@@ -20,7 +20,7 @@ The mismatch is preserved for reconciliation; physical quantity in the new syste
 Directory records and login identities are deliberately separate. A staff member may exist with login disabled until a verified email is available. Legacy Production access rows are imported into a separate private reconciliation table, not auto-merged by name.
 
 ## Runtime
-The new isolated target is Worker `logistics-hub` with D1 `logistics-hub`. Remote migrations `0001`–`0004` load the full verified seed: 397 items, opening-balance movements, the one legacy ledger row, and the one reservation. Launch steps are in `docs/DEPLOYMENT.md`; the old `hau-usc-logistics-*` resources are never touched.
+The new isolated target is Worker `logistics-hub` with D1 `logistics-hub`. Remote migrations `0001`–`0010` load the full verified seed: 397 items, opening-balance movements, the one legacy ledger row, and the one reservation. Launch steps are in `docs/DEPLOYMENT.md`; the old `hau-usc-logistics-*` resources are never touched.
 
 ## Lending readiness
 All 397 migrated records remain `needs_review`, so none are public at launch. 102 carry the legacy `Loanable` classification; staff see them in the "Loanable, not yet listed" queue and publish each one explicitly.
