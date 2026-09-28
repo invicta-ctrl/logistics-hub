@@ -25,3 +25,32 @@ Use `npm run dev` for browser-only UI work, or `npm run dev:worker` after the mi
 Staff sign-in is disabled by default. For an isolated loopback-only local test, create an ignored `.dev.vars` file with `ENVIRONMENT=development`, `DEV_AUTH_ENABLED=true`, and generated values for `SESSION_SECRET`, `DEV_STAFF_USERNAME`, and `DEV_STAFF_PASSWORD`. Generate fresh random values locally and never commit or reuse real credentials. Production authentication is not configured by this repository.
 
 Run `npm run typecheck`, `npm test`, `npm run test:browser`, `npm run test:browser:worker`, `npm run verify:migration`, `npm run verify:catalog`, and `npm run verify:privacy` before review.
+
+
+## Shared Codex + Claude development
+
+Both agents now use one authoritative local worktree:
+
+`D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`
+
+Do not create parallel active worktrees for the same Part. See `docs/SHARED_AGENT_WORKFLOW.md`.
+
+Writer ownership:
+
+```powershell
+npm run agent:status
+npm run agent:claim -- codex
+npm run agent:yield -- codex
+```
+
+Use `claude` instead of `codex` when Claude owns the turn.
+
+For a continuously running full-stack local preview:
+
+```powershell
+npm run dev:live
+```
+
+Then open `http://127.0.0.1:8791`. The command applies local D1 migrations, keeps the local Worker running, and rebuilds frontend assets as files change. Refresh the browser to see the newest full-stack build.
+
+Before an agent yields—especially when usage is nearing its limit—it must update `.codex/SESSION_HANDOFF.md` with the exact current state and next action.

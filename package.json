@@ -5,6 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:live": "node scripts/run-live-dev.mjs",
+    "dev:worker": "npm run build && wrangler dev --local",
+    "agent:status": "node scripts/agent-lock.mjs status",
+    "agent:claim": "node scripts/agent-lock.mjs claim",
+    "agent:yield": "node scripts/agent-lock.mjs yield",
     "build": "npm run typecheck && vite build",
     "typecheck": "wrangler types && tsc -p tsconfig.json && tsc -p tsconfig.worker.json",
     "generate:types": "wrangler types",
@@ -12,7 +17,6 @@
     "test:watch": "vitest",
     "test:browser": "playwright test",
     "test:browser:worker": "node scripts/run-worker-browser-tests.mjs",
-    "dev:worker": "npm run build && wrangler dev --local",
     "verify:migration": "node scripts/verify-migration-data.mjs",
     "verify:catalog": "node scripts/report-public-catalog.mjs",
     "verify:privacy": "node scripts/privacy-scan.mjs"

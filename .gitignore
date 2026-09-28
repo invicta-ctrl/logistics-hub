@@ -8,5 +8,6 @@ playwright-report/
 test-results/
 .playwright-cli/
 worker-configuration.d.ts
+.agent-state/
 data/private/*
 !data/private/README.md
