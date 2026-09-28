@@ -73,7 +73,9 @@ Options 1–10 talk to the site over HTTPS as a signed-in user, exactly like the
 - **Data:** `npx wrangler d1 time-travel restore DB --bookmark=<bookmark printed by the deploy>`.
 - **Access:** disable an account (Administration page or console 6); this ends its sessions immediately.
 
-Remote D1 rejects explicit `BEGIN TRANSACTION`/`COMMIT` and queries over 100 KB; `tests/migration.test.ts` enforces both. Migration `0011` rebuilds `staff_accounts` to add roles, which ends all existing sessions once.
+Remote D1 rejects explicit `BEGIN TRANSACTION`/`COMMIT` and queries over 100 KB; `tests/migration.test.ts` enforces both. Migration `0011` rebuilds `staff_accounts` to add roles, which ends all existing sessions once. Migration `0012` (Part 2) only adds an index.
+
+There is no Git-connected Cloudflare build: pushing `main` does not deploy. Production changes only through *Deploy verified main*.
 
 ## Operating notes
 

@@ -3,10 +3,10 @@
 Operations system for the HAU-USC Department of Logistics.
 
 - **Public:** a landing page, a live **Lending Hub** that lists only staff-reviewed Loanable items with current availability, and Staff login. Logistics Request is shown as not yet available.
-- **Staff:** an inventory workspace with a live table. Staff record Stock in, Stock out and Count movements, edit item details and lending settings (which decide what appears publicly), and read each item's movement history.
+- **Staff:** an Inventory + Catalog workspace with a live table, views (Needs review, Ready to list, Low stock, Inactive…), search across names, other names, IDs, categories and locations, and an item sheet for stock movements, catalog and lending settings, migrated-record review, and a readable change history.
 - **Stack:** semantic HTML, CSS, TypeScript modules, Vite, one Cloudflare Worker, and D1. No SPA framework.
 
-Read `AGENTS.md`, then `.codex/CURRENT.md`, before changing anything.
+Read `AGENTS.md`, then `.codex/CURRENT.md`, before changing anything. `docs/PRODUCT_REFERENCE.md` describes the whole product.
 
 ## How it works
 

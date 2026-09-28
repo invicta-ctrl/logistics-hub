@@ -1,21 +1,21 @@
-# Current Handoff — Part 1
+# Current Handoff — Part 2
 
-Part 1 code is complete on `main`, including owner access. For state and the next action, see `.codex/SESSION_HANDOFF.md`. The only runbook is `docs/DEPLOYMENT.md`.
+Part 2 (Inventory + Catalog) and the DOL redesign are complete on `main`. For state and the next action, see `.codex/SESSION_HANDOFF.md`. The only runbook is `docs/DEPLOYMENT.md`. For the whole-product description, see `docs/PRODUCT_REFERENCE.md`.
 
-Verification for the owner-access slice (Linux cloud container, local Worker + D1):
-- typecheck;
-- `npm test`: 41 tests, including 19 access-control tests covering:
-  - role limits, last owner, disabled sign-in;
-  - session invalidation on reset, rename and role change;
-  - recovery (valid, invalid, rotated, revoked, demoted owner, single-use, no admin reach);
-  - cross-site rejection, secret hygiene, audit metadata, login and recovery throttling;
-  - migration 0011 against real session rows with foreign keys on;
-- `test:browser`: 7 tests; `test:browser:worker`: 8 real Worker + D1 E2E tests, including owner-creates-staff/forced-change/staff-denied and recovery-once;
-- build, `verify:privacy`, `verify:migration`, `verify:catalog`, `npx wrangler deploy --dry-run`;
-- axe (WCAG 2.1 AA and best practices): 0 violations on Administration, New account, Manage and My account at 1366 px and 390 px. There is no horizontal overflow, and staff are redirected away from `/staff/admin`;
-- the Owner Console was driven against the preview:
-  - sign-in, list, create Staff and Admin (generated password), reset, rename, disable, sign out everywhere;
-  - an ADMIN refused on owner/admin targets; forced password change;
-  - pasted-key recovery with auto sign-in and a new key, an invalid key rejected, and key deletion.
+Verification for Part 2 (Windows, local Worker + D1):
+- `npm run typecheck` and `npm run build`;
+- `npm test`: 46 tests. The new ones cover:
+  - stale-edit 409 and a missing version;
+  - alias normalization;
+  - canonical category and location spellings;
+  - listing gaps and history events;
+  - role gating;
+- `test:browser`: 7 tests, including every public route at 320, 375, 768, 1024 and 1440 px, and the sign-in background;
+- `test:browser:worker`: 11 real Worker + D1 E2E tests.
+  - The new ones cover migrated review with "Mark reviewed & next", alias search, the location filter and humanized history; create with duplicate-name warning, lending validation and deactivation; and a 320 px phone.
+  - All Part 1 flows still pass.
+- `verify:migration` (397 items; only the ITM-0001 discrepancy), `verify:catalog` (0 listed from the snapshot), `verify:privacy` (0 matches);
+- axe-core WCAG 2.1 AA: 0 violations on landing, Lending Hub, sign-in, 404, inventory, the item sheet (all three tabs), Administration and My account, at 1440 px and 375 px, with no horizontal overflow;
+- Impeccable detector: clean after one fix batch.
 
-Not verifiable here: DPAPI pairing, the `D:\` launcher, production deploy and the production smoke suite. These run on Earl's PC.
+Not verifiable here: the production deploy (no Git-connected Cloudflare build exists; deploys go through the Owner Console), DPAPI pairing, and the `D:\` launcher.

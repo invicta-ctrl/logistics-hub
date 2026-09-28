@@ -174,7 +174,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .search-field input::-webkit-search-cancel-button { display: none; }
 .search-field kbd { position: absolute; right: .625rem; pointer-events: none; }
 .search-field input:focus ~ kbd, .search-field input:not(:placeholder-shown) ~ kbd { display: none; }
-.search-field__clear { position: absolute; right: .375rem; display: grid; width: 1.875rem; height: 1.875rem; place-items: center; border: 0; border-radius: 50%; background: var(--subtle); color: var(--text-2); transition: background-color var(--dur-1), transform var(--dur-1) var(--ease); }
+.search-field__clear { position: absolute; right: .25rem; display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border: 0; border-radius: 50%; background: var(--subtle); color: var(--text-2); transition: background-color var(--dur-1), transform var(--dur-1) var(--ease); }
 .search-field__clear:hover { background: var(--line); color: var(--text); }
 .search-field__clear:active { transform: scale(.92); }
 .search-field__clear .icon { width: .875rem; height: .875rem; }
@@ -226,7 +226,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .checklist { display: grid; gap: .375rem; }
 .checklist li { display: flex; align-items: center; gap: .5rem; color: var(--text); font-size: var(--text-sm); }
 .checklist .icon { width: 1rem; height: 1rem; color: var(--line-strong); }
-.checklist li.is-done { color: var(--text-3); }
+.checklist li.is-done { color: var(--text-2); }
 .checklist li.is-done .icon { color: var(--ok-dot); stroke-width: 2.25; }
 
 /* ---------- Empty, loading, toast ---------- */
@@ -348,7 +348,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .chip[aria-pressed="true"] .chip__count { background: rgb(255 255 255 / 18%); color: #fff; }
 .result-count { margin-bottom: 1rem; color: var(--text-3); font-size: var(--text-sm); }
 .lending-layout { display: grid; grid-template-columns: minmax(0, 1fr) 16rem; align-items: start; gap: 3rem; padding-block: 1.75rem 4rem; }
-.aside-note { position: sticky; top: 9rem; display: grid; gap: .75rem; padding: 1.25rem; border: 1px solid var(--line); border-top: 3px solid var(--brand); border-radius: var(--radius-lg); background: var(--surface); color: var(--text-2); font-size: var(--text-sm); }
+.aside-note { position: sticky; top: 9rem; display: grid; gap: .75rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--text-2); font-size: var(--text-sm); }
 .aside-note h2 { color: var(--text); font-family: var(--serif); font-size: var(--text-lg); font-weight: 500; }
 
 /* Catalogue list */
@@ -429,7 +429,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .page-header h1 { font-family: var(--serif); font-size: var(--text-3xl); font-weight: 500; letter-spacing: -.015em; }
 .page-header p { margin-top: .25rem; color: var(--text-2); font-size: var(--text-base); }
 .page-header__actions { display: flex; align-items: center; gap: 1.25rem; }
-.review-meter { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-bottom: 1rem; padding: .625rem .875rem; border: 1px solid var(--line); border-left: 3px solid var(--gold); border-radius: var(--radius); background: var(--surface); font-size: var(--text-sm); color: var(--text-2); }
+.review-meter { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; margin-bottom: 1rem; padding: .625rem .875rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: var(--text-sm); color: var(--text-2); }
 .review-meter strong { color: var(--text); font-variant-numeric: tabular-nums; }
 .review-meter progress { flex: 1 1 8rem; max-width: 20rem; height: .375rem; overflow: hidden; border: 0; border-radius: 999px; background: var(--subtle); appearance: none; }
 .review-meter progress::-webkit-progress-bar { background: var(--subtle); }
