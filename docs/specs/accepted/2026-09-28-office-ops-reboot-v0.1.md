@@ -17,7 +17,14 @@ HTML5 + CSS3 + TypeScript/JavaScript; Vite; Cloudflare Worker TypeScript; D1; R2
 Catalog metadata is separate from physical quantity. Quantity comes from append-only movements. Opening balance is a movement. Staff/borrower PII never enters public Git. Borrower classification is STUDENT or USC_STAFF. OVERDUE is derived.
 
 ## Migration now
-Import all current Production catalog records now, plus inventory history needed for current-state reconciliation. Legacy masterfile may fill unresolved metadata and marks it for review. Verify against latest Production backup. Staff import is private and runtime-only.
+Import all current Production catalog records now, plus inventory history needed for current-state reconciliation. Legacy masterfile may fill unresolved metadata and marks it for review. Verify against latest Production backup.
+
+Staff directory migration is private:
+- use DOL committee-designation responses plus verified DOL organizational records;
+- directory identity and login identity are separate;
+- allow a known staff member to exist with login disabled when email is unverified;
+- preserve old Production access accounts separately until exact identity reconciliation;
+- never commit staff PII to this public repo.
 
 ## Parts
 1. YDD Gateway + Foundation: working landing, public Lending Hub, unavailable Request affordance, staff login, real data foundation.

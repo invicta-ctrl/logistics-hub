@@ -19,8 +19,27 @@ CREATE TABLE IF NOT EXISTS reservations (
  status TEXT NOT NULL,created_at TEXT,updated_at TEXT,cleared_at TEXT,clear_reason TEXT,idempotency_key TEXT,imported_from TEXT
 );
 CREATE TABLE IF NOT EXISTS staff_users (
- id TEXT PRIMARY KEY,email TEXT NOT NULL UNIQUE,display_name TEXT NOT NULL,role TEXT NOT NULL DEFAULT 'STAFF',department TEXT,committee TEXT,
- active INTEGER NOT NULL DEFAULT 1 CHECK(active IN(0,1)),imported_from TEXT,created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+ id TEXT PRIMARY KEY,
+ email TEXT UNIQUE,
+ display_name TEXT NOT NULL,
+ role TEXT NOT NULL DEFAULT 'STAFF',
+ department TEXT,
+ committee TEXT,
+ active INTEGER NOT NULL DEFAULT 1 CHECK(active IN(0,1)),
+ login_enabled INTEGER NOT NULL DEFAULT 0 CHECK(login_enabled IN(0,1)),
+ imported_from TEXT,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ CHECK(login_enabled=0 OR email IS NOT NULL)
+);
+CREATE TABLE IF NOT EXISTS legacy_access_accounts (
+ legacy_user_id TEXT PRIMARY KEY,
+ email TEXT NOT NULL,
+ display_name TEXT,
+ legacy_role TEXT,
+ active INTEGER NOT NULL DEFAULT 1 CHECK(active IN(0,1)),
+ source_label TEXT NOT NULL,
+ imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS loans (
  id TEXT PRIMARY KEY,borrower_classification TEXT NOT NULL CHECK(borrower_classification IN('STUDENT','USC_STAFF')),borrower_name TEXT NOT NULL,
