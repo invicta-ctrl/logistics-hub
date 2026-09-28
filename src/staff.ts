@@ -29,16 +29,61 @@ const KINDS = {
 } as const;
 type Kind = keyof typeof KINDS;
 
+export type Role = "STAFF" | "ADMIN" | "OWNER";
+export type Session = { id: string; username: string; displayName: string; role: Role; mustChangePassword: boolean; recovery: { configured: boolean; createdAt: string | null } | null };
+type Section = "inventory" | "admin" | "account";
+
+export const ROLE_LABELS: Record<Role, string> = { STAFF: "Staff", ADMIN: "Administrator", OWNER: "Owner" };
+
+/** Loads the signed-in account, or routes to sign-in / the forced password change. */
+export async function loadSession(section: Section): Promise<Session | null> {
+  try {
+    const session = await api<Session>("/api/staff/session");
+    if (session.mustChangePassword && section !== "account") { navigate("/staff/account", true); return null; }
+    return session;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) { navigate("/staff", true); return null; }
+    mount(app, html`<main id="main-content" class="container page-message">${emptyState("The staff workspace is unavailable", failure(error), html`<a class="button button--secondary" href="/staff/inventory" data-route>Try again</a>`, "error")}</main>`);
+    return null;
+  }
+}
+
+/** The one staff app shell: brand, section navigation by role, account and sign out. */
+export function shell(session: Session, section: Section, main: Html): void {
+  const link = (target: Section, href: string, text: string) => html`<a href="${href}" data-route ${section === target ? html`aria-current="page"` : ""}>${text}</a>`;
+  mount(app, html`
+    <header class="app-bar">
+      <div class="app-bar__inner">
+        <a class="app-bar__brand" href="/staff/inventory" data-route aria-label="Staff workspace home">${MARK}</a>
+        <nav class="app-nav" aria-label="Workspace">
+          ${session.mustChangePassword ? "" : link("inventory", "/staff/inventory", "Inventory")}
+          ${session.role !== "STAFF" && !session.mustChangePassword ? link("admin", "/staff/admin", "Administration") : ""}
+          ${link("account", "/staff/account", "My account")}
+        </nav>
+        <div class="app-bar__end">
+          <a class="app-bar__link" href="/lending" target="_blank" rel="noopener">Public Lending Hub ${icon("external")}<span class="visually-hidden">(opens in a new tab)</span></a>
+          <a class="account" href="/staff/account" data-route><span class="account__avatar" aria-hidden="true">${initials(session.displayName)}</span><span class="account__name">${session.displayName}<small>${ROLE_LABELS[session.role]}</small></span></a>
+          <button class="button button--ghost button--sm" type="button" id="staff-logout">${icon("signOut")}<span>Sign out</span></button>
+        </div>
+      </div>
+    </header>
+    <main id="main-content" class="app-main">${main}</main>`);
+  document.querySelector("#staff-logout")!.addEventListener("click", async () => {
+    try { await api("/api/staff/logout", { method: "POST" }); } catch { /* the session is dropped client-side regardless */ }
+    navigate("/staff", true);
+  });
+}
+
 function expired(): void {
   navigate("/staff?expired=1", true);
 }
 
-function failure(error: unknown): string {
+export function failure(error: unknown): string {
   if (error instanceof ApiError && error.status === 401) expired();
   return error instanceof Error ? error.message : "Something went wrong. Please try again.";
 }
 
-function setMessage(element: HTMLElement, message: string, tone: "error" | "ok" | "" = "error"): void {
+export function setMessage(element: HTMLElement, message: string, tone: "error" | "ok" | "" = "error"): void {
   element.className = `form-alert ${tone ? `form-alert--${tone}` : ""}`;
   element.hidden = !message;
   mount(element, message ? html`${icon(tone === "ok" ? "check" : "alert")}<span>${message}</span>` : html``);
@@ -106,8 +151,8 @@ export function staffLogin(): void {
     button.textContent = "Signing in…";
     setMessage(alert, "");
     try {
-      await api("/api/staff/login", { method: "POST", body: JSON.stringify({ username: values.get("username"), password: values.get("password") }) });
-      navigate("/staff/inventory");
+      const result = await api<{ mustChangePassword: boolean }>("/api/staff/login", { method: "POST", body: JSON.stringify({ username: values.get("username"), password: values.get("password") }) });
+      navigate(result.mustChangePassword ? "/staff/account" : "/staff/inventory");
     } catch (error) {
       setMessage(alert, error instanceof Error ? error.message : "Sign-in failed.");
       button.disabled = false;
@@ -136,28 +181,10 @@ function initials(name: string): string {
 /* ---------- Workspace ---------- */
 
 export async function workspace(): Promise<void> {
-  let session: { displayName: string };
-  try {
-    session = await api("/api/staff/session");
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 401) { navigate("/staff", true); return; }
-    mount(app, html`<main id="main-content" class="container page-message">${emptyState("The staff workspace is unavailable", failure(error), html`<a class="button button--secondary" href="/staff/inventory" data-route>Try again</a>`, "error")}</main>`);
-    return;
-  }
+  const session = await loadSession("inventory");
+  if (!session) return;
   document.title = "Inventory · Staff workspace";
-  mount(app, html`
-    <header class="app-bar">
-      <div class="app-bar__inner">
-        <a class="app-bar__brand" href="/staff/inventory" data-route aria-label="Staff workspace home">${MARK}</a>
-        <nav class="app-nav" aria-label="Workspace"><a href="/staff/inventory" data-route aria-current="page">Inventory</a></nav>
-        <div class="app-bar__end">
-          <a class="app-bar__link" href="/lending" target="_blank" rel="noopener">Public Lending Hub ${icon("external")}<span class="visually-hidden">(opens in a new tab)</span></a>
-          <span class="account"><span class="account__avatar" aria-hidden="true">${initials(session.displayName)}</span><span class="account__name">${session.displayName}</span></span>
-          <button class="button button--ghost button--sm" type="button" id="staff-logout">${icon("signOut")}<span>Sign out</span></button>
-        </div>
-      </div>
-    </header>
-    <main id="main-content" class="app-main">
+  shell(session, "inventory", html`
       <header class="page-header">
         <div>
           <h1>Inventory</h1>
@@ -175,8 +202,7 @@ export async function workspace(): Promise<void> {
         <p class="table-toolbar__count" id="inventory-count" aria-live="polite"></p>
       </div>
       <div id="inventory-results" aria-busy="true">${tableSkeleton()}</div>
-    </main>
-    <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>`);
+      <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>`);
 
   const params = new URLSearchParams(window.location.search);
   let inventory: Inventory | null = null;
@@ -327,10 +353,6 @@ export async function workspace(): Promise<void> {
     if (tableRow) openItem(tableRow.dataset.key!);
   });
   document.querySelector("#new-item")!.addEventListener("click", openNew);
-  document.querySelector("#staff-logout")!.addEventListener("click", async () => {
-    try { await api("/api/staff/logout", { method: "POST" }); } catch { /* the cookie is cleared server-side on the next sign-in anyway */ }
-    navigate("/staff", true);
-  });
 
   /* ---------- Item sheet ---------- */
 

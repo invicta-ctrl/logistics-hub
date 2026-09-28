@@ -41,8 +41,9 @@ export function generatePassword() {
   return Array.from({ length: 4 }, (_, group) => Array.from({ length: 5 }, (_, index) => alphabet[bytes[group * 5 + index] % alphabet.length]).join("")).join("-");
 }
 
-export function createAccountSql(username, displayName, password) {
-  return `INSERT INTO staff_accounts(id, username, display_name, password_hash) VALUES(${sqlText(`ACC-${randomUUID()}`)}, ${sqlText(validUsername(username))}, ${sqlText(validDisplayName(displayName))}, ${sqlText(hashPassword(checkPassword(password)))});`;
+export function createAccountSql(username, displayName, password, role = "STAFF") {
+  if (!["STAFF", "ADMIN", "OWNER"].includes(role)) throw new Error("Role must be STAFF, ADMIN or OWNER.");
+  return `INSERT INTO staff_accounts(id, username, display_name, password_hash, role) VALUES(${sqlText(`ACC-${randomUUID()}`)}, ${sqlText(validUsername(username))}, ${sqlText(validDisplayName(displayName))}, ${sqlText(hashPassword(checkPassword(password)))}, ${sqlText(role)});`;
 }
 
 // Security-sensitive changes (password, username, disable) end every session of that account.

@@ -95,3 +95,58 @@ test("inventory sorts by on-hand quantity and remembers it in the URL", async ({
   const quantities = await page.locator("tbody .qty").evaluateAll((cells) => cells.slice(0, 5).map((cell) => Number(cell.textContent)));
   expect(quantities).toEqual([...quantities].sort((a, b) => b - a));
 });
+
+test.describe("owner administration", () => {
+  async function signInAs(page: Page, user: string, pass: string) {
+    await page.goto("/staff");
+    await page.getByRole("textbox", { name: "Username" }).fill(user);
+    await page.getByLabel("Password", { exact: true }).fill(pass);
+    await page.getByRole("button", { name: "Sign in" }).click();
+  }
+
+  test("owner creates a staff account; the new user must choose a password; staff cannot administer", async ({ page, browser }) => {
+    await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
+    await page.getByRole("link", { name: "Administration" }).click();
+    await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();
+    await page.getByRole("button", { name: "New account" }).click();
+    await page.getByLabel("Display name").fill("Maria Santos");
+    await page.getByLabel("Username").fill("msantos");
+    await page.getByRole("button", { name: "Create account" }).click();
+    const temporary = (await page.locator(".secret code").textContent())!;
+    expect(temporary).toMatch(/^[\w]{5}(-[\w]{5}){3}$/);
+    await page.getByRole("button", { name: "Done" }).click();
+    await expect(page.getByRole("cell", { name: /Maria Santos/ })).toBeVisible();
+
+    const staff = await (await browser.newContext()).newPage();
+    await signInAs(staff, "msantos", temporary);
+    await expect(staff.getByText("Choose your own password to continue.")).toBeVisible();
+    await expect(staff.getByRole("link", { name: "Inventory" })).toHaveCount(0);
+    expect((await staff.request.get("/api/staff/inventory")).status()).toBe(403);
+    await staff.getByLabel("Current password").fill(temporary);
+    await staff.getByLabel("New password", { exact: true }).fill("maria chose this one");
+    await staff.getByLabel("Repeat new password").fill("maria chose this one");
+    await staff.getByRole("button", { name: "Change password" }).click();
+    await expect(staff.getByRole("heading", { name: "Inventory" })).toBeVisible();
+    await expect(staff.getByRole("link", { name: "Administration" })).toHaveCount(0);
+    expect((await staff.request.get("/api/staff/admin/accounts")).status()).toBe(403);
+    await staff.goto("/staff/admin");
+    await expect(staff).toHaveURL(/\/staff\/inventory$/);
+  });
+
+  test("owner issues a recovery key that resets the owner password exactly once", async ({ page, baseURL }) => {
+    await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
+    await page.getByRole("link", { name: "My account" }).first().click();
+    await page.getByRole("button", { name: /recovery key/ }).first().click();
+    const key = (await page.locator(".secret code").textContent())!;
+    expect(key).toMatch(/^LHR1\./);
+    const recover = (newPassword: string) => page.request.post("/api/recovery/owner", { headers: { origin: baseURL! }, data: { recoveryKey: key, newPassword } });
+    const first = await recover("recovered owner pass");
+    expect(first.status()).toBe(200);
+    expect(await first.json()).toEqual({ username: process.env.E2E_OWNER_USERNAME });
+    expect((await recover("second attempt pass!")).status()).toBe(401);
+    await page.reload();
+    await expect(page).toHaveURL(/\/staff$/);
+    await signInAs(page, process.env.E2E_OWNER_USERNAME!, "recovered owner pass");
+    await expect(page.getByRole("heading", { name: "Inventory" })).toBeVisible();
+  });
+});

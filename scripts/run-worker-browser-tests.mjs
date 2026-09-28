@@ -19,7 +19,10 @@ try {
   const username = `e2e-${randomBytes(4).toString("hex")}`;
   const password = randomBytes(18).toString("base64url");
   runD1(createAccountSql(username, "E2E Staff", password), { persistTo: stateDir });
-  const result = spawnSync(process.execPath, [cli, "test", "-c", "playwright.worker.config.ts", ...process.argv.slice(2)], { stdio: "inherit", env: { ...process.env, E2E_USERNAME: username, E2E_PASSWORD: password, E2E_STATE_DIR: stateDir } });
+  const ownerUsername = `e2e-owner-${randomBytes(4).toString("hex")}`;
+  const ownerPassword = randomBytes(18).toString("base64url");
+  runD1(createAccountSql(ownerUsername, "E2E Owner", ownerPassword, "OWNER"), { persistTo: stateDir });
+  const result = spawnSync(process.execPath, [cli, "test", "-c", "playwright.worker.config.ts", ...process.argv.slice(2)], { stdio: "inherit", env: { ...process.env, E2E_USERNAME: username, E2E_PASSWORD: password, E2E_OWNER_USERNAME: ownerUsername, E2E_OWNER_PASSWORD: ownerPassword, E2E_STATE_DIR: stateDir } });
   process.exitCode = result.status ?? 1;
 } finally {
   try {

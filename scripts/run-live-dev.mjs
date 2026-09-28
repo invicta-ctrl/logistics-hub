@@ -63,13 +63,19 @@ if (fs.existsSync(stateDir)) {
 console.log("Applying local D1 migrations...");
 runNode(wrangler, ["d1", "migrations", "apply", "DB", "--local"], "local D1 migration");
 
-if (!runD1("SELECT COUNT(*) AS total FROM staff_accounts", { json: true })[0].total) {
-  const username = "preview-staff";
+// One local test identity per role, each with a random password kept in an ignored private file.
+const existing = new Set(runD1("SELECT username FROM staff_accounts", { json: true }).map((row) => row.username));
+const created = [];
+for (const [role, username, name] of [["OWNER", "preview-owner", "Preview Owner"], ["ADMIN", "preview-admin", "Preview Admin"], ["STAFF", "preview-staff", "Preview Staff"]]) {
+  if (existing.has(username)) continue;
   const password = crypto.randomBytes(12).toString("base64url");
-  runD1(createAccountSql(username, "Preview Staff", password));
+  runD1(createAccountSql(username, name, password, role));
+  created.push(`${role.padEnd(6)} ${username}  ${password}`);
+}
+if (created.length) {
   fs.mkdirSync(path.dirname(credentialPath), { recursive: true });
-  fs.writeFileSync(credentialPath, `Local preview only\nURL: http://127.0.0.1:8791/staff\nUsername: ${username}\nPassword: ${password}\n`, { mode: 0o600 });
-  console.log("Created a local preview staff account; credentials are in data/private/local-preview-credentials.txt");
+  fs.appendFileSync(credentialPath, `Local preview only — http://127.0.0.1:8791/staff\n${created.join("\n")}\n`, { mode: 0o600 });
+  console.log(`Created local preview accounts (${created.length}); credentials are in data/private/local-preview-credentials.txt`);
 }
 
 console.log("Typechecking and building initial frontend...");
