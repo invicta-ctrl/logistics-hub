@@ -526,8 +526,11 @@ th.col-qty .sort-button { margin-right: -.375rem; margin-left: 0; }
   .data-table .col-id, .data-table .col-category, .data-table .col-location { display: none; }
   .data-table .col-qty { grid-row: 1; grid-column: 2; width: auto; }
   .data-table .col-status { grid-column: 1 / -1; width: auto; }
+  .app-bar__inner { flex-wrap: wrap; gap: 0 1rem; }
+  .app-nav { order: 3; width: calc(100% + var(--gutter) * 2); min-height: 2.75rem; margin-inline: calc(var(--gutter) * -1); padding-inline: calc(var(--gutter) - .75rem); overflow-x: auto; border-top: 1px solid var(--line); }
+  .app-nav a { white-space: nowrap; }
   .account { padding-left: 0; border: 0; }
-  .account__name, #staff-logout span { display: none; }
+  .account__name, #staff-logout span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .page-header__actions { width: 100%; justify-content: space-between; }
   .table-toolbar__count { width: 100%; margin-left: 0; }
   .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
