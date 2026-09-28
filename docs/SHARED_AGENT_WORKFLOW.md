@@ -1,14 +1,49 @@
 # Shared Agent Workflow — Codex + Claude
 
-## One workspace, one writer
+## The entire workflow in one sentence
 
-Authoritative local worktree:
+**One shared worktree + one active slice branch + one writer + small verified commits + immediate merge to main when green + prune the finished branch.**
+
+## Workspace
+
+Both agents open:
 
 `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`
 
-Codex and Claude must both open this same folder.
+Do not create separate active worktrees for Codex and Claude.
 
-There is only one active writer at a time. Do not create a second worktree for the same active Part.
+## Branch budget
+
+Normal state has only:
+- `main`
+- optionally one current `slice/<part>-<scope>` branch
+
+That is the branch budget.
+
+Forbidden as permanent workflow:
+- `dev`
+- `staging`
+- `backup`
+- `codex/*`
+- `claude/*`
+- parallel feature branches for the same Part
+
+## Starting a slice
+
+When idle, shared workspace should be on `main`.
+
+Create exactly one branch:
+
+```powershell
+git fetch origin --prune
+git switch main
+git pull --ff-only
+git switch -c slice/<part>-<scope>
+```
+
+Both agents then take turns on that branch.
+
+## Writer lock
 
 Before editing:
 
@@ -23,11 +58,11 @@ or:
 npm run agent:claim -- claude
 ```
 
-If another agent owns the lock, do not write. Read the handoff and wait for the owner to yield.
+If the other agent owns it, do not write.
 
-## Live local preview
+## Local preview
 
-Keep the full local application visible while development happens:
+Run once and keep it alive:
 
 ```powershell
 npm run dev:live
@@ -37,87 +72,109 @@ Open:
 
 `http://127.0.0.1:8791`
 
-The live runner:
-- prepares safe loopback-only development authentication when missing;
-- applies local D1 migrations;
-- builds the application once;
-- watches frontend builds;
-- runs the local Cloudflare Worker/D1 stack;
-- never touches remote Cloudflare resources.
+The preview belongs to the project, not an individual agent. Handoffs should not restart it unless needed.
 
-The preview uses the same worktree both agents edit. Refresh the browser after a change to see the newest full-stack build.
+## Implementation rhythm
 
-Local preview credentials are generated into ignored local-only files under `data/private/`. Never commit them.
+For each atomic unit:
 
-## Turn-taking
+1. Understand the bounded change.
+2. Modify the smallest amount of code.
+3. Remove code made obsolete by the change.
+4. Run focused verification.
+5. Review the diff for bloat and duplication.
+6. Commit the working unit.
 
-The current agent owns the worktree until it explicitly yields.
+Do not wait until an entire Part is finished before making the first safe commit.
 
-A normal handoff is:
+Good commits are small enough that the next agent can understand/revert them, but large enough to represent a coherent working change.
 
-1. Stop starting new unrelated work.
-2. Finish the nearest coherent atomic change.
-3. Run the most relevant tests/typecheck.
-4. Review `git status` and the diff.
-5. Update `.codex/SESSION_HANDOFF.md`.
-6. Update `.codex/CURRENT.md` if milestone/task state changed.
-7. Commit a safe checkpoint whenever practical.
-8. Release the lock:
-   `npm run agent:yield -- <agent>`
-9. Tell the next agent the exact commit and exact next action.
+## Anti-bloat review before every commit
 
-The next agent:
+Reject or simplify the diff if it contains:
+- a dependency that is not necessary;
+- a helper used once without improving readability;
+- an abstraction for a hypothetical future case;
+- duplicated logic/configuration/docs;
+- two competing implementations;
+- dead code left behind;
+- generated artifacts that should be ignored;
+- verbose comments that merely restate code;
+- tests that duplicate the same behavior without added value;
+- changes outside the active slice with no necessity.
 
-1. Opens this same worktree.
-2. Reads AGENTS.md / CLAUDE.md as applicable.
-3. Reads `.codex/CURRENT.md`, `CURRENT_HANDOFF.md`, and `SESSION_HANDOFF.md`.
-4. Runs `npm run agent:status`.
-5. Claims the lock.
-6. Verifies HEAD/status and continues the exact next action.
+Prefer deleting complexity over documenting why it exists.
 
-## Low-usage handoff rule
+## Handoff between agents
 
-When the platform reports roughly 25% or less usage remaining, or gives any imminent limit warning:
+Before yielding:
 
-- do not begin a new large subtask;
-- switch into handoff mode immediately;
-- finish the smallest safe atomic unit already in progress;
-- preserve a compiling/testable state whenever possible;
-- update SESSION_HANDOFF before doing optional polish.
+1. Stop at a coherent boundary.
+2. Run relevant tests/typecheck.
+3. Check `git status`.
+4. Commit the safe atomic work when practical.
+5. Update `.codex/SESSION_HANDOFF.md` with:
+   - current branch + HEAD;
+   - completed work;
+   - incomplete work;
+   - dirty files, if any;
+   - verification run;
+   - exact next action;
+   - blockers/risks.
+6. Yield:
+   `npm run agent:yield -- <agent>`.
 
-At roughly 15% or less remaining:
-- only verification, documentation, checkpointing, and handoff are allowed;
-- do not start new implementation.
+The next agent reads the handoff, claims the lock, verifies HEAD/status, and continues the exact next action. It does not redo planning already settled.
 
-The goal is that usage exhaustion never strands undocumented work.
+## Usage-aware handoff
 
-## Dirty state rule
+At ~25% remaining usage or any warning:
+- enter handoff mode;
+- no new large subtask;
+- complete the nearest safe atomic unit;
+- checkpoint and document.
 
-Uncommitted work is allowed while one agent owns the lock.
+At ~15%:
+- implementation stops;
+- only verify, document, commit/checkpoint, and yield.
 
-It must never be handed off without a precise SESSION_HANDOFF entry containing:
-- active agent;
-- branch + HEAD;
-- what changed;
-- files currently dirty;
-- what is complete;
-- what is incomplete;
-- verification already run;
-- exact next command/action;
-- known risks/blockers.
+## Finishing a slice
 
-Prefer small checkpoint commits over large uncommitted sessions.
+A slice is ready for `main` only when its acceptance criteria are satisfied and required gates are green.
 
-## Preview ownership
+Typical gates:
+- typecheck;
+- focused tests;
+- build;
+- privacy/secret scan;
+- migration/data verification if relevant;
+- browser/E2E if user-visible;
+- final diff review.
 
-The local preview is shared infrastructure, not agent-owned.
+Then:
 
-Do not kill/restart it just because ownership changes unless it is unhealthy or configuration changed.
+1. Update CURRENT / SESSION_HANDOFF.
+2. Commit final slice state.
+3. Push the slice branch if review/backup is useful.
+4. Integrate into `main` using the simplest safe linear method.
+5. Verify `main` after integration.
+6. Push `main`.
+7. Delete the merged slice branch locally and remotely.
+8. Run `git fetch --prune`.
+9. Leave the shared worktree on clean `main`.
 
-If port 8791 is already active, use the existing preview.
+No finished slice should sit around on a stale branch once `main` is green.
+
+## Branch pruning safety
+
+After integration, delete a branch only when:
+
+`git merge-base --is-ancestor <branch> main`
+
+succeeds, or equivalent verification proves all commits are on `main`.
+
+Never delete a branch with unique unmerged commits merely because it looks old.
 
 ## Production boundary
 
-Local preview only unless Earl separately authorizes provider/Production changes.
-
-Never reuse or mutate old HAU-USC Logistics production/staging resources as part of normal local development.
+This workflow is local/Git only unless Earl separately authorizes remote provider/Production actions.
