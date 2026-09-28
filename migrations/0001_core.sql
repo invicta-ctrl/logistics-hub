@@ -57,11 +57,23 @@ CREATE TABLE IF NOT EXISTS evidence (
 CREATE TABLE IF NOT EXISTS audit_log (
  id TEXT PRIMARY KEY,created_at TEXT NOT NULL,actor_user_id TEXT,action TEXT NOT NULL,entity_type TEXT NOT NULL,entity_id TEXT,details_json TEXT
 );
+
+-- Quantity truth is movement-only. legacy_reported_* columns are preserved
+-- migration evidence and MUST NOT participate in live quantity arithmetic.
 CREATE VIEW IF NOT EXISTS inventory_balances AS
-SELECT i.id,i.name,i.unit,i.legacy_reported_opening_qty AS opening_qty,COALESCE(SUM(m.signed_quantity),0) AS movement_net,
- i.legacy_reported_opening_qty+COALESCE(SUM(m.signed_quantity),0) AS on_hand,i.legacy_reported_reserved_qty AS legacy_reserved_qty,
- (i.legacy_reported_opening_qty+COALESCE(SUM(m.signed_quantity),0))-i.legacy_reported_reserved_qty AS available,
+SELECT
+ i.id,
+ i.name,
+ i.unit,
+ COALESCE(SUM(CASE WHEN m.status='POSTED' THEN m.signed_quantity ELSE 0 END),0) AS on_hand,
+ COALESCE(SUM(CASE WHEN m.status='POSTED' THEN m.signed_quantity ELSE 0 END),0) AS available,
+ i.legacy_reported_opening_qty,
+ i.legacy_reported_reserved_qty,
  i.legacy_reported_available_qty,
- CASE WHEN i.legacy_reported_available_qty IS NULL THEN NULL
- ELSE (i.legacy_reported_opening_qty+COALESCE(SUM(m.signed_quantity),0))-i.legacy_reported_available_qty END AS migration_delta
-FROM items i LEFT JOIN inventory_movements m ON m.item_id=i.id AND m.status='POSTED' GROUP BY i.id;
+ CASE
+   WHEN i.legacy_reported_available_qty IS NULL THEN NULL
+   ELSE COALESCE(SUM(CASE WHEN m.status='POSTED' THEN m.signed_quantity ELSE 0 END),0) - i.legacy_reported_available_qty
+ END AS migration_delta
+FROM items i
+LEFT JOIN inventory_movements m ON m.item_id=i.id
+GROUP BY i.id;
