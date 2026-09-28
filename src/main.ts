@@ -6,7 +6,7 @@ import "@fontsource/newsreader/latin-500.css";
 import "./styles.css";
 import { landing, lending, notFound } from "./public";
 import { staffLogin, workspace } from "./staff";
-import { leave, navigate, toast } from "./ui";
+import { leave, navigate, reducedMotion, toast } from "./ui";
 
 function render(): void {
   leave();
@@ -50,5 +50,10 @@ window.addEventListener("unhandledrejection", (event) => {
   toast("Something went wrong. Please try again.", "error");
 });
 
-window.addEventListener("popstate", render);
+// Route changes cross-fade with the View Transitions API where supported; the
+// first paint and reduced-motion users get an instant swap.
+window.addEventListener("popstate", () => {
+  if (!document.startViewTransition || reducedMotion()) return render();
+  document.startViewTransition(render);
+});
 render();

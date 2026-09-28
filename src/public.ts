@@ -1,7 +1,8 @@
-import { MARK, type Html, app, categoryName, emptyState, html, icon, label, live, mount, onLeave, plural, preservingFocus, units, writeParams } from "./ui";
+import { MARK, type Html, animateNumber, app, categoryName, emptyState, html, icon, label, live, mount, onLeave, plural, preservingFocus, units, writeParams } from "./ui";
 
 type LendingItem = { id: string; name: string; category: string; unit: string; available: number; audience: string; maxPerLoan: number | null; loanDays: number | null };
 type Catalog = { revision: number; items: LendingItem[]; categories: string[] };
+type Sort = "name" | "available";
 
 function page(content: Html, current: "" | "lending"): void {
   mount(app, html`
@@ -33,34 +34,61 @@ function page(content: Html, current: "" | "lending"): void {
     </footer>`);
 }
 
+/** Availability reads at a glance: plenty, the last one, or all out. */
 function availability(item: LendingItem): Html {
-  return item.available > 0
-    ? html`<p class="catalogue__avail"><span class="catalogue__count">${item.available}</span> <span class="catalogue__unit">${units(item.available, item.unit)}<span class="catalogue__word"> available</span></span></p>`
-    : html`<p class="catalogue__avail catalogue__avail--out"><span class="catalogue__unit">All out right now</span></p>`;
+  if (item.available <= 0) return html`<p class="avail avail--out"><span class="avail__label">All out right now</span></p>`;
+  const low = item.available === 1;
+  return html`<p class="avail ${low ? "avail--low" : ""}"><span class="avail__count" data-count="${item.id}">${item.available}</span> <span class="avail__label">${units(item.available, item.unit)}<span class="avail__word">${low ? " · last one" : " available"}</span></span></p>`;
 }
 
 function terms(item: LendingItem): string {
-  return [label(item.audience), item.maxPerLoan ? `up to ${item.maxPerLoan} per loan` : "", item.loanDays ? `${item.loanDays}\u2011day loan` : ""].filter(Boolean).join(" · ");
+  return [label(item.audience), item.maxPerLoan ? `up to ${item.maxPerLoan} per loan` : "", item.loanDays ? `${item.loanDays}‑day loan` : ""].filter(Boolean).join(" · ");
 }
 
 const skeletonRows = (count: number) => html`<ul class="catalogue" aria-hidden="true">${Array.from({ length: count }, () => html`<li class="catalogue__row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></li>`)}</ul>`;
+
+/** Staggers rows in after a filter change; CSP forbids inline styles, so the index is set via CSSOM. */
+function stagger(container: Element): void {
+  container.querySelectorAll<HTMLElement>(".catalogue__row").forEach((row, index) => row.style.setProperty("--i", String(Math.min(index, 14))));
+  container.classList.remove("is-entering");
+  void (container as HTMLElement).offsetWidth;
+  container.classList.add("is-entering");
+}
+
+/** Shows old counts first, then rolls each changed one to its new value. */
+function rollCounts(container: Element, before: Map<string, number>, changed: Set<string>): void {
+  for (const id of changed) {
+    const element = container.querySelector(`[data-count="${CSS.escape(id)}"]`);
+    const to = Number(element?.textContent);
+    if (!element || !before.has(id)) continue;
+    element.textContent = String(before.get(id));
+    animateNumber(element, to);
+  }
+}
 
 export function landing(): void {
   document.title = "Department of Logistics · HAU University Student Council";
   page(html`<main id="main-content">
     <section class="hero" aria-labelledby="hero-title">
-      <div class="container hero__inner">
-        <p class="hero__kicker">University Student Council · Holy Angel University</p>
-        <h1 id="hero-title">Logistics that keeps the work moving.</h1>
-        <p class="hero__lede">The Department of Logistics supports the people and materials behind University Student Council work, and lends equipment to students and USC staff.</p>
-        <div class="hero__actions">
-          <a class="button button--accent button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
-          <a class="button button--on-dark button--lg" href="/staff" data-route>Staff sign in</a>
+      <div class="container hero__grid">
+        <div class="hero__copy">
+          <p class="hero__kicker">Department of Logistics · University Student Council</p>
+          <h1 id="hero-title">Logistics that keeps the work moving.</h1>
+          <p class="hero__lede">The Department of Logistics supports the people and materials behind University Student Council work, and lends equipment to students and USC staff.</p>
+          <div class="hero__actions">
+            <a class="button button--primary button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
+            <a class="button button--secondary button--lg" href="/staff" data-route>Staff sign in</a>
+          </div>
+          <a class="hero__live" href="/lending?available=1" data-route><span class="live-status" id="live-status">Connecting…</span><span id="hero-live">Checking the shelf…</span>${icon("arrow")}</a>
+        </div>
+        <div class="hero__visual" aria-hidden="true">
+          <div class="hero__photo"></div>
+          <div class="medallion">${MARK}</div>
         </div>
       </div>
     </section>
 
-    <section class="section" aria-labelledby="now-title">
+    <section class="section reveal" aria-labelledby="now-title">
       <div class="container split">
         <div class="split__head">
           <div>
@@ -69,25 +97,39 @@ export function landing(): void {
           </div>
           <a class="text-link" href="/lending" data-route>View the full Lending Hub ${icon("arrow")}</a>
         </div>
-        <div id="now-list" aria-live="polite">${skeletonRows(4)}</div>
+        <div id="now-list">${skeletonRows(4)}</div>
       </div>
     </section>
 
-    <section class="section section--alt" aria-labelledby="offer-title">
+    <section class="section section--band reveal" aria-labelledby="steps-title">
+      <div class="container">
+        <h2 id="steps-title" class="section__title">How borrowing works</h2>
+        <ol class="steps">
+          <li><span class="steps__n">1</span><h3>Find it here</h3><p>Search the Lending Hub and check that the item is on the shelf. Counts update as staff record stock.</p></li>
+          <li><span class="steps__n">2</span><h3>Visit the Department</h3><p>Speak with Department of Logistics staff. Loans are arranged in person; online requests are not open yet.</p></li>
+          <li><span class="steps__n">3</span><h3>Borrow and return</h3><p>Staff record the loan and its return date with you, so the next person sees accurate availability.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section section--alt reveal" aria-labelledby="offer-title">
       <div class="container">
         <h2 id="offer-title" class="section__title">What the Department offers</h2>
         <div class="features">
           <article class="feature">
+            <span class="feature__icon">${icon("box")}</span>
             <h3>Lending Hub</h3>
             <p>Browse equipment approved for lending and see how many are on the shelf, updated as staff record stock.</p>
             <a class="text-link" href="/lending" data-route>Browse items ${icon("arrow")}</a>
           </article>
           <article class="feature">
+            <span class="feature__icon">${icon("check")}</span>
             <h3>Staff workspace</h3>
             <p>Authorized Department staff record stock movements, maintain the catalog, and decide what appears publicly.</p>
             <a class="text-link" href="/staff" data-route>Staff sign in ${icon("arrow")}</a>
           </article>
           <article class="feature feature--muted">
+            <span class="feature__icon">${icon("info")}</span>
             <h3>Logistics requests</h3>
             <p>Online requests for event logistics are not open yet. Contact the Department of Logistics directly in the meantime.</p>
             <p class="feature__status">Not yet available</p>
@@ -99,20 +141,25 @@ export function landing(): void {
 
   live<Catalog>("/api/public/catalog", {
     interval: 30_000,
+    status: () => document.querySelector("#live-status"),
     onData: ({ items }) => {
       const list = document.querySelector("#now-list");
       const summary = document.querySelector("#now-summary");
-      if (!list || !summary) return;
+      const heroLive = document.querySelector("#hero-live");
+      if (!list || !summary || !heroLive) return;
       const ready = items.filter((item) => item.available > 0);
       if (!items.length) {
         summary.textContent = "Staff are reviewing the catalog.";
+        heroLive.textContent = "Lending Hub opening soon";
         mount(list, html`<p class="note">Nothing is listed for lending yet. Items appear here as soon as staff approve them.</p>`);
         return;
       }
       summary.textContent = `${plural(ready.length, "item")} on the shelf now, of ${items.length} listed.`;
+      heroLive.textContent = `${plural(ready.length, "item")} on the shelf now`;
       mount(list, ready.length
-        ? html`<ul class="catalogue">${ready.slice(0, 6).map((item) => html`<li class="catalogue__row"><div class="catalogue__main"><h3 class="catalogue__name">${item.name}</h3><p class="catalogue__meta">${categoryName(item.category)}</p></div>${availability(item)}</li>`)}</ul>`
+        ? html`<ul class="catalogue">${ready.slice(0, 6).map((item) => html`<li><a class="catalogue__row catalogue__row--link" href="/lending?q=${encodeURIComponent(item.name)}" data-route><div class="catalogue__main"><h3 class="catalogue__name">${item.name}</h3><p class="catalogue__meta">${categoryName(item.category)}</p></div>${availability(item)}</a></li>`)}</ul>`
         : html`<p class="note">Every listed item is currently out. Check the Lending Hub for details.</p>`);
+      stagger(list);
     },
     onError: () => {
       const summary = document.querySelector("#now-summary");
@@ -138,14 +185,21 @@ export function lending(): void {
     </div>
     <div class="filterbar" role="search" aria-label="Filter the Lending Hub">
       <div class="container filterbar__inner">
-        <label class="search-field">${icon("search")}<span class="visually-hidden">Search the Lending Hub</span><input id="lending-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search equipment" data-search /><kbd aria-hidden="true">/</kbd></label>
-        <label class="select-field"><span class="visually-hidden">Category</span><select id="lending-category"><option value="">All categories</option></select></label>
-        <label class="switch"><input id="lending-available" type="checkbox" role="switch" /><span class="switch__track" aria-hidden="true"></span><span>Available now</span></label>
-        <p class="filterbar__count" id="lending-count" aria-live="polite"></p>
+        <div class="filterbar__row">
+          <label class="search-field">${icon("search")}<span class="visually-hidden">Search the Lending Hub</span><input id="lending-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search equipment" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
+          <label class="switch"><input id="lending-available" type="checkbox" role="switch" /><span class="switch__track" aria-hidden="true"></span><span>Available now</span></label>
+          <div class="sort-toggle" role="group" aria-label="Sort">
+            <button type="button" data-sort="name" aria-pressed="true">A–Z</button><button type="button" data-sort="available" aria-pressed="false">Availability</button>
+          </div>
+        </div>
+        <div class="chips" id="lending-categories" role="group" aria-label="Category"></div>
       </div>
     </div>
     <div class="container lending-layout">
-      <div id="lending-results" aria-busy="true">${skeletonRows(6)}</div>
+      <div>
+        <p class="result-count" id="lending-count" aria-live="polite"></p>
+        <div id="lending-results" aria-busy="true">${skeletonRows(6)}</div>
+      </div>
       <aside class="aside-note" aria-labelledby="borrow-title">
         <h2 id="borrow-title">How to borrow</h2>
         <p>Loans are arranged in person with Department of Logistics staff, who record each loan and its return date with you. Online requests are not available yet.</p>
@@ -156,60 +210,82 @@ export function lending(): void {
 
   const params = new URLSearchParams(window.location.search);
   const search = document.querySelector<HTMLInputElement>("#lending-search")!;
-  const categorySelect = document.querySelector<HTMLSelectElement>("#lending-category")!;
+  const clear = document.querySelector<HTMLButtonElement>("#clear-search")!;
+  const chips = document.querySelector<HTMLDivElement>("#lending-categories")!;
   const availableOnly = document.querySelector<HTMLInputElement>("#lending-available")!;
+  const sortGroup = document.querySelector<HTMLDivElement>(".sort-toggle")!;
   const results = document.querySelector<HTMLDivElement>("#lending-results")!;
   const count = document.querySelector<HTMLParagraphElement>("#lending-count")!;
   search.value = params.get("q") ?? "";
   availableOnly.checked = params.get("available") === "1";
   let category = params.get("category") ?? "";
+  let sort: Sort = params.get("sort") === "available" ? "available" : "name";
   let catalog: Catalog | null = null;
-  const previous = new Map<string, number>();
+  let before = new Map<string, number>();
   const changed = new Set<string>();
 
   const row = (item: LendingItem) => html`<li class="catalogue__row ${changed.has(item.id) ? "is-changed" : ""}" data-key="${item.id}">
     <div class="catalogue__main"><h3 class="catalogue__name">${item.name}</h3><p class="catalogue__meta">${terms(item)}</p></div>${availability(item)}</li>`;
 
-  const render = () => {
+  const render = (reason: "filter" | "data") => {
     if (!catalog) return;
     results.removeAttribute("aria-busy");
-    writeParams({ q: search.value.trim(), category, available: availableOnly.checked ? "1" : null });
+    clear.hidden = !search.value;
+    writeParams({ q: search.value.trim(), category, available: availableOnly.checked ? "1" : null, sort: sort === "name" ? null : sort });
+    sortGroup.querySelectorAll("button").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.sort === sort)));
     if (!catalog.items.length) {
       count.textContent = "";
+      chips.hidden = true;
       mount(results, emptyState("No items are open for borrowing yet", "Staff are reviewing the inventory. Approved items appear here automatically; there is no need to refresh."));
       return;
     }
-    if ([...categorySelect.options].slice(1).map((option) => option.value).join("\n") !== catalog.categories.join("\n")) {
-      mount(categorySelect, html`<option value="">All categories</option>${catalog.categories.map((value) => html`<option value="${value}">${categoryName(value)}</option>`)}`);
-    }
-    categorySelect.value = category;
+    const inCategory = (value: string) => catalog!.items.filter((item) => !value || item.category === value).length;
+    chips.hidden = catalog.categories.length < 2;
+    mount(chips, html`${["", ...catalog.categories].map((value) => html`<button type="button" class="chip" data-category="${value}" aria-pressed="${value === category}">${value ? categoryName(value) : "All"}<span class="chip__count">${inCategory(value)}</span></button>`)}`);
     const query = search.value.trim().toLowerCase();
     const shown = catalog.items.filter((item) => (!category || item.category === category)
       && (!availableOnly.checked || item.available > 0)
-      && (!query || `${item.name} ${item.category}`.toLowerCase().includes(query)));
+      && (!query || `${item.name} ${item.category}`.toLowerCase().includes(query)))
+      .sort((a, b) => sort === "available" ? b.available - a.available || a.name.localeCompare(b.name) : a.name.localeCompare(b.name));
     const ready = shown.filter((item) => item.available > 0).length;
     count.textContent = `${plural(shown.length, "item")}, ${ready} available`;
-    const groups = [...new Set(shown.map((item) => item.category))];
+    const groups = sort === "name" ? [...new Set(shown.map((item) => item.category))] : [null];
     preservingFocus(results, () => mount(results, shown.length
-      ? html`${groups.map((group, index) => html`<section class="catalogue-group" aria-labelledby="group-${index}">
-          <h2 class="catalogue-group__title" id="group-${index}">${categoryName(group)} <span>${shown.filter((item) => item.category === group).length}</span></h2>
-          <ul class="catalogue">${shown.filter((item) => item.category === group).map(row)}</ul></section>`)}`
+      ? html`${groups.map((group, index) => {
+          const members = group === null ? shown : shown.filter((item) => item.category === group);
+          return html`<section class="catalogue-group" aria-labelledby="group-${index}">
+            <h2 class="catalogue-group__title" id="group-${index}">${group === null ? "By availability" : categoryName(group)} <span>${members.length}</span></h2>
+            <ul class="catalogue">${members.map(row)}</ul></section>`;
+        })}`
       : emptyState("Nothing matches those filters", "Try a shorter search, another category, or include items that are currently out.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
+    if (reason === "filter") stagger(results);
+    else rollCounts(results, before, changed);
     changed.clear();
   };
 
   let timer = 0;
   onLeave(() => window.clearTimeout(timer));
-  search.addEventListener("input", () => { window.clearTimeout(timer); timer = window.setTimeout(render, 120); });
-  search.addEventListener("keydown", (event) => { if (event.key === "Escape" && search.value) { search.value = ""; render(); } });
-  categorySelect.addEventListener("change", () => { category = categorySelect.value; render(); });
-  availableOnly.addEventListener("change", render);
+  search.addEventListener("input", () => { clear.hidden = !search.value; window.clearTimeout(timer); timer = window.setTimeout(() => render("filter"), 140); });
+  search.addEventListener("keydown", (event) => { if (event.key === "Escape" && search.value) { search.value = ""; render("filter"); } });
+  clear.addEventListener("click", () => { search.value = ""; render("filter"); search.focus(); });
+  availableOnly.addEventListener("change", () => render("filter"));
+  sortGroup.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-sort]");
+    if (button && button.dataset.sort !== sort) { sort = button.dataset.sort as Sort; render("filter"); }
+  });
+  chips.addEventListener("click", (event) => {
+    const chip = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-category]");
+    if (!chip || chip.dataset.category === category) return;
+    category = chip.dataset.category ?? "";
+    render("filter");
+    chips.querySelector<HTMLButtonElement>(`[data-category="${CSS.escape(category)}"]`)?.focus();
+  });
   results.addEventListener("click", (event) => {
     if (!(event.target as HTMLElement).closest("#clear-filters")) return;
     search.value = "";
     category = "";
     availableOnly.checked = false;
-    render();
+    render("filter");
     search.focus();
   });
 
@@ -217,13 +293,12 @@ export function lending(): void {
     interval: 15_000,
     status: () => document.querySelector("#live-status"),
     onData: (data) => {
-      for (const item of data.items) {
-        if (previous.has(item.id) && previous.get(item.id) !== item.available) changed.add(item.id);
-        previous.set(item.id, item.available);
-      }
+      const first = !catalog;
+      before = new Map(catalog?.items.map((item) => [item.id, item.available]) ?? []);
+      for (const item of data.items) if (before.has(item.id) && before.get(item.id) !== item.available) changed.add(item.id);
       if (category && !data.categories.includes(category)) category = "";
       catalog = data;
-      render();
+      render(first ? "filter" : "data");
     },
     onError: () => {
       if (catalog) return;

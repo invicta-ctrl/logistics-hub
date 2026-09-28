@@ -117,6 +117,25 @@ export const plural = (count: number, word: string): string => `${count.toLocale
 const dateTime = new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" });
 export const formatDateTime = (iso: string): string => dateTime.format(new Date(iso));
 
+/* ---------- Motion ---------- */
+
+export const reducedMotion = (): boolean => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** Rolls a number from its current value to `to`, so a change is seen rather than jumped. */
+export function animateNumber(element: Element | null, to: number): void {
+  if (!element) return;
+  const from = Number(element.textContent);
+  if (!Number.isFinite(from) || from === to || reducedMotion()) { element.textContent = String(to); return; }
+  const start = performance.now();
+  const duration = Math.min(700, 250 + Math.abs(to - from) * 30);
+  const step = (now: number) => {
+    const progress = Math.min(1, (now - start) / duration);
+    element.textContent = String(Math.round(from + (to - from) * (1 - (1 - progress) ** 3)));
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 /* ---------- Feedback ---------- */
 
 /** Transient confirmation in a single polite live region that survives view changes. */
@@ -170,13 +189,20 @@ type LiveOptions<T> = { interval: number; onData: (data: T) => void; onError?: (
 export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => Promise<void> } {
   let etag = "";
   let timer = 0;
+  let settle = 0;
   let stopped = false;
-  const setStatus = (state: "live" | "offline") => {
+  let loaded = false;
+  const setStatus = (state: "live" | "offline" | "updated") => {
     const element = options.status?.();
     if (!element) return;
+    if (state === "live" && element.dataset.state === "updated") return;
     element.dataset.state = state;
-    element.textContent = state === "live" ? "Live updates" : "Offline, retrying";
+    element.textContent = state === "offline" ? "Offline, retrying" : state === "updated" ? "Updated just now" : "Live updates";
     element.title = `Last checked ${new Date().toLocaleTimeString()}`;
+    if (state === "updated") {
+      window.clearTimeout(settle);
+      settle = window.setTimeout(() => { element.dataset.state = "live"; element.textContent = "Live updates"; }, 4000);
+    }
   };
   const tick = async () => {
     window.clearTimeout(timer);
@@ -187,6 +213,8 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
         etag = response.headers.get("etag") ?? "";
         const data = await response.json() as T;
         if (!stopped) options.onData(data);
+        if (loaded) setStatus("updated");
+        loaded = true;
       } else if (response.status !== 304) {
         const body = await response.json().catch(() => ({})) as { error?: string };
         throw new ApiError(response.status, body.error ?? "Could not refresh.");
@@ -203,7 +231,7 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
   };
   const resume = () => { if (document.visibilityState === "visible") void tick(); };
   document.addEventListener("visibilitychange", resume);
-  onLeave(() => { stopped = true; window.clearTimeout(timer); document.removeEventListener("visibilitychange", resume); });
+  onLeave(() => { stopped = true; window.clearTimeout(timer); window.clearTimeout(settle); document.removeEventListener("visibilitychange", resume); });
   void tick();
   return { refresh: tick };
 }
