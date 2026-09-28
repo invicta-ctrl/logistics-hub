@@ -23,10 +23,10 @@ Run these from a clean, verified `main`:
 npm ci
 npm run typecheck && npm test && npm run build
 
-# 1. Create the database, then put the printed database_id into wrangler.jsonc and commit it.
-npx wrangler d1 create logistics-hub
+# 1. The database already exists and is bound in wrangler.jsonc
+#    (logistics-hub, 3ffd8edf-a176-4f63-8b7c-5215d11c98d8, empty until step 2).
 
-# 2. Schema + the verified 397-item inventory seed with opening-balance movements.
+# 2. Schema + the verified 397-item inventory seed with opening-balance movements (0001–0005).
 npx wrangler d1 migrations apply DB --remote
 
 # 3. Session signing secret (random, never stored in Git).
