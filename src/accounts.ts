@@ -149,6 +149,8 @@ export async function updateAccount(db: D1Database, actor: Account, id: string, 
   await db.batch([
     db.prepare(`UPDATE staff_accounts SET ${changes.map(([column]) => `${column} = ?`).join(", ")}, updated_at = ? WHERE id = ?`).bind(...changes.map(([, value]) => value), new Date().toISOString(), id),
     ...(sensitive ? [revokeSessions(db, id)] : []),
+    // A recovery key belongs to the owner role; losing the role ends it for good.
+    ...(current.role === "OWNER" && "role" in detail ? [db.prepare("UPDATE owner_recovery_keys SET revoked_at = ? WHERE account_id = ? AND revoked_at IS NULL").bind(new Date().toISOString(), id)] : []),
     audit(db, actor.accountId, "ACCOUNT_UPDATED", "ACCOUNT", id, { username: current.username, ...detail, sessionsRevoked: sensitive })
   ]);
   return { changed: changes.length, sessionsRevoked: sensitive };

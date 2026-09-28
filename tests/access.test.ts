@@ -183,6 +183,15 @@ describe("owner recovery key", () => {
     expect((await recover(next)).status).toBe(401);
   });
 
+  it("ends for good when its owner loses the owner role", async () => {
+    const { key } = await issueKey();
+    await seed("ACC-owner2", "owner2", "OWNER");
+    const other = (await signIn("owner2")).cookie;
+    expect((await as(other, "/api/staff/admin/accounts/ACC-owner", "PATCH", { role: "ADMIN" })).status).toBe(200);
+    expect((await as(other, "/api/staff/admin/accounts/ACC-owner", "PATCH", { role: "OWNER" })).status).toBe(200);
+    expect((await recover(key)).status).toBe(401);
+  });
+
   it("cannot be used for anything but the owner password reset", async () => {
     const { key } = await issueKey();
     for (const [path, method] of [["/api/staff/admin/accounts", "GET"], ["/api/staff/inventory", "GET"], ["/api/staff/items/ITM-0001/movements", "POST"]]) {
