@@ -1,30 +1,29 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-STATUS: READY_FOR_NEXT_AGENT
+STATUS: IDLE_ON_MAIN
 ACTIVE_WRITER: NONE
 WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
-BRANCH: feature/part-01-ydd-foundation
-LAST_KNOWN_GOOD_HEAD: 351fcf1
+BRANCH: main
 LIVE_PREVIEW: http://127.0.0.1:8791
 
 ## Completed
-- Part 1 implementation and verification completed by Codex.
-- Final Part 1 handoff recorded at 351fcf1.
-- Shared single-worktree workflow prepared for Codex/Claude turn-taking.
-
-## Current state
-Part 1 is ready for review/finalization. No active writer owns the shared worktree.
+- Part 1 implementation, verification, and shared-agent workflow are integrated into main.
+- main is the latest verified working product.
+- Codex and Claude use one shared worktree and one writer lock.
+- Future branch budget is main + at most one active slice branch.
 
 ## Exact next action
-Next assigned agent should claim the writer lock, run the existing verification suite, perform its assigned Part 1 review/finalization work, update this handoff, and stop before Part 2 unless Earl explicitly expands scope.
+Wait for the next accepted slice. When authorized:
+1. fetch/prune;
+2. ensure clean main;
+3. create one slice/part-02-<scope> branch from main;
+4. assigned agent claims the writer lock;
+5. continue in small verified commits.
 
 ## Dirty files
-None expected at this handoff baseline.
-
-## Verification baseline
-See .codex/CURRENT_HANDOFF.md for the latest complete Part 1 verification evidence.
+None expected.
 
 ## Known unresolved
-- ITM-0001 remains intentionally reconciled as movement-derived 7 vs legacy-reported 8.
+- ITM-0001 migration reconciliation remains intentionally movement-derived 7 vs legacy-reported 8.
 - Production authentication is not configured.
 - No remote Cloudflare deployment is authorized by this handoff.
