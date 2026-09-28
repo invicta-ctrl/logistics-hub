@@ -27,6 +27,7 @@ function secureHeaders(response: Response, url: URL): Response {
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   headers.set("Content-Security-Policy", "default-src 'self'; style-src 'self'; font-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
   if (url.protocol === "https:") headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  if (url.pathname.startsWith("/staff") || url.pathname.startsWith("/api/")) headers.set("X-Robots-Tag", "noindex, nofollow");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 

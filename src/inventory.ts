@@ -61,16 +61,20 @@ export async function staffInventory(db: D1Database) {
 
 export async function itemDetail(db: D1Database, id: string) {
   const [item, movements] = await db.batch([
-    db.prepare(`SELECT ${ITEM_COLUMNS}, b.legacy_reported_available_qty AS legacyReportedAvailable, b.migration_delta AS migrationDelta,
+    // Reconciliation evidence compares the legacy snapshot with the *migrated* ledger only,
+    // so staff movements recorded later never masquerade as a migration discrepancy.
+    db.prepare(`SELECT ${ITEM_COLUMNS}, i.legacy_reported_available_qty AS legacyReportedAvailable,
+      (SELECT COALESCE(SUM(m.signed_quantity), 0) FROM inventory_movements m WHERE m.item_id = i.id AND m.status = 'POSTED' AND m.imported_from IS NOT NULL) AS migratedOnHand,
       i.legacy_source_sheet AS legacySourceSheet, i.legacy_source_row AS legacySourceRow, i.verification_note AS verificationNote
       FROM items i LEFT JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?`).bind(id),
     db.prepare(`SELECT m.id, m.created_at AS createdAt, m.movement_type AS movementType, m.signed_quantity AS signedQuantity, m.status,
       m.notes, a.display_name AS actor FROM inventory_movements m LEFT JOIN staff_accounts a ON a.id = m.actor_user_id
       WHERE m.item_id = ? ORDER BY m.rowid DESC LIMIT 30`).bind(id)
   ]);
-  const row = item.results[0] as (ItemRow & Record<string, unknown>) | undefined;
+  const row = item.results[0] as (ItemRow & { legacyReportedAvailable: number | null; migratedOnHand: number }) | undefined;
   if (!row) throw new InputError(404, "Item not found.");
-  return { item: { ...row, needsReview: row.needsReview === 1, listed: isListedForLending(row) }, movements: movements.results };
+  const migrationDelta = row.legacyReportedAvailable === null ? null : row.migratedOnHand - row.legacyReportedAvailable;
+  return { item: { ...row, migrationDelta, needsReview: row.needsReview === 1, listed: isListedForLending(row) }, movements: movements.results };
 }
 
 type ItemInput = {

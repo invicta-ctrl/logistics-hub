@@ -1,12 +1,12 @@
 import "@fontsource/ibm-plex-sans/latin-400.css";
+import "@fontsource/ibm-plex-sans/latin-500.css";
 import "@fontsource/ibm-plex-sans/latin-600.css";
-import "@fontsource/ibm-plex-sans/latin-700.css";
 import "@fontsource/newsreader/latin-400.css";
 import "@fontsource/newsreader/latin-500.css";
 import "./styles.css";
 import { landing, lending, notFound } from "./public";
 import { staffLogin, workspace } from "./staff";
-import { leave, navigate } from "./ui";
+import { leave, navigate, toast } from "./ui";
 
 function render(): void {
   leave();
@@ -30,7 +30,25 @@ document.addEventListener("click", (event) => {
   const link = (event.target as HTMLElement).closest<HTMLAnchorElement>("a[data-route]");
   if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target) return;
   event.preventDefault();
-  if (link.pathname !== window.location.pathname) navigate(link.pathname);
+  if (link.pathname !== window.location.pathname || link.search !== window.location.search) navigate(link.pathname + link.search);
 });
+
+// "/" jumps to the page's search field, as in most catalog and admin tools.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;
+  const target = event.target as HTMLElement;
+  if (target.closest("input, textarea, select, [contenteditable=true]") || document.querySelector("dialog[open]")) return;
+  const search = document.querySelector<HTMLInputElement>("[data-search]");
+  if (!search) return;
+  event.preventDefault();
+  search.focus();
+  search.select();
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  console.error(event.reason);
+  toast("Something went wrong. Please try again.", "error");
+});
+
 window.addEventListener("popstate", render);
 render();

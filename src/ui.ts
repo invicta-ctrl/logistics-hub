@@ -1,7 +1,66 @@
 import { LABELS } from "./catalog-policy";
 
 export const app = document.querySelector<HTMLDivElement>("#app")!;
-export const MARK = `<img src="/dol-mark.png" alt="HAU USC Department of Logistics" width="183" height="163" />`;
+
+/* ---------- Safe HTML ---------- */
+
+/** Markup that is already safe to insert. Only html`` and raw() create it. */
+export class Html {
+  constructor(readonly value: string) {}
+  toString(): string { return this.value; }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]!);
+}
+
+function serialize(value: unknown): string {
+  if (value instanceof Html) return value.value;
+  if (Array.isArray(value)) return value.map(serialize).join("");
+  if (value === null || value === undefined || value === false) return "";
+  return escapeHtml(String(value));
+}
+
+/** Tagged template that escapes every interpolation unless it is itself Html. */
+export function html(strings: TemplateStringsArray, ...values: unknown[]): Html {
+  return new Html(strings.reduce((out, part, index) => out + part + (index < values.length ? serialize(values[index]) : ""), ""));
+}
+
+export const raw = (markup: string): Html => new Html(markup);
+
+export function mount(target: Element, content: Html): void {
+  target.innerHTML = content.value;
+}
+
+/* ---------- Icons (24px grid, 1.75 stroke, currentColor) ---------- */
+
+const ICONS = {
+  search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-4-4",
+  close: "M6 6l12 12M18 6 6 18",
+  arrow: "M5 12h14M13 6l6 6-6 6",
+  external: "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
+  plus: "M12 5v14M5 12h14",
+  check: "m5 12.5 4.5 4.5L19 7.5",
+  info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 11v5M12 8h.01",
+  alert: "M12 3 2 20h20L12 3ZM12 10v4M12 17h.01",
+  signOut: "M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5M16 8l4 4-4 4M20 12H9",
+  sort: "m8 9 4-4 4 4M8 15l4 4 4-4",
+  sortUp: "m8 14 4-4 4 4",
+  sortDown: "m8 10 4 4 4-4",
+  box: "M4 7.5 12 4l8 3.5v9L12 20l-8-3.5v-9ZM4 7.5l8 3.5 8-3.5M12 11v9",
+  eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
+  eyeOff: "M3 3l18 18M10.6 5.1A9.9 9.9 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.9M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"
+} as const;
+
+export type IconName = keyof typeof ICONS;
+
+export function icon(name: IconName): Html {
+  return raw(`<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${ICONS[name]}"/></svg>`);
+}
+
+export const MARK = raw(`<img class="mark" src="/dol-mark.png" alt="HAU USC Department of Logistics" width="183" height="163" />`);
+
+/* ---------- Routing and view lifecycle ---------- */
 
 let leaveView: Array<() => void> = [];
 /** Registers cleanup (timers, listeners) to run when the router leaves the current view. */
@@ -13,9 +72,26 @@ export function navigate(path: string, replace = false): void {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
-export function escapeHtml(value: unknown): string {
-  return String(value ?? "").replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]!);
+/** Mirrors view state (filters, sort, open item) into the query string without adding history entries. */
+export function writeParams(values: Record<string, string | null | undefined>): void {
+  const params = new URLSearchParams(window.location.search);
+  for (const [key, value] of Object.entries(values)) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
+  const query = params.toString();
+  window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
 }
+
+/** Re-renders a live region while keeping keyboard focus on the same keyed row. */
+export function preservingFocus(container: Element, render: () => void): void {
+  const active = document.activeElement;
+  const key = active && container.contains(active) ? active.closest<HTMLElement>("[data-key]")?.dataset.key : undefined;
+  render();
+  if (key) container.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"] button`)?.focus({ preventScroll: true });
+}
+
+/* ---------- Formatting ---------- */
 
 export const label = (value: string): string => LABELS[value] ?? value;
 
@@ -34,6 +110,39 @@ export function units(count: number, unit: string): string {
   if (Math.abs(count) === 1 || /s$/i.test(unit)) return unit;
   return /(x|ch|sh)$/i.test(unit) ? `${unit}es` : `${unit}s`;
 }
+
+export const plural = (count: number, word: string): string => `${count.toLocaleString()} ${word}${count === 1 ? "" : "s"}`;
+
+const dateTime = new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" });
+export const formatDateTime = (iso: string): string => dateTime.format(new Date(iso));
+
+/* ---------- Feedback ---------- */
+
+/** Transient confirmation in a single polite live region that survives view changes. */
+export function toast(message: string, tone: "ok" | "error" = "ok"): void {
+  let region = document.querySelector<HTMLDivElement>("#toasts");
+  if (!region) {
+    region = document.createElement("div");
+    region.id = "toasts";
+    region.className = "toasts";
+    region.setAttribute("aria-live", "polite");
+    document.body.append(region);
+  }
+  const item = document.createElement("div");
+  item.className = `toast toast--${tone}`;
+  mount(item, html`${icon(tone === "ok" ? "check" : "alert")}<span>${message}</span>`);
+  region.append(item);
+  window.setTimeout(() => {
+    item.classList.add("toast--leaving");
+    window.setTimeout(() => item.remove(), 250);
+  }, tone === "ok" ? 3500 : 6000);
+}
+
+export function emptyState(title: string, detail: string, action: Html | string = "", tone: "" | "error" = ""): Html {
+  return html`<div class="empty ${tone ? `empty--${tone}` : ""}">${icon(tone ? "alert" : "box")}<h2>${title}</h2><p>${detail}</p>${action}</div>`;
+}
+
+/* ---------- Data ---------- */
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -61,11 +170,11 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
   let etag = "";
   let timer = 0;
   let stopped = false;
-  const setStatus = (state: "live" | "offline", text: string) => {
+  const setStatus = (state: "live" | "offline") => {
     const element = options.status?.();
     if (!element) return;
     element.dataset.state = state;
-    element.textContent = text;
+    element.textContent = state === "live" ? "Live updates" : "Offline, retrying";
     element.title = `Last checked ${new Date().toLocaleTimeString()}`;
   };
   const tick = async () => {
@@ -81,10 +190,10 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
         const body = await response.json().catch(() => ({})) as { error?: string };
         throw new ApiError(response.status, body.error ?? "Could not refresh.");
       }
-      setStatus("live", "Live");
+      setStatus("live");
     } catch (error) {
       const failure = error instanceof ApiError ? error : new ApiError(0, "Offline");
-      setStatus("offline", "Reconnecting…");
+      setStatus("offline");
       options.onError?.(failure);
       if (failure.status === 401) return;
     }
@@ -96,8 +205,4 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
   onLeave(() => { stopped = true; window.clearTimeout(timer); document.removeEventListener("visibilitychange", resume); });
   void tick();
   return { refresh: tick };
-}
-
-export function stateMarkup(title: string, detail: string, extra = "", tone = ""): string {
-  return `<div class="state ${tone}"><h2>${escapeHtml(title)}</h2><p>${escapeHtml(detail)}</p>${extra}</div>`;
 }

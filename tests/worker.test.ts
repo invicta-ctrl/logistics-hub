@@ -107,7 +107,12 @@ describe("movement-derived inventory", () => {
   it("preserves the ITM-0001 reconciliation discrepancy", async () => {
     const cookie = await signIn();
     const detail = await (await staff(cookie, "/api/staff/items/ITM-0001")).json() as { item: Record<string, unknown> };
-    expect(detail.item).toMatchObject({ onHand: 7, legacyReportedAvailable: 8, migrationDelta: -1 });
+    expect(detail.item).toMatchObject({ onHand: 7, legacyReportedAvailable: 8, migratedOnHand: 7, migrationDelta: -1 });
+    // Later staff movements change on-hand but never the migration evidence.
+    await staff(cookie, "/api/staff/items/ITM-0001/movements", "POST", { kind: "IN", quantity: 5, key: "evidence-stable-key" });
+    await staff(cookie, "/api/staff/items/ITM-0002/movements", "POST", { kind: "IN", quantity: 5, key: "evidence-other-key" });
+    expect((await (await staff(cookie, "/api/staff/items/ITM-0001")).json() as { item: object }).item).toMatchObject({ onHand: 12, migrationDelta: -1 });
+    expect((await (await staff(cookie, "/api/staff/items/ITM-0002")).json() as { item: object }).item).toMatchObject({ migrationDelta: 0 });
   });
 
   it("records stock in, guarded stock out, and count adjustments as appended movements", async () => {
