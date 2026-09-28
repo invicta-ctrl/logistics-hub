@@ -17,7 +17,8 @@ function escapeHtml(value: string): string {
 function serialize(value: unknown): string {
   if (value instanceof Html) return value.value;
   if (Array.isArray(value)) return value.map(serialize).join("");
-  if (value === null || value === undefined || value === false) return "";
+  // Booleans print as "true"/"false" so ARIA attributes stay valid; use a ternary to omit markup.
+  if (value === null || value === undefined) return "";
   return escapeHtml(String(value));
 }
 

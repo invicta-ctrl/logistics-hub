@@ -1,4 +1,4 @@
-import { MARK, type Html, app, categoryName, emptyState, html, icon, label, live, mount, plural, preservingFocus, units, writeParams } from "./ui";
+import { MARK, type Html, app, categoryName, emptyState, html, icon, label, live, mount, onLeave, plural, preservingFocus, units, writeParams } from "./ui";
 
 type LendingItem = { id: string; name: string; category: string; unit: string; available: number; audience: string; maxPerLoan: number | null; loanDays: number | null };
 type Catalog = { revision: number; items: LendingItem[]; categories: string[] };
@@ -179,7 +179,7 @@ export function lending(): void {
       mount(results, emptyState("No items are open for borrowing yet", "Staff are reviewing the inventory. Approved items appear here automatically; there is no need to refresh."));
       return;
     }
-    if (categorySelect.options.length !== catalog.categories.length + 1) {
+    if ([...categorySelect.options].slice(1).map((option) => option.value).join("\n") !== catalog.categories.join("\n")) {
       mount(categorySelect, html`<option value="">All categories</option>${catalog.categories.map((value) => html`<option value="${value}">${categoryName(value)}</option>`)}`);
     }
     categorySelect.value = category;
@@ -199,6 +199,7 @@ export function lending(): void {
   };
 
   let timer = 0;
+  onLeave(() => window.clearTimeout(timer));
   search.addEventListener("input", () => { window.clearTimeout(timer); timer = window.setTimeout(render, 120); });
   search.addEventListener("keydown", (event) => { if (event.key === "Escape" && search.value) { search.value = ""; render(); } });
   categorySelect.addEventListener("change", () => { category = categorySelect.value; render(); });

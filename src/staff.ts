@@ -93,7 +93,8 @@ export function staffLogin(): void {
     event.preventDefault();
     const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
     const values = new FormData(form);
-    const missing = [...form.querySelectorAll<HTMLInputElement>("input[required]")].filter((input) => !input.value.trim());
+    // Only the username is trimmed; a password is checked exactly as typed.
+    const missing = [...form.querySelectorAll<HTMLInputElement>("input[required]")].filter((input) => input.name === "password" ? !input.value : !input.value.trim());
     form.querySelectorAll("input").forEach((input) => input.removeAttribute("aria-invalid"));
     if (missing.length) {
       missing.forEach((input) => input.setAttribute("aria-invalid", "true"));
@@ -180,7 +181,7 @@ export async function workspace(): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   let inventory: Inventory | null = null;
   const requestedView = params.get("view") ?? "";
-  let view: View = requestedView in VIEWS ? requestedView as View : "all";
+  let view: View = Object.hasOwn(VIEWS, requestedView) ? requestedView as View : "all";
   const [sortParam, dirParam] = (params.get("sort") ?? "name").split("-");
   let sortKey: SortKey = (["id", "name", "category", "onHand"] as const).find((key) => key === sortParam) ?? "name";
   let sortDir = dirParam === "desc" ? -1 : 1;
@@ -228,7 +229,7 @@ export async function workspace(): Promise<void> {
     writeParams({ view: view === "all" ? null : view, q: search.value.trim(), category, sort: sortKey === "name" && sortDir === 1 ? null : `${sortKey}-${sortDir === 1 ? "asc" : "desc"}` });
     mount(document.querySelector("#views")!, html`${Object.entries(VIEWS).map(([key, value]) =>
       html`<button type="button" class="view-tab" data-view="${key}" aria-pressed="${key === view}">${value.label}<span class="view-tab__count">${items.filter(value.test).length}</span></button>`)}`);
-    if (categorySelect.options.length !== inventory.categories.length + 1) {
+    if ([...categorySelect.options].slice(1).map((option) => option.value).join("\n") !== inventory.categories.join("\n")) {
       mount(categorySelect, html`<option value="">All categories</option>${inventory.categories.map((value) => html`<option value="${value}">${categoryName(value)}</option>`)}`);
     }
     categorySelect.value = category;
@@ -274,6 +275,7 @@ export async function workspace(): Promise<void> {
   });
 
   let searchTimer = 0;
+  onLeave(() => window.clearTimeout(searchTimer));
   search.addEventListener("input", () => { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(render, 120); });
   search.addEventListener("keydown", (event) => { if (event.key === "Escape" && search.value) { search.value = ""; render(); } });
   categorySelect.addEventListener("change", () => { category = categorySelect.value; render(); });
