@@ -2,11 +2,12 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests/worker-browser",
-  use: { baseURL: "http://127.0.0.1:8791", trace: "off" },
+  workers: 1,
+  use: { baseURL: "http://127.0.0.1:8792", trace: "retain-on-failure" },
   webServer: {
-    command: "npm run build && npx wrangler d1 migrations apply logistics-hub-part-01-local --local && npx wrangler dev --local --port 8791",
-    url: "http://127.0.0.1:8791",
+    command: "npm run build && npx wrangler dev --local --port 8792 --persist-to .wrangler/e2e --env-file .wrangler/e2e/.env",
+    url: "http://127.0.0.1:8792",
     reuseExistingServer: false,
-    timeout: 90_000
+    timeout: 120_000
   }
 });

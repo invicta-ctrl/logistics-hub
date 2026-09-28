@@ -1,13 +1,15 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "logistics-hub-part-01-local",
+  // Isolated Logistics Hub resources. Never point this at the old
+  // hau-usc-logistics-production / hau-usc-logistics-staging resources.
+  "name": "logistics-hub",
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-28",
+  "observability": { "enabled": true },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "logistics-hub-part-01-local",
-      "database_id": "00000000-0000-0000-0000-000000000001",
+      "database_name": "logistics-hub",
       "migrations_dir": "migrations"
     }
   ],

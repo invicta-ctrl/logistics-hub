@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import net from "node:net";
+import { createAccountSql, runD1 } from "./staff-account.mjs";
 
 const root = process.cwd();
 const devVars = path.join(root, ".dev.vars");
@@ -36,24 +37,22 @@ if (await portInUse(8791)) {
   process.exit(0);
 }
 
-if (!fs.existsSync(devVars)) {
-  const username = "preview-staff";
-  const password = crypto.randomBytes(12).toString("base64url");
-  const secret = crypto.randomBytes(48).toString("base64url");
-  fs.writeFileSync(devVars,
-    `ENVIRONMENT=development\nDEV_AUTH_ENABLED=true\nSESSION_SECRET=${secret}\nDEV_STAFF_USERNAME=${username}\nDEV_STAFF_PASSWORD=${password}\n`,
-    { mode: 0o600 }
-  );
-  fs.mkdirSync(path.dirname(credentialPath), { recursive: true });
-  fs.writeFileSync(credentialPath,
-    `Local preview only\nURL: http://127.0.0.1:8791/staff\nUsername: ${username}\nPassword: ${password}\n`,
-    { mode: 0o600 }
-  );
-  console.log("Generated loopback-only preview credentials at data/private/local-preview-credentials.txt");
+const vars = fs.existsSync(devVars) ? fs.readFileSync(devVars, "utf8") : "";
+if (!/^SESSION_SECRET=/m.test(vars)) {
+  fs.writeFileSync(devVars, `${vars}${vars && !vars.endsWith("\n") ? "\n" : ""}SESSION_SECRET=${crypto.randomBytes(48).toString("base64url")}\n`, { mode: 0o600 });
 }
 
 console.log("Applying local D1 migrations...");
-runNode(wrangler, ["d1", "migrations", "apply", "logistics-hub-part-01-local", "--local"], "local D1 migration");
+runNode(wrangler, ["d1", "migrations", "apply", "DB", "--local"], "local D1 migration");
+
+if (!runD1("SELECT COUNT(*) AS total FROM staff_accounts", { json: true })[0].total) {
+  const username = "preview-staff";
+  const password = crypto.randomBytes(12).toString("base64url");
+  runD1(createAccountSql(username, "Preview Staff", password));
+  fs.mkdirSync(path.dirname(credentialPath), { recursive: true });
+  fs.writeFileSync(credentialPath, `Local preview only\nURL: http://127.0.0.1:8791/staff\nUsername: ${username}\nPassword: ${password}\n`, { mode: 0o600 });
+  console.log("Created a local preview staff account; credentials are in data/private/local-preview-credentials.txt");
+}
 
 console.log("Typechecking and building initial frontend...");
 runNode(wrangler, ["types"], "wrangler types");
