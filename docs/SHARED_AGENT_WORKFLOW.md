@@ -74,7 +74,7 @@ Open:
 
 The preview belongs to the project, not an individual agent. Handoffs should not restart it unless needed.
 
-For Claude Cloud, the local preview can only see work that has been committed and pushed to GitHub. `npm run dev:live` starts a cloud-sync watcher that follows the single active `origin/slice/*` branch every 5 seconds when the local worktree is clean and no local writer lock is held. Claude Cloud should push coherent working checkpoints frequently rather than holding a large unpushed session.
+For Claude Cloud, the local preview can only see work that has been committed and pushed to GitHub. `npm run dev:live` starts a cloud-sync watcher that fast-forwards the preview to the single active `origin/slice/*` branch (or `main` once that slice is merged and pruned). It polls every 15 seconds, backing off to 60 seconds while nothing changes, and only when the local worktree is clean and no local writer lock is held. It never switches away from a local branch with unpushed commits, so push a slice branch before relying on the preview. Claude Cloud should push coherent working checkpoints frequently rather than holding a large unpushed session.
 
 ## Implementation rhythm
 

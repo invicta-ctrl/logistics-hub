@@ -22,6 +22,9 @@ LIVE_PREVIEW: http://127.0.0.1:8791
 - Migration `0005`: `inventory_balances.migration_delta` now compares the legacy snapshot with the migrated ledger only, so later staff movements never create false discrepancies.
 - axe-core: 0 WCAG 2.1 AA violations on every screen. The code review findings are fixed. The security review found nothing.
 
+## Completed (cloud-sync hardening, Claude)
+- `scripts/sync-cloud-preview.mjs` never leaves a branch with unpushed commits, and returns to `main` only from a merged, pruned slice. It re-checks the lock and a dirty tree right before every switch or merge. It fetches only `main` and `slice/*`, with a 30 s timeout, polling every 15 s and backing off to 60 s.
+
 ## Exact next action
 Deploy per `docs/DEPLOYMENT.md` (first launch; the D1 is already created and bound by Earl in 8a0e9d9), then create the real staff accounts with `--remote`. Staff then review and publish items from the "Loanable, not yet listed" queue (102 legacy-Loanable records).
 
@@ -33,4 +36,4 @@ None expected.
 - ITM-0001 reconciliation stays intentionally movement-derived: 7 versus 8 reported by the legacy system. It is shown to staff as migration evidence.
 - The public Lending Hub is empty until staff review items. That is deliberate and fail-closed; no item is auto-published.
 - `docs/WORKTREE_SETUP.md` and `scripts/setup-worktree.ps1` describe the older per-Part worktree model; `docs/SHARED_AGENT_WORKFLOW.md` supersedes them.
-- Suggested follow-up task (not in this slice): harden `scripts/sync-cloud-preview.mjs`. It can `git switch main` away from an unpushed local slice branch, and it re-checks the writer lock only before its fetch, not before switching.
+- `origin/slice/part-01-polish-launch` (01b23d4) is merged into `main` but was never deleted. The hardened cloud-sync watcher ignores merged slices, but per policy the remote branch should be deleted.
