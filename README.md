@@ -14,12 +14,14 @@ Read `AGENTS.md` then `.codex/CURRENT.md` before implementation.
 
 ## Part 1 local development
 
-Install dependencies with `npm install`, then use `npm run dev` for the browser UI or `npm run dev:worker` for the complete local Worker/D1 stack. The local Worker is migrated with:
+Install dependencies with `npm install`, then apply the local D1 migrations before starting the complete Worker stack:
 
 ```powershell
 npx wrangler d1 migrations apply logistics-hub-part-01-local --local
 ```
 
-The public catalog is sourced from local D1 and uses movement-derived balances. All migrated records remain unavailable to borrow until a later approved review makes an item explicitly lending-ready. Development staff login is disabled unless an operator supplies loopback-only runtime configuration and a session secret; production authentication is not configured by this repository.
+Use `npm run dev` for browser-only UI work, or `npm run dev:worker` after the migration command for the local Worker/D1 stack. The public catalog is sourced from local D1 and uses movement-derived balances. All migrated records remain unavailable to borrow until a later approved review makes an item explicitly lending-ready.
+
+Staff sign-in is disabled by default. For an isolated loopback-only local test, create an ignored `.dev.vars` file with `ENVIRONMENT=development`, `DEV_AUTH_ENABLED=true`, and generated values for `SESSION_SECRET`, `DEV_STAFF_USERNAME`, and `DEV_STAFF_PASSWORD`. Generate fresh random values locally and never commit or reuse real credentials. Production authentication is not configured by this repository.
 
 Run `npm run typecheck`, `npm test`, `npm run test:browser`, `npm run test:browser:worker`, `npm run verify:migration`, `npm run verify:catalog`, and `npm run verify:privacy` before review.

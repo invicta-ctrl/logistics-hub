@@ -5,4 +5,4 @@ OBJECTIVE: Deliver the independently usable Part 1 public gateway, fail-closed L
 IN_SCOPE: Vite/Worker/D1 foundation; retained YDD landing identity; public catalog reads; session boundary; staff shell; accessibility; local verification and documentation.
 OUT_OF_SCOPE: Part 2 catalog editing; request workflow; remote provider mutation; production deployment; staff/borrower PII in Git.
 VERIFICATION: migration baseline; explicit lending eligibility policy; unit/Worker/browser checks; local Worker/D1 integration; typecheck/build/privacy scan.
-STATUS: IN_PROGRESS
+STATUS: PART_01_READY_FOR_REVIEW
