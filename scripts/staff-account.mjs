@@ -47,7 +47,7 @@ export function createAccountSql(username, displayName, password) {
 
 // Security-sensitive changes (password, username, disable) end every session of that account.
 export const accountSql = {
-  list: "SELECT username, display_name AS name, CASE active WHEN 1 THEN 'enabled' ELSE 'disabled' END AS state, created_at AS created, COALESCE(last_login_at, 'never') AS last_sign_in, (SELECT COUNT(*) FROM staff_sessions s WHERE s.account_id = a.id AND s.revoked_at IS NULL AND s.expires_at > CAST(strftime('%s','now') AS INTEGER) * 1000) AS open_sessions FROM staff_accounts a ORDER BY username",
+  list: "SELECT username, display_name AS name, CASE active WHEN 1 THEN 'enabled' ELSE 'disabled' END AS state, created_at AS created, COALESCE(substr(replace(last_login_at, 'T', ' '), 1, 16) || ' UTC', 'never') AS last_sign_in, (SELECT COUNT(*) FROM staff_sessions s WHERE s.account_id = a.id AND s.revoked_at IS NULL AND s.expires_at > CAST(strftime('%s','now') AS INTEGER) * 1000) AS open_sessions FROM staff_accounts a ORDER BY username",
   exists: (username) => `SELECT username, display_name AS name, active FROM staff_accounts WHERE username = ${sqlText(username)}`,
   resetPassword: (username, password) => `${revokeSessions(username)} UPDATE staff_accounts SET password_hash = ${sqlText(hashPassword(checkPassword(password)))} WHERE username = ${sqlText(username)};`,
   rename: (username, next) => `${revokeSessions(username)} UPDATE staff_accounts SET username = ${sqlText(validUsername(next))} WHERE username = ${sqlText(username)};`,

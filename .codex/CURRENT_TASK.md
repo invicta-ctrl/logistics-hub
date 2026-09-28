@@ -1,6 +1,5 @@
-# Current Bounded Task — PART-01 product upgrade and Cloudflare launch
-INTENT: FEATURE_IMPLEMENTATION + DEPLOYMENT
-OBJECTIVE: A polished, production-ready Part 1: landing, a live fail-closed Lending Hub, real staff auth, and the minimal staff inventory operations that make availability live, launched on isolated Cloudflare resources.
-IN_SCOPE: redesign and logo; staff accounts and sessions; staff item create/edit and lending settings; stock in/out/count movements; live refresh; tests; deploy runbook; Cloudflare launch.
-OUT_OF_SCOPE: loan records/returns (Part 4); activity/audit browsing (Part 5); role administration UI (Part 6); R2 evidence; Logistics Request.
-STATUS: PRODUCT_COMPLETE_ON_MAIN; LAUNCH_PENDING_CREDENTIALS
+# Current Bounded Task — PART-01 launch, local admin console, final polish
+INTENT: DEPLOYMENT + OPERATOR TOOLING + PRODUCT POLISH
+OBJECTIVE: Reconcile repository state; ship a local operator console for staff accounts and guarded Cloudflare deployment; elevate visual design, motion and microinteractions; launch logistics-hub on isolated Cloudflare resources.
+OUT_OF_SCOPE: lending transactions/returns (Part 4), R2 evidence, Activity/Audit (Part 5), role administration UI (Part 6), web-based account administration.
+STATUS: COMPLETE_ON_MAIN; PRODUCTION_LAUNCH_PENDING_LOCAL_EXECUTION (no Cloudflare API access from the cloud container)
