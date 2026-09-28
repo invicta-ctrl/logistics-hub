@@ -1,0 +1,20 @@
+{
+  "generatedAt": "2026-09-28",
+  "itemCount": 397,
+  "uniqueItemIds": 397,
+  "productionBackupItemCount": 397,
+  "productionVsLatestBackupMismatchCount": 0,
+  "postedLedgerRows": 1,
+  "reservationRows": 1,
+  "computedBalanceMismatchCount": 1,
+  "mismatches": [
+    {
+      "itemId": "ITM-0001",
+      "openingQty": 8,
+      "postedMovementNet": -1,
+      "computedOnHand": 7,
+      "legacyAvailableQty": 8,
+      "deltaToLegacyAvailable": -1
+    }
+  ]
+}

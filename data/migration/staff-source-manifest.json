@@ -1,0 +1,15 @@
+{
+  "generatedAt": "2026-09-28",
+  "publicGitContainsPII": false,
+  "productionAccessRows": 1,
+  "candidatePrivateRosterSource": "[DOL] Committee Designation (Responses).xlsx",
+  "candidatePrivateRosterRows": 10,
+  "assignedDepartmentCounts": {
+    "Materials": 6,
+    "Inventory": 2,
+    "Food": 1,
+    "Unassigned": 1
+  },
+  "importState": "PRIVATE_RUNTIME_IMPORT_REQUIRED",
+  "note": "Private roster must be exported locally to data/private/staff.private.json; never commit personal data."
+}
