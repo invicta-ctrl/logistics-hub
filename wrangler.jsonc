@@ -10,6 +10,7 @@
     {
       "binding": "DB",
       "database_name": "logistics-hub",
+      "database_id": "3ffd8edf-a176-4f63-8b7c-5215d11c98d8",
       "migrations_dir": "migrations"
     }
   ],
