@@ -14,6 +14,7 @@ Authority: Earl current instruction -> accepted spec/amendment -> verified repos
 - Shared worktree only: `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`.
 - One active writer. Claim the writer lock before edits; yield before handoff.
 - Both agents use the same active slice branch. No Codex/Claude-specific branches.
+- Claude Cloud must commit and push each coherent working checkpoint to the one active `slice/*` branch so the local preview can auto-sync it. Unpushed cloud edits cannot appear locally.
 - `main` is always the latest verified working product.
 - At most one active short-lived `slice/<part>-<scope>` branch.
 - A finished green slice is merged to `main` immediately and its branch is deleted/pruned.

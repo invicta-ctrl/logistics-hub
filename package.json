@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:live": "node scripts/run-live-dev.mjs",
+    "preview:sync-cloud": "node scripts/sync-cloud-preview.mjs",
     "dev:worker": "npm run build && wrangler dev --local",
     "staff:account": "node scripts/staff-account.mjs",
     "agent:status": "node scripts/agent-lock.mjs status",

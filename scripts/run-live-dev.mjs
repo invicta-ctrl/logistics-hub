@@ -11,6 +11,7 @@ const credentialPath = path.join(root, "data", "private", "local-preview-credent
 const wrangler = path.join(root, "node_modules", "wrangler", "bin", "wrangler.js");
 const vite = path.join(root, "node_modules", "vite", "bin", "vite.js");
 const tsc = path.join(root, "node_modules", "typescript", "bin", "tsc");
+const cloudSync = path.join(root, "scripts", "sync-cloud-preview.mjs");
 
 function portInUse(port) {
   return new Promise((resolve) => {
@@ -34,6 +35,7 @@ function runNode(script, args, label) {
 
 if (await portInUse(8791)) {
   console.log("Logistics Hub live preview is already running at http://127.0.0.1:8791");
+  console.log("Start cloud sync separately with: npm run preview:sync-cloud");
   process.exit(0);
 }
 
@@ -70,9 +72,10 @@ function start(script, args, label) {
 }
 
 console.log("\nFull local preview: http://127.0.0.1:8791");
-console.log("Frontend rebuild watcher and local Worker/D1 are running.");
-console.log("Refresh the browser after edits to see the newest full-stack build.\n");
+console.log("Frontend rebuild watcher, local Worker/D1, and cloud-branch sync are running.");
+console.log("Claude Cloud must commit + push working checkpoints for the local preview to receive them.\n");
 
+start(cloudSync, [], "cloud preview sync");
 start(vite, ["build", "--watch"], "vite build watcher");
 start(wrangler, ["dev", "--local", "--port", "8791"], "wrangler dev");
 
