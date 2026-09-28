@@ -1,5 +1,5 @@
 import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, isListedForLending } from "./catalog-policy";
-import { ApiError, MARK, type Html, api, app, categoryName, emptyState, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, toast, units, writeParams } from "./ui";
+import { ApiError, MARK, type Html, animateNumber, api, app, categoryName, emptyState, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, reducedMotion, toast, units, writeParams } from "./ui";
 
 type Item = {
   id: string; name: string; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
@@ -170,7 +170,7 @@ export async function workspace(): Promise<void> {
       </header>
       <div class="views" id="views" role="group" aria-label="Inventory views"></div>
       <div class="table-toolbar">
-        <label class="search-field">${icon("search")}<span class="visually-hidden">Search inventory</span><input id="inventory-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search name, ID, category, location" data-search /><kbd aria-hidden="true">/</kbd></label>
+        <label class="search-field">${icon("search")}<span class="visually-hidden">Search inventory</span><input id="inventory-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search name, ID, category, location" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
         <label class="select-field"><span class="visually-hidden">Category</span><select id="inventory-category"><option value="">All categories</option></select></label>
         <p class="table-toolbar__count" id="inventory-count" aria-live="polite"></p>
       </div>
@@ -189,7 +189,7 @@ export async function workspace(): Promise<void> {
   let dirty = false;
   let pendingItem = params.get("item");
   const previous = new Map<string, number>();
-  const changed = new Set<string>();
+  const changed = new Map<string, number>();
   const sheet = document.querySelector<HTMLDialogElement>("#sheet")!;
   const search = document.querySelector<HTMLInputElement>("#inventory-search")!;
   const categorySelect = document.querySelector<HTMLSelectElement>("#inventory-category")!;
@@ -214,12 +214,13 @@ export async function workspace(): Promise<void> {
       <button type="button" class="sort-button" data-sort="${key}">${title}${icon(active ? (sortDir === 1 ? "sortUp" : "sortDown") : "sort")}</button></th>`;
   };
 
-  const row = (item: Item) => html`<tr data-key="${item.id}" class="${[changed.has(item.id) ? "is-changed" : "", item.id === openId ? "is-open" : ""].join(" ")}">
+  const direction = (id: string) => { const was = changed.get(id); if (was === undefined) return ""; const now = previous.get(id) ?? was; return now > was ? "is-changed is-up" : "is-changed is-down"; };
+  const row = (item: Item) => html`<tr data-key="${item.id}" class="${[direction(item.id), item.id === openId ? "is-open" : ""].join(" ")}">
     <td class="col-id">${item.id}</td>
     <td class="col-item"><button type="button" class="row-link">${item.name}</button><span class="cell-sub">${label(item.itemType)}</span></td>
     <td class="col-category">${categoryName(item.category)}</td>
     <td class="col-location">${item.storageLocation ?? html`<span class="muted">—</span>`}</td>
-    <td class="col-qty"><span class="qty">${item.onHand}</span> <span class="qty-unit">${units(item.onHand, item.unit)}</span></td>
+    <td class="col-qty"><span class="qty" data-qty="${item.id}">${item.onHand}</span> <span class="qty-unit">${units(item.onHand, item.unit)}</span></td>
     <td class="col-status">${tags(item)}</td></tr>`;
 
   const render = () => {
@@ -244,7 +245,15 @@ export async function workspace(): Promise<void> {
           <thead><tr>${sortHeader("id", "ID", "col-id")}${sortHeader("name", "Item", "col-item")}${sortHeader("category", "Category", "col-category")}<th scope="col" class="col-location">Location</th>${sortHeader("onHand", "On hand", "col-qty")}<th scope="col" class="col-status">Status</th></tr></thead>
           <tbody>${shown.map(row)}</tbody></table></div>`
       : emptyState("No items match", "Try another search, category, or view.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
+    for (const [id, was] of changed) {
+      const cell = results.querySelector(`[data-qty="${CSS.escape(id)}"]`);
+      if (!cell) continue;
+      const to = Number(cell.textContent);
+      cell.textContent = String(was);
+      animateNumber(cell, to);
+    }
     changed.clear();
+    (document.querySelector("#clear-search") as HTMLElement).hidden = !search.value;
   };
 
   const poll = live<Inventory>("/api/staff/inventory", {
@@ -254,7 +263,7 @@ export async function workspace(): Promise<void> {
       let openChanged = false;
       for (const item of data.items) {
         if (previous.has(item.id) && previous.get(item.id) !== item.onHand) {
-          changed.add(item.id);
+          changed.set(item.id, previous.get(item.id)!);
           if (item.id === openId) openChanged = true;
         }
         previous.set(item.id, item.onHand);
@@ -262,7 +271,9 @@ export async function workspace(): Promise<void> {
       if (category && !data.categories.includes(category)) category = "";
       inventory = data;
       render();
-      if (openChanged && openId) void loadDetail(openId, false);
+      // Refresh the open sheet only when it does not already show the new quantity (e.g. another staff member's change).
+      const shown = Number(sheet.querySelector<HTMLElement>("[data-onhand]")?.dataset.onhand);
+      if (openChanged && openId && shown !== data.items.find((item) => item.id === openId)?.onHand) void loadDetail(openId, false);
       if (pendingItem) { openItem(pendingItem); pendingItem = null; }
     },
     onError: (error) => {
@@ -279,6 +290,19 @@ export async function workspace(): Promise<void> {
   search.addEventListener("input", () => { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(render, 120); });
   search.addEventListener("keydown", (event) => { if (event.key === "Escape" && search.value) { search.value = ""; render(); } });
   categorySelect.addEventListener("change", () => { category = categorySelect.value; render(); });
+  document.querySelector("#clear-search")!.addEventListener("click", () => { search.value = ""; render(); search.focus(); });
+  // Arrow keys move between rows; Home/End jump to the ends; Enter opens (native button).
+  results.addEventListener("keydown", (event) => {
+    const current = (event.target as HTMLElement).closest<HTMLButtonElement>(".row-link");
+    if (!current || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const links = [...results.querySelectorAll<HTMLButtonElement>(".row-link")];
+    const index = links.indexOf(current);
+    const next = event.key === "Home" ? 0 : event.key === "End" ? links.length - 1 : index + (event.key === "ArrowDown" ? 1 : -1);
+    if (!links[next]) return;
+    event.preventDefault();
+    links[next].focus();
+    links[next].scrollIntoView({ block: "nearest" });
+  });
   document.querySelector("#views")!.addEventListener("click", (event) => {
     const tab = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-view]");
     if (tab) { view = tab.dataset.view as View; render(); }
@@ -313,9 +337,18 @@ export async function workspace(): Promise<void> {
 
   /* ---------- Item sheet ---------- */
 
+  /** Plays the exit animation before closing, so the sheet leaves the way it arrived. */
+  const closeSheet = () => {
+    if (!sheet.open || sheet.classList.contains("is-closing")) return;
+    if (reducedMotion()) return sheet.close();
+    sheet.classList.add("is-closing");
+    const done = () => { sheet.classList.remove("is-closing"); sheet.close(); };
+    sheet.addEventListener("animationend", done, { once: true });
+    window.setTimeout(() => { if (sheet.classList.contains("is-closing")) done(); }, 400);
+  };
   const requestClose = () => {
     if (dirty && !window.confirm("Discard your unsaved changes to this item?")) return;
-    sheet.close();
+    closeSheet();
   };
   sheet.addEventListener("cancel", (event) => { event.preventDefault(); requestClose(); });
   sheet.addEventListener("click", (event) => { if (event.target === sheet) requestClose(); });
@@ -356,7 +389,16 @@ export async function workspace(): Promise<void> {
       const detail = await api<Detail>(`/api/staff/items/${encodeURIComponent(id)}`);
       if (openId !== id) return;
       if (full) return renderDetail(detail);
+      const was = Number(sheet.querySelector<HTMLElement>("[data-onhand]")?.dataset.onhand);
+      const badge = sheet.querySelector(".delta");
       sheet.querySelector("#summary")!.outerHTML = summaryMarkup(detail).value;
+      const difference = detail.item.onHand - was;
+      if (difference === 0 && badge) sheet.querySelector(".summary__primary dd")?.append(badge);
+      if (Number.isFinite(was) && difference !== 0) {
+        const quantity = sheet.querySelector(".summary__qty");
+        if (quantity) { quantity.textContent = String(was); animateNumber(quantity, detail.item.onHand); }
+        sheet.querySelector(".summary__primary dd")?.insertAdjacentHTML("beforeend", html` <span class="delta ${difference > 0 ? "delta--up" : "delta--down"}">${difference > 0 ? "+" : "−"}${Math.abs(difference)}</span>`.value);
+      }
       mount(sheet.querySelector("#history")!, historyMarkup(detail.movements));
       sheet.querySelector<HTMLFormElement>("#stock-form")?.dispatchEvent(new Event("refresh"));
     } catch (error) {
@@ -382,7 +424,7 @@ export async function workspace(): Promise<void> {
     if (!movements.length) return html`<li class="history__empty">No movements recorded yet.</li>`;
     return html`${movements.map((movement) => {
       const quantity = movement.signedQuantity;
-      return html`<li class="history__item">
+      return html`<li class="history__item ${quantity > 0 ? "is-in" : quantity < 0 ? "is-out" : ""}">
         <div><p class="history__title">${MOVEMENT_LABELS[movement.movementType] ?? movement.movementType}${movement.status !== "POSTED" ? ` (${movement.status.toLowerCase()})` : ""}</p>
           <p class="history__meta"><time datetime="${movement.createdAt}">${formatDateTime(movement.createdAt)}</time> · ${movement.actor ?? "Legacy system"}</p>
           ${movement.notes ? html`<p class="history__note">${movement.notes}</p>` : ""}</div>
@@ -428,7 +470,8 @@ export async function workspace(): Promise<void> {
         ${Object.entries(KINDS).map(([kind, value], index) => html`<label><input type="radio" name="kind" value="${kind}" ${index === 0 ? html`checked` : ""} /><span>${value.label}</span></label>`)}
       </fieldset>
       <div class="field-row">
-        <div class="field"><label for="stock-quantity" id="stock-quantity-label">${KINDS.IN.quantity}</label><input id="stock-quantity" name="quantity" type="number" inputmode="numeric" min="1" max="100000" step="1" required /></div>
+        <div class="field"><label for="stock-quantity" id="stock-quantity-label">${KINDS.IN.quantity}</label>
+          <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="Decrease quantity">−</button><input id="stock-quantity" name="quantity" type="number" inputmode="numeric" min="1" max="100000" step="1" required /><button type="button" class="stepper__button" data-step="1" aria-label="Increase quantity">+</button></div></div>
         <p class="stock-preview" id="stock-preview" aria-live="polite"></p>
       </div>
       <div class="field"><label for="stock-note"><span id="stock-note-label">Reason</span> <span class="field__optional" id="stock-note-optional">optional</span></label><input id="stock-note" name="note" maxlength="500" placeholder="${KINDS.IN.placeholder}" /></div>
@@ -453,7 +496,9 @@ export async function workspace(): Promise<void> {
       note.placeholder = config.placeholder;
       note.required = !config.optional;
       quantity.min = String(config.min);
-      button.textContent = kind() === "COUNT" ? "Record count" : `Record ${config.label.toLowerCase()}`;
+      if (!button.classList.contains("is-done")) button.textContent = kind() === "COUNT" ? "Record count" : `Record ${config.label.toLowerCase()}`;
+      button.classList.toggle("button--danger", kind() === "OUT");
+      button.classList.toggle("button--primary", kind() !== "OUT");
       const value = Number(quantity.value);
       const preview = form.querySelector("#stock-preview")!;
       if (quantity.value === "" || !Number.isInteger(value) || value < config.min) { mount(preview, html``); return; }
@@ -466,6 +511,11 @@ export async function workspace(): Promise<void> {
     form.addEventListener("change", () => { setMessage(alert, ""); update(); });
     form.addEventListener("input", () => { key = crypto.randomUUID(); quantity.removeAttribute("aria-invalid"); note.removeAttribute("aria-invalid"); update(); });
     form.addEventListener("refresh", update);
+    form.querySelectorAll<HTMLButtonElement>("[data-step]").forEach((stepButton) => stepButton.addEventListener("click", () => {
+      const next = Math.max(KINDS[kind()].min, (Number(quantity.value) || 0) + Number(stepButton.dataset.step));
+      quantity.value = String(next);
+      quantity.dispatchEvent(new Event("input", { bubbles: true }));
+    }));
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const value = Number(quantity.value);
@@ -489,6 +539,10 @@ export async function workspace(): Promise<void> {
         form.reset();
         key = crypto.randomUUID();
         update();
+        // Brief in-place confirmation; the toast carries the full message for screen readers.
+        button.classList.add("is-done");
+        mount(button, html`${icon("check")}Recorded`);
+        window.setTimeout(() => { button.classList.remove("is-done"); update(); }, 1400);
         await loadDetail(item.id, false);
         await poll.refresh();
       } catch (error) {
