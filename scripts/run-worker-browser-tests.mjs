@@ -6,7 +6,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createAccountSql, runD1 } from "./staff-account.mjs";
 
-const stateDir = ".wrangler/e2e";
+const stateDir = `.wrangler/e2e-${process.pid}`;
 const wrangler = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
 const cli = fileURLToPath(new URL("../node_modules/@playwright/test/cli.js", import.meta.url));
 
@@ -19,8 +19,12 @@ try {
   const username = `e2e-${randomBytes(4).toString("hex")}`;
   const password = randomBytes(18).toString("base64url");
   runD1(createAccountSql(username, "E2E Staff", password), { persistTo: stateDir });
-  const result = spawnSync(process.execPath, [cli, "test", "-c", "playwright.worker.config.ts", ...process.argv.slice(2)], { stdio: "inherit", env: { ...process.env, E2E_USERNAME: username, E2E_PASSWORD: password } });
+  const result = spawnSync(process.execPath, [cli, "test", "-c", "playwright.worker.config.ts", ...process.argv.slice(2)], { stdio: "inherit", env: { ...process.env, E2E_USERNAME: username, E2E_PASSWORD: password, E2E_STATE_DIR: stateDir } });
   process.exitCode = result.status ?? 1;
 } finally {
-  fs.rmSync(stateDir, { recursive: true, force: true });
+  try {
+    fs.rmSync(stateDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+  } catch (error) {
+    console.warn(`e2e cleanup skipped for ${stateDir}: ${error.message}`);
+  }
 }

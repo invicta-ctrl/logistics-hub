@@ -11,9 +11,9 @@ LIVE_PREVIEW: http://127.0.0.1:8791
 - Staff inventory workspace at `/staff/inventory`: a live table and filter tiles, plus an item drawer with Stock in / Stock out / Count, details and lending editing (audited), and history.
 - Public Lending Hub lists only reviewed, active Loanable items that have an audience. It fails closed and shows live availability.
 - Live refresh: the `catalog_revision` counter plus ETag/304 polling (public every 15 s, staff every 10 s).
-- Ledger invariants: guarded single-statement movements, idempotency keys, and append-only triggers (migration 0004).
+- Ledger invariants: guarded single-statement movements, idempotency keys, and append-only triggers (migration 0009).
 - Redesign: cropped large DOL mark (no caption), new landing, Lending Hub and staff shell. Fonts are self-hosted and the CSP is `'self'` only.
-- Worker tests run on every real migration via node:sqlite. E2E runs a real Worker + D1 in throwaway `.wrangler/e2e` state.
+- Worker tests run on every real migration via node:sqlite. E2E runs a real Worker + D1 in PID-scoped throwaway `.wrangler/e2e-*` state.
 
 ## Exact next action
 Deploy per `docs/DEPLOYMENT.md` (first launch), then create the real staff accounts with `--remote`. Staff then review and publish items from the "Loanable, not yet listed" queue (102 legacy-Loanable records).
