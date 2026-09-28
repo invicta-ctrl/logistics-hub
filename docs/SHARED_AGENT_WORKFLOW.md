@@ -74,6 +74,8 @@ Open:
 
 The preview belongs to the project, not an individual agent. Handoffs should not restart it unless needed.
 
+The preview seeds three LOCAL test identities when missing: `preview-owner` (Owner), `preview-admin` (Administrator) and `preview-staff` (Staff). Their random passwords are appended to the Git-ignored `data/private/local-preview-credentials.txt`; they exist only in `.wrangler/state`.
+
 For Claude Cloud, the local preview can only see work that has been committed and pushed to GitHub. `npm run dev:live` starts a cloud-sync watcher that fast-forwards the preview to the single active `origin/slice/*` branch (or `main` once that slice is merged and pruned). It polls every 15 seconds, backing off to 60 seconds while nothing changes, and only when the local worktree is clean and no local writer lock is held. It never switches away from a local branch with unpushed commits, so push a slice branch before relying on the preview. Claude Cloud should push coherent working checkpoints frequently rather than holding a large unpushed session.
 
 ## Implementation rhythm
@@ -180,3 +182,5 @@ Never delete a branch with unique unmerged commits merely because it looks old.
 ## Production boundary
 
 This workflow is local/Git only unless Earl separately authorizes remote provider/Production actions.
+
+`docs/DEPLOYMENT.md` is the only deployment and credential runbook: deploy with the Owner Console (`LOGISTICS_ADMIN.cmd` → 13) from clean, verified `main`, and manage accounts through the site's Administration page or the console (Admin API). Agents never create, read or store real staff credentials.

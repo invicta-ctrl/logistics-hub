@@ -1,17 +1,21 @@
 # Current Handoff — Part 1
 
-Part 1 is on `main`, including the launch tooling and the final polish. For state and the next action see `.codex/SESSION_HANDOFF.md`. The launch runbook is `docs/DEPLOYMENT.md`, and the operator entry point is `npm run admin` / `LOGISTICS_ADMIN.cmd`.
+Part 1 code is complete on `main`, including owner access. For state and the next action, see `.codex/SESSION_HANDOFF.md`. The only runbook is `docs/DEPLOYMENT.md`.
 
-Verification for this round:
-- typecheck (frontend and Worker);
-- `npm test`: 21 tests on migrations 0001–0010, including a guard on remote D1 limits;
-- `npm run test:browser`: 7 UI tests, 320–1440 px;
-- `npm run test:browser:worker`: 6 real Worker + D1 E2E tests, covering live public refresh from staff writes, rejection of anonymous and cross-site writes, sorting and item deep links;
-- `verify:migration`, `verify:catalog` and `verify:privacy`;
-- axe-core (WCAG 2.1 AA and best practices): 0 violations on the landing page, Lending Hub, sign-in, 404, inventory and the item sheet tabs;
-- reduced motion clamps every animation to 0.01 ms;
-- the console's verification suite (12 checks) passes against a real local Worker + D1;
-- console account operations were exercised on LOCAL: create, list, edit, case-only rename, disable, enable and reset, with sign-in confirmed before and after the reset;
-- a code review found 10 issues, all fixed.
+Verification for the owner-access slice (Linux cloud container, local Worker + D1):
+- typecheck;
+- `npm test`: 41 tests, including 19 access-control tests covering:
+  - role limits, last owner, disabled sign-in;
+  - session invalidation on reset, rename and role change;
+  - recovery (valid, invalid, rotated, revoked, demoted owner, single-use, no admin reach);
+  - cross-site rejection, secret hygiene, audit metadata, login and recovery throttling;
+  - migration 0011 against real session rows with foreign keys on;
+- `test:browser`: 7 tests; `test:browser:worker`: 8 real Worker + D1 E2E tests, including owner-creates-staff/forced-change/staff-denied and recovery-once;
+- build, `verify:privacy`, `verify:migration`, `verify:catalog`, `npx wrangler deploy --dry-run`;
+- axe (WCAG 2.1 AA and best practices): 0 violations on Administration, New account, Manage and My account at 1366 px and 390 px. There is no horizontal overflow, and staff are redirected away from `/staff/admin`;
+- the Owner Console was driven against the preview:
+  - sign-in, list, create Staff and Admin (generated password), reset, rename, disable, sign out everywhere;
+  - an ADMIN refused on owner/admin targets; forced password change;
+  - pasted-key recovery with auto sign-in and a new key, an invalid key rejected, and key deletion.
 
-Production: D1 `logistics-hub` has only `0001_core.sql` applied (read-only check). The Worker is not deployed from the cloud container, which has no Cloudflare API access.
+Not verifiable here: DPAPI pairing, the `D:\` launcher, production deploy and the production smoke suite. These run on Earl's PC.

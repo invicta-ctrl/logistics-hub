@@ -248,7 +248,7 @@ export async function myAccount(): Promise<void> {
         <h2 class="panel__title" id="recovery-title">Owner recovery key</h2>
         <p class="field__hint">If you ever forget your username or password, a recovery key resets your owner password without Cloudflare or database access. It can do nothing else, works once, and only its fingerprint is stored.</p>
         <p class="recovery-status">${recovery?.configured ? html`<span class="tag tag--ok">Configured</span> since ${formatDateTime(recovery.createdAt!)}` : html`<span class="tag tag--warn">Not configured</span>`}</p>
-        <p class="field__hint">The simplest way to keep it safe is the Owner Console on your PC: <strong>Recovery → Pair this computer</strong> stores it encrypted to your Windows account. You can also issue one here to print or store offline.</p>
+        <p class="field__hint">The simplest way to keep it safe is the Owner Console on your PC: <strong>9. Pair this computer</strong> stores it encrypted to your Windows account. You can also issue one here to print or store offline.</p>
         <div class="form-alert" id="recovery-alert" role="alert" hidden></div>
         <div class="form-actions form-actions--start">
           <button class="button button--secondary" type="button" id="rotate-key">${recovery?.configured ? "Replace recovery key" : "Create recovery key"}</button>

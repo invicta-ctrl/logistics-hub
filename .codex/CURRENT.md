@@ -1,19 +1,19 @@
 # Current Work Pointer — Logistics Hub
 PROGRAM: Logistics Hub
-MILESTONE: PART-01_YDD_GATEWAY_AND_FOUNDATION (launch, admin console, final polish)
-STATUS: PART_01_COMPLETE_ON_MAIN; PRODUCTION_LAUNCH_READY_FROM_LOCAL_ADMIN_CONSOLE
+MILESTONE: PART-01_YDD_GATEWAY_AND_FOUNDATION
+STATUS: OWNER_ACCESS_COMPLETE_ON_MAIN; PRODUCTION_DEPLOY_AND_OWNER_BOOTSTRAP_PENDING_ON_EARL_PC
 BRANCH: main
 ACTIVE_WRITER: NONE
 SHARED_WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
+PRODUCTION: Worker logistics-hub; D1 logistics-hub (binding DB); never hau-usc-logistics-production/staging
+PRODUCTION_STATE: read-only check 2026-09-28 — Worker deployed (older build); D1 migrations 0001–0009 applied; 397 items; 0 accounts. Pending: 0010, 0011.
+ACCESS: roles STAFF/ADMIN/OWNER enforced by the Worker; Administration + My Account pages; Owner Console over the Admin API; owner recovery key (DPAPI pairing). No OWNER exists in production yet.
+LAUNCHER: D:\Documents\Logi hub access\LOGISTICS_ADMIN.cmd (created by the console on first run on Earl's PC; not yet verified on Windows)
+PREVIEW: http://127.0.0.1:8791 via npm run dev:live (LOCAL identities preview-owner / preview-admin / preview-staff)
+RUNBOOK: docs/DEPLOYMENT.md (the one deployment and credential path)
 SESSION_HANDOFF: .codex/SESSION_HANDOFF.md
 SHARED_WORKFLOW: docs/SHARED_AGENT_WORKFLOW.md
-DEPLOYMENT_RUNBOOK: docs/DEPLOYMENT.md
-ADMIN_CONSOLE: npm run admin  (Windows: LOGISTICS_ADMIN.cmd)
-LIVE_PREVIEW: http://127.0.0.1:8791 via npm run dev:live
 ACCEPTED_SPEC: docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md
 CURRENT_TASK: .codex/CURRENT_TASK.md
-CURRENT_HANDOFF: .codex/CURRENT_HANDOFF.md
-PRODUCTION_TARGET: Worker logistics-hub + D1 logistics-hub (binding DB, id in wrangler.jsonc); never hau-usc-logistics-production/staging
-PRODUCTION_STATE: D1 has only 0001_core.sql applied (no data, verified 2026-09-28 read-only); Worker not deployed
-PRODUCTION_DEPLOYMENT: AUTHORIZED_BY_EARL; NOT_YET_EXECUTED — the Claude cloud container cannot reach api.cloudflare.com and the Cloudflare connector cannot upload Workers
-NEXT_EXACT_ACTION: on Earl's machine, npx wrangler login, then LOGISTICS_ADMIN.cmd → 7 (status) → 8 (deploy latest verified main) → 2 (create staff accounts on PRODUCTION).
+OPEN_PART_01_ITEMS: production deploy (0010, 0011) + verification; real OWNER bootstrap; D:\ launcher + DPAPI pairing + recovery verified on Windows
+NEXT_EXACT_ACTION: on Earl's PC from clean main — npx wrangler login; LOGISTICS_ADMIN.cmd → 12 (status) → 13 (deploy) → 14 (first-time owner setup, Earl types his own credentials) → 8 (recovery check). Then set STATUS: COMPLETE_AND_PRODUCTION_VERIFIED.

@@ -6,54 +6,57 @@ WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
 BRANCH: main
 LIVE_PREVIEW: http://127.0.0.1:8791
 
-## Completed (Part 1 product upgrade, Claude)
-- Real staff auth: explicit `staff_accounts` (PBKDF2) managed with the local admin console (`npm run admin`); the env-var dev login is removed.
-- Staff inventory workspace at `/staff/inventory`: a live table and filter tiles, plus an item drawer with Stock in / Stock out / Count, details and lending editing (audited), and history.
-- Public Lending Hub lists only reviewed, active Loanable items that have an audience. It fails closed and shows live availability.
-- Live refresh: the `catalog_revision` counter plus ETag/304 polling (public every 15 s, staff every 10 s).
-- Ledger invariants: guarded single-statement movements, idempotency keys, and append-only triggers (migration 0009).
-- Redesign: cropped large DOL mark (no caption), new landing, Lending Hub and staff shell. Fonts are self-hosted and the CSP is `'self'` only.
-- Worker tests run on every real migration via node:sqlite. E2E runs a real Worker + D1 in PID-scoped throwaway `.wrangler/e2e-*` state.
+## Part 1 on main (summary)
+- **Public:** the landing page, and a Lending Hub that fails closed, shows only reviewed items, and refreshes live via `catalog_revision` with ETag/304.
+- **Staff workspace:** inventory with Stock in, Stock out and Count on an append-only, movement-derived ledger; item details and lending; history.
+- **Data:** 397 migrated items. ITM-0001 intentionally stays at 7 against the legacy 8, shown to staff as migration evidence (`0010`).
+- **Design:** a token design system with self-hosted fonts, a `'self'`-only CSP, and a motion system with a reduced-motion clamp.
 
-## Completed (frontend polish round, Claude)
-- Token-based design system: neutral surfaces, oxblood for actions only, one type scale, hairlines, dot status tags, SVG icons, self-hosted fonts.
-- Editorial landing; a catalogue-style Lending Hub grouped by category; staff app bar, view tabs, a sortable table, a side sheet, toasts, and an unsaved-changes guard.
-- Filters, sort and the open item are kept in the URL; `/` focuses search; live refresh preserves keyboard focus.
-- Migration `0010` (formerly 0005): `inventory_balances.migration_delta` now compares the legacy snapshot with the migrated ledger only, so later staff movements never create false discrepancies.
-- axe-core: 0 WCAG 2.1 AA violations on every screen. The code review findings are fixed. The security review found nothing.
+## Owner access slice (Claude, merged)
+- **Migration `0011`:**
+  - roles `STAFF`/`ADMIN`/`OWNER` and `must_change_password`;
+  - `owner_recovery_keys` (verifier only);
+  - `auth_throttle`;
+  - indexes.
+  It rebuilds `staff_accounts`, which ends existing sessions once. Its foreign-key safety was tested against real session rows.
+- **`src/accounts.ts`:** a single server implementation of every account rule, used by the website and the console.
+  - ADMIN manages STAFF only.
+  - The last OWNER cannot be removed.
+  - Sensitive changes revoke sessions.
+  - Changes are audited to `audit_log` without secrets.
+- **Worker API:**
+  - `/api/staff/me*` for self service;
+  - `/api/staff/admin/*` for administration;
+  - `/api/recovery/owner`, which only resets the owner's password.
+  Login and recovery are throttled in D1. Mutations require the same origin.
+- **UI:**
+  - `/staff/admin`: account table, create (generated or typed password), manage (profile, role, reset, sign out everywhere, enable/disable), security activity;
+  - `/staff/account`: password, profile, sign out other devices, recovery key.
+  The navigation is Inventory · Administration · My account.
+- **Owner Console (`scripts/admin.mjs`):**
+  - account work goes over HTTPS to the Admin API, with no Wrangler needed;
+  - recovery (a paired DPAPI key or a pasted key, then auto sign-in and a fresh key), pairing, and rotate/delete;
+  - developer options: status, deploy (which records the replaced Worker version and the Time Travel bookmark), and first-time owner setup, which works only while there are zero owners;
+  - it writes the `D:\Documents\Logi hub access\LOGISTICS_ADMIN.cmd` launcher on Windows.
+  The obsolete direct-D1 account SQL was removed.
+- **Docs:** `docs/DEPLOYMENT.md` is now the single deployment and credential runbook. `docs/WORKTREE_SETUP.md` and `scripts/setup-worktree.ps1` were retired.
 
-## Completed (cloud-sync hardening, Claude)
-- `scripts/sync-cloud-preview.mjs` never leaves a branch with unpushed commits, and returns to `main` only from a merged, pruned slice. It re-checks the lock and a dirty tree right before every switch or merge. It fetches only `main` and `slice/*`, with a 30 s timeout, polling every 15 s and backing off to 60 s.
-
-## Completed (launch tooling and final polish, Claude)
-- Reconciled: Earl's seed split (slice), the watcher hardening (claude branch) and main were merged into `slice/part-01-polish-launch` with no work lost. Production D1 was verified read-only: only `0001_core.sql` applied, no data.
-- Remote D1 rejects `BEGIN TRANSACTION` (error 7500, verified) and queries over 100 KB. Seed parts `0002`–`0007` contain neither, and `tests/migration.test.ts` enforces this. The evidence view is `0010`.
-- `dev:live` moves a local database migrated before the renumbering to `.wrangler/state-backup-<time>` and rebuilds, so nothing is lost and no manual reset is needed.
-- Local admin console (`npm run admin`, `LOGISTICS_ADMIN.cmd`):
-  - accounts: list, create (with a generated password option), reset password, edit name or username, enable, disable;
-  - production changes require typing `production`;
-  - operations: status (with fixes), deploy (strict preflight, Time Travel bookmark, typed `deploy`, migrations, generated `SESSION_SECRET` on first launch, live verification) and verify.
-- UI:
-  - an editorial split hero with the emblem medallion;
-  - Lending Hub chips, sort, clear and last-one states;
-  - staff stepper, destructive Stock out, delta badges, rolling counts, a timeline history, a mobile bottom sheet, and arrow-key rows;
-  - a motion system (View Transitions, scroll-driven CSS, reduced-motion clamp).
-- Verification: axe reports 0 violations on 8 screens.
-
-## Exact next action
-On Earl's machine, from clean `main`:
-1. Run `npx wrangler login` once.
-2. Run `LOGISTICS_ADMIN.cmd` and choose 7 (status), then 8 (deploy). This applies migrations `0002`–`0010`, sets `SESSION_SECRET`, deploys and verifies.
-3. Choose 2 on PRODUCTION to create the real staff accounts.
-4. Staff publish items from the "Ready to list" view.
+## Exact next action (Earl's PC, clean main)
+1. `npx wrangler login`.
+2. Double-click `LOGISTICS_ADMIN.cmd` in the worktree. The first run creates `D:\Documents\Logi hub access\LOGISTICS_ADMIN.cmd`; use that from then on.
+3. Choose **12** (production status), then **13** (deploy). This applies `0010` and `0011`, keeps the existing `SESSION_SECRET`, and verifies.
+4. Choose **14** (first-time owner setup). Earl types his own username, display name and password. The console signs in and pairs the PC.
+5. Verify production:
+   - **S** to production and sign in;
+   - create temporary Admin and Staff accounts, check their sign-in and permissions, then disable them;
+   - **8** (recovery with the paired key), then confirm the old key fails.
+6. When all of this passes, set `.codex/CURRENT.md` STATUS to `COMPLETE_AND_PRODUCTION_VERIFIED`, with `OPEN_PART_01_ITEMS: none`.
 
 ## Dirty files
 None expected.
 
 ## Known unresolved
-- The Cloudflare launch has not run yet: the Claude cloud container cannot reach api.cloudflare.com, and the Cloudflare connector has no Worker-upload tool. The admin console performs the launch from Earl's machine.
-- ITM-0001 reconciliation stays intentionally movement-derived: 7 versus 8 reported by the legacy system. It is shown to staff as migration evidence.
-- The public Lending Hub is empty until staff review items. That is deliberate and fail-closed; no item is auto-published.
-- `docs/WORKTREE_SETUP.md` and `scripts/setup-worktree.ps1` describe the older per-Part worktree model; `docs/SHARED_AGENT_WORKFLOW.md` supersedes them.
-- Restart `npm run dev:live` once to pick up the watcher fix and rebuild the local preview database.
-- `origin/claude/relaxed-dijkstra-aw1i6o` is fully merged, but this session's Git proxy refused to delete it; delete it from GitHub.
+- Production is not yet deployed with this code and has no OWNER. The cloud container has no Cloudflare API, Windows or `D:\` access. The production state was verified read-only via the Cloudflare connector: 0001–0009 applied, 397 items, 0 accounts.
+- DPAPI pairing and the `.cmd` launcher are untested on real Windows. Their logic was reviewed, and the launcher content was generated and checked with CRLF line endings.
+- The public Lending Hub is empty until staff publish items. This is deliberate.
+- The remote branches `slice/part-01-polish-launch` and `claude/relaxed-dijkstra-aw1i6o` are fully contained in `main`, but the cloud Git proxy refuses remote branch deletion. Delete them, and `slice/part-01-owner-access` if it is still present, from GitHub or with `git push origin --delete <branch>` locally.

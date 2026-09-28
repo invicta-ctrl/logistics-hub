@@ -1,5 +1,5 @@
-# Current Bounded Task — PART-01 launch, local admin console, final polish
-INTENT: DEPLOYMENT + OPERATOR TOOLING + PRODUCT POLISH
-OBJECTIVE: Reconcile repository state; ship a local operator console for staff accounts and guarded Cloudflare deployment; elevate visual design, motion and microinteractions; launch logistics-hub on isolated Cloudflare resources.
-OUT_OF_SCOPE: lending transactions/returns (Part 4), R2 evidence, Activity/Audit (Part 5), role administration UI (Part 6), web-based account administration.
-STATUS: COMPLETE_ON_MAIN; PRODUCTION_LAUNCH_PENDING_LOCAL_EXECUTION (no Cloudflare API access from the cloud container)
+# Current Bounded Task — PART-01 final reconciliation, owner access, production closure
+INTENT: ACCESS CONTROL + OWNER TOOLING + PRODUCTION CLOSURE
+OBJECTIVE: STAFF/ADMIN/OWNER roles enforced server-side; web Administration and My Account; Owner Console over the site's Admin API; single-use owner recovery key with Windows DPAPI pairing; permanent D:\ launcher; one deployment and one credential path; deploy and verify production.
+OUT_OF_SCOPE: Part 2 and later (lending transactions, R2 evidence, broader audit UI).
+STATUS: CODE_COMPLETE_ON_MAIN; PRODUCTION_STEPS_PENDING_ON_EARL_PC (the cloud container has no Cloudflare API, Windows or D:\ access)
