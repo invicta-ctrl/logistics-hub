@@ -163,9 +163,14 @@ async function deploy(ask) {
   try { bookmark = JSON.parse(travel.stdout).bookmark ?? null; } catch { /* reported below */ }
   if (!bookmark) return fail("D1 Time Travel bookmark", "could not be read", "Retry; deployment stops without a rollback point.");
   pass("D1 Time Travel bookmark", bookmark);
-  const pending = pendingMigrations() ?? [];
+  const pending = pendingMigrations();
+  if (pending === null) return fail("Migrations", "could not read the production migration list", "Nothing was changed. Check your connection and Cloudflare access, then retry.");
+  // Generate a session key only for a Worker that has never been deployed. If an existing
+  // Worker's secrets cannot be read, stop: replacing the key would sign every staff member out.
+  const firstDeploy = !wr(["deployments", "list", "--name", EXPECTED.worker, "--json"]).ok;
   const secrets = wr(["secret", "list", "--name", EXPECTED.worker]);
-  const needsSecret = !(secrets.ok && secrets.stdout.includes("SESSION_SECRET"));
+  if (!firstDeploy && !secrets.ok) return fail("Worker secrets", "could not be read", "Nothing was changed. Retry; if it persists, check that your Cloudflare token can read Worker secrets.");
+  const needsSecret = firstDeploy || !secrets.stdout.includes("SESSION_SECRET");
   const commit = git("rev-parse", "--short", "HEAD");
 
   console.log(c.bold("\n3. Plan"));
@@ -331,7 +336,8 @@ async function interactive() {
       const name = await ask(`  Display name [${account.name}] (Enter to keep): `);
       const username = await ask(`  Username [${account.username}] (Enter to keep): `);
       if (!name && !username) return note("No changes");
-      if (username && username !== account.username && d1(accountSql.exists(validUsername(username)), true).length) throw new Error(`"${username}" already exists.`);
+      // Usernames are case-insensitive, so a capitalisation-only change is not a clash with itself.
+      if (username && username.toLowerCase() !== account.username.toLowerCase() && d1(accountSql.exists(validUsername(username)), true).length) throw new Error(`"${username}" already exists.`);
       if (!await guard(`Edit "${account.username}"${username ? " (a username change signs them out)" : ""}`)) return note("Cancelled");
       if (name) d1(accountSql.setDisplayName(account.username, name));
       if (username && username !== account.username) d1(accountSql.rename(account.username, username));
@@ -385,7 +391,10 @@ try {
   if (!fs.existsSync(wrangler)) throw new Error("Dependencies are missing. Run  npm ci  first.");
   if (!command) await interactive();
   else if (command === "status") process.exitCode = await status() ? 0 : 1;
-  else if (command === "deploy") { const ask = prompter(); process.exitCode = await deploy(ask) ? 0 : 1; ask.close(); }
+  else if (command === "deploy") {
+    const ask = prompter();
+    try { process.exitCode = await deploy(ask) ? 0 : 1; } finally { ask.close(); }
+  }
   else if (command === "verify") {
     const url = rest.find((value) => value.startsWith("http")) ?? lastDeployment()?.url;
     if (!url) throw new Error("Usage: npm run admin -- verify <url> [--local]");

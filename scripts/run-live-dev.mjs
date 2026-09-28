@@ -44,6 +44,22 @@ if (!/^SESSION_SECRET=/m.test(vars)) {
   fs.writeFileSync(devVars, `${vars}${vars && !vars.endsWith("\n") ? "\n" : ""}SESSION_SECRET=${crypto.randomBytes(48).toString("base64url")}\n`, { mode: 0o600 });
 }
 
+// A local database migrated before the seed was split (Sept 2026) records migration
+// names that no longer exist; re-running would duplicate the seed. Keep it as a backup
+// and rebuild the disposable preview database from the current migrations.
+const stateDir = path.join(root, ".wrangler", "state");
+if (fs.existsSync(stateDir)) {
+  let applied = [];
+  try { applied = runD1("SELECT name FROM d1_migrations", { json: true }).map((row) => row.name); } catch { /* fresh or unreadable state */ }
+  const current = new Set(fs.readdirSync(path.join(root, "migrations")));
+  const stale = applied.filter((name) => !current.has(name));
+  if (stale.length) {
+    const backup = path.join(root, ".wrangler", `state-backup-${new Date().toISOString().replace(/[:.]/g, "-")}`);
+    fs.renameSync(stateDir, backup);
+    console.log(`Local preview database predates the current migrations (${stale.join(", ")}); moved it to ${path.relative(root, backup)} and rebuilding.`);
+  }
+}
+
 console.log("Applying local D1 migrations...");
 runNode(wrangler, ["d1", "migrations", "apply", "DB", "--local"], "local D1 migration");
 

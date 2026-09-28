@@ -121,13 +121,13 @@ export const formatDateTime = (iso: string): string => dateTime.format(new Date(
 
 export const reducedMotion = (): boolean => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** Rolls a number from its current value to `to`, so a change is seen rather than jumped. */
-export function animateNumber(element: Element | null, to: number): void {
+/** Rolls a number to `to` (from `from`, or its current text), so a change is seen rather than jumped. */
+export function animateNumber(element: Element | null, to: number, from = Number(element?.textContent)): void {
   if (!element) return;
-  const from = Number(element.textContent);
   if (!Number.isFinite(from) || from === to || reducedMotion()) { element.textContent = String(to); return; }
   const start = performance.now();
   const duration = Math.min(700, 250 + Math.abs(to - from) * 30);
+  element.textContent = String(from);
   const step = (now: number) => {
     const progress = Math.min(1, (now - start) / duration);
     element.textContent = String(Math.round(from + (to - from) * (1 - (1 - progress) ** 3)));
@@ -196,6 +196,7 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
     const element = options.status?.();
     if (!element) return;
     if (state === "live" && element.dataset.state === "updated") return;
+    if (state === "offline") window.clearTimeout(settle);
     element.dataset.state = state;
     element.textContent = state === "offline" ? "Offline, retrying" : state === "updated" ? "Updated just now" : "Live updates";
     element.title = `Last checked ${new Date().toLocaleTimeString()}`;

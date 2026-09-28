@@ -247,10 +247,7 @@ export async function workspace(): Promise<void> {
       : emptyState("No items match", "Try another search, category, or view.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
     for (const [id, was] of changed) {
       const cell = results.querySelector(`[data-qty="${CSS.escape(id)}"]`);
-      if (!cell) continue;
-      const to = Number(cell.textContent);
-      cell.textContent = String(was);
-      animateNumber(cell, to);
+      animateNumber(cell, Number(cell?.textContent), was);
     }
     changed.clear();
     (document.querySelector("#clear-search") as HTMLElement).hidden = !search.value;
@@ -342,9 +339,16 @@ export async function workspace(): Promise<void> {
     if (!sheet.open || sheet.classList.contains("is-closing")) return;
     if (reducedMotion()) return sheet.close();
     sheet.classList.add("is-closing");
-    const done = () => { sheet.classList.remove("is-closing"); sheet.close(); };
-    sheet.addEventListener("animationend", done, { once: true });
-    window.setTimeout(() => { if (sheet.classList.contains("is-closing")) done(); }, 400);
+    // Only the sheet's own exit animation ends the close; child animations bubble here too.
+    const finish = (event?: AnimationEvent) => {
+      if (event && event.target !== sheet) return;
+      sheet.removeEventListener("animationend", finish);
+      window.clearTimeout(fallback);
+      sheet.classList.remove("is-closing");
+      sheet.close();
+    };
+    const fallback = window.setTimeout(finish, 400);
+    sheet.addEventListener("animationend", finish);
   };
   const requestClose = () => {
     if (dirty && !window.confirm("Discard your unsaved changes to this item?")) return;
@@ -395,8 +399,7 @@ export async function workspace(): Promise<void> {
       const difference = detail.item.onHand - was;
       if (difference === 0 && badge) sheet.querySelector(".summary__primary dd")?.append(badge);
       if (Number.isFinite(was) && difference !== 0) {
-        const quantity = sheet.querySelector(".summary__qty");
-        if (quantity) { quantity.textContent = String(was); animateNumber(quantity, detail.item.onHand); }
+        animateNumber(sheet.querySelector(".summary__qty"), detail.item.onHand, was);
         sheet.querySelector(".summary__primary dd")?.insertAdjacentHTML("beforeend", html` <span class="delta ${difference > 0 ? "delta--up" : "delta--down"}">${difference > 0 ? "+" : "−"}${Math.abs(difference)}</span>`.value);
       }
       mount(sheet.querySelector("#history")!, historyMarkup(detail.movements));

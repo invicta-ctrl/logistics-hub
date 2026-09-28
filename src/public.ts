@@ -55,14 +55,11 @@ function stagger(container: Element): void {
   container.classList.add("is-entering");
 }
 
-/** Shows old counts first, then rolls each changed one to its new value. */
+/** Rolls each changed count from its previous value to the new one. */
 function rollCounts(container: Element, before: Map<string, number>, changed: Set<string>): void {
   for (const id of changed) {
     const element = container.querySelector(`[data-count="${CSS.escape(id)}"]`);
-    const to = Number(element?.textContent);
-    if (!element || !before.has(id)) continue;
-    element.textContent = String(before.get(id));
-    animateNumber(element, to);
+    if (element && before.has(id)) animateNumber(element, Number(element.textContent), before.get(id));
   }
 }
 
@@ -241,7 +238,13 @@ export function lending(): void {
     }
     const inCategory = (value: string) => catalog!.items.filter((item) => !value || item.category === value).length;
     chips.hidden = catalog.categories.length < 2;
-    mount(chips, html`${["", ...catalog.categories].map((value) => html`<button type="button" class="chip" data-category="${value}" aria-pressed="${value === category}">${value ? categoryName(value) : "All"}<span class="chip__count">${inCategory(value)}</span></button>`)}`);
+    const chipMarkup = html`${["", ...catalog.categories].map((value) => html`<button type="button" class="chip" data-category="${value}" aria-pressed="${value === category}">${value ? categoryName(value) : "All"}<span class="chip__count">${inCategory(value)}</span></button>`)}`;
+    // Rebuild chips only when they change, and keep keyboard focus on the same chip.
+    if (chips.innerHTML !== chipMarkup.value) {
+      const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>(".chip")?.dataset.category;
+      mount(chips, chipMarkup);
+      if (focused !== undefined) chips.querySelector<HTMLElement>(`[data-category="${CSS.escape(focused)}"]`)?.focus();
+    }
     const query = search.value.trim().toLowerCase();
     const shown = catalog.items.filter((item) => (!category || item.category === category)
       && (!availableOnly.checked || item.available > 0)
