@@ -6,5 +6,7 @@ dist/
 coverage/
 playwright-report/
 test-results/
+.playwright-cli/
+worker-configuration.d.ts
 data/private/*
 !data/private/README.md

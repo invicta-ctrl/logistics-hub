@@ -1,8 +1,8 @@
-# Current Bounded Task — BOOTSTRAP-001
-INTENT: PROJECT_BOOTSTRAP_AND_DATA_MIGRATION
+# Current Bounded Task — PART-01_YDD_GATEWAY_AND_FOUNDATION
+INTENT: FEATURE_IMPLEMENTATION
 MODE: EXECUTE
-OBJECTIVE: Establish governance, migration-ready core schema, full inventory seed, private staff import boundary and deterministic Codex worktree setup.
-IN_SCOPE: accepted spec/current chain; core D1 schema; full catalog; opening movements; existing ledger/reservation rows; backup reconciliation; private staff import tooling; worktree setup.
-OUT_OF_SCOPE: provider/D1/R2 creation; remote DB mutation; production deployment; UI implementation; staff/borrower PII in Git.
-VERIFICATION: 397 inventory items; unique IDs; Production/latest-backup row parity; no staff PII in Git; local seed verification after clone.
-STATUS: READY_FOR_REVIEW
+OBJECTIVE: Deliver the independently usable Part 1 public gateway, fail-closed Lending Hub, and staff authentication foundation.
+IN_SCOPE: Vite/Worker/D1 foundation; retained YDD landing identity; public catalog reads; session boundary; staff shell; accessibility; local verification and documentation.
+OUT_OF_SCOPE: Part 2 catalog editing; request workflow; remote provider mutation; production deployment; staff/borrower PII in Git.
+VERIFICATION: migration baseline; explicit lending eligibility policy; unit/Worker/browser checks; local Worker/D1 integration; typecheck/build/privacy scan.
+STATUS: IN_PROGRESS
