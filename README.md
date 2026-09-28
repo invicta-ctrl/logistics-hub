@@ -24,7 +24,7 @@ npm ci
 npm run dev:live      # http://127.0.0.1:8791 — local Worker + D1, rebuilds on change
 ```
 
-`dev:live` applies local migrations. It generates `.dev.vars` (`SESSION_SECRET`) and, when none exists, a local preview staff account. The preview credentials go in the ignored `data/private/local-preview-credentials.txt`. Manage accounts with `npm run staff:account -- create|reset-password|disable|list …` (add `--remote` only for the deployed database).
+`dev:live` applies local migrations. It generates `.dev.vars` (`SESSION_SECRET`) and, when none exists, a local preview staff account. The preview credentials go in the ignored `data/private/local-preview-credentials.txt`. Manage staff accounts and deployments with the local admin console: `npm run admin`, or double-click `LOGISTICS_ADMIN.cmd` on Windows. It targets PRODUCTION by default; press `E` to switch to the LOCAL preview database.
 
 ## Checks
 
@@ -41,7 +41,7 @@ If Playwright's bundled browser is missing, set `PLAYWRIGHT_CHROMIUM_PATH` to a 
 
 ## Deploying
 
-See `docs/DEPLOYMENT.md`. It covers only the isolated `logistics-hub` Worker/D1 and never the old `hau-usc-logistics-*` resources.
+Run `npm run admin` and choose **8. Deploy latest verified main**. It preflights, records a D1 rollback point, applies pending migrations, deploys, then smoke-tests the live site. `docs/DEPLOYMENT.md` explains each step. Only the isolated `logistics-hub` Worker/D1 is ever targeted, never the old `hau-usc-logistics-*` resources.
 
 ## Shared Codex + Claude development
 

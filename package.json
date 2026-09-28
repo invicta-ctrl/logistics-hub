@@ -8,7 +8,7 @@
     "dev:live": "node scripts/run-live-dev.mjs",
     "preview:sync-cloud": "node scripts/sync-cloud-preview.mjs",
     "dev:worker": "npm run build && wrangler dev --local",
-    "staff:account": "node scripts/staff-account.mjs",
+    "admin": "node scripts/admin.mjs",
     "agent:status": "node scripts/agent-lock.mjs status",
     "agent:claim": "node scripts/agent-lock.mjs claim",
     "agent:yield": "node scripts/agent-lock.mjs yield",

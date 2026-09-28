@@ -1,18 +1,13 @@
-// Operator tool for staff login accounts. Accounts are created explicitly here,
+// Staff login accounts: hashing, validation, and the SQL for every account
+// operation. Accounts are created explicitly by an operator (npm run admin),
 // never inferred from the staff directory or historical sources.
-//
-//   node scripts/staff-account.mjs create <username> --name "Display Name" [--remote] [--password-stdin]
-//   node scripts/staff-account.mjs reset-password <username> [--remote] [--password-stdin]
-//   node scripts/staff-account.mjs disable <username> [--remote]
-//   node scripts/staff-account.mjs list [--remote]
 import { pbkdf2Sync, randomBytes, randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import readline from "node:readline";
 
 // Must match PASSWORD_ITERATIONS in src/session.ts (Workers cap PBKDF2 at 100k).
 const ITERATIONS = 100_000;
-const wrangler = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
+export const wrangler = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
 
 export function hashPassword(password) {
   const salt = randomBytes(16);
@@ -20,65 +15,55 @@ export function hashPassword(password) {
 }
 
 const sqlText = (value) => `'${String(value).replaceAll("'", "''")}'`;
+const byUsername = (username) => `(SELECT id FROM staff_accounts WHERE username = ${sqlText(username)})`;
+const revokeSessions = (username) => `UPDATE staff_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE revoked_at IS NULL AND account_id = ${byUsername(username)};`;
 
-export function createAccountSql(username, displayName, password) {
-  return `INSERT INTO staff_accounts(id, username, display_name, password_hash) VALUES(${sqlText(`ACC-${randomUUID()}`)}, ${sqlText(username)}, ${sqlText(displayName)}, ${sqlText(hashPassword(password))});`;
-}
-
-export function runD1(sql, { remote = false, json = false, persistTo } = {}) {
-  const target = remote ? ["--remote"] : ["--local", ...(persistTo ? ["--persist-to", persistTo] : [])];
-  const result = spawnSync(process.execPath, [wrangler, "d1", "execute", "DB", ...target, "--yes", ...(json ? ["--json"] : []), "--command", sql], { encoding: "utf8", stdio: json ? ["ignore", "pipe", "inherit"] : "inherit" });
-  if (result.status !== 0) throw new Error("wrangler d1 execute failed");
-  return json ? JSON.parse(result.stdout)[0].results : undefined;
-}
-
-function validUsername(username) {
-  if (!/^[a-z0-9][a-z0-9._-]{2,63}$/i.test(username ?? "")) throw new Error("Username must be 3-64 letters, numbers, dots, dashes, or underscores.");
+export function validUsername(username) {
+  if (!/^[a-z0-9][a-z0-9._-]{2,63}$/i.test(username ?? "")) throw new Error("Username must be 3-64 letters, numbers, dots, dashes, or underscores, starting with a letter or number.");
   return username;
 }
 
-async function readPassword(fromStdin) {
-  if (fromStdin) {
-    let input = "";
-    for await (const chunk of process.stdin) input += chunk;
-    return checkPassword(input.replace(/\r?\n$/, ""));
-  }
-  const ask = (prompt) => new Promise((resolve) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
-    rl._writeToOutput = (text) => { if (text.includes(prompt)) process.stdout.write(prompt); };
-    rl.question(prompt, (answer) => { rl.close(); process.stdout.write("\n"); resolve(answer); });
-  });
-  const password = await ask("New password: ");
-  if (password !== await ask("Repeat password: ")) throw new Error("Passwords did not match.");
-  return checkPassword(password);
+export function validDisplayName(name) {
+  const value = String(name ?? "").trim();
+  if (!value || value.length > 80 || /[\u0000-\u001f]/.test(value)) throw new Error("Display name must be 1-80 printable characters.");
+  return value;
 }
 
-function checkPassword(password) {
+export function checkPassword(password) {
   if (password.length < 12 || password.length > 256) throw new Error("Password must be 12-256 characters.");
   return password;
 }
 
-async function main() {
-  const [command, username] = process.argv.slice(2);
-  const flag = (name) => process.argv.includes(name);
-  const option = (name) => { const index = process.argv.indexOf(name); return index > 0 ? process.argv[index + 1] : undefined; };
-  const remote = flag("--remote");
-  if (command === "create") {
-    const displayName = option("--name")?.trim();
-    if (!displayName) throw new Error("Provide --name \"Display Name\".");
-    runD1(createAccountSql(validUsername(username), displayName, await readPassword(flag("--password-stdin"))), { remote });
-  } else if (command === "reset-password") {
-    const hash = hashPassword(await readPassword(flag("--password-stdin")));
-    runD1(`UPDATE staff_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE revoked_at IS NULL AND account_id = (SELECT id FROM staff_accounts WHERE username = ${sqlText(validUsername(username))}); UPDATE staff_accounts SET password_hash = ${sqlText(hash)} WHERE username = ${sqlText(username)};`, { remote });
-  } else if (command === "disable") {
-    runD1(`UPDATE staff_accounts SET active = 0 WHERE username = ${sqlText(validUsername(username))}; UPDATE staff_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE revoked_at IS NULL AND account_id = (SELECT id FROM staff_accounts WHERE username = ${sqlText(username)});`, { remote });
-  } else if (command === "list") {
-    console.table(runD1("SELECT username, display_name, active, created_at, last_login_at FROM staff_accounts ORDER BY username", { remote, json: true }));
-  } else {
-    throw new Error("Usage: staff-account.mjs create|reset-password|disable|list <username> [--name \"Display Name\"] [--remote] [--password-stdin]");
-  }
+/** A random password staff can type: 4 groups of 5 unambiguous characters. */
+export function generatePassword() {
+  const alphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = randomBytes(20);
+  return Array.from({ length: 4 }, (_, group) => Array.from({ length: 5 }, (_, index) => alphabet[bytes[group * 5 + index] % alphabet.length]).join("")).join("-");
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  main().catch((error) => { console.error(error.message); process.exit(1); });
+export function createAccountSql(username, displayName, password) {
+  return `INSERT INTO staff_accounts(id, username, display_name, password_hash) VALUES(${sqlText(`ACC-${randomUUID()}`)}, ${sqlText(validUsername(username))}, ${sqlText(validDisplayName(displayName))}, ${sqlText(hashPassword(checkPassword(password)))});`;
+}
+
+// Security-sensitive changes (password, username, disable) end every session of that account.
+export const accountSql = {
+  list: "SELECT username, display_name AS name, CASE active WHEN 1 THEN 'enabled' ELSE 'disabled' END AS state, created_at AS created, COALESCE(last_login_at, 'never') AS last_sign_in, (SELECT COUNT(*) FROM staff_sessions s WHERE s.account_id = a.id AND s.revoked_at IS NULL AND s.expires_at > CAST(strftime('%s','now') AS INTEGER) * 1000) AS open_sessions FROM staff_accounts a ORDER BY username",
+  exists: (username) => `SELECT username, display_name AS name, active FROM staff_accounts WHERE username = ${sqlText(username)}`,
+  resetPassword: (username, password) => `${revokeSessions(username)} UPDATE staff_accounts SET password_hash = ${sqlText(hashPassword(checkPassword(password)))} WHERE username = ${sqlText(username)};`,
+  rename: (username, next) => `${revokeSessions(username)} UPDATE staff_accounts SET username = ${sqlText(validUsername(next))} WHERE username = ${sqlText(username)};`,
+  setDisplayName: (username, name) => `UPDATE staff_accounts SET display_name = ${sqlText(validDisplayName(name))} WHERE username = ${sqlText(username)};`,
+  setActive: (username, active) => `${active ? "" : revokeSessions(username)} UPDATE staff_accounts SET active = ${active ? 1 : 0} WHERE username = ${sqlText(username)};`
+};
+
+export function runD1(sql, { remote = false, json = false, persistTo } = {}) {
+  const target = remote ? ["--remote"] : ["--local", ...(persistTo ? ["--persist-to", persistTo] : [])];
+  const result = spawnSync(process.execPath, [wrangler, "d1", "execute", "DB", ...target, "--yes", ...(json ? ["--json"] : []), "--command", sql], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  if (result.status !== 0) {
+    let detail = "";
+    try { detail = JSON.parse(result.stdout).error?.text ?? ""; } catch { detail = `${result.stdout}\n${result.stderr}`.split("\n").find((line) => /error|no such|unique/i.test(line))?.trim() ?? ""; }
+    if (/CLOUDFLARE_API_TOKEN|not authenticated|login/i.test(detail)) throw new Error("Not signed in to Cloudflare. Run  npx wrangler login  (opens your browser), or set CLOUDFLARE_API_TOKEN, then try again.");
+    if (/no such table/i.test(detail) && !remote) throw new Error("The local database is not set up yet. Run  npm run dev:live  once, then try again.");
+    throw new Error(detail ? `Database command failed: ${detail}` : "Database command failed.");
+  }
+  return json ? JSON.parse(result.stdout)[0].results : undefined;
 }

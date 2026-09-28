@@ -7,7 +7,7 @@ BRANCH: main
 LIVE_PREVIEW: http://127.0.0.1:8791
 
 ## Completed (Part 1 product upgrade, Claude)
-- Real staff auth: explicit `staff_accounts` (PBKDF2) managed by `npm run staff:account`; the env-var dev login is removed.
+- Real staff auth: explicit `staff_accounts` (PBKDF2) managed with the local admin console (`npm run admin`); the env-var dev login is removed.
 - Staff inventory workspace at `/staff/inventory`: a live table and filter tiles, plus an item drawer with Stock in / Stock out / Count, details and lending editing (audited), and history.
 - Public Lending Hub lists only reviewed, active Loanable items that have an audience. It fails closed and shows live availability.
 - Live refresh: the `catalog_revision` counter plus ETag/304 polling (public every 15 s, staff every 10 s).
