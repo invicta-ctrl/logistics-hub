@@ -1,19 +1,17 @@
 # Current Work Pointer — Logistics Hub
 PROGRAM: Logistics Hub
-MILESTONE: PART-01_YDD_GATEWAY_AND_FOUNDATION
-STATUS: PART_01_COMPLETE_ON_MAIN
+MILESTONE: PART-01_YDD_GATEWAY_AND_FOUNDATION (product upgrade)
+STATUS: PART_01_UPGRADE_COMPLETE_ON_MAIN; CLOUDFLARE_LAUNCH_PENDING_CREDENTIALS
 BRANCH: main
 ACTIVE_WRITER: NONE
 SHARED_WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
 SESSION_HANDOFF: .codex/SESSION_HANDOFF.md
 SHARED_WORKFLOW: docs/SHARED_AGENT_WORKFLOW.md
+DEPLOYMENT_RUNBOOK: docs/DEPLOYMENT.md
 LIVE_PREVIEW: http://127.0.0.1:8791 via npm run dev:live
 ACCEPTED_SPEC: docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md
 CURRENT_TASK: .codex/CURRENT_TASK.md
 CURRENT_HANDOFF: .codex/CURRENT_HANDOFF.md
-LOCAL_WORKTREE_STATE: CLEAN_MAIN_BASELINE
-IMPLEMENTATION_SHA: be26d43
-PART_01_HANDOFF_SHA: 351fcf1
-SHARED_WORKFLOW_SHA: 4bf8212
-PRODUCTION_DEPLOYMENT: NOT_AUTHORIZED; no deployed SHA
-NEXT_EXACT_ACTION: when Part 2 is explicitly started, create exactly one short-lived slice/part-02-<scope> branch from current main; Codex and Claude take turns on that same branch/worktree.
+PRODUCTION_TARGET: Worker logistics-hub + D1 logistics-hub (new, isolated; never hau-usc-logistics-production/staging)
+PRODUCTION_DEPLOYMENT: AUTHORIZED_BY_EARL; NOT_YET_EXECUTED — the Claude cloud session had no CLOUDFLARE_API_TOKEN and api.cloudflare.com was blocked by its network policy
+NEXT_EXACT_ACTION: run docs/DEPLOYMENT.md "First launch" from main with Cloudflare credentials, commit the D1 database_id, then smoke-test the live URL.

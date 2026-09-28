@@ -1,8 +1,6 @@
-# Current Bounded Task — PART-01_YDD_GATEWAY_AND_FOUNDATION
-INTENT: FEATURE_IMPLEMENTATION
-MODE: EXECUTE
-OBJECTIVE: Deliver the independently usable Part 1 public gateway, fail-closed Lending Hub, and staff authentication foundation.
-IN_SCOPE: Vite/Worker/D1 foundation; retained YDD landing identity; public catalog reads; session boundary; staff shell; accessibility; local verification and documentation.
-OUT_OF_SCOPE: Part 2 catalog editing; request workflow; remote provider mutation; production deployment; staff/borrower PII in Git.
-VERIFICATION: migration baseline; explicit lending eligibility policy; unit/Worker/browser checks; local Worker/D1 integration; typecheck/build/privacy scan.
-STATUS: PART_01_READY_FOR_REVIEW
+# Current Bounded Task — PART-01 product upgrade and Cloudflare launch
+INTENT: FEATURE_IMPLEMENTATION + DEPLOYMENT
+OBJECTIVE: A polished, production-ready Part 1: landing, a live fail-closed Lending Hub, real staff auth, and the minimal staff inventory operations that make availability live, launched on isolated Cloudflare resources.
+IN_SCOPE: redesign and logo; staff accounts and sessions; staff item create/edit and lending settings; stock in/out/count movements; live refresh; tests; deploy runbook; Cloudflare launch.
+OUT_OF_SCOPE: loan records/returns (Part 4); activity/audit browsing (Part 5); role administration UI (Part 6); R2 evidence; Logistics Request.
+STATUS: PRODUCT_COMPLETE_ON_MAIN; LAUNCH_PENDING_CREDENTIALS

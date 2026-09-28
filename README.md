@@ -1,56 +1,48 @@
 # Logistics Hub
 
-Focused HAU-USC Department of Logistics office operations system.
+Operations system for the HAU-USC Department of Logistics.
 
-- Retained YDD-facing public landing identity.
-- Public Lending Hub and Staff Login.
-- Logistics Request unavailable for now.
-- Inventory/cataloguing first; then stock/pantry, lending, activity/audit, administration.
-- HTML5/CSS/TypeScript-first frontend with Cloudflare Worker + D1 + R2.
+- **Public:** a landing page, a live **Lending Hub** that lists only staff-reviewed Loanable items with current availability, and Staff login. Logistics Request is shown as not yet available.
+- **Staff:** an inventory workspace with a live table. Staff record Stock in, Stock out and Count movements, edit item details and lending settings (which decide what appears publicly), and read each item's movement history.
+- **Stack:** semantic HTML, CSS, TypeScript modules, Vite, one Cloudflare Worker, and D1. No SPA framework.
 
-Bootstrap branch: `bootstrap/office-ops-v0.1`.
+Read `AGENTS.md`, then `.codex/CURRENT.md`, before changing anything.
 
-Read `AGENTS.md` then `.codex/CURRENT.md` before implementation.
+## How it works
 
-## Part 1 local development
+- Quantity is the sum of posted `inventory_movements`. The ledger is append-only, and database triggers enforce that. A stock movement is one guarded SQL statement, so stock cannot go negative and a retried request is never counted twice.
+- Every inventory write bumps `catalog_revision`. Pages poll with `If-None-Match`, so an unchanged catalog costs a single-row read and returns `304`. Public pages poll every 15 s, and the staff table every 10 s. Polling pauses while the tab is hidden.
+- Staff logins are explicit accounts in `staff_accounts`, with PBKDF2 hashes and signed, revocable D1 sessions. They are never inferred from the staff directory.
+- Authorization is enforced by the Worker. Every `/api/staff/*` route and every `/staff/*` page needs a live session. Writes must also come from the same origin.
 
-Install dependencies with `npm install`, then apply the local D1 migrations before starting the complete Worker stack:
+Source: `src/worker.ts` (routing and auth), `src/inventory.ts` (data), `src/catalog-policy.ts` (listing rule), `src/public.ts`, `src/staff.ts`, and `src/ui.ts` (browser).
 
-```powershell
-npx wrangler d1 migrations apply logistics-hub-part-01-local --local
+## Local development
+
+```sh
+npm ci
+npm run dev:live      # http://127.0.0.1:8791 — local Worker + D1, rebuilds on change
 ```
 
-Use `npm run dev` for browser-only UI work, or `npm run dev:worker` after the migration command for the local Worker/D1 stack. The public catalog is sourced from local D1 and uses movement-derived balances. All migrated records remain unavailable to borrow until a later approved review makes an item explicitly lending-ready.
+`dev:live` applies local migrations. It generates `.dev.vars` (`SESSION_SECRET`) and, when none exists, a local preview staff account. The preview credentials go in the ignored `data/private/local-preview-credentials.txt`. Manage accounts with `npm run staff:account -- create|reset-password|disable|list …` (add `--remote` only for the deployed database).
 
-Staff sign-in is disabled by default. For an isolated loopback-only local test, create an ignored `.dev.vars` file with `ENVIRONMENT=development`, `DEV_AUTH_ENABLED=true`, and generated values for `SESSION_SECRET`, `DEV_STAFF_USERNAME`, and `DEV_STAFF_PASSWORD`. Generate fresh random values locally and never commit or reuse real credentials. Production authentication is not configured by this repository.
+## Checks
 
-Run `npm run typecheck`, `npm test`, `npm run test:browser`, `npm run test:browser:worker`, `npm run verify:migration`, `npm run verify:catalog`, and `npm run verify:privacy` before review.
+```sh
+npm run typecheck
+npm test                     # Worker + SQL tests against every real migration
+npm run test:browser         # UI tests, 320–1440 px
+npm run test:browser:worker  # real Worker + D1 end-to-end in throwaway state
+npm run verify:migration && npm run verify:catalog && npm run verify:privacy
+npm run build
+```
 
+If Playwright's bundled browser is missing, set `PLAYWRIGHT_CHROMIUM_PATH` to a local Chromium.
+
+## Deploying
+
+See `docs/DEPLOYMENT.md`. It covers only the isolated `logistics-hub` Worker/D1 and never the old `hau-usc-logistics-*` resources.
 
 ## Shared Codex + Claude development
 
-Both agents now use one authoritative local worktree:
-
-`D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`
-
-Do not create parallel active worktrees for the same Part. See `docs/SHARED_AGENT_WORKFLOW.md`.
-
-Writer ownership:
-
-```powershell
-npm run agent:status
-npm run agent:claim -- codex
-npm run agent:yield -- codex
-```
-
-Use `claude` instead of `codex` when Claude owns the turn.
-
-For a continuously running full-stack local preview:
-
-```powershell
-npm run dev:live
-```
-
-Then open `http://127.0.0.1:8791`. The command applies local D1 migrations, keeps the local Worker running, and rebuilds frontend assets as files change. Refresh the browser to see the newest full-stack build.
-
-Before an agent yields—especially when usage is nearing its limit—it must update `.codex/SESSION_HANDOFF.md` with the exact current state and next action.
+Both agents use one worktree, one active slice branch, and one writer lock (`npm run agent:status|claim|yield -- <agent>`). See `docs/SHARED_AGENT_WORKFLOW.md`. Before yielding, update `.codex/SESSION_HANDOFF.md`.
