@@ -6,7 +6,7 @@ const password = process.env.E2E_PASSWORD!;
 async function signIn(page: Page) {
   await page.goto("/staff");
   await page.getByRole("textbox", { name: "Username" }).fill(username);
-  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Inventory" })).toBeVisible();
 }
@@ -35,8 +35,11 @@ test("preserves the ITM-0001 reconciliation evidence", async ({ page }) => {
   await signIn(page);
   await page.getByRole("searchbox", { name: "Search inventory" }).fill("ITM-0001");
   await page.getByRole("button", { name: "Detergent Bar" }).click();
-  await expect(page.locator("#onhand")).toContainText("7 blocks on hand");
-  await expect(page.locator("#onhand")).toContainText("legacy snapshot reported 8 blocks");
+  await expect(page.locator(".summary__primary")).toContainText("7 blocks");
+  await expect(page.locator("#summary")).toContainText("legacy snapshot reported 8 blocks, but the migrated movement ledger derives 7");
+  await expect(page).toHaveURL(/item=ITM-0001/);
+  await page.reload();
+  await expect(page.getByRole("dialog", { name: "Detergent Bar" })).toBeVisible();
 });
 
 test("staff publish and stock changes reach an open public page live", async ({ page, browser }) => {
@@ -53,18 +56,18 @@ test("staff publish and stock changes reach an open public page live", async ({ 
   await page.getByLabel("Details reviewed and verified").check();
   await expect(page.getByText("Will appear on the public Lending Hub.")).toBeVisible();
   await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText("Saved.")).toBeVisible();
+  await expect(page.getByText("Changes saved.")).toBeVisible();
 
   await expect(visitor.getByText("Bluetooth Microphone")).toBeVisible({ timeout: 25_000 });
   await expect(visitor.getByText("1 piece available")).toBeVisible();
 
   await page.getByRole("tab", { name: "Stock" }).click();
-  await page.getByText("Stock in", { exact: true }).click();
+  await page.getByRole("radio", { name: "Stock in" }).check();
   await page.getByLabel("Quantity to add").fill("4");
-  await expect(page.getByText("On hand after: 5 pieces")).toBeVisible();
+  await expect(page.locator("#stock-preview")).toHaveText("1 → 5 pieces");
   await page.getByRole("button", { name: "Record stock in" }).click();
-  await expect(page.getByText("Recorded. On hand is now 5 pieces.")).toBeVisible();
-  await page.getByText("Stock out", { exact: true }).click();
+  await expect(page.getByText("Stock in recorded. Bluetooth Microphone now has 5 pieces.")).toBeVisible();
+  await page.getByRole("radio", { name: "Stock out" }).check();
   await page.getByLabel("Quantity to remove").fill("9");
   await page.getByRole("button", { name: "Record stock out" }).click();
   await expect(page.getByText("Only 5 on hand; cannot remove 9.")).toBeVisible();
@@ -78,8 +81,17 @@ test("staff publish and stock changes reach an open public page live", async ({ 
 test("sign out revokes the session", async ({ page }) => {
   await signIn(page);
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("heading", { name: "Staff login" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Staff sign in" })).toBeVisible();
   expect((await page.request.get("/api/staff/session")).status()).toBe(401);
   await page.goto("/staff/inventory");
   await expect(page).toHaveURL(/\/staff$/);
+});
+
+test("inventory sorts by on-hand quantity and remembers it in the URL", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("button", { name: "On hand" }).click();
+  await expect(page.getByRole("columnheader", { name: "On hand" })).toHaveAttribute("aria-sort", "descending");
+  await expect(page).toHaveURL(/sort=onHand-desc/);
+  const quantities = await page.locator("tbody .qty").evaluateAll((cells) => cells.slice(0, 5).map((cell) => Number(cell.textContent)));
+  expect(quantities).toEqual([...quantities].sort((a, b) => b - a));
 });

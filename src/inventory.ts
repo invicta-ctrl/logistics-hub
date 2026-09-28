@@ -61,8 +61,8 @@ export async function staffInventory(db: D1Database) {
 
 export async function itemDetail(db: D1Database, id: string) {
   const [item, movements] = await db.batch([
-    db.prepare(`SELECT ${ITEM_COLUMNS}, b.legacy_reported_available_qty AS legacyReportedAvailable, b.migration_delta AS migrationDelta,
-      i.legacy_source_sheet AS legacySourceSheet, i.legacy_source_row AS legacySourceRow, i.verification_note AS verificationNote
+    db.prepare(`SELECT ${ITEM_COLUMNS}, b.legacy_reported_available_qty AS legacyReportedAvailable, b.migrated_on_hand AS migratedOnHand,
+      b.migration_delta AS migrationDelta, i.legacy_source_sheet AS legacySourceSheet, i.legacy_source_row AS legacySourceRow, i.verification_note AS verificationNote
       FROM items i LEFT JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?`).bind(id),
     db.prepare(`SELECT m.id, m.created_at AS createdAt, m.movement_type AS movementType, m.signed_quantity AS signedQuantity, m.status,
       m.notes, a.display_name AS actor FROM inventory_movements m LEFT JOIN staff_accounts a ON a.id = m.actor_user_id

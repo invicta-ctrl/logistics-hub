@@ -15,8 +15,15 @@ LIVE_PREVIEW: http://127.0.0.1:8791
 - Redesign: cropped large DOL mark (no caption), new landing, Lending Hub and staff shell. Fonts are self-hosted and the CSP is `'self'` only.
 - Worker tests run on every real migration via node:sqlite. E2E runs a real Worker + D1 in PID-scoped throwaway `.wrangler/e2e-*` state.
 
+## Completed (frontend polish round, Claude)
+- Token-based design system: neutral surfaces, oxblood for actions only, one type scale, hairlines, dot status tags, SVG icons, self-hosted fonts.
+- Editorial landing; a catalogue-style Lending Hub grouped by category; staff app bar, view tabs, a sortable table, a side sheet, toasts, and an unsaved-changes guard.
+- Filters, sort and the open item are kept in the URL; `/` focuses search; live refresh preserves keyboard focus.
+- Migration `0005`: `inventory_balances.migration_delta` now compares the legacy snapshot with the migrated ledger only, so later staff movements never create false discrepancies.
+- axe-core: 0 WCAG 2.1 AA violations on every screen. The code review findings are fixed. The security review found nothing.
+
 ## Exact next action
-Deploy per `docs/DEPLOYMENT.md` (first launch), then create the real staff accounts with `--remote`. Staff then review and publish items from the "Loanable, not yet listed" queue (102 legacy-Loanable records).
+Deploy per `docs/DEPLOYMENT.md` (first launch; the D1 is already created and bound by Earl in 8a0e9d9), then create the real staff accounts with `--remote`. Staff then review and publish items from the "Loanable, not yet listed" queue (102 legacy-Loanable records).
 
 ## Dirty files
 None expected.
@@ -26,3 +33,4 @@ None expected.
 - ITM-0001 reconciliation stays intentionally movement-derived: 7 versus 8 reported by the legacy system. It is shown to staff as migration evidence.
 - The public Lending Hub is empty until staff review items. That is deliberate and fail-closed; no item is auto-published.
 - `docs/WORKTREE_SETUP.md` and `scripts/setup-worktree.ps1` describe the older per-Part worktree model; `docs/SHARED_AGENT_WORKFLOW.md` supersedes them.
+- Suggested follow-up task (not in this slice): harden `scripts/sync-cloud-preview.mjs`. It can `git switch main` away from an unpushed local slice branch, and it re-checks the writer lock only before its fetch, not before switching.

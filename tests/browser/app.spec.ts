@@ -1,37 +1,51 @@
 import { expect, test } from "@playwright/test";
 
-const catalog = { revision: 1, categories: ["FURNITURE"], items: [
+const catalog = { revision: 1, categories: ["FURNITURE", "SCHOOL SUPPLIES"], items: [
   { id: "ITM-0005", name: "Folding Table", category: "FURNITURE", unit: "piece", available: 3, audience: "STUDENTS_AND_USC_STAFF", maxPerLoan: 2, loanDays: 3 },
-  { id: "ITM-0080", name: "Cork Board", category: "FURNITURE", unit: "piece", available: 0, audience: "USC_STAFF_ONLY", maxPerLoan: null, loanDays: null }
+  { id: "ITM-0080", name: "Cork Board", category: "FURNITURE", unit: "piece", available: 0, audience: "USC_STAFF_ONLY", maxPerLoan: null, loanDays: null },
+  { id: "ITM-0262", name: "Scissors", category: "SCHOOL SUPPLIES", unit: "piece", available: 10, audience: "STUDENTS_AND_USC_STAFF", maxPerLoan: null, loanDays: null }
 ] };
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/public/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify(catalog) }));
 });
 
-test("landing shows the mark, live snapshot, and the Part 1 destinations only", async ({ page }) => {
+test("landing shows the undistorted mark, live availability, and only Part 1 destinations", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Logistics that keeps the work moving." })).toBeVisible();
-  const mark = page.locator(".masthead__brand img");
-  const box = (await mark.boundingBox())!;
+  const box = (await page.locator(".site-header__brand img").boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(70);
   expect(Math.abs(box.width / box.height - 183 / 163)).toBeLessThan(0.02);
-  await expect(page.locator("#snapshot-body")).toContainText("1");
+  await expect(page.locator("#now-summary")).toHaveText("2 items on the shelf now, of 3 listed.");
   await expect(page.getByText("Not yet available", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Explore the Lending Hub/ })).toHaveAttribute("href", "/lending");
+  await expect(page.getByRole("link", { name: /Browse the Lending Hub/ })).toHaveAttribute("href", "/lending");
 });
 
-test("Lending Hub searches, filters availability, and shows terms", async ({ page }) => {
+test("Lending Hub groups by category, filters, and keeps filters in the URL", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 700 });
   await page.goto("/lending");
-  await expect(page.getByRole("heading", { name: "Lending Hub" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Lending Hub", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Furniture/, level: 2 })).toBeVisible();
   await expect(page.getByText("3 pieces available")).toBeVisible();
-  await expect(page.getByText("Up to 2 per loan · 3-day loan · Students & USC staff")).toBeVisible();
-  await expect(page.getByText("None on the shelf right now")).toBeVisible();
+  await expect(page.getByText("Students & USC staff · up to 2 per loan · 3‑day loan")).toBeVisible();
+  await expect(page.getByText("All out right now")).toBeVisible();
   await page.getByLabel("Available now").check();
   await expect(page.getByText("Cork Board")).toHaveCount(0);
+  await expect(page).toHaveURL(/available=1/);
   await page.getByRole("searchbox", { name: "Search the Lending Hub" }).fill("missing");
   await expect(page.getByRole("heading", { name: "Nothing matches those filters" })).toBeVisible();
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await expect(page.getByText("Cork Board")).toBeVisible();
+});
+
+test("a shared Lending Hub link restores its filters, and / focuses search", async ({ page }) => {
+  await page.goto("/lending?q=sciss");
+  await expect(page.getByRole("searchbox", { name: "Search the Lending Hub" })).toHaveValue("sciss");
+  await expect(page.getByText("Folding Table")).toHaveCount(0);
+  await expect(page.getByText("Scissors")).toBeVisible();
+  await page.locator("body").click();
+  await page.keyboard.press("/");
+  await expect(page.getByRole("searchbox", { name: "Search the Lending Hub" })).toBeFocused();
 });
 
 test("Lending Hub explains an empty, fail-closed catalog", async ({ page }) => {
@@ -47,11 +61,14 @@ test("Lending Hub reports a recoverable loading failure", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Try again now" })).toBeVisible();
 });
 
-test("staff login is a real form with validation", async ({ page }) => {
+test("staff sign-in validates fields and can reveal the password", async ({ page }) => {
   await page.goto("/staff");
-  await expect(page.getByRole("textbox", { name: "Username" })).toBeVisible();
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByText("Enter your username and password.")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveText("Enter your username and password.");
+  await expect(page.getByLabel("Username")).toHaveAttribute("aria-invalid", "true");
+  await page.getByLabel("Password", { exact: true }).fill("secret-value");
+  await page.getByRole("button", { name: "Show password" }).click();
+  await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "text");
 });
 
 test("public routes fit every required viewport class", async ({ page }) => {

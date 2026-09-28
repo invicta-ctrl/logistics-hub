@@ -11,7 +11,8 @@ describe("D1 migration arithmetic", () => {
     db.exec("INSERT INTO inventory_movements(id,created_at,movement_type,direction,item_id,quantity,unit,signed_quantity,status) VALUES('TEST-UNPOSTED','2026-09-28T00:00:00+08:00','ADJUST','IN','ITM-0001',5,'block',5,'PENDING')");
     expect(db.prepare("SELECT on_hand FROM inventory_balances WHERE id = 'ITM-0001'").get()).toMatchObject({ on_hand: 7 });
     db.exec("INSERT INTO inventory_movements(id,created_at,movement_type,direction,item_id,quantity,unit,signed_quantity,status) VALUES('TEST-POSTED','2026-09-28T00:00:00+08:00','ADJUST','IN','ITM-0001',5,'block',5,'POSTED')");
-    expect(db.prepare("SELECT on_hand FROM inventory_balances WHERE id = 'ITM-0001'").get()).toMatchObject({ on_hand: 12 });
+    expect(db.prepare("SELECT on_hand, migrated_on_hand, migration_delta FROM inventory_balances WHERE id = 'ITM-0001'").get()).toMatchObject({ on_hand: 12, migrated_on_hand: 7, migration_delta: -1 });
+    expect(db.prepare("SELECT COUNT(*) AS total FROM inventory_balances WHERE migration_delta <> 0").get()).toMatchObject({ total: 1 });
     db.close();
   });
 });
