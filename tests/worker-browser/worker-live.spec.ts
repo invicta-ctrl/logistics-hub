@@ -35,8 +35,8 @@ test("preserves the ITM-0001 reconciliation evidence", async ({ page }) => {
   await signIn(page);
   await page.getByRole("searchbox", { name: "Search inventory" }).fill("ITM-0001");
   await page.getByRole("button", { name: "Detergent Bar" }).click();
-  await expect(page.locator(".summary__primary")).toContainText("7 blocks");
-  await expect(page.locator("#summary")).toContainText("legacy snapshot reported 8 blocks, but the migrated movement ledger derives 7");
+  await expect(page.locator("#quantity")).toContainText("7 blocks on hand");
+  await expect(page.locator("#panel-overview")).toContainText("legacy snapshot reported 8 blocks, but the migrated movement ledger derives 7");
   await expect(page).toHaveURL(/item=ITM-0001/);
   await page.reload();
   await expect(page.getByRole("dialog", { name: "Detergent Bar" })).toBeVisible();
@@ -51,17 +51,19 @@ test("staff publish and stock changes reach an open public page live", async ({ 
   await signIn(page);
   await page.getByRole("searchbox", { name: "Search inventory" }).fill("Bluetooth Microphone");
   await page.getByRole("button", { name: "Bluetooth Microphone" }).click();
-  await page.getByRole("tab", { name: "Details & lending" }).click();
+  await page.getByRole("tab", { name: "Review & edit" }).click();
   await page.getByLabel("Who may borrow").selectOption("STUDENTS_AND_USC_STAFF");
   await page.getByLabel("Details reviewed and verified").check();
   await expect(page.getByText("Will appear on the public Lending Hub.")).toBeVisible();
-  await page.getByRole("button", { name: "Save changes" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Changes saved.")).toBeVisible();
 
   await expect(visitor.getByText("Bluetooth Microphone")).toBeVisible({ timeout: 25_000 });
   await expect(visitor.getByText("1 piece · last one")).toBeVisible();
 
-  await page.getByRole("tab", { name: "Stock" }).click();
+  await expect(page.getByRole("tab", { name: "Edit details" })).toBeVisible();
+  await page.getByRole("tab", { name: "Overview" }).click();
+  await expect(page.getByRole("heading", { name: "Listed on the Lending Hub" })).toBeVisible();
   await page.getByRole("radio", { name: "Stock in" }).check();
   await page.getByLabel("Quantity to add").fill("4");
   await expect(page.locator("#stock-preview")).toHaveText("1 → 5 pieces");
@@ -149,4 +151,74 @@ test.describe("owner administration", () => {
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, "recovered owner pass");
     await expect(page.getByRole("heading", { name: "Inventory" })).toBeVisible();
   });
+});
+
+test("migrated review: fill the gaps, mark reviewed, and move to the next record", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("button", { name: /^Needs review/ }).click();
+  await expect(page).toHaveURL(/view=review/);
+  const reviewedBefore = Number((await page.locator("#review-meter strong").textContent())!.replace(/\D/g, ""));
+  const first = (await page.locator("tbody .row-link").first().textContent())!;
+  const second = (await page.locator("tbody .row-link").nth(1).textContent())!;
+  await page.locator("tbody .row-link").first().click();
+  await page.getByRole("button", { name: "Review details" }).click();
+  const sheet = page.getByRole("dialog");
+  await sheet.getByLabel("Storage location").fill("E2E shelf  A");
+  await sheet.getByLabel("Other names").fill("e2e alias, E2E ALIAS");
+  await sheet.getByLabel("Type", { exact: true }).selectOption("Consumable");
+  await page.getByRole("button", { name: /Mark reviewed & next/ }).click();
+  await expect(page.getByText(`${first} reviewed. Opening the next record.`)).toBeVisible();
+  await expect(page.getByRole("dialog", { name: second })).toBeVisible();
+  await expect(page.locator("#review-meter")).toContainText(`${reviewedBefore + 1} of 397 records reviewed`);
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: /^All items/ }).click();
+  await page.getByRole("searchbox", { name: "Search inventory" }).fill("e2e alias");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await page.getByRole("searchbox", { name: "Search inventory" }).fill("");
+  await page.getByLabel("Location", { exact: true }).selectOption("E2E shelf A");
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await page.locator("tbody .row-link").first().click();
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.locator("#history li").first()).toContainText("Review completed");
+  await expect(page.locator("#history li").first()).toContainText("Location Not set → E2E shelf A");
+  await expect(page.locator("#history")).not.toContainText("{");
+});
+
+test("create, warn on a duplicate name, then deactivate without deleting", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("button", { name: "New item" }).click();
+  const sheet = page.getByRole("dialog");
+  await sheet.getByLabel("Name", { exact: true }).fill("detergent bar");
+  await expect(page.getByText("ITM-0001 already uses this name.")).toBeVisible();
+  await sheet.getByLabel("Name", { exact: true }).fill("E2E Extension Cord");
+  await sheet.getByLabel("Category", { exact: true }).fill("office equipment and supplies");
+  await sheet.getByLabel("Unit", { exact: true }).fill("piece");
+  await sheet.getByLabel("Who may borrow").selectOption("STUDENTS_AND_USC_STAFF");
+  await sheet.getByLabel("Type", { exact: true }).selectOption("Consumable");
+  await page.getByRole("button", { name: "Create item" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("Only Loanable items can be offered for lending.");
+  await sheet.getByLabel("Type", { exact: true }).selectOption("Loanable");
+  await sheet.getByLabel("Opening quantity").fill("3");
+  await page.getByRole("button", { name: "Create item" }).click();
+  await expect(page.getByText(/Item ITM-\d+ created\./)).toBeVisible();
+  await expect(page.locator("#quantity")).toContainText("3 pieces on hand");
+  await expect(page.locator(".sheet__kicker")).toContainText("Office Equipment and Supplies");
+
+  await page.getByRole("tab", { name: "Edit details" }).click();
+  await sheet.getByLabel("Status", { exact: true }).selectOption("INACTIVE");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Changes saved.")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: /^Inactive/ }).click();
+  await expect(page.getByRole("button", { name: "E2E Extension Cord" })).toBeVisible();
+});
+
+test("staff workspace fits a 320 px phone", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await signIn(page);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  await page.locator("tbody .row-link").first().click();
+  await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });

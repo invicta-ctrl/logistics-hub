@@ -50,7 +50,11 @@ const ICONS = {
   sortDown: "m8 10 4 4 4-4",
   box: "M4 7.5 12 4l8 3.5v9L12 20l-8-3.5v-9ZM4 7.5l8 3.5 8-3.5M12 11v9",
   eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
-  eyeOff: "M3 3l18 18M10.6 5.1A9.9 9.9 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.9M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"
+  eyeOff: "M3 3l18 18M10.6 5.1A9.9 9.9 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.9M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2",
+  pin: "M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21ZM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z",
+  refresh: "M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4",
+  circle: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z",
+  next: "M9 6l6 6-6 6"
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -59,7 +63,9 @@ export function icon(name: IconName): Html {
   return raw(`<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${ICONS[name]}"/></svg>`);
 }
 
-export const MARK = raw(`<img class="mark" src="/dol-mark.png" alt="HAU USC Department of Logistics" width="183" height="163" />`);
+export const MARK = raw(`<img class="mark" src="/brand/dol-mark.png" alt="HAU USC Department of Logistics" width="183" height="163" />`);
+/** The HAU University Student Council crest, shown beside the DOL mark on public pages. */
+export const CREST = raw(`<img class="crest" src="/brand/hau-usc-crest.webp" alt="Holy Angel University Student Council" width="205" height="240" />`);
 
 /* ---------- Routing and view lifecycle ---------- */
 

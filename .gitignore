@@ -11,3 +11,4 @@ worker-configuration.d.ts
 .agent-state/
 data/private/*
 !data/private/README.md
+.impeccable/

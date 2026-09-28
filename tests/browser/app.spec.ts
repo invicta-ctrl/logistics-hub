@@ -10,11 +10,12 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/public/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify(catalog) }));
 });
 
-test("landing shows the undistorted mark, live availability, and only Part 1 destinations", async ({ page }) => {
+test("landing shows the undistorted DOL mark beside the HAU·USC crest, live availability, and only Part 1 destinations", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Logistics that keeps the work moving." })).toBeVisible();
-  const box = (await page.locator(".site-header__brand img").boundingBox())!;
-  expect(box.height).toBeGreaterThanOrEqual(70);
+  const box = (await page.locator(".site-header__brand .mark").boundingBox())!;
+  expect(box.height).toBeGreaterThanOrEqual(40);
+  await expect(page.locator(".site-header__brand .crest")).toBeVisible();
   expect(Math.abs(box.width / box.height - 183 / 163)).toBeLessThan(0.02);
   await expect(page.locator("#now-summary")).toHaveText("2 items on the shelf now, of 3 listed.");
   await expect(page.getByText("Not yet available", { exact: true })).toBeVisible();
@@ -63,6 +64,8 @@ test("Lending Hub reports a recoverable loading failure", async ({ page }) => {
 
 test("staff sign-in validates fields and can reveal the password", async ({ page }) => {
   await page.goto("/staff");
+  const background = await page.locator(".auth").evaluate((element) => getComputedStyle(element, "::before").backgroundImage);
+  expect(background).toContain("/brand/hau-campus-dusk.webp");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("alert")).toHaveText("Enter your username and password.");
   await expect(page.getByLabel("Username")).toHaveAttribute("aria-invalid", "true");

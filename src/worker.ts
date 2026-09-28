@@ -131,7 +131,10 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   }
   const match = ITEM_PATH.exec(path);
   if (match && !match[2] && method === "GET") return json(await itemDetail(env.DB, match[1]!));
-  if (match && !match[2] && method === "PATCH") return json(await updateItem(env.DB, account, match[1]!, parseItemInput(await body())));
+  if (match && !match[2] && method === "PATCH") {
+    const input = await body() as Record<string, unknown> | null;
+    return json(await updateItem(env.DB, account, match[1]!, parseItemInput(input), input?.updatedAt));
+  }
   if (match && match[2] && method === "POST") return json(await recordMovement(env.DB, account, match[1]!, await body()));
   const known = match || ["/api/staff/session", "/api/staff/inventory", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);

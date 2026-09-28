@@ -138,8 +138,60 @@ describe("movement-derived inventory", () => {
     const cookie = await signIn();
     const current = (await (await staff(cookie, "/api/staff/items/ITM-0001")).json() as { item: typeof loanable }).item;
     expect((await staff(cookie, "/api/staff/items/ITM-0001", "PATCH", { ...current, lendingAudience: "USC_STAFF_ONLY" })).status).toBe(400);
-    expect(await (await staff(cookie, "/api/staff/items/ITM-0001", "PATCH", { ...current, storageLocation: "Cabinet 2" })).json()).toEqual({ changed: 1 });
+    expect(await (await staff(cookie, "/api/staff/items/ITM-0001", "PATCH", { ...current, storageLocation: "Cabinet 2" })).json()).toMatchObject({ changed: 1 });
     expect(sqlite.prepare("SELECT action, entity_id, actor_user_id FROM audit_log").all()).toEqual([{ action: "ITEM_UPDATED", entity_id: "ITM-0001", actor_user_id: "ACC-1" }]);
+  });
+});
+
+describe("catalog management", () => {
+  type Detail = { item: Record<string, unknown> & { updatedAt: string | null }; events: Array<{ action: string; actor: string; details: Record<string, unknown> }> };
+  const detail = async (cookie: string, id: string) => await (await staff(cookie, `/api/staff/items/${id}`)).json() as Detail;
+
+  it("refuses a stale edit instead of silently overwriting another change", async () => {
+    const cookie = await signIn();
+    const loaded = (await detail(cookie, "ITM-0003")).item;
+    expect((await staff(cookie, "/api/staff/items/ITM-0003", "PATCH", { ...loaded, storageLocation: "Cabinet 1" })).status).toBe(200);
+    const stale = await staff(cookie, "/api/staff/items/ITM-0003", "PATCH", { ...loaded, notes: "Written from an old form" });
+    expect(stale.status).toBe(409);
+    expect((await staff(cookie, "/api/staff/items/ITM-0003", "PATCH", { ...loaded, updatedAt: undefined })).status).toBe(400);
+    expect((await detail(cookie, "ITM-0003")).item).toMatchObject({ storageLocation: "Cabinet 1", notes: null });
+    expect(sqlite.prepare("SELECT COUNT(*) AS total FROM audit_log").get()).toEqual({ total: 1 });
+  });
+
+  it("normalizes aliases and reuses existing category and location spellings", async () => {
+    const cookie = await signIn();
+    const first = (await detail(cookie, "ITM-0004")).item;
+    await staff(cookie, "/api/staff/items/ITM-0004", "PATCH", { ...first, storageLocation: "Supply  Room  B" });
+    const created = await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: "Wireless Mic", aliases: "mic, Microphone ; MIC, wireless mic", category: "school   supplies", storageLocation: "supply room b" })).json() as { id: string };
+    expect((await detail(cookie, created.id)).item).toMatchObject({ aliases: "mic, Microphone", category: "SCHOOL SUPPLIES", storageLocation: "Supply Room B" });
+    const inventory = await (await staff(cookie, "/api/staff/inventory")).json() as { locations: string[]; categories: string[] };
+    expect(inventory.locations).toEqual(["Supply Room B"]);
+    expect(inventory.categories.filter((value) => value.toLowerCase() === "school supplies")).toEqual(["SCHOOL SUPPLIES"]);
+  });
+
+  it("explains every listing gap and records review, lending and deactivation in history", async () => {
+    const cookie = await signIn();
+    const before = (await detail(cookie, "ITM-0005")).item;
+    expect(before.listed).toBe(false);
+    expect(before.listingGaps).toEqual(expect.arrayContaining(["Choose who may borrow it", "Mark the details reviewed"]));
+    const reviewed = { ...before, itemType: "Loanable", lendingAudience: "USC_STAFF_ONLY", needsReview: false };
+    await staff(cookie, "/api/staff/items/ITM-0005", "PATCH", reviewed);
+    const listed = (await detail(cookie, "ITM-0005")).item;
+    expect(listed).toMatchObject({ listed: true, listingGaps: [] });
+    await staff(cookie, "/api/staff/items/ITM-0005", "PATCH", { ...listed, status: "INACTIVE" });
+    const after = await detail(cookie, "ITM-0005");
+    expect(after.item).toMatchObject({ listed: false, listingGaps: ["Set the status to Active"] });
+    expect(after.events.map((event) => [event.action, event.actor, Object.keys(event.details).sort()])).toEqual([
+      ["ITEM_UPDATED", "Staff One", ["status"]],
+      ["ITEM_UPDATED", "Staff One", expect.arrayContaining(["lendingAudience", "needsReview"])]
+    ]);
+    expect(sqlite.prepare("SELECT COUNT(*) AS total FROM items WHERE id = 'ITM-0005'").get()).toEqual({ total: 1 });
+  });
+
+  it("lets every staff role manage the catalog but keeps administration server-gated", async () => {
+    const cookie = await signIn();
+    expect((await staff(cookie, "/api/staff/admin/accounts")).status).toBe(403);
+    expect((await staff(cookie, "/api/staff/items", "POST", { ...loanable, openingQuantity: 1 })).status).toBe(201);
   });
 });
 

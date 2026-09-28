@@ -1,26 +1,31 @@
-import { MARK, type Html, animateNumber, app, categoryName, emptyState, html, icon, label, live, mount, onLeave, plural, preservingFocus, units, writeParams } from "./ui";
+import { CREST, MARK, type Html, animateNumber, app, categoryName, emptyState, html, icon, label, live, mount, onLeave, plural, preservingFocus, units, writeParams } from "./ui";
 
 type LendingItem = { id: string; name: string; category: string; unit: string; available: number; audience: string; maxPerLoan: number | null; loanDays: number | null };
 type Catalog = { revision: number; items: LendingItem[]; categories: string[] };
 type Sort = "name" | "available";
 
+const LOCKUP = html`<span class="lockup">${CREST}<span class="lockup__rule" aria-hidden="true"></span>${MARK}<span class="lockup__text"><strong>Department of Logistics</strong><span>HAU University Student Council</span></span></span>`;
+
 function page(content: Html, current: "" | "lending"): void {
   mount(app, html`
     <header class="site-header">
       <div class="container site-header__inner">
-        <a class="site-header__brand" href="/" data-route aria-label="Department of Logistics home">${MARK}</a>
+        <a class="site-header__brand" href="/" data-route aria-label="Department of Logistics home">${LOCKUP}</a>
         <nav class="site-nav" aria-label="Main">
           <a class="site-nav__link" href="/lending" data-route ${current === "lending" ? html`aria-current="page"` : ""}>Lending Hub</a>
-          <a class="button button--secondary" href="/staff" data-route>Staff sign in</a>
+          <a class="button button--outline-light" href="/staff" data-route>Staff sign in</a>
         </nav>
       </div>
     </header>
     ${content}
     <footer class="site-footer">
       <div class="container site-footer__inner">
-        <div>
-          <p class="site-footer__name">Department of Logistics</p>
-          <p>University Student Council<br />Holy Angel University</p>
+        <div class="site-footer__brand">
+          <span class="site-footer__marks" aria-hidden="true">${CREST}${MARK}</span>
+          <div>
+            <p class="site-footer__name">Department of Logistics</p>
+            <p>University Student Council<br />Holy Angel University, Angeles City</p>
+          </div>
         </div>
         <nav aria-label="Footer">
           <ul class="site-footer__links">
@@ -33,6 +38,7 @@ function page(content: Html, current: "" | "lending"): void {
       <div class="site-footer__base"><div class="container">© ${new Date().getFullYear()} University Student Council, Holy Angel University</div></div>
     </footer>`);
 }
+
 
 /** Availability reads at a glance: plenty, the last one, or all out. */
 function availability(item: LendingItem): Html {
@@ -63,42 +69,31 @@ function rollCounts(container: Element, before: Map<string, number>, changed: Se
   }
 }
 
+
 export function landing(): void {
   document.title = "Department of Logistics · HAU University Student Council";
   page(html`<main id="main-content">
     <section class="hero" aria-labelledby="hero-title">
       <div class="container hero__grid">
         <div class="hero__copy">
-          <p class="hero__kicker">Department of Logistics · University Student Council</p>
+          <p class="hero__kicker">Holy Angel University · University Student Council</p>
           <h1 id="hero-title">Logistics that keeps the work moving.</h1>
           <p class="hero__lede">The Department of Logistics supports the people and materials behind University Student Council work, and lends equipment to students and USC staff.</p>
           <div class="hero__actions">
-            <a class="button button--primary button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
-            <a class="button button--secondary button--lg" href="/staff" data-route>Staff sign in</a>
+            <a class="button button--gold button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
+            <a class="button button--outline-light button--lg" href="/staff" data-route>Staff sign in</a>
           </div>
-          <a class="hero__live" href="/lending?available=1" data-route><span class="live-status" id="live-status">Connecting…</span><span id="hero-live">Checking the shelf…</span>${icon("arrow")}</a>
         </div>
-        <div class="hero__visual" aria-hidden="true">
-          <div class="hero__photo"></div>
-          <div class="medallion">${MARK}</div>
-        </div>
+        <aside class="shelf" aria-labelledby="shelf-title">
+          <div class="shelf__head"><h2 id="shelf-title">On the shelf now</h2><p class="live-status" id="live-status">Connecting…</p></div>
+          <p class="shelf__summary" id="now-summary">Checking what is on the shelf…</p>
+          <div id="now-list">${skeletonRows(4)}</div>
+          <a class="text-link shelf__more" href="/lending" data-route>See everything in the Lending Hub ${icon("arrow")}</a>
+        </aside>
       </div>
     </section>
 
-    <section class="section reveal" aria-labelledby="now-title">
-      <div class="container split">
-        <div class="split__head">
-          <div>
-            <h2 id="now-title" class="section__title">Available to borrow</h2>
-            <p class="section__sub" id="now-summary">Checking what is on the shelf…</p>
-          </div>
-          <a class="text-link" href="/lending" data-route>View the full Lending Hub ${icon("arrow")}</a>
-        </div>
-        <div id="now-list">${skeletonRows(4)}</div>
-      </div>
-    </section>
-
-    <section class="section section--band reveal" aria-labelledby="steps-title">
+    <section class="section reveal" aria-labelledby="steps-title">
       <div class="container">
         <h2 id="steps-title" class="section__title">How borrowing works</h2>
         <ol class="steps">
@@ -110,28 +105,25 @@ export function landing(): void {
     </section>
 
     <section class="section section--alt reveal" aria-labelledby="offer-title">
-      <div class="container">
+      <div class="container split">
         <h2 id="offer-title" class="section__title">What the Department offers</h2>
-        <div class="features">
-          <article class="feature">
-            <span class="feature__icon">${icon("box")}</span>
+        <ul class="offers">
+          <li class="offer">
             <h3>Lending Hub</h3>
-            <p>Browse equipment approved for lending and see how many are on the shelf, updated as staff record stock.</p>
+            <p>Equipment approved for lending, with how many are on the shelf right now.</p>
             <a class="text-link" href="/lending" data-route>Browse items ${icon("arrow")}</a>
-          </article>
-          <article class="feature">
-            <span class="feature__icon">${icon("check")}</span>
+          </li>
+          <li class="offer">
             <h3>Staff workspace</h3>
-            <p>Authorized Department staff record stock movements, maintain the catalog, and decide what appears publicly.</p>
+            <p>Department staff keep the catalog, record stock movements, and decide what appears publicly.</p>
             <a class="text-link" href="/staff" data-route>Staff sign in ${icon("arrow")}</a>
-          </article>
-          <article class="feature feature--muted">
-            <span class="feature__icon">${icon("info")}</span>
+          </li>
+          <li class="offer offer--muted">
             <h3>Logistics requests</h3>
             <p>Online requests for event logistics are not open yet. Contact the Department of Logistics directly in the meantime.</p>
-            <p class="feature__status">Not yet available</p>
-          </article>
-        </div>
+            <p class="offer__status">Not yet available</p>
+          </li>
+        </ul>
       </div>
     </section>
   </main>`, "");
@@ -142,20 +134,17 @@ export function landing(): void {
     onData: ({ items }) => {
       const list = document.querySelector("#now-list");
       const summary = document.querySelector("#now-summary");
-      const heroLive = document.querySelector("#hero-live");
-      if (!list || !summary || !heroLive) return;
+      if (!list || !summary) return;
       const ready = items.filter((item) => item.available > 0);
       if (!items.length) {
         summary.textContent = "Staff are reviewing the catalog.";
-        heroLive.textContent = "Lending Hub opening soon";
-        mount(list, html`<p class="note">Nothing is listed for lending yet. Items appear here as soon as staff approve them.</p>`);
+        mount(list, html`<p class="shelf__note">Nothing is listed for lending yet. Items appear here as soon as staff approve them, with no need to refresh.</p>`);
         return;
       }
       summary.textContent = `${plural(ready.length, "item")} on the shelf now, of ${items.length} listed.`;
-      heroLive.textContent = `${plural(ready.length, "item")} on the shelf now`;
       mount(list, ready.length
-        ? html`<ul class="catalogue">${ready.slice(0, 6).map((item) => html`<li><a class="catalogue__row catalogue__row--link" href="/lending?q=${encodeURIComponent(item.name)}" data-route><div class="catalogue__main"><h3 class="catalogue__name">${item.name}</h3><p class="catalogue__meta">${categoryName(item.category)}</p></div>${availability(item)}</a></li>`)}</ul>`
-        : html`<p class="note">Every listed item is currently out. Check the Lending Hub for details.</p>`);
+        ? html`<ul class="catalogue catalogue--compact">${ready.slice(0, 5).map((item) => html`<li><a class="catalogue__row catalogue__row--link" href="/lending?q=${encodeURIComponent(item.name)}" data-route><div class="catalogue__main"><h3 class="catalogue__name">${item.name}</h3><p class="catalogue__meta">${categoryName(item.category)}</p></div>${availability(item)}</a></li>`)}</ul>`
+        : html`<p class="shelf__note">Every listed item is currently out. Check the Lending Hub for details.</p>`);
       stagger(list);
     },
     onError: () => {

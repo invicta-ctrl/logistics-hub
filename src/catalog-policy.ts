@@ -26,13 +26,19 @@ export type ListingCandidate = {
 };
 
 /**
- * An item appears on the public Lending Hub only when staff have explicitly
- * reviewed it, classified it Loanable, kept it Active, and chosen an audience.
- * Anything else fails closed and is never sent to the public.
+ * What still blocks an item from the public Lending Hub, in the words staff see.
+ * An item is listed only when nothing is missing: explicitly reviewed, classified
+ * Loanable, kept Active, and given an audience. Anything else fails closed.
  */
+export function listingGaps(item: ListingCandidate): string[] {
+  const gaps: string[] = [];
+  if (item.itemType !== PUBLIC_LENDING_ITEM_TYPE) gaps.push("Set the type to Loanable");
+  if (!PUBLIC_LENDING_AUDIENCES.has(item.lendingAudience)) gaps.push("Choose who may borrow it");
+  if (item.status !== "ACTIVE") gaps.push("Set the status to Active");
+  if (!(item.needsReview === 0 || item.needsReview === false)) gaps.push("Mark the details reviewed");
+  return gaps;
+}
+
 export function isListedForLending(item: ListingCandidate): boolean {
-  return item.status === "ACTIVE"
-    && (item.needsReview === 0 || item.needsReview === false)
-    && PUBLIC_LENDING_AUDIENCES.has(item.lendingAudience)
-    && item.itemType === PUBLIC_LENDING_ITEM_TYPE;
+  return listingGaps(item).length === 0;
 }

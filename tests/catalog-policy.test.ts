@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isListedForLending } from "../src/catalog-policy";
+import { isListedForLending, listingGaps } from "../src/catalog-policy";
 
 const listed = { status: "ACTIVE", needsReview: false, lendingAudience: "STUDENTS_AND_USC_STAFF", itemType: "Loanable" };
 
@@ -16,5 +16,11 @@ describe("public lending policy", () => {
     expect(isListedForLending({ ...listed, needsReview: 1 })).toBe(false);
     expect(isListedForLending({ ...listed, status: "VERIFY" })).toBe(false);
     expect(isListedForLending({ ...listed, lendingAudience: "NOT_AVAILABLE_FOR_LENDING" })).toBe(false);
+  });
+
+  it("names every missing condition, so staff know exactly what blocks publication", () => {
+    expect(listingGaps(listed)).toEqual([]);
+    expect(listingGaps({ status: "INACTIVE", needsReview: 1, lendingAudience: "NOT_AVAILABLE_FOR_LENDING", itemType: "NEEDS_REVIEW" }))
+      .toEqual(["Set the type to Loanable", "Choose who may borrow it", "Set the status to Active", "Mark the details reviewed"]);
   });
 });

@@ -1,33 +1,51 @@
-import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, isListedForLending } from "./catalog-policy";
+import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, listingGaps } from "./catalog-policy";
 import { ApiError, MARK, type Html, animateNumber, api, app, categoryName, emptyState, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, reducedMotion, toast, units, writeParams } from "./ui";
 
 type Item = {
-  id: string; name: string; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
+  id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
   lendingAudience: string; onHand: number; reorderThreshold: number; storageLocation: string | null; listed: boolean;
 };
-type Inventory = { revision: number; items: Item[]; categories: string[] };
+type Inventory = { revision: number; items: Item[]; categories: string[]; locations: string[]; units: string[] };
 type Movement = { id: string; createdAt: string; movementType: string; signedQuantity: number; status: string; notes: string | null; actor: string | null };
-type DetailItem = Item & { defaultLoanDays: number | null; maximumLoanQty: number | null; notes: string | null; legacyReportedAvailable: number | null; migratedOnHand: number; migrationDelta: number | null };
-type Detail = { item: DetailItem; movements: Movement[] };
-type SortKey = "id" | "name" | "category" | "onHand";
+type Change = { from: unknown; to: unknown };
+type CatalogEvent = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
+type DetailItem = Item & {
+  defaultLoanDays: number | null; maximumLoanQty: number | null; notes: string | null; updatedAt: string | null; listingGaps: string[];
+  legacyReportedAvailable: number | null; migratedOnHand: number; migrationDelta: number | null;
+  legacySourceSheet: string | null; legacySourceRow: string | null; verificationNote: string | null; importedFrom: string | null;
+};
+type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[] };
+type SortKey = "id" | "name" | "category" | "storageLocation" | "onHand";
+type Tab = "overview" | "details" | "history";
 
+const active = (item: Item) => item.status !== "INACTIVE";
+const isLow = (item: Pick<Item, "onHand" | "reorderThreshold">) => item.reorderThreshold > 0 && item.onHand > 0 && item.onHand <= item.reorderThreshold;
 const VIEWS = {
   all: { label: "All items", test: (_: Item) => true },
-  listed: { label: "On Lending Hub", test: (item: Item) => item.listed },
-  ready: { label: "Ready to list", test: (item: Item) => item.itemType === "Loanable" && !item.listed && item.status !== "INACTIVE" },
   review: { label: "Needs review", test: (item: Item) => item.needsReview },
-  out: { label: "Out of stock", test: (item: Item) => item.onHand <= 0 && item.status !== "INACTIVE" }
+  ready: { label: "Ready to list", test: (item: Item) => item.itemType === PUBLIC_LENDING_ITEM_TYPE && !item.listed && active(item) },
+  listed: { label: "On Lending Hub", test: (item: Item) => item.listed },
+  low: { label: "Low stock", test: (item: Item) => isLow(item) && active(item) },
+  out: { label: "Out of stock", test: (item: Item) => item.onHand <= 0 && active(item) },
+  inactive: { label: "Inactive", test: (item: Item) => !active(item) }
 };
 type View = keyof typeof VIEWS;
+const NO_LOCATION = "__none";
 const MOVEMENT_LABELS: Record<string, string> = {
   OPENING_BALANCE: "Opening balance", STOCK_IN: "Stock in", STOCK_OUT: "Stock out", COUNT_ADJUSTMENT: "Count adjustment", ISSUE: "Issued (legacy system)"
 };
 const KINDS = {
-  IN: { label: "Stock in", quantity: "Quantity to add", min: 1, note: "Reason", optional: true, placeholder: "Delivery, returned item…" },
-  OUT: { label: "Stock out", quantity: "Quantity to remove", min: 1, note: "Reason", optional: true, placeholder: "Issued for an event, damaged…" },
-  COUNT: { label: "Count", quantity: "Counted on the shelf", min: 0, note: "Reason", optional: false, placeholder: "Monthly physical count…" }
+  IN: { label: "Stock in", quantity: "Quantity to add", min: 1, optional: true, placeholder: "Delivery, returned item…" },
+  OUT: { label: "Stock out", quantity: "Quantity to remove", min: 1, optional: true, placeholder: "Issued for an event, damaged…" },
+  COUNT: { label: "Count", quantity: "Counted on the shelf", min: 0, optional: false, placeholder: "Monthly physical count…" }
 } as const;
 type Kind = keyof typeof KINDS;
+const FIELD_LABELS: Record<string, string> = {
+  name: "Name", aliases: "Other names", category: "Category", itemType: "Type", unit: "Unit", status: "Status", storageLocation: "Location",
+  reorderThreshold: "Reorder level", lendingAudience: "Who may borrow", defaultLoanDays: "Loan period (days)", maximumLoanQty: "Maximum per loan",
+  needsReview: "Review", notes: "Internal notes"
+};
+const LENDING_FIELDS = ["lendingAudience", "defaultLoanDays", "maximumLoanQty"];
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
 export type Session = { id: string; username: string; displayName: string; role: Role; mustChangePassword: boolean; recovery: { configured: boolean; createdAt: string | null } | null };
@@ -54,7 +72,7 @@ export function shell(session: Session, section: Section, main: Html): void {
   mount(app, html`
     <header class="app-bar">
       <div class="app-bar__inner">
-        <a class="app-bar__brand" href="/staff/inventory" data-route aria-label="Staff workspace home">${MARK}</a>
+        <a class="app-bar__brand" href="/staff/inventory" data-route aria-label="Logistics Hub staff workspace home">${MARK}<span class="app-bar__title" aria-hidden="true">Logistics Hub<small>Staff workspace</small></span></a>
         <nav class="app-nav" aria-label="Workspace">
           ${session.mustChangePassword ? "" : link("inventory", "/staff/inventory", "Inventory")}
           ${session.role !== "STAFF" && !session.mustChangePassword ? link("admin", "/staff/admin", "Administration") : ""}
@@ -63,7 +81,7 @@ export function shell(session: Session, section: Section, main: Html): void {
         <div class="app-bar__end">
           <a class="app-bar__link" href="/lending" target="_blank" rel="noopener">Public Lending Hub ${icon("external")}<span class="visually-hidden">(opens in a new tab)</span></a>
           <a class="account" href="/staff/account" data-route><span class="account__avatar" aria-hidden="true">${initials(session.displayName)}</span><span class="account__name">${session.displayName}<small>${ROLE_LABELS[session.role]}</small></span></a>
-          <button class="button button--ghost button--sm" type="button" id="staff-logout">${icon("signOut")}<span>Sign out</span></button>
+          <button class="button button--ghost button--sm app-bar__signout" type="button" id="staff-logout">${icon("signOut")}<span>Sign out</span></button>
         </div>
       </div>
     </header>
@@ -83,7 +101,7 @@ export function failure(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong. Please try again.";
 }
 
-export function setMessage(element: HTMLElement, message: string, tone: "error" | "ok" | "" = "error"): void {
+export function setMessage(element: HTMLElement, message: string | Html, tone: "error" | "ok" | "" = "error"): void {
   element.className = `form-alert ${tone ? `form-alert--${tone}` : ""}`;
   element.hidden = !message;
   mount(element, message ? html`${icon(tone === "ok" ? "check" : "alert")}<span>${message}</span>` : html``);
@@ -95,29 +113,36 @@ export function staffLogin(): void {
   document.title = "Staff sign in · Department of Logistics";
   const ended = new URLSearchParams(window.location.search).has("expired");
   mount(app, html`<main id="main-content" class="auth">
-    <section class="auth__panel" aria-labelledby="signin-title">
-      <a class="auth__brand" href="/" data-route aria-label="Department of Logistics home">${MARK}</a>
-      <h1 id="signin-title">Staff sign in</h1>
-      <p class="auth__lede">Manage inventory and the public Lending Hub.</p>
-      <form id="staff-login" class="form" novalidate>
-        <div class="form-alert" id="login-alert" role="alert" hidden></div>
-        <div class="field">
-          <label for="username">Username</label>
-          <input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required />
-        </div>
-        <div class="field">
-          <label for="password">Password</label>
-          <div class="input-group">
-            <input id="password" name="password" type="password" autocomplete="current-password" required aria-describedby="caps-hint" />
-            <button class="input-group__button" type="button" id="toggle-password" aria-label="Show password" aria-pressed="false">${icon("eye")}</button>
+    <div class="auth__layout">
+      <section class="auth__intro" aria-hidden="true">
+        <p class="auth__eyebrow">Holy Angel University · University Student Council</p>
+        <p class="auth__statement">Department of Logistics</p>
+        <p class="auth__sub">Inventory, catalog and the Lending Hub, kept in one place.</p>
+      </section>
+      <section class="auth__panel" aria-labelledby="signin-title">
+        <a class="auth__brand" href="/" data-route aria-label="Department of Logistics home">${MARK}</a>
+        <h1 id="signin-title">Staff sign in</h1>
+        <p class="auth__lede">For Department of Logistics staff.</p>
+        <form id="staff-login" class="form" novalidate>
+          <div class="form-alert" id="login-alert" role="alert" hidden></div>
+          <div class="field">
+            <label for="username">Username</label>
+            <input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required />
           </div>
-          <p class="field__hint field__hint--warn" id="caps-hint" hidden>Caps Lock is on.</p>
-        </div>
-        <button class="button button--primary button--block" type="submit">Sign in</button>
-      </form>
-      <p class="auth__foot">Accounts are issued by the Department of Logistics.</p>
-    </section>
-    <a class="auth__back text-link" href="/" data-route>Back to the public site</a>
+          <div class="field">
+            <label for="password">Password</label>
+            <div class="input-group">
+              <input id="password" name="password" type="password" autocomplete="current-password" required aria-describedby="caps-hint" />
+              <button class="input-group__button" type="button" id="toggle-password" aria-label="Show password" aria-pressed="false">${icon("eye")}</button>
+            </div>
+            <p class="field__hint field__hint--warn" id="caps-hint" hidden>Caps Lock is on.</p>
+          </div>
+          <button class="button button--primary button--block button--lg" type="submit">Sign in</button>
+        </form>
+        <p class="auth__foot">Accounts are issued by the Department of Logistics. Forgot your password? Ask an administrator to reset it.</p>
+      </section>
+    </div>
+    <p class="auth__back"><a class="text-link text-link--light" href="/" data-route>Back to the public site</a></p>
   </main>`);
   const form = document.querySelector<HTMLFormElement>("#staff-login")!;
   const alert = form.querySelector<HTMLDivElement>("#login-alert")!;
@@ -168,14 +193,48 @@ function tags(item: Item): Html {
   const list: Html[] = [];
   if (item.listed) list.push(html`<span class="tag tag--ok">On Lending Hub</span>`);
   if (item.needsReview) list.push(html`<span class="tag tag--warn">Needs review</span>`);
-  if (item.status !== "ACTIVE") list.push(html`<span class="tag">${label(item.status)}</span>`);
+  if (item.status !== "ACTIVE") list.push(html`<span class="tag ${item.status === "VERIFY" ? "tag--warn" : ""}">${label(item.status)}</span>`);
   if (item.onHand <= 0) list.push(html`<span class="tag tag--bad">Out of stock</span>`);
-  else if (item.reorderThreshold > 0 && item.onHand <= item.reorderThreshold) list.push(html`<span class="tag tag--warn">Low stock</span>`);
+  else if (isLow(item)) list.push(html`<span class="tag tag--warn">Low stock</span>`);
   return html`<span class="tags">${list}</span>`;
 }
 
 function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join("");
+}
+
+/** The metadata a reviewer confirms for a migrated record. */
+function reviewChecklist(item: Pick<Item, "category" | "itemType" | "unit" | "storageLocation">): Array<[string, boolean]> {
+  return [
+    ["Category chosen", Boolean(item.category)],
+    ["Type classified", item.itemType !== "NEEDS_REVIEW"],
+    ["Unit set", Boolean(item.unit)],
+    ["Storage location recorded", Boolean(item.storageLocation)]
+  ];
+}
+
+function checklist(entries: Array<[string, boolean]>): Html {
+  return html`<ul class="checklist">${entries.map(([text, done]) => html`<li class="${done ? "is-done" : ""}">${icon(done ? "check" : "circle")}<span>${text}${done ? "" : html`<span class="visually-hidden"> (still missing)</span>`}</span></li>`)}</ul>`;
+}
+
+function formatValue(field: string, value: unknown): string {
+  if (value === null || value === undefined || value === "") return "Not set";
+  if (field === "needsReview") return value ? "Needs review" : "Reviewed";
+  if (field === "category") return categoryName(String(value));
+  if (field === "defaultLoanDays" || field === "maximumLoanQty" || field === "reorderThreshold") return Number(value) > 0 ? String(value) : "Not set";
+  return label(String(value));
+}
+
+/** Turns one audited catalog change into a headline staff can scan. */
+function eventTitle(event: CatalogEvent): string {
+  if (event.action === "ITEM_CREATED") return "Item created";
+  const change = (field: string) => event.details[field] as Change | undefined;
+  if (change("needsReview")) return change("needsReview")!.to ? "Marked for review" : "Review completed";
+  if (change("status")?.to === "INACTIVE") return "Deactivated";
+  if (change("status")?.from === "INACTIVE") return "Reactivated";
+  if (LENDING_FIELDS.some((field) => change(field))) return "Lending settings changed";
+  if (change("category") || change("storageLocation")) return change("category") ? "Category changed" : "Location changed";
+  return "Details updated";
 }
 
 /* ---------- Workspace ---------- */
@@ -188,17 +247,20 @@ export async function workspace(): Promise<void> {
       <header class="page-header">
         <div>
           <h1>Inventory</h1>
-          <p id="inventory-summary">Quantities are derived from the movement ledger; every change is recorded under your name.</p>
+          <p>Quantities come from the movement ledger. Every change is recorded under your name.</p>
         </div>
         <div class="page-header__actions">
           <p class="live-status" id="live-status">Connecting…</p>
           <button class="button button--primary" type="button" id="new-item">${icon("plus")}New item</button>
         </div>
       </header>
+      <div class="review-meter" id="review-meter" hidden></div>
       <div class="views" id="views" role="group" aria-label="Inventory views"></div>
       <div class="table-toolbar">
-        <label class="search-field">${icon("search")}<span class="visually-hidden">Search inventory</span><input id="inventory-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search name, ID, category, location" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
-        <label class="select-field"><span class="visually-hidden">Category</span><select id="inventory-category"><option value="">All categories</option></select></label>
+        <label class="search-field">${icon("search")}<span class="visually-hidden">Search inventory</span><input id="inventory-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search name, other name, ID, category, location" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
+        <div class="select-field"><label class="visually-hidden" for="filter-category">Category</label><select id="filter-category"></select></div>
+        <div class="select-field"><label class="visually-hidden" for="filter-location">Location</label><select id="filter-location"></select></div>
+        <div class="select-field select-field--narrow"><label class="visually-hidden" for="filter-type">Type</label><select id="filter-type"></select></div>
         <p class="table-toolbar__count" id="inventory-count" aria-live="polite"></p>
       </div>
       <div id="inventory-results" aria-busy="true">${tableSkeleton()}</div>
@@ -209,68 +271,91 @@ export async function workspace(): Promise<void> {
   const requestedView = params.get("view") ?? "";
   let view: View = Object.hasOwn(VIEWS, requestedView) ? requestedView as View : "all";
   const [sortParam, dirParam] = (params.get("sort") ?? "name").split("-");
-  let sortKey: SortKey = (["id", "name", "category", "onHand"] as const).find((key) => key === sortParam) ?? "name";
+  let sortKey: SortKey = (["id", "name", "category", "storageLocation", "onHand"] as const).find((key) => key === sortParam) ?? "name";
   let sortDir = dirParam === "desc" ? -1 : 1;
+  let filters = { category: params.get("category") ?? "", location: params.get("location") ?? "", type: params.get("type") ?? "" };
   let openId: string | null = null;
+  let detail: Detail | null = null;
   let dirty = false;
   let pendingItem = params.get("item");
+  let shownIds: string[] = [];
   const previous = new Map<string, number>();
   const changed = new Map<string, number>();
   const sheet = document.querySelector<HTMLDialogElement>("#sheet")!;
   const search = document.querySelector<HTMLInputElement>("#inventory-search")!;
-  const categorySelect = document.querySelector<HTMLSelectElement>("#inventory-category")!;
+  const selects = {
+    category: document.querySelector<HTMLSelectElement>("#filter-category")!,
+    location: document.querySelector<HTMLSelectElement>("#filter-location")!,
+    type: document.querySelector<HTMLSelectElement>("#filter-type")!
+  };
   const results = document.querySelector<HTMLDivElement>("#inventory-results")!;
   search.value = params.get("q") ?? "";
-  let category = params.get("category") ?? "";
 
   function tableSkeleton(): Html {
     return html`<div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 8 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></div>`)}</div>`;
   }
 
   const compare = (a: Item, b: Item) => {
-    const left = a[sortKey];
-    const right = b[sortKey];
+    const left = a[sortKey] ?? "";
+    const right = b[sortKey] ?? "";
+    // Empty locations sort last in either direction, so the known ones stay together.
+    if (sortKey === "storageLocation" && (!left || !right) && left !== right) return left ? -1 : 1;
     const order = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
     return (order || a.name.localeCompare(b.name)) * sortDir;
   };
 
   const sortHeader = (key: SortKey, title: string, className = "") => {
-    const active = sortKey === key;
-    return html`<th scope="col" class="${className}" aria-sort="${active ? (sortDir === 1 ? "ascending" : "descending") : "none"}">
-      <button type="button" class="sort-button" data-sort="${key}">${title}${icon(active ? (sortDir === 1 ? "sortUp" : "sortDown") : "sort")}</button></th>`;
+    const current = sortKey === key;
+    return html`<th scope="col" class="${className}" aria-sort="${current ? (sortDir === 1 ? "ascending" : "descending") : "none"}">
+      <button type="button" class="sort-button" data-sort="${key}">${title}${icon(current ? (sortDir === 1 ? "sortUp" : "sortDown") : "sort")}</button></th>`;
   };
 
   const direction = (id: string) => { const was = changed.get(id); if (was === undefined) return ""; const now = previous.get(id) ?? was; return now > was ? "is-changed is-up" : "is-changed is-down"; };
-  const row = (item: Item) => html`<tr data-key="${item.id}" class="${[direction(item.id), item.id === openId ? "is-open" : ""].join(" ")}">
+  const row = (item: Item) => html`<tr data-key="${item.id}" class="${[direction(item.id), item.id === openId ? "is-open" : "", active(item) ? "" : "is-inactive"].join(" ")}">
     <td class="col-id">${item.id}</td>
-    <td class="col-item"><button type="button" class="row-link">${item.name}</button><span class="cell-sub">${label(item.itemType)}</span></td>
+    <td class="col-item"><button type="button" class="row-link">${item.name}</button><span class="cell-sub">${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}</span></td>
     <td class="col-category">${categoryName(item.category)}</td>
-    <td class="col-location">${item.storageLocation ?? html`<span class="muted">—</span>`}</td>
+    <td class="col-location">${item.storageLocation ?? html`<span class="muted">Not set</span>`}</td>
     <td class="col-qty"><span class="qty" data-qty="${item.id}">${item.onHand}</span> <span class="qty-unit">${units(item.onHand, item.unit)}</span></td>
     <td class="col-status">${tags(item)}</td></tr>`;
+
+  const matches = (item: Item, query: string) => !query || `${item.name} ${item.id} ${item.aliases ?? ""} ${item.category} ${item.storageLocation ?? ""}`.toLowerCase().includes(query);
+
+  const fillSelect = (select: HTMLSelectElement, all: string, options: Array<[string, string]>, value: string) => {
+    const markup = html`<option value="">${all}</option>${options.map(([optionValue, text]) => html`<option value="${optionValue}">${text}</option>`)}`;
+    if (select.dataset.markup !== markup.value) { mount(select, markup); select.dataset.markup = markup.value; }
+    select.value = value;
+    select.classList.toggle("is-set", Boolean(value));
+  };
 
   const render = () => {
     if (!inventory) return;
     results.removeAttribute("aria-busy");
     const items = inventory.items;
-    writeParams({ view: view === "all" ? null : view, q: search.value.trim(), category, sort: sortKey === "name" && sortDir === 1 ? null : `${sortKey}-${sortDir === 1 ? "asc" : "desc"}` });
+    writeParams({ view: view === "all" ? null : view, q: search.value.trim(), ...filters, sort: sortKey === "name" && sortDir === 1 ? null : `${sortKey}-${sortDir === 1 ? "asc" : "desc"}` });
     mount(document.querySelector("#views")!, html`${Object.entries(VIEWS).map(([key, value]) =>
       html`<button type="button" class="view-tab" data-view="${key}" aria-pressed="${key === view}">${value.label}<span class="view-tab__count">${items.filter(value.test).length}</span></button>`)}`);
-    if ([...categorySelect.options].slice(1).map((option) => option.value).join("\n") !== inventory.categories.join("\n")) {
-      mount(categorySelect, html`<option value="">All categories</option>${inventory.categories.map((value) => html`<option value="${value}">${categoryName(value)}</option>`)}`);
-    }
-    categorySelect.value = category;
+    const reviewed = items.filter((item) => !item.needsReview).length;
+    const meter = document.querySelector<HTMLElement>("#review-meter")!;
+    meter.hidden = reviewed === items.length;
+    mount(meter, html`<p><strong>${reviewed.toLocaleString()}</strong> of ${plural(items.length, "record")} reviewed</p><progress max="${items.length}" value="${reviewed}" aria-label="Records reviewed">${reviewed}</progress>${view === "review" ? "" : html`<button type="button" class="text-link" data-view="review">Review the next records ${icon("arrow")}</button>`}`);
+    fillSelect(selects.category, "All categories", inventory.categories.map((value) => [value, categoryName(value)]), filters.category);
+    fillSelect(selects.location, "All locations", [[NO_LOCATION, "No location set"], ...inventory.locations.map((value): [string, string] => [value, value])], filters.location);
+    fillSelect(selects.type, "All types", ITEM_TYPES.map((value) => [value, label(value)]), filters.type);
     const query = search.value.trim().toLowerCase();
     const shown = items.filter((item) => VIEWS[view].test(item)
-      && (!category || item.category === category)
-      && (!query || `${item.name} ${item.id} ${item.category} ${item.storageLocation ?? ""}`.toLowerCase().includes(query))).sort(compare);
+      && (!filters.category || item.category === filters.category)
+      && (!filters.location || (filters.location === NO_LOCATION ? !item.storageLocation : item.storageLocation === filters.location))
+      && (!filters.type || item.itemType === filters.type)
+      && matches(item, query)).sort(compare);
+    shownIds = shown.map((item) => item.id);
     document.querySelector("#inventory-count")!.textContent = shown.length === items.length ? plural(items.length, "item") : `${shown.length.toLocaleString()} of ${plural(items.length, "item")}`;
     preservingFocus(results, () => mount(results, shown.length
       ? html`<div class="data-table-wrap"><table class="data-table">
-          <caption class="visually-hidden">Inventory items. Select an item to record stock or edit it.</caption>
-          <thead><tr>${sortHeader("id", "ID", "col-id")}${sortHeader("name", "Item", "col-item")}${sortHeader("category", "Category", "col-category")}<th scope="col" class="col-location">Location</th>${sortHeader("onHand", "On hand", "col-qty")}<th scope="col" class="col-status">Status</th></tr></thead>
+          <caption class="visually-hidden">Inventory items. Select an item to see, review or edit it.</caption>
+          <thead><tr>${sortHeader("id", "ID", "col-id")}${sortHeader("name", "Item", "col-item")}${sortHeader("category", "Category", "col-category")}${sortHeader("storageLocation", "Location", "col-location")}${sortHeader("onHand", "On hand", "col-qty")}<th scope="col" class="col-status">Status</th></tr></thead>
           <tbody>${shown.map(row)}</tbody></table></div>`
-      : emptyState("No items match", "Try another search, category, or view.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
+      : emptyState(view === "review" && !query ? "Every record is reviewed" : "No items match", view === "review" && !query ? "Nothing is waiting for review with these filters." : "Try another search, filter, or view.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
     for (const [id, was] of changed) {
       const cell = results.querySelector(`[data-qty="${CSS.escape(id)}"]`);
       animateNumber(cell, Number(cell?.textContent), was);
@@ -291,12 +376,12 @@ export async function workspace(): Promise<void> {
         }
         previous.set(item.id, item.onHand);
       }
-      if (category && !data.categories.includes(category)) category = "";
+      if (filters.category && !data.categories.includes(filters.category)) filters = { ...filters, category: "" };
+      if (filters.location && filters.location !== NO_LOCATION && !data.locations.includes(filters.location)) filters = { ...filters, location: "" };
       inventory = data;
       render();
-      // Refresh the open sheet only when it does not already show the new quantity (e.g. another staff member's change).
-      const shown = Number(sheet.querySelector<HTMLElement>("[data-onhand]")?.dataset.onhand);
-      if (openChanged && openId && shown !== data.items.find((item) => item.id === openId)?.onHand) void loadDetail(openId, false);
+      // Refresh the open sheet when another staff member changes its quantity.
+      if (openChanged && openId && detail?.item.onHand !== data.items.find((item) => item.id === openId)?.onHand) void refreshStock(openId);
       if (pendingItem) { openItem(pendingItem); pendingItem = null; }
     },
     onError: (error) => {
@@ -312,7 +397,7 @@ export async function workspace(): Promise<void> {
   onLeave(() => window.clearTimeout(searchTimer));
   search.addEventListener("input", () => { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(render, 120); });
   search.addEventListener("keydown", (event) => { if (event.key === "Escape" && search.value) { search.value = ""; render(); } });
-  categorySelect.addEventListener("change", () => { category = categorySelect.value; render(); });
+  for (const [key, select] of Object.entries(selects)) select.addEventListener("change", () => { filters = { ...filters, [key]: select.value }; render(); });
   document.querySelector("#clear-search")!.addEventListener("click", () => { search.value = ""; render(); search.focus(); });
   // Arrow keys move between rows; Home/End jump to the ends; Enter opens (native button).
   results.addEventListener("keydown", (event) => {
@@ -326,9 +411,13 @@ export async function workspace(): Promise<void> {
     links[next].focus();
     links[next].scrollIntoView({ block: "nearest" });
   });
+  const setView = (next: View) => { view = next; render(); };
   document.querySelector("#views")!.addEventListener("click", (event) => {
     const tab = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-view]");
-    if (tab) { view = tab.dataset.view as View; render(); }
+    if (tab) setView(tab.dataset.view as View);
+  });
+  document.querySelector("#review-meter")!.addEventListener("click", (event) => {
+    if ((event.target as HTMLElement).closest("[data-view]")) { setView("review"); document.querySelector<HTMLButtonElement>('[data-view="review"]')?.focus(); }
   });
   results.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
@@ -343,7 +432,7 @@ export async function workspace(): Promise<void> {
     }
     if (target.closest("#clear-filters")) {
       search.value = "";
-      category = "";
+      filters = { category: "", location: "", type: "" };
       view = "all";
       render();
       search.focus();
@@ -372,19 +461,20 @@ export async function workspace(): Promise<void> {
     const fallback = window.setTimeout(finish, 400);
     sheet.addEventListener("animationend", finish);
   };
-  const requestClose = () => {
-    if (dirty && !window.confirm("Discard your unsaved changes to this item?")) return;
-    closeSheet();
-  };
+  const discardOk = () => !dirty || window.confirm("Discard your unsaved changes to this item?");
+  const requestClose = () => { if (discardOk()) closeSheet(); };
   sheet.addEventListener("cancel", (event) => { event.preventDefault(); requestClose(); });
   sheet.addEventListener("click", (event) => { if (event.target === sheet) requestClose(); });
   sheet.addEventListener("close", () => {
     const closedId = openId;
     openId = null;
+    detail = null;
     dirty = false;
     sheet.innerHTML = "";
     writeParams({ item: null });
-    document.querySelector(`tr[data-key="${CSS.escape(closedId ?? "")}"]`)?.classList.remove("is-open");
+    const closedRow = document.querySelector(`tr[data-key="${CSS.escape(closedId ?? "")}"]`);
+    closedRow?.classList.remove("is-open");
+    closedRow?.querySelector<HTMLButtonElement>(".row-link")?.focus({ preventScroll: true });
   });
   onLeave(() => { dirty = false; if (sheet.open) sheet.close(); });
 
@@ -397,96 +487,156 @@ export async function workspace(): Promise<void> {
     sheet.querySelector("[data-close]")!.addEventListener("click", requestClose);
   }
 
-  function openItem(id: string): void {
-    if (dirty && openId !== id && !window.confirm("Discard your unsaved changes to this item?")) return;
+  function openItem(id: string, tab: Tab = "overview"): void {
+    if (openId !== id && !discardOk()) return;
     dirty = false;
     document.querySelectorAll("tr.is-open").forEach((element) => element.classList.remove("is-open"));
     document.querySelector(`tr[data-key="${CSS.escape(id)}"]`)?.classList.add("is-open");
     openId = id;
+    detail = null;
     writeParams({ item: id });
     const item = inventory?.items.find((entry) => entry.id === id);
     sheetShell(id, item?.name ?? "Loading…", html`<div class="skeleton skeleton--block"></div>`);
     if (!sheet.open) sheet.showModal();
-    void loadDetail(id, true);
+    void loadDetail(id, tab);
   }
 
-  async function loadDetail(id: string, full: boolean): Promise<void> {
+  async function fetchDetail(id: string): Promise<Detail | null> {
+    const loaded = await api<Detail>(`/api/staff/items/${encodeURIComponent(id)}`);
+    return openId === id ? loaded : null;
+  }
+
+  async function loadDetail(id: string, tab: Tab): Promise<void> {
     try {
-      const detail = await api<Detail>(`/api/staff/items/${encodeURIComponent(id)}`);
-      if (openId !== id) return;
-      if (full) return renderDetail(detail);
-      const was = Number(sheet.querySelector<HTMLElement>("[data-onhand]")?.dataset.onhand);
-      const badge = sheet.querySelector(".delta");
-      sheet.querySelector("#summary")!.outerHTML = summaryMarkup(detail).value;
-      const difference = detail.item.onHand - was;
-      if (difference === 0 && badge) sheet.querySelector(".summary__primary dd")?.append(badge);
-      if (Number.isFinite(was) && difference !== 0) {
-        animateNumber(sheet.querySelector(".summary__qty"), detail.item.onHand, was);
-        sheet.querySelector(".summary__primary dd")?.insertAdjacentHTML("beforeend", html` <span class="delta ${difference > 0 ? "delta--up" : "delta--down"}">${difference > 0 ? "+" : "−"}${Math.abs(difference)}</span>`.value);
-      }
-      mount(sheet.querySelector("#history")!, historyMarkup(detail.movements));
-      sheet.querySelector<HTMLFormElement>("#stock-form")?.dispatchEvent(new Event("refresh"));
+      const loaded = await fetchDetail(id);
+      if (loaded) renderDetail(loaded, tab);
     } catch (error) {
-      if (openId === id && full) mount(sheet.querySelector(".sheet__body")!, emptyState("Could not load this item", failure(error), "", "error"));
+      if (openId === id) mount(sheet.querySelector(".sheet__body")!, emptyState("Could not load this item", failure(error), "", "error"));
     }
   }
 
-  function summaryMarkup({ item }: Detail): Html {
+  /** Updates only the quantity and history in place, so an edit in progress is never lost. */
+  async function refreshStock(id: string): Promise<void> {
+    try {
+      const was = detail?.item.onHand;
+      const loaded = await fetchDetail(id);
+      if (!loaded || !detail) return;
+      detail = { ...detail, item: { ...detail.item, onHand: loaded.item.onHand }, movements: loaded.movements };
+      mount(sheet.querySelector("#quantity")!, quantityMarkup(detail.item));
+      if (was !== undefined && was !== loaded.item.onHand) {
+        animateNumber(sheet.querySelector(".quantity__value"), loaded.item.onHand, was);
+        const difference = loaded.item.onHand - was;
+        sheet.querySelector(".quantity__figure")?.insertAdjacentHTML("beforeend", html`<span class="delta ${difference > 0 ? "delta--up" : "delta--down"}">${difference > 0 ? "+" : "−"}${Math.abs(difference)}</span>`.value);
+      }
+      mount(sheet.querySelector("#history")!, historyMarkup(detail));
+      sheet.querySelector<HTMLFormElement>("#stock-form")?.dispatchEvent(new Event("refresh"));
+    } catch { /* the next live refresh retries */ }
+  }
+
+  function quantityMarkup(item: DetailItem): Html {
+    const low = isLow(item);
+    return html`<div class="quantity__figure"><span class="quantity__value ${item.onHand <= 0 ? "is-out" : low ? "is-low" : ""}">${item.onHand}</span> <span class="quantity__unit">${units(item.onHand, item.unit)} on hand</span></div>
+      <p class="quantity__context">${item.reorderThreshold > 0
+        ? html`${item.onHand <= 0 ? html`<span class="tag tag--bad">Out of stock</span>` : low ? html`<span class="tag tag--warn">Low stock</span>` : html`<span class="tag tag--ok">Above reorder level</span>`} Reorder level ${item.reorderThreshold}`
+        : item.onHand <= 0 ? html`<span class="tag tag--bad">Out of stock</span> No reorder level set` : "No reorder level set"}</p>`;
+  }
+
+  function overviewMarkup({ item }: Detail): Html {
     const delta = item.migrationDelta ?? 0;
-    return html`<div id="summary">
-      <dl class="summary" data-onhand="${item.onHand}">
-        <div class="summary__primary"><dt>On hand</dt><dd><span class="summary__qty ${item.onHand <= 0 ? "is-out" : ""}">${item.onHand}</span> ${units(item.onHand, item.unit)}${item.reorderThreshold > 0 && item.onHand > 0 && item.onHand <= item.reorderThreshold ? html` <span class="tag tag--warn">Low stock</span>` : ""}</dd></div>
-        <div><dt>Type</dt><dd>${label(item.itemType)}</dd></div>
-        <div><dt>Status</dt><dd>${label(item.status)}${item.needsReview ? html`<span class="summary__flag">Needs review</span>` : ""}</dd></div>
-        <div><dt>Location</dt><dd>${item.storageLocation ?? "Not set"}</dd></div>
-        <div><dt>Lending Hub</dt><dd>${item.listed ? "Listed" : "Not listed"}</dd></div>
-      </dl>
+    const gaps = item.listingGaps;
+    const origin = item.importedFrom === "LOGISTICS_HUB" ? "Created in the Logistics Hub" : item.legacySourceSheet ? `Migrated from the legacy system · ${categoryName(item.legacySourceSheet)}, row ${item.legacySourceRow ?? "?"}` : "Migrated from the legacy system";
+    return html`
+      <div class="quantity" id="quantity">${quantityMarkup(item)}</div>
       ${delta !== 0 ? html`<div class="callout">${icon("info")}<p><strong>Migration evidence.</strong> At migration the legacy snapshot reported ${item.legacyReportedAvailable} ${units(item.legacyReportedAvailable ?? 0, item.unit)}, but the migrated movement ledger derives ${item.migratedOnHand}. The difference is preserved as recorded, not guessed. Once a physical count confirms the real figure, record it with a Count.</p></div>` : ""}
-    </div>`;
+      ${item.verificationNote ? html`<div class="callout">${icon("alert")}<p><strong>Verify:</strong> ${item.verificationNote}</p></div>` : ""}
+      ${item.needsReview ? html`<section class="card card--review" aria-labelledby="review-title">
+          <div class="card__head"><h3 id="review-title">Needs review</h3><button type="button" class="button button--secondary button--sm" data-goto="details">Review details</button></div>
+          <p class="card__text">This record came from the legacy system. Confirm its details, then mark it reviewed.</p>
+          ${checklist(reviewChecklist(item))}
+        </section>` : ""}
+      <dl class="facts">
+        <div><dt>Type</dt><dd>${label(item.itemType)}</dd></div>
+        <div><dt>Category</dt><dd>${categoryName(item.category)}</dd></div>
+        <div><dt>Location</dt><dd>${item.storageLocation ?? html`<span class="muted">Not set</span>`}</dd></div>
+        <div><dt>Unit</dt><dd>${item.unit}</dd></div>
+        <div><dt>Status</dt><dd>${label(item.status)}${item.needsReview ? "" : html` · Reviewed`}</dd></div>
+        <div><dt>Other names</dt><dd>${item.aliases ?? html`<span class="muted">None</span>`}</dd></div>
+      </dl>
+      <section class="card ${gaps.length ? "" : "card--ok"}" aria-labelledby="lending-title">
+        <div class="card__head"><h3 id="lending-title">${gaps.length ? "Not on the Lending Hub" : "Listed on the Lending Hub"}</h3>${gaps.length ? "" : html`<a class="text-link" href="/lending?q=${encodeURIComponent(item.name)}" target="_blank" rel="noopener">View ${icon("external")}<span class="visually-hidden">(opens in a new tab)</span></a>`}</div>
+        ${gaps.length
+          ? html`<p class="card__text">Still needed before it can be listed:</p>${checklist(gaps.map((gap) => [gap, false]))}`
+          : html`<p class="card__text">${label(item.lendingAudience)}${item.maximumLoanQty ? ` · up to ${item.maximumLoanQty} per loan` : ""}${item.defaultLoanDays ? ` · ${item.defaultLoanDays}-day loan` : ""}. Students see live availability.</p>`}
+      </section>
+      <section aria-labelledby="stock-title" class="stock">
+        <h3 id="stock-title" class="section-label">Record stock</h3>
+        ${stockFormMarkup()}
+      </section>
+      <p class="provenance">${origin}</p>`;
   }
 
-  function historyMarkup(movements: Movement[]): Html {
-    if (!movements.length) return html`<li class="history__empty">No movements recorded yet.</li>`;
-    return html`${movements.map((movement) => {
-      const quantity = movement.signedQuantity;
-      return html`<li class="history__item ${quantity > 0 ? "is-in" : quantity < 0 ? "is-out" : ""}">
-        <div><p class="history__title">${MOVEMENT_LABELS[movement.movementType] ?? movement.movementType}${movement.status !== "POSTED" ? ` (${movement.status.toLowerCase()})` : ""}</p>
-          <p class="history__meta"><time datetime="${movement.createdAt}">${formatDateTime(movement.createdAt)}</time> · ${movement.actor ?? "Legacy system"}</p>
-          ${movement.notes ? html`<p class="history__note">${movement.notes}</p>` : ""}</div>
-        <p class="history__qty ${quantity > 0 ? "is-in" : quantity < 0 ? "is-out" : ""}">${quantity > 0 ? "+" : quantity < 0 ? "−" : ""}${Math.abs(quantity)}</p></li>`;
-    })}`;
+  function historyMarkup({ movements, events }: Detail): Html {
+    type Entry = { at: string; markup: Html };
+    const entries: Entry[] = [
+      ...movements.map((movement) => {
+        const quantity = movement.signedQuantity;
+        const tone = quantity > 0 ? "is-in" : quantity < 0 ? "is-out" : "";
+        return { at: movement.createdAt, markup: html`<li class="history__item ${tone}">
+          <div><p class="history__title">${MOVEMENT_LABELS[movement.movementType] ?? movement.movementType}${movement.status !== "POSTED" ? ` (${movement.status.toLowerCase()})` : ""}</p>
+            <p class="history__meta"><time datetime="${movement.createdAt}">${formatDateTime(movement.createdAt)}</time> · ${movement.actor ?? "Legacy system"}</p>
+            ${movement.notes ? html`<p class="history__note">${movement.notes}</p>` : ""}</div>
+          <p class="history__qty ${tone}">${quantity > 0 ? "+" : quantity < 0 ? "−" : ""}${Math.abs(quantity)}</p></li>` };
+      }),
+      ...events.map((event) => {
+        const changes = event.action === "ITEM_UPDATED"
+          ? Object.entries(event.details).filter(([field]) => FIELD_LABELS[field]).map(([field, value]) => html`<li><span>${FIELD_LABELS[field]}</span> ${formatValue(field, (value as Change).from)} → <strong>${formatValue(field, (value as Change).to)}</strong></li>`)
+          : [];
+        const opening = Number(event.details.openingQuantity ?? 0);
+        return { at: event.at, markup: html`<li class="history__item is-catalog">
+          <div><p class="history__title">${eventTitle(event)}</p>
+            <p class="history__meta"><time datetime="${event.at}">${formatDateTime(event.at)}</time> · ${event.actor ?? "System"}</p>
+            ${changes.length ? html`<ul class="history__changes">${changes}</ul>` : event.action === "ITEM_CREATED" && opening > 0 ? html`<p class="history__note">Opening quantity ${opening}</p>` : ""}</div></li>` };
+      })
+    ].sort((a, b) => b.at.localeCompare(a.at));
+    return entries.length ? html`${entries.map((entry) => entry.markup)}` : html`<li class="history__empty">No history recorded yet.</li>`;
   }
 
-  function renderDetail(detail: Detail): void {
-    const { item } = detail;
-    sheetShell(html`<span class="mono">${item.id}</span> · ${categoryName(item.category)}`, item.name, html`${summaryMarkup(detail)}
+  function renderDetail(loaded: Detail, tab: Tab): void {
+    detail = loaded;
+    dirty = false;
+    const { item } = loaded;
+    const tabs: Array<[Tab, string]> = [["overview", "Overview"], ["details", item.needsReview ? "Review & edit" : "Edit details"], ["history", "History"]];
+    sheetShell(html`<span class="mono">${item.id}</span> · ${categoryName(item.category)}`, item.name, html`
+      <div class="sheet__tags">${tags(item)}</div>
       <div class="tabs" role="tablist" aria-label="Item sections">
-        <button type="button" role="tab" id="tab-stock" aria-controls="panel-stock" aria-selected="true">Stock</button>
-        <button type="button" role="tab" id="tab-details" aria-controls="panel-details" aria-selected="false" tabindex="-1">Details &amp; lending</button>
-        <button type="button" role="tab" id="tab-history" aria-controls="panel-history" aria-selected="false" tabindex="-1">History</button>
+        ${tabs.map(([key, text]) => html`<button type="button" role="tab" id="tab-${key}" aria-controls="panel-${key}" aria-selected="${key === tab}" tabindex="${key === tab ? 0 : -1}">${text}</button>`)}
       </div>
-      <section id="panel-stock" role="tabpanel" aria-labelledby="tab-stock" tabindex="0">${stockFormMarkup()}</section>
-      <section id="panel-details" role="tabpanel" aria-labelledby="tab-details" tabindex="0" hidden>${detailsFormMarkup(item)}</section>
-      <section id="panel-history" role="tabpanel" aria-labelledby="tab-history" tabindex="0" hidden><ol class="history" id="history">${historyMarkup(detail.movements)}</ol></section>`);
-    const tabs = [...sheet.querySelectorAll<HTMLButtonElement>("[role=tab]")];
-    const select = (tab: HTMLButtonElement) => tabs.forEach((entry) => {
-      const active = entry === tab;
-      entry.setAttribute("aria-selected", String(active));
-      entry.tabIndex = active ? 0 : -1;
-      sheet.querySelector<HTMLElement>(`#${entry.getAttribute("aria-controls")}`)!.hidden = !active;
+      <section id="panel-overview" class="panel-stack" role="tabpanel" aria-labelledby="tab-overview" tabindex="0" ${tab === "overview" ? "" : html`hidden`}>${overviewMarkup(loaded)}</section>
+      <section id="panel-details" role="tabpanel" aria-labelledby="tab-details" tabindex="0" ${tab === "details" ? "" : html`hidden`}>${detailsFormMarkup(item)}</section>
+      <section id="panel-history" role="tabpanel" aria-labelledby="tab-history" tabindex="0" ${tab === "history" ? "" : html`hidden`}><ol class="history" id="history">${historyMarkup(loaded)}</ol></section>`);
+    const tabButtons = [...sheet.querySelectorAll<HTMLButtonElement>("[role=tab]")];
+    const select = (target: HTMLButtonElement) => tabButtons.forEach((entry) => {
+      const selected = entry === target;
+      entry.setAttribute("aria-selected", String(selected));
+      entry.tabIndex = selected ? 0 : -1;
+      sheet.querySelector<HTMLElement>(`#${entry.getAttribute("aria-controls")}`)!.hidden = !selected;
     });
-    tabs.forEach((tab, index) => {
-      tab.addEventListener("click", () => select(tab));
-      tab.addEventListener("keydown", (event) => {
+    tabButtons.forEach((button, index) => {
+      button.addEventListener("click", () => select(button));
+      button.addEventListener("keydown", (event) => {
         const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
         if (!step) return;
-        const next = tabs[(index + step + tabs.length) % tabs.length]!;
+        const next = tabButtons[(index + step + tabButtons.length) % tabButtons.length]!;
         select(next);
         next.focus();
       });
     });
+    sheet.querySelector("[data-goto=details]")?.addEventListener("click", () => {
+      select(sheet.querySelector<HTMLButtonElement>("#tab-details")!);
+      sheet.querySelector<HTMLInputElement>("#f-name")?.focus();
+    });
     bindStockForm(item);
-    bindDetailsForm(item.id);
+    bindDetailsForm(item);
   }
 
   function stockFormMarkup(): Html {
@@ -513,7 +663,7 @@ export async function workspace(): Promise<void> {
     const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
     let key = crypto.randomUUID();
     const kind = () => (new FormData(form).get("kind") ?? "IN") as Kind;
-    const onHand = () => Number(sheet.querySelector<HTMLElement>("[data-onhand]")?.dataset.onhand ?? item.onHand);
+    const onHand = () => detail?.item.onHand ?? item.onHand;
     const update = () => {
       const config = KINDS[kind()];
       form.querySelector("#stock-quantity-label")!.textContent = config.quantity;
@@ -568,7 +718,7 @@ export async function workspace(): Promise<void> {
         button.classList.add("is-done");
         mount(button, html`${icon("check")}Recorded`);
         window.setTimeout(() => { button.classList.remove("is-done"); update(); }, 1400);
-        await loadDetail(item.id, false);
+        await refreshStock(item.id);
         await poll.refresh();
       } catch (error) {
         setMessage(alert, failure(error));
@@ -581,33 +731,54 @@ export async function workspace(): Promise<void> {
 
   function detailsFormMarkup(item: Partial<DetailItem>, creating = false): Html {
     const options = (values: readonly string[], current: string | undefined) => values.map((value) => html`<option value="${value}" ${value === current ? html`selected` : ""}>${label(value)}</option>`);
-    const text = (id: string, title: string, value: unknown, attributes: Html | string = "") => html`<div class="field"><label for="f-${id}">${title}</label><input id="f-${id}" name="${id}" value="${value ?? ""}" ${attributes} /></div>`;
-    const number = (id: string, title: string, value: unknown, hint = "") => html`<div class="field"><label for="f-${id}">${title}</label><input id="f-${id}" name="${id}" type="number" inputmode="numeric" min="0" step="1" value="${value ?? 0}" ${hint ? html`aria-describedby="f-${id}-hint"` : ""} />${hint ? html`<p class="field__hint" id="f-${id}-hint">${hint}</p>` : ""}</div>`;
+    const hinted = (id: string, hint: string) => hint ? html`aria-describedby="f-${id}-hint"` : "";
+    const hintMarkup = (id: string, hint: string) => hint ? html`<p class="field__hint" id="f-${id}-hint">${hint}</p>` : "";
+    const text = (id: string, title: string, value: unknown, attributes: Html | string = "", hint = "", optional = false) => html`<div class="field"><label for="f-${id}">${title}${optional ? html` <span class="field__optional">optional</span>` : ""}</label><input id="f-${id}" name="${id}" value="${value ?? ""}" ${attributes} ${hinted(id, hint)} />${hintMarkup(id, hint)}</div>`;
+    const number = (id: string, title: string, value: unknown, max: number, hint = "") => html`<div class="field"><label for="f-${id}">${title}</label><input id="f-${id}" name="${id}" type="number" inputmode="numeric" min="0" max="${max}" step="1" value="${value ?? 0}" ${hinted(id, hint)} />${hintMarkup(id, hint)}</div>`;
+    const reviewing = !creating && item.needsReview === true;
     return html`<form id="details-form" class="form" novalidate>
+      ${reviewing ? html`<div class="callout callout--review">${icon("info")}<div><p><strong>Reviewing a migrated record.</strong> Check each detail against the physical item, fill in what is missing, then mark it reviewed.</p><div id="review-checklist">${checklist(reviewChecklist(item as Item))}</div></div></div>` : ""}
       <div class="form-section">
-        <h3 class="form-section__title">Catalog record</h3>
-        ${text("name", "Name", item.name, html`required maxlength="120"`)}
-        <div class="field-grid">${text("category", "Category", item.category, html`required maxlength="100" list="category-options"`)}${text("unit", "Unit", item.unit, html`required maxlength="30" placeholder="piece, box, pack"`)}</div>
-        <datalist id="category-options">${(inventory?.categories ?? []).map((value) => html`<option value="${value}"></option>`)}</datalist>
+        <h3 class="form-section__title">Catalog</h3>
+        ${text("name", "Name", item.name, html`required maxlength="120" autocomplete="off"`)}
+        <p class="field__hint field__hint--warn" id="duplicate-hint" hidden></p>
+        ${text("aliases", "Other names", item.aliases, html`maxlength="300" autocomplete="off"`, "Names people also use for it, separated by commas. Search finds these too.", true)}
         <div class="field-grid">
+          ${text("category", "Category", item.category, html`required maxlength="100" list="category-options" autocomplete="off"`, "Pick an existing category where one fits.")}
           <div class="field"><label for="f-itemType">Type</label><select id="f-itemType" name="itemType">${options(ITEM_TYPES, item.itemType ?? "Loanable")}</select></div>
-          <div class="field"><label for="f-status">Status</label><select id="f-status" name="status">${options(ITEM_STATUSES, item.status ?? "ACTIVE")}</select></div>
         </div>
-        <div class="field-grid">${text("storageLocation", "Storage location", item.storageLocation, html`maxlength="120"`)}${number("reorderThreshold", "Reorder level", item.reorderThreshold, "Flags low stock at or below this. 0 turns it off.")}</div>
-        ${creating ? number("openingQuantity", "Opening quantity", 0, "Recorded as the item's opening movement.") : ""}
+        <div class="field-grid">
+          ${text("unit", "Unit", item.unit, html`required maxlength="30" list="unit-options" autocomplete="off" placeholder="piece, box, pack"`, "Singular, as counted.")}
+          ${text("storageLocation", "Storage location", item.storageLocation, html`maxlength="120" list="location-options" autocomplete="off" placeholder="Office cabinet 2"`, "Where staff find it.", true)}
+        </div>
+        <datalist id="category-options">${(inventory?.categories ?? []).map((value) => html`<option value="${value}"></option>`)}</datalist>
+        <datalist id="unit-options">${(inventory?.units ?? []).map((value) => html`<option value="${value}"></option>`)}</datalist>
+        <datalist id="location-options">${(inventory?.locations ?? []).map((value) => html`<option value="${value}"></option>`)}</datalist>
+        <div class="field"><label for="f-notes">Internal notes <span class="field__optional">optional</span></label><textarea id="f-notes" name="notes" maxlength="1000" rows="3">${item.notes ?? ""}</textarea></div>
       </div>
       <div class="form-section">
-        <h3 class="form-section__title">Lending Hub</h3>
+        <h3 class="form-section__title">Inventory settings</h3>
+        <div class="field-grid">
+          <div class="field"><label for="f-status">Status</label><select id="f-status" name="status" aria-describedby="f-status-hint">${options(ITEM_STATUSES, item.status ?? "ACTIVE")}</select><p class="field__hint" id="f-status-hint">Inactive items leave the Lending Hub. Nothing is deleted.</p></div>
+          ${number("reorderThreshold", "Reorder level", item.reorderThreshold, 100_000, "Low stock at or below this. 0 turns it off.")}
+        </div>
+        ${creating ? number("openingQuantity", "Opening quantity", 0, 100_000, "Recorded as the item's first movement.") : ""}
+      </div>
+      <div class="form-section">
+        <h3 class="form-section__title">Lending</h3>
         <div class="field"><label for="f-lendingAudience">Who may borrow</label><select id="f-lendingAudience" name="lendingAudience">${options(LENDING_AUDIENCES, item.lendingAudience ?? "NOT_AVAILABLE_FOR_LENDING")}</select></div>
-        <div class="field-grid">${number("defaultLoanDays", "Loan period (days)", item.defaultLoanDays)}${number("maximumLoanQty", "Maximum per loan", item.maximumLoanQty)}</div>
-        <label class="checkbox"><input type="checkbox" name="reviewed" ${item.needsReview === false || creating ? html`checked` : ""} /><span>Details reviewed and verified</span></label>
-        <p class="listing-status" id="listing-preview" aria-live="polite"></p>
+        <div class="field-grid">${number("defaultLoanDays", "Loan period (days)", item.defaultLoanDays, 365, "0 leaves it unstated.")}${number("maximumLoanQty", "Maximum per loan", item.maximumLoanQty, 100_000, "0 leaves it unstated.")}</div>
+        <div class="listing-status" id="listing-preview" aria-live="polite"></div>
       </div>
-      <div class="form-section">
-        <div class="field"><label for="f-notes">Internal notes</label><textarea id="f-notes" name="notes" maxlength="1000" rows="3">${item.notes ?? ""}</textarea></div>
+      <div class="form-section form-section--last">
+        <label class="checkbox"><input type="checkbox" name="reviewed" ${item.needsReview === false || creating ? html`checked` : ""} /><span>Details reviewed and verified</span></label>
       </div>
       <div class="form-alert" id="details-alert" role="alert" hidden></div>
-      <div class="form-actions"><button class="button button--primary" type="submit">${creating ? "Create item" : "Save changes"}</button></div>
+      <div class="form-actions form-actions--sticky">
+        ${creating ? html`<button class="button button--primary" type="submit">Create item</button>`
+          : reviewing ? html`<button class="button button--secondary" type="submit" data-intent="save">Save</button><button class="button button--primary" type="submit" data-intent="review-next">Mark reviewed &amp; next ${icon("next")}</button>`
+          : html`<button class="button button--primary" type="submit" data-intent="save">Save changes</button>`}
+      </div>
     </form>`;
   }
 
@@ -615,7 +786,7 @@ export async function workspace(): Promise<void> {
     const values = new FormData(form);
     const whole = (key: string) => values.get(key) === "" ? 0 : Number(values.get(key));
     return {
-      name: String(values.get("name") ?? ""), category: String(values.get("category") ?? ""), unit: String(values.get("unit") ?? ""),
+      name: String(values.get("name") ?? ""), aliases: String(values.get("aliases") ?? ""), category: String(values.get("category") ?? ""), unit: String(values.get("unit") ?? ""),
       itemType: String(values.get("itemType")), status: String(values.get("status")), storageLocation: String(values.get("storageLocation") ?? ""),
       reorderThreshold: whole("reorderThreshold"), lendingAudience: String(values.get("lendingAudience")),
       defaultLoanDays: whole("defaultLoanDays"), maximumLoanQty: whole("maximumLoanQty"),
@@ -624,66 +795,108 @@ export async function workspace(): Promise<void> {
     };
   }
 
-  function bindDetailsForm(id: string | null): void {
+  /** Mirrors the Worker's validation so mistakes are caught before a round trip; the Worker still decides. */
+  function invalidFields(form: HTMLFormElement): Array<[HTMLElement, string]> {
+    const problems: Array<[HTMLElement, string]> = [];
+    for (const input of form.querySelectorAll<HTMLInputElement>("input[required]")) {
+      if (!input.value.trim()) problems.push([input, `${form.querySelector(`label[for="${input.id}"]`)?.firstChild?.textContent?.trim()} is required.`]);
+    }
+    for (const input of form.querySelectorAll<HTMLInputElement>("input[type=number]")) {
+      const value = Number(input.value || 0);
+      if (!Number.isInteger(value) || value < 0 || value > Number(input.max)) problems.push([input, `${form.querySelector(`label[for="${input.id}"]`)?.textContent?.trim()} must be a whole number from 0 to ${Number(input.max).toLocaleString()}.`]);
+    }
+    const values = readDetails(form);
+    if (values.lendingAudience !== "NOT_AVAILABLE_FOR_LENDING" && values.itemType !== PUBLIC_LENDING_ITEM_TYPE) {
+      problems.push([form.querySelector<HTMLElement>("#f-lendingAudience")!, "Only Loanable items can be offered for lending. Change the type, or choose Not lendable."]);
+    }
+    return problems;
+  }
+
+  function bindDetailsForm(item: Partial<DetailItem> & { id?: string }): void {
     const form = sheet.querySelector<HTMLFormElement>("#details-form")!;
     const alert = form.querySelector<HTMLDivElement>("#details-alert")!;
+    const creating = !item.id;
+    let intent = "save";
     const preview = () => {
-      const listed = isListedForLending(readDetails(form));
+      const values = readDetails(form);
+      const gaps = listingGaps(values);
       const element = form.querySelector("#listing-preview")!;
-      element.className = `listing-status ${listed ? "is-listed" : ""}`;
-      mount(element, listed
-        ? html`${icon("check")}<span>Will appear on the public Lending Hub.</span>`
-        : html`${icon("info")}<span>Not shown publicly. Listing needs the Loanable type, Active status, an audience, and reviewed details.</span>`);
+      element.className = `listing-status ${gaps.length ? "" : "is-listed"}`;
+      mount(element, gaps.length
+        ? html`${icon("info")}<div><p>Not shown publicly. Still needed:</p>${checklist(gaps.map((gap) => [gap, false]))}</div>`
+        : html`${icon("check")}<p>Will appear on the public Lending Hub.</p>`);
+      const review = form.querySelector("#review-checklist");
+      if (review) mount(review, checklist(reviewChecklist(values)));
+      const duplicate = form.querySelector<HTMLElement>("#duplicate-hint")!;
+      const name = values.name.trim().toLowerCase();
+      const twin = name ? inventory?.items.find((entry) => entry.id !== item.id && entry.name.toLowerCase() === name) : undefined;
+      duplicate.hidden = !twin;
+      duplicate.textContent = twin ? `${twin.id} already uses this name. Check it is not the same item before saving.` : "";
     };
     form.addEventListener("input", () => { dirty = true; preview(); });
     form.addEventListener("change", preview);
+    form.addEventListener("click", (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[type=submit]");
+      if (button) intent = button.dataset.intent ?? "save";
+    });
     preview();
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const missing = [...form.querySelectorAll<HTMLInputElement>("input[required]")].filter((input) => !input.value.trim());
+      if (intent === "review-next") form.querySelector<HTMLInputElement>("input[name=reviewed]")!.checked = true;
       form.querySelectorAll("[aria-invalid]").forEach((element) => element.removeAttribute("aria-invalid"));
-      if (missing.length) {
-        missing.forEach((input) => input.setAttribute("aria-invalid", "true"));
-        setMessage(alert, `${missing.map((input) => form.querySelector(`label[for="${input.id}"]`)?.textContent).join(", ")} ${missing.length === 1 ? "is" : "are"} required.`);
-        missing[0]!.focus();
+      const problems = invalidFields(form);
+      if (problems.length) {
+        problems.forEach(([element]) => element.setAttribute("aria-invalid", "true"));
+        setMessage(alert, problems.map(([, message]) => message).join(" "));
+        problems[0]![0].focus();
         return;
       }
-      const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
-      button.disabled = true;
+      const buttons = [...form.querySelectorAll<HTMLButtonElement>("button[type=submit]")];
+      buttons.forEach((button) => { button.disabled = true; });
       setMessage(alert, "");
       try {
-        if (id) {
-          const result = await api<{ changed: number }>(`/api/staff/items/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(readDetails(form)) });
-          dirty = false;
-          toast(result.changed ? "Changes saved." : "No changes to save.");
-          await poll.refresh();
-          await loadDetail(id, false);
-          const title = sheet.querySelector("#sheet-title");
-          const current = inventory?.items.find((entry) => entry.id === id);
-          if (title && current) title.textContent = current.name;
-        } else {
+        if (creating) {
           const { id: created } = await api<{ id: string }>("/api/staff/items", { method: "POST", body: JSON.stringify(readDetails(form)) });
           dirty = false;
           toast(`Item ${created} created.`);
           await poll.refresh();
           openItem(created);
+          return;
         }
+        const id = item.id!;
+        // The queue is the list the reviewer was working through, captured before this save changes it.
+        const queue = [...shownIds];
+        const result = await api<{ changed: number }>(`/api/staff/items/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ ...readDetails(form), updatedAt: item.updatedAt ?? null }) });
+        dirty = false;
+        await poll.refresh();
+        if (intent === "review-next") {
+          const next = queue.slice(queue.indexOf(id) + 1).find((candidate) => inventory?.items.find((entry) => entry.id === candidate)?.needsReview);
+          toast(next ? `${item.name} reviewed. Opening the next record.` : `${item.name} reviewed. That was the last record in this list.`);
+          if (next) openItem(next, "details");
+          else closeSheet();
+          return;
+        }
+        toast(result.changed ? "Changes saved." : "No changes to save.");
+        await loadDetail(id, "details");
       } catch (error) {
-        setMessage(alert, failure(error));
+        const stale = error instanceof ApiError && error.status === 409;
+        setMessage(alert, stale ? html`${failure(error)} <button type="button" class="text-link" data-reload>Load the latest details</button>` : failure(error));
+        alert.querySelector("[data-reload]")?.addEventListener("click", () => { dirty = false; void loadDetail(item.id!, "details"); });
       } finally {
-        button.disabled = false;
+        buttons.forEach((button) => { button.disabled = false; });
       }
     });
   }
 
   function openNew(): void {
-    if (dirty && !window.confirm("Discard your unsaved changes to this item?")) return;
+    if (!discardOk()) return;
     dirty = false;
     openId = null;
+    detail = null;
     writeParams({ item: null });
     sheetShell("New item", "Add an item", detailsFormMarkup({ needsReview: false }, true));
     if (!sheet.open) sheet.showModal();
-    bindDetailsForm(null);
+    bindDetailsForm({ needsReview: false });
     sheet.querySelector<HTMLInputElement>("#f-name")!.focus();
   }
 }
