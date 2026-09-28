@@ -3,11 +3,11 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/main.ts", "src/catalog-policy.ts", "tests/browser", "tests/worker-browser", "tests/catalog-policy.test.ts", "tests/migration.test.ts", "tests/session.test.ts", "vite.config.ts", "playwright.config.ts", "playwright.worker.config.ts"]
+  "include": ["src/main.ts", "src/public.ts", "src/staff.ts", "src/ui.ts", "src/catalog-policy.ts", "tests/browser", "tests/worker-browser", "tests/catalog-policy.test.ts", "tests/migration.test.ts", "tests/session.test.ts", "vite.config.ts", "playwright.config.ts", "playwright.worker.config.ts"]
 }

@@ -88,6 +88,14 @@ describe("staff boundary", () => {
     expect((await staff(cookie, "/api/staff/session")).status).toBe(401);
   });
 
+  it("sends a signed-in visit to the login page straight to the workspace", async () => {
+    const cookie = await signIn();
+    const response = await call("/staff", { headers: { cookie } });
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(`${origin}/staff/inventory`);
+    expect((await call("/staff")).status).toBe(200);
+  });
+
   it("ends sessions for disabled accounts", async () => {
     const cookie = await signIn();
     sqlite.exec("UPDATE staff_accounts SET active = 0");

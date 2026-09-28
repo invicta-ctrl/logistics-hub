@@ -25,7 +25,7 @@ function secureHeaders(response: Response, url: URL): Response {
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("X-Frame-Options", "DENY");
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  headers.set("Content-Security-Policy", "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  headers.set("Content-Security-Policy", "default-src 'self'; style-src 'self'; font-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
   if (url.protocol === "https:") headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
@@ -131,8 +131,10 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   }
   if (path.startsWith("/api/staff/")) return staffApi(request, env, url);
   if (path.startsWith("/api/")) return json({ error: "Not found." }, 404);
-  // Every staff page below /staff requires a live session before any HTML is served.
+  // Every staff page below /staff requires a live session before any HTML is served;
+  // a signed-in visit to the login page goes straight to the workspace.
   if (path.startsWith("/staff/") && !await accountFor(request, env)) return Response.redirect(new URL("/staff", url), 302);
+  if (path === "/staff" && request.method === "GET" && await accountFor(request, env)) return Response.redirect(new URL("/staff/inventory", url), 302);
   return env.ASSETS.fetch(request);
 }
 
