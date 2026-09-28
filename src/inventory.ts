@@ -127,9 +127,10 @@ const EDITABLE: Array<[keyof ItemInput, string]> = [
 ];
 const stored = (value: ItemInput[keyof ItemInput]) => typeof value === "boolean" ? Number(value) : value;
 
-function audit(db: D1Database, actor: Actor, action: string, entityId: string, details: unknown): D1PreparedStatement {
-  return db.prepare("INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json) VALUES(?, ?, ?, ?, 'ITEM', ?, ?)")
-    .bind(crypto.randomUUID(), new Date().toISOString(), actor.accountId, action, entityId, JSON.stringify(details));
+/** The one audit writer. Details must never contain passwords, hashes, keys or tokens. */
+export function audit(db: D1Database, actorId: string | null, action: string, entityType: "ITEM" | "ACCOUNT" | "RECOVERY", entityId: string, details: unknown): D1PreparedStatement {
+  return db.prepare("INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json) VALUES(?, ?, ?, ?, ?, ?, ?)")
+    .bind(crypto.randomUUID(), new Date().toISOString(), actorId, action, entityType, entityId, JSON.stringify(details));
 }
 
 export async function updateItem(db: D1Database, actor: Actor, id: string, input: ItemInput) {
@@ -141,7 +142,7 @@ export async function updateItem(db: D1Database, actor: Actor, id: string, input
   await db.batch([
     db.prepare(`UPDATE items SET ${changed.map(([, column]) => `${column} = ?`).join(", ")}, updated_at = ? WHERE id = ?`)
       .bind(...changed.map(([key]) => stored(input[key])), now, id),
-    audit(db, actor, "ITEM_UPDATED", id, Object.fromEntries(changed.map(([key]) => [key, { from: current[key], to: stored(input[key]) }]))),
+    audit(db, actor.accountId, "ITEM_UPDATED", "ITEM", id, Object.fromEntries(changed.map(([key]) => [key, { from: current[key], to: stored(input[key]) }]))),
     db.prepare(BUMP_REVISION)
   ]);
   return { changed: changed.length };
@@ -158,7 +159,7 @@ export async function createItem(db: D1Database, actor: Actor, input: ItemInput,
         default_loan_days, maximum_loan_qty, needs_review, notes, imported_from, imported_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
         .bind(id, input.name, input.category, input.itemType, input.unit, input.status, input.storageLocation, input.reorderThreshold, input.lendingAudience,
           input.defaultLoanDays, input.maximumLoanQty, Number(input.needsReview), input.notes, now, now),
-      audit(db, actor, "ITEM_CREATED", id, { ...input, openingQuantity }),
+      audit(db, actor.accountId, "ITEM_CREATED", "ITEM", id, { ...input, openingQuantity }),
       db.prepare(BUMP_REVISION)
     ];
     if (openingQuantity > 0) {

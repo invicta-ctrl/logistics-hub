@@ -16,3 +16,22 @@ describe("D1 migration arithmetic", () => {
     db.close();
   });
 });
+
+describe("0011 role migration on a database that is already in use", () => {
+  it("keeps accounts, upgrades the role constraint, and satisfies foreign keys", async () => {
+    const { DatabaseSync } = await import("node:sqlite");
+    const fs = await import("node:fs");
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    const apply = (file: string) => { db.exec("BEGIN"); db.exec(fs.readFileSync(`migrations/${file}`, "utf8")); db.exec("COMMIT"); };
+    const files = fs.readdirSync("migrations").sort();
+    files.filter((file) => file < "0011").forEach(apply);
+    db.exec("INSERT INTO staff_accounts(id, username, display_name, password_hash) VALUES('ACC-1', 'existing', 'Existing', 'hash')");
+    db.exec("INSERT INTO staff_sessions(id, expires_at, account_id) VALUES('S-1', 9999999999999, 'ACC-1')");
+    files.filter((file) => file >= "0011").forEach(apply);
+    expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    expect(db.prepare("SELECT username, role, must_change_password FROM staff_accounts").all()).toEqual([{ username: "existing", role: "STAFF", must_change_password: 0 }]);
+    expect(() => db.exec("UPDATE staff_accounts SET role = 'OWNER'")).not.toThrow();
+    db.close();
+  });
+});
