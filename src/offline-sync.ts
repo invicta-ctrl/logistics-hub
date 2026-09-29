@@ -12,6 +12,11 @@ export type SyncMessage = { type: "syncing"; count: number } | { type: "changed"
 export type SyncReport = { offline: boolean; skipped?: boolean };
 
 const CHANNEL = "logistics-hub";
+/**
+ * A request that neither answers nor fails (a dropped connection on campus Wi-Fi) must not stall
+ * the queue: it is abandoned after this long and counts as offline.
+ */
+const deadline = (ms: number) => typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(ms) : undefined;
 const listeners = new Set<(message: SyncMessage) => void>();
 let channel: BroadcastChannel | null = null;
 
@@ -44,7 +49,7 @@ export async function refreshCatalog(): Promise<"updated" | "unchanged" | "offli
   const current = await store.catalog();
   let response: Response;
   try {
-    response = await fetch("/api/self-service/catalog", { headers: current ? { "if-none-match": `"r${current.revision}"` } : {} });
+    response = await fetch("/api/self-service/catalog", { headers: current ? { "if-none-match": `"r${current.revision}"` } : {}, signal: deadline(15_000) });
   } catch {
     return "offline";
   }
@@ -115,7 +120,7 @@ async function drain(force: boolean): Promise<SyncReport> {
     }
     let response: Response | null = null;
     try {
-      response = await fetch("/api/self-service/sync", { method: "POST", body: form, credentials: "same-origin" });
+      response = await fetch("/api/self-service/sync", { method: "POST", body: form, credentials: "same-origin", signal: deadline(45_000) });
     } catch {
       offline = true;
     }

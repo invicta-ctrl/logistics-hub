@@ -110,6 +110,27 @@ test("loan due labels derive overdue from an open loan's return date", async ({ 
   expect(labels.closedOverdue).toBe(false);
 });
 
+const selfServiceCatalog = { revision: 3, serverTime: "2026-09-30T01:00:00.000Z", categories: ["PANTRY", "SCHOOL SUPPLIES"], items: [
+  { id: "ITM-0043", name: "Bottled Water", aliases: null, category: "PANTRY", unit: "piece", action: "TAKE", available: 18, location: "Pantry shelf", audience: null },
+  { id: "ITM-0262", name: "Scissors", aliases: "Gunting", category: "SCHOOL SUPPLIES", unit: "piece", action: "BORROW", available: 0, location: "Cabinet B", audience: "STUDENTS_AND_USC_STAFF" }
+] };
+
+test("self-service fits phones, tablets and desktops, with every screen and sheet inside the viewport", async ({ page }) => {
+  await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
+  for (const viewport of [{ width: 320, height: 640 }, { width: 375, height: 667 }, { width: 412, height: 915 }, { width: 390, height: 844 }, { width: 820, height: 1180 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    for (const route of ["/self-service", "/self-service?do=take", "/self-service?do=borrow&item=ITM-0262", "/self-service?do=return", "/self-service?do=activity", "/self-service?do=install"]) {
+      await page.goto(route);
+      await expect(page.locator("#main-content")).toBeVisible();
+      if (route.includes("item=")) await expect(page.getByRole("dialog", { name: "Scissors" })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${route} at ${viewport.width}`).toBeTruthy();
+    }
+  }
+  // A borrow the records say is out explains itself instead of hiding the item.
+  await page.goto("/self-service?do=borrow&item=ITM-0262");
+  await expect(page.getByRole("dialog", { name: "Scissors" })).toContainText("The records show none left.");
+});
+
 test("public routes fit every required viewport class", async ({ page }) => {
   for (const viewport of [{ width: 320, height: 700 }, { width: 375, height: 700 }, { width: 768, height: 900 }, { width: 1024, height: 900 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(viewport);

@@ -46,7 +46,8 @@ async function phone(browser: Browser) {
   const context = await browser.newContext({ ...devices["Pixel 7"], baseURL: BASE });
   const page = await context.newPage();
   await page.goto("/self-service");
-  await expect(page.getByText("Ready for offline use")).toBeVisible({ timeout: 30_000 });
+  // Exact: "Getting ready for offline use…" must not count.
+  await expect(page.getByText("Ready for offline use", { exact: true })).toBeVisible({ timeout: 30_000 });
   return { context, page };
 }
 

@@ -57,7 +57,11 @@ export async function loadSession(section: Section): Promise<Session | null> {
     return session;
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) { navigate("/staff", true); return null; }
-    mount(app, html`<main id="main-content" class="container page-message">${emptyState("The staff workspace is unavailable", failure(error), html`<a class="button button--secondary" href="/staff/inventory" data-route>Try again</a>`, "error")}</main>`);
+    // Staff tools never work offline (there are no offline credentials); Self-Service does.
+    const offline = error instanceof ApiError && error.status === 0;
+    mount(app, html`<main id="main-content" class="container page-message">${offline
+      ? emptyState("Staff tools need a connection", "You're offline. Inventory, stock, loans and administration work only online, so nothing is changed on this device. Self-Service keeps working offline.", html`<a class="button button--secondary" href="${window.location.pathname}" data-route>Try again</a> <a class="button button--ghost" href="/self-service" data-route>Open Self-Service</a>`, "error")
+      : emptyState("The staff workspace is unavailable", failure(error), html`<a class="button button--secondary" href="/staff/inventory" data-route>Try again</a>`, "error")}</main>`);
     return null;
   }
 }
