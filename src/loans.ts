@@ -1,10 +1,12 @@
 import { LOAN_OUTCOMES, LOAN_PURPOSES, PUBLIC_LENDING_ITEM_TYPE } from "./catalog-policy";
-import { type Actor, BUMP_REVISION, InputError, LOAN_COLUMNS, audit, isoDate } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, LOAN_COLUMNS, audit, countAwareStatus, isoDate } from "./inventory";
 
 const LOAN_ID = /^LN-[A-Za-z0-9-]{1,60}$/;
-const STUDENT_ID = /^[A-Z0-9][A-Z0-9-]{2,29}$/;
+export const STUDENT_ID = /^[A-Z0-9][A-Z0-9-]{2,29}$/;
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const DAY_MS = 86_400_000;
+/** The actor id for anything a phone recorded through self-service (no staff account row). */
+export const SELF_SERVICE_ACTOR = "SELF_SERVICE";
 
 const ascii = (bytes: Uint8Array, from: number, to: number) => String.fromCharCode(...bytes.subarray(from, to));
 /** The stored type comes from the file's own bytes, never from what the browser claims. */
@@ -15,9 +17,12 @@ function photoType(bytes: Uint8Array): string | null {
   return null;
 }
 
-function field(form: FormData, key: string, label: string, max: number, required: boolean): string | null {
-  const value = form.get(key);
-  const text = typeof value === "string" ? value.trim().replace(/\s+/g, " ") : "";
+/**
+ * One line of text: control and invisible format characters (including bidi overrides that could
+ * disguise a name in a staff list) removed, trimmed, inner whitespace collapsed, length-checked.
+ */
+export function cleanText(value: unknown, label: string, max: number, required: boolean): string | null {
+  const text = typeof value === "string" ? value.replace(/[\p{Cc}\p{Cf}]/gu, " ").trim().replace(/\s+/g, " ") : "";
   if (required && !text) throw new InputError(400, `${label} is required.`);
   if (text.length > max) throw new InputError(400, `${label} must be ${max} characters or fewer.`);
   return text || null;
@@ -26,28 +31,85 @@ function field(form: FormData, key: string, label: string, max: number, required
 /** Today in the office's time zone, so "return by" is judged by the Manila calendar. */
 export const officeDay = (at = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(at);
 
+export type LoanDetails = {
+  purpose: typeof LOAN_PURPOSES[number];
+  borrowerName: string;
+  studentId: string | null;
+  reason: string | null;
+  quantity: number;
+  returnBy: string | null;
+};
+
+/**
+ * Who is borrowing, how many and until when. One set of rules for the staff form and a phone:
+ * Individual use needs a student ID, USC use a specific reason, both a name.
+ */
+export function loanDetails(get: (key: string) => unknown, today: string): LoanDetails {
+  const purposeValue = get("purpose");
+  if (typeof purposeValue !== "string" || !(LOAN_PURPOSES as readonly string[]).includes(purposeValue)) throw new InputError(400, "Choose Individual use or USC use.");
+  const purpose = purposeValue as LoanDetails["purpose"];
+  const borrowerName = cleanText(get("borrowerName"), purpose === "USC" ? "Name of the person using it" : "Borrower's full name", 120, true)!;
+  const studentId = cleanText(get("studentId"), "Student ID number", 30, purpose === "INDIVIDUAL")?.toUpperCase() ?? null;
+  if (studentId && !STUDENT_ID.test(studentId)) throw new InputError(400, "Student ID number may use only letters, digits and dashes.");
+  const reason = cleanText(get("reason"), "Specific reason", 300, purpose === "USC");
+  const quantity = Number(get("quantity"));
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100_000) throw new InputError(400, "Quantity must be a whole number from 1 to 100000.");
+  const returnBy = isoDate(get("returnBy") || null, "Return date");
+  if (returnBy && returnBy < today) throw new InputError(400, "The return date cannot be in the past.");
+  return { purpose, borrowerName, studentId, reason, quantity, returnBy };
+}
+
+export type Photo = { bytes: Uint8Array; contentType: string };
+
+/** An uploaded hand-over photo, checked by size and by its own bytes (JPEG, PNG or WebP). */
+export async function readPhoto(value: unknown): Promise<Photo> {
+  if (!(value instanceof File) || value.size === 0) throw new InputError(400, "A photo is required.");
+  if (value.size > MAX_PHOTO_BYTES) throw new InputError(400, "The photo is too large. Use one under 8 MB.");
+  const bytes = new Uint8Array(await value.arrayBuffer());
+  const contentType = photoType(bytes);
+  if (!contentType) throw new InputError(400, "The photo must be a JPEG, PNG or WebP image.");
+  return { bytes, contentType };
+}
+
+export type LendWrite = {
+  id: string; itemId: string; details: LoanDetails; photoKey: string; movementId: string; key: string;
+  actorId: string; at: string; allowShort?: boolean; countAware?: boolean;
+};
+
+/**
+ * The statements that lend, for one atomic D1 batch: the LOAN_OUT movement (refused if it would
+ * drive stock negative, unless `allowShort`), the loan (only if that movement was written), its
+ * audit entry and the revision. Self-service sync appends its own event row to the same batch.
+ */
+export function lendStatements(db: D1Database, write: LendWrite): D1PreparedStatement[] {
+  const { details } = write;
+  return [
+    db.prepare(`INSERT OR IGNORE INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity,
+        related_entity_type, related_entity_id, actor_user_id, idempotency_key, status)
+      SELECT ?1, ?2, 'LOAN_OUT', 'OUT', i.id, ?3, i.unit, -?3, 'LOAN', ?4, ?5, ?6, ${write.countAware ? countAwareStatus("i.id", "?2") : "'POSTED'"}
+      FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?7${write.allowShort ? "" : " AND b.on_hand >= ?3"}`)
+      .bind(write.movementId, write.at, details.quantity, write.id, write.actorId, write.key, write.itemId),
+    db.prepare(`INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, reason, photo_key, return_by, movement_id, created_at, created_by)
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM inventory_movements WHERE id = ?)`)
+      .bind(write.id, write.itemId, details.quantity, details.purpose, details.borrowerName, details.studentId, details.reason, write.photoKey,
+        details.returnBy, write.movementId, write.at, write.actorId, write.movementId),
+    audit(db, write.actorId, "LOAN_CREATED", "ITEM", write.itemId, { loanId: write.id, quantity: details.quantity, purpose: details.purpose }, true),
+    db.prepare(`${BUMP_REVISION} AND changes() > 0`)
+  ];
+}
+
 async function byKey(db: D1Database, key: string) {
   return db.prepare(`SELECT l.id, l.item_id AS itemId, b.on_hand AS onHand FROM loans l JOIN inventory_movements m ON m.id = l.movement_id
     JOIN inventory_balances b ON b.id = l.item_id WHERE m.idempotency_key = ?`).bind(key).first<{ id: string; itemId: string; onHand: number }>();
 }
 
 /**
- * Hands out a Loanable item. The photo goes to R2 first; one D1 batch then writes the
- * LOAN_OUT movement (refused if it would drive stock negative), the loan, its audit entry
- * and the revision. If nothing was written the photo is removed again.
+ * Hands out a Loanable item (staff). The photo goes to R2 first; one D1 batch then writes the
+ * guarded LOAN_OUT movement, the loan, its audit entry and the revision. If nothing was written
+ * the photo is removed again.
  */
 export async function createLoan(db: D1Database, bucket: R2Bucket, actor: Actor, itemId: string, form: FormData) {
-  const purposeValue = form.get("purpose");
-  if (typeof purposeValue !== "string" || !(LOAN_PURPOSES as readonly string[]).includes(purposeValue)) throw new InputError(400, "Choose Individual use or USC use.");
-  const purpose = purposeValue as typeof LOAN_PURPOSES[number];
-  const borrowerName = field(form, "borrowerName", purpose === "USC" ? "Name of the person using it" : "Borrower's full name", 120, true)!;
-  const studentId = field(form, "studentId", "Student ID number", 30, purpose === "INDIVIDUAL")?.toUpperCase() ?? null;
-  if (studentId && !STUDENT_ID.test(studentId)) throw new InputError(400, "Student ID number may use only letters, digits and dashes.");
-  const reason = field(form, "reason", "Specific reason", 300, purpose === "USC");
-  const quantity = Number(form.get("quantity"));
-  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100_000) throw new InputError(400, "Quantity must be a whole number from 1 to 100000.");
-  const returnBy = isoDate(form.get("returnBy") || null, "Return date");
-  if (returnBy && returnBy < officeDay()) throw new InputError(400, "The return date cannot be in the past.");
+  const details = loanDetails((key) => form.get(key), officeDay());
   const key = form.get("key");
   if (typeof key !== "string" || !/^[A-Za-z0-9-]{8,80}$/.test(key)) throw new InputError(400, "Missing request key.");
 
@@ -61,31 +123,13 @@ export async function createLoan(db: D1Database, bucket: R2Bucket, actor: Actor,
   if (!item) throw new InputError(404, "Item not found.");
   if (item.itemType !== PUBLIC_LENDING_ITEM_TYPE) throw new InputError(400, "Only Loanable items can be lent. Change the item's type first.");
   if (item.status === "INACTIVE") throw new InputError(400, "Inactive items cannot be lent. Reactivate the item first.");
-  const photo = form.get("photo");
-  if (!(photo instanceof File) || photo.size === 0) throw new InputError(400, "A photo is required.");
-  if (photo.size > MAX_PHOTO_BYTES) throw new InputError(400, "The photo is too large. Use one under 8 MB.");
-  const bytes = new Uint8Array(await photo.arrayBuffer());
-  const contentType = photoType(bytes);
-  if (!contentType) throw new InputError(400, "The photo must be a JPEG, PNG or WebP image.");
+  const photo = await readPhoto(form.get("photo"));
 
   const id = `LN-${crypto.randomUUID()}`;
   const photoKey = `loans/${id}`;
-  const movementId = `MOV-${crypto.randomUUID()}`;
-  const now = new Date().toISOString();
-  await bucket.put(photoKey, bytes, { httpMetadata: { contentType } });
+  await bucket.put(photoKey, photo.bytes, { httpMetadata: { contentType: photo.contentType } });
   try {
-    await db.batch([
-      db.prepare(`INSERT OR IGNORE INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity,
-          related_entity_type, related_entity_id, actor_user_id, idempotency_key, status)
-        SELECT ?1, ?2, 'LOAN_OUT', 'OUT', i.id, ?3, i.unit, -?3, 'LOAN', ?4, ?5, ?6, 'POSTED'
-        FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?7 AND b.on_hand >= ?3`)
-        .bind(movementId, now, quantity, id, actor.accountId, key, itemId),
-      db.prepare(`INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, reason, photo_key, return_by, movement_id, created_at, created_by)
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM inventory_movements WHERE id = ?)`)
-        .bind(id, itemId, quantity, purpose, borrowerName, studentId, reason, photoKey, returnBy, movementId, now, actor.accountId, movementId),
-      audit(db, actor.accountId, "LOAN_CREATED", "ITEM", itemId, { loanId: id, quantity, purpose }, true),
-      db.prepare(`${BUMP_REVISION} AND changes() > 0`)
-    ]);
+    await db.batch(lendStatements(db, { id, itemId, details, photoKey, movementId: `MOV-${crypto.randomUUID()}`, key, actorId: actor.accountId, at: new Date().toISOString() }));
   } catch (error) {
     await bucket.delete(photoKey);
     throw error;
@@ -96,7 +140,31 @@ export async function createLoan(db: D1Database, bucket: R2Bucket, actor: Actor,
   const raced = await byKey(db, key);
   if (raced?.itemId === itemId) return { id: raced.id, onHand: raced.onHand };
   const balance = await db.prepare("SELECT on_hand AS onHand FROM inventory_balances WHERE id = ?").bind(itemId).first<number>("onHand");
-  throw new InputError(409, `Only ${balance ?? 0} on hand; cannot lend ${quantity}.`);
+  throw new InputError(409, `Only ${balance ?? 0} on hand; cannot lend ${details.quantity}.`);
+}
+
+export type CloseWrite = {
+  loanId: string; itemId: string; quantity: number; outcome: typeof LOAN_OUTCOMES[number]; note: string | null;
+  actorId: string; at: string; movementId: string; countAware?: boolean;
+};
+
+/**
+ * The statements that end an OUT loan, for one atomic D1 batch. Only a good return writes the
+ * LOAN_RETURN movement that puts the quantity back; damaged or lost items stay off the shelf.
+ * Nothing changes if the loan is no longer OUT.
+ */
+export function closeStatements(db: D1Database, write: CloseWrite): D1PreparedStatement[] {
+  return [
+    db.prepare(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, related_entity_type, related_entity_id, actor_user_id, status)
+      SELECT ?1, ?2, 'LOAN_RETURN', 'IN', l.item_id, l.quantity, i.unit, l.quantity, 'LOAN', l.id, ?3, ${write.countAware ? countAwareStatus("l.item_id", "?2") : "'POSTED'"}
+      FROM loans l JOIN items i ON i.id = l.item_id WHERE l.id = ?4 AND l.status = 'OUT' AND ?5 = 'RETURNED'`)
+      .bind(write.movementId, write.at, write.actorId, write.loanId, write.outcome),
+    db.prepare(`UPDATE loans SET status = ?1, closed_at = ?2, closed_by = ?3, return_note = ?4,
+      return_movement_id = (SELECT m.id FROM inventory_movements m WHERE m.id = ?5) WHERE id = ?6 AND status = 'OUT'`)
+      .bind(write.outcome, write.at, write.actorId, write.note, write.movementId, write.loanId),
+    audit(db, write.actorId, "LOAN_CLOSED", "ITEM", write.itemId, { loanId: write.loanId, outcome: write.outcome, quantity: write.quantity }, true),
+    db.prepare(`${BUMP_REVISION} AND changes() > 0`)
+  ];
 }
 
 /**
@@ -117,19 +185,10 @@ export async function closeLoan(db: D1Database, actor: Actor, id: string, body: 
     if (loan.status === outcome) return { status: outcome };
     throw new InputError(409, "This loan was already closed. Refresh to see the latest.");
   }
-  const movementId = `MOV-${crypto.randomUUID()}`;
-  const now = new Date().toISOString();
-  const [, update] = await db.batch([
-    db.prepare(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, related_entity_type, related_entity_id, actor_user_id, status)
-      SELECT ?1, ?2, 'LOAN_RETURN', 'IN', l.item_id, l.quantity, i.unit, l.quantity, 'LOAN', l.id, ?3, 'POSTED'
-      FROM loans l JOIN items i ON i.id = l.item_id WHERE l.id = ?4 AND l.status = 'OUT' AND ?5 = 'RETURNED'`)
-      .bind(movementId, now, actor.accountId, id, outcome),
-    db.prepare(`UPDATE loans SET status = ?1, closed_at = ?2, closed_by = ?3, return_note = ?4,
-      return_movement_id = (SELECT m.id FROM inventory_movements m WHERE m.id = ?5) WHERE id = ?6 AND status = 'OUT'`)
-      .bind(outcome, now, actor.accountId, note || null, movementId, id),
-    audit(db, actor.accountId, "LOAN_CLOSED", "ITEM", loan.itemId, { loanId: id, outcome, quantity: loan.quantity }, true),
-    db.prepare(`${BUMP_REVISION} AND changes() > 0`)
-  ]);
+  const [, update] = await db.batch(closeStatements(db, {
+    loanId: id, itemId: loan.itemId, quantity: loan.quantity, outcome: outcome as CloseWrite["outcome"], note: note || null,
+    actorId: actor.accountId, at: new Date().toISOString(), movementId: `MOV-${crypto.randomUUID()}`
+  }));
   if (!update!.meta.changes) {
     const current = await db.prepare("SELECT status FROM loans WHERE id = ?").bind(id).first<string>("status");
     if (current === outcome) return { status: outcome };

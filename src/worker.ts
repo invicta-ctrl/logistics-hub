@@ -3,6 +3,7 @@ import { InputError, catalogRevision, createItem, itemDetail, parseItemInput, pu
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { openReorder, stockOverview, updateReorder } from "./stock";
+import { heldPhoto, readBatch, resolveReview, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
 
 export type Env = {
   DB: D1Database;
@@ -16,6 +17,9 @@ const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans)?$/;
 const LOAN_PATH = /^\/api\/staff\/loans\/(LN-[A-Za-z0-9-]{1,60})\/(return|photo)$/;
 const REORDER_PATH = /^\/api\/staff\/reorders\/(RO-[A-Za-z0-9-]{1,60})$/;
+const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|photo)$/;
+/** A sync carries at most a few compressed photos; anything larger is not from the app. */
+const MAX_SYNC_BYTES = 12 * 1024 * 1024;
 const ACCOUNT_PATH = /^\/api\/staff\/admin\/accounts\/(ACC-[A-Za-z0-9-]{1,60})(\/password|\/sessions\/revoke)?$/;
 // Paths still usable while an account must replace a password someone else set.
 const PASSWORD_CHANGE_ALLOWED = new Set(["/api/staff/session", "/api/staff/me/password"]);
@@ -131,7 +135,11 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (path === "/api/staff/inventory" && method === "GET") return revisioned(request, env.DB, () => staffInventory(env.DB));
   if (path === "/api/staff/stock" && method === "GET") return revisioned(request, env.DB, () => stockOverview(env.DB));
   if (path === "/api/staff/loans" && method === "GET") return revisioned(request, env.DB, () => loansOverview(env.DB));
+  if (path === "/api/staff/self-service" && method === "GET") return revisioned(request, env.DB, () => selfServiceReview(env.DB));
   if (path === "/api/staff/reorders" && method === "POST") return json(await openReorder(env.DB, account, await body()), 201);
+  const review = REVIEW_PATH.exec(path);
+  if (review?.[2] === "resolve" && method === "POST") return json(await resolveReview(env.DB, env.EVIDENCE, account, review[1]!, await body()));
+  if (review?.[2] === "photo" && method === "GET") return heldPhoto(env.DB, env.EVIDENCE, review[1]!);
   const loan = LOAN_PATH.exec(path);
   if (loan?.[2] === "return" && method === "POST") return json(await closeLoan(env.DB, account, loan[1]!, await body()));
   if (loan?.[2] === "photo" && method === "GET") return loanPhoto(env.DB, env.EVIDENCE, loan[1]!);
@@ -155,8 +163,44 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!form) throw new InputError(400, "Invalid loan form.");
     return json(await createLoan(env.DB, env.EVIDENCE, account, match[1]!, form), 201);
   }
-  const known = match || reorder || loan || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/reorders", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || reorder || loan || review || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/reorders", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
+}
+
+/**
+ * Phone self-service sync: public and anonymous, so same-origin, size-capped and rate-limited
+ * per network and per phone (by events, not requests). A 429 just makes the phone retry later.
+ */
+async function selfServiceSync(request: Request, env: Env, url: URL): Promise<Response> {
+  if (request.method !== "POST") return json({ error: "Method not allowed." }, 405, { allow: "POST" });
+  if (!sameOrigin(request, url)) return json({ error: "Invalid request origin." }, 403);
+  const size = Number(request.headers.get("content-length"));
+  if (!size) return json({ error: "Missing content length." }, 411);
+  if (size > MAX_SYNC_BYTES) return json({ error: "Too much at once." }, 413);
+  const busy = () => json({ error: "Too many records at once. They are safe on your phone and will be sent shortly." }, 429, { "retry-after": "60" });
+  // Requests are counted before anything is parsed; records are counted once the batch is read.
+  if (await throttled(env.DB, clientKey(request, "self-service-requests"), 120, 10 * 60_000)) return busy();
+  const form = await request.formData().catch(() => null);
+  if (!form) throw new InputError(400, "Malformed sync request.");
+  const batch = { ...readBatch(form), clientTag: await networkTag(request, env) };
+  const weight = batch.events.length;
+  if (await throttled(env.DB, clientKey(request, "self-service"), 300, 10 * 60_000, weight) || await throttled(env.DB, `self-service-device:${batch.deviceId}`, 100, 10 * 60_000, weight)) return busy();
+  // Phones choose their own device ids, so old throttle rows are swept now and then.
+  if (Math.random() < 0.02) await env.DB.prepare("DELETE FROM auth_throttle WHERE reset_at < ?").bind(Date.now() - 60 * 60_000).run();
+  return json(await syncEvents(env.DB, env.EVIDENCE, batch, (id) => form.get(`photo:${id}`)));
+}
+
+/**
+ * A short keyed hash of the sender's network (an IPv6 address by its /64), so staff can see that
+ * records came from the same place without anyone storing or seeing the address itself.
+ */
+async function networkTag(request: Request, env: Env): Promise<string | null> {
+  const address = request.headers.get("CF-Connecting-IP");
+  if (!address) return null;
+  const network = address.includes(":") ? address.split(":").slice(0, 4).join(":") : address;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.SESSION_SECRET ?? "logistics-hub"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(network)));
+  return [...digest.subarray(0, 4)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /** Owner recovery: public, same-origin, throttled, and able to do exactly one thing. */
@@ -177,6 +221,10 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
     return path === "/api/staff/login" ? login(request, env, url) : logout(request, env, url);
   }
   if (path === "/api/recovery/owner") return recovery(request, env, url);
+  if (path === "/api/self-service/catalog") {
+    return request.method === "GET" ? revisioned(request, env.DB, () => selfServiceCatalog(env.DB)) : json({ error: "Method not allowed." }, 405, { allow: "GET" });
+  }
+  if (path === "/api/self-service/sync") return selfServiceSync(request, env, url);
   if (path.startsWith("/api/staff/")) return staffApi(request, env, url);
   if (path.startsWith("/api/")) return json({ error: "Not found." }, 404);
   // Every staff page below /staff requires a live session before any HTML is served;

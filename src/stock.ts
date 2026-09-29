@@ -1,5 +1,5 @@
 import { OPEN_REORDER_STATUSES } from "./catalog-policy";
-import { type Actor, BUMP_REVISION, InputError, audit, staffInventory } from "./inventory";
+import { type Actor, BUMP_REVISION, HISTORY_ORDER, InputError, actorName, audit, staffInventory } from "./inventory";
 
 const OPEN = [...OPEN_REORDER_STATUSES].map((status) => `'${status}'`).join(",");
 const REORDER_ID = /^RO-[A-Za-z0-9-]{1,60}$/;
@@ -29,10 +29,11 @@ async function listReorders(db: D1Database) {
 async function recentActivity(db: D1Database) {
   const { results } = await db.prepare(`SELECT id, createdAt, itemId, itemName, unit, movementType, change, afterQuantity, reason, notes, actor FROM (
       SELECT m.id, m.created_at AS createdAt, m.item_id AS itemId, i.name AS itemName, i.unit, m.movement_type AS movementType,
-        m.signed_quantity AS change, m.reason, m.notes, a.display_name AS actor, m.imported_from AS importedFrom, m.rowid AS seq,
-        SUM(CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END) OVER (PARTITION BY m.item_id ORDER BY m.rowid) AS afterQuantity
+        m.signed_quantity AS change, m.reason, m.notes, ${actorName("a", "m.actor_user_id")} AS actor, m.imported_from AS importedFrom,
+        CASE WHEN m.imported_from IS NULL THEN julianday(m.created_at) ELSE 0 END AS happened, m.rowid AS seq,
+        SUM(CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END) OVER (PARTITION BY m.item_id ORDER BY ${HISTORY_ORDER}) AS afterQuantity
       FROM inventory_movements m JOIN items i ON i.id = m.item_id LEFT JOIN staff_accounts a ON a.id = m.actor_user_id
-    ) WHERE importedFrom IS NULL ORDER BY seq DESC LIMIT 100`).all();
+    ) WHERE importedFrom IS NULL ORDER BY happened DESC, seq DESC LIMIT 100`).all();
   return results;
 }
 

@@ -1,4 +1,4 @@
-import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, PUBLIC_LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
+import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, PUBLIC_LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, isListedForLending, listingGaps, selfServiceGaps } from "./catalog-policy";
 
 export class InputError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -9,18 +9,37 @@ export type Actor = { accountId: string };
 type ItemRow = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: number;
   lendingAudience: string; onHand: number; reorderThreshold: number; storageLocation: string | null; notes: string | null; updatedAt: string | null;
-  stockArea: string | null; expiresOn: string | null;
+  stockArea: string | null; expiresOn: string | null; selfService: number;
 };
 
 const ITEM_COLUMNS = `i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.unit, i.status, i.needs_review AS needsReview,
  i.lending_audience AS lendingAudience, COALESCE(b.on_hand, 0) AS onHand, i.reorder_threshold AS reorderThreshold,
  i.storage_location AS storageLocation, i.notes, i.updated_at AS updatedAt,
- i.stock_area AS stockArea, i.expires_on AS expiresOn`;
+ i.stock_area AS stockArea, i.expires_on AS expiresOn, i.self_service AS selfService`;
 export const BUMP_REVISION = "UPDATE catalog_revision SET value = value + 1 WHERE id = 1";
+/**
+ * History is shown in business order: migrated rows keep their import order, then everything
+ * recorded in the Hub in the order it happened (a phone that synced late slots into place).
+ * julianday() compares the migrated "+08:00" and the Hub's "Z" timestamps correctly.
+ */
+export const HISTORY_ORDER = "CASE WHEN m.imported_from IS NULL THEN julianday(m.created_at) ELSE 0 END, m.rowid";
+/** A physical count this close to a movement (either side, in days) may or may not have seen it. */
+export const COUNT_TOLERANCE_DAYS = 5 / (24 * 60);
+/**
+ * Status for a movement that happened at `at` but is only being recorded now (a phone that was
+ * offline). A physical count recorded after it already observed its effect, so it is kept as
+ * evidence but excluded from on-hand. Evaluated inside the INSERT, so a count saved a moment
+ * earlier is always seen.
+ */
+export const countAwareStatus = (item: string, at: string) => `CASE WHEN EXISTS (SELECT 1 FROM inventory_movements c
+  WHERE c.item_id = ${item} AND c.movement_type = 'COUNT_ADJUSTMENT' AND c.status = 'POSTED' AND c.imported_from IS NULL
+    AND julianday(c.created_at) > julianday(${at}) + ${COUNT_TOLERANCE_DAYS}) THEN 'SUPERSEDED' ELSE 'POSTED' END`;
+/** Who recorded something: a staff member's name, or "Self-service" for a phone (actor id SELF_SERVICE). */
+export const actorName = (account: string, actorId: string) => `COALESCE(${account}.display_name, CASE ${actorId} WHEN 'SELF_SERVICE' THEN 'Self-service' END)`;
 /** One loan as staff see it; the photo is served separately and never inlined. */
 export const LOAN_COLUMNS = `SELECT l.id, l.item_id AS itemId, i.name AS itemName, i.unit, l.quantity, l.purpose, l.borrower_name AS borrowerName,
   l.student_id AS studentId, l.reason, l.return_by AS returnBy, l.status, l.return_note AS returnNote, l.created_at AS createdAt,
-  l.closed_at AS closedAt, c.display_name AS createdBy, x.display_name AS closedBy
+  l.closed_at AS closedAt, ${actorName("c", "l.created_by")} AS createdBy, ${actorName("x", "l.closed_by")} AS closedBy
   FROM loans l JOIN items i ON i.id = l.item_id LEFT JOIN staff_accounts c ON c.id = l.created_by LEFT JOIN staff_accounts x ON x.id = l.closed_by`;
 const OPEN_REORDERS = [...OPEN_REORDER_STATUSES].map((status) => `'${status}'`).join(",");
 
@@ -64,6 +83,7 @@ export async function staffInventory(db: D1Database) {
     needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand,
     reorderThreshold: row.reorderThreshold, storageLocation: row.storageLocation, listed: isListedForLending(row),
     stockArea: row.stockArea, expiresOn: row.expiresOn, lastCountedAt: row.lastCountedAt, reorderStatus: row.reorderStatus, onLoan: row.onLoan,
+    selfService: row.selfService === 1, selfServiceReady: selfServiceGaps(row).length === 0,
     // The legacy quantity is doubtful (migration discrepancy or a VERIFY record) until someone counts it.
     countNeeded: row.status !== "INACTIVE" && !row.lastCountedAt && ((row.migrationDelta ?? 0) !== 0 || row.status === "VERIFY")
   }));
@@ -85,18 +105,20 @@ export async function itemDetail(db: D1Database, id: string) {
       i.verification_note AS verificationNote, i.imported_from AS importedFrom
       FROM items i LEFT JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?`).bind(id),
     db.prepare(`SELECT * FROM (SELECT m.id, m.created_at AS createdAt, m.movement_type AS movementType, m.signed_quantity AS signedQuantity, m.status,
-      m.notes, m.reason, a.display_name AS actor, m.rowid AS seq, l.borrower_name AS borrower, l.purpose,
-      SUM(CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END) OVER (ORDER BY m.rowid) AS afterQuantity
+      m.notes, m.reason, ${actorName("a", "m.actor_user_id")} AS actor, ROW_NUMBER() OVER (ORDER BY ${HISTORY_ORDER}) AS seq,
+      COALESCE(l.borrower_name, s.person_name) AS borrower, l.purpose,
+      SUM(CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END) OVER (ORDER BY ${HISTORY_ORDER}) AS afterQuantity
       FROM inventory_movements m LEFT JOIN staff_accounts a ON a.id = m.actor_user_id
-      LEFT JOIN loans l ON m.related_entity_type = 'LOAN' AND l.id = m.related_entity_id WHERE m.item_id = ?) ORDER BY seq DESC LIMIT 50`).bind(id),
-    db.prepare(`SELECT l.created_at AS at, l.action, l.details_json AS details, a.display_name AS actor FROM audit_log l
+      LEFT JOIN loans l ON m.related_entity_type = 'LOAN' AND l.id = m.related_entity_id
+      LEFT JOIN self_service_events s ON m.related_entity_type = 'SELF_SERVICE' AND s.id = m.related_entity_id WHERE m.item_id = ?) ORDER BY seq DESC LIMIT 50`).bind(id),
+    db.prepare(`SELECT l.created_at AS at, l.action, l.details_json AS details, ${actorName("a", "l.actor_user_id")} AS actor FROM audit_log l
       LEFT JOIN staff_accounts a ON a.id = l.actor_user_id WHERE l.entity_type = 'ITEM' AND l.entity_id = ? ORDER BY l.created_at DESC, l.rowid DESC LIMIT 50`).bind(id),
     db.prepare(`${LOAN_COLUMNS} WHERE l.item_id = ? ORDER BY l.status = 'OUT' DESC, l.created_at DESC LIMIT 20`).bind(id)
   ]);
   const row = item.results[0] as (ItemRow & Record<string, unknown>) | undefined;
   if (!row) throw new InputError(404, "Item not found.");
   return {
-    item: { ...row, needsReview: row.needsReview === 1, listed: isListedForLending(row), listingGaps: listingGaps(row) },
+    item: { ...row, needsReview: row.needsReview === 1, selfService: row.selfService === 1, listed: isListedForLending(row), listingGaps: listingGaps(row), selfServiceGaps: selfServiceGaps(row) },
     movements: movements.results,
     loans: loans.results,
     // Parsed here so the browser renders sentences, never raw JSON.
@@ -108,7 +130,7 @@ type ItemInput = {
   name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; storageLocation: string | null;
   reorderThreshold: number; lendingAudience: string; needsReview: boolean; notes: string | null;
   // Optional: an older form that omits them keeps the stored value.
-  stockArea?: string; expiresOn?: string | null;
+  stockArea?: string; expiresOn?: string | null; selfService?: boolean;
 };
 
 function text(body: Record<string, unknown>, key: string, label: string, max: number, required: boolean, multiline = false): string | null {
@@ -163,7 +185,8 @@ export function parseItemInput(body: unknown): ItemInput {
     needsReview: record.needsReview === true,
     notes: text(record, "notes", "Notes", 1000, false, true),
     ...(record.stockArea === undefined ? {} : { stockArea: choice(record, "stockArea", "stock area", STOCK_AREAS) }),
-    ...(record.expiresOn === undefined ? {} : { expiresOn: isoDate(record.expiresOn, "Expiry date") })
+    ...(record.expiresOn === undefined ? {} : { expiresOn: isoDate(record.expiresOn, "Expiry date") }),
+    ...(record.selfService === undefined ? {} : { selfService: record.selfService === true })
   };
   if (input.lendingAudience !== "NOT_AVAILABLE_FOR_LENDING" && input.itemType !== PUBLIC_LENDING_ITEM_TYPE) {
     throw new InputError(400, "Only Loanable items can be offered for lending.");
@@ -193,7 +216,7 @@ const EDITABLE: Array<[keyof ItemInput, string]> = [
   ["name", "name"], ["aliases", "aliases"], ["category", "category"], ["itemType", "item_type"], ["unit", "unit"], ["status", "status"],
   ["storageLocation", "storage_location"], ["reorderThreshold", "reorder_threshold"], ["lendingAudience", "lending_audience"],
   ["needsReview", "needs_review"], ["notes", "notes"],
-  ["stockArea", "stock_area"], ["expiresOn", "expires_on"]
+  ["stockArea", "stock_area"], ["expiresOn", "expires_on"], ["selfService", "self_service"]
 ];
 const stored = (value: ItemInput[keyof ItemInput]) => typeof value === "boolean" ? Number(value) : value;
 
@@ -240,10 +263,10 @@ export async function createItem(db: D1Database, actor: Actor, parsed: ItemInput
     const id = `ITM-${String(next).padStart(4, "0")}`;
     const statements = [
       db.prepare(`INSERT INTO items(id, name, aliases, category, item_type, unit, status, storage_location, reorder_threshold, lending_audience,
-        needs_review, notes, stock_area, expires_on, imported_from, imported_at, updated_at)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
+        needs_review, notes, stock_area, expires_on, self_service, imported_from, imported_at, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
         .bind(id, input.name, input.aliases, input.category, input.itemType, input.unit, input.status, input.storageLocation, input.reorderThreshold, input.lendingAudience,
-          Number(input.needsReview), input.notes, input.stockArea ?? "Inventory", input.expiresOn ?? null, now, now),
+          Number(input.needsReview), input.notes, input.stockArea ?? "Inventory", input.expiresOn ?? null, Number(input.selfService ?? false), now, now),
       audit(db, actor.accountId, "ITEM_CREATED", "ITEM", id, { ...input, openingQuantity }),
       db.prepare(BUMP_REVISION)
     ];

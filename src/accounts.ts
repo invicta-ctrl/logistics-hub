@@ -294,11 +294,12 @@ export async function recoverOwner(db: D1Database, input: unknown) {
 /* ---------- Attempt throttling (shared across isolates) ---------- */
 
 /** Counts an attempt; true when the caller is over `limit` within the window. */
-export async function throttled(db: D1Database, key: string, limit: number, windowMs: number): Promise<boolean> {
+/** Counts `weight` attempts against `key` in a fixed window; true once the window's total passes `limit`. */
+export async function throttled(db: D1Database, key: string, limit: number, windowMs: number, weight = 1): Promise<boolean> {
   const now = Date.now();
-  const count = await db.prepare(`INSERT INTO auth_throttle(key, count, reset_at) VALUES(?1, 1, ?2 + ?3)
-    ON CONFLICT(key) DO UPDATE SET count = CASE WHEN reset_at < ?2 THEN 1 ELSE count + 1 END, reset_at = CASE WHEN reset_at < ?2 THEN ?2 + ?3 ELSE reset_at END
-    RETURNING count`).bind(key, now, windowMs).first<number>("count");
+  const count = await db.prepare(`INSERT INTO auth_throttle(key, count, reset_at) VALUES(?1, ?4, ?2 + ?3)
+    ON CONFLICT(key) DO UPDATE SET count = CASE WHEN reset_at < ?2 THEN ?4 ELSE count + ?4 END, reset_at = CASE WHEN reset_at < ?2 THEN ?2 + ?3 ELSE reset_at END
+    RETURNING count`).bind(key, now, windowMs, weight).first<number>("count");
   return (count ?? 0) > limit;
 }
 

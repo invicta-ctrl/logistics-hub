@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["@cloudflare/workers-types", "node"]
   },
-  "include": ["worker-configuration.d.ts", "src/worker.ts", "src/catalog-policy.ts", "src/session.ts", "src/inventory.ts", "src/stock.ts", "src/loans.ts", "src/accounts.ts", "tests/worker.test.ts", "tests/access.test.ts", "tests/migration-sql.test.ts", "tests/d1-sqlite.ts"]
+  "include": ["worker-configuration.d.ts", "src/worker.ts", "src/catalog-policy.ts", "src/session.ts", "src/inventory.ts", "src/stock.ts", "src/loans.ts", "src/accounts.ts", "src/self-service.ts", "tests/worker.test.ts", "tests/self-service.test.ts", "tests/access.test.ts", "tests/migration-sql.test.ts", "tests/d1-sqlite.ts"]
 }

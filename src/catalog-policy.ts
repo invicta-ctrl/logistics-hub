@@ -83,3 +83,54 @@ export function listingGaps(item: ListingCandidate): string[] {
 export function isListedForLending(item: ListingCandidate): boolean {
   return listingGaps(item).length === 0;
 }
+
+/* ---------- Self-service (phones, Part 4.5) ---------- */
+
+export type SelfServiceCandidate = ListingCandidate & { selfService: number | boolean };
+export type SelfServiceAction = "TAKE" | "BORROW";
+
+/**
+ * What still blocks an item from phone self-service, in the words staff see. Fail closed:
+ * staff opt each item in; a Consumable must be Active and reviewed, a Loanable must also be
+ * listed on the Lending Hub (so it has an audience).
+ */
+export function selfServiceGaps(item: SelfServiceCandidate): string[] {
+  const gaps: string[] = [];
+  if (!(item.selfService === 1 || item.selfService === true)) gaps.push("Turn on self-service");
+  if (item.itemType === PUBLIC_LENDING_ITEM_TYPE) gaps.push(...listingGaps(item));
+  else if (item.itemType !== "Consumable") gaps.push("Set the type to Loanable or Consumable");
+  else {
+    if (item.status !== "ACTIVE") gaps.push("Set the status to Active");
+    if (!(item.needsReview === 0 || item.needsReview === false)) gaps.push("Mark the details reviewed");
+  }
+  return gaps;
+}
+
+/** The one self-service rule: a Consumable can be taken, a Loanable borrowed, anything else is not offered. */
+export function selfServiceAction(item: SelfServiceCandidate): SelfServiceAction | null {
+  if (selfServiceGaps(item).length) return null;
+  return item.itemType === PUBLIC_LENDING_ITEM_TYPE ? "BORROW" : "TAKE";
+}
+
+/**
+ * Limits shared by the phone and the Worker, so the form never offers what the server refuses.
+ * Five events per sync keeps one request well inside D1's per-invocation query budget.
+ * Past `unitsPerItemHour` self-service units of one item in an hour, further takes and borrows
+ * are held for staff, which bounds what an abusive client can do to the shelf's records.
+ */
+export const SELF_SERVICE_LIMITS = { quantity: 50, eventsPerSync: 5, photosPerSync: 4, unitsPerItemHour: 30 } as const;
+
+/**
+ * Why a self-service event needs a person, in the words staff read. Everything else reconciles
+ * automatically. A held event changed nothing yet: staff apply (or match) it, or dismiss it.
+ */
+export const REVIEW_REASONS = {
+  UNMATCHED_RETURN: "A return that could not be matched to one open loan",
+  RETURN_CONFLICT: "A return that does not fit its loan (already closed differently, or a different quantity)",
+  NOT_ELIGIBLE: "Recorded offline for an item that is no longer self-service",
+  VOLUME: "More of this item was recorded in an hour than self-service allows",
+  CLOCK: "The phone's clock was implausible, so the time cannot be trusted",
+  COUNT_OVERLAP: "Happened within minutes of a physical count; the count may already include it",
+  ERROR: "Could not be applied automatically"
+} as const;
+export type ReviewReason = keyof typeof REVIEW_REASONS;
