@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 const catalog = { revision: 1, categories: ["FURNITURE", "SCHOOL SUPPLIES"], items: [
-  { id: "ITM-0005", name: "Folding Table", category: "FURNITURE", unit: "piece", available: 3, audience: "STUDENTS_AND_USC_STAFF", maxPerLoan: 2, loanDays: 3 },
-  { id: "ITM-0080", name: "Cork Board", category: "FURNITURE", unit: "piece", available: 0, audience: "USC_STAFF_ONLY", maxPerLoan: null, loanDays: null },
-  { id: "ITM-0262", name: "Scissors", category: "SCHOOL SUPPLIES", unit: "piece", available: 10, audience: "STUDENTS_AND_USC_STAFF", maxPerLoan: null, loanDays: null }
+  { id: "ITM-0005", name: "Folding Table", category: "FURNITURE", unit: "piece", available: 3, audience: "STUDENTS_AND_USC_STAFF" },
+  { id: "ITM-0080", name: "Cork Board", category: "FURNITURE", unit: "piece", available: 0, audience: "USC_STAFF_ONLY" },
+  { id: "ITM-0262", name: "Scissors", category: "SCHOOL SUPPLIES", unit: "piece", available: 10, audience: "STUDENTS_AND_USC_STAFF" }
 ] };
 
 test.beforeEach(async ({ page }) => {
@@ -36,7 +36,9 @@ test("Lending Hub groups by category, filters, and keeps filters in the URL", as
   await expect(page.getByRole("link", { name: "Department of Logistics home" })).toHaveAttribute("href", "/");
   await expect(page.getByRole("heading", { name: /Furniture/, level: 2 })).toBeVisible();
   await expect(page.getByText("3 pieces available")).toBeVisible();
-  await expect(page.getByText("Students & USC staff · up to 2 per loan · 3‑day loan")).toBeVisible();
+  // Loan period and maximum per loan are no longer item settings; the row states only who may borrow.
+  await expect(page.locator(".catalogue__row", { hasText: "Folding Table" }).locator(".catalogue__meta")).toHaveText("Students & USC staff");
+  await expect(page.getByText(/per loan|day loan/)).toHaveCount(0);
   await expect(page.getByText("All out right now")).toBeVisible();
   await page.getByLabel("Available now").check();
   await expect(page.getByText("Cork Board")).toHaveCount(0);

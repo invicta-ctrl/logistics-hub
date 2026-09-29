@@ -1,24 +1,25 @@
 import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
-import { bindMovementForm, movementFields, movementTitle, signed } from "./movement-form";
+import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
+import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { ApiError, MARK, type Html, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
   lendingAudience: string; onHand: number; reorderThreshold: number; storageLocation: string | null; listed: boolean;
-  stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean; lastCountedAt: string | null;
+  stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean; lastCountedAt: string | null; onLoan: number;
 };
 type Inventory = { revision: number; items: Item[]; categories: string[]; locations: string[]; units: string[] };
-type Movement = { id: string; createdAt: string; movementType: string; signedQuantity: number; status: string; notes: string | null; reason: string | null; actor: string | null; afterQuantity: number };
+type Movement = { id: string; createdAt: string; movementType: string; signedQuantity: number; status: string; notes: string | null; reason: string | null; actor: string | null; afterQuantity: number; borrower: string | null; purpose: string | null };
 type Change = { from: unknown; to: unknown };
 type CatalogEvent = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
 type DetailItem = Item & {
-  defaultLoanDays: number | null; maximumLoanQty: number | null; notes: string | null; updatedAt: string | null; listingGaps: string[];
+  notes: string | null; updatedAt: string | null; listingGaps: string[];
   legacyReportedAvailable: number | null; migratedOnHand: number; migrationDelta: number | null;
   legacySourceSheet: string | null; legacySourceRow: string | null; verificationNote: string | null; importedFrom: string | null;
 };
-type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[] };
+type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[] };
 type SortKey = "id" | "name" | "category" | "storageLocation" | "onHand";
-type Tab = "overview" | "details" | "history";
+type Tab = "overview" | "loan" | "details" | "history";
 
 const active = (item: Item) => item.status !== "INACTIVE";
 const isLow = (item: Pick<Item, "onHand" | "reorderThreshold" | "status">) => stockState(item) === "LOW";
@@ -42,7 +43,7 @@ const LENDING_FIELDS = ["lendingAudience", "defaultLoanDays", "maximumLoanQty"];
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
 export type Session = { id: string; username: string; displayName: string; role: Role; mustChangePassword: boolean; recovery: { configured: boolean; createdAt: string | null } | null };
-type Section = "inventory" | "stock" | "admin" | "account";
+type Section = "inventory" | "stock" | "loans" | "admin" | "account";
 
 export const ROLE_LABELS: Record<Role, string> = { STAFF: "Staff", ADMIN: "Administrator", OWNER: "Owner" };
 
@@ -69,6 +70,7 @@ export function shell(session: Session, section: Section, main: Html): void {
         <nav class="app-nav" aria-label="Workspace">
           ${session.mustChangePassword ? "" : link("inventory", "/staff/inventory", "Inventory")}
           ${session.mustChangePassword ? "" : link("stock", "/staff/stock", "Stock & Pantry")}
+          ${session.mustChangePassword ? "" : link("loans", "/staff/loans", "Loans")}
           ${session.role !== "STAFF" && !session.mustChangePassword ? link("admin", "/staff/admin", "Administration") : ""}
           ${link("account", "/staff/account", "My account")}
         </nav>
@@ -97,7 +99,7 @@ export function staffLogin(): void {
       <section class="auth__intro" aria-hidden="true">
         <p class="auth__eyebrow">Holy Angel University · University Student Council</p>
         <p class="auth__statement">Department of Logistics</p>
-        <p class="auth__sub">Inventory, stock, pantry and the Lending Hub, kept in one place.</p>
+        <p class="auth__sub">Inventory, stock, pantry and loans, kept in one place.</p>
       </section>
       <section class="auth__panel" aria-labelledby="signin-title">
         <a class="auth__brand" href="/" data-route aria-label="Department of Logistics home">${MARK}</a>
@@ -210,6 +212,7 @@ function eventTitle(event: CatalogEvent): string {
   if (event.action === "ITEM_CREATED") return "Item created";
   if (event.action === "REORDER_OPENED") return "Added to the restock list";
   if (event.action === "REORDER_RESTOCKED") return `Restocked (+${String(event.details.quantity)})`;
+  if (event.action === "LOAN_CLOSED") return event.details.outcome === "LOST" ? "Loan closed · lost" : "Loan closed · returned damaged";
   if (event.action === "REORDER_UPDATED") {
     const status = (event.details.status as Change | undefined)?.to;
     return status === "DISMISSED" ? "Removed from the restock list" : status === "PLANNED" ? "Restock planned" : status === "NEEDS_RESTOCK" ? "Restock re-opened" : "Restock entry updated";
@@ -489,42 +492,39 @@ export async function workspace(): Promise<void> {
     }
   }
 
-  /** Updates only the quantity and history in place, so an edit in progress is never lost. */
+  /** Updates quantity, loans and history in place, so an edit in progress is never lost. */
   async function refreshStock(id: string): Promise<void> {
     try {
-      const was = detail?.item.onHand;
       const loaded = await fetchDetail(id);
       if (!loaded || !detail) return;
-      detail = { ...detail, item: { ...detail.item, onHand: loaded.item.onHand }, movements: loaded.movements };
-      mount(sheet.querySelector("#quantity")!, quantityMarkup(detail.item));
-      if (was !== undefined && was !== loaded.item.onHand) {
-        animateNumber(sheet.querySelector(".quantity__value"), loaded.item.onHand, was);
-        const difference = loaded.item.onHand - was;
-        sheet.querySelector(".quantity__figure")?.insertAdjacentHTML("beforeend", html`<span class="delta ${difference > 0 ? "delta--up" : "delta--down"}">${difference > 0 ? "+" : "−"}${Math.abs(difference)}</span>`.value);
-      }
+      detail = { ...detail, item: { ...detail.item, onHand: loaded.item.onHand }, movements: loaded.movements, loans: loaded.loans };
+      mount(sheet.querySelector("#quantity-context")!, quantityContext(detail));
       mount(sheet.querySelector("#history")!, historyMarkup(detail));
+      const loanList = sheet.querySelector("#item-loans");
+      if (loanList) mount(loanList, itemLoansMarkup(detail));
+      const out = detail.loans.filter((loan) => loan.status === "OUT").length;
+      const loanTab = sheet.querySelector("#tab-loan");
+      if (loanTab) loanTab.textContent = out ? `Loan · ${out} out` : "Loan";
       stockForm?.refresh();
+      loanForm?.refresh();
     } catch { /* the next live refresh retries */ }
   }
 
-  function quantityMarkup(item: DetailItem): Html {
-    const low = isLow(item);
-    return html`<div class="quantity__figure"><span class="quantity__value ${item.onHand <= 0 ? "is-out" : low ? "is-low" : ""}">${item.onHand}</span> <span class="quantity__unit">${units(item.onHand, item.unit)} on hand</span></div>
-      <p class="quantity__context">${item.reorderThreshold > 0
-        ? html`${item.onHand <= 0 ? html`<span class="tag tag--bad">Out of stock</span>` : low ? html`<span class="tag tag--warn">Low stock</span>` : html`<span class="tag tag--ok">Above reorder level</span>`} Reorder level ${item.reorderThreshold}`
-        : item.onHand <= 0 ? html`<span class="tag tag--bad">Out of stock</span> No reorder level set` : "No reorder level set"}</p>`;
+  function quantityContext({ item, loans }: Detail): Html {
+    const state = stockState(item);
+    const out = loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
+    return html`${state === "OUT" ? html`<span class="tag tag--bad">Out of stock</span>` : state === "LOW" ? html`<span class="tag tag--warn">Low stock</span>` : item.reorderThreshold > 0 ? html`<span class="tag tag--ok">Above reorder level</span>` : ""}
+      <span>${item.reorderThreshold > 0 ? `Reorder level ${item.reorderThreshold}` : "No reorder level set"}</span>
+      ${out ? html`<button type="button" class="text-link" data-goto="loan">${out} more on loan</button>` : ""}`;
   }
 
-  function overviewMarkup({ item }: Detail): Html {
+  function overviewMarkup(detail: Detail): Html {
+    const { item } = detail;
     const delta = item.migrationDelta ?? 0;
     const gaps = item.listingGaps;
     const origin = item.importedFrom === "LOGISTICS_HUB" ? "Created in the Logistics Hub" : item.legacySourceSheet ? `Migrated from the legacy system · ${categoryName(item.legacySourceSheet)}, row ${item.legacySourceRow ?? "?"}` : "Migrated from the legacy system";
     return html`
-      <div class="quantity" id="quantity">${quantityMarkup(item)}</div>
-      <section aria-labelledby="stock-title" class="stock">
-        <h3 id="stock-title" class="section-label">Record stock</h3>
-        <form id="stock-form" class="form" novalidate>${movementFields("stock")}</form>
-      </section>
+      <form id="stock-form" class="form quantity" novalidate aria-label="Update the quantity">${quantityEditor("stock")}<p class="quantity__context" id="quantity-context">${quantityContext(detail)}</p></form>
       ${delta !== 0 ? html`<div class="callout">${icon("info")}<p><strong>Migration evidence.</strong> At migration the legacy snapshot reported ${item.legacyReportedAvailable} ${units(item.legacyReportedAvailable ?? 0, item.unit)}, but the migrated movement ledger derives ${item.migratedOnHand}. The difference is preserved as recorded, not guessed. Once a physical count confirms the real figure, record it with a Count.</p></div>` : ""}
       ${item.verificationNote ? html`<div class="callout">${icon("alert")}<p><strong>Verify:</strong> ${item.verificationNote}</p></div>` : ""}
       ${item.needsReview ? html`<section class="card card--review" aria-labelledby="review-title">
@@ -544,12 +544,29 @@ export async function workspace(): Promise<void> {
         <div class="card__head"><h3 id="lending-title">${gaps.length ? "Not on the Lending Hub" : "Listed on the Lending Hub"}</h3>${gaps.length ? "" : html`<a class="text-link" href="/lending?q=${encodeURIComponent(item.name)}" target="_blank" rel="noopener">View ${icon("external")}<span class="visually-hidden">(opens in a new tab)</span></a>`}</div>
         ${gaps.length
           ? html`<p class="card__text">Still needed before it can be listed:</p>${checklist(gaps.map((gap) => [gap, false]))}`
-          : html`<p class="card__text">${label(item.lendingAudience)}${item.maximumLoanQty ? ` · up to ${item.maximumLoanQty} per loan` : ""}${item.defaultLoanDays ? ` · ${item.defaultLoanDays}-day loan` : ""}. Students see live availability.</p>`}
+          : html`<p class="card__text">${label(item.lendingAudience)}. The public page shows live availability.</p>`}
       </section>
       <p class="provenance">${origin}</p>`;
   }
 
-  let stockForm: ReturnType<typeof bindMovementForm> | null = null;
+  let stockForm: ReturnType<typeof bindQuantityEditor> | null = null;
+  let loanForm: ReturnType<typeof bindLoanForm> | null = null;
+  let known: Borrower[] = [];
+  let knownLoaded = false;
+  /** Earlier borrowers, fetched once when a Loan tab is first opened. */
+  async function loadKnown(): Promise<void> {
+    if (knownLoaded) return;
+    knownLoaded = true;
+    try { known = (await api<{ known: Borrower[] }>("/api/staff/loans")).known; loanForm?.refresh(); } catch { knownLoaded = false; }
+  }
+
+  function itemLoansMarkup({ loans }: Detail): Html {
+    const out = loans.filter((loan) => loan.status === "OUT");
+    const closed = loans.filter((loan) => loan.status !== "OUT").slice(0, 5);
+    return html`<section aria-labelledby="loans-out-title"><h3 class="section-label" id="loans-out-title">On loan now${out.length ? ` · ${out.length}` : ""}</h3>
+        ${out.length ? html`<ul class="loan-list">${out.map((loan) => loanRow(loan))}</ul>` : html`<p class="muted loan-list__empty">Nothing from this item is out right now.</p>`}</section>
+      ${closed.length ? html`<section aria-labelledby="loans-closed-title"><h3 class="section-label" id="loans-closed-title">Recently returned</h3><ul class="loan-list loan-list--closed">${closed.map((loan) => loanRow(loan))}</ul></section>` : ""}`;
+  }
 
   function historyMarkup({ movements, events }: Detail): Html {
     type Entry = { at: string; markup: Html };
@@ -558,12 +575,13 @@ export async function workspace(): Promise<void> {
         const quantity = movement.signedQuantity;
         const tone = quantity > 0 ? "is-in" : quantity < 0 ? "is-out" : "";
         return { at: movement.createdAt, markup: html`<li class="history__item ${tone}">
-          <div><p class="history__title">${movementTitle(movement.movementType, quantity, movement.reason)}${movement.status !== "POSTED" ? ` (${movement.status.toLowerCase()})` : ""}</p>
+          <div><p class="history__title">${movementTitle(movement.movementType, quantity, movement.reason, movement.borrower)}${movement.purpose ? html` <span class="muted">(${label(movement.purpose).toLowerCase()})</span>` : ""}${movement.status !== "POSTED" ? ` (${movement.status.toLowerCase()})` : ""}</p>
             <p class="history__meta"><time datetime="${movement.createdAt}">${formatDateTime(movement.createdAt)}</time> · ${movement.actor ?? "Legacy system"}</p>
             ${movement.notes ? html`<p class="history__note">${movement.notes}</p>` : ""}</div>
           <p class="history__qty ${tone}">${signed(quantity)}<span class="history__after">${movement.afterQuantity - quantity} → ${movement.afterQuantity}</span></p></li>` };
       }),
-      ...events.map((event) => {
+      // A loan and a good return already appear as movements; only damaged or lost closings add a line.
+      ...events.filter((event) => event.action !== "LOAN_CREATED" && !(event.action === "LOAN_CLOSED" && event.details.outcome === "RETURNED")).map((event) => {
         const changes = event.action === "ITEM_UPDATED"
           ? Object.entries(event.details).filter(([field]) => FIELD_LABELS[field]).map(([field, value]) => html`<li><span>${FIELD_LABELS[field]}</span> ${formatValue(field, (value as Change).from)} → <strong>${formatValue(field, (value as Change).to)}</strong></li>`)
           : [];
@@ -581,22 +599,33 @@ export async function workspace(): Promise<void> {
     detail = loaded;
     dirty = false;
     const { item } = loaded;
-    const tabs: Array<[Tab, string]> = [["overview", "Overview"], ["details", item.needsReview ? "Review & edit" : "Edit details"], ["history", "History"]];
+    const lendable = item.itemType === PUBLIC_LENDING_ITEM_TYPE;
+    const out = loaded.loans.filter((loan) => loan.status === "OUT").length;
+    const tabs: Array<[Tab, string]> = [["overview", "Overview"], ...(lendable ? [["loan", out ? `Loan · ${out} out` : "Loan"] as [Tab, string]] : []), ["details", item.needsReview ? "Review & edit" : "Edit details"], ["history", "History"]];
+    if (tab === "loan" && !lendable) tab = "overview";
     sheetShell(html`<span class="mono">${item.id}</span> · ${categoryName(item.category)}`, item.name, html`
       <div class="sheet__tags">${tags(item)}</div>
       <div class="tabs" role="tablist" aria-label="Item sections">
         ${tabs.map(([key, text]) => html`<button type="button" role="tab" id="tab-${key}" aria-controls="panel-${key}" aria-selected="${key === tab}" tabindex="${key === tab ? 0 : -1}">${text}</button>`)}
       </div>
       <section id="panel-overview" class="panel-stack" role="tabpanel" aria-labelledby="tab-overview" tabindex="0" ${tab === "overview" ? "" : html`hidden`}>${overviewMarkup(loaded)}</section>
+      ${lendable ? html`<section id="panel-loan" class="panel-stack" role="tabpanel" aria-labelledby="tab-loan" tabindex="0" ${tab === "loan" ? "" : html`hidden`}>
+        ${item.status === "INACTIVE" ? html`<div class="callout">${icon("info")}<p>Inactive items cannot be lent. Reactivate it in Edit details first.</p></div>` : html`<form id="loan-form" class="form" novalidate aria-labelledby="lend-title"><h3 class="section-label" id="lend-title">Lend this item</h3>${loanFields("loan")}</form>`}
+        <div id="item-loans" class="panel-stack">${itemLoansMarkup(loaded)}</div>
+      </section>` : ""}
       <section id="panel-details" role="tabpanel" aria-labelledby="tab-details" tabindex="0" ${tab === "details" ? "" : html`hidden`}>${detailsFormMarkup(item)}</section>
       <section id="panel-history" role="tabpanel" aria-labelledby="tab-history" tabindex="0" ${tab === "history" ? "" : html`hidden`}><ol class="history" id="history">${historyMarkup(loaded)}</ol></section>`);
     const tabButtons = [...sheet.querySelectorAll<HTMLButtonElement>("[role=tab]")];
-    const select = (target: HTMLButtonElement) => tabButtons.forEach((entry) => {
-      const selected = entry === target;
-      entry.setAttribute("aria-selected", String(selected));
-      entry.tabIndex = selected ? 0 : -1;
-      sheet.querySelector<HTMLElement>(`#${entry.getAttribute("aria-controls")}`)!.hidden = !selected;
-    });
+    const select = (target: HTMLButtonElement) => {
+      tabButtons.forEach((entry) => {
+        const selected = entry === target;
+        entry.setAttribute("aria-selected", String(selected));
+        entry.tabIndex = selected ? 0 : -1;
+        sheet.querySelector<HTMLElement>(`#${entry.getAttribute("aria-controls")}`)!.hidden = !selected;
+      });
+      if (target.id === "tab-loan") void loadKnown();
+    };
+    if (tab === "loan") void loadKnown();
     tabButtons.forEach((button, index) => {
       button.addEventListener("click", () => select(button));
       button.addEventListener("keydown", (event) => {
@@ -607,20 +636,36 @@ export async function workspace(): Promise<void> {
         next.focus();
       });
     });
-    sheet.querySelector("[data-goto=details]")?.addEventListener("click", () => {
-      select(sheet.querySelector<HTMLButtonElement>("#tab-details")!);
-      sheet.querySelector<HTMLInputElement>("#f-name")?.focus();
+    sheet.querySelector(".sheet__body")!.addEventListener("click", (event) => {
+      const element = event.target as HTMLElement;
+      const goto = element.closest<HTMLElement>("[data-goto]");
+      if (goto) {
+        select(sheet.querySelector<HTMLButtonElement>(`#tab-${goto.dataset.goto}`)!);
+        (sheet.querySelector<HTMLElement>(goto.dataset.goto === "details" ? "#f-name" : "#loan-studentId") ?? sheet.querySelector<HTMLElement>(`#tab-${goto.dataset.goto}`))?.focus();
+      }
+      const giveBack = element.closest<HTMLButtonElement>("[data-return]");
+      const loan = giveBack && detail?.loans.find((entry) => entry.id === giveBack.dataset.return);
+      if (loan) openReturn(loan, async () => { await refreshStock(loan.itemId); await poll.refresh(); });
     });
     const target = () => detail ? { id: detail.item.id, name: detail.item.name, unit: detail.item.unit, onHand: detail.item.onHand } : null;
-    stockForm = bindMovementForm(sheet.querySelector<HTMLFormElement>("#stock-form")!, {
+    stockForm = bindQuantityEditor(sheet.querySelector<HTMLFormElement>("#stock-form")!, {
       target,
       onRecorded: async (recorded) => { await refreshStock(recorded.id); await poll.refresh(); }
     });
+    stockForm.refresh();
+    const lendForm = sheet.querySelector<HTMLFormElement>("#loan-form");
+    loanForm = lendForm ? bindLoanForm(lendForm, {
+      target,
+      known: () => known,
+      onLent: async (lent) => { await refreshStock(lent.id); await poll.refresh(); }
+    }) : null;
     bindDetailsForm(item);
   }
 
   function detailsFormMarkup(item: Partial<DetailItem>, creating = false): Html {
     const options = (values: readonly string[], current: string | undefined) => values.map((value) => html`<option value="${value}" ${value === current ? html`selected` : ""}>${label(value)}</option>`);
+    // Unclassified is offered only while a migrated record still is; staff choose Loanable or Consumable.
+    const types = ITEM_TYPES.filter((type) => type !== "NEEDS_REVIEW" || item.itemType === "NEEDS_REVIEW");
     const hinted = (id: string, hint: string) => hint ? html`aria-describedby="f-${id}-hint"` : "";
     const hintMarkup = (id: string, hint: string) => hint ? html`<p class="field__hint" id="f-${id}-hint">${hint}</p>` : "";
     const text = (id: string, title: string, value: unknown, attributes: Html | string = "", hint = "", optional = false) => html`<div class="field"><label for="f-${id}">${title}${optional ? html` <span class="field__optional">optional</span>` : ""}</label><input id="f-${id}" name="${id}" value="${value ?? ""}" ${attributes} ${hinted(id, hint)} />${hintMarkup(id, hint)}</div>`;
@@ -634,15 +679,13 @@ export async function workspace(): Promise<void> {
         <p class="field__hint field__hint--warn" id="duplicate-hint" hidden></p>
         ${text("aliases", "Other names", item.aliases, html`maxlength="300" autocomplete="off"`, "Names people also use for it, separated by commas. Search finds these too.", true)}
         <div class="field-grid">
-          ${text("category", "Category", item.category, html`required maxlength="100" list="category-options" autocomplete="off"`, "Pick an existing category where one fits.")}
-          <div class="field"><label for="f-itemType">Type</label><select id="f-itemType" name="itemType">${options(ITEM_TYPES, item.itemType ?? "Loanable")}</select></div>
+          ${text("category", "Category", item.category, html`required maxlength="100" autocomplete="off"`, "Letter case does not matter; an existing category is reused.")}
+          <div class="field"><label for="f-itemType">Type</label><select id="f-itemType" name="itemType" aria-describedby="f-itemType-hint">${options(types, item.itemType ?? "Loanable")}</select><p class="field__hint" id="f-itemType-hint">Loanable comes back; Consumable is used up.</p></div>
         </div>
         <div class="field-grid">
-          ${text("unit", "Unit", item.unit, html`required maxlength="30" list="unit-options" autocomplete="off" placeholder="piece, box, pack"`, "Singular, as counted.")}
+          ${text("unit", "Unit", item.unit, html`required maxlength="30" autocomplete="off" placeholder="piece, box, pack"`, "Singular, as counted.")}
           ${text("storageLocation", "Storage location", item.storageLocation, html`maxlength="120" list="location-options" autocomplete="off" placeholder="Office cabinet 2"`, "Where staff find it.", true)}
         </div>
-        <datalist id="category-options">${(inventory?.categories ?? []).map((value) => html`<option value="${value}"></option>`)}</datalist>
-        <datalist id="unit-options">${(inventory?.units ?? []).map((value) => html`<option value="${value}"></option>`)}</datalist>
         <datalist id="location-options">${(inventory?.locations ?? []).map((value) => html`<option value="${value}"></option>`)}</datalist>
         <div class="field"><label for="f-notes">Internal notes <span class="field__optional">optional</span></label><textarea id="f-notes" name="notes" maxlength="1000" rows="3">${item.notes ?? ""}</textarea></div>
       </div>
@@ -659,9 +702,8 @@ export async function workspace(): Promise<void> {
         ${creating ? number("openingQuantity", "Opening quantity", 0, 100_000, "Recorded as the item's first movement.") : ""}
       </div>
       <div class="form-section">
-        <h3 class="form-section__title">Lending</h3>
-        <div class="field"><label for="f-lendingAudience">Who may borrow</label><select id="f-lendingAudience" name="lendingAudience">${options(LENDING_AUDIENCES, item.lendingAudience ?? "NOT_AVAILABLE_FOR_LENDING")}</select></div>
-        <div class="field-grid">${number("defaultLoanDays", "Loan period (days)", item.defaultLoanDays, 365, "0 leaves it unstated.")}${number("maximumLoanQty", "Maximum per loan", item.maximumLoanQty, 100_000, "0 leaves it unstated.")}</div>
+        <h3 class="form-section__title">Public Lending Hub</h3>
+        <div class="field"><label for="f-lendingAudience">Shown to</label><select id="f-lendingAudience" name="lendingAudience" aria-describedby="f-lendingAudience-hint">${options(LENDING_AUDIENCES, item.lendingAudience ?? "NOT_AVAILABLE_FOR_LENDING")}</select><p class="field__hint" id="f-lendingAudience-hint">Who sees it on the public page. Loans themselves are recorded in the Loan tab.</p></div>
         <div class="listing-status" id="listing-preview" aria-live="polite"></div>
       </div>
       <div class="form-section form-section--last">
@@ -683,7 +725,6 @@ export async function workspace(): Promise<void> {
       name: String(values.get("name") ?? ""), aliases: String(values.get("aliases") ?? ""), category: String(values.get("category") ?? ""), unit: String(values.get("unit") ?? ""),
       itemType: String(values.get("itemType")), status: String(values.get("status")), storageLocation: String(values.get("storageLocation") ?? ""),
       reorderThreshold: whole("reorderThreshold"), lendingAudience: String(values.get("lendingAudience")),
-      defaultLoanDays: whole("defaultLoanDays"), maximumLoanQty: whole("maximumLoanQty"),
       needsReview: values.get("reviewed") !== "on", notes: String(values.get("notes") ?? ""),
       stockArea: String(values.get("stockArea") ?? "Inventory"), expiresOn: String(values.get("expiresOn") ?? ""),
       ...(values.has("openingQuantity") ? { openingQuantity: whole("openingQuantity") } : {})

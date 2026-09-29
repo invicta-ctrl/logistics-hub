@@ -35,7 +35,8 @@ test("preserves the ITM-0001 reconciliation evidence", async ({ page }) => {
   await signIn(page);
   await page.getByRole("searchbox", { name: "Search inventory" }).fill("ITM-0001");
   await page.getByRole("button", { name: "Detergent Bar" }).click();
-  await expect(page.locator("#quantity")).toContainText("7 blocks on hand");
+  await expect(page.getByLabel("Quantity on hand")).toHaveValue("7");
+  await expect(page.locator("#stock-form")).toContainText("blocks on hand");
   await expect(page.locator("#panel-overview")).toContainText("legacy snapshot reported 8 blocks, but the migrated movement ledger derives 7");
   await expect(page).toHaveURL(/item=ITM-0001/);
   await page.reload();
@@ -52,7 +53,7 @@ test("staff publish and stock changes reach an open public page live", async ({ 
   await page.getByRole("searchbox", { name: "Search inventory" }).fill("Bluetooth Microphone");
   await page.getByRole("button", { name: "Bluetooth Microphone" }).click();
   await page.getByRole("tab", { name: "Review & edit" }).click();
-  await page.getByLabel("Who may borrow").selectOption("STUDENTS_AND_USC_STAFF");
+  await page.getByLabel("Shown to").selectOption("STUDENTS_AND_USC_STAFF");
   await page.getByLabel("Details reviewed and verified").check();
   await expect(page.getByText("Will appear on the public Lending Hub.")).toBeVisible();
   await page.getByRole("button", { name: "Save", exact: true }).click();
@@ -64,17 +65,21 @@ test("staff publish and stock changes reach an open public page live", async ({ 
   await expect(page.getByRole("tab", { name: "Edit details" })).toBeVisible();
   await page.getByRole("tab", { name: "Overview" }).click();
   await expect(page.getByRole("heading", { name: "Listed on the Lending Hub" })).toBeVisible();
-  await page.getByRole("radio", { name: "Stock in" }).check();
-  await page.getByLabel("Quantity to add").fill("4");
-  await page.getByLabel("Reason", { exact: true }).selectOption("DELIVERY");
-  await expect(page.locator("#stock-preview")).toHaveText("1 → 5 pieces");
-  await page.getByRole("button", { name: "Record stock in" }).click();
-  await expect(page.getByText("Stock in recorded. Bluetooth Microphone now has 5 pieces.")).toBeVisible();
-  await page.getByRole("radio", { name: "Stock out" }).check();
-  await page.getByLabel("Quantity to remove").fill("9");
-  await page.getByLabel("Reason", { exact: true }).selectOption("ISSUED");
-  await page.getByRole("button", { name: "Record stock out" }).click();
-  await expect(page.getByText("Only 5 on hand; cannot remove 9.")).toBeVisible();
+  // The figure itself is the editor; a change needs a reason before it saves.
+  const total = page.getByLabel("Quantity on hand");
+  await expect(total).toHaveValue("1");
+  await total.fill("5");
+  await expect(page.locator("#stock-change")).toContainText("+4 1 → 5");
+  await page.getByRole("button", { name: "Add 4" }).click();
+  await expect(page.locator("#stock-form").getByRole("alert")).toHaveText("Choose a reason.");
+  await page.getByRole("radio", { name: "New stock received" }).check();
+  await page.getByRole("button", { name: "Add 4" }).click();
+  await expect(page.getByText("Bluetooth Microphone: 1 → 5 pieces (new stock received).")).toBeVisible();
+  await expect(total).toHaveValue("5");
+  await total.fill("-9");
+  await expect(page.locator("#stock-change")).toContainText("Only 5 on hand; it cannot go below 0.");
+  await total.press("Escape");
+  await expect(total).toHaveValue("5");
 
   await expect(visitor.getByText("5 pieces available")).toBeVisible({ timeout: 25_000 });
   await page.getByRole("tab", { name: "History" }).click();
@@ -196,7 +201,8 @@ test("create, warn on a duplicate name, then deactivate without deleting", async
   await sheet.getByLabel("Name", { exact: true }).fill("E2E Extension Cord");
   await sheet.getByLabel("Category", { exact: true }).fill("office equipment and supplies");
   await sheet.getByLabel("Unit", { exact: true }).fill("piece");
-  await sheet.getByLabel("Who may borrow").selectOption("STUDENTS_AND_USC_STAFF");
+  await sheet.getByLabel("Shown to").selectOption("STUDENTS_AND_USC_STAFF");
+  await expect(sheet.getByLabel("Type", { exact: true }).locator("option")).toHaveText(["Loanable", "Consumable"]);
   await sheet.getByLabel("Type", { exact: true }).selectOption("Consumable");
   await page.getByRole("button", { name: "Create item" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Only Loanable items can be offered for lending.");
@@ -204,7 +210,7 @@ test("create, warn on a duplicate name, then deactivate without deleting", async
   await sheet.getByLabel("Opening quantity").fill("3");
   await page.getByRole("button", { name: "Create item" }).click();
   await expect(page.getByText(/Item ITM-\d+ created\./)).toBeVisible();
-  await expect(page.locator("#quantity")).toContainText("3 pieces on hand");
+  await expect(page.getByLabel("Quantity on hand")).toHaveValue("3");
   await expect(page.locator(".sheet__kicker")).toContainText("Office Equipment and Supplies");
 
   await page.getByRole("tab", { name: "Edit details" }).click();
@@ -234,13 +240,13 @@ test("stock workspace: record a delivery, restock and receive, then read it in a
   const panel = page.locator("#record-panel");
   await panel.getByLabel("Item", { exact: true }).fill("Bond Paper - A4 · ITM-0135");
   await expect(panel.locator("#record-card")).toContainText("0 reams on hand");
-  await panel.getByLabel("Quantity to add").fill("12");
-  await expect(panel.locator("#record-preview")).toHaveText("0 → 12 reams");
-  await panel.getByRole("button", { name: "Record stock in" }).click();
+  await panel.getByLabel("Quantity on hand").fill("+12");
+  await expect(panel.locator("#record-change")).toContainText("+12 0 → 12");
+  await panel.getByRole("button", { name: "Add 12" }).click();
   await expect(panel.getByRole("alert")).toHaveText("Choose a reason.");
-  await panel.getByLabel("Reason", { exact: true }).selectOption("DELIVERY");
-  await panel.getByRole("button", { name: "Record stock in" }).click();
-  await expect(page.getByText("Stock in recorded. Bond Paper - A4 now has 12 reams.")).toBeVisible();
+  await panel.getByRole("radio", { name: "New stock received" }).check();
+  await panel.getByRole("button", { name: "Add 12" }).click();
+  await expect(page.getByText("Bond Paper - A4: 0 → 12 reams (new stock received).")).toBeVisible();
   await expect(panel.locator("#receipts")).toContainText("+12 Bond Paper - A4");
   await expect(panel.getByLabel("Item", { exact: true })).toBeFocused();
 
@@ -253,16 +259,18 @@ test("stock workspace: record a delivery, restock and receive, then read it in a
   await expect(entry.getByText("Planned", { exact: true })).toBeVisible();
   await entry.getByRole("button", { name: "Receive" }).click();
   await expect(panel.getByText("Receiving the restock of Banana Ketchup.", { exact: false })).toBeVisible();
-  await panel.getByLabel("Quantity to add").fill("6");
-  await panel.getByRole("button", { name: "Record stock in" }).click();
-  await expect(page.getByText("Stock in recorded. Banana Ketchup now has 6 bottles.")).toBeVisible();
+  await expect(panel.getByRole("radio", { name: "New stock received" })).toBeHidden();
+  await panel.getByLabel("Quantity on hand").fill("6");
+  await expect(panel.getByRole("radio", { name: "New stock received" })).toBeChecked();
+  await panel.getByRole("button", { name: "Add 6" }).click();
+  await expect(page.getByText("Banana Ketchup: 0 → 6 bottles (new stock received).")).toBeVisible();
   await expect(page.getByRole("button", { name: /^Restock list 0/ })).toBeVisible();
   await expect(page.getByText("Closed in the last two weeks")).toBeVisible();
 
   await page.getByRole("button", { name: /^Activity/ }).click();
   const latest = page.locator(".activity-row").first();
   await expect(latest).toContainText("+6");
-  await expect(latest).toContainText("Banana Ketchup · Stock in · Delivery or purchase");
+  await expect(latest).toContainText("Banana Ketchup · Stock in · New stock received");
   await expect(latest).toContainText("0 → 6 bottles · E2E Staff");
 });
 
@@ -272,17 +280,19 @@ test("counting records the observed quantity, and pantry lists the catalog's pan
   const flour = page.locator("tr", { hasText: "All Purpose Flour" });
   await flour.getByRole("button", { name: "Count" }).click();
   const panel = page.locator("#record-panel");
-  await expect(panel.getByRole("radio", { name: "Count" })).toBeChecked();
-  await panel.getByLabel("Counted on the shelf").fill("18");
-  await expect(panel.locator("#record-preview")).toContainText("→ 18 kilos");
-  await panel.getByRole("button", { name: "Record count" }).click();
-  await expect(page.getByText("Count recorded. All Purpose Flour now has 18 kilos.")).toBeVisible();
+  await expect(panel.getByRole("radio", { name: "Physical count" })).toBeChecked();
+  await expect(panel.getByRole("button", { name: "Confirm count" })).toBeVisible();
+  await panel.getByLabel("Quantity on hand").fill("18");
+  await expect(panel.getByRole("radio", { name: "Physical count" })).toBeChecked();
+  await expect(panel.locator("#record-change")).toContainText("→ 18");
+  await panel.getByRole("button", { name: "Save count of 18" }).click();
+  await expect(page.getByText(/All Purpose Flour: \d+ → 18 kilos \(physical count\)\./)).toBeVisible();
   await expect(page.locator("tr", { hasText: "All Purpose Flour" })).toHaveCount(0);
   await page.getByRole("button", { name: /^Pantry/ }).click();
   await expect(page.locator("tbody tr")).toHaveCount(10);
   await expect(page.locator("tr", { hasText: "All Purpose Flour" })).toContainText("18 kilos");
   await page.getByRole("button", { name: /^Activity/ }).click();
-  await expect(page.locator(".activity-row").first()).toContainText("Count adjustment");
+  await expect(page.locator(".activity-row").first()).toContainText("Count correction");
 });
 
 test("stock workspace on a 320 px phone records through a bottom sheet", async ({ page }) => {
@@ -291,10 +301,75 @@ test("stock workspace on a 320 px phone records through a bottom sheet", async (
   await page.goto("/staff/stock");
   await expect(page.getByRole("heading", { name: "Stock & Pantry" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
-  await page.getByRole("button", { name: "Record movement" }).click();
-  const sheet = page.getByRole("dialog", { name: "Record movement" });
+  await page.getByRole("button", { name: "Update stock" }).click();
+  const sheet = page.getByRole("dialog", { name: "Update stock" });
   await expect(sheet.getByLabel("Item", { exact: true })).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
+});
+
+test("lend for individual and USC use with a photo, return one damaged, and read the dashboard", async ({ page }) => {
+  const photo = "public/brand/ydd-2026-banner.jpg";
+  await signIn(page);
+  await page.goto("/staff/inventory?item=ITM-0262");
+  await expect(page.getByLabel("Quantity on hand")).toHaveValue("10");
+  await page.getByRole("tab", { name: "Loan" }).click();
+  const form = page.locator("#loan-form");
+  await form.getByLabel("Borrower's full name").fill("Test Borrower One");
+  await form.getByRole("button", { name: "Lend 1 piece" }).click();
+  await expect(form.getByRole("alert")).toHaveText("Enter the borrower's student ID number.");
+  await form.getByLabel(/Student ID number/).fill("test-0001");
+  await form.getByRole("button", { name: "Lend 1 piece" }).click();
+  await expect(form.getByRole("alert")).toHaveText("Add a photo of the hand-over.");
+  await form.locator("input[type=file]").setInputFiles(photo);
+  await expect(form.getByRole("img", { name: "Photo to attach" })).toBeVisible();
+  await form.getByRole("button", { name: "One more" }).click();
+  await form.getByRole("button", { name: "Lend 2 pieces" }).click();
+  await expect(page.getByText("Lent 2 pieces of Scissors to Test Borrower One.")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Loan · 1 out" })).toBeVisible();
+
+  await form.getByRole("radio", { name: "USC use" }).check();
+  await form.getByLabel("Name of the person using it").fill("Test Officer");
+  await form.locator("input[type=file]").setInputFiles(photo);
+  await form.getByRole("button", { name: "Lend 1 piece" }).click();
+  await expect(form.getByRole("alert")).toHaveText("Give the specific reason for USC use.");
+  await form.getByLabel("Specific reason").fill("Banner cutting for the general assembly");
+  await form.getByRole("button", { name: "Lend 1 piece" }).click();
+  await expect(page.getByText("Lent 1 piece of Scissors to Test Officer.")).toBeVisible();
+  await expect(page.locator("#item-loans")).toContainText("Test Borrower One");
+  await expect(page.locator("#item-loans")).toContainText("TEST-0001");
+  await page.getByRole("tab", { name: "Overview" }).click();
+  await expect(page.getByLabel("Quantity on hand")).toHaveValue("7");
+  await expect(page.locator("#quantity-context")).toContainText("3 more on loan");
+  await page.getByRole("tab", { name: "History" }).click();
+  await expect(page.locator("#history li").first()).toContainText("Lent out · Test Officer");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("link", { name: "Loans" }).click();
+  await expect(page.getByRole("heading", { name: "Loans", level: 1 })).toBeVisible();
+  await expect(page.locator("#loans-summary")).toContainText("2 loans out · 3 items");
+  const row = page.locator(".loan-row", { hasText: "Test Borrower One" });
+  await row.getByRole("button", { name: "Return" }).click();
+  const dialog = page.getByRole("dialog", { name: "Scissors" });
+  await expect(dialog.getByRole("img", { name: /Photo taken when it was lent/ })).toBeVisible();
+  await dialog.getByRole("radio", { name: "Damaged" }).check();
+  await dialog.getByRole("button", { name: "Mark damaged" }).click();
+  await expect(dialog.getByRole("alert")).toHaveText("Describe the damage.");
+  await dialog.getByLabel(/What happened/).fill("One blade bent");
+  await dialog.getByRole("button", { name: "Mark damaged" }).click();
+  await expect(page.getByText("Scissors marked damaged.")).toBeVisible();
+  await expect(page.locator("#loans-summary")).toContainText("1 loan out · 1 item");
+
+  await page.getByRole("button", { name: /^Borrowers/ }).click();
+  await expect(page.getByRole("heading", { name: "Individual use" })).toBeVisible();
+  const individual = page.locator(".leaderboard", { has: page.getByRole("heading", { name: "Individual use" }) });
+  await expect(individual).toContainText("Test Borrower One");
+  await expect(individual).toContainText("1 damaged or lost");
+  const usc = page.locator(".leaderboard", { has: page.getByRole("heading", { name: "USC use" }) });
+  await expect(usc).toContainText("Test Officer");
+  await expect(usc).toContainText("1 out now");
+  await page.getByRole("button", { name: /^Returned/ }).click();
+  await expect(page.locator(".loan-row").first()).toContainText("One blade bent");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });

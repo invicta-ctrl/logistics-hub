@@ -55,7 +55,9 @@ const ICONS = {
   refresh: "M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4",
   circle: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z",
   next: "M9 6l6 6-6 6",
-  filter: "M4 5h16l-6 7.5V18l-4 2v-7.5L4 5Z"
+  filter: "M4 5h16l-6 7.5V18l-4 2v-7.5L4 5Z",
+  camera: "M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-9ZM12 16a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5Z",
+  handoff: "M12 15V4M8 8l4-4 4 4M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12"
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -240,7 +242,8 @@ export class ApiError extends Error {
 export async function api<T>(url: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(url, { credentials: "same-origin", ...init, headers: { accept: "application/json", ...(init.body ? { "content-type": "application/json" } : {}), ...init.headers } });
+    // JSON bodies are strings; a FormData body sets its own multipart boundary.
+    response = await fetch(url, { credentials: "same-origin", ...init, headers: { accept: "application/json", ...(typeof init.body === "string" ? { "content-type": "application/json" } : {}), ...init.headers } });
   } catch {
     throw new ApiError(0, "You appear to be offline. Check your connection and try again.");
   }

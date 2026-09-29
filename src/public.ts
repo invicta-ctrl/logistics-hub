@@ -1,6 +1,6 @@
 import { CREST, MARK, type Html, animateNumber, app, categoryName, emptyState, html, icon, label, live, mount, onLeave, plural, preservingFocus, units, writeParams } from "./ui";
 
-type LendingItem = { id: string; name: string; category: string; unit: string; available: number; audience: string; maxPerLoan: number | null; loanDays: number | null };
+type LendingItem = { id: string; name: string; category: string; unit: string; available: number; audience: string };
 type Catalog = { revision: number; items: LendingItem[]; categories: string[] };
 type Sort = "name" | "available";
 
@@ -54,7 +54,7 @@ function availability(item: LendingItem): Html {
 }
 
 function terms(item: LendingItem): string {
-  return [label(item.audience), item.maxPerLoan ? `up to ${item.maxPerLoan} per loan` : "", item.loanDays ? `${item.loanDays}‑day loan` : ""].filter(Boolean).join(" · ");
+  return label(item.audience);
 }
 
 const skeletonRows = (count: number) => html`<ul class="catalogue" aria-hidden="true">${Array.from({ length: count }, () => html`<li class="catalogue__row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></li>`)}</ul>`;

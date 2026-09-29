@@ -1,5 +1,5 @@
 import { stockState } from "./catalog-policy";
-import { type Kind, bindMovementForm, movementFields, movementTitle, signed } from "./movement-form";
+import { type Preset, bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { loadSession, shell } from "./staff";
 import {
   type Html, api, categoryName, emptyState, expired, failure, formatDate, formatDateTime, formatTime, html, icon, label, live, mount,
@@ -66,7 +66,7 @@ export async function stockWorkspace(): Promise<void> {
       <div class="page-header__title"><h1>Stock &amp; Pantry</h1><p id="stock-today">Loading today's activity…</p></div>
       <div class="page-header__actions">
         <p class="live-status" id="live-status">Connecting…</p>
-        <button class="button button--primary record-open" type="button" data-record>${icon("plus")}Record movement</button>
+        <button class="button button--primary record-open" type="button" data-record>${icon("plus")}Update stock</button>
       </div>
     </header>
     <div class="stock-layout">
@@ -76,7 +76,7 @@ export async function stockWorkspace(): Promise<void> {
       </section>
       <aside class="record-home" id="record-home" aria-labelledby="record-title">
         <div class="record-panel" id="record-panel">
-          <h2 id="record-title" class="record-panel__title">Record movement</h2>
+          <h2 id="record-title" class="record-panel__title">Update stock</h2>
           <form id="record-form" class="form" novalidate>
             <div class="field">
               <label for="record-item">Item</label>
@@ -84,7 +84,7 @@ export async function stockWorkspace(): Promise<void> {
               <datalist id="record-items"></datalist>
             </div>
             <div class="record-card" id="record-card" aria-live="polite"><p class="muted">Choose an item to see what is on the shelf.</p></div>
-            ${movementFields("record")}
+            ${quantityEditor("record")}
           </form>
           <ol class="receipts" id="receipts" aria-label="Recorded this session"></ol>
         </div>
@@ -113,20 +113,20 @@ export async function stockWorkspace(): Promise<void> {
   const lent = createSheet(recordSheet, { onClose: () => home.append(panelNode) });
   const showRecord = () => {
     if (compact.matches) {
-      mount(recordSheet, sheetContent("Stock & Pantry", "Record movement", html``));
+      mount(recordSheet, sheetContent("Stock & Pantry", "Update stock", html``));
       recordSheet.querySelector(".sheet__body")!.append(panelNode);
       lent.open();
     }
-    (selected ? form.querySelector<HTMLInputElement>("input[name=quantity]")! : input).focus();
+    (selected ? form.querySelector<HTMLInputElement>("input[name=total]")! : input).focus();
   };
 
-  const movement = bindMovementForm(form, {
+  const movement = bindQuantityEditor(form, {
     target: () => selected,
-    onRecorded: async (target, kind, result) => {
-      receipts.unshift(html`<li><strong>${signed(result.change)}</strong> ${target.name} <span class="muted">· ${result.onHand - result.change} → ${result.onHand} ${units(result.onHand, target.unit)} · ${kind === "COUNT" ? "count" : "recorded"} ${formatTime(new Date().toISOString())}</span></li>`);
+    onRecorded: async (target, result, reason) => {
+      receipts.unshift(html`<li><strong>${signed(result.change)}</strong> ${target.name} <span class="muted">· ${result.onHand - result.change} → ${result.onHand} ${units(result.onHand, target.unit)} · ${label(reason).toLowerCase()} ${formatTime(new Date().toISOString())}</span></li>`);
       mount(document.querySelector("#receipts")!, html`${receipts.slice(0, 5)}`);
       await poll.refresh();
-      // Ready for the next entry: same movement type and reason, a fresh item.
+      // Ready for the next entry: a fresh item.
       select(null);
       input.value = "";
       input.focus();
@@ -152,16 +152,16 @@ export async function stockWorkspace(): Promise<void> {
   };
   input.addEventListener("input", () => {
     const item = findItem(input.value);
-    if (item?.id !== selected?.id) { movement.preset({ reorderId: null }); select(item); }
+    if (item?.id !== selected?.id) select(item);
   });
 
-  /** Prefills the panel from a row action: the item, the likely movement, and optionally a restock entry. */
-  function startRecord(itemId: string, kind: Kind, preset: { quantity?: number; reason?: string; reorderId?: string; context?: string } = {}): void {
+  /** Prefills the panel from a row action: the item, the likely change and reason, and optionally a restock entry. */
+  function startRecord(itemId: string, preset: Preset): void {
     const item = stock?.items.find((entry) => entry.id === itemId) ?? null;
     if (!item) return;
     input.value = `${item.name} · ${item.id}`;
     select(item);
-    movement.preset({ kind, reason: preset.reason ?? (kind === "IN" ? "DELIVERY" : undefined), quantity: preset.quantity, reorderId: preset.reorderId ?? null, context: preset.context });
+    movement.preset(preset);
     showRecord();
   }
 
@@ -185,7 +185,7 @@ export async function stockWorkspace(): Promise<void> {
         <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Why</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
         <tbody>${shown.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit)}${levelCell(item)}<td>${whyTags(item)}</td>
           <td class="col-actions"><span class="row-actions">
-            <button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-kind="${reasons(item)[0] === "count" ? "COUNT" : "IN"}">${reasons(item)[0] === "count" ? "Count" : "Stock in"}</button>
+            <button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="${reasons(item)[0] === "count" ? "COUNT" : "DELIVERY"}">${reasons(item)[0] === "count" ? "Count" : "Stock in"}</button>
             ${item.reorderStatus ? "" : html`<button type="button" class="button button--ghost button--sm" data-restock="${item.id}">Add to restock</button>`}
           </span></td></tr>`)}</tbody></table></div>`
         : emptyState(focus === "all" ? "Nothing needs attention" : `No items: ${FOCUS[focus as keyof typeof FOCUS]}`, focus === "all" ? "Every active item is in stock, above its reorder level, counted where needed, and not near expiry." : "Try another filter.")}`;
@@ -227,7 +227,7 @@ export async function stockWorkspace(): Promise<void> {
       <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Expiry</th><th scope="col">Status</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
       <tbody>${pantry.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit)}${levelCell(item)}<td>${expiryTag(item)}</td>
         <td>${stockState(item) === "OUT" ? html`<span class="tag tag--bad">Out of stock</span>` : stockState(item) === "LOW" ? html`<span class="tag tag--warn">Low stock</span>` : html`<span class="tag tag--ok">In stock</span>`}</td>
-        <td class="col-actions"><span class="row-actions"><button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-kind="OUT">Use</button><button type="button" class="button button--ghost button--sm" data-record-item="${item.id}" data-kind="IN">Restock</button></span></td></tr>`)}</tbody></table></div>`;
+        <td class="col-actions"><span class="row-actions"><button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="CONSUMED" data-delta="-1">Use</button><button type="button" class="button button--ghost button--sm" data-record-item="${item.id}" data-reason="DELIVERY">Restock</button></span></td></tr>`)}</tbody></table></div>`;
   }
 
   function activityMarkup(data: Stock): Html {
@@ -310,14 +310,14 @@ export async function stockWorkspace(): Promise<void> {
     const range = target.closest<HTMLButtonElement>("[data-range]");
     if (range) { todayOnly = range.dataset.range === "today"; render(); return; }
     const record = target.closest<HTMLButtonElement>("[data-record-item]");
-    if (record) return startRecord(record.dataset.recordItem!, record.dataset.kind as Kind, record.dataset.kind === "OUT" ? { reason: "CONSUMED" } : {});
+    if (record) return startRecord(record.dataset.recordItem!, { reason: record.dataset.reason, delta: record.dataset.delta ? Number(record.dataset.delta) : undefined });
     const add = target.closest<HTMLButtonElement>("[data-restock]");
     if (add) return void restock(add.dataset.restock!);
     const receive = target.closest<HTMLButtonElement>("[data-receive]");
     const reorderOf = (id: string | undefined) => stock?.reorders.find((entry) => entry.id === id);
     if (receive) {
       const reorder = reorderOf(receive.dataset.receive);
-      if (reorder) startRecord(reorder.itemId, "IN", { quantity: reorder.desiredQuantity ?? undefined, reorderId: reorder.id, reason: "DELIVERY", context: `Receiving the restock of ${reorder.itemName}. Recording it closes the entry.` });
+      if (reorder) startRecord(reorder.itemId, { delta: reorder.desiredQuantity ?? undefined, reorderId: reorder.id, reason: "DELIVERY", context: `Receiving the restock of ${reorder.itemName}. Saving the added stock closes the entry.` });
       return;
     }
     const status = target.closest<HTMLButtonElement>("[data-status]");
