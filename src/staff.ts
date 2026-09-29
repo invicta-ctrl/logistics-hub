@@ -1,5 +1,5 @@
 import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, listingGaps } from "./catalog-policy";
-import { ApiError, MARK, type Html, animateNumber, api, app, categoryName, emptyState, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, reducedMotion, toast, units, writeParams } from "./ui";
+import { ApiError, MARK, type Html, animateNumber, api, app, categoryName, emptyState, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
@@ -192,7 +192,7 @@ export function staffLogin(): void {
 function tags(item: Item): Html {
   const list: Html[] = [];
   if (item.listed) list.push(html`<span class="tag tag--ok">On Lending Hub</span>`);
-  if (item.needsReview) list.push(html`<span class="tag tag--warn">Needs review</span>`);
+  if (item.needsReview) list.push(html`<span class="tag tag--pending">Needs review</span>`);
   if (item.status !== "ACTIVE") list.push(html`<span class="tag ${item.status === "VERIFY" ? "tag--warn" : ""}">${label(item.status)}</span>`);
   if (item.onHand <= 0) list.push(html`<span class="tag tag--bad">Out of stock</span>`);
   else if (isLow(item)) list.push(html`<span class="tag tag--warn">Low stock</span>`);
@@ -245,22 +245,24 @@ export async function workspace(): Promise<void> {
   document.title = "Inventory · Staff workspace";
   shell(session, "inventory", html`
       <header class="page-header">
-        <div>
+        <div class="page-header__title">
           <h1>Inventory</h1>
-          <p>Quantities come from the movement ledger. Every change is recorded under your name.</p>
+          <div class="review-meter" id="review-meter" hidden></div>
         </div>
         <div class="page-header__actions">
           <p class="live-status" id="live-status">Connecting…</p>
           <button class="button button--primary" type="button" id="new-item">${icon("plus")}New item</button>
         </div>
       </header>
-      <div class="review-meter" id="review-meter" hidden></div>
       <div class="views" id="views" role="group" aria-label="Inventory views"></div>
       <div class="table-toolbar">
         <label class="search-field">${icon("search")}<span class="visually-hidden">Search inventory</span><input id="inventory-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search name, other name, ID, category, location" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
-        <div class="select-field"><label class="visually-hidden" for="filter-category">Category</label><select id="filter-category"></select></div>
-        <div class="select-field"><label class="visually-hidden" for="filter-location">Location</label><select id="filter-location"></select></div>
-        <div class="select-field select-field--narrow"><label class="visually-hidden" for="filter-type">Type</label><select id="filter-type"></select></div>
+        <button class="button button--secondary filters-toggle" type="button" id="filters-toggle" aria-expanded="false" aria-controls="table-filters">${icon("filter")}<span>Filters</span></button>
+        <div class="table-filters" id="table-filters">
+          <div class="select-field"><label class="visually-hidden" for="filter-category">Category</label><select id="filter-category"></select></div>
+          <div class="select-field"><label class="visually-hidden" for="filter-location">Location</label><select id="filter-location"></select></div>
+          <div class="select-field select-field--narrow"><label class="visually-hidden" for="filter-type">Type</label><select id="filter-type"></select></div>
+        </div>
         <p class="table-toolbar__count" id="inventory-count" aria-live="polite"></p>
       </div>
       <div id="inventory-results" aria-busy="true">${tableSkeleton()}</div>
@@ -342,6 +344,8 @@ export async function workspace(): Promise<void> {
     fillSelect(selects.category, "All categories", inventory.categories.map((value) => [value, categoryName(value)]), filters.category);
     fillSelect(selects.location, "All locations", [[NO_LOCATION, "No location set"], ...inventory.locations.map((value): [string, string] => [value, value])], filters.location);
     fillSelect(selects.type, "All types", ITEM_TYPES.map((value) => [value, label(value)]), filters.type);
+    const active = Object.values(filters).filter(Boolean).length;
+    document.querySelector("#filters-toggle span")!.textContent = active ? `Filters (${active})` : "Filters";
     const query = search.value.trim().toLowerCase();
     const shown = items.filter((item) => VIEWS[view].test(item)
       && (!filters.category || item.category === filters.category)
@@ -398,6 +402,14 @@ export async function workspace(): Promise<void> {
   search.addEventListener("input", () => { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(render, 120); });
   search.addEventListener("keydown", (event) => { if (event.key === "Escape" && search.value) { search.value = ""; render(); } });
   for (const [key, select] of Object.entries(selects)) select.addEventListener("change", () => { filters = { ...filters, [key]: select.value }; render(); });
+  // On phones the three filters fold behind one button instead of stacking above the list.
+  const filtersToggle = document.querySelector<HTMLButtonElement>("#filters-toggle")!;
+  filtersToggle.addEventListener("click", () => {
+    const open = filtersToggle.getAttribute("aria-expanded") !== "true";
+    filtersToggle.setAttribute("aria-expanded", String(open));
+    document.querySelector("#table-filters")!.classList.toggle("is-open", open);
+    if (open) selects.category.focus();
+  });
   document.querySelector("#clear-search")!.addEventListener("click", () => { search.value = ""; render(); search.focus(); });
   // Arrow keys move between rows; Home/End jump to the ends; Enter opens (native button).
   results.addEventListener("keydown", (event) => {
@@ -445,46 +457,22 @@ export async function workspace(): Promise<void> {
 
   /* ---------- Item sheet ---------- */
 
-  /** Plays the exit animation before closing, so the sheet leaves the way it arrived. */
-  const closeSheet = () => {
-    if (!sheet.open || sheet.classList.contains("is-closing")) return;
-    if (reducedMotion()) return sheet.close();
-    sheet.classList.add("is-closing");
-    // Only the sheet's own exit animation ends the close; child animations bubble here too.
-    const finish = (event?: AnimationEvent) => {
-      if (event && event.target !== sheet) return;
-      sheet.removeEventListener("animationend", finish);
-      window.clearTimeout(fallback);
-      sheet.classList.remove("is-closing");
-      sheet.close();
-    };
-    const fallback = window.setTimeout(finish, 400);
-    sheet.addEventListener("animationend", finish);
-  };
-  const discardOk = () => !dirty || window.confirm("Discard your unsaved changes to this item?");
-  const requestClose = () => { if (discardOk()) closeSheet(); };
-  sheet.addEventListener("cancel", (event) => { event.preventDefault(); requestClose(); });
-  sheet.addEventListener("click", (event) => { if (event.target === sheet) requestClose(); });
-  sheet.addEventListener("close", () => {
-    const closedId = openId;
-    openId = null;
-    detail = null;
-    dirty = false;
-    sheet.innerHTML = "";
-    writeParams({ item: null });
-    const closedRow = document.querySelector(`tr[data-key="${CSS.escape(closedId ?? "")}"]`);
-    closedRow?.classList.remove("is-open");
-    closedRow?.querySelector<HTMLButtonElement>(".row-link")?.focus({ preventScroll: true });
+  const panel = createSheet(sheet, {
+    dirty: () => dirty,
+    onClose: () => {
+      document.querySelector(`tr[data-key="${CSS.escape(openId ?? "")}"]`)?.classList.remove("is-open");
+      openId = null;
+      detail = null;
+      dirty = false;
+      writeParams({ item: null });
+    }
   });
-  onLeave(() => { dirty = false; if (sheet.open) sheet.close(); });
+  const discardOk = panel.discardOk;
+  const closeSheet = () => panel.close(true);
+  onLeave(() => { dirty = false; });
 
   function sheetShell(kicker: Html | string, title: string, body: Html): void {
-    mount(sheet, html`<header class="sheet__header">
-        <div><p class="sheet__kicker">${kicker}</p><h2 id="sheet-title">${title}</h2></div>
-        <button class="icon-button" type="button" aria-label="Close" data-close>${icon("close")}</button>
-      </header>
-      <div class="sheet__body">${body}</div>`);
-    sheet.querySelector("[data-close]")!.addEventListener("click", requestClose);
+    mount(sheet, sheetContent(kicker, title, body));
   }
 
   function openItem(id: string, tab: Tab = "overview"): void {
@@ -497,7 +485,7 @@ export async function workspace(): Promise<void> {
     writeParams({ item: id });
     const item = inventory?.items.find((entry) => entry.id === id);
     sheetShell(id, item?.name ?? "Loading…", html`<div class="skeleton skeleton--block"></div>`);
-    if (!sheet.open) sheet.showModal();
+    panel.open();
     void loadDetail(id, tab);
   }
 
@@ -547,6 +535,10 @@ export async function workspace(): Promise<void> {
     const origin = item.importedFrom === "LOGISTICS_HUB" ? "Created in the Logistics Hub" : item.legacySourceSheet ? `Migrated from the legacy system · ${categoryName(item.legacySourceSheet)}, row ${item.legacySourceRow ?? "?"}` : "Migrated from the legacy system";
     return html`
       <div class="quantity" id="quantity">${quantityMarkup(item)}</div>
+      <section aria-labelledby="stock-title" class="stock">
+        <h3 id="stock-title" class="section-label">Record stock</h3>
+        ${stockFormMarkup()}
+      </section>
       ${delta !== 0 ? html`<div class="callout">${icon("info")}<p><strong>Migration evidence.</strong> At migration the legacy snapshot reported ${item.legacyReportedAvailable} ${units(item.legacyReportedAvailable ?? 0, item.unit)}, but the migrated movement ledger derives ${item.migratedOnHand}. The difference is preserved as recorded, not guessed. Once a physical count confirms the real figure, record it with a Count.</p></div>` : ""}
       ${item.verificationNote ? html`<div class="callout">${icon("alert")}<p><strong>Verify:</strong> ${item.verificationNote}</p></div>` : ""}
       ${item.needsReview ? html`<section class="card card--review" aria-labelledby="review-title">
@@ -567,10 +559,6 @@ export async function workspace(): Promise<void> {
         ${gaps.length
           ? html`<p class="card__text">Still needed before it can be listed:</p>${checklist(gaps.map((gap) => [gap, false]))}`
           : html`<p class="card__text">${label(item.lendingAudience)}${item.maximumLoanQty ? ` · up to ${item.maximumLoanQty} per loan` : ""}${item.defaultLoanDays ? ` · ${item.defaultLoanDays}-day loan` : ""}. Students see live availability.</p>`}
-      </section>
-      <section aria-labelledby="stock-title" class="stock">
-        <h3 id="stock-title" class="section-label">Record stock</h3>
-        ${stockFormMarkup()}
       </section>
       <p class="provenance">${origin}</p>`;
   }
@@ -895,7 +883,7 @@ export async function workspace(): Promise<void> {
     detail = null;
     writeParams({ item: null });
     sheetShell("New item", "Add an item", detailsFormMarkup({ needsReview: false }, true));
-    if (!sheet.open) sheet.showModal();
+    panel.open();
     bindDetailsForm({ needsReview: false });
     sheet.querySelector<HTMLInputElement>("#f-name")!.focus();
   }

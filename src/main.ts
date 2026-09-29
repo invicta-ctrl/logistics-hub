@@ -10,6 +10,7 @@ import { staffLogin, workspace } from "./staff";
 import { leave, navigate, reducedMotion, toast } from "./ui";
 
 function render(): void {
+  rendered = window.location.pathname + window.location.search;
   leave();
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   if (path === "/") landing();
@@ -55,7 +56,10 @@ window.addEventListener("unhandledrejection", (event) => {
 
 // Route changes cross-fade with the View Transitions API where supported; the
 // first paint and reduced-motion users get an instant swap.
+// A same-page #fragment jump also fires popstate; only a new path or query is a new view.
+let rendered = "";
 window.addEventListener("popstate", () => {
+  if (window.location.pathname + window.location.search === rendered) return;
   if (!document.startViewTransition || reducedMotion()) return render();
   document.startViewTransition(render);
 });

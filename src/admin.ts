@@ -1,5 +1,5 @@
 import { type Role, ROLE_LABELS, type Session, failure, loadSession, setMessage, shell } from "./staff";
-import { type Html, api, emptyState, formatDateTime, html, icon, mount, navigate, onLeave, plural, reducedMotion, toast } from "./ui";
+import { type Html, api, emptyState, formatDateTime, html, icon, mount, navigate, plural, sheet as createSheet, sheetContent, toast } from "./ui";
 
 type Row = { id: string; username: string; displayName: string; role: Role; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number };
 type Event = { at: string; action: string; actor: string | null; details: Record<string, { from?: unknown; to?: unknown } | unknown> };
@@ -7,7 +7,7 @@ type Event = { at: string; action: string; actor: string | null; details: Record
 // Mirrors the server rules purely to show the right controls; the server decides.
 const canManage = (actor: Session, target: Pick<Row, "role">) => actor.role === "OWNER" || (actor.role === "ADMIN" && target.role === "STAFF");
 const assignable = (actor: Session): Role[] => actor.role === "OWNER" ? ["STAFF", "ADMIN", "OWNER"] : ["STAFF"];
-const roleTag = (role: Role) => html`<span class="tag ${role === "OWNER" ? "tag--brand" : role === "ADMIN" ? "tag--warn" : ""}">${ROLE_LABELS[role]}</span>`;
+const roleTag = (role: Role) => html`<span class="tag ${role === "OWNER" ? "tag--brand" : role === "ADMIN" ? "tag--gold" : ""}">${ROLE_LABELS[role]}</span>`;
 
 /** A secret shown exactly once, with copy, and an explicit instruction. */
 function oneTime(label: string, value: string, note: string): Html {
@@ -64,14 +64,8 @@ export async function administration(): Promise<void> {
   const sheet = document.querySelector<HTMLDialogElement>("#sheet")!;
   let rows: Row[] = [];
   bindCopy(sheet);
-  onLeave(() => { if (sheet.open) sheet.close(); });
-  sheet.addEventListener("click", (event) => { if (event.target === sheet) close(); });
-  const close = () => {
-    if (!sheet.open) return;
-    if (reducedMotion()) return sheet.close();
-    sheet.classList.add("is-closing");
-    window.setTimeout(() => { sheet.classList.remove("is-closing"); sheet.close(); }, 200);
-  };
+  const panel = createSheet(sheet);
+  const close = () => panel.close(true);
 
   async function load(): Promise<void> {
     try {
@@ -97,9 +91,8 @@ export async function administration(): Promise<void> {
   }
 
   function sheetShell(kicker: string, title: string, body: Html): void {
-    mount(sheet, html`<header class="sheet__header"><div><p class="sheet__kicker">${kicker}</p><h2 id="sheet-title">${title}</h2></div><button class="icon-button" type="button" aria-label="Close" data-close>${icon("close")}</button></header><div class="sheet__body">${body}</div>`);
-    sheet.querySelector("[data-close]")!.addEventListener("click", close);
-    if (!sheet.open) sheet.showModal();
+    mount(sheet, sheetContent(kicker, title, body));
+    panel.open();
   }
 
   const passwordFields = (prefix: string) => html`<fieldset class="segmented segmented--2"><legend class="visually-hidden">Password</legend>
@@ -131,8 +124,7 @@ export async function administration(): Promise<void> {
         const result = await api<{ username: string; generatedPassword: string | null }>("/api/staff/admin/accounts", { method: "POST", body: JSON.stringify({ displayName: values.get("displayName"), username: values.get("username"), role: values.get("role"), ...passwordPayload(form, "c") }) });
         form.hidden = true;
         mount(sheet.querySelector("#create-result")!, html`${result.generatedPassword ? oneTime(`Temporary password for ${result.username}`, result.generatedPassword, "Shown once and never stored. Give it to them privately; they must choose their own password at first sign-in.") : html`<p class="callout">${icon("check")}<span>Account created. They must replace the temporary password at first sign-in.</span></p>`}
-          <div class="form-actions"><button type="button" class="button button--secondary" data-close-done>Done</button></div>`);
-        sheet.querySelector("[data-close-done]")!.addEventListener("click", close);
+          <div class="form-actions"><button type="button" class="button button--secondary" data-close>Done</button></div>`);
         toast(`Account ${result.username} created.`);
         await load();
       } catch (error) { setMessage(sheet.querySelector("#create-alert")!, failure(error)); }

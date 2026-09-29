@@ -87,7 +87,7 @@ export function landing(): void {
           <p class="hero__lede">The Department of Logistics supports the people and materials behind University Student Council work, and lends equipment to students and USC staff.</p>
           <div class="hero__actions">
             <a class="button button--gold button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
-            <a class="button button--outline-light button--lg" href="/staff" data-route>Staff sign in</a>
+            <a class="text-link text-link--light hero__secondary" href="#steps-title">How borrowing works</a>
           </div>
         </div>
         <figure class="hero__banner"><img src="/brand/ydd-2026-banner.jpg" alt="Siglawang: Yabong ng Pamana, Youth Development Day 2026" width="960" height="356" fetchpriority="high" /></figure>
@@ -102,31 +102,13 @@ export function landing(): void {
           <li><span class="steps__n">2</span><h3>Visit the Department</h3><p>Speak with Department of Logistics staff. Loans are arranged in person; online requests are not open yet.</p></li>
           <li><span class="steps__n">3</span><h3>Borrow and return</h3><p>Staff record the loan and its return date with you, so the next person sees accurate availability.</p></li>
         </ol>
+        <div class="steps__foot">
+          <a class="button button--primary" href="/lending" data-route>Open the Lending Hub ${icon("arrow")}</a>
+          <p class="notice"><strong>Logistics requests</strong> for events are <span class="notice__status">Not yet available</span> online. Contact the Department of Logistics directly.</p>
+        </div>
       </div>
     </section>
 
-    <section class="section section--alt reveal" aria-labelledby="offer-title">
-      <div class="container split">
-        <h2 id="offer-title" class="section__title">What the Department offers</h2>
-        <ul class="offers">
-          <li class="offer">
-            <h3>Lending Hub</h3>
-            <p>Equipment approved for lending, with how many are on the shelf right now.</p>
-            <a class="text-link" href="/lending" data-route>Browse items ${icon("arrow")}</a>
-          </li>
-          <li class="offer">
-            <h3>Staff workspace</h3>
-            <p>Department staff keep the catalog, record stock movements, and decide what appears publicly.</p>
-            <a class="text-link" href="/staff" data-route>Staff sign in ${icon("arrow")}</a>
-          </li>
-          <li class="offer offer--muted">
-            <h3>Logistics requests</h3>
-            <p>Online requests for event logistics are not open yet. Contact the Department of Logistics directly in the meantime.</p>
-            <p class="offer__status">Not yet available</p>
-          </li>
-        </ul>
-      </div>
-    </section>
   </main>`, "home");
 }
 

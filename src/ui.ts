@@ -54,7 +54,8 @@ const ICONS = {
   pin: "M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21ZM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z",
   refresh: "M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4",
   circle: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z",
-  next: "M9 6l6 6-6 6"
+  next: "M9 6l6 6-6 6",
+  filter: "M4 5h16l-6 7.5V18l-4 2v-7.5L4 5Z"
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -140,6 +141,60 @@ export function animateNumber(element: Element | null, to: number, from = Number
     if (progress < 1) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
+}
+
+/* ---------- Sheets ---------- */
+
+/** The shared sheet frame: kicker, title, close button, scrolling body. */
+export function sheetContent(kicker: Html | string, title: string, body: Html): Html {
+  return html`<header class="sheet__header">
+      <div><p class="sheet__kicker">${kicker}</p><h2 id="sheet-title">${title}</h2></div>
+      <button class="icon-button" type="button" aria-label="Close" data-close>${icon("close")}</button>
+    </header>
+    <div class="sheet__body">${body}</div>`;
+}
+
+export type Sheet = { open: () => void; close: (force?: boolean) => void; discardOk: () => boolean };
+
+/**
+ * The one sheet behaviour (side panel on desktop, bottom sheet on phones): modal open,
+ * Escape and backdrop close, an optional unsaved-changes guard, an exit animation, and
+ * focus returned to whatever opened it.
+ */
+export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolean; onClose?: () => void } = {}): Sheet {
+  let opener: HTMLElement | null = null;
+  const discardOk = () => !options.dirty?.() || window.confirm("Discard your unsaved changes?");
+  const close = (force = false) => {
+    if (!dialog.open || dialog.classList.contains("is-closing") || (!force && !discardOk())) return;
+    if (reducedMotion()) return dialog.close();
+    dialog.classList.add("is-closing");
+    // Only the dialog's own exit animation ends the close; child animations bubble here too.
+    const finish = (event?: AnimationEvent) => {
+      if (event && event.target !== dialog) return;
+      dialog.removeEventListener("animationend", finish);
+      window.clearTimeout(fallback);
+      dialog.classList.remove("is-closing");
+      dialog.close();
+    };
+    const fallback = window.setTimeout(finish, 400);
+    dialog.addEventListener("animationend", finish);
+  };
+  dialog.addEventListener("cancel", (event) => { event.preventDefault(); close(); });
+  dialog.addEventListener("click", (event) => {
+    if (event.target === dialog || (event.target as HTMLElement).closest("[data-close]")) close();
+  });
+  dialog.addEventListener("close", () => {
+    dialog.innerHTML = "";
+    options.onClose?.();
+    if (opener?.isConnected) opener.focus({ preventScroll: true });
+    opener = null;
+  });
+  onLeave(() => { if (dialog.open) dialog.close(); });
+  return {
+    open: () => { if (!dialog.open) { opener = document.activeElement as HTMLElement | null; dialog.showModal(); } },
+    close,
+    discardOk
+  };
 }
 
 /* ---------- Feedback ---------- */
