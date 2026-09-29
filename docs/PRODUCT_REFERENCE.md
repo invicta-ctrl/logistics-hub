@@ -59,33 +59,44 @@ The table shows ID, item (with type and other names), category, location, on-han
 
 **Review progress** sits in the compact page header: "N of 397 records reviewed". "Needs review" is a neutral marker, not a warning colour.
 
-**Item sheet** (a side sheet on desktop, a bottom sheet on phones), in three tabs:
+**Item sheet** (a side sheet on desktop, a bottom sheet on phones), in up to four tabs:
 - **Overview:**
-  - on-hand quantity against the reorder level;
-  - migration evidence and verification notes;
-  - the review checklist;
-  - Lending Hub status that says exactly what is missing (`listingGaps()`);
-  - Record stock first (Stock in, Stock out, Count), then the facts and where the record came from.
+  - **the quantity editor** first: the on-hand figure itself is the input. Staff change it (type a new total, type +5 or −2, use − / +, or arrow keys) and must pick a **reason** before it saves: for an increase, new stock received, returned, donation, physical count or other; for a decrease, consumed or used, given out, damaged, missing, transferred, physical count or other ("Other" needs a note). "Confirm a physical count" logs a count that matches. The Worker records the difference as a Stock in, Stock out or Count;
+  - the reorder level, low or out-of-stock state, and how many more are out on loan;
+  - migration evidence and verification notes; the review checklist;
+  - Lending Hub status that says exactly what is missing (`listingGaps()`), then the facts and where the record came from.
+- **Loan** (Loanable items only): lend this item, see what is out now, and return it (see Loans below). The tab shows how many loans are out.
 - **Review & edit / Edit details:**
-  - **Catalog:** name, other names, category, type, unit, location, notes;
+  - **Catalog:** name, other names, category and unit (typed freely; an existing spelling is reused regardless of letter case), type (**Loanable** or **Consumable**; *Unclassified* appears only while a migrated record still is), location, notes;
   - **Inventory settings:** status (Active, Verify, Inactive), reorder level, stock area (Inventory or Pantry) and, for pantry items, an optional earliest expiry;
-  - **Lending:** who may borrow, loan period, maximum per loan;
+  - **Public Lending Hub:** who it is shown to (there is no loan period or maximum per loan);
   - a "Details reviewed and verified" box;
   - "Mark reviewed & next", which walks the current filtered list.
-- **History:** stock movements and catalog changes merged in one timeline, written as sentences with the actor and the time (never raw JSON).
+- **History:** stock movements (including lent out and returned from loan, with the borrower) and catalog changes merged in one timeline, written as sentences with the actor and the time (never raw JSON).
 
 **New item:** the Worker generates the ID (`ITM-####`). The opening quantity becomes the first movement. A duplicate name is warned about but not blocked.
 
 ### Stock & Pantry (`/staff/stock`)
 
 Daily quantity work over the same items and ledger (Inventory stays the catalog workspace).
-- **Header:** today's movement count and who recorded the last one; one "Record movement" action.
+- **Header:** today's movement count and who recorded the last one; one "Update stock" action.
 - **Needs attention:** one list with filter chips (Out of stock, Low stock, Needs count, Expiring). Each row says why, and offers the next action (Stock in or Count, Add to restock). Items without a reorder level are never called low; a hint says how many have none.
 - **Restock list:** a lightweight replenishment list, not procurement: restock quantity, Needs restock → Planned, **Receive** (records a Stock in that closes the entry) or Dismiss; suggestions from reorder levels; closed entries from the last two weeks.
 - **Pantry:** items whose stock area is Pantry (a catalog field; 10 food and kitchen items migrated), with reorder level, optional earliest expiry (Expired, or expiring within 14 days) and quick Use and Restock actions.
 - **Activity:** today's or recent staff movements, each with the change, before → after, reason, actor and time.
-- **Record movement:** item search (name or ID), Stock in, Stock out or Count, quantity with a live before → after preview, reason (Stock in: delivery or purchase, returned, donation, other; Stock out: consumed, issued, damaged, missing, transferred, other; Other needs a note), and note. After recording, the movement type and reason stay and the item field is ready for the next entry; a session list shows what was just recorded. A sticky panel on desktop; a bottom sheet on phones and tablets.
-- The same movement form is used in the Inventory item sheet (`src/movement-form.ts`).
+- **Update stock:** item search (name or ID), then the same quantity editor as the item sheet (`src/movement-form.ts`). Row actions preset it: Stock in suggests "new stock received", Count opens a physical count, Use removes one as consumed, Receive adds the restock quantity and closes the restock entry. After saving, the item field is ready for the next entry, and a session list shows what was just recorded. A sticky panel on desktop; a bottom sheet on phones and tablets.
+
+### Loans (`/staff/loans`)
+
+Internal lending, recorded by staff (the public Lending Hub still only shows availability).
+- **Lending** happens from an item's **Loan** tab or from **Lend an item** on this page (item search, then the same form, `src/loan-form.ts`):
+  - **Individual use:** borrower's full name, **student ID number** and a **photo** are required;
+  - **USC use:** the name of the person using it, a **photo** and a **specific reason** are required; the student ID is optional;
+  - quantity (up to what is on the shelf) and an optional return-by date. The photo is taken or chosen on the device, shrunk to 1600 px JPEG in the browser, and kept in R2. A returning student's name fills in from their ID.
+- **Out now:** every open loan, overdue first (a return-by date before today, Manila time), with who, what, since when, the reason, and **Return**.
+- **Return** shows the hand-over photo and asks how it came back: **returned in good condition** (back on the shelf), **damaged** or **lost or not returned** (both stay off the shelf and need a note).
+- **Borrowers:** for the last 30 days, 12 months or all time: loans (split individual and USC), items lent, distinct borrowers, damaged or lost; the **top borrowers ranked separately for Individual use and USC use** (loans, items, out now, damaged or lost); and the most borrowed items. A borrower is their student ID when known, otherwise their name.
+- **Returned:** the 100 most recent closed loans with their outcome and notes. Search covers name, student ID, item and reason.
 
 ### Administration and My account
 - **Administration (`/staff/admin`, ADMIN and OWNER only):** the accounts table, create, manage (profile, role, reset, sign out everywhere, enable or disable), and security activity.
@@ -95,7 +106,7 @@ Daily quantity work over the same items and ledger (Inventory stays the catalog 
 ## Roles
 | Role | Can |
 | --- | --- |
-| STAFF | Everything in Inventory, Catalog and Stock & Pantry, and their own account |
+| STAFF | Everything in Inventory, Catalog, Stock & Pantry and Loans, and their own account |
 | ADMIN | STAFF, plus managing STAFF accounts |
 | OWNER | Everything, including roles, other owners and the recovery key |
 
@@ -107,7 +118,7 @@ Every rule is enforced by the Worker (`src/accounts.ts`, `src/worker.ts`). The b
 | 1 YDD Gateway + Foundation | Landing, fail-closed Lending Hub, staff auth and roles, owner recovery, movement ledger, live refresh | **Complete** — local + GitHub verified 2026-09-29 |
 | 2 Inventory + Catalog | Complete item management, search, views, classification, locations, reorder settings, lending readiness, migrated review, history | **Complete** — local + GitHub verified 2026-09-29 |
 | 3 Stock + Pantry | Stock workspace, movement reasons, counts, low stock, restock list, pantry, optional expiry, activity; whole-product polish | **Complete** — local + GitHub verified; production D1 migrated 2026-09-29 |
-| 4 Lending | Borrowers (STUDENT or USC_STAFF), multi-item loans, due and return, damage and loss, photo evidence (R2) | Planned |
+| 4 Lending | Internal loans by purpose (Individual use with student ID, USC use with reason), photo evidence (R2), return / damaged / lost, overdue, borrower rankings; quantity editor with required reasons; two item types | **Verified on the slice** — merge waits for migration 0014 and the R2 bucket in production |
 | 5 Activity + Accountability | Full activity center and safe exports | Planned |
 | 6 Admin + Hardening | System settings, backups, final production hardening | Planned |
 
@@ -121,21 +132,24 @@ Each Part must work end to end without depending on a later Part.
 - **Low stock needs a reorder level** (`stockState()` in `src/catalog-policy.ts`, shared by Worker and browser). "Needs count" marks items whose legacy quantity is doubtful (a migration discrepancy or a VERIFY record) until a count is recorded in the Hub.
 - **The restock list never holds stock.** `reorders` stores status, restock quantity and note; at most one open entry per item. An entry becomes Restocked only through the Stock in that received it, in the same batch. No suppliers, quotes or purchase orders.
 - **Pantry is a view,** not a separate inventory: `items.stock_area = 'Pantry'`. Expiry is one optional earliest date per item, not lots or batches.
+- **A loan never stores quantity.** Lending writes a LOAN_OUT movement (refused if it would drive stock negative; idempotent), and only a good return writes LOAN_RETURN. Damaged or lost items stay off the shelf. Overdue is derived from the return-by date. Each loan keeps its purpose, borrower, student ID or reason, and the R2 key of its photo.
+- **A quantity edit is guarded.** The editor sends the figure it showed (`expectedOnHand`); if someone else changed the item meanwhile, the save is refused with the new figure instead of overwriting it.
+- **Two item types.** Loanable (comes back) or Consumable (used up). Migration 0014 reclassified the 112 legacy "Saleable" records as Consumable, with the change in each item's history.
 - **Catalog edits never touch quantity history.**
   - Edits carry the version the editor loaded (`updatedAt`), and a stale edit gets `409` instead of silently overwriting.
-  - Categories and locations reuse the stored spelling of an existing value that matches regardless of case or spacing.
+  - Categories, units and locations reuse the stored spelling of an existing value that matches regardless of case or spacing.
   - Nothing with history is deleted; items are made Inactive.
 - **Lending is fail-closed.** An item is public only when it is Active, reviewed, type Loanable, and has an audience. `listingGaps()` in `src/catalog-policy.ts` is the single source of that rule. Migrated Loanable items are never auto-published.
 - **Migration evidence stays visible.** ITM-0001 derives 7 from the ledger while the legacy system reported 8 (delta −1). It is shown to staff, not corrected.
-- **Audit.** `audit_log` records who changed what and when, with no passwords, hashes, keys or tokens. The events are ITEM_CREATED, ITEM_UPDATED (as a field diff) and REORDER_OPENED/UPDATED/RESTOCKED on the item, plus account and recovery events.
-- **Privacy.** The public repository holds no staff or borrower PII, credentials, provider IDs or private exports (`npm run verify:privacy`).
+- **Audit.** `audit_log` records who changed what and when, with no passwords, hashes, keys or tokens. The events are ITEM_CREATED, ITEM_UPDATED (as a field diff), REORDER_OPENED/UPDATED/RESTOCKED and LOAN_CREATED/LOAN_CLOSED on the item, plus account and recovery events.
+- **Privacy.** The public repository holds no staff or borrower PII, credentials, provider IDs or private exports (`npm run verify:privacy`). Borrower names, student IDs and photos live only in D1 and R2 and are served only to signed-in staff; photo keys are loan IDs.
 
 ## Architecture
 - **Front end:** semantic HTML, CSS and TypeScript modules built by Vite. There is no SPA framework; routing is a small client router over `data-route` links.
 - **Worker:** one Cloudflare Worker, `logistics-hub` (`src/worker.ts`), serves the API and the static assets (`run_worker_first`). The public address is `https://logistics.hausc.org`; the `logistics-hub.<account>.workers.dev` address also works. It sets strict security headers and a `'self'`-only CSP.
-- **Data:** D1 `logistics-hub` (binding `DB`) with migrations `0001`–`0013`. R2 is reserved for Part 4 evidence.
-- **Staff APIs:** `/api/staff/inventory` and `/api/staff/stock` (both revisioned), `/api/staff/items/:id` and `…/movements`, `/api/staff/reorders` (POST) and `/api/staff/reorders/:id` (PATCH), plus account and admin routes.
-- **Live refresh:** the `catalog_revision` counter plus ETag/304 polling (public every 15 s, staff Inventory and Stock every 10 s), which pauses in hidden tabs. Stock and restock writes bump the revision, so Inventory, Stock, the item sheet and the Lending Hub all follow.
+- **Data:** D1 `logistics-hub` (binding `DB`) with migrations `0001`–`0014`. R2 bucket `logistics-hub-evidence` (binding `EVIDENCE`) holds loan photos, streamed only through the Worker to signed-in staff.
+- **Staff APIs:** `/api/staff/inventory`, `/api/staff/stock` and `/api/staff/loans` (all revisioned), `/api/staff/items/:id`, `…/movements` (with optional `expectedOnHand`) and `…/loans` (multipart, with the photo), `/api/staff/loans/:id/return` and `…/photo`, `/api/staff/reorders` (POST) and `/api/staff/reorders/:id` (PATCH), plus account and admin routes.
+- **Live refresh:** the `catalog_revision` counter plus ETag/304 polling (public every 15 s, staff Inventory and Stock every 10 s, Loans every 15 s), which pauses in hidden tabs. Stock, restock and loan writes bump the revision, so Inventory, Stock, Loans, the item sheet and the Lending Hub all follow.
 - **Never** touch the old `hau-usc-logistics-production` or `hau-usc-logistics-staging` resources.
 
 ## Branding and retained legacy assets
@@ -170,5 +184,5 @@ Each Part must work end to end without depending on a later Part.
 ## Git and deployment workflow
 - `main` is the latest verified product. There is at most one short-lived `slice/<part>-<scope>` branch, shared by Codex and Claude under one writer lock (`npm run agent:claim|yield`).
 - A green slice is merged to `main` immediately, and the slice branch is deleted.
-- **Production deploys only from `main`.** Cloudflare Workers Builds deploys each push to `main` automatically, but it does **not** apply D1 migrations. A `main` that adds a migration needs that migration applied to production first (it must be additive), then the push. The Owner Console's *Deploy verified main* (`docs/DEPLOYMENT.md`) remains the gated path with a Time Travel bookmark and a Worker rollback id.
+- **Production deploys only from `main`.** Cloudflare Workers Builds deploys each push to `main` automatically, but it does **not** apply D1 migrations. A `main` that adds a migration needs that migration applied to production first (it must be safe for the code already live), then the push. A `main` that adds a binding (such as the R2 bucket) needs the resource created first, or the deploy fails. The Owner Console's *Deploy verified main* (`docs/DEPLOYMENT.md`) remains the gated path with a Time Travel bookmark and a Worker rollback id.
 - Production and provider writes need Earl's explicit authority.

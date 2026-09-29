@@ -7,7 +7,7 @@ There is **one deployment path** (the Owner Console's *Deploy verified main*) an
 | Worker | `logistics-hub` (`https://logistics-hub.<account-subdomain>.workers.dev`) |
 | D1 | `logistics-hub` (binding `DB`, id in `wrangler.jsonc`) |
 | Secret | `SESSION_SECRET`, generated once on the first deploy and never regenerated |
-| R2 | none: Part 1 stores no files |
+| R2 | `logistics-hub-evidence` (binding `EVIDENCE`): loan photos, private, streamed only through the Worker to signed-in staff. Create it once before the first deploy that includes Part 4: `npx wrangler r2 bucket create logistics-hub-evidence` |
 
 Never target `hau-usc-logistics-production` or `hau-usc-logistics-staging`. The console refuses to deploy if `wrangler.jsonc` references either one.
 
@@ -75,7 +75,9 @@ Options 1–10 talk to the site over HTTPS as a signed-in user, exactly like the
 
 Remote D1 rejects explicit `BEGIN TRANSACTION`/`COMMIT` and queries over 100 KB; `tests/migration.test.ts` enforces both. Migration `0011` rebuilds `staff_accounts` to add roles, which ends all existing sessions once. Migration `0012` (Part 2) only adds an index.
 
-Workers Builds deploys every push to `main` automatically, but it does not apply D1 migrations. Before pushing a `main` that adds a migration, apply it to production (Console **13**, or `npx wrangler d1 migrations apply DB --remote` from that commit). Migrations must stay additive, so the previous code keeps working until the push lands. Migration `0013` (Part 3) is additive: a movement reason column, an optional expiry column and the `reorders` table.
+Workers Builds deploys every push to `main` automatically, but it does not apply D1 migrations. Before pushing a `main` that adds a migration, apply it to production (Console **13**, or `npx wrangler d1 migrations apply DB --remote` from that commit). Migrations must stay safe for the code already live, so it keeps working until the push lands. Migration `0013` (Part 3) is additive: a movement reason column, an optional expiry column and the `reorders` table. Migration `0014` (Part 4) reclassifies the 112 "Saleable" items as Consumable (audited per item), replaces the never-used, empty `loans` / `loan_items` / `evidence` placeholders with the new `loans` table, and bumps the revision; the Part 3 code references none of those tables and accepts Consumable, so it is safe to apply first.
+
+A deploy that adds a binding needs the resource first: Part 4 adds the R2 bucket above, and a push without it fails the Workers Builds deploy (the live version keeps serving). Order for Part 4: create the bucket, apply `0014`, then push `main`.
 
 ## Operating notes
 

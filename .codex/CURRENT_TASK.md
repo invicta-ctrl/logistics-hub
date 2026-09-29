@@ -1,7 +1,7 @@
-# Current Bounded Task — PART-03 Stock + Pantry (with whole-product polish)
-INTENT: FEATURE_IMPLEMENTATION + PRODUCT POLISH
-OBJECTIVE: Make the whole site feel like one coherent production system, then turn quantity handling into a complete daily workflow: stock in, stock out and counts with reasons, low stock, a lightweight restock list, pantry, optional expiry, and readable activity.
-IN_SCOPE: Hallmark and Impeccable audits and fixes across every surface; migration 0013; /staff/stock; /api/staff/stock and /api/staff/reorders; shared movement form; tests; PRODUCT_REFERENCE.md.
-OUT_OF_SCOPE: suppliers, quotations, purchase orders, procurement approval; lots and batches; loans (Part 4); the activity center and exports (Part 5); settings and backups (Part 6).
-BRIEF: .codex/PART_03_BRIEF.md
-STATUS: COMPLETE — merged to main 2026-09-29; migration 0013 applied to production D1 before the push.
+# Current Bounded Task — PART-04 Lending (internal loans), quantity editor, two item types
+INTENT: FEATURE_IMPLEMENTATION + PRODUCT POLISH + PERFORMANCE
+OBJECTIVE: Earl's 2026-09-29 instruction (see .codex/PART_04_BRIEF.md): an always-editable quantity with a required reason; Loanable/Consumable only; typed category and unit; no loan period or maximum per loan; a Loan tab (Individual use: name, student ID, photo; USC use: name, photo, specific reason); a loans dashboard ranking borrowers by purpose; then clean up, improve the front end and speed up the backend without bloat.
+IN_SCOPE: migration 0014; src/loans.ts; /api/staff/loans and loan routes; src/movement-form.ts (quantity editor); src/loan-form.ts; src/loans-workspace.ts; item sheet changes; tests; docs.
+OUT_OF_SCOPE: multi-item loans in one record, departments, borrower accounts, public requests (Request Center), exports and the activity center (Part 5), backups and settings (Part 6).
+BRIEF: .codex/PART_04_BRIEF.md
+STATUS: IN_PROGRESS — merge waits for the R2 bucket and remote migration 0014

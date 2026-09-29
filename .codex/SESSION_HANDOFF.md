@@ -1,45 +1,27 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-STATUS: PART_03_COMPLETE
-ACTIVE_WRITER: none
+STATUS: PART_04_IN_PROGRESS
+ACTIVE_WRITER: claude
 WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
-BRANCH: main (no active slice)
-LIVE_PREVIEW: http://127.0.0.1:8791
+BRANCH: slice/part-04-lending (pushed at each checkpoint)
+LIVE_PREVIEW: http://127.0.0.1:8791 (restart `npm run dev:live` to pick up migration 0014 and the new build)
 
-## Part 3 (Claude, 2026-09-29)
-- **Polish pass:**
-  - Hallmark audit of 16 surfaces × 1440/375, before and after the redesign (see `.codex/PART_03_BRIEF.md`).
-  - One shared sheet behaviour and frame; compact operations headers; mobile filters behind one button; a neutral "Needs review" marker; Record stock first in the item sheet; consistent panel actions.
-  - Landing: without the redundant "offers" section; staff sign-in only in the masthead and footer.
-  - Toasts bottom-left; the router ignores `#fragment` jumps.
-- **Migration 0013 (additive):** `inventory_movements.reason`, `items.expires_on`, `reorders` (the restock list; one open entry per item), and an activity index.
-- **Worker:**
-  - movement reasons (Other needs a note);
-  - counts accepted even when they match (a 0 adjustment);
-  - responses include the change;
-  - a Stock in can receive a restock entry atomically;
-  - `/api/staff/stock` (one revisioned payload);
-  - `/api/staff/reorders` POST and PATCH with optimistic concurrency.
-- **UI:**
-  - `/staff/stock`: Needs attention (Out, Low, Needs count, Expiring), Restock list, Pantry, Activity, and the Record movement panel (a bottom sheet on phones).
-  - The shared movement form is used by the item sheet too.
-  - Item settings gain stock area and pantry expiry; item history shows reasons, before → after and restock events.
-
-## Verification (Windows, local Worker + D1)
-- `npm run typecheck`: pass. `npm run build`: pass.
-- `npm test`: 52/52, including 6 new Part 3 suites (reasons, before/after, negative stock, idempotency, low stock, count-needed, the restock lifecycle, pantry and expiry, revisioned staff-only access).
-- `npm run test:browser`: 7/7.
-- `npm run test:browser:worker`: 14/14 real Worker + D1, including 3 new Stock flows and every Part 1/2 regression.
-- `verify:migration`, `verify:catalog`, `verify:privacy`: pass. `wrangler deploy --dry-run`: pass.
-- axe-core WCAG 2.1 AA: 0 violations on 30 screen/viewport combinations; no horizontal overflow at 320, 375 or 1440.
-- Impeccable detector: clean. Hallmark final: 0 critical · 0 major.
+## Part 4 (Claude, 2026-09-29) — see `.codex/PART_04_BRIEF.md`
+- **Done and verified on the slice:**
+  - migration 0014 (Saleable → Consumable, audited; the `loans` table);
+  - `src/loans.ts` (lend with R2 photo, return / damaged / lost, dashboard statistics, photo stream) and routes in `src/worker.ts`;
+  - the quantity editor (`src/movement-form.ts`) in the item sheet and Stock & Pantry, with a required reason and an `expectedOnHand` guard;
+  - the Loan tab and shared loan form (`src/loan-form.ts`), the `/staff/loans` dashboard (`src/loans-workspace.ts`), simplified Edit details, the Lending Hub without loan terms.
+- **Gates at checkpoint 45bf880:** typecheck, build, `npm test` 60/60 (8 new Part 4 tests), `npm run test:browser` 7/7, `npm run test:browser:worker` 15/15 (a new real Worker + D1 lending flow), privacy scan; no horizontal overflow at 320 / 375 / 768 / 1024–1440.
+- **In progress:** a read-only multi-lens review (server, frontend, performance, design, bloat) with adversarial verification, then fixes.
 
 ## Exact next action
-- Part 3 is merged to `main` (2026-09-29). Earl applied migration 0013 to production D1 first; `wrangler d1 migrations list DB --remote` reports nothing pending.
-- Next: Part 4 (Lending), on Earl's instruction, from fresh `main` on one new slice branch.
+1. Finish the review fixes, re-run every gate, update docs, push the slice.
+2. Earl, before the merge: `npx wrangler r2 bucket create logistics-hub-evidence`, then `npx wrangler d1 migrations apply DB --remote` from the shared workspace (0014 is safe for the live Part 3 code).
+3. Then fast-forward `main` to the slice, push, verify the Workers Builds deploy, delete the slice, and yield the lock.
 
 ## Known facts and limitations
-- No item has a reorder level yet, so Low stock is empty until staff set levels. The Stock page says so.
-- Legacy "Needs count" candidates: ITM-0001 (−1 evidence) and three VERIFY records, including All Purpose Flour (legacy quantity 46026 kilos, date-formatted in the old sheet).
-- The legacy *category* "PANTRY" holds 16 office supplies. Pantry uses the stock area instead, and the category is left for staff review.
-- The running 8791 preview's `wrangler dev` asset watcher stopped after rebuilds (Windows EPERM). Restart `npm run dev:live` to see the latest build and apply migration 0013 locally.
+- No item has a reorder level yet, so Low stock is empty until staff set levels.
+- Some legacy classifications look wrong (for example "Sanitary Napkin/Pads" is Loanable); they remain for staff review.
+- The legacy *category* "PANTRY" holds 16 office supplies; Pantry uses the stock area instead.
+- The running 8791 preview's asset watcher stopped after rebuilds (Windows EPERM). Restart `npm run dev:live`.
