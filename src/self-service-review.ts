@@ -1,7 +1,7 @@
 import "./self-service.css";
 import { REVIEW_REASONS, type ReviewReason } from "./catalog-policy";
 import { loadSession, shell } from "./staff";
-import { type Html, CREST, MARK, api, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, onLeave, plural, preservingFocus, toast, units, writeParams } from "./ui";
+import { type Html, CREST, MARK, api, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, onLeave, plural, preservingFocus, toast, units, writeParams } from "./ui";
 
 /*
  * Staff view of phone self-service (/staff/self-service). Normal records reconcile on their own;
@@ -45,7 +45,7 @@ function facts(entry: Entry): Html {
   ];
   if (entry.purpose) rows.push(["For", entry.reason ? `${label(entry.purpose)}: ${entry.reason}` : label(entry.purpose)]);
   if (entry.note) rows.push(["Note", entry.note]);
-  rows.push(["Phone", html`<span class="mono">${entry.device}</span>${entry.network ? html` · network <span class="mono">${entry.network}</span>` : ""}`]);
+  rows.push(["Phone ID", html`<span class="mono">${entry.device}</span>${entry.network ? html` · network <span class="mono">${entry.network}</span>` : ""}`]);
   return html`<dl class="review-card__facts">${rows.map(([term, value]) => html`<div><dt>${term}</dt><dd>${value}</dd></div>`)}</dl>`;
 }
 
@@ -58,9 +58,12 @@ function actions(entry: Entry, candidates: Candidate[]): Html {
   }
   if (entry.type === "RETURN") {
     const loans = candidates.filter((loan) => loan.itemId === entry.itemId);
+    if (!loans.length) {
+      return html`<p class="field__hint">No open loan of this item. If it came back anyway, record a count from the item, then dismiss this.</p>
+        ${note}<div class="review-card__buttons"><button type="button" class="button button--primary button--sm" data-act="dismiss">Dismiss</button><a class="text-link" href="/staff/inventory?item=${entry.itemId}" data-route>Open item</a></div>`;
+    }
     return html`<div class="field"><label for="loan-${entry.id}">Loan it belongs to</label>
-        <select id="loan-${entry.id}" name="loanId"><option value="">Choose an open loan…</option>${loans.map((loan) => html`<option value="${loan.id}" ${loan.quantity === entry.quantity ? "" : "disabled"}>${loan.borrowerName}${loan.studentId ? ` (${loan.studentId})` : ""} · ${loan.quantity} · since ${formatDateTime(loan.createdAt)}${loan.quantity === entry.quantity ? "" : " · different quantity"}</option>`)}</select>
-        ${loans.length ? "" : html`<p class="field__hint">No open loan of this item. If it came back anyway, record a count, then dismiss.</p>`}</div>
+        <select id="loan-${entry.id}" name="loanId"><option value="">Choose an open loan…</option>${loans.map((loan) => html`<option value="${loan.id}" ${loan.quantity === entry.quantity ? "" : "disabled"}>${loan.borrowerName}${loan.studentId ? ` (${loan.studentId})` : ""} · ${loan.quantity} · since ${formatDateTime(loan.createdAt)}${loan.quantity === entry.quantity ? "" : " · different quantity"}</option>`)}</select></div>
       ${note}<div class="review-card__buttons"><button type="button" class="button button--primary button--sm" data-act="match">Match and close loan</button><button type="button" class="button button--ghost button--sm" data-act="dismiss">Dismiss</button></div>`;
   }
   return html`${note}<div class="review-card__buttons"><button type="button" class="button button--primary button--sm" data-act="apply">${entry.type === "TAKE" ? "Apply the take" : "Apply the loan"}</button><button type="button" class="button button--ghost button--sm" data-act="dismiss">Dismiss</button>${photo}</div>`;
@@ -82,8 +85,8 @@ function reviewCard(entry: Entry, candidates: Candidate[]): Html {
 
 function issueRow(issue: Issue): Html {
   return html`<li class="review-card review-card--issue">
-      <header class="review-card__head"><p class="review-card__what"><strong>Count needed</strong> · <a href="/staff/inventory?item=${issue.itemId}" data-route>${issue.itemName}</a></p><span class="tag tag--bad">Records below zero</span></header>
-      <p class="review-card__why">Records went down to ${issue.lowest} ${units(issue.lowest, issue.unit)} from ${formatDateTime(issue.since)}: more was recorded than the shelf could hold. ${issue.openLoans ? `${plural(issue.openLoans, "loan")} out; one may be wrong. ` : ""}On hand now: ${issue.onHand}.</p>
+      <header class="review-card__head"><p class="review-card__what"><a href="/staff/inventory?item=${issue.itemId}" data-route>${issue.itemName}</a></p><span class="tag tag--bad">Below zero</span></header>
+      <p class="review-card__why">Records show ${issue.lowest} ${units(issue.lowest, issue.unit)} since ${formatDateTime(issue.since)}: more was recorded than the shelf could hold.${issue.openLoans ? ` ${plural(issue.openLoans, "loan")} out; one may be wrong.` : ""}${issue.onHand === issue.lowest ? "" : ` On hand now: ${issue.onHand}.`} Count the shelf to correct it.</p>
       <p class="review-card__buttons"><a class="button button--secondary button--sm" href="/staff/inventory?item=${issue.itemId}" data-route>Open item to count</a></p>
     </li>`;
 }
@@ -101,7 +104,7 @@ function poster(): Html {
       </div>
     </div>
     <div class="poster-actions">
-      <button type="button" class="button button--primary" data-print>${icon("external")}Print poster</button>
+      <button type="button" class="button button--primary" data-print>Print poster</button>
       <a class="button button--secondary" href="/qr/logistics-self-service.svg" download>QR as SVG</a>
       <a class="button button--secondary" href="/qr/logistics-self-service.png" download>QR as PNG</a>
     </div>

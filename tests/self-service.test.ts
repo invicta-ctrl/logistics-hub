@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
+import { networkOf } from "../src/self-service";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
 
 const origin = "https://hub.example.test";
@@ -54,11 +55,11 @@ function phone() {
     take: (itemId: string, quantity: number, minutesAgo = 0) => event("TAKE", itemId, { quantity }, minutesAgo),
     borrow: (itemId: string, minutesAgo = 0, fields: Record<string, unknown> = {}) => event("BORROW", itemId, { purpose: "INDIVIDUAL", ...fields }, minutesAgo),
     giveBack: (itemId: string, loanEventId: string | null, minutesAgo = 0, fields: Record<string, unknown> = {}) => event("RETURN", itemId, { loanEventId, outcome: "RETURNED", ...fields }, minutesAgo),
-    sync: async (events: Array<Record<string, unknown>>, options: { photoFor?: string[]; origin?: string; sentAt?: string } = {}) => {
+    sync: async (events: Array<Record<string, unknown>>, options: { photoFor?: string[]; photo?: Uint8Array<ArrayBuffer>; origin?: string; sentAt?: string } = {}) => {
       const form = new FormData();
       form.set("batch", JSON.stringify({ deviceId, sentAt: options.sentAt ?? new Date().toISOString(), events }));
       const withPhoto = options.photoFor ?? events.filter((entry) => entry.type === "BORROW").map((entry) => entry.id as string);
-      for (const id of withPhoto) form.set(`photo:${id}`, new File([JPEG], "photo.jpg", { type: "image/jpeg" }));
+      for (const id of withPhoto) form.set(`photo:${id}`, new File([options.photo ?? JPEG], "photo.jpg", { type: "image/jpeg" }));
       // Serialised like a browser would, so the Worker sees a real Content-Length.
       const request = new Request(`${origin}/api/self-service/sync`, { method: "POST", headers: { origin: options.origin ?? origin }, body: form });
       const body = await request.arrayBuffer();
@@ -76,6 +77,17 @@ const stored = (id: string) => sqlite.prepare("SELECT * FROM self_service_events
 const loan = (eventId: string) => sqlite.prepare("SELECT * FROM loans WHERE id = ?").get(`LN-SS-${eventId}`) as Record<string, unknown> | undefined;
 const review = async () => await (await staff("/api/staff/self-service")).json() as { open: Array<Record<string, unknown>>; stockIssues: Array<Record<string, unknown>>; candidates: Array<{ id: string }> };
 const resolve = (id: string, body: Record<string, unknown>) => staff(`/api/staff/self-service/${id}/resolve`, "POST", body);
+/** Runs `other` (another staff member, another phone) just before the next database batch, as if it happened at the same moment. */
+function meanwhile(other: () => Promise<unknown>, skip = 0) {
+  const batch = env.DB.batch.bind(env.DB);
+  let calls = 0;
+  env.DB.batch = (async (statements: D1PreparedStatement[]) => {
+    if (calls++ < skip) return batch(statements);
+    env.DB.batch = batch;
+    await other();
+    return batch(statements);
+  }) as D1Database["batch"];
+}
 async function count(itemId: string, observed: number) {
   const response = await staff(`/api/staff/items/${itemId}/movements`, "POST", { kind: "COUNT", quantity: observed, expectedOnHand: onHand(itemId), note: "Shelf count", key: crypto.randomUUID() });
   expect(response.status).toBe(200);
@@ -90,12 +102,11 @@ describe("self-service catalog", () => {
     await loanable("Unlisted Projector", 1, { lendingAudience: "NOT_AVAILABLE_FOR_LENDING" });
     const response = await call("/api/self-service/catalog");
     expect(response.headers.get("cache-control")).toBe("no-store");
-    const body = await response.json() as { items: Array<Record<string, unknown>>; serverTime: string; revision: number };
+    const body = await response.json() as { items: Array<Record<string, unknown>>; revision: number };
     expect(body.items).toEqual([
       { id: water, name: "Bottled Water", aliases: null, category: "SUPPLIES", unit: "piece", action: "TAKE", available: 20, location: "Shelf B", audience: null },
       { id: scissors, name: "Scissors", aliases: "Gunting", category: "SUPPLIES", unit: "piece", action: "BORROW", available: 5, location: "Shelf B", audience: "STUDENTS_AND_USC_STAFF" }
     ]);
-    expect(Number.isNaN(Date.parse(body.serverTime))).toBe(false);
     expect(JSON.stringify(body)).not.toContain("private staff note");
     const etag = response.headers.get("etag")!;
     expect((await call("/api/self-service/catalog", { headers: { "if-none-match": etag } })).status).toBe(304);
@@ -268,31 +279,36 @@ describe("Borrow and Return", () => {
     expect([loan(one.id)!.status, loan(two.id)!.status, onHand(scissors)]).toEqual(["DAMAGED", "LOST", 0]);
   });
 
-  it("matches a return from another phone only when it is clearly one loan, without revealing which", async () => {
+  it("holds every return not linked to this phone's borrow, with one answer whoever borrowed it", async () => {
     const scissors = await loanable("Scissors", 5);
     const [a, b] = [phone(), phone()];
     const borrow = a.borrow(scissors, 60);
     await a.sync([borrow]);
-    const matched = b.giveBack(scissors, null, 10);
+    // The loan's own name and student ID, and a stranger's: the answers cannot tell them apart.
+    const sameDetails = b.giveBack(scissors, null, 10);
     const stranger = b.giveBack(scissors, null, 9, { person: { name: "Someone Else", studentId: "99-9999-999" } });
-    const matchedResult = (await results(await b.sync([matched])))[0]!;
-    const strangerResult = (await results(await b.sync([stranger])))[0]!;
-    expect(matchedResult).toEqual({ id: matched.id, outcome: "accepted" });
-    expect(strangerResult).toEqual({ id: stranger.id, outcome: "accepted", message: "Return recorded. Logistics will match it to the loan." });
-    expect(loan(borrow.id)).toMatchObject({ status: "RETURNED" });
-    expect(stored(stranger.id)).toMatchObject({ applied: 0, review: "UNMATCHED_RETURN" });
-    expect(onHand(scissors)).toBe(5);
+    const message = "Return recorded. Logistics will match it to the loan.";
+    expect(await results(await b.sync([sameDetails, stranger]))).toEqual([{ id: sameDetails.id, outcome: "review", message }, { id: stranger.id, outcome: "review", message }]);
+    expect(loan(borrow.id)).toMatchObject({ status: "OUT" });
+    expect([stored(sameDetails.id), stored(stranger.id)].map((row) => [row!.applied, row!.review])).toEqual([[0, "UNMATCHED_RETURN"], [0, "UNMATCHED_RETURN"]]);
+    expect(onHand(scissors)).toBe(4);
   });
 
-  it("never lets a linked return from another phone close someone else's loan", async () => {
+  it("refuses a return linked to a borrow this phone did not make, or to a borrow that was refused", async () => {
     const scissors = await loanable("Scissors", 5);
     const [a, b] = [phone(), phone()];
     const borrow = a.borrow(scissors, 60, { person: { name: "Maria", studentId: "21-0000-001" } });
     await a.sync([borrow]);
     const forged = b.giveBack(scissors, borrow.id, 5, { person: { name: "Mallory", studentId: "21-0000-002" } });
-    await b.sync([forged]);
+    const refusal = { outcome: "rejected", message: "The borrow this return belongs to was not recorded. Please see Logistics staff." };
+    expect(await results(await b.sync([forged]))).toEqual([{ id: forged.id, ...refusal }]);
     expect(loan(borrow.id)).toMatchObject({ status: "OUT" });
-    expect(stored(forged.id)).toMatchObject({ review: "UNMATCHED_RETURN", applied: 0 });
+    expect(stored(forged.id)).toBeUndefined();
+    // A borrow refused earlier in the same batch takes its return with it.
+    const noId = b.borrow(scissors, 2, { person: { name: "Ana" } });
+    const itsReturn = b.giveBack(scissors, noId.id, 1);
+    expect((await results(await b.sync([noId, itsReturn]))).map((result) => result.outcome)).toEqual(["rejected", "rejected"]);
+    expect(stored(itsReturn.id)).toBeUndefined();
   });
 
   it("lets staff match an unmatched return to an open loan, closing it when the return happened", async () => {
@@ -345,6 +361,120 @@ describe("Borrow and Return", () => {
   });
 });
 
+describe("business time and counts", () => {
+  it("accepts a return-by date of the day it was borrowed, even when it syncs the next day", async () => {
+    const scissors = await loanable("Scissors", 5);
+    const a = phone();
+    const borrowDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date(Date.now() - 26 * 60 * MINUTE));
+    const borrow = a.borrow(scissors, 26 * 60, { returnBy: borrowDay });
+    expect(await results(await a.sync([borrow]))).toEqual([{ id: borrow.id, outcome: "accepted" }]);
+    expect(loan(borrow.id)).toMatchObject({ return_by: borrowDay });
+  });
+
+  it("holds a borrow recorded more than 30 days ago instead of refusing its return-by date", async () => {
+    const scissors = await loanable("Scissors", 5);
+    const a = phone();
+    const borrow = a.borrow(scissors, 40 * 24 * 60, { returnBy: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date(Date.now() - 39 * 24 * 60 * MINUTE)) });
+    expect((await results(await a.sync([borrow])))[0]).toMatchObject({ outcome: "review", message: "Saved for staff to confirm: your phone's clock looked wrong." });
+    expect(stored(borrow.id)).toMatchObject({ review: "CLOCK", applied: 0, photo_key: expect.stringMatching(/^loans\//) });
+  });
+
+  it("lets a later count supersede a borrow and a return it already saw", async () => {
+    const scissors = await loanable("Scissors", 5);
+    const [a, b] = [phone(), phone()];
+    const borrowed = b.borrow(scissors, 50);
+    await b.sync([borrowed]);
+    // Recorded offline before a count: one borrowed, the other one brought back. The count finds 3.
+    const early = a.borrow(scissors, 60);
+    const returned = b.giveBack(scissors, borrowed.id, 40);
+    await count(scissors, 3);
+    expect((await results(await a.sync([early])))[0]!.outcome).toBe("accepted");
+    expect((await results(await b.sync([returned])))[0]!.outcome).toBe("accepted");
+    expect([loan(early.id)!.status, loan(borrowed.id)!.status, onHand(scissors)]).toEqual(["OUT", "RETURNED", 3]);
+    const status = (loanId: string, type: string) => (sqlite.prepare("SELECT status FROM inventory_movements WHERE related_entity_id = ? AND movement_type = ?").get(`LN-SS-${loanId}`, type) as { status: string }).status;
+    expect([status(early.id, "LOAN_OUT"), status(borrowed.id, "LOAN_OUT"), status(borrowed.id, "LOAN_RETURN")]).toEqual(["SUPERSEDED", "POSTED", "SUPERSEDED"]);
+  });
+
+  it("asks for a count when a late take just before a count leaves the shelf below zero", async () => {
+    const water = await consumable("Bottled Water", 2);
+    await count(water, 1);
+    const a = phone();
+    const late = a.take(water, 2, 3);
+    expect((await results(await a.sync([late])))[0]).toMatchObject({ outcome: "review" });
+    expect(onHand(water)).toBe(-1);
+    expect((await review()).stockIssues).toEqual([expect.objectContaining({ itemId: water, lowest: -1 })]);
+  });
+});
+
+describe("staff review", () => {
+  async function unmatchedReturn() {
+    const scissors = await loanable("Scissors", 5);
+    const [a, b] = [phone(), phone()];
+    const [first, second] = [a.borrow(scissors, 60), a.borrow(scissors, 59)];
+    await a.sync([first, second]);
+    const unmatched = b.giveBack(scissors, null, 15);
+    await b.sync([unmatched]);
+    return { scissors, first: `LN-SS-${first.id}`, second: `LN-SS-${second.id}`, unmatched: unmatched.id };
+  }
+  const loanStatus = (id: string) => (sqlite.prepare("SELECT status FROM loans WHERE id = ?").get(id) as { status: string }).status;
+
+  it("closes only one loan when two staff match the same return at once", async () => {
+    const { scissors, first, second, unmatched } = await unmatchedReturn();
+    meanwhile(() => resolve(unmatched, { action: "match", loanId: first }));
+    const late = await resolve(unmatched, { action: "match", loanId: second });
+    expect(late.status).toBe(409);
+    expect([loanStatus(first), loanStatus(second), onHand(scissors)]).toEqual(["RETURNED", "OUT", 4]);
+    expect(stored(unmatched)).toMatchObject({ applied: 1, loan_id: first });
+  });
+
+  it("does not record a match when the loan was closed at the desk a moment earlier", async () => {
+    const { first, unmatched } = await unmatchedReturn();
+    meanwhile(() => staff(`/api/staff/loans/${first}/return`, "POST", { outcome: "LOST", note: "Reported lost at the desk" }));
+    expect((await resolve(unmatched, { action: "match", loanId: first })).status).toBe(409);
+    expect(loanStatus(first)).toBe("LOST");
+    expect(stored(unmatched)).toMatchObject({ applied: 0, resolved_at: null });
+  });
+
+  it("never applies a dismissed borrow, and never deletes an applied borrow's photo", async () => {
+    const drill = await loanable("Drill", 2, { selfService: false });
+    const a = phone();
+    const [one, two] = [a.borrow(drill, 30), a.borrow(drill, 29)];
+    await a.sync([one, two]);
+    meanwhile(() => resolve(one.id, { action: "dismiss" }));
+    expect((await resolve(one.id, { action: "apply" })).status).toBe(409);
+    expect([loan(one.id), onHand(drill)]).toEqual([undefined, 2]);
+    meanwhile(() => resolve(two.id, { action: "apply" }));
+    expect((await resolve(two.id, { action: "dismiss" })).status).toBe(409);
+    expect(loan(two.id)).toMatchObject({ status: "OUT" });
+    expect(photos.has(loan(two.id)!.photo_key as string)).toBe(true);
+    // The database itself keeps a resolution final.
+    expect(() => sqlite.prepare("UPDATE self_service_events SET resolution_note = 'changed' WHERE id = ?").run(two.id)).toThrow(/self_service_event_resolved/);
+  });
+
+  it("keeps a borrow's photo when an unexpected error holds it, so staff can still apply it", async () => {
+    const scissors = await loanable("Scissors", 5);
+    const a = phone();
+    const borrow = a.borrow(scissors, 10);
+    // The lookup batch passes; the loan batch fails once.
+    meanwhile(async () => { throw new Error("D1 overloaded"); }, 1);
+    expect((await results(await a.sync([borrow])))[0]).toMatchObject({ outcome: "review", message: "Saved for staff to check." });
+    expect(stored(borrow.id)).toMatchObject({ review: "ERROR", applied: 0, photo_key: expect.stringMatching(/^loans\//) });
+    expect(photos.size).toBe(1);
+    expect((await resolve(borrow.id, { action: "apply" })).status).toBe(200);
+    expect(loan(borrow.id)).toMatchObject({ status: "OUT", photo_key: stored(borrow.id)!.photo_key });
+  });
+
+  it("refuses to apply a held borrow that has no photo", async () => {
+    const drill = await loanable("Drill", 1, { selfService: false });
+    const a = phone();
+    const borrow = a.borrow(drill, 30);
+    await a.sync([borrow]);
+    sqlite.prepare("UPDATE self_service_events SET photo_key = NULL WHERE id = ?").run(borrow.id);
+    expect((await resolve(borrow.id, { action: "apply" })).status).toBe(400);
+    expect(loan(borrow.id)).toBeUndefined();
+  });
+});
+
 describe("self-service security", () => {
   it("rejects cross-origin, malformed and oversized sync requests", async () => {
     const water = await consumable("Bottled Water", 20);
@@ -365,6 +495,15 @@ describe("self-service security", () => {
     const outcomes = [...await results(await a.sync(bad.slice(0, 4))), ...await results(await a.sync(bad.slice(4)))];
     expect(outcomes.map((result) => result.outcome)).toEqual(Array(8).fill("rejected"));
     expect(onHand(water)).toBe(20);
+    const sync = (headers: Record<string, string>) => call("/api/self-service/sync", { method: "POST", headers: { origin, ...headers }, body: "x" });
+    expect((await sync({})).status).toBe(411);
+    expect((await sync({ "content-length": String(13 * 1024 * 1024) })).status).toBe(413);
+    const scissors = await loanable("Scissors", 5);
+    const huge = new Uint8Array(2 * 1024 * 1024 + 1);
+    huge.set(JPEG);
+    const borrow = a.borrow(scissors);
+    expect((await results(await a.sync([borrow], { photo: huge })))[0]).toMatchObject({ outcome: "rejected", message: "The photo is too large. Take it again and borrow once more." });
+    expect(photos.size).toBe(0);
   });
 
   it("stores hostile text as plain text, and holds a record whose clock cannot be trusted", async () => {
@@ -386,6 +525,24 @@ describe("self-service security", () => {
     const row = stored(take.id)!;
     expect(Math.abs(Date.parse(row.received_at as string) - Date.parse(row.occurred_at as string) - 40 * MINUTE)).toBeLessThan(2000);
     expect(row.review).toBeNull();
+  });
+
+  it("limits how many records one network can leave for staff in a day", async () => {
+    const scissors = await loanable("Scissors", 5);
+    for (let round = 0; round < 12; round += 1) {
+      const a = phone();
+      expect((await results(await a.sync(Array.from({ length: 5 }, () => a.giveBack(scissors, null))))).every((result) => result.outcome === "review")).toBe(true);
+    }
+    const a = phone();
+    expect((await results(await a.sync([a.giveBack(scissors, null)])))[0]).toMatchObject({ outcome: "rejected", message: "Too many records from this network need a staff check today. Please see Logistics staff." });
+  });
+
+  it("groups IPv6 addresses by their /64 network", () => {
+    const from = (address: string) => networkOf(new Request(origin, { headers: { "CF-Connecting-IP": address } }));
+    expect(from("2001:db8:85a3::8a2e:370:7334")).toBe("2001:0db8:85a3:0000::/64");
+    expect(from("2001:DB8:85A3:0:1::1")).toBe("2001:0db8:85a3:0000::/64");
+    expect(from("::1")).toBe("0000:0000:0000:0000::/64");
+    expect(from("203.0.113.9")).toBe("203.0.113.9");
   });
 
   it("rate-limits one phone and keeps the review API staff-only", async () => {

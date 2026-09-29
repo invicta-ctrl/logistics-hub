@@ -4,7 +4,7 @@ import "@fontsource/ibm-plex-sans/latin-600.css";
 import "@fontsource/newsreader/latin-400.css";
 import "@fontsource/newsreader/latin-500.css";
 import "./styles.css";
-import { landing, lending, notFound } from "./public";
+import { landing, lending, notFound, offlinePage } from "./public";
 import { startPwa } from "./pwa";
 import { handOverQuery, leave, navigate, reducedMotion, toast } from "./ui";
 
@@ -38,12 +38,15 @@ async function render(): Promise<void> {
   try {
     view = await (ROUTES[path] ?? (() => notFound))();
   } catch {
-    // A deploy replaced the files this page was built with: load the new version once.
-    if (!sessionStorage.getItem("reloaded-for-update")) {
-      sessionStorage.setItem("reloaded-for-update", "1");
-      window.location.reload();
+    if (navigator.onLine) {
+      // A deploy replaced the files this page was built with: load the new version once.
+      if (!sessionStorage.getItem("reloaded-for-update")) {
+        sessionStorage.setItem("reloaded-for-update", "1");
+        window.location.reload();
+      }
+      return;
     }
-    return;
+    view = offlinePage;
   }
   sessionStorage.removeItem("reloaded-for-update");
   // A quicker, later navigation already rendered; this one is stale.

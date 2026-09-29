@@ -1,5 +1,6 @@
+import "@fontsource/newsreader/latin-400-italic.css";
 import "./self-service.css";
-import { LABELS, SELF_SERVICE_LIMITS } from "./catalog-policy";
+import { SELF_SERVICE_LIMITS, STUDENT_ID_PATTERN } from "./catalog-policy";
 import { type CatalogItem, type LocalEvent, type Snapshot, estimate, openLoans, pendingByItem, summary } from "./offline-queue";
 import * as store from "./offline-store";
 import { type Draft, clearHistory, nextAttemptAt, onSyncMessage, record, refreshCatalog, syncNow } from "./offline-sync";
@@ -30,8 +31,11 @@ let syncing = false;
 let offline = !navigator.onLine;
 /** A form in a sheet has input that closing would lose. */
 let dirty = false;
-/** Set by the running screen: what to do once a new record is saved (start a sync). */
-let afterSave: () => void = () => void syncNow();
+
+/* Formatting in the office's time zone, whatever the phone's own setting. */
+const DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" });
+const DAY_TIME = new Intl.DateTimeFormat("en-PH", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" });
+const HOUR = new Intl.DateTimeFormat("en-PH", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Manila" });
 
 function params(): Params {
   const query = new URLSearchParams(window.location.search);
@@ -68,9 +72,11 @@ async function load(): Promise<void> {
 /* ---------- Frame ---------- */
 
 function frame(): Html {
-  return html`<header class="ss-bar">
+  // The sky: the HAU campus at dusk (the legacy login's photograph) and a slow aurora, behind everything.
+  return html`<div class="ss-sky" aria-hidden="true"><div class="ss-sky__photo"></div><div class="ss-sky__aurora"></div><div class="ss-sky__grain"></div></div>
+    <header class="ss-bar">
       <div class="ss-bar__inner">
-        <a class="ss-bar__brand" href="/self-service" data-route aria-label="Self-Service home"><span class="ss-bar__marks" aria-hidden="true">${CREST}${MARK}</span><span class="ss-bar__title">Self-Service<small>HAU USC Logistics</small></span></a>
+        <a class="ss-bar__brand" href="/self-service" data-route aria-label="Self-Service home"><span class="ss-bar__marks" aria-hidden="true">${CREST}${MARK}</span><span class="ss-bar__title"><span>Self-Service</span><small>HAU USC Logistics</small></span></a>
         <div data-region="pill"></div>
       </div>
       <div class="ss-update" data-region="update" hidden></div>
@@ -88,10 +94,10 @@ function pill(): Html {
   const reviews = recentReviews();
   const [tone, text] = syncing && counts.pending ? ["busy", `Syncing ${counts.pending}…`]
     : reviews ? ["review", `${reviews} ${reviews === 1 ? "needs" : "need"} review`]
-    : offline && counts.pending ? ["offline", `Offline · ${counts.pending} pending`]
+    : offline && counts.pending ? ["offline", `Offline · ${counts.pending} waiting`]
     : offline ? ["offline", "Offline"]
     : counts.pending ? ["waiting", `${counts.pending} waiting`]
-    : ["ok", "Synced"];
+    : ["ok", events.length ? "Synced" : "Online"];
   return html`<a class="ss-pill ss-pill--${tone}" href="/self-service?do=activity" data-route aria-label="${text}. Open My activity."><span class="ss-pill__dot" aria-hidden="true"></span>${text}</a>`;
 }
 
@@ -123,7 +129,7 @@ function refreshRegions(): void {
 /* ---------- Home ---------- */
 
 function greeting(): string {
-  const hour = Number(new Intl.DateTimeFormat("en-PH", { hour: "numeric", hourCycle: "h23", timeZone: "Asia/Manila" }).format(new Date()));
+  const hour = Number(HOUR.format(new Date()));
   const part = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const first = profile.name.split(" ")[0];
   return first ? `${part}, ${first}.` : `${part}.`;
@@ -134,7 +140,7 @@ function tile(screen: Screen, name: string, detail: string, glyph: Parameters<ty
       <span class="ss-tile__icon" aria-hidden="true">${icon(glyph)}</span>
       <span class="ss-tile__name">${name}</span>
       <span class="ss-tile__detail">${detail}</span>
-      ${badge ? html`<span class="ss-tile__badge">${badge}</span>` : ""}
+      ${badge ? html`<span class="ss-tile__badge" aria-hidden="true">${badge}</span>` : ""}
     </a>`;
 }
 
@@ -156,8 +162,9 @@ function renderHome(): void {
   if (!screen) return;
   mount(screen, html`<div class="ss-home">
       <section class="ss-hero" aria-labelledby="ss-question">
+        <p class="ss-hero__kicker">HAU USC · Department of Logistics</p>
+        <h1 id="ss-question">What do you <em>need</em>?</h1>
         <p class="ss-hero__hello">${greeting()}</p>
-        <h1 id="ss-question">What do you need?</h1>
       </section>
       <nav class="ss-tiles" aria-label="Actions" data-region="tiles">${homeTiles()}</nav>
       <form class="ss-find" role="search" data-find>
@@ -215,18 +222,20 @@ function renderResults(query: string): void {
 
 const normalize = (text: string) => text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
 
-/** Name, other names, category and location all match; every word typed must appear. */
+/** Name, other names and location match (not the category, whose labels would match too much); every word typed must appear. */
 function matching(items: CatalogItem[], query: string): CatalogItem[] {
   const words = normalize(query).split(/\s+/).filter(Boolean);
   return items.filter((item) => {
-    const haystack = normalize(`${item.name} ${item.aliases ?? ""} ${item.category} ${item.location ?? ""}`);
+    const haystack = normalize(`${item.name} ${item.aliases ?? ""} ${item.location ?? ""}`);
     return words.every((word) => haystack.includes(word));
   });
 }
 
 function countBadge(item: CatalogItem, available: number): Html {
   if (available <= 0) return html`<span class="ss-count ss-count--out">None left</span>`;
-  return html`<span class="ss-count ${available <= 2 ? "ss-count--low" : ""}"><strong>${available}</strong> ${item.action === "TAKE" ? "left" : "free"}</span>`;
+  const noun = item.action === "TAKE" ? "left" : "available";
+  // Low stock says so in words as well as colour.
+  return available <= 2 ? html`<span class="ss-count ss-count--low">Only <strong>${available}</strong> ${noun}</span>` : html`<span class="ss-count"><strong>${available}</strong> ${noun}</span>`;
 }
 
 const SCREEN_COPY = {
@@ -312,10 +321,7 @@ const skeleton = () => html`<ul class="ss-list" aria-hidden="true">${Array.from(
 
 function when(iso: string): string {
   const date = new Date(iso);
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
-  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(date);
-  if (day === today) return formatTime(iso);
-  return new Intl.DateTimeFormat("en-PH", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" }).format(date);
+  return DAY.format(date) === DAY.format(new Date()) ? formatTime(iso) : DAY_TIME.format(date);
 }
 
 /* ---------- Sheets: Take, Borrow, Return ---------- */
@@ -332,8 +338,8 @@ function estimateLine(item: CatalogItem): Html {
 
 function quantityField(max: number): Html {
   return html`<div class="field"><label for="ss-qty">How many?</label>
-      <div class="stepper ss-stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One less">−</button><input id="ss-qty" name="quantity" type="number" inputmode="numeric" min="1" max="${max}" step="1" value="1" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">+</button></div>
-      <p class="field__hint" data-over hidden></p></div>`;
+      <div class="stepper ss-stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One less">−</button><input id="ss-qty" name="quantity" type="number" inputmode="numeric" min="1" max="${max}" step="1" value="1" aria-describedby="ss-over" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">+</button></div>
+      <p class="field__hint field__hint--warn" id="ss-over" aria-live="polite" data-over hidden></p></div>`;
 }
 
 const nameField = (label: string) => html`<div class="field"><label for="ss-name">${label}</label><input id="ss-name" name="name" autocomplete="name" autocapitalize="words" maxlength="120" required value="${profile.name}" enterkeyhint="done" /></div>`;
@@ -359,13 +365,13 @@ function borrowSheet(item: CatalogItem): Html {
   const uscOnly = item.audience === "USC_STAFF_ONLY";
   const today = new Date();
   const tomorrow = new Date(today.getTime() + 86_400_000);
-  const day = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(date);
+  const day = (date: Date) => DAY.format(date);
   return sheetFrame(`Borrow · ${categoryName(item.category)}`, item.name, html`
     ${estimateLine(item)}
     <form class="form ss-form" data-form="BORROW" novalidate>
       ${uscOnly ? html`<input type="hidden" name="purpose" value="USC" /><p class="callout">${icon("info")}<span>Lent for USC use only. Say what it's for.</span></p>`
-        : html`<fieldset class="segmented segmented--2"><legend class="visually-hidden">What is it for?</legend>
-          <label><input type="radio" name="purpose" value="INDIVIDUAL" checked /><span>Individual use</span></label><label><input type="radio" name="purpose" value="USC" /><span>USC use</span></label></fieldset>`}
+        : html`<fieldset class="ss-question"><legend class="ss-legend">What is it for?</legend><div class="segmented segmented--2">
+          <label><input type="radio" name="purpose" value="INDIVIDUAL" checked /><span>Individual use</span></label><label><input type="radio" name="purpose" value="USC" /><span>USC use</span></label></div></fieldset>`}
       ${nameField(uscOnly ? "Name of the person using it" : "Your full name")}
       ${studentIdField(!uscOnly)}
       <div class="field" data-reason ${uscOnly ? "" : "hidden"}><label for="ss-reason">Specific reason</label><textarea id="ss-reason" name="reason" rows="2" maxlength="300" placeholder="e.g. stage setup for the general assembly"></textarea></div>
@@ -377,8 +383,8 @@ function borrowSheet(item: CatalogItem): Html {
       </fieldset>
       <div class="field">
         <span class="field-label" id="ss-photo-label">Photo <span class="field__optional">required</span></span>
-        <input class="visually-hidden" id="ss-photo" type="file" accept="image/jpeg,image/png,image/webp" capture="user" tabindex="-1" aria-labelledby="ss-photo-label" />
-        <div class="photo-field" data-photo><button type="button" class="photo-field__pick" data-pick aria-describedby="ss-photo-hint">${icon("camera")}<span>Take a photo holding it</span></button></div>
+        <input id="ss-photo" type="file" accept="image/jpeg,image/png,image/webp" capture="user" hidden />
+        <div class="photo-field" data-photo>${photoPick()}</div>
         <p class="field__hint" id="ss-photo-hint">Your face and the item, together. It stays private to Logistics staff.</p>
       </div>
       <div class="form-alert" role="alert" hidden data-alert></div>
@@ -386,13 +392,15 @@ function borrowSheet(item: CatalogItem): Html {
     </form>`);
 }
 
+const photoPick = () => html`<button type="button" class="photo-field__pick" data-pick aria-describedby="ss-photo-label ss-photo-hint">${icon("camera")}<span>Take a photo holding it</span></button>`;
+
 function returnSheet(item: CatalogItem | undefined, loan: LocalEvent | undefined): Html {
   const name = loan?.itemName ?? item?.name ?? "Item";
-  return sheetFrame(loan ? `Borrowed ${when(loan.occurredAt)}` : "Return", `Return ${name}${loan && loan.quantity > 1 ? ` ×${loan.quantity}` : ""}`, html`
+  return sheetFrame(loan ? `Borrowed ${when(loan.occurredAt)}` : item ? categoryName(item.category) : "Return", `Return ${name}${loan && loan.quantity > 1 ? ` ×${loan.quantity}` : ""}`, html`
     <form class="form ss-form" data-form="RETURN" novalidate>
-      <fieldset class="segmented ss-condition"><legend class="ss-legend">How is it?</legend>
+      <fieldset class="ss-question"><legend class="ss-legend">How is it?</legend><div class="segmented ss-condition">
         <label><input type="radio" name="outcome" value="RETURNED" checked /><span>Good</span></label><label><input type="radio" name="outcome" value="DAMAGED" /><span>Damaged</span></label><label><input type="radio" name="outcome" value="LOST" /><span>Lost</span></label>
-      </fieldset>
+      </div></fieldset>
       <div class="field" data-note hidden><label for="ss-note" data-note-label>What's damaged?</label><textarea id="ss-note" name="note" rows="2" maxlength="300"></textarea></div>
       ${loan ? html`<p class="ss-hint">${icon("check")}Linked to your borrow on this phone, so Logistics knows exactly which loan this is.</p>` : html`
         <p class="ss-hint">${icon("info")}Tell us who borrowed it so Logistics can match the loan.</p>
@@ -404,12 +412,17 @@ function returnSheet(item: CatalogItem | undefined, loan: LocalEvent | undefined
     </form>`);
 }
 
+const VERB: Record<string, string> = { TAKE: "Taken", BORROW: "Borrowed", RETURNED: "Returned", DAMAGED: "Returned damaged", LOST: "Reported lost" };
+const verb = (event: LocalEvent) => VERB[event.type === "RETURN" ? event.outcome ?? "RETURNED" : event.type];
+
 /** Shown in the sheet after saving: calm, specific, and it updates itself when the record syncs. */
 function receipt(event: LocalEvent): Html {
-  const verb = event.type === "TAKE" ? "Taken" : event.type === "BORROW" ? "Borrowed" : event.outcome === "RETURNED" ? "Returned" : event.outcome === "DAMAGED" ? "Returned damaged" : "Reported lost";
   return html`<div class="ss-receipt" role="status">
-      <svg class="ss-receipt__mark" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24" /><path d="m15 27 7 7 15-16" /></svg>
-      <h2 id="sheet-title">${verb}</h2>
+      <div class="ss-receipt__halo" aria-hidden="true">
+        <svg class="ss-receipt__mark" viewBox="0 0 52 52"><defs><linearGradient id="ss-gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7dc9a" /><stop offset="1" stop-color="#c9962a" /></linearGradient></defs><circle cx="26" cy="26" r="24" /><path d="m15 27 7 7 15-16" /></svg>
+        <span class="ss-receipt__sparks">${Array.from({ length: 10 }, () => html`<i></i>`)}</span>
+      </div>
+      <h2 id="sheet-title">${verb(event)}</h2>
       <p class="ss-receipt__what">${event.quantity > 1 ? `${event.quantity} × ` : ""}${event.itemName}</p>
       <p class="ss-receipt__sync" data-receipt="${event.id}">${receiptState(event)}</p>
       ${event.type === "BORROW" ? html`<p class="ss-receipt__tip">Return it from <strong>Return</strong> on this phone, so it links to this loan.</p>` : ""}
@@ -421,7 +434,7 @@ function receipt(event: LocalEvent): Html {
 }
 
 function receiptState(event: LocalEvent): Html {
-  if (event.state === "synced") return html`<span class="ss-state ss-state--ok">${icon("check")}Synced with Logistics</span>`;
+  if (event.state === "synced") return html`<span class="ss-state ss-state--ok">${icon("check")}Sent to Logistics</span>`;
   if (event.state === "review") return html`<span class="ss-state ss-state--review">${icon("info")}${event.message ?? "Staff will check it."}</span>`;
   if (event.state === "rejected") return html`<span class="ss-state ss-state--bad">${icon("alert")}Not recorded: ${event.message ?? "please ask Logistics staff."}</span>`;
   return offline
@@ -431,7 +444,6 @@ function receiptState(event: LocalEvent): Html {
 
 /* ---------- My activity ---------- */
 
-const VERB: Record<string, string> = { TAKE: "Taken", BORROW: "Borrowed", RETURNED: "Returned", DAMAGED: "Returned damaged", LOST: "Reported lost" };
 const STATE: Record<LocalEvent["state"], [string, string]> = { pending: ["wait", "Waiting to sync"], synced: ["ok", "Synced"], review: ["review", "Staff will check"], rejected: ["bad", "Not recorded"] };
 
 function renderActivity(): void {
@@ -458,7 +470,7 @@ function renderActivity(): void {
       ${recent.length ? html`<ul class="ss-timeline">${recent.map((event) => {
         const [tone, text] = STATE[event.state];
         return html`<li class="ss-event"><div><p class="ss-event__what">${event.itemName}${event.quantity > 1 ? html` <span class="muted">×${event.quantity}</span>` : ""}</p>
-            <p class="ss-event__when">${VERB[event.type === "RETURN" ? event.outcome ?? "RETURNED" : event.type]} ${when(event.occurredAt)}</p>
+            <p class="ss-event__when">${verb(event)} ${when(event.occurredAt)}</p>
             ${event.message && event.state !== "synced" ? html`<p class="ss-event__note">${event.message}</p>` : ""}</div>
           <span class="tag tag--${tone === "wait" ? "pending" : tone === "review" ? "gold" : tone}">${text}</span></li>`;
       })}</ul>` : emptyNote("Nothing yet. What you take, borrow and return with this phone shows up here.")}
@@ -478,8 +490,8 @@ function renderInstall(): void {
   if (!main) return;
   const ios = platform() === "ios";
   const steps = ios
-    ? [html`Open this page in <strong>Safari</strong>.`, html`Tap ${icon("share")}<strong>Share</strong>. On newer iPhones it's in the ${icon("more")} menu next to the address bar; tap <strong>View More</strong> if you don't see the next step.`, html`Tap <strong>Add to Home Screen</strong>, keep <strong>Open as Web App</strong> on, then tap <strong>Add</strong>.`, html`Open <strong>Logistics Hub</strong> from your Home Screen once while online. It's ready when it says <strong>Ready for offline use</strong>.`]
-    : [html`Open this page in <strong>Chrome</strong> (or Samsung Internet).`, html`Tap the ${icon("more")} menu, then <strong>Install app</strong> or <strong>Add to Home screen</strong> (newer Chrome: <strong>Install and create shortcut</strong> → <strong>Install</strong>).`, html`Open <strong>Logistics Hub</strong> from your home screen or app drawer.`, html`Wait for <strong>Ready for offline use</strong> before you rely on it offline.`];
+    ? [html`Open this page in <strong>Safari</strong>.`, html`Tap ${icon("share")}<strong>Share</strong>. On newer iPhones it's in the ${icon("more")} menu next to the address bar; tap <strong>View More</strong> if you don't see the next step.`, html`Tap <strong>Add to Home Screen</strong>, keep <strong>Open as Web App</strong> on, then tap <strong>Add</strong>.`, html`Open <strong>Logistics</strong> from your Home Screen once while online. It's ready when it says <strong>Ready for offline use</strong>.`]
+    : [html`Open this page in <strong>Chrome</strong> (or Samsung Internet).`, html`Tap the ${icon("more")} menu, then <strong>Install app</strong> or <strong>Add to Home screen</strong> (newer Chrome: <strong>Install and create shortcut</strong> → <strong>Install</strong>).`, html`Open <strong>Logistics</strong> from your home screen or app drawer.`, html`Wait for <strong>Ready for offline use</strong> before you rely on it offline.`];
   mount(main, html`<div class="ss-screen">
       ${back("Install Logistics Hub")}
       <p class="ss-lead">Install it once while you have internet. After that it opens like an app and keeps recording when the office internet is down.</p>
@@ -497,6 +509,8 @@ let renderedScreen: Screen | null = null;
 function renderScreen(): void {
   const { screen } = params();
   renderedScreen = screen;
+  // The campus photograph belongs to home; other screens keep only the aurora (see self-service.css).
+  document.body.dataset.ssScreen = screen;
   if (screen === "home") renderHome();
   else if (screen === "activity") renderActivity();
   else if (screen === "install") renderInstall();
@@ -514,7 +528,8 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
   let photo: Blob | null = null;
   let preparing: Promise<void> | null = null;
 
-  const sync = () => {
+  /** Keeps the form's dependent parts (labels, hints, optional fields) in step with its input. */
+  const updateFields = () => {
     const count = Math.max(1, Math.min(SELF_SERVICE_LIMITS.quantity, Math.round(Number(quantity?.value) || 1)));
     const label = form.querySelector("[data-qty-label]");
     if (label && item) label.textContent = `Take ${count} ${units(count, item.unit)}`;
@@ -540,14 +555,19 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     }
   };
 
-  form.addEventListener("input", () => { dirty = true; setMessage(alert, ""); sync(); });
+  form.addEventListener("input", () => {
+    dirty = true;
+    setMessage(alert, "");
+    form.querySelectorAll("[aria-invalid]").forEach((field) => field.removeAttribute("aria-invalid"));
+    updateFields();
+  });
   form.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
     const step = target.closest<HTMLElement>("[data-step]");
     if (step && quantity) {
       quantity.value = String(Math.max(1, Math.min(SELF_SERVICE_LIMITS.quantity, (Number(quantity.value) || 1) + Number(step.dataset.step))));
       navigator.vibrate?.(8);
-      sync();
+      updateFields();
     }
     if (target.closest("[data-pick]")) form.querySelector<HTMLInputElement>("#ss-photo")?.click();
     if (target.closest("[data-clear-photo]")) { photo = null; showPhoto(null); }
@@ -558,7 +578,7 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     if (!photoBox) return;
     mount(photoBox, preview
       ? html`<img class="photo-field__preview" src="${preview}" alt="Photo to attach" /><div class="photo-field__actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Retake</button><button type="button" class="button button--ghost button--sm" data-clear-photo>Remove</button></div>`
-      : html`<button type="button" class="photo-field__pick" data-pick aria-describedby="ss-photo-hint">${icon("camera")}<span>Take a photo holding it</span></button>`);
+      : photoPick());
   };
   form.querySelector<HTMLInputElement>("#ss-photo")?.addEventListener("change", (event) => {
     const chosen = (event.target as HTMLInputElement).files?.[0];
@@ -567,7 +587,7 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     if (photoBox) mount(photoBox, html`<p class="photo-field__busy">Preparing the photo…</p>`);
     preparing = (async () => {
       try {
-        photo = await shrinkPhoto(chosen);
+        photo = await shrinkPhoto(chosen, SELF_SERVICE_LIMITS.photoBytes);
         showPhoto(await dataUrl(photo));
       } catch (error) {
         photo = null;
@@ -591,15 +611,19 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     const outcome = String(data.get("outcome") ?? "RETURNED") as "RETURNED" | "DAMAGED" | "LOST";
     const note = String(data.get("note") ?? "").trim();
     const count = Math.round(Number(data.get("quantity") ?? loan?.quantity ?? 1));
-    const problem = !loan && !name ? "Please enter a name."
-      : type === "BORROW" && purpose === "INDIVIDUAL" && !studentId ? "Your student ID number is needed for individual use."
-      : studentId && !/^[A-Z0-9][A-Z0-9-]{2,29}$/.test(studentId) ? "The student ID may use only letters, digits and dashes."
-      : type === "BORROW" && purpose === "USC" && !reason ? "Say what it's for."
-      : type === "BORROW" && !photo ? "Take a photo holding the item."
-      : type === "RETURN" && outcome !== "RETURNED" && !note ? (outcome === "LOST" ? "Say what happened." : "Say what's damaged.")
-      : !Number.isInteger(count) || count < 1 || count > SELF_SERVICE_LIMITS.quantity ? `Choose a quantity from 1 to ${SELF_SERVICE_LIMITS.quantity}.` : "";
+    // The first problem, and the field to fix it in.
+    const [problem, field] = !loan && !name ? ["Please enter a name.", "#ss-name"]
+      : type === "BORROW" && purpose === "INDIVIDUAL" && !studentId ? ["Your student ID number is needed for individual use.", "#ss-student"]
+      : studentId && !STUDENT_ID_PATTERN.test(studentId) ? ["The student ID may use only letters, digits and dashes.", "#ss-student"]
+      : type === "BORROW" && purpose === "USC" && !reason ? ["Say what it's for.", "#ss-reason"]
+      : type === "BORROW" && !photo ? ["Take a photo holding the item.", "[data-pick]"]
+      : type === "RETURN" && outcome !== "RETURNED" && !note ? [outcome === "LOST" ? "Say what happened." : "Say what's damaged.", "#ss-note"]
+      : !Number.isInteger(count) || count < 1 || count > SELF_SERVICE_LIMITS.quantity ? [`Choose a quantity from 1 to ${SELF_SERVICE_LIMITS.quantity}.`, "#ss-qty"] : ["", ""];
     if (problem) {
       setMessage(alert, problem);
+      const invalid = form.querySelector<HTMLElement>(field);
+      invalid?.setAttribute("aria-invalid", "true");
+      invalid?.focus();
       navigator.vibrate?.([20, 40, 20]);
       return;
     }
@@ -620,18 +644,24 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
       onSaved(saved);
       void requestPersistence();
       void requestBackgroundSync();
-      afterSave();
     } catch {
       submit.disabled = false;
       setMessage(alert, "This phone could not save the record. Check that you're not in private browsing, then try again.");
     }
   });
-  sync();
+  updateFields();
 }
 
 export async function selfService(): Promise<void> {
   document.body.classList.add("is-self-service");
-  onLeave(() => document.body.classList.remove("is-self-service"));
+  const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  const pageTheme = themeColor?.content ?? "";
+  themeColor?.setAttribute("content", "#140609");
+  onLeave(() => {
+    document.body.classList.remove("is-self-service");
+    delete document.body.dataset.ssScreen;
+    themeColor?.setAttribute("content", pageTheme);
+  });
   mount(app, frame());
   const dialog = document.querySelector<HTMLDialogElement>("#ss-sheet")!;
   let receiptFor: string | null = null;
@@ -678,6 +708,7 @@ export async function selfService(): Promise<void> {
       receiptFor = saved.id;
       mount(dialog, receipt(saved));
       dialog.querySelector<HTMLButtonElement>("[data-done]")?.focus();
+      void runSync();
     });
     // Phones would pop the keyboard over the sheet; only a mouse user starts typing straight away.
     if (window.matchMedia("(pointer: fine)").matches) form.querySelector<HTMLInputElement>("input:not([type=hidden]):not([type=radio]):not([type=file])")?.focus();
@@ -749,8 +780,14 @@ export async function selfService(): Promise<void> {
     }
   };
   const onFind = (event: Event) => { if ((event.target as HTMLElement).matches("[data-find]")) event.preventDefault(); };
+  // On a phone, lift the search box to the top so its results are not hidden under the keyboard.
+  const onFocus = (event: FocusEvent) => {
+    const field = (event.target as HTMLElement).closest(".ss-find");
+    if (field && window.matchMedia("(pointer: coarse)").matches) window.setTimeout(() => field.scrollIntoView({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" }), 250);
+  };
   app.addEventListener("input", onInput);
   app.addEventListener("submit", onFind);
+  app.addEventListener("focusin", onFocus);
 
   const refreshReadiness = async () => { ready = await readiness(); refreshRegions(); };
   const reload = async () => {
@@ -825,11 +862,10 @@ export async function selfService(): Promise<void> {
     app.removeEventListener("click", clickHandler);
     app.removeEventListener("input", onInput);
     app.removeEventListener("submit", onFind);
+    app.removeEventListener("focusin", onFocus);
     whenIdle(() => false);
   });
 
-  afterSave = () => void runSync();
-  onLeave(() => { afterSave = () => void syncNow(); });
   await load();
   show();
   void refreshReadiness();

@@ -84,6 +84,22 @@ async function localState(page: Page) {
   }));
 }
 
+/** As if the server's answers had been lost on the way back: every record waits to be sent again. */
+async function forgetAnswers(page: Page): Promise<void> {
+  await page.evaluate(() => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open("logistics-hub");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const transaction = request.result.transaction("events", "readwrite");
+      const events = transaction.objectStore("events");
+      const all = events.getAll();
+      all.onsuccess = () => { for (const event of all.result) events.put({ ...event, state: "pending", attempts: 0, nextAttemptAt: 0 }); };
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    };
+  }));
+}
+
 async function take(page: Page, name: RegExp, count: number, person: string): Promise<void> {
   await page.getByRole("link", { name: /^Take/ }).first().click();
   await page.getByRole("link", { name }).click();
@@ -131,7 +147,7 @@ test.describe.serial("offline self-service", () => {
 
     await context.setOffline(true);
     await take(page, /Bottled Water/, 2, "Juan Dela Cruz");
-    await expect(page.getByRole("link", { name: /Offline · 1 pending/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Offline · 1 waiting/ })).toBeVisible();
 
     await page.getByRole("link", { name: /^Borrow/ }).click();
     await page.getByRole("link", { name: /Cotton - roll/ }).click();
@@ -145,7 +161,7 @@ test.describe.serial("offline self-service", () => {
     // The app opens from its own cache without a network, with everything still waiting.
     await page.reload();
     await expect(page.getByRole("heading", { name: "What do you need?" })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Offline · 2 pending/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Offline · 2 waiting/ })).toBeVisible();
     // An update replaces the app's caches; people's records are in IndexedDB and stay.
     await page.evaluate(async () => { for (const key of await caches.keys()) await caches.delete(key); });
     expect(await localState(page)).toEqual({ states: ["pending", "pending"], photos: 1 });
@@ -157,6 +173,11 @@ test.describe.serial("offline self-service", () => {
     await page.getByRole("button", { name: "Done" }).click();
     expect((await localState(page)).states).toEqual(["pending", "pending", "pending"]);
     expect((await item(WATER)).onHand).toBe(waterBefore);
+    // Staff tools are never saved on a phone: offline they say so instead of showing a blank page.
+    await page.goto("/staff");
+    await expect(page.getByRole("heading", { name: "This page needs a connection" })).toBeVisible();
+    await page.getByRole("link", { name: "Open Self-Service" }).click();
+    await expect(page.getByRole("link", { name: /Offline · 3 waiting/ })).toBeVisible();
 
     await context.setOffline(false);
     await expect(page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });
@@ -172,10 +193,16 @@ test.describe.serial("offline self-service", () => {
     expect(photo.headers()["content-type"]).toBe("image/jpeg");
     expect((await page.request.get(`/api/staff/loans/${loan!.id}/photo`)).status()).toBe(401);
 
-    // Sending everything again changes nothing: the server is idempotent.
-    await page.getByRole("link", { name: /Synced/ }).click();
-    await page.getByRole("button", { name: "Sync now" }).click();
+    // Sending everything again (the answers were lost) changes nothing: the server is idempotent.
+    await forgetAnswers(page);
+    await page.reload();
+    await expect(page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });
+    expect((await localState(page)).states).toEqual(["synced", "synced", "synced"]);
     expect((await item(WATER)).onHand).toBe(waterBefore - 2);
+    expect((await item(COTTON)).onHand).toBe(cottonBefore);
+    const after = await (await staff.request.get("/api/staff/loans")).json() as { open: Array<{ itemId: string }>; closed: Array<{ itemId: string; createdBy: string }> };
+    expect(after.open.filter((entry) => entry.itemId === COTTON)).toEqual([]);
+    expect(after.closed.filter((entry) => entry.itemId === COTTON && entry.createdBy === "Self-service")).toHaveLength(1);
     await context.close();
   });
 

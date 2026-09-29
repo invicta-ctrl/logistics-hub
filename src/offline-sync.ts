@@ -17,7 +17,6 @@ const CHANNEL = "logistics-hub";
  * the queue: it is abandoned after this long and counts as offline.
  */
 const deadline = (ms: number) => typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(ms) : undefined;
-const listeners = new Set<(message: SyncMessage) => void>();
 let channel: BroadcastChannel | null = null;
 
 /**
@@ -26,16 +25,11 @@ let channel: BroadcastChannel | null = null;
  * service worker, so each listener hears a message exactly once.
  */
 function announce(message: SyncMessage): void {
-  if (typeof BroadcastChannel !== "function") { listeners.forEach((listener) => listener(message)); return; }
   channel ??= new BroadcastChannel(CHANNEL);
   channel.postMessage(message);
 }
 
 export function onSyncMessage(listener: (message: SyncMessage) => void): () => void {
-  if (typeof BroadcastChannel !== "function") {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
-  }
   const channelForListener = new BroadcastChannel(CHANNEL);
   channelForListener.onmessage = (event: MessageEvent<SyncMessage>) => listener(event.data);
   return () => channelForListener.close();
@@ -59,8 +53,8 @@ export async function refreshCatalog(): Promise<"updated" | "unchanged" | "offli
     return "unchanged";
   }
   if (!response.ok) return "offline";
-  const body = await response.json() as { revision: number; items: CatalogItem[]; categories: string[] };
-  await store.putCatalog({ revision: body.revision, items: body.items, categories: body.categories, fetchedAt: now, checkedAt: now });
+  const body = await response.json() as { revision: number; items: CatalogItem[] };
+  await store.putCatalog({ revision: body.revision, items: body.items, fetchedAt: now, checkedAt: now });
   announce({ type: "catalog" });
   return "updated";
 }

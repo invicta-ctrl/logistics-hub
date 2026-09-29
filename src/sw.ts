@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { syncNow } from "./offline-sync";
+import { nextAttemptAt, syncNow } from "./offline-sync";
 
 /*
  * The service worker: it makes the app open without a connection and sends saved actions in
@@ -82,6 +82,6 @@ async function staleWhileRevalidate(request: Request, event: FetchEvent): Promis
 
 self.addEventListener("sync", (event) => {
   const sync = event as SyncEvent;
-  // Rejecting tells the browser to try again later, which it does a few times.
-  if (sync.tag === "logistics-hub-sync") sync.waitUntil(syncNow().then((report) => { if (report.offline) throw new Error("Still offline."); }));
+  // Rejecting tells the browser to try again later (it does a few times) while anything still waits.
+  if (sync.tag === "logistics-hub-sync") sync.waitUntil(syncNow().then(async (report) => { if (report.offline || report.skipped || await nextAttemptAt() !== null) throw new Error("Records still waiting."); }));
 });

@@ -1,6 +1,7 @@
-import { LOAN_OUTCOMES, PUBLIC_LENDING_ITEM_TYPE, type ReviewReason, SELF_SERVICE_LIMITS, selfServiceAction } from "./catalog-policy";
+import { LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, STUDENT_ID_PATTERN, selfServiceAction } from "./catalog-policy";
+import { throttled } from "./accounts";
 import { type Actor, BUMP_REVISION, COUNT_TOLERANCE_DAYS, HISTORY_ORDER, InputError, catalogRevision, countAwareStatus } from "./inventory";
-import { type LoanDetails, SELF_SERVICE_ACTOR, STUDENT_ID, cleanText, closeStatements, lendStatements, loanDetails, officeDay, readPhoto } from "./loans";
+import { LOAN_ID, type LoanDetails, SELF_SERVICE_ACTOR, cleanText, closeStatements, lendStatements, loanDetails, officeDay, readPhoto } from "./loans";
 
 /*
  * Phone self-service (Part 4.5). A phone records Take, Borrow and Return as immutable events,
@@ -11,7 +12,6 @@ import { type LoanDetails, SELF_SERVICE_ACTOR, STUDENT_ID, cleanText, closeState
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ITEM_ID = /^ITM-[A-Za-z0-9-]{1,24}$/;
-const LOAN_ID = /^LN-[A-Za-z0-9-]{1,60}$/;
 const MINUTE = 60_000;
 /** Sent this soon after it was recorded (by the phone's own clock), the person is still at the shelf. */
 const LIVE_MS = 2 * MINUTE;
@@ -19,6 +19,8 @@ const LIVE_MS = 2 * MINUTE;
 const CLOCK_SLACK_MS = 10 * MINUTE;
 const MAX_AGE_MS = 30 * 24 * 60 * MINUTE;
 const EVENT_TYPES = ["TAKE", "BORROW", "RETURN"] as const;
+/** The database's refusal to change a resolved review (trigger in migration 0015). */
+const RESOLVED = "self_service_event_resolved";
 /** Loans a phone created: `LN-SS-<event id>`, a namespace no staff loan uses. */
 const loanIdFor = (eventId: string) => `LN-SS-${eventId}`;
 
@@ -37,8 +39,11 @@ type SelfServiceEvent = {
   loanEventId: string | null; outcome: typeof LOAN_OUTCOMES[number] | null; note: string | null;
 };
 
-/** One sync request, as the Worker received it. */
-export type Batch = { deviceId: string; sentAt: string; offsetMs: number; receivedAt: string; clientTag: string | null; events: unknown[] };
+/**
+ * One sync request, as the Worker received it. `network` (the sender's IPv4 address or IPv6 /64)
+ * is used only for limits and is never stored; `clientTag` is its keyed hash, which is stored.
+ */
+export type Batch = { deviceId: string; sentAt: string; offsetMs: number; receivedAt: string; network: string; clientTag: string | null; events: unknown[] };
 
 type ItemRow = { id: string; itemType: string; status: string; needsReview: number; lendingAudience: string; selfService: number };
 
@@ -59,7 +64,7 @@ export async function selfServiceCatalog(db: D1Database) {
       available: Math.max(0, row.onHand), location: row.location, audience: action === "BORROW" ? row.lendingAudience : null
     }];
   });
-  return { serverTime: new Date().toISOString(), items, categories: [...new Set(items.map((item) => item.category))].sort((a, b) => a.localeCompare(b)) };
+  return { items };
 }
 
 /* ---------- Reading a request ---------- */
@@ -87,7 +92,7 @@ function isoTime(value: unknown, message: string): number {
  * `photo:<event id>` part per borrow. The clock offset is arrival − sentAt: both times come
  * from the same phone clock as the events, so no earlier measurement is trusted.
  */
-export function readBatch(form: FormData, now = Date.now()): Omit<Batch, "clientTag"> {
+export function readBatch(form: FormData, now = Date.now()): Omit<Batch, "clientTag" | "network"> {
   let batch: unknown;
   try {
     batch = JSON.parse(String(form.get("batch") ?? ""));
@@ -101,6 +106,20 @@ export function readBatch(form: FormData, now = Date.now()): Omit<Batch, "client
   if (photoCount > SELF_SERVICE_LIMITS.photosPerSync) throw bad(`Send at most ${SELF_SERVICE_LIMITS.photosPerSync} photos at a time.`);
   const sent = isoTime(sentAt, "Malformed send time.");
   return { deviceId: uuid(deviceId, "Malformed device id."), sentAt: new Date(sent).toISOString(), offsetMs: now - sent, receivedAt: new Date(now).toISOString(), events };
+}
+
+/**
+ * The sender's network: an IPv4 address, or an IPv6 address by its /64 (one phone or household
+ * can use many addresses inside it). Used for limits only and never stored.
+ */
+export function networkOf(request: Request): string {
+  const address = (request.headers.get("CF-Connecting-IP") ?? "local").toLowerCase();
+  if (!address.includes(":")) return address;
+  const [head = "", tail] = address.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail ? tail.split(":") : [];
+  const groups = tail === undefined ? left : [...left, ...Array<string>(Math.max(0, 8 - left.length - right.length)).fill("0"), ...right];
+  return `${groups.slice(0, 4).map((group) => group.padStart(4, "0")).join(":")}::/64`;
 }
 
 /** Validates one event and works out its business time. Throws InputError for anything malformed. */
@@ -118,7 +137,7 @@ export function parseEvent(raw: unknown, batch: Pick<Batch, "sentAt" | "offsetMs
   const person = (record.person && typeof record.person === "object" ? record.person : {}) as Record<string, unknown>;
   const personName = cleanText(person.name, "Your name", 120, true)!;
   const studentId = type === "TAKE" ? null : cleanText(person.studentId, "Student ID number", 30, false)?.toUpperCase() ?? null;
-  if (studentId && !STUDENT_ID.test(studentId)) throw bad("Student ID number may use only letters, digits and dashes.");
+  if (studentId && !STUDENT_ID_PATTERN.test(studentId)) throw bad("Student ID number may use only letters, digits and dashes.");
 
   const deviceMs = isoTime(record.occurredAt, "Malformed time.");
   const sentMs = Date.parse(batch.sentAt);
@@ -132,9 +151,10 @@ export function parseEvent(raw: unknown, batch: Pick<Batch, "sentAt" | "offsetMs
     loan: null, loanEventId: null, outcome: null, note: null
   };
   if (type === "BORROW") {
-    // The staff form's rules, with "today" being the day the borrow happened.
+    // The staff form's rules, with "today" being the day the borrow happened (for an untrusted
+    // clock, the earliest day it could have happened, so the borrow is held rather than refused).
     const fields: Record<string, unknown> = { purpose: record.purpose, borrowerName: person.name, studentId: person.studentId, reason: record.reason, quantity, returnBy: record.returnBy ?? null };
-    event.loan = loanDetails((key) => fields[key], officeDay(new Date(occurred)));
+    event.loan = loanDetails((key) => fields[key], officeDay(new Date(clockIssue ? Math.min(deviceMs, receivedMs) : occurred)));
   }
   if (type === "RETURN") {
     if (typeof record.outcome !== "string" || !(LOAN_OUTCOMES as readonly string[]).includes(record.outcome)) throw bad("Choose Good condition, Damaged or Lost.");
@@ -152,44 +172,42 @@ const PHONE_MESSAGES: Record<ReviewReason, string> = {
   UNMATCHED_RETURN: "Return recorded. Logistics will match it to the loan.",
   RETURN_CONFLICT: "This loan was already closed differently. Staff will check it.",
   NOT_ELIGIBLE: "Saved for staff to confirm: this item is no longer self-service.",
+  USC_ONLY: "Saved for staff to confirm: this item is lent for USC use only.",
   VOLUME: "Saved for staff to confirm: a lot of this item was recorded in the last hour.",
   CLOCK: "Saved for staff to confirm: your phone's clock looked wrong.",
   COUNT_OVERLAP: "Recorded. Staff will recount this item.",
   ERROR: "Saved for staff to check."
 };
-// Saying whether an unmatched return found its loan would reveal who borrowed what.
-const QUIET_REVIEWS = new Set<ReviewReason>(["UNMATCHED_RETURN"]);
-
 function answer(id: string, review: ReviewReason | null, duplicate = false): SyncResult {
-  const outcome: SyncOutcome = review && !QUIET_REVIEWS.has(review) ? "review" : "accepted";
-  return { id, outcome, ...(review ? { message: PHONE_MESSAGES[review] } : {}), ...(duplicate ? { duplicate: true as const } : {}) };
+  return { id, outcome: review ? "review" : "accepted", ...(review ? { message: PHONE_MESSAGES[review] } : {}), ...(duplicate ? { duplicate: true as const } : {}) };
 }
 const rejected = (id: string, message: string): SyncResult => ({ id, outcome: "rejected", message });
 
 /* ---------- Writing one event ---------- */
 
 type Effect = { applied: 0 | 1; review: ReviewReason | null; loanId?: string | null; movementId?: string | null; photoKey?: string | null };
-/** SQL overrides for a return, whose outcome is only known inside the batch (see applyReturn); closedAt binds as ?26. */
-type Deferred = { applied: string; review: string; movementId: string; from: string; closedAt: string };
 
 /** The one insert of an event row. */
-function eventRow(db: D1Database, event: SelfServiceEvent, batch: Batch, effect: Effect, deferred?: Deferred): D1PreparedStatement {
+function eventRow(db: D1Database, event: SelfServiceEvent, batch: Batch, effect: Effect): D1PreparedStatement {
   return db.prepare(`INSERT INTO self_service_events(id, device_id, seq, event_type, item_id, quantity, person_name, student_id, purpose, reason,
       return_outcome, note, return_by, loan_event_id, photo_key, device_time, sent_at, occurred_at, received_at, client_tag, catalog_revision,
       loan_id, movement_id, applied, review)
-    SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22,
-      ${deferred?.movementId ?? "?23"}, ${deferred?.applied ?? "?24"}, ${deferred?.review ?? "?25"}${deferred?.from ?? ""}`)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)`)
     .bind(event.id, batch.deviceId, event.seq, event.type, event.itemId, event.quantity, event.personName, event.loan?.studentId ?? event.studentId,
       event.loan?.purpose ?? null, event.loan?.reason ?? null, event.outcome, event.note, event.loan?.returnBy ?? null, event.loanEventId, effect.photoKey ?? null,
       event.deviceTime, batch.sentAt, event.occurredAt, batch.receivedAt, batch.clientTag, event.catalogRevision,
-      effect.loanId ?? null, effect.movementId ?? null, effect.applied, effect.review, ...(deferred ? [deferred.closedAt] : []));
+      effect.loanId ?? null, effect.movementId ?? null, effect.applied, effect.review);
 }
 
-/** Runs one event's batch. A concurrent copy of the same event loses on the primary key and reads as a duplicate. */
-async function write(db: D1Database, event: SelfServiceEvent, statements: D1PreparedStatement[], review: ReviewReason | null): Promise<SyncResult> {
+/**
+ * Runs one event's batch. A concurrent copy of the same event loses on the primary key and reads
+ * as a duplicate. `decide` may settle the review from the batch's own results (see applyReturn).
+ */
+async function write(db: D1Database, event: SelfServiceEvent, statements: D1PreparedStatement[], review: ReviewReason | null,
+  decide?: (results: D1Result[]) => ReviewReason | null): Promise<SyncResult> {
   try {
-    await db.batch([...statements, db.prepare(BUMP_REVISION)]);
-    return answer(event.id, review);
+    const results = await db.batch([...statements, db.prepare(BUMP_REVISION)]);
+    return answer(event.id, decide ? decide(results) : review);
   } catch (error) {
     const twin = await db.prepare("SELECT review FROM self_service_events WHERE id = ?").bind(event.id).first<{ review: ReviewReason | null }>();
     if (twin) return answer(event.id, twin.review, true);
@@ -197,8 +215,16 @@ async function write(db: D1Database, event: SelfServiceEvent, statements: D1Prep
   }
 }
 
-const hold = (db: D1Database, event: SelfServiceEvent, batch: Batch, review: ReviewReason, extra: Partial<Effect> = {}) =>
-  write(db, event, [eventRow(db, event, batch, { applied: 0, review, ...extra })], review);
+/**
+ * Keeps an event for a staff decision without applying it. A network may leave only so many of
+ * these a day, so a flood of made-up records cannot bury the review page or fill storage.
+ */
+async function hold(db: D1Database, event: SelfServiceEvent, batch: Batch, review: ReviewReason, extra: Partial<Effect> = {}): Promise<SyncResult> {
+  if (review !== "ERROR" && await throttled(db, `self-service-held:${batch.network}`, SELF_SERVICE_LIMITS.heldPerNetworkDay, 24 * 60 * MINUTE)) {
+    return rejected(event.id, "Too many records from this network need a staff check today. Please see Logistics staff.");
+  }
+  return write(db, event, [eventRow(db, event, batch, { applied: 0, review, ...extra })], review);
+}
 
 /** The self-service Take: a STOCK_OUT the phone recorded. Never refused for quantity; see stockIssues(). */
 function takeStatement(db: D1Database, movementId: string, eventId: string, itemId: string, quantity: number, at: string): D1PreparedStatement {
@@ -210,14 +236,29 @@ function takeStatement(db: D1Database, movementId: string, eventId: string, item
 
 type Context = { overlap: boolean; recentUnits: number };
 
-/** Per-event facts, in one query: a physical count right beside it, and this item's self-service volume in the last hour. */
-async function context(db: D1Database, event: SelfServiceEvent, receivedAt: string): Promise<Context> {
+/**
+ * Per-event facts, in one query: a physical count right beside `at`, and this item's
+ * self-service volume in the last hour. Read before the write, so two requests at the same
+ * moment can both pass the volume check; the request throttles bound that.
+ */
+async function context(db: D1Database, itemId: string, at: string, receivedAt: string): Promise<Context> {
   const row = await db.prepare(`SELECT EXISTS (SELECT 1 FROM inventory_movements WHERE item_id = ?1 AND movement_type = 'COUNT_ADJUSTMENT' AND status = 'POSTED'
         AND imported_from IS NULL AND julianday(created_at) BETWEEN julianday(?2) - ?3 AND julianday(?2) + ?3) AS overlap,
       (SELECT COALESCE(SUM(quantity), 0) FROM self_service_events WHERE item_id = ?1 AND event_type <> 'RETURN' AND applied = 1
         AND received_at > strftime('%Y-%m-%dT%H:%M:%fZ', ?4, '-1 hour')) AS recentUnits`)
-    .bind(event.itemId, event.occurredAt, COUNT_TOLERANCE_DAYS, receivedAt).first<{ overlap: number; recentUnits: number }>();
+    .bind(itemId, at, COUNT_TOLERANCE_DAYS, receivedAt).first<{ overlap: number; recentUnits: number }>();
   return { overlap: row?.overlap === 1, recentUnits: row?.recentUnits ?? 0 };
+}
+
+/**
+ * An unexpected failure: the event is kept for staff (with its photo) if the database is
+ * reachable; otherwise the phone keeps it and tries again later.
+ */
+async function failed(db: D1Database, bucket: R2Bucket, event: SelfServiceEvent, batch: Batch, error: unknown, photoKey: string | null = null): Promise<SyncResult> {
+  console.error("self_service_event_failed", { type: event.type, message: error instanceof Error ? error.message : "unknown" });
+  const kept = await hold(db, event, batch, "ERROR", { photoKey }).catch(() => null);
+  if (photoKey && (!kept || kept.duplicate)) await bucket.delete(photoKey);
+  return kept ?? { id: event.id, outcome: "retry" };
 }
 
 /**
@@ -234,6 +275,7 @@ async function applyOut(db: D1Database, bucket: R2Bucket, event: SelfServiceEven
     // Saved with its photo in one step on the phone, so a missing photo is never a real borrow.
     const photo = await readPhoto(photoPart).catch((error: unknown) => { if (error instanceof InputError) return error; throw error; });
     if (photo instanceof InputError) return rejected(event.id, `${photo.message} Take the photo again and borrow once more.`);
+    if (photo.bytes.length > SELF_SERVICE_LIMITS.photoBytes) return rejected(event.id, "The photo is too large. Take it again and borrow once more.");
     // Unique per attempt, so a failed attempt never deletes the photo of a concurrent successful one.
     photoKey = `loans/${loanIdFor(event.id)}-${crypto.randomUUID().slice(0, 8)}`;
     try {
@@ -243,78 +285,84 @@ async function applyOut(db: D1Database, bucket: R2Bucket, event: SelfServiceEven
       return { id: event.id, outcome: "retry", message: "The photo could not be uploaded yet." };
     }
   }
-  const facts = await context(db, event, batch.receivedAt);
-  const held = event.clockIssue ? "CLOCK" : !eligible ? "NOT_ELIGIBLE" : facts.recentUnits + event.quantity > SELF_SERVICE_LIMITS.unitsPerItemHour ? "VOLUME" : null;
+  let result: SyncResult;
   try {
-    if (held) return await hold(db, event, batch, held, { photoKey });
+    const facts = await context(db, event.itemId, event.occurredAt, batch.receivedAt);
+    const held: ReviewReason | null = event.clockIssue ? "CLOCK" : uscOnly ? "USC_ONLY" : !eligible ? "NOT_ELIGIBLE"
+      : facts.recentUnits + event.quantity > SELF_SERVICE_LIMITS.unitsPerItemHour ? "VOLUME" : null;
     const review: ReviewReason | null = facts.overlap ? "COUNT_OVERLAP" : null;
     const movementId = `MOV-${crypto.randomUUID()}`;
-    if (event.type === "TAKE") {
-      return await write(db, event, [
+    if (held) result = await hold(db, event, batch, held, { photoKey });
+    else if (event.type === "TAKE") {
+      result = await write(db, event, [
         takeStatement(db, movementId, event.id, event.itemId, event.quantity, event.occurredAt),
         eventRow(db, event, batch, { applied: 1, review, movementId })
       ], review);
+    } else {
+      const loanId = loanIdFor(event.id);
+      result = await write(db, event, [
+        ...lendStatements(db, { id: loanId, itemId: event.itemId, details: event.loan!, photoKey: photoKey!, movementId, key: `ss:${event.id}`, actorId: SELF_SERVICE_ACTOR, at: event.occurredAt, allowShort: true, countAware: true }),
+        eventRow(db, event, batch, { applied: 1, review, loanId, movementId, photoKey })
+      ], review);
     }
-    const loanId = loanIdFor(event.id);
-    return await write(db, event, [
-      ...lendStatements(db, { id: loanId, itemId: event.itemId, details: event.loan!, photoKey: photoKey!, movementId, key: `ss:${event.id}`, actorId: SELF_SERVICE_ACTOR, at: event.occurredAt, allowShort: true, countAware: true }),
-      eventRow(db, event, batch, { applied: 1, review, loanId, movementId, photoKey })
-    ], review);
   } catch (error) {
-    if (photoKey) await bucket.delete(photoKey);
-    throw error;
+    return failed(db, bucket, event, batch, error, photoKey);
   }
+  // A copy of this event was already stored (with its own photo), or it was refused: this upload is not needed.
+  if (photoKey && (result.duplicate || result.outcome === "rejected")) await bucket.delete(photoKey);
+  return result;
 }
 
-type OpenLoan = { id: string; itemId: string; quantity: number; status: string; studentId: string | null; borrowerName: string; createdAt: string };
-const LOAN_FIELDS = "l.id, l.item_id AS itemId, l.quantity, l.status, l.student_id AS studentId, l.borrower_name AS borrowerName, l.created_at AS createdAt";
+type LinkedLoan = { id: string | null; itemId: string; quantity: number; status: string; createdAt: string };
 
 /**
- * The loan a return belongs to, or null. A linked return must name a borrow this same phone
- * made. An unlinked one matches only a good-condition return by the borrower (name, and
- * student ID when the loan has one) of the one open loan of that quantity that began before it.
+ * The borrow a return names, if this same phone made it, with its loan (none while the borrow is
+ * held for staff). A return without that link (borrowed at the desk, on another phone, or the
+ * phone lost its data) always waits for staff to match it: matching by name or student ID would
+ * let anyone close someone else's loan, and would tell them whether it exists.
  */
-async function loanFor(db: D1Database, event: SelfServiceEvent, deviceId: string): Promise<OpenLoan | null> {
-  if (event.loanEventId) {
-    return db.prepare(`SELECT ${LOAN_FIELDS} FROM loans l JOIN self_service_events b ON b.loan_id = l.id AND b.event_type = 'BORROW'
-      WHERE l.id = ? AND b.device_id = ? AND l.item_id = ?`).bind(loanIdFor(event.loanEventId), deviceId, event.itemId).first<OpenLoan>();
-  }
-  if (event.outcome !== "RETURNED") return null;
-  const { results } = await db.prepare(`SELECT ${LOAN_FIELDS} FROM loans l WHERE l.item_id = ? AND l.status = 'OUT' AND julianday(l.created_at) <= julianday(?)`)
-    .bind(event.itemId, event.occurredAt).all<OpenLoan>();
-  const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-  const candidates = results.filter((loan) => same(loan.borrowerName, event.personName) && (!loan.studentId || loan.studentId === event.studentId));
-  return candidates.length === 1 && candidates[0]!.quantity === event.quantity ? candidates[0]! : null;
+async function linkedBorrow(db: D1Database, event: SelfServiceEvent, deviceId: string): Promise<LinkedLoan | null> {
+  return db.prepare(`SELECT l.id, l.item_id AS itemId, l.quantity, l.status, l.created_at AS createdAt
+    FROM self_service_events b LEFT JOIN loans l ON l.id = b.loan_id AND l.item_id = b.item_id
+    WHERE b.id = ? AND b.device_id = ? AND b.event_type = 'BORROW' AND b.item_id = ?`).bind(event.loanEventId, deviceId, event.itemId).first<LinkedLoan>();
 }
 
-async function applyReturn(db: D1Database, event: SelfServiceEvent, batch: Batch, item: ItemRow): Promise<SyncResult> {
+/**
+ * Marks a return applied only if this request's close actually closed the loan (by
+ * self-service, at exactly `at`, with this request's movement if any). Used by phone returns and
+ * staff matching alike, so a close by someone else a moment earlier is never recorded as this one.
+ * `fields` may set more columns, bound from ?5 on.
+ */
+function closedByThis(db: D1Database, eventId: string, loanId: string, at: string, movementId: string, fields: string, ...extra: unknown[]): D1PreparedStatement {
+  return db.prepare(`UPDATE self_service_events SET ${fields}applied = 1, loan_id = ?2, movement_id = (SELECT return_movement_id FROM loans WHERE id = ?2)
+    WHERE id = ?1 AND EXISTS (SELECT 1 FROM loans WHERE id = ?2 AND closed_by = '${SELF_SERVICE_ACTOR}' AND closed_at = ?3
+      AND return_movement_id IS (SELECT id FROM inventory_movements WHERE id = ?4))`).bind(eventId, loanId, at, movementId, ...extra);
+}
+
+async function applyReturn(db: D1Database, event: SelfServiceEvent, batch: Batch): Promise<SyncResult> {
+  const borrow = event.loanEventId ? await linkedBorrow(db, event, batch.deviceId) : null;
+  // Its borrow was refused, so there is nothing to return; the phone drops both.
+  if (event.loanEventId && !borrow) return rejected(event.id, "The borrow this return belongs to was not recorded. Please see Logistics staff.");
   if (event.clockIssue) return hold(db, event, batch, "CLOCK");
-  const loan = item.itemType === PUBLIC_LENDING_ITEM_TYPE ? await loanFor(db, event, batch.deviceId) : null;
-  if (!loan) return hold(db, event, batch, "UNMATCHED_RETURN");
+  if (!borrow?.id) return hold(db, event, batch, "UNMATCHED_RETURN");
+  const loan = { ...borrow, id: borrow.id };
   if (loan.quantity !== event.quantity) return hold(db, event, batch, "RETURN_CONFLICT", { loanId: loan.id });
   if (loan.status !== "OUT") {
     // Usually staff already closed it at the desk: the same outcome needs nothing more.
     if (loan.status === event.outcome) return write(db, event, [eventRow(db, event, batch, { applied: 0, review: null, loanId: loan.id })], null);
     return hold(db, event, batch, "RETURN_CONFLICT", { loanId: loan.id });
   }
-  const { overlap } = await context(db, event, batch.receivedAt);
-  const review: ReviewReason | null = overlap ? "COUNT_OVERLAP" : null;
   // A return is never earlier than its loan, whatever the clocks say.
   const at = event.occurredAt < loan.createdAt ? loan.createdAt : event.occurredAt;
-  // Whether this return closed the loan is decided inside the batch: if staff closed it a moment earlier, it becomes a conflict.
-  const deferred: Deferred = {
-    applied: "c.id IS NOT NULL",
-    review: "CASE WHEN c.id IS NULL THEN 'RETURN_CONFLICT' ELSE ?25 END",
-    movementId: "c.return_movement_id",
-    from: ` FROM (SELECT 1) LEFT JOIN loans c ON c.id = ?22 AND c.closed_by = '${SELF_SERVICE_ACTOR}' AND c.closed_at = ?26 AND c.status = ?11`,
-    closedAt: at
-  };
-  const result = await write(db, event, [
-    ...closeStatements(db, { loanId: loan.id, itemId: loan.itemId, quantity: loan.quantity, outcome: event.outcome!, note: event.note, actorId: SELF_SERVICE_ACTOR, at, movementId: `MOV-${crypto.randomUUID()}`, countAware: true }),
-    eventRow(db, event, batch, { applied: 0, review, loanId: loan.id }, deferred)
-  ], review);
-  const stored = await db.prepare("SELECT review FROM self_service_events WHERE id = ?").bind(event.id).first<{ review: ReviewReason | null }>();
-  return stored ? answer(event.id, stored.review, result.duplicate === true) : result;
+  const { overlap } = await context(db, loan.itemId, at, batch.receivedAt);
+  const review: ReviewReason | null = overlap ? "COUNT_OVERLAP" : null;
+  const movementId = `MOV-${crypto.randomUUID()}`;
+  // Stored as a conflict first; the guarded update turns it into this return only if the close was ours.
+  return write(db, event, [
+    eventRow(db, event, batch, { applied: 0, review: "RETURN_CONFLICT", loanId: loan.id }),
+    ...closeStatements(db, { loanId: loan.id, itemId: loan.itemId, quantity: loan.quantity, outcome: event.outcome!, note: event.note, actorId: SELF_SERVICE_ACTOR, at, movementId, countAware: true }),
+    closedByThis(db, event.id, loan.id, at, movementId, "review = ?5, ", review)
+  ], review, (results) => results.at(-2)!.meta.changes ? review : "RETURN_CONFLICT");
 }
 
 /**
@@ -351,19 +399,12 @@ export async function syncEvents(db: D1Database, bucket: R2Bucket, batch: Batch,
     }
     const item = catalog.get(event.itemId);
     if (!item) { results.push(rejected(id, "This item is no longer in the catalog.")); continue; }
-    try {
-      const result = event.type === "RETURN" ? await applyReturn(db, event, batch, item) : await applyOut(db, bucket, event, batch, item, photos(event.id));
-      results.push(result);
-      stopped = result.outcome === "retry";
-    } catch (error) {
-      console.error("self_service_event_failed", { type: event.type, message: error instanceof Error ? error.message : "unknown" });
-      // Kept for staff if the database is reachable; otherwise the phone keeps it and tries later.
-      const kept = await hold(db, event, batch, "ERROR").catch(() => null);
-      results.push(kept ?? { id, outcome: "retry" });
-      stopped = !kept;
-    }
+    const result = await (event.type === "RETURN" ? applyReturn(db, event, batch) : applyOut(db, bucket, event, batch, item, photos(event.id)))
+      .catch((error: unknown) => failed(db, bucket, event, batch, error));
+    results.push(result);
+    stopped = result.outcome === "retry";
   }
-  return { serverTime: new Date().toISOString(), revision: await catalogRevision(db), results };
+  return { revision: await catalogRevision(db), results };
 }
 
 /* ---------- Staff review ---------- */
@@ -391,7 +432,7 @@ function stockIssues(db: D1Database, since: string): D1PreparedStatement {
       (SELECT on_hand FROM inventory_balances WHERE id = r.itemId) AS onHand,
       (SELECT COUNT(*) FROM loans WHERE item_id = r.itemId AND status = 'OUT') AS openLoans
     FROM running r JOIN items i ON i.id = r.itemId LEFT JOIN counted c ON c.item_id = r.itemId
-    WHERE r.t > COALESCE(c.at, 0) GROUP BY r.itemId HAVING MIN(r.balance) < 0 ORDER BY i.name`).bind(since);
+    WHERE r.t >= COALESCE(c.at, 0) GROUP BY r.itemId HAVING MIN(r.balance) < 0 ORDER BY i.name`).bind(since);
 }
 
 /** The staff exception view in one revisioned payload: open reviews, stock issues, the last week's activity and loans an unmatched return could belong to. */
@@ -419,6 +460,8 @@ type HeldEvent = {
  * Closes a review. `apply` applies a held Take or Borrow exactly as if it had been eligible;
  * `match` closes the chosen open loan with a held Return, at the time it happened; `dismiss`
  * closes the review without changing anything (a held borrow's photo is then deleted).
+ * A resolution is final: the database refuses to change a resolved record (migration 0015), so
+ * of two staff acting on one record at once, the second batch is rolled back whole.
  */
 export async function resolveReview(db: D1Database, bucket: R2Bucket, actor: Actor, id: string, body: unknown) {
   if (!UUID.test(id)) throw new InputError(404, "Nothing to review.");
@@ -432,12 +475,17 @@ export async function resolveReview(db: D1Database, bucket: R2Bucket, actor: Act
   if (!event?.review) throw new InputError(404, "Nothing to review.");
   if (event.resolvedAt) return { resolved: true };
   const now = new Date().toISOString();
-  // Marks the review resolved; `fields` may set more columns from `extra`, bound from ?5 on.
-  const resolved = (fields = "", ...extra: string[]) => db.prepare(`UPDATE self_service_events SET ${fields}resolved_at = ?1, resolved_by = ?2, resolution_note = ?3 WHERE id = ?4 AND resolved_at IS NULL`)
-    .bind(now, actor.accountId, note, id, ...extra);
+  const resolution = [now, actor.accountId, note] as const;
+  // Marks the review resolved; `fields` may set more columns, bound from ?5 on.
+  const resolve = (fields = "", ...extra: string[]) => db.prepare(`UPDATE self_service_events SET ${fields}resolved_at = ?1, resolved_by = ?2, resolution_note = ?3 WHERE id = ?4`)
+    .bind(...resolution, id, ...extra);
+  const run = (statements: D1PreparedStatement[]) => db.batch([...statements, db.prepare(BUMP_REVISION)]).catch((error: unknown) => {
+    if (error instanceof Error && error.message.includes(RESOLVED)) throw new InputError(409, "Someone else resolved this a moment ago. Refresh to see the latest.");
+    throw error;
+  });
 
   if (action === "dismiss") {
-    await db.batch([resolved(), db.prepare(BUMP_REVISION)]);
+    await run([resolve()]);
     if (!event.applied && event.photoKey) await bucket.delete(event.photoKey);
     return { resolved: true };
   }
@@ -446,16 +494,17 @@ export async function resolveReview(db: D1Database, bucket: R2Bucket, actor: Act
 
   if (action === "apply") {
     if (event.type === "RETURN") throw new InputError(400, "Match a return to its loan instead.");
-    const statements = event.type === "TAKE"
-      ? [takeStatement(db, movementId, event.id, event.itemId, event.quantity, event.occurredAt), resolved("applied = 1, movement_id = ?5, ", movementId)]
+    if (event.type === "BORROW" && !event.photoKey) throw new InputError(400, "This borrow has no photo. Dismiss it and lend the item at the desk instead.");
+    const loanId = loanIdFor(event.id);
+    await run(event.type === "TAKE"
+      ? [resolve("applied = 1, movement_id = ?5, ", movementId), takeStatement(db, movementId, event.id, event.itemId, event.quantity, event.occurredAt)]
       : [
+        resolve("applied = 1, movement_id = ?5, loan_id = ?6, ", movementId, loanId),
         ...lendStatements(db, {
-          id: loanIdFor(event.id), itemId: event.itemId, photoKey: event.photoKey ?? "", movementId, key: `ss:${event.id}`, actorId: SELF_SERVICE_ACTOR, at: event.occurredAt, allowShort: true, countAware: true,
+          id: loanId, itemId: event.itemId, photoKey: event.photoKey!, movementId, key: `ss:${event.id}`, actorId: SELF_SERVICE_ACTOR, at: event.occurredAt, allowShort: true, countAware: true,
           details: { purpose: event.purpose ?? "INDIVIDUAL", borrowerName: event.personName, studentId: event.studentId, reason: event.reason, quantity: event.quantity, returnBy: event.returnBy }
-        }),
-        resolved("applied = 1, movement_id = ?5, loan_id = ?6, ", movementId, loanIdFor(event.id))
-      ];
-    await db.batch([...statements, db.prepare(BUMP_REVISION)]);
+        })
+      ]);
     return { resolved: true };
   }
 
@@ -467,12 +516,12 @@ export async function resolveReview(db: D1Database, bucket: R2Bucket, actor: Act
   if (loan.status !== "OUT") throw new InputError(409, "That loan was already closed. Refresh to see the latest.");
   if (loan.quantity !== event.quantity) throw new InputError(400, `That loan is for ${loan.quantity}, but ${event.quantity} came back. Return it from Loans and record a count instead.`);
   const at = event.occurredAt < loan.createdAt ? loan.createdAt : event.occurredAt;
-  const [, update] = await db.batch([
+  const results = await run([
     ...closeStatements(db, { loanId: record.loanId, itemId: loan.itemId, quantity: loan.quantity, outcome: event.outcome, note: event.note, actorId: SELF_SERVICE_ACTOR, at, movementId, countAware: true }),
-    resolved("applied = 1, loan_id = ?5, movement_id = (SELECT return_movement_id FROM loans WHERE id = ?5), ", record.loanId),
-    db.prepare(BUMP_REVISION)
+    closedByThis(db, id, record.loanId, at, movementId, "resolved_at = ?5, resolved_by = ?6, resolution_note = ?7, ", ...resolution)
   ]);
-  if (!update!.meta.changes) throw new InputError(409, "That loan was already closed. Refresh to see the latest.");
+  // Closed at the desk between reading and writing: nothing was changed.
+  if (!results.at(-2)!.meta.changes) throw new InputError(409, "That loan was already closed. Refresh to see the latest.");
   return { resolved: true };
 }
 

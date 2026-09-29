@@ -112,13 +112,20 @@ export function selfServiceAction(item: SelfServiceCandidate): SelfServiceAction
   return item.itemType === PUBLIC_LENDING_ITEM_TYPE ? "BORROW" : "TAKE";
 }
 
+/** A student ID number as the office writes it: letters, digits and dashes. */
+export const STUDENT_ID_PATTERN = /^[A-Z0-9][A-Z0-9-]{2,29}$/;
+
 /**
  * Limits shared by the phone and the Worker, so the form never offers what the server refuses.
- * Five events per sync keeps one request well inside D1's per-invocation query budget.
- * Past `unitsPerItemHour` self-service units of one item in an hour, further takes and borrows
- * are held for staff, which bounds what an abusive client can do to the shelf's records.
+ * - Five events per sync keeps one request inside D1's per-invocation budget (about 25 round
+ *   trips at worst).
+ * - Past `unitsPerItemHour` self-service units of one item in an hour, further takes and borrows
+ *   are held for staff; a network may leave at most `heldPerNetworkDay` held records a day. Both
+ *   bound what an abusive client can do to the records.
+ * - A phone photo is compressed to about 300 KB; 2 MB leaves room without letting four photos
+ *   exceed the request cap.
  */
-export const SELF_SERVICE_LIMITS = { quantity: 50, eventsPerSync: 5, photosPerSync: 4, unitsPerItemHour: 30 } as const;
+export const SELF_SERVICE_LIMITS = { quantity: 30, eventsPerSync: 5, photosPerSync: 4, unitsPerItemHour: 30, heldPerNetworkDay: 60, photoBytes: 2 * 1024 * 1024 } as const;
 
 /**
  * Why a self-service event needs a person, in the words staff read. Everything else reconciles
@@ -128,6 +135,7 @@ export const REVIEW_REASONS = {
   UNMATCHED_RETURN: "A return that could not be matched to one open loan",
   RETURN_CONFLICT: "A return that does not fit its loan (already closed differently, or a different quantity)",
   NOT_ELIGIBLE: "Recorded offline for an item that is no longer self-service",
+  USC_ONLY: "An individual borrow of an item lent for USC use only",
   VOLUME: "More of this item was recorded in an hour than self-service allows",
   CLOCK: "The phone's clock was implausible, so the time cannot be trusted",
   COUNT_OVERLAP: "Happened within minutes of a physical count; the count may already include it",

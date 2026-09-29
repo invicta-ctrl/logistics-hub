@@ -293,7 +293,6 @@ export async function recoverOwner(db: D1Database, input: unknown) {
 
 /* ---------- Attempt throttling (shared across isolates) ---------- */
 
-/** Counts an attempt; true when the caller is over `limit` within the window. */
 /** Counts `weight` attempts against `key` in a fixed window; true once the window's total passes `limit`. */
 export async function throttled(db: D1Database, key: string, limit: number, windowMs: number, weight = 1): Promise<boolean> {
   const now = Date.now();

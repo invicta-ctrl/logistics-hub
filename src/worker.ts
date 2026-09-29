@@ -3,7 +3,7 @@ import { InputError, catalogRevision, createItem, itemDetail, parseItemInput, pu
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { openReorder, stockOverview, updateReorder } from "./stock";
-import { heldPhoto, readBatch, resolveReview, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
+import { heldPhoto, networkOf, readBatch, resolveReview, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
 
 export type Env = {
   DB: D1Database;
@@ -179,28 +179,27 @@ async function selfServiceSync(request: Request, env: Env, url: URL): Promise<Re
   if (!size) return json({ error: "Missing content length." }, 411);
   if (size > MAX_SYNC_BYTES) return json({ error: "Too much at once." }, 413);
   const busy = () => json({ error: "Too many records at once. They are safe on your phone and will be sent shortly." }, 429, { "retry-after": "60" });
+  const network = networkOf(request);
   // Requests are counted before anything is parsed; records are counted once the batch is read.
-  if (await throttled(env.DB, clientKey(request, "self-service-requests"), 120, 10 * 60_000)) return busy();
+  if (await throttled(env.DB, `self-service-requests:${network}`, 120, 10 * 60_000)) return busy();
   const form = await request.formData().catch(() => null);
   if (!form) throw new InputError(400, "Malformed sync request.");
-  const batch = { ...readBatch(form), clientTag: await networkTag(request, env) };
+  const batch = { ...readBatch(form), network, clientTag: await networkTag(network, env) };
   const weight = batch.events.length;
-  if (await throttled(env.DB, clientKey(request, "self-service"), 300, 10 * 60_000, weight) || await throttled(env.DB, `self-service-device:${batch.deviceId}`, 100, 10 * 60_000, weight)) return busy();
+  if (await throttled(env.DB, `self-service:${network}`, 300, 10 * 60_000, weight) || await throttled(env.DB, `self-service-device:${batch.deviceId}`, 100, 10 * 60_000, weight)) return busy();
   // Phones choose their own device ids, so old throttle rows are swept now and then.
   if (Math.random() < 0.02) await env.DB.prepare("DELETE FROM auth_throttle WHERE reset_at < ?").bind(Date.now() - 60 * 60_000).run();
   return json(await syncEvents(env.DB, env.EVIDENCE, batch, (id) => form.get(`photo:${id}`)));
 }
 
 /**
- * A short keyed hash of the sender's network (an IPv6 address by its /64), so staff can see that
- * records came from the same place without anyone storing or seeing the address itself.
+ * A short keyed hash of the sender's network, so staff can see that records came from the same
+ * place without anyone storing or seeing the address itself. None without the signing secret.
  */
-async function networkTag(request: Request, env: Env): Promise<string | null> {
-  const address = request.headers.get("CF-Connecting-IP");
-  if (!address) return null;
-  const network = address.includes(":") ? address.split(":").slice(0, 4).join(":") : address;
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.SESSION_SECRET ?? "logistics-hub"), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(network)));
+async function networkTag(network: string, env: Env): Promise<string | null> {
+  if (!env.SESSION_SECRET) return null;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.SESSION_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`self-service network:${network}`)));
   return [...digest.subarray(0, 4)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 

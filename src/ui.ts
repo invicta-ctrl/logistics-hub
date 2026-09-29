@@ -261,8 +261,12 @@ export function emptyState(title: string, detail: string, action: Html | string 
 
 const MAX_PHOTO_EDGE = 1600;
 
-/** Shrinks a camera photo to at most 1600 px as JPEG, so it uploads quickly on school Wi-Fi and stays small on the phone. */
-export async function shrinkPhoto(file: File): Promise<Blob> {
+/**
+ * Shrinks a camera photo to at most 1600 px as JPEG, so it uploads quickly on school Wi-Fi and
+ * stays small on the phone. A browser that cannot decode it sends the original, up to `maxBytes`.
+ */
+export async function shrinkPhoto(file: File, maxBytes = 8 * 1024 * 1024): Promise<Blob> {
+  let photo: Blob | null;
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
     const scale = Math.min(1, MAX_PHOTO_EDGE / Math.max(bitmap.width, bitmap.height));
@@ -271,11 +275,13 @@ export async function shrinkPhoto(file: File): Promise<Blob> {
     canvas.height = Math.round(bitmap.height * scale);
     canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close();
-    return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("encode")), "image/jpeg", 0.82));
+    photo = await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("encode")), "image/jpeg", 0.82));
   } catch {
-    if (/^image\/(jpeg|png|webp)$/.test(file.type)) return file;
-    throw new Error("This photo could not be read. Take a new one, or choose a JPEG or PNG.");
+    photo = /^image\/(jpeg|png|webp)$/.test(file.type) ? file : null;
   }
+  if (!photo) throw new Error("This photo could not be read. Take a new one, or choose a JPEG or PNG.");
+  if (photo.size > maxBytes) throw new Error("This photo is too large. Take a new one.");
+  return photo;
 }
 
 /** A data: URL for previews (the CSP allows data: images but not blob: URLs). */

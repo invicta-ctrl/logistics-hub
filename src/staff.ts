@@ -77,7 +77,7 @@ export function shell(session: Session, section: Section, main: Html): void {
           ${session.mustChangePassword ? "" : link("inventory", "/staff/inventory", "Inventory")}
           ${session.mustChangePassword ? "" : link("stock", "/staff/stock", "Stock & Pantry")}
           ${session.mustChangePassword ? "" : link("loans", "/staff/loans", "Loans")}
-          ${session.mustChangePassword ? "" : html`<a href="/staff/self-service" data-route ${section === "self-service" ? html`aria-current="page"` : ""}>Self-service${session.selfServiceReviews ? html` <span class="nav-badge" aria-label="${session.selfServiceReviews} need attention">${session.selfServiceReviews}</span>` : ""}</a>`}
+          ${session.mustChangePassword ? "" : html`<a href="/staff/self-service" data-route ${section === "self-service" ? html`aria-current="page"` : ""}>Self-service${session.selfServiceReviews ? html` <span class="nav-badge" aria-hidden="true">${session.selfServiceReviews}</span><span class="visually-hidden">, ${session.selfServiceReviews} ${session.selfServiceReviews === 1 ? "record" : "records"} to check</span>` : ""}</a>`}
           ${session.role !== "STAFF" && !session.mustChangePassword ? link("admin", "/staff/admin", "Administration") : ""}
           ${link("account", "/staff/account", "My account")}
         </nav>

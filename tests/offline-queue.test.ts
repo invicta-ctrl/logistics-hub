@@ -11,7 +11,7 @@ function local(type: LocalEvent["type"], fields: Partial<LocalEvent> = {}): Loca
   };
 }
 const snapshot = (available: number, revision = 7): Snapshot => ({
-  revision, fetchedAt: NOW, checkedAt: NOW, categories: [],
+  revision, fetchedAt: NOW, checkedAt: NOW,
   items: [{ id: "ITM-0001", name: "Scissors", aliases: null, category: "SUPPLIES", unit: "piece", action: "BORROW", available, location: null, audience: "STUDENTS_AND_USC_STAFF" }]
 });
 

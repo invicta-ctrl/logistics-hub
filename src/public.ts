@@ -259,6 +259,12 @@ export function lending(): void {
   });
 }
 
+/** Offline, for a page this phone never saved: the staff tools always need a connection. */
+export function offlinePage(): void {
+  document.title = "Offline · Department of Logistics";
+  page(html`<main id="main-content" class="container page-message"><div class="empty">${icon("cloudOff")}<h1>This page needs a connection</h1><p>You're offline. Self-Service keeps working without internet.</p><a class="button button--primary" href="/self-service" data-route>Open Self-Service</a></div></main>`, "");
+}
+
 export function notFound(): void {
   document.title = "Page not found · Department of Logistics";
   page(html`<main id="main-content" class="container page-message"><div class="empty">${icon("box")}<h1>That page doesn't exist</h1><p>The link may be out of date or mistyped.</p><a class="button button--primary" href="/" data-route>Go to the home page</a></div></main>`, "");

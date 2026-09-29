@@ -1,8 +1,7 @@
-import { LOAN_OUTCOMES, LOAN_PURPOSES, PUBLIC_LENDING_ITEM_TYPE } from "./catalog-policy";
+import { LOAN_OUTCOMES, LOAN_PURPOSES, PUBLIC_LENDING_ITEM_TYPE, STUDENT_ID_PATTERN } from "./catalog-policy";
 import { type Actor, BUMP_REVISION, InputError, LOAN_COLUMNS, audit, countAwareStatus, isoDate } from "./inventory";
 
-const LOAN_ID = /^LN-[A-Za-z0-9-]{1,60}$/;
-export const STUDENT_ID = /^[A-Z0-9][A-Z0-9-]{2,29}$/;
+export const LOAN_ID = /^LN-[A-Za-z0-9-]{1,60}$/;
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const DAY_MS = 86_400_000;
 /** The actor id for anything a phone recorded through self-service (no staff account row). */
@@ -50,7 +49,7 @@ export function loanDetails(get: (key: string) => unknown, today: string): LoanD
   const purpose = purposeValue as LoanDetails["purpose"];
   const borrowerName = cleanText(get("borrowerName"), purpose === "USC" ? "Name of the person using it" : "Borrower's full name", 120, true)!;
   const studentId = cleanText(get("studentId"), "Student ID number", 30, purpose === "INDIVIDUAL")?.toUpperCase() ?? null;
-  if (studentId && !STUDENT_ID.test(studentId)) throw new InputError(400, "Student ID number may use only letters, digits and dashes.");
+  if (studentId && !STUDENT_ID_PATTERN.test(studentId)) throw new InputError(400, "Student ID number may use only letters, digits and dashes.");
   const reason = cleanText(get("reason"), "Specific reason", 300, purpose === "USC");
   const quantity = Number(get("quantity"));
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100_000) throw new InputError(400, "Quantity must be a whole number from 1 to 100000.");

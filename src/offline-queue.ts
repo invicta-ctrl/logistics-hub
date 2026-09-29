@@ -11,7 +11,7 @@ export type CatalogItem = {
   id: string; name: string; aliases: string | null; category: string; unit: string;
   action: SelfServiceAction; available: number; location: string | null; audience: string | null;
 };
-export type Snapshot = { revision: number; items: CatalogItem[]; categories: string[]; fetchedAt: number; checkedAt: number };
+export type Snapshot = { revision: number; items: CatalogItem[]; fetchedAt: number; checkedAt: number };
 
 export type EventType = "TAKE" | "BORROW" | "RETURN";
 export type Outcome = "RETURNED" | "DAMAGED" | "LOST";
