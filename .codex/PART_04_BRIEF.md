@@ -1,6 +1,6 @@
 # Part 4 Brief — Lending (internal loans), quantity editor, two item types
 
-STATUS: LOCAL_GREEN on slice (release prerequisites and production verification pending)
+STATUS: PRODUCTION_READY on slice (private R2 and remote 0014 verified; merge/deploy pending)
 BRANCH: slice/part-04-lending (from main 4f6cf4b)
 ACCEPTED_SPEC: docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md (Part 4), as directed by Earl's current instruction below
 INSTRUCTION: Earl, 2026-09-29 (after Part 3 went live)
@@ -20,7 +20,7 @@ Divergences from the v0.1 spec, per Earl: loans are classified by **purpose** (I
 - 112 items were "Saleable" (crepe paper, tape, envelopes, forks, glass cups): consumable supplies. Migration 0014 makes them Consumable with one system audit row each.
 - The 0001 `loans`, `loan_items` and `evidence` tables were placeholders: never used by code, 0 rows locally and in production (read-only check 2026-09-29). 0014 replaces them.
 - One production item had a loan period / maximum set; the columns stay (unused) rather than rewriting data.
-- R2 is enabled on the account; no `logistics-hub-evidence` bucket exists yet.
+- R2 is enabled; Codex created private `logistics-hub-evidence` on 2026-09-29 after the final local gates and verified no public endpoint.
 
 ## What was built
 - **Migration 0014:** Saleable → Consumable (audited); new `loans` table (purpose, borrower name, student ID or reason by CHECK, R2 photo key, return-by, status OUT/RETURNED/DAMAGED/LOST, LOAN_OUT and LOAN_RETURN movement links, who and when).

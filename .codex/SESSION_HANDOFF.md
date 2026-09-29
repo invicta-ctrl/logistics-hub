@@ -16,10 +16,17 @@ LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` restarted; local 0014 ap
 - **Review completed (Luna Max read-only):** accepted and fixed four major findings: stale physical counts, missing API reasons, saved-loan refresh failure messaging, and authenticated photo caching. Corrected two stale quantity/DTO statements. Minor dashboard query/schema-hardening ideas were not added because they do not block accepted Part 4 behavior and would broaden the slice.
 - **Final local gates (2026-09-29):** typecheck; 61/61 unit; 8/8 browser; 15/15 real Worker + D1; build; privacy, migration and catalog checks; Wrangler dry run. Hallmark visual review found 0 critical/0 major across the named routes and item sheet; Impeccable detector returned `[]`; no observed accessibility regression. Public and staff screens fit 320/375/768/1440 without document horizontal overflow. Local 0014 applied.
 
+## Production mutation checkpoint (2026-09-29)
+- Local and GitHub slice equal `d581208facdb465e2cd673bed0133f1a3ca9caf6` before provider changes; worktree clean then.
+- Remote `main` remained `4f6cf4b282ceb86dad6847bf9ea4a0b5a94a541f`; production `loans`, `loan_items`, `evidence` each had 0 rows; main source had no references to those tables; only 0014 was pending.
+- D1 Time Travel bookmark captured in ignored `.wrangler/part4-pre-migration-bookmark.json`. Preserve it for recovery; do not commit or print its value.
+- Created R2 bucket `logistics-hub-evidence`, verified listed, no custom domains, and r2.dev disabled. Never touch the old hau-usc-logistics production/staging resources.
+- Applied remote 0014 exactly once. Wrangler reported success; subsequent list showed no pending migration. Post-migration D1 read-only checks: Saleable 0, Consumable 152, reclassification audits 112, loans 0, only the new loans table remains from the old loan placeholders. Do not reapply 0014.
+
 ## Exact next action
-1. Review/commit the complete Part 4 diff, push `slice/part-04-lending`, and prove local/remote SHA equality. Do not merge yet.
-2. Capture a remote D1 rollback bookmark; recheck empty production loan placeholders and that `main` does not use them. Create/verify private R2 bucket `logistics-hub-evidence`; apply/verify remote migration 0014; ensure no pending migration.
-3. Fetch/prune, verify/reconcile main, merge/push the slice, verify deployed SHA and production behavior without real borrower PII. Only after production passes, mark Part 4 complete, commit closeout, delete contained local/remote slice, prune, leave clean main and yield the lock. Do not start Part 5.
+1. Commit/push the provider checkpoint to the slice, confirm local/remote SHA equality, fetch/prune, and verify/reconcile main.
+2. Fast-forward/push main, verify deployed SHA and production behavior without real borrower PII.
+3. Only after production passes, mark Part 4 complete, commit closeout, delete contained local/remote slice, prune, leave clean main and yield the lock. Do not start Part 5.
 
 ## Known facts and limitations
 - No item has a reorder level yet, so Low stock is empty until staff set levels.

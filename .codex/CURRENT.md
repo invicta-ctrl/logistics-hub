@@ -1,12 +1,12 @@
 # Current Work Pointer — Logistics Hub
 PROGRAM: Logistics Hub
 MILESTONE: PART-04_LENDING
-STATUS: PART_04_LOCAL_GREEN (production prerequisites and release verification pending)
+STATUS: PART_04_PRODUCTION_READY (private R2 and remote 0014 verified; merge/deploy pending)
 BRANCH: slice/part-04-lending
 ACTIVE_WRITER: codex (Earl confirmed Claude's lock was stale; yielded and claimed via agent scripts)
 SHARED_WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
-PRODUCTION: Worker logistics-hub; D1 logistics-hub (binding DB); R2 logistics-hub-evidence (binding EVIDENCE, not yet created); https://logistics.hausc.org; never hau-usc-logistics-production/staging
-DEPLOYMENT: Workers Builds deploys every push to main; it does NOT apply D1 migrations or create buckets. Create the R2 bucket and apply 0014 before pushing main.
+PRODUCTION: Worker logistics-hub; D1 logistics-hub (binding DB); R2 logistics-hub-evidence (binding EVIDENCE, created 2026-09-29, private: no custom domain or r2.dev access); https://logistics.hausc.org; never hau-usc-logistics-production/staging
+DEPLOYMENT: Workers Builds deploys every push to main; it does NOT apply D1 migrations or create buckets. R2 bucket private and remote 0014 verified; merge/push main and verify deployed runtime.
 PREVIEW: http://127.0.0.1:8791 via npm run dev:live
 PRODUCT_REFERENCE: docs/PRODUCT_REFERENCE.md (reference only; never overrides Earl, accepted specs, or repo state)
 RUNBOOK: docs/DEPLOYMENT.md
@@ -15,4 +15,4 @@ SHARED_WORKFLOW: docs/SHARED_AGENT_WORKFLOW.md
 ACCEPTED_SPEC: docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md
 CURRENT_TASK: .codex/CURRENT_TASK.md
 PART_04_BRIEF: .codex/PART_04_BRIEF.md
-NEXT_EXACT_ACTION: Review and commit the final local fixes, push the slice and verify SHA equality. Then capture a D1 rollback bookmark, recheck the empty production loan tables and main compatibility, create the private R2 bucket, apply remote 0014, verify both, and only then merge/push main. Earl explicitly authorized Codex to perform this release sequence.
+NEXT_EXACT_ACTION: Commit/push the provider checkpoint on the slice, verify local/remote slice SHA, fetch/prune and reconcile main (expected 4f6cf4b); fast-forward/push main, then verify Workers Builds deployed that commit and complete production acceptance before Part 4 closeout.
