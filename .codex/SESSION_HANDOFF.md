@@ -1,10 +1,15 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-STATUS: PART_04_PRODUCTION_PARTIAL; exact deployment and core production checks pass, evidence/return acceptance pending
-ACTIVE_WRITER: codex (stale Claude lock yielded and claimed after Earl confirmed takeover)
-WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
-BRANCH: main (slice/part-04-lending retained until production acceptance)
-LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` restarted; local 0014 applied)
+STATUS: PART_04_PRODUCTION_PARTIAL (unchanged; see Part 4 below) · PART_04_5 IN PROGRESS on `slice/part-04-5-offline-self-service-pwa` (Claude Code Cloud)
+ACTIVE_WRITER: claude (Cloud container; Earl's local lock is not visible from Cloud)
+WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub (Cloud works in its own clone and pushes the slice)
+BRANCH: slice/part-04-5-offline-self-service-pwa (from main 41d00fe); main unchanged; slice/part-04-lending retained until Part 4 production acceptance
+LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` follows the pushed slice)
+
+## Part 4.5 (Claude Cloud, 2026-09-29) — see `.codex/PART_04_5_BRIEF.md`, `docs/OFFLINE_SELF_SERVICE.md`
+- **Pushed and verified:** `11e8697` server core (migration 0015, lending core split into shared statements, `src/self-service.ts`, 22 Worker tests; 83/83 unit, typecheck clean) and the QR commit (decode-verified by two decoders).
+- **In the worktree, not yet committed when this was written** (the Cloud shell's safety check was failing, so nothing could be run): the offline engine (`src/offline-{queue,store,sync}.ts`, `tests/offline-queue.test.ts` — 6/6 passed before later edits), the service worker + build plugin (`src/sw.ts`, `vite.config.ts`, `tsconfig.sw.json`), `src/pwa.ts`, route code splitting (`src/main.ts`, `src/ui.ts`), `src/self-service-app.ts` + `src/self-service.css`, `src/self-service-review.ts`, staff integration in `src/staff.ts`, manifest + icons, the offline E2E (`tests/worker-browser/offline-self-service.spec.ts`, never run yet) and the docs. A real Worker + D1 preview showed the phone Take flow end to end before the last round of navigation fixes.
+- **Exact next action:** run `npm run typecheck`, `npm test`, `npm run build`, then `npm run test:browser` and `npm run test:browser:worker`; fix anything red; commit in coherent units and push the slice.
 
 ## Part 4 (Claude, 2026-09-29) — see `.codex/PART_04_BRIEF.md`
 - **Done and verified on the slice:**

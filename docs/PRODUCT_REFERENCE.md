@@ -16,6 +16,7 @@ It supersedes the older HAU-USC Logistics Management System for all new developm
 | --- | --- |
 | `/` | Landing. See the details below. |
 | `/lending` | Lending Hub. See the details below. |
+| `/self-service` | Phone Self-Service (Part 4.5): Take, Borrow, Return and My activity on a person's own phone, offline too. The one permanent QR code opens it. See below. |
 | `/staff` | Staff sign-in. See the details below. |
 | any other path | A branded "page not found". |
 
@@ -35,6 +36,18 @@ Staff sign-in (`/staff`) uses the original legacy Staff Login campus photograph 
 
 The public catalog DTO carries only: `id`, `name`, `category`, `unit`, `available`, `audience`.
 
+### Self-Service (`/self-service`)
+
+Scanned from the one permanent QR code (`public/qr/logistics-self-service.svg` / `.png`, which hold only `https://logistics.hausc.org/self-service`). An installable app (PWA, "Logistics Hub"), phone-first, with its own oxblood app bar and a sync status pill (**Synced**, **Offline · N pending**, **N waiting**, **Syncing N…**, **N needs review**).
+- **Home:** a greeting, "What do you need?", four tiles (Take, Borrow, Return with loans on this phone, My activity), search across everything, whether the phone is **Ready for offline use**, and an **Install Logistics Hub** card (a real Install button on Android/Chromium; **How to install** steps for iPhone, iPad and other browsers).
+- **Take** (Consumable, self-service on): pick, quantity stepper, name (remembered on the phone), done. **Borrow** (listed Loanable, self-service on): the Part 4 rules (Individual: full name, student ID; USC: name, specific reason; both a photo taken on the phone), an optional return-by chip (Today, Tomorrow). **Return:** loans made on this phone in one tap (linked to the exact loan), or any self-service item with the borrower's name/ID for staff to match; Good, Damaged (note) or Lost (note).
+- Counts are live when online and labelled as an estimate with the last sync time when not; the phone's own unsynced records are included.
+- A receipt confirms each record and updates itself from "Saved on this phone" to "Synced with Logistics".
+- **My activity:** loans on this phone, every record with its state (Waiting to sync, Synced, Staff will check, Not recorded), **Sync now**, **Clear synced history** and **Forget my details**. Settled records clear themselves after 30 days.
+- Works offline after one online visit: every action is saved on the phone as an immutable event (IndexedDB) and synced later; the Worker reconciles events from many phones. Engineering: `docs/OFFLINE_SELF_SERVICE.md`. People: `docs/PWA_INSTALL_GUIDE.md`.
+
+The self-service catalog DTO carries only: `id`, `name`, `aliases`, `category`, `unit`, `action` (TAKE or BORROW), `available`, `location`, `audience` (borrow only).
+
 ## Staff workspace
 Every `/staff/*` page and `/api/staff/*` call needs a live session. Writes must come from the same origin.
 
@@ -47,6 +60,7 @@ The table shows ID, item (with type and other names), category, location, on-han
 - Needs review;
 - Ready to list (Loanable, not listed, not inactive);
 - On Lending Hub;
+- Self-service (turned on for phones);
 - Low stock (at or below the reorder level);
 - Out of stock;
 - Inactive.
@@ -70,6 +84,7 @@ The table shows ID, item (with type and other names), category, location, on-han
   - **Catalog:** name, other names, category and unit (typed freely; an existing spelling is reused regardless of letter case), type (**Loanable** or **Consumable**; *Unclassified* appears only while a migrated record still is), location, notes;
   - **Inventory settings:** status (Active, Verify, Inactive), reorder level, stock area (Inventory or Pantry) and, for pantry items, an optional earliest expiry;
   - **Public Lending Hub:** who it is shown to (there is no loan period or maximum per loan);
+  - **Phone self-service:** "Offer on Self-Service" (off by default), with what is still missing before phones can take or borrow it (`selfServiceGaps()`); the Overview shows the same;
   - a "Details reviewed and verified" box;
   - "Mark reviewed & next", which walks the current filtered list.
 - **History:** stock movements (including lent out and returned from loan, with the borrower) and catalog changes merged in one timeline, written as sentences with the actor and the time (never raw JSON).
@@ -98,6 +113,15 @@ Internal lending, recorded by staff (the public Lending Hub still only shows ava
 - **Borrowers:** for the last 30 days, 12 months or all time: loans (split individual and USC), items lent, distinct borrowers, damaged or lost; the **top borrowers ranked separately for Individual use and USC use** (loans, items, out now, damaged or lost); and the most borrowed items. A borrower is their student ID when known, otherwise their name.
 - **Returned:** the 100 most recent closed loans with their outcome and notes. Search covers name, student ID, item and reason.
 
+### Self-service (`/staff/self-service`)
+
+Records made on phones reconcile on their own; this page shows only what needs a person. The nav tab shows how many need attention.
+- **Needs attention:**
+  - **Count needed:** items whose balance, rebuilt in the order things happened since the last count, went below zero (derived; clears itself after a count or a late return);
+  - **Records to check:** held records (an offline record for an item no longer self-service, more than 30 units of one item in an hour, an implausible phone clock) with **Apply** or **Dismiss** (a held borrow's photo can be opened); returns to match with the open loans of that item (**Match and close loan**); records made right beside a count (**Mark checked**). Each shows who, when (with the sync time and the phone's own clock when they differ), and short phone and network tags.
+- **Last 7 days:** every self-service record and its state.
+- **QR code & poster:** the one QR code, a print-ready A4 poster ("Borrow · Take · Return — Scan for Logistics Self-Service — Install it once for offline access — logistics.hausc.org/self-service") and SVG/PNG downloads.
+
 ### Administration and My account
 - **Administration (`/staff/admin`, ADMIN and OWNER only):** the accounts table, create, manage (profile, role, reset, sign out everywhere, enable or disable), and security activity.
 - **My account (`/staff/account`):** password, profile, sign out other devices, and (for an OWNER) the recovery key.
@@ -119,6 +143,7 @@ Every rule is enforced by the Worker (`src/accounts.ts`, `src/worker.ts`). The b
 | 2 Inventory + Catalog | Complete item management, search, views, classification, locations, reorder settings, lending readiness, migrated review, history | **Complete** — local + GitHub verified 2026-09-29 |
 | 3 Stock + Pantry | Stock workspace, movement reasons, counts, low stock, restock list, pantry, optional expiry, activity; whole-product polish | **Complete** — local + GitHub verified; production D1 migrated 2026-09-29 |
 | 4 Lending | Internal loans by purpose (Individual use with student ID, USC use with reason), photo evidence (R2), return / damaged / lost, overdue, borrower rankings; quantity editor with required reasons; two item types | **Deployed, production acceptance partial** — R2, migration 0014, core navigation and quantity/history checks verified; photo upload/retrieval and return outcomes remain open |
+| 4.5 Offline Self-Service | One permanent QR, `/self-service` (Take, Borrow, Return, My activity) on people's own phones, installable PWA that works offline, IndexedDB event queue, idempotent sync and reconciliation, staff exception view, printable poster | **Code complete on `slice/part-04-5-offline-self-service-pwa`**; production needs migration 0015 first (see `docs/DEPLOYMENT.md`) and Part 4 acceptance |
 | 5 Activity + Accountability | Full activity center and safe exports | Planned |
 | 6 Admin + Hardening | System settings, backups, final production hardening | Planned |
 
@@ -143,13 +168,17 @@ Each Part must work end to end without depending on a later Part.
 - **Migration evidence stays visible.** ITM-0001 derives 7 from the ledger while the legacy system reported 8 (delta −1). It is shown to staff, not corrected.
 - **Audit.** `audit_log` records who changed what and when, with no passwords, hashes, keys or tokens. The events are ITEM_CREATED, ITEM_UPDATED (as a field diff), REORDER_OPENED/UPDATED/RESTOCKED and LOAN_CREATED/LOAN_CLOSED on the item, plus account and recovery events.
 - **Privacy.** The public repository holds no staff or borrower PII, credentials, provider IDs or private exports (`npm run verify:privacy`). Borrower names, student IDs and photos live only in D1 and R2 and are served only to signed-in staff; photo keys are loan IDs.
+- **Self-service is fail-closed and event-based.** An item is offered on phones only when staff turn it on and `selfServiceAction()` in `src/catalog-policy.ts` allows it (Consumable: Active and reviewed; Loanable: also listed). Phones never write quantities: each action is an immutable event with a client-generated id, stored once in `self_service_events` and applied through the same ledger and lending statements staff use (`lendStatements`, `closeStatements`). Replays are no-ops. History is ordered by when things happened, not when they synced. A physical count supersedes earlier offline movements it already saw. Phone records are never refused for quantity (the shelf is the truth), but staff movements keep their strict guard. Anything that cannot be applied safely is held for staff, never guessed. Details: `docs/OFFLINE_SELF_SERVICE.md`.
 
 ## Architecture
-- **Front end:** semantic HTML, CSS and TypeScript modules built by Vite. There is no SPA framework; routing is a small client router over `data-route` links.
+- **Front end:** semantic HTML, CSS and TypeScript modules built by Vite. There is no SPA framework; routing is a small client router over `data-route` links. Public pages ship in the main bundle; Self-Service and each staff area load on first use (a phone scanning the QR never downloads the staff workspace).
+- **PWA:** `public/manifest.webmanifest` (start URL `/self-service`, shortcuts for Take, Borrow, Return, My activity) and a service worker (`src/sw.ts`, built to `/sw.js` by `vite.config.ts`) that precaches each build's app shell and never touches `/api/*`. Phone data lives in IndexedDB (`src/offline-store.ts`); sync is `src/offline-sync.ts`.
 - **Worker:** one Cloudflare Worker, `logistics-hub` (`src/worker.ts`), serves the API and the static assets (`run_worker_first`). The public address is `https://logistics.hausc.org`; the `logistics-hub.<account>.workers.dev` address also works. It sets strict security headers and a `'self'`-only CSP.
-- **Data:** D1 `logistics-hub` (binding `DB`) with migrations `0001`–`0014`. R2 bucket `logistics-hub-evidence` (binding `EVIDENCE`) holds loan photos, streamed only through the Worker to signed-in staff.
-- **Staff APIs:** `/api/staff/inventory`, `/api/staff/stock` and `/api/staff/loans` (all revisioned), `/api/staff/items/:id`, `…/movements` (with optional `expectedOnHand`) and `…/loans` (multipart, with the photo), `/api/staff/loans/:id/return` and `…/photo`, `/api/staff/reorders` (POST) and `/api/staff/reorders/:id` (PATCH), plus account and admin routes.
-- **Live refresh:** the `catalog_revision` counter plus ETag/304 polling (public every 15 s, staff Inventory and Stock every 10 s, Loans every 15 s), which pauses in hidden tabs. Stock, restock and loan writes bump the revision, so Inventory, Stock, Loans, the item sheet and the Lending Hub all follow.
+- **Data:** D1 `logistics-hub` (binding `DB`) with migrations `0001`–`0015`. R2 bucket `logistics-hub-evidence` (binding `EVIDENCE`) holds loan photos, streamed only through the Worker to signed-in staff.
+- **Staff APIs:** `/api/staff/inventory`, `/api/staff/stock` and `/api/staff/loans` (all revisioned), `/api/staff/items/:id`, `…/movements` (with optional `expectedOnHand`) and `…/loans` (multipart, with the photo), `/api/staff/loans/:id/return` and `…/photo`, `/api/staff/reorders` (POST) and `/api/staff/reorders/:id` (PATCH), `/api/staff/self-service` (revisioned) and `…/:eventId/resolve` (apply, match or dismiss) and `…/:eventId/photo`, plus account and admin routes.
+- **Self-service APIs (public):** `GET /api/self-service/catalog` (revisioned) and `POST /api/self-service/sync` (same-origin, size-capped, rate-limited per network and per phone; at most 5 events and 4 photos per request).
+- **Caching:** content-hashed `/assets/*` are `immutable` for a year; `/sw.js` is `no-cache`; every API answer is `no-store`.
+- **Live refresh:** the `catalog_revision` counter plus ETag/304 polling (public every 15 s, staff Inventory and Stock every 10 s, Loans and Self-service every 15 s, the phone's self-service catalog every 30 s), which pauses in hidden tabs. Stock, restock, loan and self-service writes bump the revision, so Inventory, Stock, Loans, the item sheet, the Lending Hub and phones all follow.
 - **Never** touch the old `hau-usc-logistics-production` or `hau-usc-logistics-staging` resources.
 
 ## Branding and retained legacy assets
@@ -169,7 +198,9 @@ Each Part must work end to end without depending on a later Part.
 | `dol-mark.png` | The Part 1 cropped DOL mark (also the favicon). |
 | `ydd-2026-banner.jpg` | The landing hero image, set by Earl on 2026-09-29: the "Siglawang: Yabong ng Pamana" Youth Development Day 2026 banner (the HAU USC Facebook cover used by the legacy site, 960×356, sha256 `6ec7c5a7…`). Shown whole, never cropped or veiled, because it carries its own title. It replaced the earlier retained YDD photograph. |
 
-`public/touch-icon.png` is the iOS home-screen icon. The old site's combined lockup is not used; the crest and the mark are composed in code instead.
+`public/touch-icon.png` is the iOS home-screen icon. `public/icons/` (192, 512 and a maskable 512) are the installed-app icons: the DOL mark on warm paper, like the touch icon, resized with Lanczos and quantized to 96 colours. The old site's combined lockup is not used; the crest and the mark are composed in code instead.
+
+`public/qr/logistics-self-service.svg` and `.png` are the one permanent Self-Service QR code (only `https://logistics.hausc.org/self-service`; version 4, error correction Q, 4-module quiet zone). `scripts/generate-self-service-qr.py` regenerates and decode-checks them.
 
 ## Local preview and verification
 - `npm run dev:live` serves `http://127.0.0.1:8791`: a local Worker plus D1, preview accounts per role (credentials in the ignored `data/private/`), and cloud-branch sync.
