@@ -79,13 +79,16 @@ Workers Builds deploys every push to `main` automatically, but it does not apply
 
 A deploy that adds a binding needs the resource first: Part 4 adds the R2 bucket above, and a push without it fails the Workers Builds deploy (the live version keeps serving). Order for Part 4: create the bucket, apply `0014`, then push `main`.
 
-Migration `0015` (Part 4.5, phone Self-Service) is additive: `items.self_service` (default off, so nothing changes until staff turn it on) and the new `self_service_events` table, then a revision bump. The Part 4 code never reads either, so it is safe to apply first. It adds no binding (loan photos from phones go to the same `EVIDENCE` bucket). Order for Part 4.5: apply `0015` to production, verify it, then push `main`:
+Migration `0015` (Part 4.5, phone Self-Service) is additive: `items.self_service` (default off, so nothing changes until staff turn it on), the new `self_service_events` table with a trigger that keeps a staff resolution final, then a revision bump. The Part 4 code never reads either, so it is safe to apply first. It adds no binding (loan photos from phones go to the same `EVIDENCE` bucket). Order for Part 4.5: apply `0015` to production, verify it, then push `main`:
 
 ```
 npx wrangler d1 migrations list DB --remote        # shows 0015_self_service.sql as the only pending migration
 npx wrangler d1 migrations apply DB --remote       # applies 0015 exactly once
 npx wrangler d1 execute DB --remote --command "SELECT COUNT(*) AS offered FROM items WHERE self_service = 1; SELECT COUNT(*) AS events FROM self_service_events;"   # both 0
+npx wrangler d1 execute DB --remote --command "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'self_service_events_resolved_final';"   # one row
 ```
+
+The trigger was added to `0015` on 2026-09-29, before the migration reached production. A **local** preview database that applied an earlier `0015` lacks it; delete the local state (`.wrangler/state`) so `npm run dev:live` rebuilds it, or add the trigger by hand with `npx wrangler d1 execute DB --local --command "CREATE TRIGGER IF NOT EXISTS self_service_events_resolved_final BEFORE UPDATE ON self_service_events WHEN OLD.resolved_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'self_service_event_resolved'); END;"`.
 
 After the push deploys: `npm run admin -- verify https://logistics.hausc.org`, then open `https://logistics.hausc.org/self-service` on a phone (it should say there is nothing to take or borrow yet), `…/manifest.webmanifest` (`application/manifest+json`) and `…/sw.js` (`Cache-Control: no-cache`). Turn on self-service for one real item from its Edit details, take or borrow it from a phone, and confirm the record under **Self-service** in the staff workspace.
 

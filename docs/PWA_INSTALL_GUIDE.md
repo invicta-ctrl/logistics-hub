@@ -71,9 +71,10 @@ The sync status is in the top bar:
 
 | You see | What it means |
 | --- | --- |
+| **Online** | You are connected and have not recorded anything on this phone yet. |
 | **Synced** | Everything on this phone has been sent. |
 | **Offline** | You are offline. Nothing is waiting. |
-| **Offline · 3 pending** | You are offline. 3 records are saved on this phone and not sent yet. |
+| **Offline · 3 waiting** | You are offline. 3 records are saved on this phone and not sent yet. |
 | **2 waiting** | You are online and 2 records are waiting; the app tries again by itself in a moment. |
 | **Syncing 3…** | Sending now. Keep the app open. |
 | **1 needs review** | Logistics staff will check one record. Open **My activity** to read why. |
@@ -82,15 +83,16 @@ The sync status is in the top bar:
 - Amounts shown while offline are estimates ("About 4 left"). They update when you are back online.
 - Records send by themselves when you are back online with the app open. To send right away, open **My activity** and tap **Sync now**.
 - On iPhone and iPad, records are only sent while the app is open. On Android they may send by themselves, but opening the app is the sure way.
-- **Clear synced history** only removes records that were already sent. Pending records stay.
+- **Clear synced history** only removes records that were already sent. Records still waiting stay.
+- Return things from **Return** on the same phone you borrowed them with; the return is then linked to your loan. Something borrowed at the desk or on another phone can still be returned here, and Logistics staff match it to the loan (the record says **Staff will check**).
 
-**Important: while any record is pending, do not:**
+**Important: while any record is waiting to be sent, do not:**
 
 - clear your browser data, website data or cookies;
 - delete or uninstall the Logistics app;
 - reset your phone or switch to a new phone.
 
-Pending records exist only on your phone until they are sent. If they are deleted, they are gone.
+Records that are waiting exist only on your phone until they are sent. If they are deleted, they are gone.
 
 ## Troubleshooting
 
@@ -109,7 +111,7 @@ Pending records exist only on your phone until they are sent. If they are delete
 4. If it does not change, close the app fully and open it again.
 5. Check that your phone has free storage space.
 
-### Records are still pending
+### Records are still waiting
 
 1. Connect to the internet.
 2. Open the app and go to **My activity**.

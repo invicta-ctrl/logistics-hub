@@ -14,12 +14,16 @@ One permanent QR → `/self-service`: people use their own phones to Take, Borro
 - **Time:** business time = phone clock corrected by (arrival − `sentAt`), measured on the same clock in the same request; history ordered by business time (`HISTORY_ORDER`). Implausible clocks are held.
 - **Physical truth:** self-service is never refused for quantity; staff movements keep the strict guard. Negative stock is a derived, self-clearing item-level "Count needed".
 - **Counts as observations:** a later physical count supersedes an earlier offline movement (`SUPERSEDED`, decided inside the INSERT).
-- **Safety over convenience:** late events for ineligible items and >30 units/item/hour are held, never applied. Unlinked returns auto-close only an unambiguous good-condition return and never reveal whether a loan exists. Linked returns must come from the phone that borrowed.
+- **Safety over convenience:** late events for ineligible items and >30 units/item/hour are held, never applied. Unlinked returns are always held for a staff match (second-wave audit: name matching let a stranger close a loan and probe for one). Linked returns must come from the phone that borrowed. A staff resolution is final (database trigger).
+- **Design ("Dusk"):** at Earl's request ("the visual sophistication philosophy of the old one but not necessarily its look … breathtaking"), the phone app keeps the crest, mark, oxblood, gold, Newsreader and the legacy campus photograph in an after-hours key, scoped to `.is-self-service`. Staff and public pages keep warm paper.
 - **No new dependencies.** Hand-written service worker built by a ~20-line Vite plugin; IndexedDB without a wrapper library.
 - **Performance:** route-level code splitting (main bundle 127 KB → 34 KB; a QR visit loads ~72 KB of JS), immutable asset caching, precached shell.
 
 ## Adversarial design review (before implementation) — accepted
 C1 late-ineligible events applied (fixed: held) · C2 anonymous abuse containment (volume hold, network tag, two-stage rate limits; per-item toggle is the kill switch) · M1 per-event negative flag false positives (derived check) · M2 stale clock offsets (sentAt) · M3 poison events (held as ERROR) · M5 unmatched-return oracle and cross-phone linked returns (fixed) · M6 photo deletion races (per-attempt keys, `LN-SS-` namespace) · M7 held borrows keep their evidence (photo_key, return_by). Not adopted: storing payload hashes for replayed ids with different payloads (only an attacker's own event is affected); a staff "reverse event" tool (a count is the canonical correction; loans close from Loans).
+
+## Second-wave audit (after implementation) — verified and fixed
+Security, performance/code, reconciliation and UX/accessibility reviews ran in parallel; each finding was reproduced or confirmed in code before a change, and each server fix has a test. Summary in `.codex/SESSION_HANDOFF.md` (Part 4.5); behaviour in `docs/OFFLINE_SELF_SERVICE.md` sections 8, 11 and 16.
 
 ## Out of scope
 Offline staff actions (no offline credentials), a global settings/kill switch (Part 6), server-side retention purge of names on takes (Part 6), multi-item loans, borrower accounts.
