@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { createAccountSql, runD1 } from "./staff-account.mjs";
 
 const stateDir = `.wrangler/e2e-${process.pid}`;
+const e2ePort = 20_000 + (randomBytes(2).readUInt16BE(0) % 20_000);
 const wrangler = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
 const cli = fileURLToPath(new URL("../node_modules/@playwright/test/cli.js", import.meta.url));
 
@@ -22,7 +23,7 @@ try {
   const ownerUsername = `e2e-owner-${randomBytes(4).toString("hex")}`;
   const ownerPassword = randomBytes(18).toString("base64url");
   runD1(createAccountSql(ownerUsername, "E2E Owner", ownerPassword, "OWNER"), { persistTo: stateDir });
-  const result = spawnSync(process.execPath, [cli, "test", "-c", "playwright.worker.config.ts", ...process.argv.slice(2)], { stdio: "inherit", env: { ...process.env, E2E_USERNAME: username, E2E_PASSWORD: password, E2E_OWNER_USERNAME: ownerUsername, E2E_OWNER_PASSWORD: ownerPassword, E2E_STATE_DIR: stateDir } });
+  const result = spawnSync(process.execPath, [cli, "test", "-c", "playwright.worker.config.ts", ...process.argv.slice(2)], { stdio: "inherit", env: { ...process.env, E2E_USERNAME: username, E2E_PASSWORD: password, E2E_OWNER_USERNAME: ownerUsername, E2E_OWNER_PASSWORD: ownerPassword, E2E_STATE_DIR: stateDir, E2E_PORT: String(e2ePort) } });
   process.exitCode = result.status ?? 1;
 } finally {
   try {
