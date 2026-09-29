@@ -1,0 +1,206 @@
+import { expect, test, devices, type Browser, type Page } from "@playwright/test";
+
+/*
+ * Part 4.5 end to end, on the real Worker + D1 and the production build (service worker on):
+ * a phone opens Self-Service online, goes offline, records a take, a borrow with a photo and a
+ * return across a reload, then syncs exactly once when the network is back. Two more phones
+ * show that every offline take counts, whatever order they sync in.
+ */
+
+const username = process.env.E2E_USERNAME!;
+const password = process.env.E2E_PASSWORD!;
+const WATER = "ITM-0043";
+const COTTON = "ITM-0063";
+const BASE = `http://127.0.0.1:${process.env.E2E_PORT ?? "8792"}`;
+
+type Item = { name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; storageLocation: string | null;
+  reorderThreshold: number; lendingAudience: string; needsReview: boolean; notes: string | null; selfService: boolean; onHand: number; updatedAt: string | null };
+
+let staff: Page;
+let original: Record<string, Item> = {};
+
+async function signIn(browser: Browser): Promise<Page> {
+  const page = await browser.newPage();
+  await page.goto("/staff");
+  await page.getByRole("textbox", { name: "Username" }).fill(username);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Inventory" })).toBeVisible();
+  return page;
+}
+
+const item = async (id: string) => (await (await staff.request.get(`/api/staff/items/${id}`)).json() as { item: Item }).item;
+
+async function setItem(id: string, changes: Partial<Item>): Promise<void> {
+  const current = await item(id);
+  const { name, aliases, category, itemType, unit, status, storageLocation, reorderThreshold, lendingAudience, needsReview, notes, selfService } = current;
+  const response = await staff.request.patch(`/api/staff/items/${id}`, {
+    data: { name, aliases, category, itemType, unit, status, storageLocation, reorderThreshold, lendingAudience, needsReview, notes, selfService, ...changes, updatedAt: current.updatedAt },
+    headers: { origin: BASE }
+  });
+  expect(response.status()).toBe(200);
+}
+
+/** A phone is its own browser context: its own IndexedDB, caches and service worker. */
+async function phone(browser: Browser) {
+  const context = await browser.newContext({ ...devices["Pixel 7"], baseURL: BASE });
+  const page = await context.newPage();
+  await page.goto("/self-service");
+  await expect(page.getByText("Ready for offline use")).toBeVisible({ timeout: 30_000 });
+  return { context, page };
+}
+
+/** A camera photo, made in the page, handed to the file input as a person would. */
+async function attachPhoto(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 480;
+    canvas.height = 640;
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#7a1419";
+    context.fillRect(0, 0, 480, 640);
+    const blob = await new Promise<Blob>((resolve) => canvas.toBlob((value) => resolve(value!), "image/jpeg", 0.8));
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([blob], "photo.jpg", { type: "image/jpeg" }));
+    const input = document.querySelector<HTMLInputElement>("#ss-photo")!;
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await expect(page.getByAltText("Photo to attach")).toBeVisible();
+}
+
+/** What the phone's own storage holds, straight from IndexedDB. */
+async function localState(page: Page) {
+  return page.evaluate(() => new Promise<{ states: string[]; photos: number }>((resolve, reject) => {
+    const request = indexedDB.open("logistics-hub");
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const transaction = request.result.transaction(["events", "photos"]);
+      const events = transaction.objectStore("events").getAll();
+      const photos = transaction.objectStore("photos").count();
+      transaction.oncomplete = () => resolve({ states: (events.result as Array<{ seq: number; state: string }>).sort((a, b) => a.seq - b.seq).map((event) => event.state), photos: photos.result });
+    };
+  }));
+}
+
+async function take(page: Page, name: RegExp, count: number, person: string): Promise<void> {
+  await page.getByRole("link", { name: /^Take/ }).first().click();
+  await page.getByRole("link", { name }).click();
+  for (let step = 1; step < count; step += 1) await page.getByRole("button", { name: "One more" }).click();
+  await page.getByLabel("Your name").fill(person);
+  await page.getByRole("button", { name: new RegExp(`^Take ${count}`) }).click();
+  await expect(page.getByRole("heading", { name: "Taken" })).toBeVisible();
+  await page.getByRole("button", { name: "Done" }).click();
+}
+
+test.describe.serial("offline self-service", () => {
+  test.beforeAll(async ({ browser }) => {
+    staff = await signIn(browser);
+    original = { [WATER]: await item(WATER), [COTTON]: await item(COTTON) };
+    await setItem(WATER, { itemType: "Consumable", status: "ACTIVE", needsReview: false, selfService: true, storageLocation: "Pantry shelf" });
+    await setItem(COTTON, { status: "ACTIVE", needsReview: false, selfService: true, lendingAudience: "STUDENTS_AND_USC_STAFF" });
+  });
+
+  test.afterAll(async () => {
+    // Leave the migrated catalog as other tests expect it: nothing public, nothing self-service.
+    for (const [id, before] of Object.entries(original)) {
+      await setItem(id, { itemType: before.itemType, status: before.status, needsReview: true, selfService: false, lendingAudience: before.lendingAudience, storageLocation: before.storageLocation });
+    }
+    await staff.close();
+  });
+
+  test("is an installable app with an offline shell, and never caches the API", async ({ request }) => {
+    const manifest = await request.get("/manifest.webmanifest");
+    expect(manifest.headers()["content-type"]).toContain("application/manifest+json");
+    expect(await manifest.json()).toMatchObject({ name: "Logistics Hub", start_url: "/self-service", display: "standalone", scope: "/" });
+    const worker = await request.get("/sw.js");
+    expect(worker.headers()["cache-control"]).toBe("no-cache");
+    expect(await worker.text()).toContain("logistics-shell-");
+    const catalog = await request.get("/api/self-service/catalog");
+    expect(catalog.headers()["cache-control"]).toBe("no-store");
+    const body = await catalog.json() as { items: Array<Record<string, unknown>> };
+    expect(body.items.map((entry) => entry.id).sort()).toEqual([WATER, COTTON].sort());
+    expect(Object.keys(body.items[0]!).sort()).toEqual(["action", "aliases", "audience", "available", "category", "id", "location", "name", "unit"]);
+  });
+
+  test("works offline: take, borrow with a photo, reload, return; syncs exactly once when back online", async ({ browser }) => {
+    const waterBefore = (await item(WATER)).onHand;
+    const cottonBefore = (await item(COTTON)).onHand;
+    const { context, page } = await phone(browser);
+
+    await context.setOffline(true);
+    await take(page, /Bottled Water/, 2, "Juan Dela Cruz");
+    await expect(page.getByRole("link", { name: /Offline · 1 pending/ })).toBeVisible();
+
+    await page.getByRole("link", { name: /^Borrow/ }).click();
+    await page.getByRole("link", { name: /Cotton - roll/ }).click();
+    await expect(page.getByLabel("Your full name")).toHaveValue("Juan Dela Cruz");
+    await page.getByLabel("Student ID number").fill("20-1234-567");
+    await attachPhoto(page);
+    await page.getByRole("button", { name: "Borrow", exact: true }).click();
+    await expect(page.getByText("Saved on this phone. It will sync when you're back online.")).toBeVisible();
+    await page.getByRole("button", { name: "Done" }).click();
+
+    // The app opens from its own cache without a network, with everything still waiting.
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "What do you need?" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Offline · 2 pending/ })).toBeVisible();
+    // An update replaces the app's caches; people's records are in IndexedDB and stay.
+    await page.evaluate(async () => { for (const key of await caches.keys()) await caches.delete(key); });
+    expect(await localState(page)).toEqual({ states: ["pending", "pending"], photos: 1 });
+
+    await page.getByRole("link", { name: /^Return/ }).click();
+    await page.getByRole("link", { name: /Cotton - roll/ }).first().click();
+    await page.getByRole("button", { name: "Return", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Returned" })).toBeVisible();
+    await page.getByRole("button", { name: "Done" }).click();
+    expect((await localState(page)).states).toEqual(["pending", "pending", "pending"]);
+    expect((await item(WATER)).onHand).toBe(waterBefore);
+
+    await context.setOffline(false);
+    await expect(page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });
+    expect(await localState(page)).toEqual({ states: ["synced", "synced", "synced"], photos: 0 });
+    expect((await item(WATER)).onHand).toBe(waterBefore - 2);
+    expect((await item(COTTON)).onHand).toBe(cottonBefore);
+
+    const loans = await (await staff.request.get("/api/staff/loans")).json() as { closed: Array<{ id: string; itemId: string; status: string; createdBy: string; studentId: string }> };
+    const loan = loans.closed.find((entry) => entry.itemId === COTTON && entry.createdBy === "Self-service");
+    expect(loan).toMatchObject({ status: "RETURNED", studentId: "20-1234-567" });
+    const photo = await staff.request.get(`/api/staff/loans/${loan!.id}/photo`);
+    expect(photo.status()).toBe(200);
+    expect(photo.headers()["content-type"]).toBe("image/jpeg");
+    expect((await page.request.get(`/api/staff/loans/${loan!.id}/photo`)).status()).toBe(401);
+
+    // Sending everything again changes nothing: the server is idempotent.
+    await page.getByRole("link", { name: /Synced/ }).click();
+    await page.getByRole("button", { name: "Sync now" }).click();
+    expect((await item(WATER)).onHand).toBe(waterBefore - 2);
+    await context.close();
+  });
+
+  test("two phones offline: every take counts, whatever order they sync", async ({ browser }) => {
+    const before = (await item(WATER)).onHand;
+    const [a, b] = [await phone(browser), await phone(browser)];
+    await a.context.setOffline(true);
+    await b.context.setOffline(true);
+    await take(a.page, /Bottled Water/, 1, "Ana");
+    await take(b.page, /Bottled Water/, 3, "Ben");
+    await b.context.setOffline(false);
+    await expect(b.page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });
+    await a.context.setOffline(false);
+    await expect(a.page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });
+    expect((await item(WATER)).onHand).toBe(before - 4);
+    await a.context.close();
+    await b.context.close();
+  });
+
+  test("staff see phone activity and can print the one QR poster", async () => {
+    await staff.goto("/staff/self-service?view=activity");
+    await expect(staff.getByRole("heading", { name: "Self-service" })).toBeVisible();
+    await expect(staff.locator("#ss-results")).toContainText("Juan Dela Cruz");
+    await expect(staff.locator("#ss-results")).toContainText("Cotton - roll");
+    await staff.getByRole("button", { name: "QR code & poster" }).click();
+    await expect(staff.getByRole("img", { name: "QR code that opens logistics.hausc.org/self-service" })).toBeVisible();
+    await expect(staff.getByText("logistics.hausc.org/self-service", { exact: true })).toBeVisible();
+  });
+});

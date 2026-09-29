@@ -112,7 +112,8 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
 
   if (path === "/api/staff/session" && method === "GET") {
     const { accountId, sessionId, ...profile } = account;
-    return json({ authenticated: true, id: accountId, ...profile, recovery: await recoveryStatus(env.DB, account) });
+    const reviews = await env.DB.prepare("SELECT COUNT(*) AS total FROM self_service_events WHERE review IS NOT NULL AND resolved_at IS NULL").first<number>("total");
+    return json({ authenticated: true, id: accountId, ...profile, recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews ?? 0 });
   }
   if (path === "/api/staff/me" && method === "PATCH") return json(await updateSelf(env.DB, account, await body()));
   if (path === "/api/staff/me/password" && method === "POST") return json(await changeOwnPassword(env.DB, account, await body()));
@@ -235,7 +236,21 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
     if (path.startsWith("/staff/admin") && !isAdmin(account)) return Response.redirect(new URL("/staff/inventory", url), 302);
   }
   if (path === "/staff" && request.method === "GET" && await accountFor(request, env)) return Response.redirect(new URL("/staff/inventory", url), 302);
-  return env.ASSETS.fetch(request);
+  return assetCaching(await env.ASSETS.fetch(request), path);
+}
+
+/**
+ * Build files under /assets/ are named by their content, so browsers may keep them for a year.
+ * The service worker script must always be revalidated, or installed phones would miss updates.
+ */
+function assetCaching(response: Response, path: string): Response {
+  const cacheControl = path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : path === "/sw.js" ? "no-cache" : null;
+  const manifest = path === "/manifest.webmanifest";
+  if (!response.ok || (!cacheControl && !manifest)) return response;
+  const headers = new Headers(response.headers);
+  if (cacheControl) headers.set("cache-control", cacheControl);
+  if (manifest) headers.set("content-type", "application/manifest+json");
+  return new Response(response.body, { status: response.status, headers });
 }
 
 export default {

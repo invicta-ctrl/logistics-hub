@@ -1,4 +1,4 @@
-import { type Html, ApiError, api, failure, formatDate, formatDateTime, html, icon, label, mount, officeDay, setMessage, toast, units } from "./ui";
+import { type Html, ApiError, api, dataUrl, failure, formatDate, formatDateTime, html, icon, label, mount, officeDay, setMessage, shrinkPhoto, toast, units } from "./ui";
 
 export type Loan = {
   id: string; itemId: string; itemName: string; unit: string; quantity: number; purpose: "INDIVIDUAL" | "USC"; borrowerName: string;
@@ -8,7 +8,6 @@ export type Loan = {
 export type Borrower = { name: string; studentId: string };
 type LoanTarget = { id: string; name: string; unit: string; onHand: number };
 
-const MAX_EDGE = 1600;
 
 /** Due and overdue are derived from the Manila calendar; nothing is stored as "overdue". */
 export function dueTag(loan: Pick<Loan, "status" | "returnBy">, today = officeDay()): Html {
@@ -72,30 +71,6 @@ export function loanFields(prefix: string): Html {
     <div class="form-alert" role="alert" hidden data-alert></div>
     <div class="form-actions"><button class="button button--primary" type="submit" data-submit>Lend</button></div>`;
 }
-
-/** Shrinks a camera photo to at most 1600 px as JPEG, so it uploads quickly on school Wi-Fi. */
-async function shrink(file: File): Promise<Blob> {
-  try {
-    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("encode")), "image/jpeg", 0.82));
-  } catch {
-    if (/^image\/(jpeg|png|webp)$/.test(file.type)) return file;
-    throw new Error("This photo could not be read. Take a new one, or choose a JPEG or PNG.");
-  }
-}
-
-const dataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result));
-  reader.onerror = () => reject(reader.error);
-  reader.readAsDataURL(blob);
-});
 
 /**
  * Wires the loan form to the item being lent. Individual use needs a student ID; USC use
@@ -190,7 +165,7 @@ export function bindLoanForm(form: HTMLFormElement, options: {
     mount(photoBox, html`<p class="photo-field__busy" role="status">Preparing the photo…</p>`);
     preparing = (async () => {
       try {
-        photo = await shrink(chosen);
+        photo = await shrinkPhoto(chosen);
         showPhoto(await dataUrl(photo));
         key = crypto.randomUUID();
         photoBox.querySelector<HTMLElement>("[data-pick]")?.focus();

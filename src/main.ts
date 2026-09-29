@@ -5,26 +5,51 @@ import "@fontsource/newsreader/latin-400.css";
 import "@fontsource/newsreader/latin-500.css";
 import "./styles.css";
 import { landing, lending, notFound } from "./public";
-import { administration, myAccount } from "./admin";
-import { staffLogin, workspace } from "./staff";
-import { loansWorkspace } from "./loans-workspace";
-import { stockWorkspace } from "./stock-workspace";
-import { leave, navigate, reducedMotion, toast } from "./ui";
+import { startPwa } from "./pwa";
+import { handOverQuery, leave, navigate, reducedMotion, toast } from "./ui";
 
-function render(): void {
+type View = () => void | Promise<void>;
+
+/**
+ * Public pages ship in the main bundle. Everything else loads on first use, so a phone that
+ * scans the QR code downloads only the self-service screens and never the staff workspace.
+ */
+const ROUTES: Record<string, () => View | Promise<View>> = {
+  "/": () => landing,
+  "/lending": () => lending,
+  "/self-service": () => import("./self-service-app").then((module) => module.selfService),
+  "/staff": () => import("./staff").then((module) => module.staffLogin),
+  "/staff/inventory": () => import("./staff").then((module) => module.workspace),
+  "/staff/stock": () => import("./stock-workspace").then((module) => module.stockWorkspace),
+  "/staff/loans": () => import("./loans-workspace").then((module) => module.loansWorkspace),
+  "/staff/self-service": () => import("./self-service-review").then((module) => module.selfServiceReview),
+  "/staff/admin": () => import("./admin").then((module) => module.administration),
+  "/staff/account": () => import("./admin").then((module) => module.myAccount)
+};
+
+let navigation = 0;
+
+async function render(): Promise<void> {
+  const current = ++navigation;
   rendered = window.location.pathname + window.location.search;
-  leave();
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
-  if (path === "/") landing();
-  else if (path === "/lending") lending();
-  else if (path === "/staff") staffLogin();
-  else if (path === "/staff/inventory") void workspace();
-  else if (path === "/staff/stock") void stockWorkspace();
-  else if (path === "/staff/loans") void loansWorkspace();
-  else if (path === "/staff/admin") void administration();
-  else if (path === "/staff/account") void myAccount();
-  else if (path.startsWith("/staff/")) navigate("/staff/inventory", true);
-  else notFound();
+  if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/inventory", true);
+  let view: View;
+  try {
+    view = await (ROUTES[path] ?? (() => notFound))();
+  } catch {
+    // A deploy replaced the files this page was built with: load the new version once.
+    if (!sessionStorage.getItem("reloaded-for-update")) {
+      sessionStorage.setItem("reloaded-for-update", "1");
+      window.location.reload();
+    }
+    return;
+  }
+  sessionStorage.removeItem("reloaded-for-update");
+  // A quicker, later navigation already rendered; this one is stale.
+  if (current !== navigation) return;
+  leave();
+  void view();
   window.scrollTo(0, 0);
   window.requestAnimationFrame(() => {
     const main = document.querySelector<HTMLElement>("#main-content");
@@ -64,7 +89,12 @@ window.addEventListener("unhandledrejection", (event) => {
 let rendered = "";
 window.addEventListener("popstate", () => {
   if (window.location.pathname + window.location.search === rendered) return;
-  if (!document.startViewTransition || reducedMotion()) return render();
+  if (window.location.pathname === new URL(rendered, window.location.href).pathname && handOverQuery()) {
+    rendered = window.location.pathname + window.location.search;
+    return;
+  }
+  if (!document.startViewTransition || reducedMotion()) return void render();
   document.startViewTransition(render);
 });
-render();
+startPwa();
+void render();

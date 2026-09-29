@@ -57,7 +57,15 @@ const ICONS = {
   next: "M9 6l6 6-6 6",
   filter: "M4 5h16l-6 7.5V18l-4 2v-7.5L4 5Z",
   camera: "M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5v-9ZM12 16a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5Z",
-  handoff: "M12 15V4M8 8l4-4 4 4M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12"
+  handoff: "M12 15V4M8 8l4-4 4 4M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12",
+  giveBack: "M12 4v11M8 11l4 4 4-4M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12",
+  basket: "M4 9.5h16l-1.6 9a1.5 1.5 0 0 1-1.5 1.25H7.1a1.5 1.5 0 0 1-1.5-1.25L4 9.5ZM8.5 9.5 12 4l3.5 5.5M10 13.5v3M14 13.5v3",
+  clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7.5V12l3 2",
+  back: "M15 18l-6-6 6-6",
+  share: "M12 3v11M8.5 6.5 12 3l3.5 3.5M8 10H6.5A1.5 1.5 0 0 0 5 11.5v7A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 17.5 10H16",
+  install: "M12 4v10M8 10.5l4 4 4-4M5 19.5h14",
+  cloudOff: "M3 3l18 18M8.4 8.4A5 5 0 0 0 6.5 18H17M20.2 16.4A3.8 3.8 0 0 0 17 10.2h-.6A6 6 0 0 0 10.5 6.2",
+  more: "M12 5.5v.01M12 12v.01M12 18.5v.01"
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -77,8 +85,24 @@ let leaveView: Array<() => void> = [];
 export function onLeave(cleanup: () => void): void { leaveView.push(cleanup); }
 export function leave(): void { leaveView.forEach((cleanup) => cleanup()); leaveView = []; }
 
-export function navigate(path: string, replace = false): void {
-  window.history[replace ? "replaceState" : "pushState"]({}, "", path);
+let queryOwner: (() => void) | null = null;
+/**
+ * Lets a view render its own query-string states (steps, open sheets) instead of being rebuilt
+ * by the router, so back and forward move between them without a full re-render.
+ */
+export function ownQuery(handler: () => void): void {
+  queryOwner = handler;
+  onLeave(() => { if (queryOwner === handler) queryOwner = null; });
+}
+/** The router asks this first when only the query changed; false means "render the view". */
+export function handOverQuery(): boolean {
+  if (!queryOwner) return false;
+  queryOwner();
+  return true;
+}
+
+export function navigate(path: string, replace = false, state: object = {}): void {
+  window.history[replace ? "replaceState" : "pushState"](state, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
@@ -232,6 +256,35 @@ export function toast(message: string, tone: "ok" | "error" = "ok"): void {
 export function emptyState(title: string, detail: string, action: Html | string = "", tone: "" | "error" = ""): Html {
   return html`<div class="empty ${tone ? `empty--${tone}` : ""}">${icon(tone ? "alert" : "box")}<h2>${title}</h2><p>${detail}</p>${action}</div>`;
 }
+
+/* ---------- Photos ---------- */
+
+const MAX_PHOTO_EDGE = 1600;
+
+/** Shrinks a camera photo to at most 1600 px as JPEG, so it uploads quickly on school Wi-Fi and stays small on the phone. */
+export async function shrinkPhoto(file: File): Promise<Blob> {
+  try {
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const scale = Math.min(1, MAX_PHOTO_EDGE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("encode")), "image/jpeg", 0.82));
+  } catch {
+    if (/^image\/(jpeg|png|webp)$/.test(file.type)) return file;
+    throw new Error("This photo could not be read. Take a new one, or choose a JPEG or PNG.");
+  }
+}
+
+/** A data: URL for previews (the CSP allows data: images but not blob: URLs). */
+export const dataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result));
+  reader.onerror = () => reject(reader.error);
+  reader.readAsDataURL(blob);
+});
 
 /* ---------- Data ---------- */
 

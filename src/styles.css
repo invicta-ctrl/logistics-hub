@@ -416,6 +416,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .app-nav a { display: inline-flex; align-items: center; padding-inline: .75rem; border-bottom: 2px solid transparent; color: var(--on-dark-2); font-size: var(--text-base); font-weight: 500; text-decoration: none; white-space: nowrap; }
 .app-nav a:hover { color: var(--on-dark); }
 .app-nav a[aria-current="page"] { border-bottom-color: var(--gold-action); color: #fff; }
+.nav-badge { display: inline-grid; min-width: 1.25rem; height: 1.25rem; margin-left: .375rem; padding-inline: .3rem; place-items: center; border-radius: 999px; background: var(--gold-action); color: var(--brand-deep); font-size: var(--text-xs); font-weight: 700; }
 .app-bar__end { display: flex; align-items: center; gap: 1rem; margin-left: auto; }
 .app-bar__link { display: inline-flex; align-items: center; gap: .375rem; color: var(--on-dark-2); font-size: var(--text-sm); text-decoration: none; white-space: nowrap; }
 .app-bar__link:hover { color: var(--gold-action); }

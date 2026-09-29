@@ -190,7 +190,9 @@ describe("Borrow and Return", () => {
   it("lends offline with the Part 4 rules and a photo in R2 that only staff can open", async () => {
     const scissors = await loanable("Scissors", 5);
     const a = phone();
-    const borrow = a.borrow(scissors, 30, { returnBy: new Date(Date.now() - 30 * MINUTE).toISOString().slice(0, 10) });
+    // "Return by today", judged on the Manila calendar of the day it was borrowed.
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date(Date.now() - 30 * MINUTE));
+    const borrow = a.borrow(scissors, 30, { returnBy: today });
     expect(await results(await a.sync([borrow]))).toEqual([{ id: borrow.id, outcome: "accepted" }]);
     expect(loan(borrow.id)).toMatchObject({ status: "OUT", purpose: "INDIVIDUAL", student_id: "20-1234-567", created_by: "SELF_SERVICE" });
     expect([...photos.keys()]).toEqual([expect.stringMatching(new RegExp(`^loans/LN-SS-${borrow.id}-[0-9a-f]{8}$`))]);

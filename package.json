@@ -13,7 +13,7 @@
     "agent:claim": "node scripts/agent-lock.mjs claim",
     "agent:yield": "node scripts/agent-lock.mjs yield",
     "build": "npm run typecheck && vite build",
-    "typecheck": "wrangler types && tsc -p tsconfig.json && tsc -p tsconfig.worker.json",
+    "typecheck": "wrangler types && tsc -p tsconfig.json && tsc -p tsconfig.worker.json && tsc -p tsconfig.sw.json",
     "generate:types": "wrangler types",
     "test": "vitest run",
     "test:watch": "vitest",
