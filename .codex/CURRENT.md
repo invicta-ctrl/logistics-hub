@@ -15,4 +15,4 @@ SHARED_WORKFLOW: docs/SHARED_AGENT_WORKFLOW.md
 ACCEPTED_SPEC: docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md
 CURRENT_TASK: .codex/CURRENT_TASK.md
 PART_04_BRIEF: .codex/PART_04_BRIEF.md
-NEXT_EXACT_ACTION: Commit/push the provider checkpoint on the slice, verify local/remote slice SHA, fetch/prune and reconcile main (expected 4f6cf4b); fast-forward/push main, then verify Workers Builds deployed that commit and complete production acceptance before Part 4 closeout.
+NEXT_EXACT_ACTION: Commit/push the weak-ETag fix on the slice, verify local/remote slice SHA, fetch/prune and reconcile main (expected 4f6cf4b); fast-forward/push main, then verify Workers Builds deployed that commit, including production ETag/304, before Part 4 closeout.

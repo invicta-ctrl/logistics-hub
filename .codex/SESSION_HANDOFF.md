@@ -22,9 +22,10 @@ LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` restarted; local 0014 ap
 - D1 Time Travel bookmark captured in ignored `.wrangler/part4-pre-migration-bookmark.json`. Preserve it for recovery; do not commit or print its value.
 - Created R2 bucket `logistics-hub-evidence`, verified listed, no custom domains, and r2.dev disabled. Never touch the old hau-usc-logistics production/staging resources.
 - Applied remote 0014 exactly once. Wrangler reported success; subsequent list showed no pending migration. Post-migration D1 read-only checks: Saleable 0, Consumable 152, reclassification audits 112, loans 0, only the new loans table remains from the old loan placeholders. Do not reapply 0014.
+- A pre-merge live smoke of the still-deployed Part 3 Worker found that Cloudflare compression weakens the catalog ETag (`W/"r4"`) and the Worker only accepted the strong form, so the production ETag/304 check failed. Fixed on the slice. Re-ran typecheck, build, 61/61 unit, 8/8 browser, 15/15 real Worker + D1, privacy/migration/catalog, and Wrangler dry run. Restarted `npm run dev:live` at 8791 and verified both strong and weak validators return 304 locally. Re-run the production smoke after the new commit deploys.
 
 ## Exact next action
-1. Commit/push the provider checkpoint to the slice, confirm local/remote SHA equality, fetch/prune, and verify/reconcile main.
+1. Commit/push the weak-ETag fix to the slice, confirm local/remote SHA equality, fetch/prune, and verify/reconcile main.
 2. Fast-forward/push main, verify deployed SHA and production behavior without real borrower PII.
 3. Only after production passes, mark Part 4 complete, commit closeout, delete contained local/remote slice, prune, leave clean main and yield the lock. Do not start Part 5.
 

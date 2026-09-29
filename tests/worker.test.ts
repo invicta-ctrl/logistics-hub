@@ -55,6 +55,7 @@ describe("public Lending Hub", () => {
     const first = await call("/api/public/catalog");
     const etag = first.headers.get("etag")!;
     expect((await call("/api/public/catalog", { headers: { "if-none-match": etag } })).status).toBe(304);
+    expect((await call("/api/public/catalog", { headers: { "if-none-match": `W/${etag}` } })).status).toBe(304);
     const cookie = await signIn();
     await staff(cookie, "/api/staff/items/ITM-0005/movements", "POST", { kind: "IN", quantity: 1, reason: "DELIVERY", key: "revision-test-key" });
     const changed = await call("/api/public/catalog", { headers: { "if-none-match": etag } });

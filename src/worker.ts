@@ -51,7 +51,8 @@ const clientKey = (request: Request, purpose: string) => `${purpose}:${request.h
 async function revisioned(request: Request, db: D1Database, load: () => Promise<object>): Promise<Response> {
   const revision = await catalogRevision(db);
   const etag = `"r${revision}"`;
-  if (request.headers.get("If-None-Match") === etag) return new Response(null, { status: 304, headers: { etag, "cache-control": "no-store" } });
+  // Compression at the edge may turn a strong ETag into a weak validator for the same revision.
+  if (request.headers.get("If-None-Match")?.replace(/^W\//, "") === etag) return new Response(null, { status: 304, headers: { etag, "cache-control": "no-store" } });
   return json({ revision, ...await load() }, 200, { etag });
 }
 
