@@ -1,9 +1,9 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-STATUS: PART_03_VERIFIED_ON_SLICE
-ACTIVE_WRITER: claude
+STATUS: PART_03_COMPLETE
+ACTIVE_WRITER: none
 WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
-BRANCH: slice/part-03-stock-pantry (pushed)
+BRANCH: main (no active slice)
 LIVE_PREVIEW: http://127.0.0.1:8791
 
 ## Part 3 (Claude, 2026-09-29)
@@ -35,11 +35,8 @@ LIVE_PREVIEW: http://127.0.0.1:8791
 - Impeccable detector: clean. Hallmark final: 0 critical · 0 major.
 
 ## Exact next action
-1. Earl applies migration 0013 to production D1. It is additive and safe for the currently deployed code:
-   - Owner Console → 12 (status), then apply migrations; or
-   - `npx wrangler d1 migrations apply DB --remote` from this branch.
-2. Then fast-forward `main` to `slice/part-03-stock-pantry` and push. Workers Builds deploys it.
-3. Verify the deploy, delete the slice branch locally and remotely, set STATUS to PART_03_COMPLETE, and yield the writer lock.
+- Part 3 is merged to `main` (2026-09-29). Earl applied migration 0013 to production D1 first; `wrangler d1 migrations list DB --remote` reports nothing pending.
+- Next: Part 4 (Lending), on Earl's instruction, from fresh `main` on one new slice branch.
 
 ## Known facts and limitations
 - No item has a reorder level yet, so Low stock is empty until staff set levels. The Stock page says so.

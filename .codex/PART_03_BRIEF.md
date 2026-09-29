@@ -1,6 +1,6 @@
 # Part 3 Brief — Stock + Pantry (with whole-product polish)
 
-STATUS: VERIFIED_ON_SLICE (merge waits for remote migration 0013)
+STATUS: COMPLETE (merged to main 2026-09-29; migration 0013 applied to production D1 first)
 BRANCH: slice/part-03-stock-pantry (from main 72a6a79)
 ACCEPTED_SPEC: docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md (Part 3)
 INSTRUCTION: Earl, 2026-09-29 — a 10× product polish pass across every surface, then Part 3.
