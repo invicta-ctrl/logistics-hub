@@ -118,7 +118,7 @@ Every rule is enforced by the Worker (`src/accounts.ts`, `src/worker.ts`). The b
 | 1 YDD Gateway + Foundation | Landing, fail-closed Lending Hub, staff auth and roles, owner recovery, movement ledger, live refresh | **Complete** — local + GitHub verified 2026-09-29 |
 | 2 Inventory + Catalog | Complete item management, search, views, classification, locations, reorder settings, lending readiness, migrated review, history | **Complete** — local + GitHub verified 2026-09-29 |
 | 3 Stock + Pantry | Stock workspace, movement reasons, counts, low stock, restock list, pantry, optional expiry, activity; whole-product polish | **Complete** — local + GitHub verified; production D1 migrated 2026-09-29 |
-| 4 Lending | Internal loans by purpose (Individual use with student ID, USC use with reason), photo evidence (R2), return / damaged / lost, overdue, borrower rankings; quantity editor with required reasons; two item types | **Verified on the slice** — merge waits for migration 0014 and the R2 bucket in production |
+| 4 Lending | Internal loans by purpose (Individual use with student ID, USC use with reason), photo evidence (R2), return / damaged / lost, overdue, borrower rankings; quantity editor with required reasons; two item types | **Deployed, production acceptance partial** — R2, migration 0014, core navigation and quantity/history checks verified; photo upload/retrieval and return outcomes remain open |
 | 5 Activity + Accountability | Full activity center and safe exports | Planned |
 | 6 Admin + Hardening | System settings, backups, final production hardening | Planned |
 
