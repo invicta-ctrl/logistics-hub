@@ -699,7 +699,7 @@ th.col-qty .sort-button { margin-right: -.375rem; margin-left: 0; }
 .photo-field__actions { display: flex; gap: var(--space-2); }
 .photo-field__busy { padding: var(--space-6); border-radius: var(--radius-lg); background: var(--subtle); color: var(--text-2); font-size: var(--text-sm); text-align: center; }
 
-.dialog { width: min(calc(100% - 2rem), 30rem); max-height: min(calc(100dvh - 2rem), 44rem); margin: auto; padding: 0; overflow-y: auto; border: 0; border-top: 3px solid var(--brand); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-xl); color: var(--text); overscroll-behavior: contain; }
+.dialog { width: min(calc(100% - 2rem), 30rem); max-height: min(calc(100dvh - 2rem), 44rem); margin: auto; padding: 0; overflow-y: auto; border: 0; background: var(--surface); box-shadow: inset 0 3px 0 var(--brand), var(--shadow-xl); color: var(--text); overscroll-behavior: contain; }
 .dialog::backdrop { background: rgb(28 25 23 / 45%); }
 .dialog__body { display: grid; gap: var(--space-4); padding: var(--space-5) var(--space-6) var(--space-6); }
 .dialog__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }

@@ -373,7 +373,7 @@ function borrowSheet(item: CatalogItem): Html {
       <fieldset class="ss-choices"><legend>Return by <span class="field__optional">optional</span></legend>
         <label><input type="radio" name="returnBy" value="${day(today)}" /><span>Today</span></label>
         <label><input type="radio" name="returnBy" value="${day(tomorrow)}" /><span>Tomorrow</span></label>
-        <label><input type="radio" name="returnBy" value="" checked /><span>Not sure</span></label>
+        <label><input type="radio" name="returnBy" value="" checked /><span>No date</span></label>
       </fieldset>
       <div class="field">
         <span class="field-label" id="ss-photo-label">Photo <span class="field__optional">required</span></span>

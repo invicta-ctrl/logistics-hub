@@ -3,6 +3,7 @@
 Operations system for the HAU-USC Department of Logistics.
 
 - **Public:** a landing page, a live **Lending Hub** that lists only staff-reviewed Loanable items with current availability, and Staff login. Logistics Request is shown as not yet available.
+- **Self-Service (`/self-service`):** one permanent QR code opens an installable app on people's own phones to Take, Borrow and Return self-service items and see My activity, and it keeps working offline (records sync later and reconcile across phones). Engineering: `docs/OFFLINE_SELF_SERVICE.md`; install guide for students and staff: `docs/PWA_INSTALL_GUIDE.md`.
 - **Staff:** an Inventory + Catalog workspace with a live table, views (Needs review, Ready to list, Low stock, Inactive…), search across names, other names, IDs, categories and locations, and an item sheet for stock movements, catalog and lending settings, migrated-record review, and a readable change history.
 - **Stack:** semantic HTML, CSS, TypeScript modules, Vite, one Cloudflare Worker, and D1. No SPA framework.
 
@@ -15,7 +16,9 @@ Read `AGENTS.md`, then `.codex/CURRENT.md`, before changing anything. `docs/PROD
 - Staff logins are explicit accounts in `staff_accounts`, with PBKDF2 hashes and signed, revocable D1 sessions. They are never inferred from the staff directory.
 - Authorization is enforced by the Worker. Every `/api/staff/*` route and every `/staff/*` page needs a live session. Writes must also come from the same origin.
 
-Source: `src/worker.ts` (routing and auth), `src/inventory.ts` (data), `src/catalog-policy.ts` (listing rule), `src/public.ts`, `src/staff.ts`, and `src/ui.ts` (browser).
+- Phones never write quantities: each self-service action is an immutable event with its own id, applied once through the same ledger and lending statements staff use. The service worker precaches each build's app shell and never caches `/api/*`.
+
+Source: `src/worker.ts` (routing and auth), `src/inventory.ts` (data), `src/catalog-policy.ts` (listing and self-service rules), `src/self-service.ts` (self-service sync), `src/public.ts`, `src/staff.ts`, `src/self-service-app.ts`, `src/offline-*.ts`, `src/sw.ts` and `src/ui.ts` (browser).
 
 ## Local development
 

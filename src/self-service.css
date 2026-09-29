@@ -109,9 +109,10 @@
 .ss-fine { color: var(--text-3); font-size: var(--text-xs); line-height: 1.5; }
 
 /* ---------- Sheets ---------- */
+.ss-sheet .sheet__header { border-top: 0; }
 .ss-sheet .sheet__header h2 { font-size: 1.625rem; }
 .ss-form { gap: 1.125rem; }
-.ss-form .field label, .ss-legend, .ss-choices legend { font-size: var(--text-base); }
+.ss-form .field label, .ss-form .field-label, .ss-legend, .ss-choices legend { font-size: var(--text-base); font-weight: 500; }
 .ss-form input:not([type=radio], [type=checkbox], [type=file]), .ss-form textarea { min-height: 3rem; font-size: var(--text-md); }
 .ss-estimate { display: grid; gap: .125rem; padding: .75rem .875rem; border-radius: var(--radius); background: var(--subtle); font-size: var(--text-base); font-weight: 500; }
 .ss-estimate small { color: var(--text-3); font-size: var(--text-xs); font-weight: 400; }
