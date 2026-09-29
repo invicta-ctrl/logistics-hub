@@ -6,43 +6,33 @@ WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
 BRANCH: main
 LIVE_PREVIEW: http://127.0.0.1:8791
 
-## Part 2 on main (Claude, 2026-09-29)
-- **Catalog:**
-  - aliases ("Other names"), normalized and searchable;
-  - a category or location that matches an existing value regardless of case or spacing reuses its stored spelling;
-  - optimistic concurrency: `PATCH /api/staff/items/:id` needs the `updatedAt` the editor loaded, and a stale edit gets 409;
-  - `listingGaps()` in `src/catalog-policy.ts` is the single lending-policy source.
-- **Workspace:**
-  - views: All, Needs review, Ready to list, On Lending Hub, Low stock, Out of stock, Inactive;
-  - filters: category, location (including *No location set*), type;
-  - search over name, other names, ID, category and location;
-  - sortable location column; review progress meter.
-- **Item sheet:**
-  - Overview: quantity vs reorder level, migration evidence, review checklist, lending readiness with the exact gaps, stock, provenance;
-  - Review & edit: catalog, inventory settings, lending, "Mark reviewed & next";
-  - History: movements plus humanized catalog audit.
-- **Migration `0012`:** the `audit_log(entity_type, entity_id, created_at)` index, and nothing else.
-- **Redesign:**
-  - an oxblood masthead with the HAU·USC crest and the DOL mark;
-  - a landing hero showing the Youth Development Day 2026 banner beside the headline (Earl's choice; the availability panel was removed at his request; the landing lockup links to the USC Facebook page);
-  - staff sign-in on the original legacy Staff Login photograph (`public/brand/hau-campus-dusk.webp`);
-  - an oxblood staff app bar.
-  All brand images now live in `public/brand/`.
-- **Docs:** `docs/PRODUCT_REFERENCE.md` (new), `.codex/PART_02_BRIEF.md`.
+## Closure state — 2026-09-29
+- Part 1 — YDD Gateway + Foundation: COMPLETE.
+- Part 2 — Inventory + Catalog: COMPLETE.
+- Closure scope: freshly verified locally and against GitHub `main`; no production/provider mutation was performed.
+- GitHub and local branch budget is clean: only `main`.
+- Shared preview was restarted and upgraded through migrations 0011-0012.
+- External launcher exists at `D:\Documents\Logi hub access\LOGISTICS_ADMIN.cmd`.
 
-## Exact next action (Earl's PC, clean main)
-Production still runs an older manual upload. There is **no Git-connected Cloudflare build**, so pushing `main` does not deploy.
-1. `npx wrangler login`.
-2. `LOGISTICS_ADMIN.cmd`, then 12 (status), then 13 (deploy verified main). This applies `0010`–`0012` and verifies the live site.
-3. Run 14 (first-time owner setup), then 8 (recovery check), as in `docs/DEPLOYMENT.md`.
-4. Staff start reviewing: *Needs review*, then "Mark reviewed & next". Then publish from *Ready to list*.
-If Earl wants automatic deploys from `main`, connect Workers Builds to this repository in the Cloudflare dashboard. That is a provider change, and it needs his action.
+## Verification evidence
+- typecheck: pass;
+- unit/Worker/SQL tests: 46/46 pass;
+- production build: pass;
+- privacy scan: pass;
+- migration verifier: 397 items, one preserved ITM-0001 discrepancy;
+- catalog verifier: 397 pending review, 102 legacy Loanable candidates, zero auto-published;
+- browser tests: 7/7 pass;
+- real Worker + D1 E2E: 11/11 pass;
+- Cloudflare deploy dry-run: pass;
+- local preview verification: landing, security headers, Lending Hub, catalog API, ETag/304, auth boundary, anonymous-write rejection, migrated inventory, and ITM-0001 evidence all pass.
 
-## Dirty files
-None expected.
+## Closure fix
+The Worker browser E2E harness no longer hardcodes port 8792. Each run receives a temporary high port, preventing Windows TIME_WAIT collisions that previously caused false gate failures.
 
-## Known unresolved
-- The Part 1 production closure is still pending. See the steps above.
-- ITM-0001 stays at 7, movement-derived, against the legacy 8. This is intentional migration evidence.
-- All 397 migrated records need human review. None has a storage location yet.
-- `wrangler dev` on Windows can disable its assets watcher with `EPERM` after a rebuild. If the preview serves stale assets, restart `npm run dev:live`.
+## Known operational facts
+- ITM-0001 remains movement-derived at 7 versus legacy-reported 8; this is intentional migration evidence.
+- The 397 migrated records still require human review; 102 are legacy Loanable candidates.
+- Provider production state was not mutated or re-verified during this local/GitHub closure.
+
+## Next action
+Start Part 3 — Stock + Pantry — from fresh `main` only when Earl authorizes it.

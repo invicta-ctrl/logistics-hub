@@ -1,7 +1,7 @@
-# Current Bounded Task — PART-02 Inventory + Catalog
-INTENT: FEATURE_IMPLEMENTATION + VISUAL REDESIGN
-OBJECTIVE: The complete daily-use Inventory + Catalog system on the Part 1 foundation, plus the DOL visual redesign (legacy branding, original Staff Login background).
-IN_SCOPE: aliases; views and filters (category, location, type); search; item sheet (Overview · Review & edit · History); reorder visibility; lending readiness (`listingGaps`); migrated-record review ("Mark reviewed & next"); humanized catalog history; optimistic concurrency; canonical category and location spellings; migration 0012 (index only); PRODUCT_REFERENCE.md.
-OUT_OF_SCOPE: purchasing and replenishment, pantry, expiry (Part 3); loans (Part 4); the activity center and exports (Part 5); settings and backups (Part 6).
-BRIEF: .codex/PART_02_BRIEF.md
-STATUS: COMPLETE_ON_MAIN; PRODUCTION_DEPLOY_PENDING_ON_EARL_PC
+# Current Bounded Task — Part 1 + Part 2 Closure Verification
+INTENT: VERIFICATION + CLOSURE
+OBJECTIVE: Verify Part 1 and Part 2 locally and on GitHub, refresh the shared preview, close both milestones, and leave main as the only normal branch.
+SCOPE_VERIFIED: Part 1 foundation/auth/public flows; Part 2 Inventory + Catalog; migrations 0001-0012; STAFF/ADMIN/OWNER access; owner recovery; local preview; GitHub parity; build/test/privacy/migration/catalog/browser/Worker+D1 E2E gates.
+OUT_OF_SCOPE: Cloudflare provider mutation or production re-deployment during this closure.
+STATUS: COMPLETE
+NEXT: Part 3 — Stock + Pantry — has not started.

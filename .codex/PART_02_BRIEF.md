@@ -1,7 +1,7 @@
 # Part 2 Brief — Inventory + Catalog
 
-STATUS: ACTIVE
-BRANCH: slice/part-02-inventory-catalog (from origin/main 0784659)
+STATUS: COMPLETE_LOCAL_AND_GITHUB_VERIFIED_2026-09-29
+BRANCH: main (closed)
 ACCEPTED_SPEC: docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md (Part 2)
 INSTRUCTION: Earl, 2026-09-29 — Part 2 Inventory + Catalog, plus a visual redesign that matches the local preview direction and reuses legacy branding.
 
@@ -54,3 +54,6 @@ INSTRUCTION: Earl, 2026-09-29 — Part 2 Inventory + Catalog, plus a visual rede
 
 ## Out of scope
 Purchasing and replenishment, pantry, expiry (Part 3); loans (Part 4); the activity center and exports (Part 5); settings and backups (Part 6). Request Center and the old React frontend are not revived.
+
+## Closure verification — 2026-09-29
+Part 2 is complete and closed on `main`. Fresh closure verification passed locally and against GitHub: typecheck, 46 unit/Worker/SQL tests, build, privacy, migration/catalog checks, 7 browser tests, 11 real Worker+D1 E2E tests, Cloudflare dry-run, and refreshed shared-preview verification. GitHub and local branch state were clean with only `main`. Provider production was not mutated or re-verified as part of this closure.

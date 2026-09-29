@@ -1,8 +1,8 @@
 # Part 1 Task Brief — YDD Gateway + Foundation
 
-STATUS: READY_AFTER_BOOTSTRAP_ACCEPTANCE
+STATUS: COMPLETE_LOCAL_AND_GITHUB_VERIFIED_2026-09-29
 PART: 01
-BRANCH: feature/part-01-ydd-foundation
+BRANCH: main (closed)
 BASELINE: bootstrap/office-ops-v0.1
 ACCEPTED_SPEC: docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md
 
@@ -184,3 +184,6 @@ Stop before implementation or further mutation if:
 - verification fails outside a bounded repair.
 
 Stop after Part 1 is green. Do not begin Part 2 automatically.
+
+## Closure verification — 2026-09-29
+Part 1 is complete and closed on `main`. Fresh closure verification passed locally and against GitHub: typecheck, 46 unit/Worker/SQL tests, build, privacy, migration/catalog checks, 7 browser tests, 11 real Worker+D1 E2E tests, Cloudflare dry-run, and refreshed shared-preview verification. Part 2 regression coverage confirms the Part 1 public/auth/inventory foundation remains intact. Provider production was not mutated or re-verified as part of this closure.

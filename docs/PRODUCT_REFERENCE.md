@@ -93,8 +93,8 @@ Every rule is enforced by the Worker (`src/accounts.ts`, `src/worker.ts`). The b
 ## Parts (roadmap)
 | Part | Scope | State |
 | --- | --- | --- |
-| 1 YDD Gateway + Foundation | Landing, fail-closed Lending Hub, staff auth and roles, owner recovery, movement ledger, live refresh | On `main` and deployed |
-| 2 Inventory + Catalog | Complete item management, search, views, classification, locations, reorder settings, lending readiness, migrated review, history | On `main`; deployed 2026-09-29 |
+| 1 YDD Gateway + Foundation | Landing, fail-closed Lending Hub, staff auth and roles, owner recovery, movement ledger, live refresh | **Complete** — local + GitHub verified 2026-09-29 |
+| 2 Inventory + Catalog | Complete item management, search, views, classification, locations, reorder settings, lending readiness, migrated review, history | **Complete** — local + GitHub verified 2026-09-29 |
 | 3 Stock + Pantry | Deeper stock workflows, pantry, reorder and replenishment workflow, expiry | Planned |
 | 4 Lending | Borrowers (STUDENT or USC_STAFF), multi-item loans, due and return, damage and loss, photo evidence (R2) | Planned |
 | 5 Activity + Accountability | Full activity center and safe exports | Planned |
