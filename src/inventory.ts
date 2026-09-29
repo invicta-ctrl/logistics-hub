@@ -1,4 +1,4 @@
-import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, PUBLIC_LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, isListedForLending, listingGaps } from "./catalog-policy";
+import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, PUBLIC_LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
 
 export class InputError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -10,12 +10,15 @@ type ItemRow = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: number;
   lendingAudience: string; onHand: number; reorderThreshold: number; storageLocation: string | null;
   defaultLoanDays: number | null; maximumLoanQty: number | null; notes: string | null; updatedAt: string | null;
+  stockArea: string | null; expiresOn: string | null;
 };
 
 const ITEM_COLUMNS = `i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.unit, i.status, i.needs_review AS needsReview,
  i.lending_audience AS lendingAudience, COALESCE(b.on_hand, 0) AS onHand, i.reorder_threshold AS reorderThreshold,
- i.storage_location AS storageLocation, i.default_loan_days AS defaultLoanDays, i.maximum_loan_qty AS maximumLoanQty, i.notes, i.updated_at AS updatedAt`;
-const BUMP_REVISION = "UPDATE catalog_revision SET value = value + 1 WHERE id = 1";
+ i.storage_location AS storageLocation, i.default_loan_days AS defaultLoanDays, i.maximum_loan_qty AS maximumLoanQty, i.notes, i.updated_at AS updatedAt,
+ i.stock_area AS stockArea, i.expires_on AS expiresOn`;
+export const BUMP_REVISION = "UPDATE catalog_revision SET value = value + 1 WHERE id = 1";
+const OPEN_REORDERS = [...OPEN_REORDER_STATUSES].map((status) => `'${status}'`).join(",");
 
 export async function catalogRevision(db: D1Database): Promise<number> {
   return (await db.prepare("SELECT value FROM catalog_revision WHERE id = 1").first<number>("value")) ?? 0;
@@ -49,12 +52,21 @@ export async function publicCatalog(db: D1Database) {
   return { items, categories: distinct(items.map((item) => item.category)) };
 }
 
+type StaffRow = ItemRow & { lastCountedAt: string | null; migrationDelta: number | null; reorderStatus: string | null };
+
 export async function staffInventory(db: D1Database) {
-  const { results } = await db.prepare(`SELECT ${ITEM_COLUMNS} FROM items i LEFT JOIN inventory_balances b ON b.id = i.id ORDER BY i.name COLLATE NOCASE`).all<ItemRow>();
+  // lastCountedAt counts only physical counts recorded in the Hub, not migrated rows.
+  const { results } = await db.prepare(`SELECT ${ITEM_COLUMNS}, b.migration_delta AS migrationDelta,
+      (SELECT MAX(m.created_at) FROM inventory_movements m WHERE m.item_id = i.id AND m.movement_type = 'COUNT_ADJUSTMENT' AND m.imported_from IS NULL) AS lastCountedAt,
+      (SELECT r.status FROM reorders r WHERE r.item_id = i.id AND r.status IN (${OPEN_REORDERS})) AS reorderStatus
+    FROM items i LEFT JOIN inventory_balances b ON b.id = i.id ORDER BY i.name COLLATE NOCASE`).all<StaffRow>();
   const items = results.map((row) => ({
     id: row.id, name: row.name, aliases: row.aliases, category: row.category, itemType: row.itemType, unit: row.unit, status: row.status,
     needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand,
-    reorderThreshold: row.reorderThreshold, storageLocation: row.storageLocation, listed: isListedForLending(row)
+    reorderThreshold: row.reorderThreshold, storageLocation: row.storageLocation, listed: isListedForLending(row),
+    stockArea: row.stockArea, expiresOn: row.expiresOn, lastCountedAt: row.lastCountedAt, reorderStatus: row.reorderStatus,
+    // The legacy quantity is doubtful (migration discrepancy or a VERIFY record) until someone counts it.
+    countNeeded: row.status !== "INACTIVE" && !row.lastCountedAt && ((row.migrationDelta ?? 0) !== 0 || row.status === "VERIFY")
   }));
   // Existing values feed the pickers, so staff reuse a spelling instead of inventing a near-duplicate.
   return {
@@ -73,9 +85,10 @@ export async function itemDetail(db: D1Database, id: string) {
       b.migration_delta AS migrationDelta, i.legacy_source_sheet AS legacySourceSheet, i.legacy_source_row AS legacySourceRow,
       i.verification_note AS verificationNote, i.imported_from AS importedFrom
       FROM items i LEFT JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?`).bind(id),
-    db.prepare(`SELECT m.id, m.created_at AS createdAt, m.movement_type AS movementType, m.signed_quantity AS signedQuantity, m.status,
-      m.notes, a.display_name AS actor FROM inventory_movements m LEFT JOIN staff_accounts a ON a.id = m.actor_user_id
-      WHERE m.item_id = ? ORDER BY m.rowid DESC LIMIT 50`).bind(id),
+    db.prepare(`SELECT * FROM (SELECT m.id, m.created_at AS createdAt, m.movement_type AS movementType, m.signed_quantity AS signedQuantity, m.status,
+      m.notes, m.reason, a.display_name AS actor, m.rowid AS seq,
+      SUM(CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END) OVER (ORDER BY m.rowid) AS afterQuantity
+      FROM inventory_movements m LEFT JOIN staff_accounts a ON a.id = m.actor_user_id WHERE m.item_id = ?) ORDER BY seq DESC LIMIT 50`).bind(id),
     db.prepare(`SELECT l.created_at AS at, l.action, l.details_json AS details, a.display_name AS actor FROM audit_log l
       LEFT JOIN staff_accounts a ON a.id = l.actor_user_id WHERE l.entity_type = 'ITEM' AND l.entity_id = ? ORDER BY l.created_at DESC, l.rowid DESC LIMIT 50`).bind(id)
   ]);
@@ -92,6 +105,8 @@ export async function itemDetail(db: D1Database, id: string) {
 type ItemInput = {
   name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; storageLocation: string | null;
   reorderThreshold: number; lendingAudience: string; defaultLoanDays: number; maximumLoanQty: number; needsReview: boolean; notes: string | null;
+  // Optional: an older form that omits them keeps the stored value.
+  stockArea?: string; expiresOn?: string | null;
 };
 
 function text(body: Record<string, unknown>, key: string, label: string, max: number, required: boolean, multiline = false): string | null {
@@ -146,12 +161,23 @@ export function parseItemInput(body: unknown): ItemInput {
     defaultLoanDays: whole(record, "defaultLoanDays", "Loan period", 0, 365),
     maximumLoanQty: whole(record, "maximumLoanQty", "Maximum per loan", 0, 100_000),
     needsReview: record.needsReview === true,
-    notes: text(record, "notes", "Notes", 1000, false, true)
+    notes: text(record, "notes", "Notes", 1000, false, true),
+    ...(record.stockArea === undefined ? {} : { stockArea: choice(record, "stockArea", "stock area", STOCK_AREAS) }),
+    ...(record.expiresOn === undefined ? {} : { expiresOn: isoDate(record.expiresOn, "Expiry date") })
   };
   if (input.lendingAudience !== "NOT_AVAILABLE_FOR_LENDING" && input.itemType !== PUBLIC_LENDING_ITEM_TYPE) {
     throw new InputError(400, "Only Loanable items can be offered for lending.");
   }
   return input;
+}
+
+/** A calendar date as YYYY-MM-DD, or null when left empty. */
+export function isoDate(value: unknown, label: string): string | null {
+  if (value === null || value === "") return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`)) || new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value) {
+    throw new InputError(400, `${label} must be a real date.`);
+  }
+  return value;
 }
 
 /** Reuses another item's stored spelling of a category or location that differs only in letter case. */
@@ -166,7 +192,8 @@ async function canonical(db: D1Database, input: ItemInput, itemId = ""): Promise
 const EDITABLE: Array<[keyof ItemInput, string]> = [
   ["name", "name"], ["aliases", "aliases"], ["category", "category"], ["itemType", "item_type"], ["unit", "unit"], ["status", "status"],
   ["storageLocation", "storage_location"], ["reorderThreshold", "reorder_threshold"], ["lendingAudience", "lending_audience"],
-  ["defaultLoanDays", "default_loan_days"], ["maximumLoanQty", "maximum_loan_qty"], ["needsReview", "needs_review"], ["notes", "notes"]
+  ["defaultLoanDays", "default_loan_days"], ["maximumLoanQty", "maximum_loan_qty"], ["needsReview", "needs_review"], ["notes", "notes"],
+  ["stockArea", "stock_area"], ["expiresOn", "expires_on"]
 ];
 const stored = (value: ItemInput[keyof ItemInput]) => typeof value === "boolean" ? Number(value) : value;
 
@@ -191,7 +218,7 @@ export async function updateItem(db: D1Database, actor: Actor, id: string, parse
   if (!current) throw new InputError(404, "Item not found.");
   if (current.updatedAt !== expectedUpdatedAt) throw new InputError(409, STALE);
   const input = await canonical(db, parsed, id);
-  const changed = EDITABLE.filter(([key]) => current[key] !== stored(input[key]));
+  const changed = EDITABLE.filter(([key]) => input[key] !== undefined && current[key] !== stored(input[key]));
   if (!changed.length) return { changed: 0, updatedAt: current.updatedAt };
   const now = new Date().toISOString();
   const [update] = await db.batch([
@@ -213,9 +240,10 @@ export async function createItem(db: D1Database, actor: Actor, parsed: ItemInput
     const id = `ITM-${String(next).padStart(4, "0")}`;
     const statements = [
       db.prepare(`INSERT INTO items(id, name, aliases, category, item_type, unit, status, storage_location, reorder_threshold, lending_audience,
-        default_loan_days, maximum_loan_qty, needs_review, notes, imported_from, imported_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
+        default_loan_days, maximum_loan_qty, needs_review, notes, stock_area, expires_on, imported_from, imported_at, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
         .bind(id, input.name, input.aliases, input.category, input.itemType, input.unit, input.status, input.storageLocation, input.reorderThreshold, input.lendingAudience,
-          input.defaultLoanDays, input.maximumLoanQty, Number(input.needsReview), input.notes, now, now),
+          input.defaultLoanDays, input.maximumLoanQty, Number(input.needsReview), input.notes, input.stockArea ?? "Inventory", input.expiresOn ?? null, now, now),
       audit(db, actor.accountId, "ITEM_CREATED", "ITEM", id, { ...input, openingQuantity }),
       db.prepare(BUMP_REVISION)
     ];
@@ -236,28 +264,52 @@ export async function createItem(db: D1Database, actor: Actor, parsed: ItemInput
 const MOVEMENTS = {
   IN: { type: "STOCK_IN", direction: "IN", signed: "?1", guard: "1" },
   OUT: { type: "STOCK_OUT", direction: "OUT", signed: "-?1", guard: "b.on_hand >= ?1" },
-  COUNT: { type: "COUNT_ADJUSTMENT", direction: "ADJUST", signed: "?1 - b.on_hand", guard: "?1 <> b.on_hand" }
+  // A count records what was observed on the shelf, even when it matches (a 0 adjustment).
+  COUNT: { type: "COUNT_ADJUSTMENT", direction: "ADJUST", signed: "?1 - b.on_hand", guard: "1" }
 } as const;
 
 export async function recordMovement(db: D1Database, actor: Actor, itemId: string, body: unknown) {
   const record = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   const kind = choice(record, "kind", "movement", ["IN", "OUT", "COUNT"] as const);
   const quantity = whole(record, "quantity", kind === "COUNT" ? "Counted quantity" : "Quantity", kind === "COUNT" ? 0 : 1, 100_000);
-  const note = text(record, "note", "Reason", 500, kind === "COUNT");
+  const reason = kind === "COUNT" || record.reason === undefined || record.reason === null || record.reason === "" ? null : choice(record, "reason", "reason", MOVEMENT_REASONS[kind]);
+  const note = text(record, "note", kind === "COUNT" ? "Reason" : "Note", 500, kind === "COUNT" || reason === "OTHER");
   const key = typeof record.key === "string" && /^[A-Za-z0-9-]{8,80}$/.test(record.key) ? record.key : null;
   if (!key) throw new InputError(400, "Missing request key.");
+  const reorderId = record.reorderId === undefined || record.reorderId === null ? null : record.reorderId;
+  if (reorderId !== null) {
+    if (kind !== "IN" || typeof reorderId !== "string" || !/^RO-[A-Za-z0-9-]{1,60}$/.test(reorderId)) throw new InputError(400, "Only a Stock in can receive a restock entry.");
+    const open = await db.prepare(`SELECT 1 FROM reorders WHERE id = ? AND item_id = ? AND status IN (${OPEN_REORDERS})`).bind(reorderId, itemId).first();
+    const received = await db.prepare("SELECT 1 FROM inventory_movements WHERE idempotency_key = ?").bind(key).first();
+    if (!open && !received) throw new InputError(409, "That restock entry is already closed. Refresh to see the latest list.");
+  }
   const movement = MOVEMENTS[kind];
+  const movementId = `MOV-${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
   // One statement computes the signed quantity from the live balance and applies
   // the guard, so concurrent writers cannot drive stock negative or double-count.
-  const insert = db.prepare(`INSERT OR IGNORE INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, idempotency_key, notes, status)
-    SELECT ?2, ?3, '${movement.type}', '${movement.direction}', i.id, ABS(${movement.signed}), i.unit, ${movement.signed}, ?4, ?5, ?6, 'POSTED'
-    FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?7 AND ${movement.guard}`)
-    .bind(quantity, `MOV-${crypto.randomUUID()}`, new Date().toISOString(), actor.accountId, key, note, itemId);
-  // changes() still refers to the INSERT, so a retry or refused write leaves the revision untouched.
-  const [result] = await db.batch([insert, db.prepare(`${BUMP_REVISION} AND changes() > 0`)]);
+  const statements = [
+    db.prepare(`INSERT OR IGNORE INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, idempotency_key, notes, reason, status)
+      SELECT ?2, ?3, '${movement.type}', '${movement.direction}', i.id, ABS(${movement.signed}), i.unit, ${movement.signed}, ?4, ?5, ?6, ?8, 'POSTED'
+      FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?7 AND ${movement.guard}`)
+      .bind(quantity, movementId, now, actor.accountId, key, note, itemId, reason),
+    // changes() still refers to the INSERT, so a retry or refused write leaves the revision untouched.
+    db.prepare(`${BUMP_REVISION} AND changes() > 0`)
+  ];
+  if (reorderId) {
+    // Closes the restock entry only if this request's movement was actually written.
+    statements.push(db.prepare(`UPDATE reorders SET status = 'RESTOCKED', movement_id = ?1, closed_at = ?2, updated_at = ?2, updated_by = ?3
+      WHERE id = ?4 AND item_id = ?5 AND status IN (${OPEN_REORDERS}) AND EXISTS (SELECT 1 FROM inventory_movements WHERE id = ?1)`)
+      .bind(movementId, now, actor.accountId, reorderId, itemId));
+    statements.push(audit(db, actor.accountId, "REORDER_RESTOCKED", "ITEM", itemId, { quantity }, true));
+  }
+  await db.batch(statements);
+  // Found for a first write and for an idempotent retry alike.
+  const written = await db.prepare(`SELECT m.item_id AS itemId, m.signed_quantity AS change, b.on_hand AS onHand
+    FROM inventory_movements m JOIN inventory_balances b ON b.id = m.item_id WHERE m.idempotency_key = ?`).bind(key).first<{ itemId: string; change: number; onHand: number }>();
+  if (written?.itemId === itemId) return { onHand: written.onHand, change: written.change };
+  if (written) throw new InputError(409, "That request was already used for another item. Please try again.");
   const balance = await db.prepare("SELECT on_hand AS onHand FROM inventory_balances WHERE id = ?").bind(itemId).first<number>("onHand");
-  if (result.meta.changes > 0) return { onHand: balance };
   if (balance === null) throw new InputError(404, "Item not found.");
-  if (await db.prepare("SELECT 1 FROM inventory_movements WHERE idempotency_key = ?").bind(key).first()) return { onHand: balance };
-  throw new InputError(409, kind === "OUT" ? `Only ${balance} on hand; cannot remove ${quantity}.` : "The count matches the current on-hand quantity; nothing to adjust.");
+  throw new InputError(409, `Only ${balance} on hand; cannot remove ${quantity}.`);
 }

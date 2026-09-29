@@ -1,6 +1,7 @@
 import { type Account, changeOwnPassword, clearThrottle, createAccount, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, throttled, updateAccount, updateSelf } from "./accounts";
 import { InputError, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
+import { openReorder, stockOverview, updateReorder } from "./stock";
 
 export type Env = {
   DB: D1Database;
@@ -11,6 +12,7 @@ export type Env = {
 const SESSION_NAME = "lh_staff_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements)?$/;
+const REORDER_PATH = /^\/api\/staff\/reorders\/(RO-[A-Za-z0-9-]{1,60})$/;
 const ACCOUNT_PATH = /^\/api\/staff\/admin\/accounts\/(ACC-[A-Za-z0-9-]{1,60})(\/password|\/sessions\/revoke)?$/;
 // Paths still usable while an account must replace a password someone else set.
 const PASSWORD_CHANGE_ALLOWED = new Set(["/api/staff/session", "/api/staff/me/password"]);
@@ -123,6 +125,10 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   }
 
   if (path === "/api/staff/inventory" && method === "GET") return revisioned(request, env.DB, () => staffInventory(env.DB));
+  if (path === "/api/staff/stock" && method === "GET") return revisioned(request, env.DB, () => stockOverview(env.DB));
+  if (path === "/api/staff/reorders" && method === "POST") return json(await openReorder(env.DB, account, await body()), 201);
+  const reorder = REORDER_PATH.exec(path);
+  if (reorder && method === "PATCH") return json(await updateReorder(env.DB, account, reorder[1]!, await body()));
   if (path === "/api/staff/items" && method === "POST") {
     const input = await body() as Record<string, unknown> | null;
     const opening = input?.openingQuantity ?? 0;
@@ -136,7 +142,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     return json(await updateItem(env.DB, account, match[1]!, parseItemInput(input), input?.updatedAt));
   }
   if (match && match[2] && method === "POST") return json(await recordMovement(env.DB, account, match[1]!, await body()));
-  const known = match || ["/api/staff/session", "/api/staff/inventory", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || reorder || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/reorders", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 

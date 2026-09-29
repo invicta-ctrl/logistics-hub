@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
 import { migratedD1 } from "./d1-sqlite";
+import { stockState } from "../src/catalog-policy";
 
 const origin = "https://hub.example.test";
 let env: Env;
@@ -118,12 +119,12 @@ describe("movement-derived inventory", () => {
   it("records stock in, guarded stock out, and count adjustments as appended movements", async () => {
     const cookie = await signIn();
     const move = (body: object) => staff(cookie, "/api/staff/items/ITM-0001/movements", "POST", body);
-    expect(await (await move({ kind: "IN", quantity: 3, key: "stock-in-key-1" })).json()).toEqual({ onHand: 10 });
-    expect(await (await move({ kind: "IN", quantity: 3, key: "stock-in-key-1" })).json()).toEqual({ onHand: 10 });
+    expect(await (await move({ kind: "IN", quantity: 3, key: "stock-in-key-1" })).json()).toMatchObject({ onHand: 10 });
+    expect(await (await move({ kind: "IN", quantity: 3, key: "stock-in-key-1" })).json()).toMatchObject({ onHand: 10 });
     expect((await move({ kind: "OUT", quantity: 11, key: "stock-out-key-1" })).status).toBe(409);
-    expect(await (await move({ kind: "OUT", quantity: 4, key: "stock-out-key-2" })).json()).toEqual({ onHand: 6 });
+    expect(await (await move({ kind: "OUT", quantity: 4, key: "stock-out-key-2" })).json()).toMatchObject({ onHand: 6 });
     expect((await move({ kind: "COUNT", quantity: 5, key: "count-key-1" })).status).toBe(400);
-    expect(await (await move({ kind: "COUNT", quantity: 5, key: "count-key-2", note: "Shelf count" })).json()).toEqual({ onHand: 5 });
+    expect(await (await move({ kind: "COUNT", quantity: 5, key: "count-key-2", note: "Shelf count" })).json()).toMatchObject({ onHand: 5 });
     const rows = sqlite.prepare("SELECT movement_type, signed_quantity, actor_user_id FROM inventory_movements WHERE item_id = 'ITM-0001' ORDER BY rowid").all();
     expect(rows.slice(2)).toEqual([
       { movement_type: "STOCK_IN", signed_quantity: 3, actor_user_id: "ACC-1" },
@@ -199,5 +200,119 @@ describe("routing", () => {
   it("does not route unknown or unsupported API calls into the static application", async () => {
     expect((await call("/api/no-request-workflow")).status).toBe(404);
     expect((await call("/api/public/catalog", { method: "POST" })).status).toBe(405);
+  });
+});
+
+describe("Part 3 — stock and pantry", () => {
+  type StockItem = { id: string; onHand: number; reorderThreshold: number; status: string; stockArea: string | null; expiresOn: string | null; countNeeded: boolean; lastCountedAt: string | null; reorderStatus: string | null };
+  type Reorder = { id: string; itemId: string; status: string; desiredQuantity: number | null; updatedAt: string; note: string | null };
+  type Activity = { itemId: string; movementType: string; change: number; afterQuantity: number; reason: string | null; notes: string | null; actor: string | null };
+  type Stock = { items: StockItem[]; reorders: Reorder[]; activity: Activity[] };
+  const stock = async (cookie: string) => await (await staff(cookie, "/api/staff/stock")).json() as Stock;
+  const move = (cookie: string, id: string, body: Record<string, unknown>) => staff(cookie, `/api/staff/items/${id}/movements`, "POST", { key: crypto.randomUUID(), ...body });
+
+  it("records stock in, stock out and counts with reasons, and reports before and after", async () => {
+    const cookie = await signIn();
+    const start = (await stock(cookie)).items.find((item) => item.id === "ITM-0005")!.onHand;
+    expect(await (await move(cookie, "ITM-0005", { kind: "IN", quantity: 4, reason: "DELIVERY", note: "Supplier drop-off" })).json()).toEqual({ onHand: start + 4, change: 4 });
+    expect((await move(cookie, "ITM-0005", { kind: "OUT", quantity: 2, reason: "OTHER" })).status).toBe(400);
+    expect((await move(cookie, "ITM-0005", { kind: "OUT", quantity: 2, reason: "SOLD" })).status).toBe(400);
+    expect(await (await move(cookie, "ITM-0005", { kind: "OUT", quantity: 2, reason: "DAMAGED" })).json()).toEqual({ onHand: start + 2, change: -2 });
+    // A count that matches is recorded as an observation (a 0 adjustment), not refused.
+    expect(await (await move(cookie, "ITM-0005", { kind: "COUNT", quantity: start + 2, note: "Shelf count" })).json()).toEqual({ onHand: start + 2, change: 0 });
+    expect(await (await move(cookie, "ITM-0005", { kind: "COUNT", quantity: 1, note: "Shelf count" })).json()).toEqual({ onHand: 1, change: 1 - (start + 2) });
+    const { activity } = await stock(cookie);
+    expect(activity.slice(0, 4).map((entry) => [entry.movementType, entry.change, entry.afterQuantity, entry.reason, entry.actor])).toEqual([
+      ["COUNT_ADJUSTMENT", 1 - (start + 2), 1, null, "Staff One"],
+      ["COUNT_ADJUSTMENT", 0, start + 2, null, "Staff One"],
+      ["STOCK_OUT", -2, start + 2, "DAMAGED", "Staff One"],
+      ["STOCK_IN", 4, start + 4, "DELIVERY", "Staff One"]
+    ]);
+    // Migrated opening balances are not staff activity.
+    expect(activity.every((entry) => entry.actor === "Staff One")).toBe(true);
+    expect(() => sqlite.exec("UPDATE inventory_movements SET reason = 'OTHER'")).toThrow(/append-only/);
+  });
+
+  it("never lets stock go negative and counts a retried request once", async () => {
+    const cookie = await signIn();
+    const onHand = (await stock(cookie)).items.find((item) => item.id === "ITM-0003")!.onHand;
+    const refused = await move(cookie, "ITM-0003", { kind: "OUT", quantity: onHand + 1, reason: "ISSUED" });
+    expect(refused.status).toBe(409);
+    expect((await refused.json() as { error: string }).error).toBe(`Only ${onHand} on hand; cannot remove ${onHand + 1}.`);
+    const body = { kind: "IN", quantity: 2, reason: "RETURNED", key: "retry-stock-key-01" };
+    await staff(cookie, "/api/staff/items/ITM-0003/movements", "POST", body);
+    expect(await (await staff(cookie, "/api/staff/items/ITM-0003/movements", "POST", body)).json()).toEqual({ onHand: onHand + 2, change: 2 });
+    expect(sqlite.prepare("SELECT COUNT(*) AS total FROM inventory_movements WHERE idempotency_key = 'retry-stock-key-01'").get()).toEqual({ total: 1 });
+    expect((await staff(cookie, "/api/staff/items/ITM-0004/movements", "POST", body)).status).toBe(409);
+  });
+
+  it("calls an item low only against its reorder level, and asks for counts where the legacy quantity is doubtful", async () => {
+    const cookie = await signIn();
+    const find = async (id: string) => (await stock(cookie)).items.find((item) => item.id === id)!;
+    expect(stockState(await find("ITM-0003"))).toBe("OK");
+    const detail = (await (await staff(cookie, "/api/staff/items/ITM-0003")).json() as { item: Record<string, unknown> }).item;
+    await staff(cookie, "/api/staff/items/ITM-0003", "PATCH", { ...detail, reorderThreshold: 50 });
+    expect(stockState(await find("ITM-0003"))).toBe("LOW");
+    expect(await find("ITM-0001")).toMatchObject({ countNeeded: true, lastCountedAt: null });
+    await move(cookie, "ITM-0001", { kind: "COUNT", quantity: 7, note: "Physical count" });
+    expect(await find("ITM-0001")).toMatchObject({ countNeeded: false, onHand: 7 });
+    // The count confirms the shelf; the migration evidence itself is never rewritten.
+    expect((await (await staff(cookie, "/api/staff/items/ITM-0001")).json() as { item: object }).item).toMatchObject({ migrationDelta: -1 });
+  });
+
+  it("runs the restock list: one open entry, plan, receive through a Stock in, dismiss", async () => {
+    const cookie = await signIn();
+    const opened = await staff(cookie, "/api/staff/reorders", "POST", { itemId: "ITM-0004", desiredQuantity: 10, note: "For the general assembly" });
+    expect(opened.status).toBe(201);
+    const { id } = await opened.json() as { id: string };
+    expect((await staff(cookie, "/api/staff/reorders", "POST", { itemId: "ITM-0004" })).status).toBe(409);
+    let entry = (await stock(cookie)).reorders.find((row) => row.id === id)!;
+    expect(entry).toMatchObject({ status: "NEEDS_RESTOCK", desiredQuantity: 10 });
+    expect((await stock(cookie)).items.find((item) => item.id === "ITM-0004")!.reorderStatus).toBe("NEEDS_RESTOCK");
+    expect((await staff(cookie, `/api/staff/reorders/${id}`, "PATCH", { status: "PLANNED", updatedAt: "stale" })).status).toBe(409);
+    expect((await staff(cookie, `/api/staff/reorders/${id}`, "PATCH", { status: "RESTOCKED", updatedAt: entry.updatedAt })).status).toBe(400);
+    expect(await (await staff(cookie, `/api/staff/reorders/${id}`, "PATCH", { status: "PLANNED", updatedAt: entry.updatedAt })).json()).toEqual({ changed: 1 });
+    expect((await move(cookie, "ITM-0004", { kind: "OUT", quantity: 1, reason: "ISSUED", reorderId: id })).status).toBe(400);
+    const receive = { kind: "IN", quantity: 10, reason: "DELIVERY", reorderId: id, key: "receive-restock-01" };
+    const before = (await stock(cookie)).items.find((item) => item.id === "ITM-0004")!.onHand;
+    expect(await (await staff(cookie, "/api/staff/items/ITM-0004/movements", "POST", receive)).json()).toEqual({ onHand: before + 10, change: 10 });
+    expect(await (await staff(cookie, "/api/staff/items/ITM-0004/movements", "POST", receive)).json()).toEqual({ onHand: before + 10, change: 10 });
+    entry = (await stock(cookie)).reorders.find((row) => row.id === id)!;
+    expect(entry.status).toBe("RESTOCKED");
+    expect(sqlite.prepare("SELECT COUNT(*) AS total FROM reorders r JOIN inventory_movements m ON m.id = r.movement_id WHERE r.id = ?").get(id)).toEqual({ total: 1 });
+    expect((await staff(cookie, `/api/staff/reorders/${id}`, "PATCH", { status: "PLANNED", updatedAt: entry.updatedAt })).status).toBe(409);
+    expect((await move(cookie, "ITM-0004", { kind: "IN", quantity: 1, reason: "DELIVERY", reorderId: id })).status).toBe(409);
+
+    const second = await (await staff(cookie, "/api/staff/reorders", "POST", { itemId: "ITM-0004" })).json() as { id: string };
+    const fresh = (await stock(cookie)).reorders.find((row) => row.id === second.id)!;
+    await staff(cookie, `/api/staff/reorders/${second.id}`, "PATCH", { status: "DISMISSED", note: "Enough on hand", updatedAt: fresh.updatedAt });
+    expect((await stock(cookie)).reorders.find((row) => row.id === second.id)).toMatchObject({ status: "DISMISSED", note: "Enough on hand" });
+    const history = (await (await staff(cookie, "/api/staff/items/ITM-0004")).json() as { events: Array<{ action: string }> }).events.map((event) => event.action);
+    expect(history).toEqual(["REORDER_UPDATED", "REORDER_OPENED", "REORDER_RESTOCKED", "REORDER_UPDATED", "REORDER_OPENED"]);
+    expect((await staff(cookie, "/api/staff/reorders", "POST", { itemId: "ITM-9999" })).status).toBe(404);
+  });
+
+  it("treats pantry as the catalog's stock area and keeps expiry optional and valid", async () => {
+    const cookie = await signIn();
+    expect((await stock(cookie)).items.filter((item) => item.stockArea === "Pantry")).toHaveLength(10);
+    const detail = (await (await staff(cookie, "/api/staff/items/ITM-0041")).json() as { item: Record<string, unknown> }).item;
+    expect((await staff(cookie, "/api/staff/items/ITM-0041", "PATCH", { ...detail, expiresOn: "2026-02-30" })).status).toBe(400);
+    expect((await staff(cookie, "/api/staff/items/ITM-0041", "PATCH", { ...detail, expiresOn: "2026-10-15" })).status).toBe(200);
+    expect((await stock(cookie)).items.find((item) => item.id === "ITM-0041")).toMatchObject({ stockArea: "Pantry", expiresOn: "2026-10-15" });
+    const created = await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: "Paper Plates", itemType: "Consumable", lendingAudience: "NOT_AVAILABLE_FOR_LENDING", openingQuantity: 3 })).json() as { id: string };
+    expect((await stock(cookie)).items.find((item) => item.id === created.id)).toMatchObject({ stockArea: "Inventory", expiresOn: null });
+  });
+
+  it("serves the stock workspace as one revisioned, staff-only payload", async () => {
+    expect((await call("/api/staff/stock")).status).toBe(401);
+    expect((await call("/api/staff/reorders", { method: "POST", headers: { origin, "content-type": "application/json" }, body: "{}" })).status).toBe(401);
+    const cookie = await signIn();
+    const first = await staff(cookie, "/api/staff/stock");
+    const etag = first.headers.get("etag")!;
+    expect((await call("/api/staff/stock", { headers: { cookie, "if-none-match": etag } })).status).toBe(304);
+    const crossSite = await call("/api/staff/reorders", { method: "POST", headers: { origin: "https://evil.example", cookie, "content-type": "application/json" }, body: JSON.stringify({ itemId: "ITM-0005" }) });
+    expect(crossSite.status).toBe(403);
+    await staff(cookie, "/api/staff/reorders", "POST", { itemId: "ITM-0005" });
+    expect((await call("/api/staff/stock", { headers: { cookie, "if-none-match": etag } })).status).toBe(200);
   });
 });

@@ -4,6 +4,14 @@ export const ITEM_STATUSES = ["ACTIVE", "VERIFY", "INACTIVE"] as const;
 export const LENDING_AUDIENCES = ["NOT_AVAILABLE_FOR_LENDING", "STUDENTS_AND_USC_STAFF", "USC_STAFF_ONLY"] as const;
 export const PUBLIC_LENDING_AUDIENCES = new Set<string>(["STUDENTS_AND_USC_STAFF", "USC_STAFF_ONLY"]);
 export const PUBLIC_LENDING_ITEM_TYPE = "Loanable";
+export const STOCK_AREAS = ["Inventory", "Pantry"] as const;
+/** Why stock moved. Kept short and operational; "OTHER" always needs a note. */
+export const MOVEMENT_REASONS = {
+  IN: ["DELIVERY", "RETURNED", "DONATION", "OTHER"],
+  OUT: ["CONSUMED", "ISSUED", "DAMAGED", "MISSING", "TRANSFERRED", "OTHER"]
+} as const;
+export const REORDER_STATUSES = ["NEEDS_RESTOCK", "PLANNED", "RESTOCKED", "DISMISSED"] as const;
+export const OPEN_REORDER_STATUSES = new Set<string>(["NEEDS_RESTOCK", "PLANNED"]);
 
 export const LABELS: Record<string, string> = {
   Loanable: "Loanable",
@@ -15,8 +23,33 @@ export const LABELS: Record<string, string> = {
   INACTIVE: "Inactive",
   NOT_AVAILABLE_FOR_LENDING: "Not lendable",
   STUDENTS_AND_USC_STAFF: "Students & USC staff",
-  USC_STAFF_ONLY: "USC staff only"
+  USC_STAFF_ONLY: "USC staff only",
+  DELIVERY: "Delivery or purchase",
+  RETURNED: "Returned",
+  DONATION: "Donation",
+  CONSUMED: "Consumed",
+  ISSUED: "Issued",
+  DAMAGED: "Damaged",
+  MISSING: "Missing",
+  TRANSFERRED: "Transferred",
+  OTHER: "Other",
+  NEEDS_RESTOCK: "Needs restock",
+  PLANNED: "Planned",
+  RESTOCKED: "Restocked",
+  DISMISSED: "Dismissed"
 };
+
+export type StockCandidate = { onHand: number; reorderThreshold: number; status: string };
+
+/**
+ * One definition of stock state for the Worker and the browser. Low stock needs a reorder
+ * level: without one an item is never called low (no alarm without a threshold).
+ */
+export function stockState(item: StockCandidate): "OUT" | "LOW" | "OK" {
+  if (item.onHand <= 0) return "OUT";
+  if (item.reorderThreshold > 0 && item.onHand <= item.reorderThreshold) return "LOW";
+  return "OK";
+}
 
 export type ListingCandidate = {
   status: string;
