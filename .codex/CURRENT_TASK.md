@@ -1,7 +1,7 @@
-# Current Bounded Task — PART-04 Lending (internal loans), quantity editor, two item types
+# Current Bounded Task — PART-04.5 Offline Self-Service + PWA + Single QR + Sync/Reconciliation
 INTENT: FEATURE_IMPLEMENTATION + PRODUCT POLISH + PERFORMANCE
-OBJECTIVE: Earl's 2026-09-29 instruction (see .codex/PART_04_BRIEF.md): an always-editable quantity with a required reason; Loanable/Consumable only; typed category and unit; no loan period or maximum per loan; a Loan tab (Individual use: name, student ID, photo; USC use: name, photo, specific reason); a loans dashboard ranking borrowers by purpose; then clean up, improve the front end and speed up the backend without bloat.
-IN_SCOPE: migration 0014; src/loans.ts; /api/staff/loans and loan routes; src/movement-form.ts (quantity editor); src/loan-form.ts; src/loans-workspace.ts; item sheet changes; tests; docs.
-OUT_OF_SCOPE: multi-item loans in one record, departments, borrower accounts, public requests (Request Center), exports and the activity center (Part 5), backups and settings (Part 6).
-BRIEF: .codex/PART_04_BRIEF.md
-STATUS: LOCAL_GREEN — merge waits for the private R2 bucket and verified remote migration 0014
+OBJECTIVE: Earl's 2026-09-29 Part 4.5 instruction (see .codex/PART_04_5_BRIEF.md): one permanent QR → /self-service on people's own phones (Take, Borrow, Return, My activity), an installable PWA that keeps working offline, an IndexedDB event queue, idempotent sync, reconciliation across phones, a staff exception view, private photos, update behaviour, tests and docs.
+IN_SCOPE: migration 0015; src/self-service.ts; src/loans.ts (shared lending statements); src/offline-{queue,store,sync}.ts; src/sw.ts + vite.config.ts; src/pwa.ts; src/self-service-app.ts + .css; src/self-service-review.ts; staff integration (item toggle, view, nav); public/manifest.webmanifest, public/icons, public/qr; tests; docs/OFFLINE_SELF_SERVICE.md, docs/PWA_INSTALL_GUIDE.md.
+OUT_OF_SCOPE: offline staff actions (no offline credentials), global settings/kill switch and server-side retention purge (Part 6), exports and the activity center (Part 5), multi-item loans, borrower accounts.
+BRIEF: .codex/PART_04_5_BRIEF.md
+STATUS: CODE_COMPLETE on the slice (local gates green). Merge to main waits for (1) Part 4 production acceptance and (2) remote migration 0015, in that order; see .codex/SESSION_HANDOFF.md.
