@@ -24,7 +24,7 @@ LIVE_PREVIEW: http://127.0.0.1:8791
 - **Migration `0012`:** the `audit_log(entity_type, entity_id, created_at)` index, and nothing else.
 - **Redesign:**
   - an oxblood masthead with the HAU·USC crest and the DOL mark;
-  - a full-bleed YDD hero (the availability panel was removed at Earl's request; the landing lockup links to the USC Facebook page);
+  - a landing hero showing the Youth Development Day 2026 banner beside the headline (Earl's choice; the availability panel was removed at his request; the landing lockup links to the USC Facebook page);
   - staff sign-in on the original legacy Staff Login photograph (`public/brand/hau-campus-dusk.webp`);
   - an oxblood staff app bar.
   All brand images now live in `public/brand/`.

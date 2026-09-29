@@ -90,6 +90,7 @@ export function landing(): void {
             <a class="button button--outline-light button--lg" href="/staff" data-route>Staff sign in</a>
           </div>
         </div>
+        <figure class="hero__banner"><img src="/brand/ydd-2026-banner.jpg" alt="Siglawang: Yabong ng Pamana, Youth Development Day 2026" width="960" height="356" fetchpriority="high" /></figure>
       </div>
     </section>
 

@@ -21,7 +21,7 @@ It supersedes the older HAU-USC Logistics Management System for all new developm
 
 The landing page (`/`):
 - an oxblood masthead carrying the HAU·USC crest and the DOL mark. On this page only, the lockup opens the official HAU University Student Council Facebook page (`https://www.facebook.com/holyangeluniversitysc`) in a new tab; on other public pages it returns home;
-- a full-bleed hero on the retained YDD photograph, with a gold "Browse the Lending Hub" action. There is deliberately no availability panel here: the landing page does not poll the catalog, and availability lives only in the Lending Hub;
+- a hero on deep oxblood: the headline and a gold "Browse the Lending Hub" action beside the whole, uncropped Youth Development Day 2026 banner (the banner sits above the headline on phones). There is deliberately no availability panel here: the landing page does not poll the catalog, and availability lives only in the Lending Hub;
 - "How borrowing works" in three steps;
 - "What the Department offers". Logistics requests are shown as *not yet available*.
 
@@ -136,7 +136,7 @@ Each Part must work end to end without depending on a later Part.
 | `hau-campus-dusk.webp` | The original **Staff Login background** of the legacy Logistics Management website: the production brand slot `/brand/login-background`, a 1654×951 PNG of 2.15 MB (sha256 `1e9b1873…af90c6`). Converted to WebP q84 at the same pixel size (191 KB), otherwise unaltered. |
 | `hau-usc-crest.webp` | The legacy `/brand/usc-logo` (a 1545×1999 PNG, sha256 `d1cb4968…3dda5`), trimmed and scaled to 240 px tall. |
 | `dol-mark.png` | The Part 1 cropped DOL mark (also the favicon). |
-| `ydd-hero.webp` | The retained YDD landing photograph from Part 1. |
+| `ydd-2026-banner.jpg` | The landing hero image, set by Earl on 2026-09-29: the "Siglawang: Yabong ng Pamana" Youth Development Day 2026 banner (the HAU USC Facebook cover used by the legacy site, 960×356, sha256 `6ec7c5a7…`). Shown whole, never cropped or veiled, because it carries its own title. It replaced the earlier retained YDD photograph. |
 
 `public/touch-icon.png` is the iOS home-screen icon. The old site's combined lockup is not used; the crest and the mark are composed in code instead.
 

@@ -268,13 +268,14 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .site-nav__link[aria-current="page"] { color: var(--gold-action); }
 .site-nav :focus-visible { outline-color: var(--gold-action); }
 
-.hero { position: relative; isolation: isolate; overflow: hidden; background: var(--brand-dark); color: var(--on-dark); }
-.hero::before { position: absolute; inset: 0; z-index: -2; background: url("/brand/ydd-hero.webp") 70% 50% / cover no-repeat; content: ""; }
-.hero::after { position: absolute; inset: 0; z-index: -1; background: linear-gradient(95deg, rgb(43 10 12 / 94%) 0%, rgb(43 10 12 / 82%) 42%, rgb(64 7 10 / 55%) 100%), linear-gradient(0deg, rgb(43 10 12 / 70%), transparent 40%); content: ""; }
-.hero__grid { display: grid; grid-template-columns: minmax(0, 46rem); padding-block: clamp(3.5rem, 10vw, 8rem); }
+.hero { position: relative; isolation: isolate; overflow: hidden; background: radial-gradient(ellipse 70% 90% at 85% 40%, rgb(122 20 25 / 55%), transparent 70%), linear-gradient(180deg, var(--brand-dark), var(--brand-deep)); color: var(--on-dark); }
+.hero__grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); align-items: center; gap: clamp(2rem, 5vw, 4.5rem); padding-block: clamp(3rem, 8vw, 6.5rem); }
+/* The Youth Development Day banner carries its own title, so it is shown whole, never cropped or veiled. */
+.hero__banner { margin: 0; overflow: hidden; border: 1px solid rgb(242 209 92 / 28%); border-radius: var(--radius-xl); background: var(--brand-deep); box-shadow: var(--shadow-xl); }
+.hero__banner img { width: 100%; aspect-ratio: 960 / 356; object-fit: cover; }
 .hero__copy { min-width: 0; }
 .hero__kicker { color: var(--gold-action); font-size: var(--text-sm); font-weight: 600; letter-spacing: .04em; }
-.hero h1 { max-width: 13ch; margin-block: 1rem 1.25rem; font-family: var(--serif); font-size: var(--text-display); font-weight: 400; letter-spacing: -.02em; line-height: 1.02; overflow-wrap: anywhere; }
+.hero h1 { max-width: 13ch; margin-block: 1rem 1.25rem; font-family: var(--serif); font-size: clamp(2.5rem, 4.6vw, 4.25rem); font-weight: 400; letter-spacing: -.02em; line-height: 1.02; overflow-wrap: anywhere; }
 .hero__lede { max-width: 34rem; color: var(--on-dark-2); font-size: var(--text-lg); line-height: 1.6; }
 .hero__actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 2rem; }
 .hero :focus-visible { outline-color: var(--gold-action); }
@@ -585,7 +586,8 @@ th.col-qty .sort-button { margin-right: -.375rem; margin-left: 0; }
   .steps { grid-template-columns: 1fr; gap: 1.75rem; }
   .app-bar__link { display: none; }
   .panels { grid-template-columns: 1fr; }
-  .hero__grid { padding-block: 3rem; }
+  .hero__grid { grid-template-columns: minmax(0, 1fr); padding-block: 2rem 3rem; }
+  .hero__banner { order: -1; max-width: 44rem; }
   .auth__layout { grid-template-columns: minmax(0, 1fr); justify-items: center; }
   .auth__intro { justify-items: center; text-align: center; }
   .auth__statement { font-size: clamp(1.75rem, 6vw, 2.5rem); }
@@ -645,7 +647,7 @@ th.col-qty .sort-button { margin-right: -.375rem; margin-left: 0; }
   .hero__copy > :nth-child(3) { animation-delay: 120ms; }
   .hero__copy > :nth-child(4) { animation-delay: 180ms; }
   .auth__panel { animation: rise .7s var(--ease) .15s both; }
-  .hero::before, .auth::before { animation: photo-in 1.2s var(--ease) both; }
+  .hero__banner, .auth::before { animation: photo-in 1.2s var(--ease) both; }
   .skeleton { animation: shimmer 1.6s linear infinite; }
   .toast { animation: rise var(--dur-2) var(--ease); }
   .sheet[open] { animation: sheet-in var(--dur-3) var(--ease); }
