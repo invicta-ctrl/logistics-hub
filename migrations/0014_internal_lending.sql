@@ -14,8 +14,8 @@ DROP TABLE IF EXISTS loan_items;
 DROP TABLE IF EXISTS evidence;
 DROP TABLE IF EXISTS loans;
 
--- A loan never stores quantity: handing out writes a LOAN_OUT movement and a good return writes
--- LOAN_RETURN, so on hand stays the sum of the ledger. Damaged or lost items do not come back.
+-- Each loan records the quantity lent and links to its LOAN_OUT movement. Only a good return
+-- writes LOAN_RETURN, so on hand stays the sum of the ledger. Damaged or lost items do not come back.
 -- The photo lives in R2 (binding EVIDENCE) under photo_key; D1 keeps only the key.
 CREATE TABLE loans (
  id TEXT PRIMARY KEY,

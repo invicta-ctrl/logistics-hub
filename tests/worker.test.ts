@@ -56,10 +56,10 @@ describe("public Lending Hub", () => {
     const etag = first.headers.get("etag")!;
     expect((await call("/api/public/catalog", { headers: { "if-none-match": etag } })).status).toBe(304);
     const cookie = await signIn();
-    await staff(cookie, "/api/staff/items/ITM-0005/movements", "POST", { kind: "IN", quantity: 1, key: "revision-test-key" });
+    await staff(cookie, "/api/staff/items/ITM-0005/movements", "POST", { kind: "IN", quantity: 1, reason: "DELIVERY", key: "revision-test-key" });
     const changed = await call("/api/public/catalog", { headers: { "if-none-match": etag } });
     expect(changed.status).toBe(200);
-    await staff(cookie, "/api/staff/items/ITM-0005/movements", "POST", { kind: "IN", quantity: 1, key: "revision-test-key" });
+    await staff(cookie, "/api/staff/items/ITM-0005/movements", "POST", { kind: "IN", quantity: 1, reason: "DELIVERY", key: "revision-test-key" });
     expect((await call("/api/public/catalog", { headers: { "if-none-match": changed.headers.get("etag")! } })).status).toBe(304);
   });
 });
@@ -113,8 +113,8 @@ describe("movement-derived inventory", () => {
     const detail = await (await staff(cookie, "/api/staff/items/ITM-0001")).json() as { item: Record<string, unknown> };
     expect(detail.item).toMatchObject({ onHand: 7, legacyReportedAvailable: 8, migratedOnHand: 7, migrationDelta: -1 });
     // Later staff movements change on-hand but never the migration evidence.
-    await staff(cookie, "/api/staff/items/ITM-0001/movements", "POST", { kind: "IN", quantity: 5, key: "evidence-stable-key" });
-    await staff(cookie, "/api/staff/items/ITM-0002/movements", "POST", { kind: "IN", quantity: 5, key: "evidence-other-key" });
+    await staff(cookie, "/api/staff/items/ITM-0001/movements", "POST", { kind: "IN", quantity: 5, reason: "DELIVERY", key: "evidence-stable-key" });
+    await staff(cookie, "/api/staff/items/ITM-0002/movements", "POST", { kind: "IN", quantity: 5, reason: "DELIVERY", key: "evidence-other-key" });
     expect((await (await staff(cookie, "/api/staff/items/ITM-0001")).json() as { item: object }).item).toMatchObject({ onHand: 12, migrationDelta: -1 });
     expect((await (await staff(cookie, "/api/staff/items/ITM-0002")).json() as { item: object }).item).toMatchObject({ migrationDelta: 0 });
   });
@@ -122,12 +122,12 @@ describe("movement-derived inventory", () => {
   it("records stock in, guarded stock out, and count adjustments as appended movements", async () => {
     const cookie = await signIn();
     const move = (body: object) => staff(cookie, "/api/staff/items/ITM-0001/movements", "POST", body);
-    expect(await (await move({ kind: "IN", quantity: 3, key: "stock-in-key-1" })).json()).toMatchObject({ onHand: 10 });
-    expect(await (await move({ kind: "IN", quantity: 3, key: "stock-in-key-1" })).json()).toMatchObject({ onHand: 10 });
-    expect((await move({ kind: "OUT", quantity: 11, key: "stock-out-key-1" })).status).toBe(409);
-    expect(await (await move({ kind: "OUT", quantity: 4, key: "stock-out-key-2" })).json()).toMatchObject({ onHand: 6 });
-    expect((await move({ kind: "COUNT", quantity: 5, key: "count-key-1" })).status).toBe(400);
-    expect(await (await move({ kind: "COUNT", quantity: 5, key: "count-key-2", note: "Shelf count" })).json()).toMatchObject({ onHand: 5 });
+    expect(await (await move({ kind: "IN", quantity: 3, reason: "DELIVERY", key: "stock-in-key-1" })).json()).toMatchObject({ onHand: 10 });
+    expect(await (await move({ kind: "IN", quantity: 3, reason: "DELIVERY", key: "stock-in-key-1" })).json()).toMatchObject({ onHand: 10 });
+    expect((await move({ kind: "OUT", quantity: 11, reason: "ISSUED", key: "stock-out-key-1" })).status).toBe(409);
+    expect(await (await move({ kind: "OUT", quantity: 4, reason: "ISSUED", key: "stock-out-key-2" })).json()).toMatchObject({ onHand: 6 });
+    expect((await move({ kind: "COUNT", quantity: 5, expectedOnHand: 6, key: "count-key-1" })).status).toBe(400);
+    expect(await (await move({ kind: "COUNT", quantity: 5, expectedOnHand: 6, key: "count-key-2", note: "Shelf count" })).json()).toMatchObject({ onHand: 5 });
     const rows = sqlite.prepare("SELECT movement_type, signed_quantity, actor_user_id FROM inventory_movements WHERE item_id = 'ITM-0001' ORDER BY rowid").all();
     expect(rows.slice(2)).toEqual([
       { movement_type: "STOCK_IN", signed_quantity: 3, actor_user_id: "ACC-1" },
@@ -222,8 +222,8 @@ describe("Part 3 — stock and pantry", () => {
     expect((await move(cookie, "ITM-0005", { kind: "OUT", quantity: 2, reason: "SOLD" })).status).toBe(400);
     expect(await (await move(cookie, "ITM-0005", { kind: "OUT", quantity: 2, reason: "DAMAGED" })).json()).toEqual({ onHand: start + 2, change: -2 });
     // A count that matches is recorded as an observation (a 0 adjustment), not refused.
-    expect(await (await move(cookie, "ITM-0005", { kind: "COUNT", quantity: start + 2, note: "Shelf count" })).json()).toEqual({ onHand: start + 2, change: 0 });
-    expect(await (await move(cookie, "ITM-0005", { kind: "COUNT", quantity: 1, note: "Shelf count" })).json()).toEqual({ onHand: 1, change: 1 - (start + 2) });
+    expect(await (await move(cookie, "ITM-0005", { kind: "COUNT", quantity: start + 2, expectedOnHand: start + 2, note: "Shelf count" })).json()).toEqual({ onHand: start + 2, change: 0 });
+    expect(await (await move(cookie, "ITM-0005", { kind: "COUNT", quantity: 1, expectedOnHand: start + 2, note: "Shelf count" })).json()).toEqual({ onHand: 1, change: 1 - (start + 2) });
     const { activity } = await stock(cookie);
     expect(activity.slice(0, 4).map((entry) => [entry.movementType, entry.change, entry.afterQuantity, entry.reason, entry.actor])).toEqual([
       ["COUNT_ADJUSTMENT", 1 - (start + 2), 1, null, "Staff One"],
@@ -257,7 +257,7 @@ describe("Part 3 — stock and pantry", () => {
     await staff(cookie, "/api/staff/items/ITM-0003", "PATCH", { ...detail, reorderThreshold: 50 });
     expect(stockState(await find("ITM-0003"))).toBe("LOW");
     expect(await find("ITM-0001")).toMatchObject({ countNeeded: true, lastCountedAt: null });
-    await move(cookie, "ITM-0001", { kind: "COUNT", quantity: 7, note: "Physical count" });
+    await move(cookie, "ITM-0001", { kind: "COUNT", quantity: 7, expectedOnHand: 7, note: "Physical count" });
     expect(await find("ITM-0001")).toMatchObject({ countNeeded: false, onHand: 7 });
     // The count confirms the shelf; the migration evidence itself is never rewritten.
     expect((await (await staff(cookie, "/api/staff/items/ITM-0001")).json() as { item: object }).item).toMatchObject({ migrationDelta: -1 });
@@ -321,7 +321,7 @@ describe("Part 3 — stock and pantry", () => {
 });
 
 describe("Part 4 — two item types, quantity edits and internal lending", () => {
-  type Loan = { id: string; itemId: string; quantity: number; purpose: string; borrowerName: string; studentId: string | null; reason: string | null; status: string; returnNote: string | null; createdBy: string | null; closedBy: string | null };
+  type Loan = { id: string; itemId: string; quantity: number; purpose: string; borrowerName: string; studentId: string | null; reason: string | null; returnBy: string | null; status: string; returnNote: string | null; createdBy: string | null; closedBy: string | null };
   type Overview = {
     open: Loan[]; closed: Loan[]; known: Array<{ name: string; studentId: string }>;
     borrowers: Array<{ period: string; purpose: string; name: string; studentId: string | null; loans: number; units: number; outNow: number; problems: number }>;
@@ -360,10 +360,28 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
   it("saves a quantity edit only against the figure the editor showed", async () => {
     const cookie = await signIn();
     const shown = onHand("ITM-0005");
+    expect((await staff(cookie, "/api/staff/items/ITM-0005/movements", "POST", { kind: "IN", quantity: 2, expectedOnHand: shown, key: crypto.randomUUID() })).status).toBe(400);
+    expect((await staff(cookie, "/api/staff/items/ITM-0005/movements", "POST", { kind: "COUNT", quantity: shown + 2, note: "Shelf count", key: crypto.randomUUID() })).status).toBe(400);
+    const staleCount = await staff(cookie, "/api/staff/items/ITM-0005/movements", "POST", { kind: "COUNT", quantity: shown + 2, note: "Shelf count", expectedOnHand: shown + 1, key: crypto.randomUUID() });
+    expect(staleCount.status).toBe(409);
+    expect(onHand("ITM-0005")).toBe(shown);
     const stale = await staff(cookie, "/api/staff/items/ITM-0005/movements", "POST", { kind: "IN", quantity: 2, reason: "DELIVERY", expectedOnHand: shown + 1, key: crypto.randomUUID() });
     expect(stale.status).toBe(409);
     expect((await stale.json() as { error: string }).error).toMatch(/Someone else just changed this item/);
     expect(await (await staff(cookie, "/api/staff/items/ITM-0005/movements", "POST", { kind: "OUT", quantity: 1, reason: "CONSUMED", expectedOnHand: shown, key: crypto.randomUUID() })).json()).toEqual({ onHand: shown - 1, change: -1 });
+  });
+
+  it("accepts an optional return date and rejects one already past in Manila", async () => {
+    const cookie = await signIn();
+    const itemId = await lendable(cookie, 3);
+    const future = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date(Date.now() + 2 * 86_400_000));
+    expect((await lend(cookie, itemId, { borrowerName: "No Due Date", studentId: "TEST-0001" })).status).toBe(201);
+    expect((await lend(cookie, itemId, { borrowerName: "Due Later", studentId: "TEST-0002", returnBy: future })).status).toBe(201);
+    expect((await lend(cookie, itemId, { borrowerName: "Past Due", studentId: "TEST-0003", returnBy: "2000-01-01" })).status).toBe(400);
+    const loans = (await overview(cookie)).open.filter((loan) => loan.itemId === itemId);
+    expect(loans.map((loan) => [loan.borrowerName, loan.returnBy])).toEqual([["No Due Date", null], ["Due Later", future]]);
+    expect(onHand(itemId)).toBe(1);
+    expect(photos.size).toBe(2);
   });
 
   it("lends for individual use with a student ID and photo, takes it off the shelf, and never double-lends a retry", async () => {
@@ -451,6 +469,7 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
     const photo = await call(`/api/staff/loans/${id}/photo`, { headers: { cookie } });
     expect(photo.status).toBe(200);
     expect(photo.headers.get("content-type")).toBe("image/jpeg");
+    expect(photo.headers.get("cache-control")).toBe("private, no-store");
     expect(new Uint8Array(await photo.arrayBuffer())).toEqual(JPEG);
     expect((await call("/api/staff/loans/LN-missing/photo", { headers: { cookie } })).status).toBe(404);
     const form = new FormData();

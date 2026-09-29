@@ -186,7 +186,7 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
     if (note.required && !note.value.trim()) return invalid(note, "Add a short note for “Other”.");
     const delta = total - base;
     const body = reason === "COUNT"
-      ? { kind: "COUNT", quantity: total, note: note.value.trim() || "Physical count", key }
+      ? { kind: "COUNT", quantity: total, note: note.value.trim() || "Physical count", expectedOnHand: base, key }
       : { kind: delta > 0 ? "IN" : "OUT", quantity: Math.abs(delta), reason, note: note.value, expectedOnHand: base, key, reorderId: delta > 0 ? reorderId : null };
     submit.disabled = true;
     setMessage(alert, "");

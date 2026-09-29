@@ -178,5 +178,5 @@ export async function loanPhoto(db: D1Database, bucket: R2Bucket, id: string): P
   const key = await db.prepare("SELECT photo_key AS photoKey FROM loans WHERE id = ?").bind(id).first<string>("photoKey");
   const object = key ? await bucket.get(key) : null;
   if (!object) throw new InputError(404, "Photo not found.");
-  return new Response(object.body, { headers: { "content-type": object.httpMetadata?.contentType ?? "application/octet-stream", "cache-control": "private, max-age=86400, immutable" } });
+  return new Response(object.body, { headers: { "content-type": object.httpMetadata?.contentType ?? "application/octet-stream", "cache-control": "private, no-store" } });
 }

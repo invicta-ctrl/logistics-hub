@@ -272,12 +272,13 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
   const record = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   const kind = choice(record, "kind", "movement", ["IN", "OUT", "COUNT"] as const);
   const quantity = whole(record, "quantity", kind === "COUNT" ? "Counted quantity" : "Quantity", kind === "COUNT" ? 0 : 1, 100_000);
-  const reason = kind === "COUNT" || record.reason === undefined || record.reason === null || record.reason === "" ? null : choice(record, "reason", "reason", MOVEMENT_REASONS[kind]);
+  const reason = kind === "COUNT" ? null : choice(record, "reason", "reason", MOVEMENT_REASONS[kind]);
   const note = text(record, "note", kind === "COUNT" ? "Reason" : "Note", 500, kind === "COUNT" || reason === "OTHER");
   const key = typeof record.key === "string" && /^[A-Za-z0-9-]{8,80}$/.test(record.key) ? record.key : null;
   if (!key) throw new InputError(400, "Missing request key.");
   // The quantity editor sends the figure it showed, so a change made elsewhere meanwhile is never overwritten blindly.
   const expected = record.expectedOnHand === undefined || record.expectedOnHand === null ? null : whole(record, "expectedOnHand", "Expected quantity", -1_000_000, 1_000_000);
+  if (kind === "COUNT" && expected === null) throw new InputError(400, "Refresh the item before recording a count.");
   const reorderId = record.reorderId === undefined || record.reorderId === null ? null : record.reorderId;
   if (reorderId !== null) {
     if (kind !== "IN" || typeof reorderId !== "string" || !/^RO-[A-Za-z0-9-]{1,60}$/.test(reorderId)) throw new InputError(400, "Only a Stock in can receive a restock entry.");

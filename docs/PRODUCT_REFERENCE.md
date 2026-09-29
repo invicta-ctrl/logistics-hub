@@ -33,7 +33,7 @@ The Lending Hub (`/lending`):
 
 Staff sign-in (`/staff`) uses the original legacy Staff Login campus photograph behind a new, secure sign-in form. A signed-in visit goes straight to the workspace.
 
-The public catalog DTO carries only: `id`, `name`, `category`, `unit`, `available`, `audience`, `maxPerLoan`, `loanDays`.
+The public catalog DTO carries only: `id`, `name`, `category`, `unit`, `available`, `audience`.
 
 ## Staff workspace
 Every `/staff/*` page and `/api/staff/*` call needs a live session. Writes must come from the same origin.
@@ -132,7 +132,7 @@ Each Part must work end to end without depending on a later Part.
 - **Low stock needs a reorder level** (`stockState()` in `src/catalog-policy.ts`, shared by Worker and browser). "Needs count" marks items whose legacy quantity is doubtful (a migration discrepancy or a VERIFY record) until a count is recorded in the Hub.
 - **The restock list never holds stock.** `reorders` stores status, restock quantity and note; at most one open entry per item. An entry becomes Restocked only through the Stock in that received it, in the same batch. No suppliers, quotes or purchase orders.
 - **Pantry is a view,** not a separate inventory: `items.stock_area = 'Pantry'`. Expiry is one optional earliest date per item, not lots or batches.
-- **A loan never stores quantity.** Lending writes a LOAN_OUT movement (refused if it would drive stock negative; idempotent), and only a good return writes LOAN_RETURN. Damaged or lost items stay off the shelf. Overdue is derived from the return-by date. Each loan keeps its purpose, borrower, student ID or reason, and the R2 key of its photo.
+- **On-hand quantity remains movement-derived.** Each loan records the quantity lent and links to its guarded, idempotent LOAN_OUT movement; only a good return writes LOAN_RETURN. Damaged or lost items stay off the shelf. Overdue is derived from the return-by date. Each loan keeps its purpose, borrower, student ID or reason, and the R2 key of its photo.
 - **A quantity edit is guarded.** The editor sends the figure it showed (`expectedOnHand`); if someone else changed the item meanwhile, the save is refused with the new figure instead of overwriting it.
 - **Two item types.** Loanable (comes back) or Consumable (used up). Migration 0014 reclassified the 112 legacy "Saleable" records as Consumable, with the change in each item's history.
 - **Catalog edits never touch quantity history.**

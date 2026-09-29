@@ -575,7 +575,7 @@ export async function workspace(): Promise<void> {
         const quantity = movement.signedQuantity;
         const tone = quantity > 0 ? "is-in" : quantity < 0 ? "is-out" : "";
         return { at: movement.createdAt, markup: html`<li class="history__item ${tone}">
-          <div><p class="history__title">${movementTitle(movement.movementType, quantity, movement.reason, movement.borrower)}${movement.purpose ? html` <span class="muted">(${label(movement.purpose).toLowerCase()})</span>` : ""}${movement.status !== "POSTED" ? ` (${movement.status.toLowerCase()})` : ""}</p>
+          <div><p class="history__title">${movementTitle(movement.movementType, quantity, movement.reason, movement.borrower)}${movement.purpose ? html` <span class="muted">(${movement.purpose === "USC" ? "USC use" : "individual use"})</span>` : ""}${movement.status !== "POSTED" ? ` (${movement.status.toLowerCase()})` : ""}</p>
             <p class="history__meta"><time datetime="${movement.createdAt}">${formatDateTime(movement.createdAt)}</time> · ${movement.actor ?? "Legacy system"}</p>
             ${movement.notes ? html`<p class="history__note">${movement.notes}</p>` : ""}</div>
           <p class="history__qty ${tone}">${signed(quantity)}<span class="history__after">${movement.afterQuantity - quantity} → ${movement.afterQuantity}</span></p></li>` };

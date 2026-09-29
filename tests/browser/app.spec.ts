@@ -84,6 +84,32 @@ test("staff sign-in validates fields and can reveal the password", async ({ page
   await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "text");
 });
 
+test("loan due labels derive overdue from an open loan's return date", async ({ page }) => {
+  await page.goto("/");
+  const labels = await page.evaluate(async () => {
+    const modulePath = "/src/loan-form.ts";
+    const { dueTag, isOverdue } = await import(modulePath);
+    const today = "2026-09-29";
+    const optional = { status: "OUT", returnBy: null };
+    const overdue = { status: "OUT", returnBy: "2026-09-28" };
+    const closed = { status: "RETURNED", returnBy: "2026-09-28" };
+    return {
+      optional: dueTag(optional, today).toString(),
+      overdue: dueTag(overdue, today).toString(),
+      today: dueTag({ status: "OUT", returnBy: today }, today).toString(),
+      closed: dueTag(closed, today).toString(),
+      isOverdue: isOverdue(overdue, today),
+      closedOverdue: isOverdue(closed, today),
+    };
+  });
+  expect(labels.optional).toBe("");
+  expect(labels.overdue).toContain("Overdue");
+  expect(labels.today).toContain("Due today");
+  expect(labels.closed).toBe("");
+  expect(labels.isOverdue).toBe(true);
+  expect(labels.closedOverdue).toBe(false);
+});
+
 test("public routes fit every required viewport class", async ({ page }) => {
   for (const viewport of [{ width: 320, height: 700 }, { width: 375, height: 700 }, { width: 768, height: 900 }, { width: 1024, height: 900 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(viewport);

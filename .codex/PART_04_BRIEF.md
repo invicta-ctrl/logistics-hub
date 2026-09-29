@@ -1,6 +1,6 @@
 # Part 4 Brief — Lending (internal loans), quantity editor, two item types
 
-STATUS: IN_PROGRESS on slice (features verified; review-and-improve pass running)
+STATUS: LOCAL_GREEN on slice (release prerequisites and production verification pending)
 BRANCH: slice/part-04-lending (from main 4f6cf4b)
 ACCEPTED_SPEC: docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md (Part 4), as directed by Earl's current instruction below
 INSTRUCTION: Earl, 2026-09-29 (after Part 3 went live)
@@ -27,7 +27,7 @@ Divergences from the v0.1 spec, per Earl: loans are classified by **purpose** (I
 - **Worker (`src/loans.ts`):** lend (multipart with photo; photo type from bytes; guarded LOAN_OUT movement, never negative, idempotent; photo removed if nothing was written), return / damaged / lost (only a good return writes LOAN_RETURN; closing twice is harmless), `/api/staff/loans` (open, recent returns, per-period rankings and totals, known borrowers; revisioned), staff-only photo stream. Movements accept `expectedOnHand`.
 - **UI:** quantity editor (`src/movement-form.ts`) in the item sheet and Stock & Pantry; Loan tab and shared loan form with in-browser photo shrink (`src/loan-form.ts`); `/staff/loans` dashboard (`src/loans-workspace.ts`); Edit details simplified; Lending Hub rows state only the audience.
 
-## Production prerequisites before merging (Earl)
+## Production prerequisites before merging (Codex authorized by Earl's current instruction)
 1. `npx wrangler r2 bucket create logistics-hub-evidence`
 2. `npx wrangler d1 migrations apply DB --remote` (applies 0014; safe for the live Part 3 code)
 3. Then fast-forward `main` and push.

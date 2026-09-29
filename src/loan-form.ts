@@ -239,11 +239,18 @@ export function bindLoanForm(form: HTMLFormElement, options: {
     setMessage(alert, "");
     try {
       await api(`/api/staff/items/${encodeURIComponent(target.id)}/loans`, { method: "POST", body });
-      toast(`Lent ${count} ${units(count, target.unit)} of ${target.name} to ${name.value.trim()}.`);
-      reset();
-      await options.onLent(target);
     } catch (error) {
       setMessage(alert, error instanceof ApiError && error.status === 0 ? "The loan was not saved: you appear to be offline. Your entries are kept; try again." : failure(error));
+      submit.disabled = false;
+      update();
+      return;
+    }
+    toast(`Lent ${count} ${units(count, target.unit)} of ${target.name} to ${name.value.trim()}.`);
+    reset();
+    try {
+      await options.onLent(target);
+    } catch {
+      setMessage(alert, "Loan saved, but the list could not refresh. Refresh the page to see it.");
     } finally {
       submit.disabled = false;
       update();
