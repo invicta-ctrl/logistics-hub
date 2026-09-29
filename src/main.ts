@@ -7,6 +7,7 @@ import "./styles.css";
 import { landing, lending, notFound } from "./public";
 import { administration, myAccount } from "./admin";
 import { staffLogin, workspace } from "./staff";
+import { stockWorkspace } from "./stock-workspace";
 import { leave, navigate, reducedMotion, toast } from "./ui";
 
 function render(): void {
@@ -17,6 +18,7 @@ function render(): void {
   else if (path === "/lending") lending();
   else if (path === "/staff") staffLogin();
   else if (path === "/staff/inventory") void workspace();
+  else if (path === "/staff/stock") void stockWorkspace();
   else if (path === "/staff/admin") void administration();
   else if (path === "/staff/account") void myAccount();
   else if (path.startsWith("/staff/")) navigate("/staff/inventory", true);

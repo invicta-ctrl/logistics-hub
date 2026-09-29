@@ -1,12 +1,14 @@
-import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, listingGaps } from "./catalog-policy";
-import { ApiError, MARK, type Html, animateNumber, api, app, categoryName, emptyState, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
+import { bindMovementForm, movementFields, movementTitle, signed } from "./movement-form";
+import { ApiError, MARK, type Html, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
   lendingAudience: string; onHand: number; reorderThreshold: number; storageLocation: string | null; listed: boolean;
+  stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean; lastCountedAt: string | null;
 };
 type Inventory = { revision: number; items: Item[]; categories: string[]; locations: string[]; units: string[] };
-type Movement = { id: string; createdAt: string; movementType: string; signedQuantity: number; status: string; notes: string | null; actor: string | null };
+type Movement = { id: string; createdAt: string; movementType: string; signedQuantity: number; status: string; notes: string | null; reason: string | null; actor: string | null; afterQuantity: number };
 type Change = { from: unknown; to: unknown };
 type CatalogEvent = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
 type DetailItem = Item & {
@@ -19,7 +21,7 @@ type SortKey = "id" | "name" | "category" | "storageLocation" | "onHand";
 type Tab = "overview" | "details" | "history";
 
 const active = (item: Item) => item.status !== "INACTIVE";
-const isLow = (item: Pick<Item, "onHand" | "reorderThreshold">) => item.reorderThreshold > 0 && item.onHand > 0 && item.onHand <= item.reorderThreshold;
+const isLow = (item: Pick<Item, "onHand" | "reorderThreshold" | "status">) => stockState(item) === "LOW";
 const VIEWS = {
   all: { label: "All items", test: (_: Item) => true },
   review: { label: "Needs review", test: (item: Item) => item.needsReview },
@@ -31,25 +33,16 @@ const VIEWS = {
 };
 type View = keyof typeof VIEWS;
 const NO_LOCATION = "__none";
-const MOVEMENT_LABELS: Record<string, string> = {
-  OPENING_BALANCE: "Opening balance", STOCK_IN: "Stock in", STOCK_OUT: "Stock out", COUNT_ADJUSTMENT: "Count adjustment", ISSUE: "Issued (legacy system)"
-};
-const KINDS = {
-  IN: { label: "Stock in", quantity: "Quantity to add", min: 1, optional: true, placeholder: "Delivery, returned item…" },
-  OUT: { label: "Stock out", quantity: "Quantity to remove", min: 1, optional: true, placeholder: "Issued for an event, damaged…" },
-  COUNT: { label: "Count", quantity: "Counted on the shelf", min: 0, optional: false, placeholder: "Monthly physical count…" }
-} as const;
-type Kind = keyof typeof KINDS;
 const FIELD_LABELS: Record<string, string> = {
   name: "Name", aliases: "Other names", category: "Category", itemType: "Type", unit: "Unit", status: "Status", storageLocation: "Location",
   reorderThreshold: "Reorder level", lendingAudience: "Who may borrow", defaultLoanDays: "Loan period (days)", maximumLoanQty: "Maximum per loan",
-  needsReview: "Review", notes: "Internal notes"
+  needsReview: "Review", notes: "Internal notes", stockArea: "Stock area", expiresOn: "Earliest expiry"
 };
 const LENDING_FIELDS = ["lendingAudience", "defaultLoanDays", "maximumLoanQty"];
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
 export type Session = { id: string; username: string; displayName: string; role: Role; mustChangePassword: boolean; recovery: { configured: boolean; createdAt: string | null } | null };
-type Section = "inventory" | "admin" | "account";
+type Section = "inventory" | "stock" | "admin" | "account";
 
 export const ROLE_LABELS: Record<Role, string> = { STAFF: "Staff", ADMIN: "Administrator", OWNER: "Owner" };
 
@@ -75,6 +68,7 @@ export function shell(session: Session, section: Section, main: Html): void {
         <a class="app-bar__brand" href="/staff/inventory" data-route aria-label="Logistics Hub staff workspace home">${MARK}<span class="app-bar__title" aria-hidden="true">Logistics Hub<small>Staff workspace</small></span></a>
         <nav class="app-nav" aria-label="Workspace">
           ${session.mustChangePassword ? "" : link("inventory", "/staff/inventory", "Inventory")}
+          ${session.mustChangePassword ? "" : link("stock", "/staff/stock", "Stock & Pantry")}
           ${session.role !== "STAFF" && !session.mustChangePassword ? link("admin", "/staff/admin", "Administration") : ""}
           ${link("account", "/staff/account", "My account")}
         </nav>
@@ -92,20 +86,6 @@ export function shell(session: Session, section: Section, main: Html): void {
   });
 }
 
-function expired(): void {
-  navigate("/staff?expired=1", true);
-}
-
-export function failure(error: unknown): string {
-  if (error instanceof ApiError && error.status === 401) expired();
-  return error instanceof Error ? error.message : "Something went wrong. Please try again.";
-}
-
-export function setMessage(element: HTMLElement, message: string | Html, tone: "error" | "ok" | "" = "error"): void {
-  element.className = `form-alert ${tone ? `form-alert--${tone}` : ""}`;
-  element.hidden = !message;
-  mount(element, message ? html`${icon(tone === "ok" ? "check" : "alert")}<span>${message}</span>` : html``);
-}
 
 /* ---------- Sign in ---------- */
 
@@ -117,7 +97,7 @@ export function staffLogin(): void {
       <section class="auth__intro" aria-hidden="true">
         <p class="auth__eyebrow">Holy Angel University · University Student Council</p>
         <p class="auth__statement">Department of Logistics</p>
-        <p class="auth__sub">Inventory, catalog and the Lending Hub, kept in one place.</p>
+        <p class="auth__sub">Inventory, stock, pantry and the Lending Hub, kept in one place.</p>
       </section>
       <section class="auth__panel" aria-labelledby="signin-title">
         <a class="auth__brand" href="/" data-route aria-label="Department of Logistics home">${MARK}</a>
@@ -228,6 +208,12 @@ function formatValue(field: string, value: unknown): string {
 /** Turns one audited catalog change into a headline staff can scan. */
 function eventTitle(event: CatalogEvent): string {
   if (event.action === "ITEM_CREATED") return "Item created";
+  if (event.action === "REORDER_OPENED") return "Added to the restock list";
+  if (event.action === "REORDER_RESTOCKED") return `Restocked (+${String(event.details.quantity)})`;
+  if (event.action === "REORDER_UPDATED") {
+    const status = (event.details.status as Change | undefined)?.to;
+    return status === "DISMISSED" ? "Removed from the restock list" : status === "PLANNED" ? "Restock planned" : status === "NEEDS_RESTOCK" ? "Restock re-opened" : "Restock entry updated";
+  }
   const change = (field: string) => event.details[field] as Change | undefined;
   if (change("needsReview")) return change("needsReview")!.to ? "Marked for review" : "Review completed";
   if (change("status")?.to === "INACTIVE") return "Deactivated";
@@ -517,7 +503,7 @@ export async function workspace(): Promise<void> {
         sheet.querySelector(".quantity__figure")?.insertAdjacentHTML("beforeend", html`<span class="delta ${difference > 0 ? "delta--up" : "delta--down"}">${difference > 0 ? "+" : "−"}${Math.abs(difference)}</span>`.value);
       }
       mount(sheet.querySelector("#history")!, historyMarkup(detail));
-      sheet.querySelector<HTMLFormElement>("#stock-form")?.dispatchEvent(new Event("refresh"));
+      stockForm?.refresh();
     } catch { /* the next live refresh retries */ }
   }
 
@@ -537,7 +523,7 @@ export async function workspace(): Promise<void> {
       <div class="quantity" id="quantity">${quantityMarkup(item)}</div>
       <section aria-labelledby="stock-title" class="stock">
         <h3 id="stock-title" class="section-label">Record stock</h3>
-        ${stockFormMarkup()}
+        <form id="stock-form" class="form" novalidate>${movementFields("stock")}</form>
       </section>
       ${delta !== 0 ? html`<div class="callout">${icon("info")}<p><strong>Migration evidence.</strong> At migration the legacy snapshot reported ${item.legacyReportedAvailable} ${units(item.legacyReportedAvailable ?? 0, item.unit)}, but the migrated movement ledger derives ${item.migratedOnHand}. The difference is preserved as recorded, not guessed. Once a physical count confirms the real figure, record it with a Count.</p></div>` : ""}
       ${item.verificationNote ? html`<div class="callout">${icon("alert")}<p><strong>Verify:</strong> ${item.verificationNote}</p></div>` : ""}
@@ -563,6 +549,8 @@ export async function workspace(): Promise<void> {
       <p class="provenance">${origin}</p>`;
   }
 
+  let stockForm: ReturnType<typeof bindMovementForm> | null = null;
+
   function historyMarkup({ movements, events }: Detail): Html {
     type Entry = { at: string; markup: Html };
     const entries: Entry[] = [
@@ -570,10 +558,10 @@ export async function workspace(): Promise<void> {
         const quantity = movement.signedQuantity;
         const tone = quantity > 0 ? "is-in" : quantity < 0 ? "is-out" : "";
         return { at: movement.createdAt, markup: html`<li class="history__item ${tone}">
-          <div><p class="history__title">${MOVEMENT_LABELS[movement.movementType] ?? movement.movementType}${movement.status !== "POSTED" ? ` (${movement.status.toLowerCase()})` : ""}</p>
+          <div><p class="history__title">${movementTitle(movement.movementType, quantity, movement.reason)}${movement.status !== "POSTED" ? ` (${movement.status.toLowerCase()})` : ""}</p>
             <p class="history__meta"><time datetime="${movement.createdAt}">${formatDateTime(movement.createdAt)}</time> · ${movement.actor ?? "Legacy system"}</p>
             ${movement.notes ? html`<p class="history__note">${movement.notes}</p>` : ""}</div>
-          <p class="history__qty ${tone}">${quantity > 0 ? "+" : quantity < 0 ? "−" : ""}${Math.abs(quantity)}</p></li>` };
+          <p class="history__qty ${tone}">${signed(quantity)}<span class="history__after">${movement.afterQuantity - quantity} → ${movement.afterQuantity}</span></p></li>` };
       }),
       ...events.map((event) => {
         const changes = event.action === "ITEM_UPDATED"
@@ -623,98 +611,12 @@ export async function workspace(): Promise<void> {
       select(sheet.querySelector<HTMLButtonElement>("#tab-details")!);
       sheet.querySelector<HTMLInputElement>("#f-name")?.focus();
     });
-    bindStockForm(item);
-    bindDetailsForm(item);
-  }
-
-  function stockFormMarkup(): Html {
-    return html`<form id="stock-form" class="form" novalidate>
-      <fieldset class="segmented"><legend class="visually-hidden">Movement type</legend>
-        ${Object.entries(KINDS).map(([kind, value], index) => html`<label><input type="radio" name="kind" value="${kind}" ${index === 0 ? html`checked` : ""} /><span>${value.label}</span></label>`)}
-      </fieldset>
-      <div class="field-row">
-        <div class="field"><label for="stock-quantity" id="stock-quantity-label">${KINDS.IN.quantity}</label>
-          <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="Decrease quantity">−</button><input id="stock-quantity" name="quantity" type="number" inputmode="numeric" min="1" max="100000" step="1" required /><button type="button" class="stepper__button" data-step="1" aria-label="Increase quantity">+</button></div></div>
-        <p class="stock-preview" id="stock-preview" aria-live="polite"></p>
-      </div>
-      <div class="field"><label for="stock-note"><span id="stock-note-label">Reason</span> <span class="field__optional" id="stock-note-optional">optional</span></label><input id="stock-note" name="note" maxlength="500" placeholder="${KINDS.IN.placeholder}" /></div>
-      <div class="form-alert" id="stock-alert" role="alert" hidden></div>
-      <div class="form-actions"><button class="button button--primary" type="submit">Record stock in</button></div>
-    </form>`;
-  }
-
-  function bindStockForm(item: DetailItem): void {
-    const form = sheet.querySelector<HTMLFormElement>("#stock-form")!;
-    const quantity = form.querySelector<HTMLInputElement>("#stock-quantity")!;
-    const note = form.querySelector<HTMLInputElement>("#stock-note")!;
-    const alert = form.querySelector<HTMLDivElement>("#stock-alert")!;
-    const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
-    let key = crypto.randomUUID();
-    const kind = () => (new FormData(form).get("kind") ?? "IN") as Kind;
-    const onHand = () => detail?.item.onHand ?? item.onHand;
-    const update = () => {
-      const config = KINDS[kind()];
-      form.querySelector("#stock-quantity-label")!.textContent = config.quantity;
-      form.querySelector<HTMLElement>("#stock-note-optional")!.textContent = config.optional ? "optional" : "required";
-      note.placeholder = config.placeholder;
-      note.required = !config.optional;
-      quantity.min = String(config.min);
-      if (!button.classList.contains("is-done")) button.textContent = kind() === "COUNT" ? "Record count" : `Record ${config.label.toLowerCase()}`;
-      button.classList.toggle("button--danger", kind() === "OUT");
-      button.classList.toggle("button--primary", kind() !== "OUT");
-      const value = Number(quantity.value);
-      const preview = form.querySelector("#stock-preview")!;
-      if (quantity.value === "" || !Number.isInteger(value) || value < config.min) { mount(preview, html``); return; }
-      const after = kind() === "IN" ? onHand() + value : kind() === "OUT" ? onHand() - value : value;
-      const difference = after - onHand();
-      mount(preview, after < 0
-        ? html`<span class="is-error">Only ${onHand()} on hand</span>`
-        : html`${onHand()} → <strong>${after}</strong> ${units(after, item.unit)}${kind() === "COUNT" ? html` <span class="muted">(${difference >= 0 ? "+" : "−"}${Math.abs(difference)})</span>` : ""}`);
-    };
-    form.addEventListener("change", () => { setMessage(alert, ""); update(); });
-    form.addEventListener("input", () => { key = crypto.randomUUID(); quantity.removeAttribute("aria-invalid"); note.removeAttribute("aria-invalid"); update(); });
-    form.addEventListener("refresh", update);
-    form.querySelectorAll<HTMLButtonElement>("[data-step]").forEach((stepButton) => stepButton.addEventListener("click", () => {
-      const next = Math.max(KINDS[kind()].min, (Number(quantity.value) || 0) + Number(stepButton.dataset.step));
-      quantity.value = String(next);
-      quantity.dispatchEvent(new Event("input", { bubbles: true }));
-    }));
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const value = Number(quantity.value);
-      if (quantity.value === "" || !Number.isInteger(value) || value < KINDS[kind()].min) {
-        quantity.setAttribute("aria-invalid", "true");
-        setMessage(alert, "Enter a whole-number quantity.");
-        quantity.focus();
-        return;
-      }
-      if (kind() === "COUNT" && !note.value.trim()) {
-        note.setAttribute("aria-invalid", "true");
-        setMessage(alert, "Give a reason for the count adjustment.");
-        note.focus();
-        return;
-      }
-      button.disabled = true;
-      setMessage(alert, "");
-      try {
-        const result = await api<{ onHand: number }>(`/api/staff/items/${encodeURIComponent(item.id)}/movements`, { method: "POST", body: JSON.stringify({ kind: kind(), quantity: value, note: note.value, key }) });
-        toast(`${KINDS[kind()].label} recorded. ${item.name} now has ${result.onHand} ${units(result.onHand, item.unit)}.`);
-        form.reset();
-        key = crypto.randomUUID();
-        update();
-        // Brief in-place confirmation; the toast carries the full message for screen readers.
-        button.classList.add("is-done");
-        mount(button, html`${icon("check")}Recorded`);
-        window.setTimeout(() => { button.classList.remove("is-done"); update(); }, 1400);
-        await refreshStock(item.id);
-        await poll.refresh();
-      } catch (error) {
-        setMessage(alert, failure(error));
-      } finally {
-        button.disabled = false;
-      }
+    const target = () => detail ? { id: detail.item.id, name: detail.item.name, unit: detail.item.unit, onHand: detail.item.onHand } : null;
+    stockForm = bindMovementForm(sheet.querySelector<HTMLFormElement>("#stock-form")!, {
+      target,
+      onRecorded: async (recorded) => { await refreshStock(recorded.id); await poll.refresh(); }
     });
-    update();
+    bindDetailsForm(item);
   }
 
   function detailsFormMarkup(item: Partial<DetailItem>, creating = false): Html {
@@ -750,6 +652,10 @@ export async function workspace(): Promise<void> {
           <div class="field"><label for="f-status">Status</label><select id="f-status" name="status" aria-describedby="f-status-hint">${options(ITEM_STATUSES, item.status ?? "ACTIVE")}</select><p class="field__hint" id="f-status-hint">Inactive items leave the Lending Hub. Nothing is deleted.</p></div>
           ${number("reorderThreshold", "Reorder level", item.reorderThreshold, 100_000, "Low stock at or below this. 0 turns it off.")}
         </div>
+        <div class="field-grid">
+          <div class="field"><label for="f-stockArea">Stock area</label><select id="f-stockArea" name="stockArea" aria-describedby="f-stockArea-hint">${options(STOCK_AREAS, item.stockArea ?? "Inventory")}</select><p class="field__hint" id="f-stockArea-hint">Pantry items appear in Stock &amp; Pantry → Pantry.</p></div>
+          <div class="field" data-expiry ${(item.stockArea ?? "Inventory") === "Pantry" ? "" : html`hidden`}><label for="f-expiresOn">Earliest expiry <span class="field__optional">optional</span></label><input id="f-expiresOn" name="expiresOn" type="date" value="${item.expiresOn ?? ""}" aria-describedby="f-expiresOn-hint" /><p class="field__hint" id="f-expiresOn-hint">The soonest date on the shelf.</p></div>
+        </div>
         ${creating ? number("openingQuantity", "Opening quantity", 0, 100_000, "Recorded as the item's first movement.") : ""}
       </div>
       <div class="form-section">
@@ -779,6 +685,7 @@ export async function workspace(): Promise<void> {
       reorderThreshold: whole("reorderThreshold"), lendingAudience: String(values.get("lendingAudience")),
       defaultLoanDays: whole("defaultLoanDays"), maximumLoanQty: whole("maximumLoanQty"),
       needsReview: values.get("reviewed") !== "on", notes: String(values.get("notes") ?? ""),
+      stockArea: String(values.get("stockArea") ?? "Inventory"), expiresOn: String(values.get("expiresOn") ?? ""),
       ...(values.has("openingQuantity") ? { openingQuantity: whole("openingQuantity") } : {})
     };
   }
@@ -815,6 +722,7 @@ export async function workspace(): Promise<void> {
         : html`${icon("check")}<p>Will appear on the public Lending Hub.</p>`);
       const review = form.querySelector("#review-checklist");
       if (review) mount(review, checklist(reviewChecklist(values)));
+      form.querySelector<HTMLElement>("[data-expiry]")!.hidden = values.stockArea !== "Pantry";
       const duplicate = form.querySelector<HTMLElement>("#duplicate-hint")!;
       const name = values.name.trim().toLowerCase();
       const twin = name ? inventory?.items.find((entry) => entry.id !== item.id && entry.name.toLowerCase() === name) : undefined;

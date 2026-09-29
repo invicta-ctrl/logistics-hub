@@ -75,7 +75,7 @@ Options 1–10 talk to the site over HTTPS as a signed-in user, exactly like the
 
 Remote D1 rejects explicit `BEGIN TRANSACTION`/`COMMIT` and queries over 100 KB; `tests/migration.test.ts` enforces both. Migration `0011` rebuilds `staff_accounts` to add roles, which ends all existing sessions once. Migration `0012` (Part 2) only adds an index.
 
-There is no Git-connected Cloudflare build: pushing `main` does not deploy. Production changes only through *Deploy verified main*.
+Workers Builds deploys every push to `main` automatically, but it does not apply D1 migrations. Before pushing a `main` that adds a migration, apply it to production (Console **13**, or `npx wrangler d1 migrations apply DB --remote` from that commit). Migrations must stay additive, so the previous code keeps working until the push lands. Migration `0013` (Part 3) is additive: a movement reason column, an optional expiry column and the `reorders` table.
 
 ## Operating notes
 

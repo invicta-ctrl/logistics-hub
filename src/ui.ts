@@ -123,6 +123,13 @@ export const plural = (count: number, word: string): string => `${count.toLocale
 
 const dateTime = new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" });
 export const formatDateTime = (iso: string): string => dateTime.format(new Date(iso));
+const time = new Intl.DateTimeFormat("en-PH", { timeStyle: "short", timeZone: "Asia/Manila" });
+export const formatTime = (iso: string): string => time.format(new Date(iso));
+const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" });
+/** The office's calendar day (Asia/Manila) as YYYY-MM-DD, for "today" and expiry. */
+export const officeDay = (date: Date | string = new Date()): string => day.format(typeof date === "string" ? new Date(date) : date);
+const dateOnly = new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeZone: "UTC" });
+export const formatDate = (isoDay: string): string => dateOnly.format(new Date(`${isoDay}T00:00:00Z`));
 
 /* ---------- Motion ---------- */
 
@@ -184,8 +191,9 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
     if (event.target === dialog || (event.target as HTMLElement).closest("[data-close]")) close();
   });
   dialog.addEventListener("close", () => {
-    dialog.innerHTML = "";
+    // onClose runs first so a caller can take back content it lent to the sheet.
     options.onClose?.();
+    dialog.innerHTML = "";
     if (opener?.isConnected) opener.focus({ preventScroll: true });
     opener = null;
   });
@@ -239,6 +247,23 @@ export async function api<T>(url: string, init: RequestInit = {}): Promise<T> {
   const body = await response.json().catch(() => ({})) as T & { error?: string };
   if (!response.ok) throw new ApiError(response.status, body.error ?? "Something went wrong. Please try again.");
   return body;
+}
+
+/** Sends a signed-out user back to sign in, explaining why. */
+export function expired(): void {
+  navigate("/staff?expired=1", true);
+}
+
+/** The message to show for a failed request; an ended session also routes to sign in. */
+export function failure(error: unknown): string {
+  if (error instanceof ApiError && error.status === 401) expired();
+  return error instanceof Error ? error.message : "Something went wrong. Please try again.";
+}
+
+export function setMessage(element: HTMLElement, message: string | Html, tone: "error" | "ok" | "" = "error"): void {
+  element.className = `form-alert ${tone ? `form-alert--${tone}` : ""}`;
+  element.hidden = !message;
+  mount(element, message ? html`${icon(tone === "ok" ? "check" : "alert")}<span>${message}</span>` : html``);
 }
 
 type LiveOptions<T> = { interval: number; onData: (data: T) => void; onError?: (error: ApiError) => void; status?: () => HTMLElement | null };

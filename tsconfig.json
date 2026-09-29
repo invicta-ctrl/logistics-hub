@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/main.ts", "src/public.ts", "src/staff.ts", "src/admin.ts", "src/ui.ts", "src/catalog-policy.ts", "tests/browser", "tests/worker-browser", "tests/catalog-policy.test.ts", "tests/migration.test.ts", "tests/session.test.ts", "vite.config.ts", "playwright.config.ts", "playwright.worker.config.ts"]
+  "include": ["src/main.ts", "src/public.ts", "src/staff.ts", "src/admin.ts", "src/ui.ts", "src/movement-form.ts", "src/stock-workspace.ts", "src/catalog-policy.ts", "tests/browser", "tests/worker-browser", "tests/catalog-policy.test.ts", "tests/migration.test.ts", "tests/session.test.ts", "vite.config.ts", "playwright.config.ts", "playwright.worker.config.ts"]
 }

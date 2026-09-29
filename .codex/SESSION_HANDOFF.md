@@ -1,38 +1,48 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-STATUS: IDLE_ON_MAIN
-ACTIVE_WRITER: NONE
+STATUS: PART_03_VERIFIED_ON_SLICE
+ACTIVE_WRITER: claude
 WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
-BRANCH: main
+BRANCH: slice/part-03-stock-pantry (pushed)
 LIVE_PREVIEW: http://127.0.0.1:8791
 
-## Closure state — 2026-09-29
-- Part 1 — YDD Gateway + Foundation: COMPLETE.
-- Part 2 — Inventory + Catalog: COMPLETE.
-- Closure scope: freshly verified locally and against GitHub `main`; no production/provider mutation was performed.
-- GitHub and local branch budget is clean: only `main`.
-- Shared preview was restarted and upgraded through migrations 0011-0012.
-- External launcher exists at `D:\Documents\Logi hub access\LOGISTICS_ADMIN.cmd`.
+## Part 3 (Claude, 2026-09-29)
+- **Polish pass:**
+  - Hallmark audit of 16 surfaces × 1440/375, before and after the redesign (see `.codex/PART_03_BRIEF.md`).
+  - One shared sheet behaviour and frame; compact operations headers; mobile filters behind one button; a neutral "Needs review" marker; Record stock first in the item sheet; consistent panel actions.
+  - Landing: without the redundant "offers" section; staff sign-in only in the masthead and footer.
+  - Toasts bottom-left; the router ignores `#fragment` jumps.
+- **Migration 0013 (additive):** `inventory_movements.reason`, `items.expires_on`, `reorders` (the restock list; one open entry per item), and an activity index.
+- **Worker:**
+  - movement reasons (Other needs a note);
+  - counts accepted even when they match (a 0 adjustment);
+  - responses include the change;
+  - a Stock in can receive a restock entry atomically;
+  - `/api/staff/stock` (one revisioned payload);
+  - `/api/staff/reorders` POST and PATCH with optimistic concurrency.
+- **UI:**
+  - `/staff/stock`: Needs attention (Out, Low, Needs count, Expiring), Restock list, Pantry, Activity, and the Record movement panel (a bottom sheet on phones).
+  - The shared movement form is used by the item sheet too.
+  - Item settings gain stock area and pantry expiry; item history shows reasons, before → after and restock events.
 
-## Verification evidence
-- typecheck: pass;
-- unit/Worker/SQL tests: 46/46 pass;
-- production build: pass;
-- privacy scan: pass;
-- migration verifier: 397 items, one preserved ITM-0001 discrepancy;
-- catalog verifier: 397 pending review, 102 legacy Loanable candidates, zero auto-published;
-- browser tests: 7/7 pass;
-- real Worker + D1 E2E: 11/11 pass;
-- Cloudflare deploy dry-run: pass;
-- local preview verification: landing, security headers, Lending Hub, catalog API, ETag/304, auth boundary, anonymous-write rejection, migrated inventory, and ITM-0001 evidence all pass.
+## Verification (Windows, local Worker + D1)
+- `npm run typecheck`: pass. `npm run build`: pass.
+- `npm test`: 52/52, including 6 new Part 3 suites (reasons, before/after, negative stock, idempotency, low stock, count-needed, the restock lifecycle, pantry and expiry, revisioned staff-only access).
+- `npm run test:browser`: 7/7.
+- `npm run test:browser:worker`: 14/14 real Worker + D1, including 3 new Stock flows and every Part 1/2 regression.
+- `verify:migration`, `verify:catalog`, `verify:privacy`: pass. `wrangler deploy --dry-run`: pass.
+- axe-core WCAG 2.1 AA: 0 violations on 30 screen/viewport combinations; no horizontal overflow at 320, 375 or 1440.
+- Impeccable detector: clean. Hallmark final: 0 critical · 0 major.
 
-## Closure fix
-The Worker browser E2E harness no longer hardcodes port 8792. Each run receives a temporary high port, preventing Windows TIME_WAIT collisions that previously caused false gate failures.
+## Exact next action
+1. Earl applies migration 0013 to production D1. It is additive and safe for the currently deployed code:
+   - Owner Console → 12 (status), then apply migrations; or
+   - `npx wrangler d1 migrations apply DB --remote` from this branch.
+2. Then fast-forward `main` to `slice/part-03-stock-pantry` and push. Workers Builds deploys it.
+3. Verify the deploy, delete the slice branch locally and remotely, set STATUS to PART_03_COMPLETE, and yield the writer lock.
 
-## Known operational facts
-- ITM-0001 remains movement-derived at 7 versus legacy-reported 8; this is intentional migration evidence.
-- The 397 migrated records still require human review; 102 are legacy Loanable candidates.
-- Provider production state was not mutated or re-verified during this local/GitHub closure.
-
-## Next action
-Start Part 3 — Stock + Pantry — from fresh `main` only when Earl authorizes it.
+## Known facts and limitations
+- No item has a reorder level yet, so Low stock is empty until staff set levels. The Stock page says so.
+- Legacy "Needs count" candidates: ITM-0001 (−1 evidence) and three VERIFY records, including All Purpose Flour (legacy quantity 46026 kilos, date-formatted in the old sheet).
+- The legacy *category* "PANTRY" holds 16 office supplies. Pantry uses the stock area instead, and the category is left for staff review.
+- The running 8791 preview's `wrangler dev` asset watcher stopped after rebuilds (Windows EPERM). Restart `npm run dev:live` to see the latest build and apply migration 0013 locally.

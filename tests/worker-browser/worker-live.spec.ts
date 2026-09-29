@@ -66,11 +66,13 @@ test("staff publish and stock changes reach an open public page live", async ({ 
   await expect(page.getByRole("heading", { name: "Listed on the Lending Hub" })).toBeVisible();
   await page.getByRole("radio", { name: "Stock in" }).check();
   await page.getByLabel("Quantity to add").fill("4");
+  await page.getByLabel("Reason", { exact: true }).selectOption("DELIVERY");
   await expect(page.locator("#stock-preview")).toHaveText("1 → 5 pieces");
   await page.getByRole("button", { name: "Record stock in" }).click();
   await expect(page.getByText("Stock in recorded. Bluetooth Microphone now has 5 pieces.")).toBeVisible();
   await page.getByRole("radio", { name: "Stock out" }).check();
   await page.getByLabel("Quantity to remove").fill("9");
+  await page.getByLabel("Reason", { exact: true }).selectOption("ISSUED");
   await page.getByRole("button", { name: "Record stock out" }).click();
   await expect(page.getByText("Only 5 on hand; cannot remove 9.")).toBeVisible();
 
@@ -221,4 +223,78 @@ test("staff workspace fits a 320 px phone", async ({ page }) => {
   await page.locator("tbody .row-link").first().click();
   await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+});
+
+test("stock workspace: record a delivery, restock and receive, then read it in activity", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("link", { name: "Stock & Pantry" }).click();
+  await expect(page.getByRole("heading", { name: "Stock & Pantry" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Needs attention/ })).toBeVisible();
+
+  const panel = page.locator("#record-panel");
+  await panel.getByLabel("Item", { exact: true }).fill("Bond Paper - A4 · ITM-0135");
+  await expect(panel.locator("#record-card")).toContainText("0 reams on hand");
+  await panel.getByLabel("Quantity to add").fill("12");
+  await expect(panel.locator("#record-preview")).toHaveText("0 → 12 reams");
+  await panel.getByRole("button", { name: "Record stock in" }).click();
+  await expect(panel.getByRole("alert")).toHaveText("Choose a reason.");
+  await panel.getByLabel("Reason", { exact: true }).selectOption("DELIVERY");
+  await panel.getByRole("button", { name: "Record stock in" }).click();
+  await expect(page.getByText("Stock in recorded. Bond Paper - A4 now has 12 reams.")).toBeVisible();
+  await expect(panel.locator("#receipts")).toContainText("+12 Bond Paper - A4");
+  await expect(panel.getByLabel("Item", { exact: true })).toBeFocused();
+
+  const ketchup = page.locator("tr", { hasText: "Banana Ketchup" });
+  await ketchup.getByRole("button", { name: "Add to restock" }).click();
+  await expect(page.getByText("Banana Ketchup added to the restock list.")).toBeVisible();
+  await page.getByRole("button", { name: /^Restock list/ }).click();
+  const entry = page.locator("tr", { hasText: "Banana Ketchup" });
+  await entry.getByRole("button", { name: "Mark planned" }).click();
+  await expect(entry.getByText("Planned", { exact: true })).toBeVisible();
+  await entry.getByRole("button", { name: "Receive" }).click();
+  await expect(panel.getByText("Receiving the restock of Banana Ketchup.", { exact: false })).toBeVisible();
+  await panel.getByLabel("Quantity to add").fill("6");
+  await panel.getByRole("button", { name: "Record stock in" }).click();
+  await expect(page.getByText("Stock in recorded. Banana Ketchup now has 6 bottles.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Restock list 0/ })).toBeVisible();
+  await expect(page.getByText("Closed in the last two weeks")).toBeVisible();
+
+  await page.getByRole("button", { name: /^Activity/ }).click();
+  const latest = page.locator(".activity-row").first();
+  await expect(latest).toContainText("+6");
+  await expect(latest).toContainText("Banana Ketchup · Stock in · Delivery or purchase");
+  await expect(latest).toContainText("0 → 6 bottles · E2E Staff");
+});
+
+test("counting records the observed quantity, and pantry lists the catalog's pantry items", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/staff/stock?show=count");
+  const flour = page.locator("tr", { hasText: "All Purpose Flour" });
+  await flour.getByRole("button", { name: "Count" }).click();
+  const panel = page.locator("#record-panel");
+  await expect(panel.getByRole("radio", { name: "Count" })).toBeChecked();
+  await panel.getByLabel("Counted on the shelf").fill("18");
+  await expect(panel.locator("#record-preview")).toContainText("→ 18 kilos");
+  await panel.getByRole("button", { name: "Record count" }).click();
+  await expect(page.getByText("Count recorded. All Purpose Flour now has 18 kilos.")).toBeVisible();
+  await expect(page.locator("tr", { hasText: "All Purpose Flour" })).toHaveCount(0);
+  await page.getByRole("button", { name: /^Pantry/ }).click();
+  await expect(page.locator("tbody tr")).toHaveCount(10);
+  await expect(page.locator("tr", { hasText: "All Purpose Flour" })).toContainText("18 kilos");
+  await page.getByRole("button", { name: /^Activity/ }).click();
+  await expect(page.locator(".activity-row").first()).toContainText("Count adjustment");
+});
+
+test("stock workspace on a 320 px phone records through a bottom sheet", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await signIn(page);
+  await page.goto("/staff/stock");
+  await expect(page.getByRole("heading", { name: "Stock & Pantry" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  await page.getByRole("button", { name: "Record movement" }).click();
+  const sheet = page.getByRole("dialog", { name: "Record movement" });
+  await expect(sheet.getByLabel("Item", { exact: true })).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
 });
