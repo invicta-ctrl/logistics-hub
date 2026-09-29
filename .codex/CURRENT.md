@@ -6,7 +6,7 @@ BRANCH: main
 ACTIVE_WRITER: NONE
 SHARED_WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
 PRODUCTION: Worker logistics-hub; D1 logistics-hub (binding DB); never hau-usc-logistics-production/staging
-PRODUCTION_STATE: read-only check 2026-09-29 — last Worker deploy 2026-09-28 16:53 UTC by manual upload (older build); no Git-connected auto-deploy observed. Remote D1 is expected at 0001–0009 (0010–0012 pending); no OWNER yet.
+PRODUCTION_STATE: read-only check 2026-09-29 — Worker deployed 2026-09-29 01:08 UTC by Earl; https://logistics.hausc.org and the workers.dev address serve the Part 2 build. Remote migrations and owner bootstrap were not verified by Claude (its Wrangler login has no D1 scope).
 PREVIEW: http://127.0.0.1:8791 via npm run dev:live
 PRODUCT_REFERENCE: docs/PRODUCT_REFERENCE.md (reference only; never overrides Earl, accepted specs, or repo state)
 RUNBOOK: docs/DEPLOYMENT.md

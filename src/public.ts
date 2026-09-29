@@ -6,11 +6,17 @@ type Sort = "name" | "available";
 
 const LOCKUP = html`<span class="lockup">${CREST}<span class="lockup__rule" aria-hidden="true"></span>${MARK}<span class="lockup__text"><strong>Department of Logistics</strong><span>HAU University Student Council</span></span></span>`;
 
-function page(content: Html, current: "" | "lending"): void {
+const USC_FACEBOOK = "https://www.facebook.com/holyangeluniversitysc";
+
+function page(content: Html, current: "" | "home" | "lending"): void {
+  // On the landing page the lockup leads to the Student Council's official page; elsewhere it goes home.
+  const brand = current === "home"
+    ? html`<a class="site-header__brand" href="${USC_FACEBOOK}" target="_blank" rel="noopener noreferrer" aria-label="HAU University Student Council on Facebook (opens in a new tab)">${LOCKUP}</a>`
+    : html`<a class="site-header__brand" href="/" data-route aria-label="Department of Logistics home">${LOCKUP}</a>`;
   mount(app, html`
     <header class="site-header">
       <div class="container site-header__inner">
-        <a class="site-header__brand" href="/" data-route aria-label="Department of Logistics home">${LOCKUP}</a>
+        ${brand}
         <nav class="site-nav" aria-label="Main">
           <a class="site-nav__link" href="/lending" data-route ${current === "lending" ? html`aria-current="page"` : ""}>Lending Hub</a>
           <a class="button button--outline-light" href="/staff" data-route>Staff sign in</a>
@@ -84,12 +90,6 @@ export function landing(): void {
             <a class="button button--outline-light button--lg" href="/staff" data-route>Staff sign in</a>
           </div>
         </div>
-        <aside class="shelf" aria-labelledby="shelf-title">
-          <div class="shelf__head"><h2 id="shelf-title">On the shelf now</h2><p class="live-status" id="live-status">Connecting…</p></div>
-          <p class="shelf__summary" id="now-summary">Checking what is on the shelf…</p>
-          <div id="now-list">${skeletonRows(4)}</div>
-          <a class="text-link shelf__more" href="/lending" data-route>See everything in the Lending Hub ${icon("arrow")}</a>
-        </aside>
       </div>
     </section>
 
@@ -126,32 +126,7 @@ export function landing(): void {
         </ul>
       </div>
     </section>
-  </main>`, "");
-
-  live<Catalog>("/api/public/catalog", {
-    interval: 30_000,
-    status: () => document.querySelector("#live-status"),
-    onData: ({ items }) => {
-      const list = document.querySelector("#now-list");
-      const summary = document.querySelector("#now-summary");
-      if (!list || !summary) return;
-      const ready = items.filter((item) => item.available > 0);
-      if (!items.length) {
-        summary.textContent = "Staff are reviewing the catalog.";
-        mount(list, html`<p class="shelf__note">Nothing is listed for lending yet. Items appear here as soon as staff approve them, with no need to refresh.</p>`);
-        return;
-      }
-      summary.textContent = `${plural(ready.length, "item")} on the shelf now, of ${items.length} listed.`;
-      mount(list, ready.length
-        ? html`<ul class="catalogue catalogue--compact">${ready.slice(0, 5).map((item) => html`<li><a class="catalogue__row catalogue__row--link" href="/lending?q=${encodeURIComponent(item.name)}" data-route><div class="catalogue__main"><h3 class="catalogue__name">${item.name}</h3><p class="catalogue__meta">${categoryName(item.category)}</p></div>${availability(item)}</a></li>`)}</ul>`
-        : html`<p class="shelf__note">Every listed item is currently out. Check the Lending Hub for details.</p>`);
-      stagger(list);
-    },
-    onError: () => {
-      const summary = document.querySelector("#now-summary");
-      if (summary) summary.textContent = "Availability is temporarily unreachable. Retrying automatically.";
-    }
-  });
+  </main>`, "home");
 }
 
 export function lending(): void {

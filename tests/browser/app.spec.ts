@@ -10,14 +10,21 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/public/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify(catalog) }));
 });
 
-test("landing shows the undistorted DOL mark beside the HAU·USC crest, live availability, and only Part 1 destinations", async ({ page }) => {
+test("landing shows the undistorted DOL mark beside the HAU·USC crest, and only Part 1 destinations", async ({ page }) => {
+  let catalogRequests = 0;
+  page.on("request", (request) => { if (request.url().includes("/api/public/catalog")) catalogRequests += 1; });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Logistics that keeps the work moving." })).toBeVisible();
   const box = (await page.locator(".site-header__brand .mark").boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(40);
   await expect(page.locator(".site-header__brand .crest")).toBeVisible();
+  const brand = page.getByRole("link", { name: "HAU University Student Council on Facebook (opens in a new tab)" });
+  await expect(brand).toHaveAttribute("href", "https://www.facebook.com/holyangeluniversitysc");
+  await expect(brand).toHaveAttribute("target", "_blank");
   expect(Math.abs(box.width / box.height - 183 / 163)).toBeLessThan(0.02);
-  await expect(page.locator("#now-summary")).toHaveText("2 items on the shelf now, of 3 listed.");
+  // Availability lives only in the Lending Hub; the landing page does not poll the catalog.
+  await expect(page.locator(".shelf")).toHaveCount(0);
+  expect(catalogRequests).toBe(0);
   await expect(page.getByText("Not yet available", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /Browse the Lending Hub/ })).toHaveAttribute("href", "/lending");
 });
@@ -26,6 +33,7 @@ test("Lending Hub groups by category, filters, and keeps filters in the URL", as
   await page.setViewportSize({ width: 375, height: 700 });
   await page.goto("/lending");
   await expect(page.getByRole("heading", { name: "Lending Hub", level: 1 })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Department of Logistics home" })).toHaveAttribute("href", "/");
   await expect(page.getByRole("heading", { name: /Furniture/, level: 2 })).toBeVisible();
   await expect(page.getByText("3 pieces available")).toBeVisible();
   await expect(page.getByText("Students & USC staff · up to 2 per loan · 3‑day loan")).toBeVisible();

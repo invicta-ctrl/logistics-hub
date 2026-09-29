@@ -20,9 +20,8 @@ It supersedes the older HAU-USC Logistics Management System for all new developm
 | any other path | A branded "page not found". |
 
 The landing page (`/`):
-- an oxblood masthead carrying the HAU·USC crest and the DOL mark;
-- a full-bleed hero on the retained YDD photograph, with a gold "Browse the Lending Hub" action;
-- a live **On the shelf now** panel fed only by the public catalog;
+- an oxblood masthead carrying the HAU·USC crest and the DOL mark. On this page only, the lockup opens the official HAU University Student Council Facebook page (`https://www.facebook.com/holyangeluniversitysc`) in a new tab; on other public pages it returns home;
+- a full-bleed hero on the retained YDD photograph, with a gold "Browse the Lending Hub" action. There is deliberately no availability panel here: the landing page does not poll the catalog, and availability lives only in the Lending Hub;
 - "How borrowing works" in three steps;
 - "What the Department offers". Logistics requests are shown as *not yet available*.
 
@@ -94,8 +93,8 @@ Every rule is enforced by the Worker (`src/accounts.ts`, `src/worker.ts`). The b
 ## Parts (roadmap)
 | Part | Scope | State |
 | --- | --- | --- |
-| 1 YDD Gateway + Foundation | Landing, fail-closed Lending Hub, staff auth and roles, owner recovery, movement ledger, live refresh | Code on `main`. Production closure is pending on Earl's PC: deploy 0010–0012, first owner, recovery check. |
-| 2 Inventory + Catalog | Complete item management, search, views, classification, locations, reorder settings, lending readiness, migrated review, history | Built on `slice/part-02-inventory-catalog` |
+| 1 YDD Gateway + Foundation | Landing, fail-closed Lending Hub, staff auth and roles, owner recovery, movement ledger, live refresh | On `main` and deployed |
+| 2 Inventory + Catalog | Complete item management, search, views, classification, locations, reorder settings, lending readiness, migrated review, history | On `main`; deployed 2026-09-29 |
 | 3 Stock + Pantry | Deeper stock workflows, pantry, reorder and replenishment workflow, expiry | Planned |
 | 4 Lending | Borrowers (STUDENT or USC_STAFF), multi-item loans, due and return, damage and loss, photo evidence (R2) | Planned |
 | 5 Activity + Accountability | Full activity center and safe exports | Planned |
@@ -118,7 +117,7 @@ Each Part must work end to end without depending on a later Part.
 
 ## Architecture
 - **Front end:** semantic HTML, CSS and TypeScript modules built by Vite. There is no SPA framework; routing is a small client router over `data-route` links.
-- **Worker:** one Cloudflare Worker, `logistics-hub` (`src/worker.ts`), serves the API and the static assets (`run_worker_first`). It sets strict security headers and a `'self'`-only CSP.
+- **Worker:** one Cloudflare Worker, `logistics-hub` (`src/worker.ts`), serves the API and the static assets (`run_worker_first`). The public address is `https://logistics.hausc.org`; the `logistics-hub.<account>.workers.dev` address also works. It sets strict security headers and a `'self'`-only CSP.
 - **Data:** D1 `logistics-hub` (binding `DB`) with migrations `0001`–`0012`. R2 is reserved for Part 4 evidence.
 - **Live refresh:** the `catalog_revision` counter plus ETag/304 polling (public every 15 s, staff every 10 s), which pauses in hidden tabs.
 - **Never** touch the old `hau-usc-logistics-production` or `hau-usc-logistics-staging` resources.

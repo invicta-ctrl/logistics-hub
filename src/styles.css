@@ -271,7 +271,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .hero { position: relative; isolation: isolate; overflow: hidden; background: var(--brand-dark); color: var(--on-dark); }
 .hero::before { position: absolute; inset: 0; z-index: -2; background: url("/brand/ydd-hero.webp") 70% 50% / cover no-repeat; content: ""; }
 .hero::after { position: absolute; inset: 0; z-index: -1; background: linear-gradient(95deg, rgb(43 10 12 / 94%) 0%, rgb(43 10 12 / 82%) 42%, rgb(64 7 10 / 55%) 100%), linear-gradient(0deg, rgb(43 10 12 / 70%), transparent 40%); content: ""; }
-.hero__grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); align-items: center; gap: clamp(2rem, 5vw, 4.5rem); padding-block: clamp(3.5rem, 9vw, 7rem); }
+.hero__grid { display: grid; grid-template-columns: minmax(0, 46rem); padding-block: clamp(3.5rem, 10vw, 8rem); }
 .hero__copy { min-width: 0; }
 .hero__kicker { color: var(--gold-action); font-size: var(--text-sm); font-weight: 600; letter-spacing: .04em; }
 .hero h1 { max-width: 13ch; margin-block: 1rem 1.25rem; font-family: var(--serif); font-size: var(--text-display); font-weight: 400; letter-spacing: -.02em; line-height: 1.02; overflow-wrap: anywhere; }
@@ -279,14 +279,6 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .hero__actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 2rem; }
 .hero :focus-visible { outline-color: var(--gold-action); }
 
-/* The live shelf: a paper panel on the dark hero, fed only by the public catalog. */
-.shelf { display: grid; gap: .875rem; padding: 1.5rem; border: 1px solid rgb(242 209 92 / 30%); border-radius: var(--radius-xl); background: var(--paper); color: var(--text); box-shadow: var(--shadow-xl); }
-.shelf__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-bottom: .75rem; border-bottom: 1px solid var(--line); }
-.shelf__head h2 { font-family: var(--serif); font-size: var(--text-xl); font-weight: 500; }
-.shelf__summary { color: var(--text-2); font-size: var(--text-sm); }
-.shelf__note { color: var(--text-2); font-size: var(--text-base); }
-.shelf__more { justify-self: start; }
-.shelf :focus-visible { outline-color: var(--brand); }
 
 .section { padding-block: clamp(3rem, 7vw, 5rem); }
 .section--alt { border-top: 1px solid var(--line); background: var(--surface); }
@@ -358,8 +350,6 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .catalogue { border-top: 1px solid var(--line); }
 .catalogue__row { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; min-height: 3.75rem; padding: .875rem .625rem; border-bottom: 1px solid var(--line); transition: background-color var(--dur-2); }
 .catalogue__row:hover { background: var(--surface); }
-.catalogue--compact .catalogue__row { min-height: 3.25rem; padding-block: .625rem; }
-.catalogue--compact .catalogue__row:hover { background: #f5efe4; }
 .catalogue__row--link { color: inherit; text-decoration: none; }
 .catalogue__row--link:hover .catalogue__name { color: var(--brand); }
 .catalogue__row--link:focus-visible { outline-offset: -2px; }
@@ -595,8 +585,7 @@ th.col-qty .sort-button { margin-right: -.375rem; margin-left: 0; }
   .steps { grid-template-columns: 1fr; gap: 1.75rem; }
   .app-bar__link { display: none; }
   .panels { grid-template-columns: 1fr; }
-  .hero__grid { grid-template-columns: minmax(0, 1fr); padding-block: 3rem; }
-  .shelf { max-width: 36rem; }
+  .hero__grid { padding-block: 3rem; }
   .auth__layout { grid-template-columns: minmax(0, 1fr); justify-items: center; }
   .auth__intro { justify-items: center; text-align: center; }
   .auth__statement { font-size: clamp(1.75rem, 6vw, 2.5rem); }
@@ -641,7 +630,6 @@ th.col-qty .sort-button { margin-right: -.375rem; margin-left: 0; }
   .avail__word { display: none; }
   .sort-toggle { flex: 1; }
   .sort-toggle button { flex: 1; }
-  .shelf { padding: 1.125rem; }
   .form-actions { flex-wrap: wrap; }
   .form-actions .button { flex: 1 1 auto; }
   .auth__intro { display: none; }
@@ -656,7 +644,7 @@ th.col-qty .sort-button { margin-right: -.375rem; margin-left: 0; }
   .hero__copy > :nth-child(2) { animation-delay: 60ms; }
   .hero__copy > :nth-child(3) { animation-delay: 120ms; }
   .hero__copy > :nth-child(4) { animation-delay: 180ms; }
-  .shelf, .auth__panel { animation: rise .7s var(--ease) .15s both; }
+  .auth__panel { animation: rise .7s var(--ease) .15s both; }
   .hero::before, .auth::before { animation: photo-in 1.2s var(--ease) both; }
   .skeleton { animation: shimmer 1.6s linear infinite; }
   .toast { animation: rise var(--dur-2) var(--ease); }
