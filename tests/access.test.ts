@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
-import { migratedD1 } from "./d1-sqlite";
+import { memoryR2, migratedD1 } from "./d1-sqlite";
 
 const origin = "https://hub.example.test";
 const PASSWORD = "correct horse battery";
@@ -15,7 +15,7 @@ async function seed(id: string, username: string, role: string, active = 1) {
 beforeEach(async () => {
   const database = migratedD1();
   sqlite = database.sqlite;
-  env = { DB: database.d1, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
+  env = { DB: database.d1, EVIDENCE: memoryR2().bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
   await seed("ACC-owner", "owner", "OWNER");
   await seed("ACC-admin", "admin", "ADMIN");
   await seed("ACC-staff", "staff", "STAFF");

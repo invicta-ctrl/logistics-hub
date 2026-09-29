@@ -14,7 +14,7 @@ export function migratedD1(): { d1: D1Database; sqlite: DatabaseSync } {
   const statement = (sql: string, args: SQLInputValue[] = []) => {
     const execute = () => {
       const prepared = sqlite.prepare(sql);
-      if (/^\s*SELECT|\bRETURNING\b/i.test(sql)) return { results: prepared.all(...args), meta: { changes: 0 } };
+      if (/^\s*(SELECT|WITH)\b|\bRETURNING\b/i.test(sql)) return { results: prepared.all(...args), meta: { changes: 0 } };
       return { results: [], meta: { changes: Number(prepared.run(...args).changes) } };
     };
     return {
@@ -43,4 +43,18 @@ export function migratedD1(): { d1: D1Database; sqlite: DatabaseSync } {
     }
   };
   return { d1: d1 as unknown as D1Database, sqlite };
+}
+
+/** Minimal in-memory R2 stand-in: put, get and delete are all the Worker uses. */
+export function memoryR2(): { bucket: R2Bucket; objects: Map<string, { bytes: Uint8Array; contentType?: string }> } {
+  const objects = new Map<string, { bytes: Uint8Array; contentType?: string }>();
+  const bucket = {
+    put: async (key: string, bytes: Uint8Array, options?: { httpMetadata?: { contentType?: string } }) => { objects.set(key, { bytes, contentType: options?.httpMetadata?.contentType }); },
+    get: async (key: string) => {
+      const object = objects.get(key);
+      return object ? { body: new Blob([object.bytes as BlobPart]).stream(), httpMetadata: { contentType: object.contentType } } : null;
+    },
+    delete: async (key: string) => { objects.delete(key); }
+  };
+  return { bucket: bucket as unknown as R2Bucket, objects };
 }

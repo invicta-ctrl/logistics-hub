@@ -14,6 +14,10 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Loan photos: staff-only, streamed through the Worker, never public.
+  "r2_buckets": [
+    { "binding": "EVIDENCE", "bucket_name": "logistics-hub-evidence" }
+  ],
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",

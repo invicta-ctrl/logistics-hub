@@ -1,17 +1,20 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
-import { migratedD1 } from "./d1-sqlite";
+import { memoryR2, migratedD1 } from "./d1-sqlite";
 import { stockState } from "../src/catalog-policy";
 
 const origin = "https://hub.example.test";
 let env: Env;
 let sqlite: ReturnType<typeof migratedD1>["sqlite"];
+let photos: ReturnType<typeof memoryR2>["objects"];
 
 beforeEach(async () => {
   const database = migratedD1();
   sqlite = database.sqlite;
-  env = { DB: database.d1, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
+  const r2 = memoryR2();
+  photos = r2.objects;
+  env = { DB: database.d1, EVIDENCE: r2.bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
   sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash) VALUES('ACC-1', 'staff.one', 'Staff One', ?)").run(await hashPassword("correct horse battery"));
 });
 
@@ -33,7 +36,7 @@ async function publicItems() {
   return (await (await call("/api/public/catalog")).json() as { items: Array<Record<string, unknown>> }).items;
 }
 
-const loanable = { name: "Folding Table", category: "FURNITURE", itemType: "Loanable", unit: "piece", status: "ACTIVE", storageLocation: "Office shelf A", reorderThreshold: 0, lendingAudience: "STUDENTS_AND_USC_STAFF", defaultLoanDays: 3, maximumLoanQty: 2, needsReview: false, notes: null };
+const loanable = { name: "Folding Table", category: "FURNITURE", itemType: "Loanable", unit: "piece", status: "ACTIVE", storageLocation: "Office shelf A", reorderThreshold: 0, lendingAudience: "STUDENTS_AND_USC_STAFF", needsReview: false, notes: null };
 
 describe("public Lending Hub", () => {
   it("fails closed: migrated records awaiting review are never published", async () => {
@@ -45,7 +48,7 @@ describe("public Lending Hub", () => {
     const created = await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, openingQuantity: 4 })).json() as { id: string };
     await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: "Unreviewed Speaker", needsReview: true, openingQuantity: 2 });
     const items = await publicItems();
-    expect(items).toEqual([{ id: created.id, name: "Folding Table", category: "FURNITURE", unit: "piece", available: 4, audience: "STUDENTS_AND_USC_STAFF", maxPerLoan: 2, loanDays: 3 }]);
+    expect(items).toEqual([{ id: created.id, name: "Folding Table", category: "FURNITURE", unit: "piece", available: 4, audience: "STUDENTS_AND_USC_STAFF" }]);
   });
 
   it("answers 304 until an inventory write changes the revision", async () => {
@@ -140,7 +143,7 @@ describe("movement-derived inventory", () => {
     const current = (await (await staff(cookie, "/api/staff/items/ITM-0001")).json() as { item: typeof loanable }).item;
     expect((await staff(cookie, "/api/staff/items/ITM-0001", "PATCH", { ...current, lendingAudience: "USC_STAFF_ONLY" })).status).toBe(400);
     expect(await (await staff(cookie, "/api/staff/items/ITM-0001", "PATCH", { ...current, storageLocation: "Cabinet 2" })).json()).toMatchObject({ changed: 1 });
-    expect(sqlite.prepare("SELECT action, entity_id, actor_user_id FROM audit_log").all()).toEqual([{ action: "ITEM_UPDATED", entity_id: "ITM-0001", actor_user_id: "ACC-1" }]);
+    expect(sqlite.prepare("SELECT action, entity_id, actor_user_id FROM audit_log WHERE actor_user_id IS NOT NULL").all()).toEqual([{ action: "ITEM_UPDATED", entity_id: "ITM-0001", actor_user_id: "ACC-1" }]);
   });
 });
 
@@ -156,7 +159,7 @@ describe("catalog management", () => {
     expect(stale.status).toBe(409);
     expect((await staff(cookie, "/api/staff/items/ITM-0003", "PATCH", { ...loaded, updatedAt: undefined })).status).toBe(400);
     expect((await detail(cookie, "ITM-0003")).item).toMatchObject({ storageLocation: "Cabinet 1", notes: null });
-    expect(sqlite.prepare("SELECT COUNT(*) AS total FROM audit_log").get()).toEqual({ total: 1 });
+    expect(sqlite.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE actor_user_id IS NOT NULL").get()).toEqual({ total: 1 });
   });
 
   it("normalizes aliases and reuses existing category and location spellings", async () => {
@@ -314,5 +317,149 @@ describe("Part 3 — stock and pantry", () => {
     expect(crossSite.status).toBe(403);
     await staff(cookie, "/api/staff/reorders", "POST", { itemId: "ITM-0005" });
     expect((await call("/api/staff/stock", { headers: { cookie, "if-none-match": etag } })).status).toBe(200);
+  });
+});
+
+describe("Part 4 — two item types, quantity edits and internal lending", () => {
+  type Loan = { id: string; itemId: string; quantity: number; purpose: string; borrowerName: string; studentId: string | null; reason: string | null; status: string; returnNote: string | null; createdBy: string | null; closedBy: string | null };
+  type Overview = {
+    open: Loan[]; closed: Loan[]; known: Array<{ name: string; studentId: string }>;
+    borrowers: Array<{ period: string; purpose: string; name: string; studentId: string | null; loans: number; units: number; outNow: number; problems: number }>;
+    items: Array<{ period: string; itemId: string; loans: number; units: number }>;
+    totals: Array<{ period: string; purpose: string; loans: number; units: number; borrowers: number; problems: number }>;
+  };
+  // Bytes are what count: a JPEG starts FF D8 FF whatever the browser calls it.
+  const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0]);
+  const onHand = (id: string) => (sqlite.prepare("SELECT on_hand AS onHand FROM inventory_balances WHERE id = ?").get(id) as { onHand: number }).onHand;
+  const overview = async (cookie: string) => await (await staff(cookie, "/api/staff/loans")).json() as Overview;
+  async function lendable(cookie: string, quantity = 5) {
+    return (await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: `Tripod ${crypto.randomUUID().slice(0, 6)}`, openingQuantity: quantity })).json() as { id: string }).id;
+  }
+  function lend(cookie: string, itemId: string, fields: Record<string, string>, photo: Uint8Array | null = JPEG) {
+    const form = new FormData();
+    for (const [key, value] of Object.entries({ purpose: "INDIVIDUAL", quantity: "1", key: crypto.randomUUID(), ...fields })) form.set(key, value);
+    if (photo) form.set("photo", new File([photo as BlobPart], "borrower.jpg", { type: "text/plain" }));
+    return call(`/api/staff/items/${itemId}/loans`, { method: "POST", headers: { origin, cookie }, body: form });
+  }
+  const close = (cookie: string, id: string, body: Record<string, unknown>) => staff(cookie, `/api/staff/loans/${id}/return`, "POST", body);
+
+  it("reclassifies every Saleable record as Consumable, with the change in each item's history", async () => {
+    expect(sqlite.prepare("SELECT COUNT(*) AS total FROM items WHERE item_type NOT IN ('Loanable', 'Consumable', 'NEEDS_REVIEW')").get()).toEqual({ total: 0 });
+    const audited = sqlite.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE action = 'ITEM_UPDATED' AND actor_user_id IS NULL AND details_json LIKE '%Saleable%'").get() as { total: number };
+    expect(audited.total).toBe(112);
+    const cookie = await signIn();
+    expect((await staff(cookie, "/api/staff/items", "POST", { ...loanable, itemType: "Saleable", lendingAudience: "NOT_AVAILABLE_FOR_LENDING" })).status).toBe(400);
+  });
+
+  it("reuses an existing spelling for a typed category or unit", async () => {
+    const cookie = await signIn();
+    const created = await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: "Bench", category: "school supplies", unit: "PIECE" })).json() as { id: string };
+    expect(sqlite.prepare("SELECT category, unit FROM items WHERE id = ?").get(created.id)).toEqual({ category: "SCHOOL SUPPLIES", unit: "piece" });
+  });
+
+  it("saves a quantity edit only against the figure the editor showed", async () => {
+    const cookie = await signIn();
+    const shown = onHand("ITM-0005");
+    const stale = await staff(cookie, "/api/staff/items/ITM-0005/movements", "POST", { kind: "IN", quantity: 2, reason: "DELIVERY", expectedOnHand: shown + 1, key: crypto.randomUUID() });
+    expect(stale.status).toBe(409);
+    expect((await stale.json() as { error: string }).error).toMatch(/Someone else just changed this item/);
+    expect(await (await staff(cookie, "/api/staff/items/ITM-0005/movements", "POST", { kind: "OUT", quantity: 1, reason: "CONSUMED", expectedOnHand: shown, key: crypto.randomUUID() })).json()).toEqual({ onHand: shown - 1, change: -1 });
+  });
+
+  it("lends for individual use with a student ID and photo, takes it off the shelf, and never double-lends a retry", async () => {
+    const cookie = await signIn();
+    const itemId = await lendable(cookie, 5);
+    expect((await lend(cookie, itemId, { borrowerName: "Test Borrower" })).status).toBe(400);
+    expect((await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "TEST-0001" }, null)).status).toBe(400);
+    expect((await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "TEST-0001" }, new TextEncoder().encode("not an image"))).status).toBe(400);
+    const request = { borrowerName: "Test Borrower", studentId: "test-0001", quantity: "2", key: "loan-retry-key-01" };
+    const first = await lend(cookie, itemId, request);
+    expect(first.status).toBe(201);
+    const { id } = await first.json() as { id: string };
+    expect(await (await lend(cookie, itemId, request)).json()).toEqual({ id, onHand: 3 });
+    expect(onHand(itemId)).toBe(3);
+    expect(sqlite.prepare("SELECT movement_type AS type, signed_quantity AS change, related_entity_id AS loan FROM inventory_movements WHERE item_id = ? AND movement_type = 'LOAN_OUT'").all(itemId)).toEqual([{ type: "LOAN_OUT", change: -2, loan: id }]);
+    expect([...photos.keys()]).toEqual([`loans/${id}`]);
+    expect(photos.get(`loans/${id}`)!.contentType).toBe("image/jpeg");
+    const loan = (await overview(cookie)).open.find((entry) => entry.id === id)!;
+    expect(loan).toMatchObject({ itemId, quantity: 2, purpose: "INDIVIDUAL", borrowerName: "Test Borrower", studentId: "TEST-0001", status: "OUT", createdBy: "Staff One" });
+    const refused = await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "TEST-0001", quantity: "4" });
+    expect(refused.status).toBe(409);
+    expect((await refused.json() as { error: string }).error).toBe("Only 3 on hand; cannot lend 4.");
+    expect(photos.size).toBe(1);
+  });
+
+  it("lends for USC use with a reason, and lends only active Loanable items", async () => {
+    const cookie = await signIn();
+    const itemId = await lendable(cookie, 2);
+    expect((await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer" })).status).toBe(400);
+    expect((await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer", reason: "General assembly stage setup" })).status).toBe(201);
+    const consumable = await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: "Masking Tape", itemType: "Consumable", lendingAudience: "NOT_AVAILABLE_FOR_LENDING", openingQuantity: 5 })).json() as { id: string };
+    const refused = await lend(cookie, consumable.id, { borrowerName: "Test Borrower", studentId: "TEST-0001" });
+    expect(refused.status).toBe(400);
+    expect(photos.size).toBe(1);
+  });
+
+  it("returns a loan to the shelf, keeps damaged and lost items off it, and closes each loan once", async () => {
+    const cookie = await signIn();
+    const itemId = await lendable(cookie, 3);
+    const ids = [];
+    for (const name of ["Test Borrower A", "Test Borrower B", "Test Borrower C"]) {
+      ids.push((await (await lend(cookie, itemId, { borrowerName: name, studentId: `TEST-${ids.length}` })).json() as { id: string }).id);
+    }
+    expect(onHand(itemId)).toBe(0);
+    expect((await close(cookie, ids[0]!, { outcome: "RETURNED" })).status).toBe(200);
+    expect((await close(cookie, ids[0]!, { outcome: "RETURNED" })).status).toBe(200);
+    expect(onHand(itemId)).toBe(1);
+    expect((await close(cookie, ids[0]!, { outcome: "LOST", note: "Changed mind" })).status).toBe(409);
+    expect((await close(cookie, ids[1]!, { outcome: "DAMAGED" })).status).toBe(400);
+    expect((await close(cookie, ids[1]!, { outcome: "DAMAGED", note: "Cracked leg" })).status).toBe(200);
+    expect((await close(cookie, ids[2]!, { outcome: "LOST", note: "Not returned after the event" })).status).toBe(200);
+    expect(onHand(itemId)).toBe(1);
+    expect(sqlite.prepare("SELECT COUNT(*) AS total FROM inventory_movements WHERE item_id = ? AND movement_type = 'LOAN_RETURN'").get(itemId)).toEqual({ total: 1 });
+    const { open, closed } = await overview(cookie);
+    expect(open.filter((loan) => loan.itemId === itemId)).toEqual([]);
+    expect(closed.filter((loan) => loan.itemId === itemId).map((loan) => [loan.status, loan.returnNote, loan.closedBy]).sort()).toEqual([
+      ["DAMAGED", "Cracked leg", "Staff One"], ["LOST", "Not returned after the event", "Staff One"], ["RETURNED", null, "Staff One"]
+    ]);
+    const detail = await (await staff(cookie, `/api/staff/items/${itemId}`)).json() as { loans: Loan[]; movements: Array<{ movementType: string; borrower: string | null }>; events: Array<{ action: string }> };
+    expect(detail.loans).toHaveLength(3);
+    expect(detail.movements.filter((movement) => movement.movementType.startsWith("LOAN")).map((movement) => movement.borrower)).toEqual(["Test Borrower A", "Test Borrower C", "Test Borrower B", "Test Borrower A"]);
+    expect(detail.events.filter((event) => event.action.startsWith("LOAN")).map((event) => event.action)).toEqual(["LOAN_CLOSED", "LOAN_CLOSED", "LOAN_CLOSED", "LOAN_CREATED", "LOAN_CREATED", "LOAN_CREATED"]);
+  });
+
+  it("ranks borrowers separately for individual and USC use, per period", async () => {
+    const cookie = await signIn();
+    const itemId = await lendable(cookie, 20);
+    for (let index = 0; index < 3; index += 1) await lend(cookie, itemId, { borrowerName: "Test Frequent", studentId: "TEST-0100" });
+    await lend(cookie, itemId, { borrowerName: "Test Once", studentId: "TEST-0200", quantity: "4" });
+    for (let index = 0; index < 2; index += 1) await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer", reason: "Event setup" });
+    const { borrowers, totals, items, known } = await overview(cookie);
+    const ranked = (period: string, purpose: string) => borrowers.filter((row) => row.period === period && row.purpose === purpose).map((row) => [row.name, row.loans, row.units]);
+    expect(ranked("30d", "INDIVIDUAL")).toEqual([["Test Frequent", 3, 3], ["Test Once", 1, 4]]);
+    expect(ranked("all", "USC")).toEqual([["Test Officer", 2, 2]]);
+    expect(totals.filter((row) => row.period === "30d").map((row) => [row.purpose, row.loans, row.units, row.borrowers]).sort()).toEqual([["INDIVIDUAL", 4, 7, 2], ["USC", 2, 2, 1]]);
+    expect(items.find((row) => row.period === "all" && row.itemId === itemId)).toMatchObject({ loans: 6, units: 9 });
+    expect(known.map((row) => row.studentId).sort()).toEqual(["TEST-0100", "TEST-0200"]);
+  });
+
+  it("keeps loans and photos staff-only, same-origin and revisioned", async () => {
+    const cookie = await signIn();
+    const itemId = await lendable(cookie, 2);
+    const { id } = await (await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "TEST-0001" })).json() as { id: string };
+    for (const path of ["/api/staff/loans", `/api/staff/loans/${id}/photo`]) expect((await call(path)).status).toBe(401);
+    const photo = await call(`/api/staff/loans/${id}/photo`, { headers: { cookie } });
+    expect(photo.status).toBe(200);
+    expect(photo.headers.get("content-type")).toBe("image/jpeg");
+    expect(new Uint8Array(await photo.arrayBuffer())).toEqual(JPEG);
+    expect((await call("/api/staff/loans/LN-missing/photo", { headers: { cookie } })).status).toBe(404);
+    const form = new FormData();
+    form.set("purpose", "INDIVIDUAL");
+    const crossSite = await call(`/api/staff/items/${itemId}/loans`, { method: "POST", headers: { origin: "https://evil.example", cookie }, body: form });
+    expect(crossSite.status).toBe(403);
+    const etag = (await staff(cookie, "/api/staff/loans")).headers.get("etag")!;
+    expect((await call("/api/staff/loans", { headers: { cookie, "if-none-match": etag } })).status).toBe(304);
+    await close(cookie, id, { outcome: "RETURNED" });
+    expect((await call("/api/staff/loans", { headers: { cookie, "if-none-match": etag } })).status).toBe(200);
   });
 });
