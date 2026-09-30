@@ -16,10 +16,12 @@
 - **CSV export (from the prompt):** the exact filtered query; UTF-8, Excel-friendly, fixed columns, quoting, formula-prefix neutralization (`=`, `+`, `-`, `@`, tab, CR), row cap with a truncation message, server-controlled filename, `Cache-Control: private, no-store`, rate limiting, and an audit record of actor, time, filters and row count. Never exported: password hashes, session tokens, recovery secrets, credentials, R2/photo keys, image bytes, network hashes, raw `details_json`, private infrastructure data.
 - **A12 (from the prompt):** Consumables are `WHOLE_UNIT` (default for every existing item, no auto-classification, staff opt in) or `OPEN_UNIT`; only outer units are counted, never sheets, millilitres, grams, length or percentages. Open, Use and Condition change stock by 0; Empty changes it by exactly −1 through the existing guarded movement path; `sealed = on_hand − open_units` is derived, never stored; `open_units ≤ on_hand`. The movement ledger stays the sole quantity authority.
 - **Phone Use is in scope, not optional (supersedes the "optional" wording in 4.6 and OU-4 below).** Self-Service is item-driven: Loanable → **Borrow**, Consumable + `WHOLE_UNIT` → **Take**, Consumable + `OPEN_UNIT` → **Use**. The generic user-facing Borrow/Consume choice is removed once the routing is verified. Use has no quantity question and stock delta 0; phones cannot mark Empty, set condition, reconcile or adjust stock. It reuses the sole immutable offline queue and sync path; no second offline system.
+- **Owner prompt source:** `docs/specs/accepted/2026-10-01-part-05-owner-master-prompt.md` is a verbatim copy of the prompt for review. This record normalizes it; where they differ the prompt governs, except the deliberate refinement in the next bullet.
+- **Impossible open/on-hand state is prevented, not merely flagged** (refines prompt invariant 14 and OU-3, which say to flag it): no commit may leave `open_units > on_hand`; a correction that would must carry an explicit atomic open-unit reconciliation or be rejected (4.7 item 8). The flag remains only for states found already inconsistent.
 - **Unsafe changes are blocked while open units exist:** `OPEN_UNIT → WHOLE_UNIT`, Consumable → Loanable, deactivation that invalidates state, and a physical count to zero, until explicitly reconciled. Open-unit records are never silently deleted or fabricated.
 - **Gates (union of prompt and plan):** the section 5 gate list, with touched pages checked at 390, 768 and 1366 px at minimum and the widths in AC-A8, plus keyboard and accessible-label checks, no horizontal overflow, final diff and anti-bloat review. Unrun tests are never claimed.
 - **Production stays separately authorized.** Acceptance authorizes no production mutation. Any D1 migration needs the exact target and release commit, a throwaway-D1 test, a Time Travel bookmark, the pending list, Earl's explicit authorization, Harbor applying it once, read-only post-checks and no reapply. Workers Builds deploys every push to `main` and does not apply migrations, so code that depends on an unapplied migration must not reach `main` before that migration is applied. Migration 0015 is already applied; never reapply it.
-- **Decisions in section 6 the prompt did not answer (still open, defaults are conservative):** borrower name and student ID are excluded from exports for all roles until Earl decides (plan recommendation: ADMIN/OWNER only); no dev dependency is added, so no axe check until Earl approves it; the home-page "Where to find us" line and deleting the merged leftover remote slice branches are outside Part 5.
+- **Decisions in section 6 the prompt did not answer, settled conservatively (2026-10-01, no further owner decision needed to proceed):** borrower name and student ID are excluded from CSV exports for every role; no axe dev dependency is added; the home-page "Where to find us" line and deleting the merged leftover remote slice branches are outside Part 5.
 - The original A12 text (`PART_05_OPEN_UNIT_TRACKING_AMENDMENT.md`) is not in the repository; section 4 below is its record.
 
 ---
@@ -196,7 +198,7 @@ Open a ream · Record use (no content quantity) · Set condition · Mark empty w
 5. A unit cannot be marked empty twice; a retry cannot double-deduct; two competing empties produce exactly one movement.
 6. Open units can never exceed on-hand quantity; opening more than stock supports is rejected.
 7. A physical count remains observed truth and counts containers (3 sealed + 1 open = 4); the open count is reconciled separately and never rewrites history.
-8. If a correction leaves fewer units on hand than open units, the system flags **Open-unit state needs review** and does not invent values.
+8. No committed operation may leave fewer units on hand than open units. A stock correction, count or deactivation that would do so is rejected unless it carries an explicit open-unit reconciliation that atomically restores `open_units ≤ on_hand` in the same transaction (traceable, attributable, never rewriting or deleting movement history, never creating a second stock authority). **Open-unit state needs review** is only a defensive flag for an inconsistent state found already stored (for example legacy data or a fault); it is never produced by a normal commit, and the system does not invent values to clear it.
 9. Condition labels never affect quantity.
 10. Loanables and existing Whole-unit Consumables behave exactly as before.
 11. Every transition is attributable (actor/device/time) and visible in History and the Activity center.
@@ -228,7 +230,7 @@ Configurable per item; usable with no content counting; open and use leave quant
 
 ### 4.13 Tests required
 
-Unit/data: every invariant above, including retry and concurrent-empty cases, count reconciliation and impossible-state flagging. Browser at the existing viewports: configure, open, use, set Low, mark empty, quantity change, multiple-open warning, one-hand mobile flow, reconciliation, history text. Worker + D1: migration safety, append-only behavior, idempotent empty, auth boundaries, offline `Use` sync if included. Plus the standing gates in section 5.
+Unit/data: every invariant above, including retry and concurrent-empty cases, count reconciliation, rejection of any commit that would leave open units above on-hand, and flagging of an already-inconsistent stored state. Browser at the existing viewports: configure, open, use, set Low, mark empty, quantity change, multiple-open warning, one-hand mobile flow, reconciliation, history text. Worker + D1: migration safety, append-only behavior, idempotent empty, auth boundaries, offline `Use` sync with replay, retry and double-tap (stock delta 0 every time), and item-driven Borrow/Take/Use routing with no generic Borrow/Consume choice. Plus the standing gates in section 5.
 
 ## 5. Order of work, slices and gates
 
@@ -253,7 +255,7 @@ Unit/data: every invariant above, including retry and concurrent-empty cases, co
 
 **Governance for each slice:** claim the writer lock, one active `slice/*` branch, commit and push each green checkpoint, merge to `main` immediately when green, delete the slice, update `.codex/CURRENT.md` and the handoff, and stop at the slice's stop condition. Production writes need Earl's explicit target and authority.
 
-## 6. Decisions (1, 5 and 6 answered by the Acceptance record; 2–4 and 7 open)
+## 6. Decisions (1, 5 and 6 answered by the Acceptance record; 2 and 3 settled conservatively there; 4 and 7 are outside Part 5)
 
 1. **Accept Part 5 core as written?** (Yes / trim / change scope.)
 2. **Borrower identity in exports:** include borrower name and student ID for ADMIN and OWNER only (recommended), for all staff, or never?
