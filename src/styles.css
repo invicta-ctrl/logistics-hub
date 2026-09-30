@@ -1,10 +1,4 @@
-/* Hallmark · macrostructure: Marquee Hero (public) + Workbench (staff) · tone: institutional-editorial / utilitarian · anchor hue: oxblood + gold
-   ==========================================================================
-   Logistics Hub — design tokens
-   Deep oxblood carries the institution (masthead, hero, app bar); warm paper
-   carries the work. Gold is for primary actions on dark and for focus.
-   One type scale, one 4px spacing rhythm.
-   ========================================================================== */
+/* Logistics Hub design tokens and components: oxblood for the institution, warm paper for the work. */
 :root {
   --bg: #faf9f7;
   --surface: #ffffff;
@@ -261,7 +255,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .toast--leaving { opacity: 0; transform: translateY(.5rem); }
 
 /* ==========================================================================
-   Public site — an institutional masthead, then warm paper
+   Public site
    ========================================================================== */
 .site-header { position: relative; z-index: 30; border-bottom: 1px solid var(--on-dark-line); background: var(--brand-dark); color: var(--on-dark); }
 .site-header__inner { display: flex; min-height: 4.75rem; align-items: center; justify-content: space-between; gap: 1rem; }
@@ -382,8 +376,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 @keyframes row-in { from { opacity: 0; transform: translateY(6px); } }
 
 /* ==========================================================================
-   Staff sign-in — the original HAU campus-at-dusk photograph from the
-   legacy Staff Login page, under the same oxblood veil it had there.
+   Staff sign-in over the HAU campus photograph from the legacy login page
    ========================================================================== */
 .auth { position: relative; isolation: isolate; display: flex; flex-direction: column; justify-content: center; gap: 1.5rem; padding: clamp(1.5rem, 6vh, 4rem) var(--gutter); background: var(--brand-dark); color: var(--on-dark); }
 .auth::before { position: absolute; inset: 0; z-index: -2; background: url("/brand/hau-campus-dusk.webp") 50% 45% / cover no-repeat; content: ""; }

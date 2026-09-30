@@ -1,8 +1,4 @@
-/* Hallmark · Self-Service "Dusk": the institution after hours. The HAU campus at dusk (the
-   legacy login's photograph) glows behind a deep oxblood-black sky; frosted glass floats over
-   it; gold is light, not decoration. Editorial Newsreader over IBM Plex. Motion is slow and
-   purposeful, and absent under reduced motion. The tokens below re-theme every shared
-   component inside Self-Service; nothing outside .is-self-service changes. */
+/* Self-Service phone app: re-themes the shared components inside .is-self-service only. */
 
 .is-self-service {
   --canvas: #140609;
