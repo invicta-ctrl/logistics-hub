@@ -1,6 +1,6 @@
 # Part 4.5 Brief — Offline Self-Service + PWA + Single QR + Sync/Reconciliation
 
-STATUS: CODE_COMPLETE on the slice; production waits for Part 4 acceptance and remote migration 0015 (see `.codex/SESSION_HANDOFF.md`)
+STATUS: STEP_2_COMPLETE (2026-09-30): Part 4 accepted; all required local gates green; remote 0015 applied once and verified. Part 4.5 release and production phone acceptance remain pending (see `.codex/SESSION_HANDOFF.md`).
 BRANCH: slice/part-04-5-offline-self-service-pwa (from main 41d00fe)
 INSTRUCTION: Earl, 2026-09-29 (Claude Code Cloud prompt "Part 4.5 — Offline Self-Service + PWA + Single QR + Sync/Reconciliation")
 ENGINEERING GUIDE: docs/OFFLINE_SELF_SERVICE.md · USER GUIDE: docs/PWA_INSTALL_GUIDE.md

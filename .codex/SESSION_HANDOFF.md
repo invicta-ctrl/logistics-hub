@@ -1,9 +1,9 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-STATUS: PART_04_PRODUCTION_ACCEPTANCE_COMPLETE; PART_04_5_STEP_2_LOCAL_GATES_GREEN (2026-09-30; remote 0015 not applied yet)
-ACTIVE_WRITER: codex claimed for the authorized Step 2 repair and migration; yield at completion
+STATUS: PART_04_PRODUCTION_ACCEPTANCE_COMPLETE; PART_04_5_STEP_2_COMPLETE (2026-09-30; remote 0015 applied once and verified; not released)
+ACTIVE_WRITER: none after this handoff (codex yields); claim before edits
 WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub (Cloud works in its own clone and pushes the slice)
-BRANCH: slice/part-04-5-offline-self-service-pwa; tested code 1dc6639; main/origin/main 41b132d; both slices retained for later release cleanup
+BRANCH: slice/part-04-5-offline-self-service-pwa; verified correction 7eed18f; main/origin/main 41b132d; both slices retained for later release cleanup
 LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` follows the pushed slice)
 
 ## Part 4.5 (Claude Cloud, 2026-09-29) — see `.codex/PART_04_5_BRIEF.md`, `docs/OFFLINE_SELF_SERVICE.md`
@@ -37,7 +37,7 @@ LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` follows the pushed slice
 - Fast-forwarded local main to the slice and pushed `main`; push reported `4f6cf4b..64c037e`. Exact deployment and production behavior are still unverified. Keep the slice branch until acceptance passes.
 
 ## Exact next action
-Complete Step 2: capture a fresh D1 Time Travel bookmark in ignored .wrangler/, verify only 0015 is pending, apply once, then verify the two zero counts and resolution trigger. All required local gates passed after the authorized test repair below. Step 3 still needs the recorded branch divergence resolved within Earl's constraints. Do not start Part 5.
+Step 2 is complete; do not reapply 0015. Step 3 still needs the recorded branch divergence resolved within Earl's no-merge-commit/no-force-push constraints, then the release and production phone acceptance. No integration exception has been granted. Preserve the ignored bookmark for recovery; restore only if data is damaged. Do not start Part 5.
 
 ## Known facts and limitations
 - No item has a reorder level yet, so Low stock is empty until staff set levels.
@@ -62,3 +62,13 @@ Complete Step 2: capture a fresh D1 Time Travel bookmark in ignored .wrangler/, 
 - Root cause was the test sequence: it explicitly deleted every app cache while offline, then expected a new /staff navigation to load the cached app shell. Moved the cache-deletion/IndexedDB durability check after the offline Staff fallback and return-to-Self-Service navigation. Added an assertion that all three pending events and the borrow photo survive the deletion. No production code change was needed.
 - Fresh required gates all passed: typecheck; 100/100 unit; build; 9/9 browser; 19/19 real Worker + D1 browser; privacy (0 matches); migration-data verification (ok: true); npx wrangler deploy --dry-run. The formerly failed offline flow and both formerly skipped serial tests passed. The Worker suite's local cleanup reported Windows EPERM; ignored test evidence was preserved, with no remote effect.
 - Confirmed Wrangler authentication without printing account details. Dry run confirmed DB logistics-hub, EVIDENCE logistics-hub-evidence and ASSETS. Production migration remains the next action; no live deploy has occurred.
+
+## 2026-09-30 remote 0015 mutation checkpoint
+- Tested correction and green preflight committed/pushed on the slice at 7eed18f. Captured and verified a fresh Time Travel bookmark in ignored `.wrangler/part4-5-pre-0015-20260930.json`; never print or commit its value.
+- Remote migrations list showed only `0015_self_service.sql` pending. Ran `npx wrangler d1 migrations apply DB --remote` exactly once against D1 logistics-hub via DB; Wrangler reported 9 commands successful and 0015 applied. Do not repeat the apply. Verification queries are the next action; no Part 4.5 Worker release occurred.
+
+## 2026-09-30 Step 2 verification complete (09:52 Manila / 01:52 UTC)
+- Both count queries in docs/DEPLOYMENT.md passed on remote D1: items with self_service=1 (offered) = 0; self_service_events (events) = 0. The sqlite_master query returned one row named self_service_events_resolved_final. All responses successful, no rows written. The final remote migrations list reported no migrations to apply.
+- Step 2 is complete. No unexpected data damage was observed and no restore was performed. The recovery bookmark remains verified and Git-ignored at `.wrangler/part4-5-pre-0015-20260930.json`; its value was never displayed or committed. Direct shell redirection was refused by the tool; the read-only JSON result was captured without display and saved with the file-write tool instead.
+- Only D1 logistics-hub schema was changed in production. Worker logistics-hub and R2 logistics-hub-evidence were not changed; neither legacy production/staging target was touched. No Part 4.5 live deployment or phone acceptance has occurred, and no Part 5 work began. Main remains 41b132d. The separate Step 3 branch-history constraint remains unresolved.
+- This checkpoint updates the current/task/handoff and brief records on the shared slice. Unknown untracked NUL is preserved untouched. Yield the codex writer lock at handoff. Next action is Step 3 integration resolution and release; never repeat migration 0015 without first verifying remote migration state.
