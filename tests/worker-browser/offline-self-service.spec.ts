@@ -162,8 +162,6 @@ test.describe.serial("offline self-service", () => {
     await page.reload();
     await expect(page.getByRole("heading", { name: "What do you need?" })).toBeVisible();
     await expect(page.getByRole("link", { name: /Offline · 2 waiting/ })).toBeVisible();
-    // An update replaces the app's caches; people's records are in IndexedDB and stay.
-    await page.evaluate(async () => { for (const key of await caches.keys()) await caches.delete(key); });
     expect(await localState(page)).toEqual({ states: ["pending", "pending"], photos: 1 });
 
     await page.getByRole("link", { name: /^Return/ }).click();
@@ -178,6 +176,10 @@ test.describe.serial("offline self-service", () => {
     await expect(page.getByRole("heading", { name: "This page needs a connection" })).toBeVisible();
     await page.getByRole("link", { name: "Open Self-Service" }).click();
     await expect(page.getByRole("link", { name: /Offline · 3 waiting/ })).toBeVisible();
+
+    // Cache deletion leaves saved actions intact; fresh offline navigation needs the cached shell.
+    await page.evaluate(async () => { for (const key of await caches.keys()) await caches.delete(key); });
+    expect(await localState(page)).toEqual({ states: ["pending", "pending", "pending"], photos: 1 });
 
     await context.setOffline(false);
     await expect(page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });

@@ -1,7 +1,7 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-STATUS: PART_04_PRODUCTION_ACCEPTANCE_COMPLETE; PART_04_5_STEP_2_BLOCKED_LOCAL_WORKER_BROWSER_GATE (2026-09-30; not merged, not deployed, remote 0015 not applied)
-ACTIVE_WRITER: none after this handoff (codex yields); claim before edits
+STATUS: PART_04_PRODUCTION_ACCEPTANCE_COMPLETE; PART_04_5_STEP_2_LOCAL_GATES_GREEN (2026-09-30; remote 0015 not applied yet)
+ACTIVE_WRITER: codex claimed for the authorized Step 2 repair and migration; yield at completion
 WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub (Cloud works in its own clone and pushes the slice)
 BRANCH: slice/part-04-5-offline-self-service-pwa; tested code 1dc6639; main/origin/main 41b132d; both slices retained for later release cleanup
 LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` follows the pushed slice)
@@ -37,7 +37,7 @@ LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` follows the pushed slice
 - Fast-forwarded local main to the slice and pushed `main`; push reported `4f6cf4b..64c037e`. Exact deployment and production behavior are still unverified. Keep the slice branch until acceptance passes.
 
 ## Exact next action
-Resolve the failed offline Staff fallback gate in the latest checkpoint before resuming Step 2. Earl's explicit Step 2 stop condition was followed; no repair or test retry was attempted. Do not apply 0015 until all required gates pass. Step 3 also needs the previously recorded branch divergence resolved within Earl's no-merge-commit/no-force-push constraints. Do not start Part 5.
+Complete Step 2: capture a fresh D1 Time Travel bookmark in ignored .wrangler/, verify only 0015 is pending, apply once, then verify the two zero counts and resolution trigger. All required local gates passed after the authorized test repair below. Step 3 still needs the recorded branch divergence resolved within Earl's constraints. Do not start Part 5.
 
 ## Known facts and limitations
 - No item has a reorder level yet, so Low stock is empty until staff set levels.
@@ -56,3 +56,9 @@ Resolve the failed offline Staff fallback gate in the latest checkpoint before r
 - The suite migrated only its isolated LOCAL D1 in ignored `.wrangler/e2e-43000`; cleanup reported Windows EPERM after the failed run, so that evidence directory was preserved. This was not a remote migration.
 - Stopped per Earl's Step 2 rule. Wrangler deploy dry run, D1 bookmark capture, remote migrations list/apply and post-migration queries were not run after the failure. Remote 0015 was not applied by this session; no production Worker or R2 mutation, no Part 4.5 release and no Part 5 work occurred. Known Step 3 divergence remains: main and the slice have merge-base `41d00fe`; no history rewrite or merge exception has been granted.
 - Next exact action: authorize and perform a bounded repair of the failed offline Staff fallback, verify its regression and required gates, then resume Step 2's bookmark/list/apply/verification sequence. Never treat the earlier local 0015 test application as production evidence. Yield the writer lock at this handoff.
+
+## 2026-09-30 Step 2 repair and green preflight
+- Earl authorized fixing the failed gate and finishing Step 2. Claimed the codex writer lock on the existing slice at 2d815a5; no other writer or tracked dirty work existed. Unknown untracked NUL remains untouched.
+- Root cause was the test sequence: it explicitly deleted every app cache while offline, then expected a new /staff navigation to load the cached app shell. Moved the cache-deletion/IndexedDB durability check after the offline Staff fallback and return-to-Self-Service navigation. Added an assertion that all three pending events and the borrow photo survive the deletion. No production code change was needed.
+- Fresh required gates all passed: typecheck; 100/100 unit; build; 9/9 browser; 19/19 real Worker + D1 browser; privacy (0 matches); migration-data verification (ok: true); npx wrangler deploy --dry-run. The formerly failed offline flow and both formerly skipped serial tests passed. The Worker suite's local cleanup reported Windows EPERM; ignored test evidence was preserved, with no remote effect.
+- Confirmed Wrangler authentication without printing account details. Dry run confirmed DB logistics-hub, EVIDENCE logistics-hub-evidence and ASSETS. Production migration remains the next action; no live deploy has occurred.
