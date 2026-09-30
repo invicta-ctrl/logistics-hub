@@ -200,7 +200,7 @@ function installCard(): Html {
     : html`<a class="button button--secondary" href="/self-service?do=install" data-go="install">How to install</a>`;
   return html`<section class="ss-install" aria-labelledby="ss-install-title">
       <img src="/icons/icon-192.png" alt="" width="56" height="56" />
-      <div><h2 id="ss-install-title">Install Logistics Hub</h2><p>${ios ? "Add it to your Home Screen once while you're online. Offline recording works from the Home Screen app." : "Use Self-Service faster and keep recording when the office internet is down."}</p></div>
+      <div><h2 id="ss-install-title">Install Logistics Hub</h2><p>${ios ? "Add it to your Home Screen once while you're online. Offline recording works from the Home Screen app." : platform() === "android" ? "Install it from Chrome once while you're online. It then opens like an app and keeps recording when the office internet is down." : "Use Self-Service faster and keep recording when the office internet is down."}</p></div>
       ${action}
     </section>`;
 }
@@ -392,7 +392,7 @@ function borrowSheet(item: CatalogItem): Html {
     </form>`);
 }
 
-const photoPick = () => html`<button type="button" class="photo-field__pick" data-pick aria-describedby="ss-photo-label ss-photo-hint">${icon("camera")}<span>Take a photo holding it</span></button>`;
+const photoPick = (text = "Take a photo holding it") => html`<button type="button" class="photo-field__pick" data-pick aria-describedby="ss-photo-label ss-photo-hint">${icon("camera")}<span>${text}</span></button>`;
 
 function returnSheet(item: CatalogItem | undefined, loan: LocalEvent | undefined): Html {
   const name = loan?.itemName ?? item?.name ?? "Item";
@@ -402,6 +402,12 @@ function returnSheet(item: CatalogItem | undefined, loan: LocalEvent | undefined
         <label><input type="radio" name="outcome" value="RETURNED" checked /><span>Good</span></label><label><input type="radio" name="outcome" value="DAMAGED" /><span>Damaged</span></label><label><input type="radio" name="outcome" value="LOST" /><span>Lost</span></label>
       </div></fieldset>
       <div class="field" data-note hidden><label for="ss-note" data-note-label>What's damaged?</label><textarea id="ss-note" name="note" rows="2" maxlength="300"></textarea></div>
+      <div class="field">
+        <span class="field-label" id="ss-photo-label">Photo of the item <span class="field__optional">required</span></span>
+        <input id="ss-photo" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden />
+        <div class="photo-field" data-photo>${photoPick("Take a photo of the item")}</div>
+        <p class="field__hint" id="ss-photo-hint">Logistics staff check this photo before the stock is updated. It stays private to staff.</p>
+      </div>
       ${loan ? html`<p class="ss-hint">${icon("check")}Linked to your borrow on this phone, so Logistics knows exactly which loan this is.</p>` : html`
         <p class="ss-hint">${icon("info")}Tell us who borrowed it so Logistics can match the loan.</p>
         ${nameField("Borrower's name")}
@@ -412,7 +418,7 @@ function returnSheet(item: CatalogItem | undefined, loan: LocalEvent | undefined
     </form>`);
 }
 
-const VERB: Record<string, string> = { TAKE: "Taken", BORROW: "Borrowed", RETURNED: "Returned", DAMAGED: "Returned damaged", LOST: "Reported lost" };
+const VERB: Record<string, string> = { TAKE: "Taken", BORROW: "Borrowed", RETURNED: "Return sent", DAMAGED: "Damaged return sent", LOST: "Reported lost" };
 const verb = (event: LocalEvent) => VERB[event.type === "RETURN" ? event.outcome ?? "RETURNED" : event.type];
 
 /** Shown in the sheet after saving: calm, specific, and it updates itself when the record syncs. */
@@ -488,10 +494,12 @@ function renderActivity(): void {
 function renderInstall(): void {
   const main = region("screen");
   if (!main) return;
-  const ios = platform() === "ios";
-  const steps = ios
+  const kind = platform();
+  const steps = kind === "ios"
     ? [html`Open this page in <strong>Safari</strong>.`, html`Tap ${icon("share")}<strong>Share</strong>. On newer iPhones it's in the ${icon("more")} menu next to the address bar; tap <strong>View More</strong> if you don't see the next step.`, html`Tap <strong>Add to Home Screen</strong>, keep <strong>Open as Web App</strong> on, then tap <strong>Add</strong>.`, html`Open <strong>Logistics</strong> from your Home Screen once while online. It's ready when it says <strong>Ready for offline use</strong>.`]
-    : [html`Open this page in <strong>Chrome</strong> (or Samsung Internet).`, html`Tap the ${icon("more")} menu, then <strong>Install app</strong> or <strong>Add to Home screen</strong> (newer Chrome: <strong>Install and create shortcut</strong> → <strong>Install</strong>).`, html`Open <strong>Logistics</strong> from your home screen or app drawer.`, html`Wait for <strong>Ready for offline use</strong> before you rely on it offline.`];
+    : kind === "android"
+      ? [html`Open this page in <strong>Chrome</strong>. If the QR code opened it inside another app (Messenger, Facebook or a scanner), tap ${icon("more")} then <strong>Open in Chrome</strong>.`, html`Tap <strong>Install now</strong> above, then <strong>Install</strong>. No button? Tap the Chrome ${icon("more")} menu, then <strong>Install app</strong> (or <strong>Add to Home screen</strong>, then <strong>Install</strong>; don't choose Create shortcut).`, html`<strong>Samsung Internet:</strong> tap the install icon in the address bar, or the menu, then <strong>Add page to</strong> and <strong>Home screen</strong>.`, html`Open <strong>Logistics</strong> from your home screen or app drawer while online. Allow the <strong>camera</strong> when asked: borrows and returns need a photo.`, html`Wait for <strong>Ready for offline use</strong> before you rely on it offline.`]
+      : [html`Open this page in <strong>Chrome</strong> or <strong>Edge</strong>.`, html`Use the install icon in the address bar, or the ${icon("more")} menu, then <strong>Install</strong>.`, html`Open <strong>Logistics</strong> and wait for <strong>Ready for offline use</strong>.`];
   mount(main, html`<div class="ss-screen">
       ${back("Install Logistics Hub")}
       <p class="ss-lead">Install it once while you have internet. After that it opens like an app and keeps recording when the office internet is down.</p>
@@ -578,7 +586,7 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     if (!photoBox) return;
     mount(photoBox, preview
       ? html`<img class="photo-field__preview" src="${preview}" alt="Photo to attach" /><div class="photo-field__actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Retake</button><button type="button" class="button button--ghost button--sm" data-clear-photo>Remove</button></div>`
-      : photoPick());
+      : photoPick(type === "RETURN" ? "Take a photo of the item" : undefined));
   };
   form.querySelector<HTMLInputElement>("#ss-photo")?.addEventListener("change", (event) => {
     const chosen = (event.target as HTMLInputElement).files?.[0];
@@ -617,6 +625,7 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
       : studentId && !STUDENT_ID_PATTERN.test(studentId) ? ["The student ID may use only letters, digits and dashes.", "#ss-student"]
       : type === "BORROW" && purpose === "USC" && !reason ? ["Say what it's for.", "#ss-reason"]
       : type === "BORROW" && !photo ? ["Take a photo holding the item.", "[data-pick]"]
+      : type === "RETURN" && !photo ? ["Take a photo of the item you are returning.", "[data-pick]"]
       : type === "RETURN" && outcome !== "RETURNED" && !note ? [outcome === "LOST" ? "Say what happened." : "Say what's damaged.", "#ss-note"]
       : !Number.isInteger(count) || count < 1 || count > SELF_SERVICE_LIMITS.quantity ? [`Choose a quantity from 1 to ${SELF_SERVICE_LIMITS.quantity}.`, "#ss-qty"] : ["", ""];
     if (problem) {

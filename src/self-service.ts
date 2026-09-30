@@ -169,6 +169,7 @@ export function parseEvent(raw: unknown, batch: Pick<Batch, "sentAt" | "offsetMs
 
 /** What the phone is told when staff will look at an event. It never reveals anyone else's details. */
 const PHONE_MESSAGES: Record<ReviewReason, string> = {
+  RETURN_CHECK: "Return sent. Logistics staff will check the photo, then update the stock.",
   UNMATCHED_RETURN: "Return recorded. Logistics will match it to the loan.",
   RETURN_CONFLICT: "This loan was already closed differently. Staff will check it.",
   NOT_ELIGIBLE: "Saved for staff to confirm: this item is no longer self-service.",
@@ -220,7 +221,7 @@ async function write(db: D1Database, event: SelfServiceEvent, statements: D1Prep
  * these a day, so a flood of made-up records cannot bury the review page or fill storage.
  */
 async function hold(db: D1Database, event: SelfServiceEvent, batch: Batch, review: ReviewReason, extra: Partial<Effect> = {}): Promise<SyncResult> {
-  if (review !== "ERROR" && await throttled(db, `self-service-held:${batch.network}`, SELF_SERVICE_LIMITS.heldPerNetworkDay, 24 * 60 * MINUTE)) {
+  if (review !== "ERROR" && review !== "RETURN_CHECK" && await throttled(db, `self-service-held:${batch.network}`, SELF_SERVICE_LIMITS.heldPerNetworkDay, 24 * 60 * MINUTE)) {
     return rejected(event.id, "Too many records from this network need a staff check today. Please see Logistics staff.");
   }
   return write(db, event, [eventRow(db, event, batch, { applied: 0, review, ...extra })], review);
@@ -262,6 +263,25 @@ async function failed(db: D1Database, bucket: R2Bucket, event: SelfServiceEvent,
 }
 
 /**
+ * Validates and stores a phone's photo in the private bucket. The key is unique per attempt, so a
+ * failed attempt never deletes the photo of a concurrent successful one. Returns the answer to
+ * send instead when the photo is unusable or the upload must be retried.
+ */
+async function uploadPhoto(bucket: R2Bucket, event: SelfServiceEvent, photoPart: unknown, again: string, keyPrefix: string): Promise<{ key: string } | SyncResult> {
+  const photo = await readPhoto(photoPart).catch((error: unknown) => { if (error instanceof InputError) return error; throw error; });
+  if (photo instanceof InputError) return rejected(event.id, `${photo.message} Take the photo again and ${again}.`);
+  if (photo.bytes.length > SELF_SERVICE_LIMITS.photoBytes) return rejected(event.id, `The photo is too large. Take it again and ${again}.`);
+  const key = `${keyPrefix}-${crypto.randomUUID().slice(0, 8)}`;
+  try {
+    await bucket.put(key, photo.bytes, { httpMetadata: { contentType: photo.contentType } });
+  } catch (error) {
+    console.error("self_service_photo_failed", { message: error instanceof Error ? error.message : "unknown" });
+    return { id: event.id, outcome: "retry", message: "The photo could not be uploaded yet." };
+  }
+  return { key };
+}
+
+/**
  * Take and Borrow. Ineligible while the person is still here: refused. Anything that cannot
  * be applied safely (ineligible late, implausible clock, over the hourly volume) is held for
  * staff with all its evidence, including a borrow's photo. Otherwise it is applied.
@@ -273,17 +293,9 @@ async function applyOut(db: D1Database, bucket: R2Bucket, event: SelfServiceEven
   let photoKey: string | null = null;
   if (event.type === "BORROW") {
     // Saved with its photo in one step on the phone, so a missing photo is never a real borrow.
-    const photo = await readPhoto(photoPart).catch((error: unknown) => { if (error instanceof InputError) return error; throw error; });
-    if (photo instanceof InputError) return rejected(event.id, `${photo.message} Take the photo again and borrow once more.`);
-    if (photo.bytes.length > SELF_SERVICE_LIMITS.photoBytes) return rejected(event.id, "The photo is too large. Take it again and borrow once more.");
-    // Unique per attempt, so a failed attempt never deletes the photo of a concurrent successful one.
-    photoKey = `loans/${loanIdFor(event.id)}-${crypto.randomUUID().slice(0, 8)}`;
-    try {
-      await bucket.put(photoKey, photo.bytes, { httpMetadata: { contentType: photo.contentType } });
-    } catch (error) {
-      console.error("self_service_photo_failed", { message: error instanceof Error ? error.message : "unknown" });
-      return { id: event.id, outcome: "retry", message: "The photo could not be uploaded yet." };
-    }
+    const stored = await uploadPhoto(bucket, event, photoPart, "borrow once more", `loans/${loanIdFor(event.id)}`);
+    if ("outcome" in stored) return stored;
+    photoKey = stored.key;
   }
   let result: SyncResult;
   try {
@@ -339,30 +351,30 @@ function closedByThis(db: D1Database, eventId: string, loanId: string, at: strin
       AND return_movement_id IS (SELECT id FROM inventory_movements WHERE id = ?4))`).bind(eventId, loanId, at, movementId, ...extra);
 }
 
-async function applyReturn(db: D1Database, event: SelfServiceEvent, batch: Batch): Promise<SyncResult> {
+/**
+ * A return never changes stock by itself. It arrives with a photo of the item and waits for DOL
+ * staff (RETURN_CHECK); accepting it (resolveReview "match") closes the loan and puts the quantity
+ * back. One that cannot be tied to exactly one matching open loan is held for a person with the
+ * reason why. A loan already closed the same way at the desk needs nothing.
+ */
+async function applyReturn(db: D1Database, bucket: R2Bucket, event: SelfServiceEvent, batch: Batch, photoPart: unknown): Promise<SyncResult> {
   const borrow = event.loanEventId ? await linkedBorrow(db, event, batch.deviceId) : null;
   // Its borrow was refused, so there is nothing to return; the phone drops both.
   if (event.loanEventId && !borrow) return rejected(event.id, "The borrow this return belongs to was not recorded. Please see Logistics staff.");
-  if (event.clockIssue) return hold(db, event, batch, "CLOCK");
-  if (!borrow?.id) return hold(db, event, batch, "UNMATCHED_RETURN");
-  const loan = { ...borrow, id: borrow.id };
-  if (loan.quantity !== event.quantity) return hold(db, event, batch, "RETURN_CONFLICT", { loanId: loan.id });
-  if (loan.status !== "OUT") {
-    // Usually staff already closed it at the desk: the same outcome needs nothing more.
-    if (loan.status === event.outcome) return write(db, event, [eventRow(db, event, batch, { applied: 0, review: null, loanId: loan.id })], null);
-    return hold(db, event, batch, "RETURN_CONFLICT", { loanId: loan.id });
+  const loan = borrow?.id ? { ...borrow, id: borrow.id } : null;
+  if (loan && loan.status === event.outcome) return write(db, event, [eventRow(db, event, batch, { applied: 0, review: null, loanId: loan.id })], null);
+  const stored = await uploadPhoto(bucket, event, photoPart, "return it once more", `returns/${event.id}`);
+  if ("outcome" in stored) return stored;
+  const review: ReviewReason = event.clockIssue ? "CLOCK" : !loan ? "UNMATCHED_RETURN"
+    : loan.quantity !== event.quantity || loan.status !== "OUT" ? "RETURN_CONFLICT" : "RETURN_CHECK";
+  let result: SyncResult;
+  try {
+    result = await hold(db, event, batch, review, { photoKey: stored.key, loanId: loan?.id ?? null });
+  } catch (error) {
+    return failed(db, bucket, event, batch, error, stored.key);
   }
-  // A return is never earlier than its loan, whatever the clocks say.
-  const at = event.occurredAt < loan.createdAt ? loan.createdAt : event.occurredAt;
-  const { overlap } = await context(db, loan.itemId, at, batch.receivedAt);
-  const review: ReviewReason | null = overlap ? "COUNT_OVERLAP" : null;
-  const movementId = `MOV-${crypto.randomUUID()}`;
-  // Stored as a conflict first; the guarded update turns it into this return only if the close was ours.
-  return write(db, event, [
-    eventRow(db, event, batch, { applied: 0, review: "RETURN_CONFLICT", loanId: loan.id }),
-    ...closeStatements(db, { loanId: loan.id, itemId: loan.itemId, quantity: loan.quantity, outcome: event.outcome!, note: event.note, actorId: SELF_SERVICE_ACTOR, at, movementId, countAware: true }),
-    closedByThis(db, event.id, loan.id, at, movementId, "review = ?5, ", review)
-  ], review, (results) => results.at(-2)!.meta.changes ? review : "RETURN_CONFLICT");
+  if (result.duplicate || result.outcome === "rejected") await bucket.delete(stored.key);
+  return result;
 }
 
 /**
@@ -399,7 +411,7 @@ export async function syncEvents(db: D1Database, bucket: R2Bucket, batch: Batch,
     }
     const item = catalog.get(event.itemId);
     if (!item) { results.push(rejected(id, "This item is no longer in the catalog.")); continue; }
-    const result = await (event.type === "RETURN" ? applyReturn(db, event, batch) : applyOut(db, bucket, event, batch, item, photos(event.id)))
+    const result = await (event.type === "RETURN" ? applyReturn(db, bucket, event, batch, photos(event.id)) : applyOut(db, bucket, event, batch, item, photos(event.id)))
       .catch((error: unknown) => failed(db, bucket, event, batch, error));
     results.push(result);
     stopped = result.outcome === "retry";
@@ -443,7 +455,7 @@ export async function selfServiceReview(db: D1Database) {
     stockIssues(db, new Date(Date.now() - 30 * 24 * 60 * MINUTE).toISOString()),
     db.prepare(`${EVENT_COLUMNS} WHERE e.received_at >= ? ORDER BY e.occurred_at DESC LIMIT 200`).bind(since),
     db.prepare(`SELECT l.id, l.item_id AS itemId, l.quantity, l.purpose, l.borrower_name AS borrowerName, l.student_id AS studentId, l.created_at AS createdAt
-      FROM loans l WHERE l.status = 'OUT' AND l.item_id IN (SELECT item_id FROM self_service_events WHERE review IN ('UNMATCHED_RETURN', 'RETURN_CONFLICT', 'CLOCK') AND event_type = 'RETURN' AND resolved_at IS NULL)
+      FROM loans l WHERE l.status = 'OUT' AND l.item_id IN (SELECT item_id FROM self_service_events WHERE review IN ('RETURN_CHECK', 'UNMATCHED_RETURN', 'RETURN_CONFLICT', 'CLOCK') AND event_type = 'RETURN' AND resolved_at IS NULL)
       ORDER BY l.created_at`)
   ]);
   return { open: open.results, stockIssues: issues.results, recent: recent.results, candidates: candidates.results, enabledItems: (await selfServiceCatalog(db)).items.length };

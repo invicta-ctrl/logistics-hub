@@ -51,10 +51,17 @@ function facts(entry: Entry): Html {
 
 function actions(entry: Entry, candidates: Candidate[]): Html {
   const note = html`<label class="visually-hidden" for="note-${entry.id}">Note</label><input id="note-${entry.id}" name="note" maxlength="300" placeholder="Note (optional)" autocomplete="off" />`;
-  const photo = entry.type === "BORROW" && (entry.hasPhoto || entry.loanId)
+  const photo = (entry.type === "BORROW" || entry.type === "RETURN") && (entry.hasPhoto || (entry.type === "BORROW" && entry.loanId))
     ? html`<a class="text-link" href="${entry.applied && entry.loanId ? `/api/staff/loans/${entry.loanId}/photo` : `/api/staff/self-service/${entry.id}/photo`}" target="_blank" rel="noopener">Photo<span class="visually-hidden"> (opens in a new tab)</span></a>` : "";
   if (entry.applied) {
     return html`${note}<div class="review-card__buttons"><button type="button" class="button button--secondary button--sm" data-act="dismiss">Mark checked</button><a class="text-link" href="/staff/inventory?item=${entry.itemId}" data-route>Open item</a>${photo}</div>`;
+  }
+  if (entry.review === "RETURN_CHECK" && entry.loanId) {
+    const loan = candidates.find((candidate) => candidate.id === entry.loanId);
+    return html`${entry.hasPhoto ? html`<img class="review-card__photo" loading="lazy" src="/api/staff/self-service/${entry.id}/photo" alt="Photo sent with the return of ${entry.itemName}" />` : ""}
+      ${loan ? html`<p class="field__hint">Borrowed by ${loan.borrowerName}${loan.studentId ? ` (${loan.studentId})` : ""}, ${formatDateTime(loan.createdAt)}.</p>` : ""}
+      <input type="hidden" name="loanId" value="${entry.loanId}" />
+      ${note}<div class="review-card__buttons"><button type="button" class="button button--primary button--sm" data-act="match">Confirm returned${entry.returnOutcome === "RETURNED" ? " · update stock" : ""}</button><button type="button" class="button button--ghost button--sm" data-act="dismiss">Not returned</button>${photo}</div>`;
   }
   if (entry.type === "RETURN") {
     const loans = candidates.filter((loan) => loan.itemId === entry.itemId);
@@ -194,7 +201,7 @@ export async function selfServiceReview(): Promise<void> {
     button.disabled = true;
     try {
       await api(`/api/staff/self-service/${form.dataset.entry}/resolve`, { method: "POST", body: JSON.stringify({ action, note: values.get("note") || null, ...(action === "match" ? { loanId: values.get("loanId") } : {}) }) });
-      toast(action === "apply" ? "Applied." : action === "match" ? "Matched: the loan is closed." : "Marked as checked.");
+      toast(action === "apply" ? "Applied." : action === "match" ? "Confirmed: the loan is closed." : "Marked as checked.");
       await poll.refresh();
     } catch (error) {
       button.disabled = false;

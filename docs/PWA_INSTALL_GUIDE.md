@@ -19,24 +19,27 @@ Use **Chrome**. Samsung Internet also works. Firefox is not recommended, because
 ### Install
 
 1. Scan the QR code, or open Chrome and go to **logistics.hausc.org/self-service**.
-2. If the link opened inside another app (such as Messenger or a QR scanner), tap that app's menu and choose **Open in Chrome**.
-3. Find the card **Install Logistics Hub** and tap **Install**.
-4. Tap **Install** again to confirm.
-5. Wait a few seconds while it installs.
+2. If the QR code opened the page inside another app (Messenger, Facebook or a QR scanner), tap that app's menu (three dots) and choose **Open in Chrome**. Installing only works from Chrome itself.
+3. Find the card **Install Logistics Hub** and tap **Install**, then tap **Install** again to confirm. Wait a few seconds while it installs.
 
 ### If there is no Install button
 
-1. Tap the menu button (three dots) next to the address bar in Chrome.
-2. Tap **Install and create shortcut**. On some phones it says **Add to Home screen** or **Install app**.
-3. Choose **Install**. Do not choose **Create shortcut**.
+1. In Chrome, tap the menu button (three dots) next to the address bar.
+2. Tap **Install app**. On some phones it says **Install and create shortcut**, **Add to Home screen** or **Install app**.
+3. Choose **Install**. Do not choose **Create shortcut**: a plain shortcut does not work offline.
 
-In Samsung Internet, tap the install icon in the address bar. Or open the menu (three lines), tap **Add page to**, then **Home screen**.
+### Samsung Internet
+
+Tap the install icon in the address bar. Or open the menu (three lines), tap **Add page to**, then **Home screen**.
 
 ### Find it and finish setup
 
-1. Look for the **Logistics** icon on your home screen or in your apps list.
+1. Look for the **Logistics** icon on your home screen or in your app drawer.
 2. Open it while you still have internet.
-3. Wait until the home screen says **Ready for offline use**.
+3. When Android asks to allow the **camera**, tap **Allow**. Borrowing and returning both need a photo.
+4. Wait until the home screen says **Ready for offline use**.
+
+If you tapped **Don't allow** by mistake, open Chrome's menu, then **Settings**, **Site settings**, **Camera**, and allow **logistics.hausc.org**.
 
 ## iPhone / iPad
 
@@ -84,7 +87,7 @@ The sync status is in the top bar:
 - Records send by themselves when you are back online with the app open. To send right away, open **My activity** and tap **Sync now**.
 - On iPhone and iPad, records are only sent while the app is open. On Android they may send by themselves, but opening the app is the sure way.
 - **Clear synced history** only removes records that were already sent. Records still waiting stay.
-- Return things from **Return** on the same phone you borrowed them with; the return is then linked to your loan. Something borrowed at the desk or on another phone can still be returned here, and Logistics staff match it to the loan (the record says **Staff will check**).
+- Return things from **Return** on the same phone you borrowed them with; the return is then linked to your loan. Every return needs a **photo of the item**. Logistics staff look at the photo and confirm it is back; the stock only updates once they do (the record says **Staff will check**). Something borrowed at the desk or on another phone can still be returned here, and staff match it to the loan.
 
 **Important: while any record is waiting to be sent, do not:**
 

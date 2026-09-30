@@ -133,6 +133,7 @@ export const SELF_SERVICE_LIMITS = { quantity: 30, eventsPerSync: 5, photosPerSy
  * automatically. A held event changed nothing yet: staff apply (or match) it, or dismiss it.
  */
 export const REVIEW_REASONS = {
+  RETURN_CHECK: "A return with a photo, waiting for staff to confirm the item is back before stock is updated",
   UNMATCHED_RETURN: "A return that could not be matched to one open loan",
   RETURN_CONFLICT: "A return that does not fit its loan (already closed differently, or a different quantity)",
   NOT_ELIGIBLE: "Recorded offline for an item that is no longer self-service",

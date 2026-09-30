@@ -58,7 +58,7 @@ function phone() {
     sync: async (events: Array<Record<string, unknown>>, options: { photoFor?: string[]; photo?: Uint8Array<ArrayBuffer>; origin?: string; sentAt?: string } = {}) => {
       const form = new FormData();
       form.set("batch", JSON.stringify({ deviceId, sentAt: options.sentAt ?? new Date().toISOString(), events }));
-      const withPhoto = options.photoFor ?? events.filter((entry) => entry.type === "BORROW").map((entry) => entry.id as string);
+      const withPhoto = options.photoFor ?? events.filter((entry) => entry.type === "BORROW" || entry.type === "RETURN").map((entry) => entry.id as string);
       for (const id of withPhoto) form.set(`photo:${id}`, new File([options.photo ?? JPEG], "photo.jpg", { type: "image/jpeg" }));
       // Serialised like a browser would, so the Worker sees a real Content-Length.
       const request = new Request(`${origin}/api/self-service/sync`, { method: "POST", headers: { origin: options.origin ?? origin }, body: form });
@@ -227,24 +227,47 @@ describe("Borrow and Return", () => {
     ]);
   });
 
-  it("returns a loan from the same phone, in business order even when another phone syncs first", async () => {
+  it("holds a return with its photo until staff confirm it, and only then updates stock", async () => {
     const scissors = await loanable("Scissors", 1);
     const [a, b] = [phone(), phone()];
     const aBorrow = a.borrow(scissors, 60);
     const aReturn = a.giveBack(scissors, aBorrow.id, 30);
     const bBorrow = b.borrow(scissors, 25);
     const bReturn = b.giveBack(scissors, bBorrow.id, 5);
-    expect((await results(await b.sync([bBorrow, bReturn]))).map((result) => result.outcome)).toEqual(["accepted", "accepted"]);
-    expect((await results(await a.sync([aBorrow, aReturn]))).map((result) => result.outcome)).toEqual(["accepted", "accepted"]);
-    expect(onHand(scissors)).toBe(1);
-    expect(loan(aBorrow.id)).toMatchObject({ status: "RETURNED", closed_by: "SELF_SERVICE" });
-    expect(loan(bBorrow.id)).toMatchObject({ status: "RETURNED" });
-    const detail = await (await staff(`/api/staff/items/${scissors}`)).json() as { movements: Array<{ movementType: string; afterQuantity: number; borrower: string; actor: string }> };
-    // Newest first, by when it happened (not by when it synced), with before/after rebuilt in that order.
-    expect(detail.movements.slice(0, 4).map((movement) => [movement.movementType, movement.afterQuantity])).toEqual([["LOAN_RETURN", 1], ["LOAN_OUT", 0], ["LOAN_RETURN", 1], ["LOAN_OUT", 0]]);
-    expect(detail.movements[0]).toMatchObject({ borrower: "Juan Dela Cruz", actor: "Self-service" });
-    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM self_service_events WHERE review IS NOT NULL").get()).toEqual({ n: 0 });
-    expect((await review()).stockIssues).toEqual([]);
+    expect((await results(await b.sync([bBorrow, bReturn]))).map((result) => result.outcome)).toEqual(["accepted", "review"]);
+    expect((await results(await a.sync([aBorrow, aReturn]))).map((result) => result.outcome)).toEqual(["accepted", "review"]);
+    // Nothing came back yet: both loans are out, and no stock moved for either return.
+    expect([loan(aBorrow.id)!.status, loan(bBorrow.id)!.status, onHand(scissors)]).toEqual(["OUT", "OUT", -1]);
+    expect(stored(aReturn.id)).toMatchObject({ applied: 0, review: "RETURN_CHECK", loan_id: `LN-SS-${aBorrow.id}` });
+    expect(String(stored(aReturn.id)!.photo_key)).toMatch(/^returns\//);
+    const queue = await review();
+    expect(queue.open.map((entry) => entry.review)).toEqual(["RETURN_CHECK", "RETURN_CHECK"]);
+    // Staff confirm the photos: each loan closes and the quantity goes back on the shelf.
+    for (const [returned, borrow] of [[aReturn, aBorrow], [bReturn, bBorrow]] as const) {
+      expect((await resolve(returned.id, { action: "match", loanId: `LN-SS-${borrow.id}` })).status).toBe(200);
+    }
+    expect([loan(aBorrow.id)!.status, loan(bBorrow.id)!.status, onHand(scissors)]).toEqual(["RETURNED", "RETURNED", 1]);
+    expect(loan(aBorrow.id)).toMatchObject({ closed_by: "SELF_SERVICE" });
+    expect(stored(aReturn.id)).toMatchObject({ applied: 1, resolved_by: expect.any(String) });
+    expect(stored(aReturn.id)!.photo_key).toBeTruthy();
+    expect((await review()).open).toEqual([]);
+  });
+
+  it("refuses a return without a usable photo, and leaves the loan out when staff say it was not returned", async () => {
+    const scissors = await loanable("Scissors", 2);
+    const p = phone();
+    const borrow = p.borrow(scissors, 20);
+    const noPhoto = p.giveBack(scissors, borrow.id, 5);
+    await p.sync([borrow]);
+    const missing = await results(await p.sync([noPhoto], { photoFor: [] }));
+    expect(missing[0]).toMatchObject({ outcome: "rejected" });
+    expect(missing[0]!.message).toContain("photo");
+    expect(stored(noPhoto.id)).toBeUndefined();
+    const withPhoto = p.giveBack(scissors, borrow.id, 4);
+    expect((await results(await p.sync([withPhoto])))[0]!.outcome).toBe("review");
+    expect((await resolve(withPhoto.id, { action: "dismiss", note: "The photo shows a different item." })).status).toBe(200);
+    expect([loan(borrow.id)!.status, onHand(scissors)]).toEqual(["OUT", 1]);
+    expect(stored(withPhoto.id)).toMatchObject({ applied: 0, resolution_note: "The photo shows a different item." });
   });
 
   it("allows overlapping loans that fit, and flags only an impossible overlap", async () => {
@@ -270,7 +293,8 @@ describe("Borrow and Return", () => {
     const noNote = a.giveBack(scissors, one.id, 10, { outcome: "DAMAGED" });
     const damaged = a.giveBack(scissors, one.id, 9, { outcome: "DAMAGED", note: "Blade bent" });
     const lost = a.giveBack(scissors, two.id, 8, { outcome: "LOST", note: "Left at the gym" });
-    expect((await results(await a.sync([noNote, damaged, lost]))).map((result) => [result.outcome, result.message])).toEqual([["rejected", "The damage is required."], ["accepted", undefined], ["accepted", undefined]]);
+    expect((await results(await a.sync([noNote, damaged, lost]))).map((result) => [result.outcome, result.outcome === "rejected" ? result.message : undefined])).toEqual([["rejected", "The damage is required."], ["review", undefined], ["review", undefined]]);
+    for (const [returned, borrow] of [[damaged, one], [lost, two]] as const) expect((await resolve(returned.id, { action: "match", loanId: `LN-SS-${borrow.id}` })).status).toBe(200);
     expect([loan(one.id)!.status, loan(two.id)!.status, onHand(scissors)]).toEqual(["DAMAGED", "LOST", 0]);
   });
 
@@ -334,8 +358,8 @@ describe("Borrow and Return", () => {
     expect((await results(await a.sync([borrow, giveBack]))).map((result) => result.outcome)).toEqual(["retry", "retry"]);
     expect([stored(borrow.id), stored(giveBack.id), loan(borrow.id)]).toEqual([undefined, undefined, undefined]);
     env.EVIDENCE.put = put;
-    expect((await results(await a.sync([borrow, giveBack]))).map((result) => result.outcome)).toEqual(["accepted", "accepted"]);
-    expect(photos.size).toBe(1);
+    expect((await results(await a.sync([borrow, giveBack]))).map((result) => result.outcome)).toEqual(["accepted", "review"]);
+    expect(photos.size).toBe(2);
   });
 
   it("refuses a borrow without a valid photo, keeps a held borrow's photo for staff, and deletes it when dismissed", async () => {
@@ -384,7 +408,8 @@ describe("business time and counts", () => {
     const returned = b.giveBack(scissors, borrowed.id, 40);
     await count(scissors, 3);
     expect((await results(await a.sync([early])))[0]!.outcome).toBe("accepted");
-    expect((await results(await b.sync([returned])))[0]!.outcome).toBe("accepted");
+    expect((await results(await b.sync([returned])))[0]!.outcome).toBe("review");
+    expect((await resolve(returned.id, { action: "match", loanId: `LN-SS-${borrowed.id}` })).status).toBe(200);
     expect([loan(early.id)!.status, loan(borrowed.id)!.status, onHand(scissors)]).toEqual(["OUT", "RETURNED", 3]);
     const status = (loanId: string, type: string) => (sqlite.prepare("SELECT status FROM inventory_movements WHERE related_entity_id = ? AND movement_type = ?").get(`LN-SS-${loanId}`, type) as { status: string }).status;
     expect([status(early.id, "LOAN_OUT"), status(borrowed.id, "LOAN_OUT"), status(borrowed.id, "LOAN_RETURN")]).toEqual(["SUPERSEDED", "POSTED", "SUPERSEDED"]);
@@ -524,9 +549,9 @@ describe("self-service security", () => {
 
   it("limits how many records one network can leave for staff in a day", async () => {
     const scissors = await loanable("Scissors", 5);
-    for (let round = 0; round < 12; round += 1) {
+    for (let round = 0; round < 15; round += 1) {
       const a = phone();
-      expect((await results(await a.sync(Array.from({ length: 5 }, () => a.giveBack(scissors, null))))).every((result) => result.outcome === "review")).toBe(true);
+      expect((await results(await a.sync(Array.from({ length: 4 }, () => a.giveBack(scissors, null))))).every((result) => result.outcome === "review")).toBe(true);
     }
     const a = phone();
     expect((await results(await a.sync([a.giveBack(scissors, null)])))[0]).toMatchObject({ outcome: "rejected", message: "Too many records from this network need a staff check today. Please see Logistics staff." });

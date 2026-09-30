@@ -63,7 +63,7 @@ The wire part (sent unchanged on every retry):
   occurredAt: ISO (phone clock), catalogRevision,
   person: { name, studentId? },
   purpose?, reason?, returnBy?            // BORROW (Individual: name + student ID; USC: name + reason)
-  loanEventId?, outcome?, note? }         // RETURN (note required unless the item came back in good condition)
+  loanEventId?, outcome?, note? }         // RETURN (note required unless good; a photo of the item is always required)
 ```
 
 plus local bookkeeping: `state` (`pending | synced | review | rejected`), `message`, `attempts`, `nextAttemptAt`, `appliedRevision`, `hasPhoto`, `itemName`, `unit`.
@@ -81,7 +81,7 @@ One row per event id: who/what/when, `device_time`, `sent_at`, `occurred_at` (bu
 | --- | --- |
 | TAKE | an `inventory_movements` STOCK_OUT, reason CONSUMED, `related_entity_type = 'SELF_SERVICE'`, key `ss:<id>` |
 | BORROW | a loan `LN-SS-<id>` plus its LOAN_OUT movement (via `lendStatements`), photo in R2 |
-| RETURN | the loan closed via `closeStatements` (LOAN_RETURN only for a good return) |
+| RETURN | nothing yet: it is held with its photo (`RETURN_CHECK`). Staff confirming it (`resolveReview` `match`) closes the loan via `closeStatements` (LOAN_RETURN only for a good return), which is what puts stock back |
 
 Records made by phones carry the actor id `SELF_SERVICE`; staff screens show it as "Self-service".
 
@@ -122,14 +122,14 @@ Self-service events are **physical facts**. The Worker preserves every valid eve
 3. **Volume.** More than 30 self-service units of one item in an hour → further takes and borrows are **held** (`VOLUME`). This bounds what an abusive client can do to the records; staff apply or dismiss. The check reads before it writes, so two requests at the same instant can both pass it; the request limits (section 11) bound that.
 4. **Counts are observations.** A physical count recorded more than 5 minutes after an event already saw its effect, so the event's movement is stored with status `SUPERSEDED` (kept as evidence, excluded from on-hand). This is decided **inside the INSERT** (`countAwareStatus()`), so a count saved a moment earlier is always seen. Within 5 minutes of a count → posted and flagged `COUNT_OVERLAP`.
 5. **Negative stock is derived, not stored.** The staff view rebuilds each touched item's balance in business order from its last count (including the count's own balance, which a late take just before it can push below zero); if it went below zero, the item appears under **Count needed** until a count or a late return settles it. (A per-event flag would give false alarms: a late return can make the history valid again.)
-6. **Linked return** (`loanEventId`): must name a borrow **this same phone** made, of the same item; otherwise it is refused (a return whose borrow was itself refused goes with it). Borrow still held → the return waits for staff too. Loan open → closed at business time (never earlier than the loan). Already closed the same way (e.g. at the desk) → accepted, nothing to do. Closed differently, or a different quantity → held (`RETURN_CONFLICT`). The event is stored as a conflict and a guarded update in the same batch turns it into this return only if *this* request closed the loan (by self-service, at that time, with its own movement), so a close a moment earlier is never mistaken for it.
+6. **Linked return** (`loanEventId`): must name a borrow **this same phone** made, of the same item; otherwise it is refused (a return whose borrow was itself refused goes with it). **Every return needs a photo of the item** (refused without one) and **never changes stock by itself**: it is held as `RETURN_CHECK` with its photo, and the loan stays out until DOL staff confirm it on `/staff/self-service` (**Confirm returned** closes the loan and returns a good item to stock; **Not returned** leaves the loan out and deletes the photo). A borrow still held, a different quantity or an already closed loan is held for staff with its own reason (`RETURN_CONFLICT` etc.); a loan the desk already closed the same way needs nothing. Return holds are not counted against the per-network daily limit, because each is tied to a borrow this phone made.
 7. **Unlinked return** (borrowed at the desk, on another phone, or the phone lost its data): **always held** (`UNMATCHED_RETURN`) for staff to match, with one reply ("Return recorded. Logistics will match it to the loan."). There is no matching by name or student ID, so nobody can close someone else's loan or learn whether a loan exists.
 8. **Photo.** A borrow without a valid photo is rejected (the phone saves them together, so a missing photo is never a real borrow). A held borrow keeps its photo in R2 so staff can still apply it; dismissing deletes it.
 
 ### Worked examples (all in `tests/self-service.test.ts`)
 
 - **Consumable**: 20 water; phones −2, −1, −3 in all six arrival orders → 14, three movements.
-- **Two phones, one scissors**: A borrows 10:00 / returns 10:30; B borrows 10:35 / returns 11:00; B syncs first → both loans closed, balance 1, history in business order, no alarm.
+- **Two phones, one scissors**: A borrows 10:00 / returns 10:30; B borrows 10:35 / returns 11:00; B syncs first → both borrows apply, both returns wait with their photos; each staff confirmation closes its loan, and once both are confirmed the balance is 1, history in business order, no alarm.
 - **Overlapping loans that fit** (5 scissors, two borrowers) → no alarm. **Impossible overlap** (1 unit, two loans) → **Count needed**.
 - **Late take before a count** → `SUPERSEDED`, on-hand unchanged.
 
@@ -138,6 +138,7 @@ Self-service events are **physical facts**. The Worker preserves every valid eve
 - **Count needed**: open the item and count (clears itself).
 - **Held take or borrow**: **Apply** (exactly as if it had been eligible, at its business time) or **Dismiss**. A borrow with no photo cannot be applied.
 - **Return to match**: pick the open loan → **Match and close loan**, or **Dismiss**. With no open loan of that item, only **Dismiss** is offered.
+- **Return to check** (`RETURN_CHECK`): the return's photo, who borrowed it and **Confirm returned · update stock** or **Not returned**.
 - **Recorded · check** (`COUNT_OVERLAP`): **Mark checked** after a recount.
 
 A resolution is final: a trigger (`self_service_events_resolved_final`) refuses any change to a resolved record, so when two staff act on one record at once the second batch rolls back whole and gets "Someone else resolved this a moment ago". A match whose loan was closed at the desk in between records nothing and says so. Dismiss deletes a held borrow's photo only after it actually resolved the record.

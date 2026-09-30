@@ -171,7 +171,10 @@ test.describe.serial("offline self-service", () => {
     await page.getByRole("link", { name: /^Return/ }).click();
     await page.getByRole("link", { name: /Cotton - roll/ }).first().click();
     await page.getByRole("button", { name: "Return", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Returned" })).toBeVisible();
+    await expect(page.getByText("Take a photo of the item you are returning.")).toBeVisible();
+    await attachPhoto(page);
+    await page.getByRole("button", { name: "Return", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Return sent" })).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
     expect((await localState(page)).states).toEqual(["pending", "pending", "pending"]);
     expect((await item(WATER)).onHand).toBe(waterBefore);
@@ -183,12 +186,22 @@ test.describe.serial("offline self-service", () => {
 
     // Cache deletion leaves saved actions intact; fresh offline navigation needs the cached shell.
     await page.evaluate(async () => { for (const key of await caches.keys()) await caches.delete(key); });
-    expect(await localState(page)).toEqual({ states: ["pending", "pending", "pending"], photos: 1 });
+    expect(await localState(page)).toEqual({ states: ["pending", "pending", "pending"], photos: 2 });
 
     await context.setOffline(false);
-    await expect(page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });
-    expect(await localState(page)).toEqual({ states: ["synced", "synced", "synced"], photos: 0 });
+    // The take and the borrow apply; the return (with its photo) waits for DOL staff.
+    await expect(page.getByRole("link", { name: /1 needs review/ })).toBeVisible({ timeout: 20_000 });
+    expect(await localState(page)).toEqual({ states: ["synced", "synced", "review"], photos: 0 });
     expect((await item(WATER)).onHand).toBe(waterBefore - 2);
+    expect((await item(COTTON)).onHand).toBe(cottonBefore - 1);
+    const waiting = await (await staff.request.get("/api/staff/loans")).json() as { open: Array<{ itemId: string }> };
+    expect(waiting.open.filter((entry) => entry.itemId === COTTON)).toHaveLength(1);
+
+    // Staff look at the photo and confirm it is back: only then does the loan close and stock return.
+    await staff.goto("/staff/self-service");
+    await expect(staff.getByRole("img", { name: /Photo sent with the return of Cotton - roll/ })).toBeVisible();
+    await staff.getByRole("button", { name: /Confirm returned/ }).click();
+    await expect(staff.getByText("Confirmed: the loan is closed.")).toBeVisible();
     expect((await item(COTTON)).onHand).toBe(cottonBefore);
 
     const loans = await (await staff.request.get("/api/staff/loans")).json() as { closed: Array<{ id: string; itemId: string; status: string; createdBy: string; studentId: string }> };
@@ -202,8 +215,8 @@ test.describe.serial("offline self-service", () => {
     // Sending everything again (the answers were lost) changes nothing: the server is idempotent.
     await forgetAnswers(page);
     await page.reload();
-    await expect(page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });
-    expect((await localState(page)).states).toEqual(["synced", "synced", "synced"]);
+    await expect(page.getByRole("link", { name: /1 needs review/ })).toBeVisible({ timeout: 20_000 });
+    expect((await localState(page)).states).toEqual(["synced", "synced", "review"]);
     expect((await item(WATER)).onHand).toBe(waterBefore - 2);
     expect((await item(COTTON)).onHand).toBe(cottonBefore);
     const after = await (await staff.request.get("/api/staff/loans")).json() as { open: Array<{ itemId: string }>; closed: Array<{ itemId: string; createdBy: string }> };
