@@ -45,12 +45,13 @@ function page(content: Html, current: "" | "home" | "lending"): void {
 /** Availability reads at a glance: plenty, the last one, or all out. */
 function availability(item: LendingItem): Html {
   if (item.available <= 0) return html`<p class="avail avail--out"><span class="avail__label">All out right now</span></p>`;
-  const low = item.available === 1;
-  return html`<p class="avail ${low ? "avail--low" : ""}"><span class="avail__count" data-count="${item.id}">${item.available}</span> <span class="avail__label">${units(item.available, item.unit)}<span class="avail__word">${low ? " · last one" : " available"}</span></span></p>`;
+  if (item.available === 1) return html`<p class="avail avail--low"><span class="avail__count" data-count="${item.id}">1</span> <span class="avail__label">left</span></p>`;
+  return html`<p class="avail"><span class="avail__count" data-count="${item.id}">${item.available}</span> <span class="avail__label">${units(item.available, item.unit)}<span class="avail__word"> available</span></span></p>`;
 }
 
+/** Only the exceptions: most items are open to students and USC staff, and are returned. */
 function terms(item: LendingItem): string {
-  return item.itemType === "Consumable" ? `${label(item.audience)} · Consumable, taken and not returned` : label(item.audience);
+  return [item.audience === "USC_STAFF_ONLY" ? label(item.audience) : "", item.itemType === "Consumable" ? "Consumable, taken and not returned" : ""].filter(Boolean).join(" · ");
 }
 
 const skeletonRows = (count: number) => html`<ul class="catalogue" aria-hidden="true">${Array.from({ length: count }, () => html`<li class="catalogue__row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></li>`)}</ul>`;
@@ -101,7 +102,7 @@ export function lending(): void {
         <div class="page-intro__row">
           <div>
             <h1>Lending Hub</h1>
-            <p class="page-intro__lede">Equipment the Department of Logistics lends to students and USC staff. Counts show what is on the shelf right now.</p>
+            <p class="page-intro__lede">What you can borrow or take, and how many are in the office now.</p>
           </div>
           <p class="live-status" id="live-status">Connecting…</p>
         </div>
@@ -120,16 +121,9 @@ export function lending(): void {
       </div>
     </div>
     <div class="container lending-layout">
-      <div>
-        <p class="result-count" id="lending-count" aria-live="polite"></p>
-        <div id="lending-results" aria-busy="true">${skeletonRows(6)}</div>
-      </div>
-      <aside class="aside-note" aria-labelledby="borrow-title">
-        <h2 id="borrow-title">How to borrow</h2>
-        <p>Loans are arranged in person with Department of Logistics staff, who record each loan and its return date with you. Online requests are not available yet.</p>
-        <p>Consumables are taken, not lent: once taken they are not returned.</p>
-        <p>Only items reviewed by staff are listed here.</p>
-      </aside>
+      <p class="result-count" id="lending-count" aria-live="polite"></p>
+      <div id="lending-results" aria-busy="true">${skeletonRows(6)}</div>
+      <p class="lending-note">Borrow in person at the Logistics office. Staff record the loan and return date.</p>
     </div>
   </main>`, "lending");
 
@@ -150,7 +144,7 @@ export function lending(): void {
   const changed = new Set<string>();
 
   const row = (item: LendingItem) => html`<li class="catalogue__row ${changed.has(item.id) ? "is-changed" : ""}" data-key="${item.id}">
-    <div class="catalogue__main"><h3 class="catalogue__name">${item.name}</h3><p class="catalogue__meta">${terms(item)}</p></div>${availability(item)}</li>`;
+    <div class="catalogue__main"><h3 class="catalogue__name">${item.name}</h3>${terms(item) ? html`<p class="catalogue__meta">${terms(item)}</p>` : ""}</div>${availability(item)}</li>`;
 
   const render = (reason: "filter" | "data") => {
     if (!catalog) return;

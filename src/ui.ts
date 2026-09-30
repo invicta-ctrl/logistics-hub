@@ -340,17 +340,19 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
   let settle = 0;
   let stopped = false;
   let loaded = false;
+  // The status names when this view last received changed data, not when it last asked.
+  let changedAt = "";
   const setStatus = (state: "live" | "offline" | "updated") => {
     const element = options.status?.();
     if (!element) return;
     if (state === "live" && element.dataset.state === "updated") return;
     if (state === "offline") window.clearTimeout(settle);
     element.dataset.state = state;
-    element.textContent = state === "offline" ? "Offline, retrying" : state === "updated" ? "Updated just now" : "Live updates";
-    element.title = `Last checked ${new Date().toLocaleTimeString()}`;
+    element.textContent = state === "offline" ? "Offline, retrying" : `Updated ${changedAt}`;
+    element.title = `Last checked ${formatTime(new Date().toISOString())}`;
     if (state === "updated") {
       window.clearTimeout(settle);
-      settle = window.setTimeout(() => { element.dataset.state = "live"; element.textContent = "Live updates"; }, 4000);
+      settle = window.setTimeout(() => { element.dataset.state = "live"; }, 4000);
     }
   };
   const tick = async () => {
@@ -360,6 +362,7 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
       const response = await fetch(url, { credentials: "same-origin", headers: etag ? { "if-none-match": etag } : {} });
       if (response.status === 200) {
         etag = response.headers.get("etag") ?? "";
+        changedAt = formatTime(new Date().toISOString());
         const data = await response.json() as T;
         if (!stopped) options.onData(data);
         if (loaded) setStatus("updated");

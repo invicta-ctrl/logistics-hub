@@ -339,9 +339,8 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .chip__count { min-width: 1.375rem; padding: .0625rem var(--space-2); border-radius: 999px; background: var(--subtle); color: var(--text-3); font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-align: center; transition: inherit; }
 .chip[aria-pressed="true"] .chip__count { background: var(--brand-hover); color: var(--on-brand); }
 .result-count { margin-bottom: var(--space-4); color: var(--text-3); font-size: var(--text-sm); }
-.lending-layout { display: grid; grid-template-columns: minmax(0, 1fr) 16rem; align-items: start; gap: var(--space-12); padding-block: var(--space-8) var(--space-16); }
-.aside-note { position: sticky; top: 9rem; display: grid; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--text-2); font-size: var(--text-sm); }
-.aside-note h2 { color: var(--text); font-family: var(--serif); font-size: var(--text-lg); font-weight: 500; }
+.lending-layout { padding-block: var(--space-8) var(--space-16); }
+.lending-note { margin-top: var(--space-8); color: var(--text-2); font-size: var(--text-base); }
 
 /* Catalogue list */
 .catalogue-group + .catalogue-group { margin-top: var(--space-10); }
@@ -363,7 +362,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .avail__count { min-width: 1ch; font-family: var(--serif); font-size: var(--text-lg); font-variant-numeric: tabular-nums; line-height: 1; }
 .avail__label { color: var(--text-2); font-size: var(--text-sm); }
 .avail--low::before { background: var(--warn-dot); }
-.avail--low .avail__word { color: var(--warn); font-weight: 500; }
+.avail--low .avail__label { color: var(--warn); font-weight: 500; }
 .avail--out::before { background: var(--bad-dot); }
 .avail--out .avail__label { color: var(--bad); font-weight: 500; }
 
@@ -755,8 +754,6 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 @media (max-width: 960px) {
   .stock-layout { grid-template-columns: minmax(0, 1fr); }
   .record-home { display: none; }
-  .lending-layout { grid-template-columns: minmax(0, 1fr); gap: var(--space-8); }
-  .aside-note { position: static; }
   .steps { grid-template-columns: 1fr; gap: var(--space-8); }
   .app-bar__link { display: none; }
   .panels { grid-template-columns: 1fr; }
@@ -851,7 +848,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 
 /* ---------- Print: the Lending Hub list prints as a clean sheet ---------- */
 @media print {
-  .site-header, .filterbar, .site-footer, .aside-note, .hero__actions, .skip-link, .toasts { display: none !important; }
+  .site-header, .filterbar, .site-footer, .hero__actions, .skip-link, .toasts { display: none !important; }
   body, .page-intro, .section--alt { background: var(--surface); color: var(--text); }
   .lending-layout { display: block; padding: 0; }
   .catalogue__row { break-inside: avoid; }

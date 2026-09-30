@@ -29,8 +29,9 @@ The landing page (`/`):
 The Lending Hub (`/lending`):
 - the public, read-only catalogue, grouped by category, showing every listed item, Loanable or Consumable (a Consumable is marked "taken and not returned");
 - search, an Available-now switch, category chips and sorting;
-- live availability that refreshes every 15 s;
-- filters kept in the URL.
+- rows name only the exceptions ("USC staff only", a Consumable) and read "1 left" for the last one;
+- live availability that refreshes every 15 s, with "Updated <time>" naming the last change (every live view shares this status);
+- filters kept in the URL, and one line under the list saying loans are made in person.
 
 Staff sign-in (`/staff`) uses the original legacy Staff Login campus photograph behind a new, secure sign-in form. A signed-in visit goes straight to the workspace.
 

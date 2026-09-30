@@ -36,8 +36,9 @@ test("Lending Hub groups by category, filters, and keeps filters in the URL", as
   await expect(page.getByRole("link", { name: "Department of Logistics home" })).toHaveAttribute("href", "/");
   await expect(page.getByRole("heading", { name: /Furniture/, level: 2 })).toBeVisible();
   await expect(page.getByText("3 pieces available")).toBeVisible();
-  // Loan period and maximum per loan are no longer item settings; the row states only who may borrow.
-  await expect(page.locator(".catalogue__row", { hasText: "Folding Table" }).locator(".catalogue__meta")).toHaveText("Students & USC staff");
+  // Rows name only the exception: who may not borrow, never loan periods or the usual audience.
+  await expect(page.locator(".catalogue__row", { hasText: "Folding Table" }).locator(".catalogue__meta")).toHaveCount(0);
+  await expect(page.locator(".catalogue__row", { hasText: "Cork Board" }).locator(".catalogue__meta")).toHaveText("USC staff only");
   await expect(page.getByText(/per loan|day loan/)).toHaveCount(0);
   await expect(page.getByText("All out right now")).toBeVisible();
   await page.getByLabel("Available now").check();
