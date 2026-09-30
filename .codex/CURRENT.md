@@ -17,4 +17,5 @@ CURRENT_TASK: .codex/CURRENT_TASK.md
 PART_04_BRIEF: .codex/PART_04_BRIEF.md
 PART_04_5_BRIEF: .codex/PART_04_5_BRIEF.md
 PART_04_6_BRIEF: .codex/PART_04_6_BRIEF.md
+PART_05_PLAN: docs/specs/proposed/2026-09-30-part-05-activity-accountability-plan.md (PROPOSED; Part 5 core, visual-cleanup record, Open-Unit Tracking A12)
 NEXT_EXACT_ACTION: Owner runs the signed-in phone acceptance in SESSION_HANDOFF and looks over the Part 4.6 visuals and the Part 4.7–4.9 theme switch and photos (decisions in PART_04_6_BRIEF). Part 5 and Open-Unit Tracking (A12) stay PROPOSED until Earl accepts them. Do not reapply 0015.
