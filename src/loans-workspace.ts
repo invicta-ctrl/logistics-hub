@@ -57,13 +57,13 @@ export async function loansWorkspace(): Promise<void> {
     // Overdue first, then the longest out.
     const open = overview.open.filter(matches).sort((a, b) => Number(isOverdue(b, overview.today)) - Number(isOverdue(a, overview.today)) || a.createdAt.localeCompare(b.createdAt));
     if (!open.length) return search.value.trim() ? emptyState("No loans match", "Try another name, student ID or item.") : emptyState("Nothing is out on loan", "Lend from an item's Loan tab in Inventory, or with Lend an item above.");
-    return html`<ul class="loan-list loan-list--page">${open.map((loan) => loanRow(loan, true))}</ul>`;
+    return html`<ul class="loan-list">${open.map((loan) => loanRow(loan, true))}</ul>`;
   }
 
   function historyMarkup(overview: Overview): Html {
     const closed = overview.closed.filter(matches);
     if (!closed.length) return search.value.trim() ? emptyState("No returns match", "Try another name, student ID or item.") : emptyState("No returns yet", "Returned, damaged and lost loans appear here.");
-    return html`<ul class="loan-list loan-list--page loan-list--closed">${closed.map((loan) => loanRow(loan, true))}</ul>
+    return html`<ul class="loan-list loan-list--closed">${closed.map((loan) => loanRow(loan, true))}</ul>
       ${overview.closed.length === 100 ? html`<p class="hint-line">${icon("info")}<span>Showing the 100 most recent returns.</span></p>` : ""}`;
   }
 

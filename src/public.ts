@@ -15,7 +15,7 @@ function page(content: Html, current: "" | "home" | "lending"): void {
         <a class="site-header__brand" href="/" data-route aria-label="Department of Logistics home">${LOCKUP}</a>
         <nav class="site-nav" aria-label="Main">
           <a class="site-nav__link" href="/lending" data-route ${current === "lending" ? html`aria-current="page"` : ""}>Lending Hub</a>
-          <a class="button button--outline-light" href="/staff" data-route>Staff sign in</a>
+          <a class="site-nav__link" href="/staff" data-route>Staff sign in</a>
         </nav>
       </div>
     </header>
@@ -44,7 +44,7 @@ function page(content: Html, current: "" | "home" | "lending"): void {
 
 /** Availability reads at a glance: plenty, the last one, or all out. */
 function availability(item: LendingItem): Html {
-  if (item.available <= 0) return html`<p class="avail avail--out"><span class="avail__label">All out right now</span></p>`;
+  if (item.available <= 0) return html`<p class="avail avail--out"><span class="avail__label">All out</span></p>`;
   if (item.available === 1) return html`<p class="avail avail--low"><span class="avail__count" data-count="${item.id}">1</span> <span class="avail__label">left</span></p>`;
   return html`<p class="avail"><span class="avail__count" data-count="${item.id}">${item.available}</span> <span class="avail__label">${units(item.available, item.unit)}<span class="avail__word"> available</span></span></p>`;
 }
@@ -73,7 +73,7 @@ export function landing(): void {
         <h1 id="hero-title">Borrow equipment from the USC Department of Logistics</h1>
         <p class="hero__lede">Check what is on the shelf, then borrow it in person at the Logistics office.</p>
         <div class="hero__actions">
-          <a class="button button--gold button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
+          <a class="button button--on-dark button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
           <a class="text-link text-link--light hero__secondary" href="#steps-title">How borrowing works</a>
         </div>
       </div>

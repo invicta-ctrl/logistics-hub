@@ -40,7 +40,7 @@ test("Lending Hub groups by category, filters, and keeps filters in the URL", as
   await expect(page.locator(".catalogue__row", { hasText: "Folding Table" }).locator(".catalogue__meta")).toHaveCount(0);
   await expect(page.locator(".catalogue__row", { hasText: "Cork Board" }).locator(".catalogue__meta")).toHaveText("USC staff only");
   await expect(page.getByText(/per loan|day loan/)).toHaveCount(0);
-  await expect(page.getByText("All out right now")).toBeVisible();
+  await expect(page.getByText("All out", { exact: true })).toBeVisible();
   await page.getByLabel("Available now").check();
   await expect(page.getByText("Cork Board")).toHaveCount(0);
   await expect(page).toHaveURL(/available=1/);

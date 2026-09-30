@@ -136,7 +136,7 @@
 .is-self-service .button--primary { border-color: rgb(255 236 190 / 50%); background: linear-gradient(180deg, #f8dea0 0%, #e3b457 100%); color: #2a0a0c; font-weight: 600; box-shadow: inset 0 1px 0 rgb(255 255 255 / 45%), 0 10px 26px rgb(227 180 87 / 28%); }
 .is-self-service .button--secondary { border-color: var(--line-strong); background: rgb(255 238 220 / 7%); color: var(--text); box-shadow: none; }
 .is-self-service .button--ghost { color: var(--text-2); }
-.is-self-service .button--gold { color: #2a0a0c; }
+.is-self-service .button--on-dark { color: #2a0a0c; }
 /* The buttons above set their own shadows, so focus is drawn as an outline that nothing overrides. */
 .is-self-service .button:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 3px; }
 

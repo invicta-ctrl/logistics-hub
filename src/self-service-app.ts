@@ -112,7 +112,7 @@ function refreshRegions(): void {
   const updateRegion = region("update");
   if (updateRegion) {
     updateRegion.hidden = !hasUpdate();
-    mount(updateRegion, hasUpdate() ? html`<p>${icon("refresh")}A new version is ready.</p><button type="button" class="button button--gold button--sm" data-apply-update>Update</button>` : html``);
+    mount(updateRegion, hasUpdate() ? html`<p>${icon("refresh")}A new version is ready.</p><button type="button" class="button button--on-dark button--sm" data-apply-update>Update</button>` : html``);
   }
   const { screen } = params();
   const tiles = region("tiles");
