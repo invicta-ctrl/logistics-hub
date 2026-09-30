@@ -1,7 +1,7 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-STATUS: PART_04_PRODUCTION_ACCEPTANCE_COMPLETE; Part 4.5 not started
-ACTIVE_WRITER: codex claimed for Step 1 closure; yield at end of this handoff
+STATUS: PART_04_PRODUCTION_ACCEPTANCE_COMPLETE; PART_04_5_RELEASE_BLOCKED_BY_BRANCH_DIVERGENCE; migration 0015 not applied
+ACTIVE_WRITER: none after the 2026-09-30 Part 4.5 preflight handoff (codex yields)
 WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
 BRANCH: main (slice/part-04-lending retained for Part 4.5 Step 3 branch cleanup)
 LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` restarted; local 0014 applied)
@@ -29,7 +29,7 @@ LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` restarted; local 0014 ap
 - Fast-forwarded local main to the slice and pushed `main`; push reported `4f6cf4b..64c037e`. Exact deployment and production behavior are still unverified. Keep the slice branch until acceptance passes.
 
 ## Exact next action
-Part 4 production acceptance is complete. For Part 4.5, perform Earl's ordered Step 2 only after a fresh branch/lock handshake: fetch, check out `slice/part-04-5-offline-self-service-pwa`, confirm head `1dc6639` or later, then run every required local gate before considering remote migration 0015. Do not start Part 5. The Part 4 slice branch remains for Earl's later Step 3 cleanup.
+Earl must explicitly resolve the Part 4.5 branch-history conflict recorded in the latest checkpoint below. Current `main` cannot fast-forward to the existing Part 4.5 slice without a merge commit or history rewrite, both excluded by the release instruction. Do not apply migration 0015 or start Part 5. The Part 4 slice branch remains for Earl's later Step 3 cleanup.
 
 ## 2026-09-30 stop checkpoint — Part 4 acceptance blocked
 - Local `main` and `origin/main` were `41d00feb4499cb29438640d9973f2d161c5f94fa` at entry; `slice/part-04-lending` was `64c037e`. The existing `codex` writer lock was claimed again with `npm run agent:claim -- codex` before edits.
@@ -60,3 +60,9 @@ Part 4 production acceptance is complete. For Part 4.5, perform Earl's ordered S
 - Staff opened a synthetic loan photo in Chrome. The browser network response was HTTP 200, `image/jpeg`. A separate isolated real Chrome session without authentication navigated to a synthetic loan photo URL and reported HTTP 401. The isolated session was closed after verification.
 - Returned the first Individual loan Good: on-hand 4→5. Closed the USC loan Damaged and second Individual loan Lost, each with the required note: on-hand remained 5. Staff Loans dashboard showed `Out now 0` and `Returned 6` across both acceptance runs; the returned list showed all three Staff outcomes and notes. Item History, after a page reload, showed all three Staff loan-out movements, the Good loan-return movement, and the Damaged/Lost closure audit entries. The initial pre-reload history view lagged; reloaded view reconciled.
 - The synthetic item was restored to Inactive with 5 on hand and `Not lendable` public audience. It was never listed publicly. This completes every Part 4 production acceptance criterion in Earl's Step 1. No Part 4.5 migration, release, or Part 5 work occurred in this checkpoint.
+
+## 2026-09-30 Part 4.5 preflight stop — divergent branch history
+- Part 4 closure docs committed as `b787b756ead2d28a21f63abe5eff47f77b239b45` and pushed to `origin/main` (`41d00fe..b787b75`). Step 1 is complete. No new executable code was committed.
+- `git fetch origin --prune` found `origin/slice/part-04-5-offline-self-service-pwa` at `1dc663918f23ba97fa376c9b1e0dc1f930d93030`, satisfying the required minimum slice head. Its merge-base with current `main` is `41d00feb4499cb29438640d9973f2d161c5f94fa`; the Part 4 closure commit is not in the slice ancestry.
+- Therefore a later `main` fast-forward to this existing slice is impossible. A merge commit would preserve both commit histories but violates Earl's no-merge-commit instruction; rebasing/replaying the slice would rewrite its history, which the governance and release instructions forbid. This is a preflight contradiction. Stop before checkout, local gates, D1 bookmark, migration 0015, or release. No Part 4.5 provider mutation occurred.
+- Worktree remains on `main`; untracked `NUL` was preserved untouched. Next action is Earl's explicit choice of integration exception, followed by a new lock/branch handshake. The writer lock is yielded at the end of this checkpoint.
