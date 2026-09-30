@@ -154,3 +154,27 @@ Earl must explicitly resolve the Part 4.5 branch-history conflict recorded in th
 
 ## 2026-09-30 One list on the phone (Earl)
 - The phone home now has one **Get an item** tile (plus Return and My activity) instead of separate Take and Borrow tiles. The list shows every offered item; each row says Borrow or Take (from the type staff chose) and opens the matching form. `?do=take` and `?do=borrow` still work and show the same list. Manifest shortcuts now: Get an item, Return, My activity. Gates: typecheck, build, unit 100/100, browser 9/9, Worker+D1 19/19.
+## 2026-09-30 Part 4.6 visual cleanup complete (Claude Cloud)
+- Earl accepted the visual cleanup plan ("Start cleanup"). Slice `slice/part-04-6-visual-cleanup` from main 72475b8: 13 step commits plus a dead-CSS removal, each built, unit-tested, browser-tested and screenshotted at 1366 and 390 px, and pushed. Details and decisions: `.codex/PART_04_6_BRIEF.md` (banner removed per plan; header Staff sign in is a nav link; "1 left" / "All out"; "Updated <time>" on every live view; self-service "Flat dark" as the card default since no answer arrived; `--text-3` #6f675e; new `--line-field`).
+- Final gates on the slice head: typecheck + build; unit 100/100; browser 9/9; real Worker + D1 browser 19/19; privacy 0 matches; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`. No migration, no API or workflow change, no new dependency. The Youth Development Day banner moved from `public/brand/` to `tests/worker-browser/loan-photo.jpg` (test fixture only).
+- Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded.
+
+## 2026-09-30 Part 4.7 Self-Service light/dark switch (Claude Cloud)
+- Earl asked for "a light and dark animated option" after choosing "Flat dark". Slice `slice/part-04-7-self-service-themes` from main 402946e. Decisions in `.codex/CURRENT_TASK.md`; design notes in docs/OFFLINE_SELF_SERVICE.md section 16. Dark stays the default; the choice lives in `localStorage` (`ss-theme`), per phone.
+- Gates on the slice head: typecheck + build; unit 100/100; browser 10/10 (new theme test); real Worker + D1 browser 19/19; privacy; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`. Contrast checked in both themes (AA). No migration, API, workflow or dependency change.
+- Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded. Remote slice branches need deleting from Earl's machine (cloud push --delete disconnects).
+
+## 2026-09-30 Part 4.8 Self-Service photo back (Claude Cloud)
+- Earl: "The background photo on the self service disappeared and the icon and doesnt look good. Fix it". Slice `slice/part-04-8-self-service-photo` from main 2f308e3. Decisions in `.codex/CURRENT_TASK.md`; design notes in docs/OFFLINE_SELF_SERVICE.md section 16.
+- Gates on the slice head: typecheck + build; unit 100/100; browser 10/10 (the theme test now covers the photo); real Worker + D1 browser 19/19; privacy; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`. No migration, API, workflow or dependency change.
+- Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded. Delete the remote slice branch from Earl's machine.
+
+## 2026-09-30 Part 4.9 home banner back (Claude Cloud)
+- Earl: "The photo in the main website also is missing, fix". Slice `slice/part-04-9-home-banner` from main 5923729: the Youth Development Day banner returns to the landing hero (`public/brand/ydd-2026-banner.jpg`). Decisions in `.codex/CURRENT_TASK.md`.
+- Gates on the slice head: typecheck + build; unit 100/100; browser 10/10 (the landing test checks the banner); real Worker + D1 browser 19/19; privacy; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`; no overflow at 1366/1024/390.
+- Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded. Delete the remote slice branches from Earl's machine.
+
+## 2026-09-30 Part 4.10 public pages load fresh (Claude Cloud)
+- Earl's phone showed the home page without the Part 4.9 banner: the service worker served public pages from its saved shell until every tab closed. Slice `slice/part-04-10-fresh-public-pages` from main 0f27556 makes every navigation except `/self-service*` network-first with the saved shell as the offline fallback. Details in `.codex/CURRENT_TASK.md` and docs/OFFLINE_SELF_SERVICE.md section 9.
+- Gates on the slice head: typecheck + build; unit 100/100; browser 10/10; real Worker + D1 browser 20/20 (new test fails on the old worker); privacy; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`.
+- Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Phones still on the old worker pick it up once all of the site's tabs close. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded.

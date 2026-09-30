@@ -86,7 +86,7 @@ export async function administration(): Promise<void> {
         ? html`${events.map((event) => html`<li class="history__item"><div><p class="history__title">${event.actor ?? "Recovery"} ${(EVENT_TEXT[event.action] ?? (() => event.action.toLowerCase()))(event)}</p><p class="history__meta"><time datetime="${event.at}">${formatDateTime(event.at)}</time></p></div></li>`)}`
         : html`<li class="history__empty">No account changes yet.</li>`);
     } catch (error) {
-      mount(document.querySelector("#accounts")!, emptyState("Accounts could not be loaded", failure(error), "", "error"));
+      mount(document.querySelector("#accounts")!, emptyState("Accounts could not be loaded", failure(error), "", "error", 3));
     }
   }
 

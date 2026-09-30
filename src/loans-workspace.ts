@@ -57,13 +57,13 @@ export async function loansWorkspace(): Promise<void> {
     // Overdue first, then the longest out.
     const open = overview.open.filter(matches).sort((a, b) => Number(isOverdue(b, overview.today)) - Number(isOverdue(a, overview.today)) || a.createdAt.localeCompare(b.createdAt));
     if (!open.length) return search.value.trim() ? emptyState("No loans match", "Try another name, student ID or item.") : emptyState("Nothing is out on loan", "Lend from an item's Loan tab in Inventory, or with Lend an item above.");
-    return html`<ul class="loan-list loan-list--page">${open.map((loan) => loanRow(loan, true))}</ul>`;
+    return html`<ul class="loan-list">${open.map((loan) => loanRow(loan, true))}</ul>`;
   }
 
   function historyMarkup(overview: Overview): Html {
     const closed = overview.closed.filter(matches);
     if (!closed.length) return search.value.trim() ? emptyState("No returns match", "Try another name, student ID or item.") : emptyState("No returns yet", "Returned, damaged and lost loans appear here.");
-    return html`<ul class="loan-list loan-list--page loan-list--closed">${closed.map((loan) => loanRow(loan, true))}</ul>
+    return html`<ul class="loan-list loan-list--closed">${closed.map((loan) => loanRow(loan, true))}</ul>
       ${overview.closed.length === 100 ? html`<p class="hint-line">${icon("info")}<span>Showing the 100 most recent returns.</span></p>` : ""}`;
   }
 
@@ -76,9 +76,8 @@ export async function loansWorkspace(): Promise<void> {
       const rows = overview.borrowers.filter((row) => row.period === period && row.purpose === purpose);
       const top = rows[0]?.loans ?? 1;
       return html`<section class="leaderboard" aria-labelledby="board-${purpose}">
-        <header class="leaderboard__head"><h2 class="subsection__title" id="board-${purpose}">${label(purpose)}</h2><p class="muted">${plural(byPurpose(purpose), "loan")}</p></header>
-        ${rows.length ? html`<ol class="rank-list">${rows.map((row, index) => html`<li class="rank-row">
-            <span class="rank-row__rank" aria-hidden="true">${index + 1}</span>
+        <header class="leaderboard__head"><h3 id="board-${purpose}">${label(purpose)}</h3><p class="muted">${plural(byPurpose(purpose), "loan")}</p></header>
+        ${rows.length ? html`<ol class="rank-list">${rows.map((row) => html`<li class="rank-row">
             <div class="rank-row__main">
               <p class="rank-row__name"><strong>${row.name}</strong>${row.studentId ? html` <span class="mono muted">${row.studentId}</span>` : ""}</p>
               <span class="rank-row__bar" data-share="${(row.loans / top).toFixed(3)}" aria-hidden="true"></span>
@@ -99,14 +98,18 @@ export async function loansWorkspace(): Promise<void> {
         <div class="stat"><dt>Borrowers</dt><dd><span class="stat__value">${sum("borrowers")}</span><span class="stat__note">different people</span></dd></div>
         <div class="stat ${sum("problems") ? "stat--warn" : ""}"><dt>Damaged or lost</dt><dd><span class="stat__value">${sum("problems")}</span><span class="stat__note">${loans ? `${Math.round((sum("problems") / loans) * 100)}% of loans` : "none"}</span></dd></div>
       </dl>
-      <div class="leaderboards">${PURPOSES.map(board)}</div>
-      <section class="leaderboard leaderboard--items" aria-labelledby="board-items">
-        <header class="leaderboard__head"><h2 class="subsection__title" id="board-items">Most borrowed items</h2></header>
-        ${items.length ? html`<ol class="rank-list">${items.map((row, index) => html`<li class="rank-row">
-            <span class="rank-row__rank" aria-hidden="true">${index + 1}</span>
+      <section class="subsection" aria-labelledby="top-borrowers">
+        <h2 class="subsection__title" id="top-borrowers">Top borrowers</h2>
+        <div class="leaderboards">${PURPOSES.map(board)}</div>
+      </section>
+      <section class="subsection" aria-labelledby="board-items">
+        <h2 class="subsection__title" id="board-items">Most borrowed items</h2>
+        <div class="leaderboard">
+        ${items.length ? html`<ol class="rank-list">${items.map((row) => html`<li class="rank-row">
             <div class="rank-row__main"><p class="rank-row__name"><a class="row-link" href="/staff/inventory?item=${row.itemId}" data-route>${row.itemName}</a></p><span class="rank-row__bar rank-row__bar--item" data-share="${(row.loans / topItem).toFixed(3)}" aria-hidden="true"></span><p class="rank-row__meta">${plural(row.units, "piece")} in total</p></div>
             <p class="rank-row__value"><strong>${row.loans}</strong> ${row.loans === 1 ? "loan" : "loans"}</p></li>`)}</ol>`
           : html`<p class="muted leaderboard__empty">Nothing was lent in this period.</p>`}
+        </div>
       </section>`;
   }
 
@@ -173,7 +176,7 @@ export async function loansWorkspace(): Promise<void> {
   async function openLend(): Promise<void> {
     mount(lendSheet, sheetContent("Loans", "Lend an item", html`<div class="skeleton skeleton--block"></div>`));
     panel.open();
-    try { await loadItems(); } catch (error) { mount(lendSheet.querySelector(".sheet__body")!, emptyState("Items could not be loaded", error instanceof Error ? error.message : "Try again.", "", "error")); return; }
+    try { await loadItems(); } catch (error) { mount(lendSheet.querySelector(".sheet__body")!, emptyState("Items could not be loaded", error instanceof Error ? error.message : "Try again.", "", "error", 3)); return; }
     mount(lendSheet.querySelector(".sheet__body")!, html`
       <div class="field"><label for="lend-item">Item</label><input id="lend-item" list="lend-items" autocomplete="off" spellcheck="false" placeholder="Search by name or ID" aria-describedby="lend-card" /><datalist id="lend-items">${items.map((item) => html`<option value="${item.name} · ${item.id}">${item.onHand} on the shelf</option>`)}</datalist></div>
       <div class="record-card" id="lend-card" aria-live="polite"></div>

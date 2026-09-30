@@ -144,6 +144,17 @@ test.describe.serial("offline self-service", () => {
     expect(Object.keys(body.items[0]!).sort()).toEqual(["action", "aliases", "audience", "available", "category", "id", "location", "name", "unit"]);
   });
 
+  test("public pages load fresh from the network, while Self-Service opens from the phone's cache", async ({ browser }) => {
+    const { context, page } = await phone(browser);
+    const fromNetwork: string[] = [];
+    context.on("request", (request) => { if (request.serviceWorker()) fromNetwork.push(new URL(request.url()).pathname); });
+    await page.goto("/");
+    await page.goto("/lending");
+    await page.goto("/self-service");
+    expect(fromNetwork.filter((path) => ["/", "/lending", "/self-service"].includes(path))).toEqual(["/", "/lending"]);
+    await context.close();
+  });
+
   test("works offline: take, borrow with a photo, reload, return; syncs exactly once when back online", async ({ browser }) => {
     const waterBefore = (await item(WATER)).onHand;
     const cottonBefore = (await item(COTTON)).onHand;

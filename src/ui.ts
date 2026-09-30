@@ -65,7 +65,9 @@ const ICONS = {
   share: "M12 3v11M8.5 6.5 12 3l3.5 3.5M8 10H6.5A1.5 1.5 0 0 0 5 11.5v7A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 17.5 10H16",
   install: "M12 4v10M8 10.5l4 4 4-4M5 19.5h14",
   cloudOff: "M3 3l18 18M8.4 8.4A5 5 0 0 0 6.5 18H17M20.2 16.4A3.8 3.8 0 0 0 17 10.2h-.6A6 6 0 0 0 10.5 6.2",
-  more: "M12 5.5v.01M12 12v.01M12 18.5v.01"
+  more: "M12 5.5v.01M12 12v.01M12 18.5v.01",
+  sun: "M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM12 2.5v2M12 19.5v2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M2.5 12h2M19.5 12h2M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4",
+  moon: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -253,8 +255,9 @@ export function toast(message: string, tone: "ok" | "error" = "ok"): void {
   }, tone === "ok" ? 3500 : 6000);
 }
 
-export function emptyState(title: string, detail: string, action: Html | string = "", tone: "" | "error" = ""): Html {
-  return html`<div class="empty ${tone ? `empty--${tone}` : ""}">${icon(tone ? "alert" : "box")}<h2>${title}</h2><p>${detail}</p>${action}</div>`;
+/** `level` follows the surrounding outline: 1 when it is the whole page, 3 inside a sheet or titled section. */
+export function emptyState(title: string, detail: string, action: Html | string = "", tone: "" | "error" = "", level: 1 | 2 | 3 = 2): Html {
+  return html`<div class="empty ${tone ? `empty--${tone}` : ""}">${icon(tone ? "alert" : "box")}<h${level}>${title}</h${level}><p>${detail}</p>${action}</div>`;
 }
 
 /* ---------- Photos ---------- */
@@ -340,17 +343,19 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
   let settle = 0;
   let stopped = false;
   let loaded = false;
+  // The status names when this view last received changed data, not when it last asked.
+  let changedAt = "";
   const setStatus = (state: "live" | "offline" | "updated") => {
     const element = options.status?.();
     if (!element) return;
     if (state === "live" && element.dataset.state === "updated") return;
     if (state === "offline") window.clearTimeout(settle);
     element.dataset.state = state;
-    element.textContent = state === "offline" ? "Offline, retrying" : state === "updated" ? "Updated just now" : "Live updates";
-    element.title = `Last checked ${new Date().toLocaleTimeString()}`;
+    element.textContent = state === "offline" ? "Offline, retrying" : `Updated ${changedAt}`;
+    element.title = `Last checked ${formatTime(new Date().toISOString())}`;
     if (state === "updated") {
       window.clearTimeout(settle);
-      settle = window.setTimeout(() => { element.dataset.state = "live"; element.textContent = "Live updates"; }, 4000);
+      settle = window.setTimeout(() => { element.dataset.state = "live"; }, 4000);
     }
   };
   const tick = async () => {
@@ -360,6 +365,7 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
       const response = await fetch(url, { credentials: "same-origin", headers: etag ? { "if-none-match": etag } : {} });
       if (response.status === 200) {
         etag = response.headers.get("etag") ?? "";
+        changedAt = formatTime(new Date().toISOString());
         const data = await response.json() as T;
         if (!stopped) options.onData(data);
         if (loaded) setStatus("updated");

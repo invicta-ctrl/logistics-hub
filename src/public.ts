@@ -9,17 +9,13 @@ const LOCKUP = html`<span class="lockup">${CREST}<span class="lockup__rule" aria
 const USC_FACEBOOK = "https://www.facebook.com/holyangeluniversitysc";
 
 function page(content: Html, current: "" | "home" | "lending"): void {
-  // On the landing page the lockup leads to the Student Council's official page; elsewhere it goes home.
-  const brand = current === "home"
-    ? html`<a class="site-header__brand" href="${USC_FACEBOOK}" target="_blank" rel="noopener noreferrer" aria-label="HAU University Student Council on Facebook (opens in a new tab)">${LOCKUP}</a>`
-    : html`<a class="site-header__brand" href="/" data-route aria-label="Department of Logistics home">${LOCKUP}</a>`;
   mount(app, html`
     <header class="site-header">
       <div class="container site-header__inner">
-        ${brand}
+        <a class="site-header__brand" href="/" data-route aria-label="Department of Logistics home">${LOCKUP}</a>
         <nav class="site-nav" aria-label="Main">
           <a class="site-nav__link" href="/lending" data-route ${current === "lending" ? html`aria-current="page"` : ""}>Lending Hub</a>
-          <a class="button button--outline-light" href="/staff" data-route>Staff sign in</a>
+          <a class="site-nav__link" href="/staff" data-route>Staff sign in</a>
         </nav>
       </div>
     </header>
@@ -37,7 +33,7 @@ function page(content: Html, current: "" | "home" | "lending"): void {
           <ul class="site-footer__links">
             <li><a href="/lending" data-route>Lending Hub</a></li>
             <li><a href="/staff" data-route>Staff sign in</a></li>
-            <li><span>Logistics requests <em>(not yet available)</em></span></li>
+            <li><a href="${USC_FACEBOOK}" target="_blank" rel="noopener noreferrer">Student Council on Facebook<span class="visually-hidden"> (opens in a new tab)</span></a></li>
           </ul>
         </nav>
       </div>
@@ -48,24 +44,17 @@ function page(content: Html, current: "" | "home" | "lending"): void {
 
 /** Availability reads at a glance: plenty, the last one, or all out. */
 function availability(item: LendingItem): Html {
-  if (item.available <= 0) return html`<p class="avail avail--out"><span class="avail__label">All out right now</span></p>`;
-  const low = item.available === 1;
-  return html`<p class="avail ${low ? "avail--low" : ""}"><span class="avail__count" data-count="${item.id}">${item.available}</span> <span class="avail__label">${units(item.available, item.unit)}<span class="avail__word">${low ? " · last one" : " available"}</span></span></p>`;
+  if (item.available <= 0) return html`<p class="avail avail--out"><span class="avail__label">All out</span></p>`;
+  if (item.available === 1) return html`<p class="avail avail--low"><span class="avail__count" data-count="${item.id}">1</span> <span class="avail__label">left</span></p>`;
+  return html`<p class="avail"><span class="avail__count" data-count="${item.id}">${item.available}</span> <span class="avail__label">${units(item.available, item.unit)}<span class="avail__word"> available</span></span></p>`;
 }
 
+/** Only the exceptions: most items are open to students and USC staff, and are returned. */
 function terms(item: LendingItem): string {
-  return item.itemType === "Consumable" ? `${label(item.audience)} · Consumable, taken and not returned` : label(item.audience);
+  return [item.audience === "USC_STAFF_ONLY" ? label(item.audience) : "", item.itemType === "Consumable" ? "Consumable, taken and not returned" : ""].filter(Boolean).join(" · ");
 }
 
 const skeletonRows = (count: number) => html`<ul class="catalogue" aria-hidden="true">${Array.from({ length: count }, () => html`<li class="catalogue__row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></li>`)}</ul>`;
-
-/** Staggers rows in after a filter change; CSP forbids inline styles, so the index is set via CSSOM. */
-function stagger(container: Element): void {
-  container.querySelectorAll<HTMLElement>(".catalogue__row").forEach((row, index) => row.style.setProperty("--i", String(Math.min(index, 14))));
-  container.classList.remove("is-entering");
-  void (container as HTMLElement).offsetWidth;
-  container.classList.add("is-entering");
-}
 
 /** Rolls each changed count from its previous value to the new one. */
 function rollCounts(container: Element, before: Map<string, number>, changed: Set<string>): void {
@@ -80,13 +69,12 @@ export function landing(): void {
   document.title = "Department of Logistics · HAU University Student Council";
   page(html`<main id="main-content">
     <section class="hero" aria-labelledby="hero-title">
-      <div class="container hero__grid">
+      <div class="container hero__inner">
         <div class="hero__copy">
-          <p class="hero__kicker">Holy Angel University · University Student Council</p>
-          <h1 id="hero-title">Logistics that keeps the work moving.</h1>
-          <p class="hero__lede">The Department of Logistics supports the people and materials behind University Student Council work, and lends equipment to students and USC staff.</p>
+          <h1 id="hero-title">Borrow equipment from the USC Department of Logistics</h1>
+          <p class="hero__lede">Check what is on the shelf, then borrow it in person at the Logistics office.</p>
           <div class="hero__actions">
-            <a class="button button--gold button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
+            <a class="button button--on-dark button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
             <a class="text-link text-link--light hero__secondary" href="#steps-title">How borrowing works</a>
           </div>
         </div>
@@ -94,7 +82,7 @@ export function landing(): void {
       </div>
     </section>
 
-    <section class="section reveal" aria-labelledby="steps-title">
+    <section class="section" aria-labelledby="steps-title">
       <div class="container">
         <h2 id="steps-title" class="section__title">How borrowing works</h2>
         <ol class="steps">
@@ -102,10 +90,6 @@ export function landing(): void {
           <li><span class="steps__n">2</span><h3>Visit the Department</h3><p>Speak with Department of Logistics staff. Loans are arranged in person; online requests are not open yet.</p></li>
           <li><span class="steps__n">3</span><h3>Borrow and return</h3><p>Staff record the loan and its return date with you, so the next person sees accurate availability.</p></li>
         </ol>
-        <div class="steps__foot">
-          <a class="button button--primary" href="/lending" data-route>Open the Lending Hub ${icon("arrow")}</a>
-          <p class="notice"><strong>Logistics requests</strong> for events are <span class="notice__status">Not yet available</span> online. Contact the Department of Logistics directly.</p>
-        </div>
       </div>
     </section>
 
@@ -121,13 +105,13 @@ export function lending(): void {
         <div class="page-intro__row">
           <div>
             <h1>Lending Hub</h1>
-            <p class="page-intro__lede">Equipment the Department of Logistics lends to students and USC staff. Counts show what is on the shelf right now.</p>
+            <p class="page-intro__lede">What you can borrow or take, and how many are in the office now.</p>
           </div>
           <p class="live-status" id="live-status">Connecting…</p>
         </div>
       </div>
     </div>
-    <div class="filterbar" role="search" aria-label="Filter the Lending Hub">
+    <search class="filterbar" aria-label="Filter the Lending Hub">
       <div class="container filterbar__inner">
         <div class="filterbar__row">
           <label class="search-field">${icon("search")}<span class="visually-hidden">Search the Lending Hub</span><input id="lending-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search equipment" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
@@ -138,18 +122,11 @@ export function lending(): void {
         </div>
         <div class="chips" id="lending-categories" role="group" aria-label="Category"></div>
       </div>
-    </div>
+    </search>
     <div class="container lending-layout">
-      <div>
-        <p class="result-count" id="lending-count" aria-live="polite"></p>
-        <div id="lending-results" aria-busy="true">${skeletonRows(6)}</div>
-      </div>
-      <aside class="aside-note" aria-labelledby="borrow-title">
-        <h2 id="borrow-title">How to borrow</h2>
-        <p>Loans are arranged in person with Department of Logistics staff, who record each loan and its return date with you. Online requests are not available yet.</p>
-        <p>Consumables are taken, not lent: once taken they are not returned.</p>
-        <p>Only items reviewed by staff are listed here.</p>
-      </aside>
+      <p class="result-count" id="lending-count" aria-live="polite"></p>
+      <div id="lending-results" aria-busy="true">${skeletonRows(6)}</div>
+      <p class="lending-note">Borrow in person at the Logistics office. Staff record the loan and return date.</p>
     </div>
   </main>`, "lending");
 
@@ -170,7 +147,7 @@ export function lending(): void {
   const changed = new Set<string>();
 
   const row = (item: LendingItem) => html`<li class="catalogue__row ${changed.has(item.id) ? "is-changed" : ""}" data-key="${item.id}">
-    <div class="catalogue__main"><h3 class="catalogue__name">${item.name}</h3><p class="catalogue__meta">${terms(item)}</p></div>${availability(item)}</li>`;
+    <div class="catalogue__main"><h3 class="catalogue__name">${item.name}</h3>${terms(item) ? html`<p class="catalogue__meta">${terms(item)}</p>` : ""}</div>${availability(item)}</li>`;
 
   const render = (reason: "filter" | "data") => {
     if (!catalog) return;
@@ -209,8 +186,7 @@ export function lending(): void {
             <ul class="catalogue">${members.map(row)}</ul></section>`;
         })}`
       : emptyState("Nothing matches those filters", "Try a shorter search, another category, or include items that are currently out.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
-    if (reason === "filter") stagger(results);
-    else rollCounts(results, before, changed);
+    if (reason === "data") rollCounts(results, before, changed);
     changed.clear();
   };
 

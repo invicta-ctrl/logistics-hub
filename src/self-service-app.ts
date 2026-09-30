@@ -71,15 +71,49 @@ async function load(): Promise<void> {
   [snapshot, events, profile] = await Promise.all([store.catalog(), store.events(), store.getMeta<store.Profile>("profile").then((saved) => saved ?? { name: "", studentId: "" })]);
 }
 
+/* ---------- Theme ---------- */
+
+type Theme = "light" | "dark";
+const THEME_KEY = "ss-theme";
+const THEME_COLOR: Record<Theme, string> = { light: "#faf9f7", dark: "#140609" };
+
+/** Dark unless this phone chose light; the choice stays on the phone only. */
+function storedTheme(): Theme {
+  try { return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark"; } catch { return "dark"; }
+}
+
+function applyTheme(theme: Theme): void {
+  document.body.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOR[theme]);
+  document.querySelector("[data-theme-toggle]")?.setAttribute("aria-pressed", String(theme === "dark"));
+}
+
+/** The new theme spreads out from the switch as a circle where the browser can; otherwise it swaps at once. */
+function switchTheme(button: HTMLElement): void {
+  const next: Theme = document.body.dataset.theme === "dark" ? "light" : "dark";
+  try { localStorage.setItem(THEME_KEY, next); } catch { /* the choice lasts this visit only */ }
+  if (!document.startViewTransition || reducedMotion()) return applyTheme(next);
+  const box = button.getBoundingClientRect();
+  const x = box.left + box.width / 2;
+  const y = box.top + box.height / 2;
+  const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
+  document.startViewTransition(() => applyTheme(next)).ready.then(() => {
+    document.documentElement.animate({ clipPath: [`circle(0 at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+      { duration: 500, easing: "cubic-bezier(.2, .8, .2, 1)", pseudoElement: "::view-transition-new(root)" });
+  }).catch(() => undefined);
+}
+
 /* ---------- Frame ---------- */
 
 function frame(): Html {
-  // The sky: the HAU campus at dusk (the legacy login's photograph) and a slow aurora, behind everything.
-  return html`<div class="ss-sky" aria-hidden="true"><div class="ss-sky__photo"></div><div class="ss-sky__aurora"></div><div class="ss-sky__grain"></div></div>
+  return html`<div class="ss-photo" aria-hidden="true"></div>
     <header class="ss-bar">
       <div class="ss-bar__inner">
         <a class="ss-bar__brand" href="/self-service" data-route aria-label="Self-Service home"><span class="ss-bar__marks" aria-hidden="true">${CREST}${MARK}</span><span class="ss-bar__title"><span>Self-Service</span><small>HAU USC Logistics</small></span></a>
-        <div data-region="pill"></div>
+        <div class="ss-bar__end">
+          <button class="ss-theme" type="button" data-theme-toggle aria-label="Dark theme" aria-pressed="${String(document.body.dataset.theme === "dark")}">${icon("sun")}${icon("moon")}</button>
+          <div data-region="pill"></div>
+        </div>
       </div>
       <div class="ss-update" data-region="update" hidden></div>
     </header>
@@ -114,7 +148,7 @@ function refreshRegions(): void {
   const updateRegion = region("update");
   if (updateRegion) {
     updateRegion.hidden = !hasUpdate();
-    mount(updateRegion, hasUpdate() ? html`<p>${icon("refresh")}A new version is ready.</p><button type="button" class="button button--gold button--sm" data-apply-update>Update</button>` : html``);
+    mount(updateRegion, hasUpdate() ? html`<p>${icon("refresh")}A new version is ready.</p><button type="button" class="button button--primary button--sm" data-apply-update>Update</button>` : html``);
   }
   const { screen } = params();
   const tiles = region("tiles");
@@ -162,8 +196,7 @@ function renderHome(): void {
   if (!screen) return;
   mount(screen, html`<div class="ss-home">
       <section class="ss-hero" aria-labelledby="ss-question">
-        <p class="ss-hero__kicker">HAU USC · Department of Logistics</p>
-        <h1 id="ss-question">What do you <em>need</em>?</h1>
+        <h1 id="ss-question">What do you need?</h1>
         <p class="ss-hero__hello">${greeting()}</p>
       </section>
       <nav class="ss-tiles" aria-label="Actions" data-region="tiles">${homeTiles()}</nav>
@@ -186,7 +219,7 @@ function readinessCard(): Html {
   // On iPhone and iPad a Safari tab keeps its own storage, so offline use starts in the installed app (see installCard).
   if (platform() === "ios" && !isStandalone()) return html``;
   if (ready && ready.shell && ready.catalog && ready.storage) {
-    return html`<section class="ss-ready ss-ready--ok">${icon("check")}<div><h2>Ready for offline use</h2><p>Keep using it without internet; records wait on this phone and send later${updated}.</p></div></section>`;
+    return html`<section class="ss-ready ss-ready--ok">${icon("check")}<div><h2>Ready for offline use</h2><p>Works without internet. Records send when you are back online${updated}.</p></div></section>`;
   }
   if (ready && !ready.storage) return html`<section class="ss-ready ss-ready--bad">${icon("alert")}<div><h2>Offline setup incomplete</h2><p>This browser is not letting the app save data (private browsing?). Open it in a normal window to use it offline.</p></div></section>`;
   return html`<section class="ss-ready ss-ready--todo" aria-live="polite">${icon("refresh")}<div><h2>Getting ready for offline use…</h2><p>Keep this page open for a moment while it saves the app and catalog${updated}.</p></div></section>`;
@@ -412,10 +445,7 @@ const verb = (event: LocalEvent) => VERB[event.type === "RETURN" ? event.outcome
 /** Shown in the sheet after saving: calm, specific, and it updates itself when the record syncs. */
 function receipt(event: LocalEvent): Html {
   return html`<div class="ss-receipt" role="status">
-      <div class="ss-receipt__halo" aria-hidden="true">
-        <svg class="ss-receipt__mark" viewBox="0 0 52 52"><defs><linearGradient id="ss-gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7dc9a" /><stop offset="1" stop-color="#c9962a" /></linearGradient></defs><circle cx="26" cy="26" r="24" /><path d="m15 27 7 7 15-16" /></svg>
-        <span class="ss-receipt__sparks">${Array.from({ length: 10 }, () => html`<i></i>`)}</span>
-      </div>
+      <svg class="ss-receipt__mark" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24" /><path d="m15 27 7 7 15-16" /></svg>
       <h2 id="sheet-title">${verb(event)}</h2>
       <p class="ss-receipt__what">${event.quantity > 1 ? `${event.quantity} × ` : ""}${event.itemName}</p>
       <p class="ss-receipt__sync" data-receipt="${event.id}">${receiptState(event)}</p>
@@ -505,7 +535,7 @@ let renderedScreen: Screen | null = null;
 function renderScreen(): void {
   const { screen } = params();
   renderedScreen = screen;
-  // The campus photograph belongs to home; other screens keep only the aurora (see self-service.css).
+  // The campus photograph belongs to home (see self-service.css).
   document.body.dataset.ssScreen = screen;
   if (screen === "home") renderHome();
   else if (screen === "activity") renderActivity();
@@ -653,10 +683,11 @@ export async function selfService(): Promise<void> {
   document.body.classList.add("is-self-service");
   const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
   const pageTheme = themeColor?.content ?? "";
-  themeColor?.setAttribute("content", "#140609");
+  applyTheme(storedTheme());
   onLeave(() => {
     document.body.classList.remove("is-self-service");
     delete document.body.dataset.ssScreen;
+    delete document.body.dataset.theme;
     themeColor?.setAttribute("content", pageTheme);
   });
   mount(app, frame());
@@ -730,9 +761,8 @@ export async function selfService(): Promise<void> {
     if (dialog.open) { receiptFor = null; steering = true; control.close(true); }
     // Closing a sheet keeps the list, and its scroll position, as it was.
     if (screen === renderedScreen) return;
-    const switchScreen = () => { renderScreen(); refreshRegions(); };
-    if (document.startViewTransition && !reducedMotion()) document.startViewTransition(switchScreen);
-    else switchScreen();
+    renderScreen();
+    refreshRegions();
     window.scrollTo(0, 0);
   });
 
@@ -747,6 +777,8 @@ export async function selfService(): Promise<void> {
     const openLoan = target.closest<HTMLAnchorElement>("[data-open-loan]");
     if (openLoan) { event.preventDefault(); go({ screen: "return", item: null, loan: openLoan.dataset.openLoan! }); return; }
     if (target.closest("[data-back]")) { event.preventDefault(); goBack(); return; }
+    const themeToggle = target.closest<HTMLElement>("[data-theme-toggle]");
+    if (themeToggle) { switchTheme(themeToggle); return; }
     if (target.closest("[data-done]")) { closeAnd(goHome); return; }
     const again = target.closest<HTMLElement>("[data-again]");
     // "Take something else" steps back to the list the item was picked from.

@@ -1,7 +1,7 @@
-# Current Bounded Task — PART-04.5 Offline Self-Service + PWA + Single QR + Sync/Reconciliation
-INTENT: FEATURE_IMPLEMENTATION + PRODUCT POLISH + PERFORMANCE
-OBJECTIVE: Earl's 2026-09-29 Part 4.5 instruction (see .codex/PART_04_5_BRIEF.md): one permanent QR → /self-service on people's own phones (Take, Borrow, Return, My activity), an installable PWA that keeps working offline, an IndexedDB event queue, idempotent sync, reconciliation across phones, a staff exception view, private photos, update behaviour, tests and docs.
-IN_SCOPE: migration 0015; src/self-service.ts; src/loans.ts (shared lending statements); src/offline-{queue,store,sync}.ts; src/sw.ts + vite.config.ts; src/pwa.ts; src/self-service-app.ts + .css; src/self-service-review.ts; staff integration (item toggle, view, nav); public/manifest.webmanifest, public/icons, public/qr; tests; docs/OFFLINE_SELF_SERVICE.md, docs/PWA_INSTALL_GUIDE.md.
-OUT_OF_SCOPE: offline staff actions (no offline credentials), global settings/kill switch and server-side retention purge (Part 6), exports and the activity center (Part 5), multi-item loans, borrower accounts.
-BRIEF: .codex/PART_04_5_BRIEF.md
-STATUS: STEP_2_COMPLETE (2026-09-30). Corrected the offline test's cache-deletion order at 7eed18f. All required local gates green: typecheck, 100 unit tests, build, 9 browser tests, 19 Worker browser tests, privacy, migration-data verification, Wrangler dry run. Captured ignored Time Travel bookmark; only 0015 pending; applied once remotely; verified offered=0, events=0 and final-resolution trigger. Not released; Step 3 integration constraint remains. Do not reapply 0015; see SESSION_HANDOFF.
+# Current Bounded Task — PART-04.10 Fresh Public Pages
+INTENT: DEFECT FIX (service worker navigation strategy; no data or API change)
+OBJECTIVE: Earl's phone (2026-09-30) still showed the home page without the restored banner after the deploy.
+CAUSE: src/sw.ts served every public navigation from the saved shell, and a waiting version activates only when every tab closes (public pages never report idle to pwa.ts).
+FIX: only /self-service* opens from the cache; every other navigation goes to the network first and falls back to the saved shell offline. Phones still on the old worker switch once all of the site's tabs close.
+TEST: tests/worker-browser/offline-self-service.spec.ts, "public pages load fresh from the network, while Self-Service opens from the phone's cache" (fails on the previous worker).
+STATUS: COMPLETE (2026-09-30); merged to main. No active task until Earl accepts the next one.

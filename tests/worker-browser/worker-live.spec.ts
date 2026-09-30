@@ -60,7 +60,7 @@ test("staff publish and stock changes reach an open public page live", async ({ 
   await expect(page.getByText("Changes saved.")).toBeVisible();
 
   await expect(visitor.getByText("Bluetooth Microphone")).toBeVisible({ timeout: 25_000 });
-  await expect(visitor.getByText("1 piece · last one")).toBeVisible();
+  await expect(visitor.locator(".catalogue__row", { hasText: "Bluetooth Microphone" }).locator(".avail")).toHaveText("1 left");
 
   await expect(page.getByRole("tab", { name: "Edit details" })).toBeVisible();
   await page.getByRole("tab", { name: "Overview" }).click();

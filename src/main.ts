@@ -6,7 +6,7 @@ import "@fontsource/newsreader/latin-500.css";
 import "./styles.css";
 import { landing, lending, notFound, offlinePage } from "./public";
 import { startPwa } from "./pwa";
-import { handOverQuery, leave, navigate, reducedMotion, toast } from "./ui";
+import { handOverQuery, leave, navigate, toast } from "./ui";
 
 type View = () => void | Promise<void>;
 
@@ -86,8 +86,6 @@ window.addEventListener("unhandledrejection", (event) => {
   toast("Something went wrong. Please try again.", "error");
 });
 
-// Route changes cross-fade with the View Transitions API where supported; the
-// first paint and reduced-motion users get an instant swap.
 // A same-page #fragment jump also fires popstate; only a new path or query is a new view.
 let rendered = "";
 window.addEventListener("popstate", () => {
@@ -96,8 +94,7 @@ window.addEventListener("popstate", () => {
     rendered = window.location.pathname + window.location.search;
     return;
   }
-  if (!document.startViewTransition || reducedMotion()) return void render();
-  document.startViewTransition(render);
+  render();
 });
 startPwa();
 void render();

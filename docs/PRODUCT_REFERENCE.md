@@ -21,18 +21,19 @@ It supersedes the older HAU-USC Logistics Management System for all new developm
 | any other path | A branded "page not found". |
 
 The landing page (`/`):
-- an oxblood masthead carrying the HAU·USC crest and the DOL mark. On this page only, the lockup opens the official HAU University Student Council Facebook page (`https://www.facebook.com/holyangeluniversitysc`) in a new tab; on other public pages it returns home;
-- a hero on deep oxblood: the headline, a gold "Browse the Lending Hub" action and a "How borrowing works" link, beside the whole, uncropped Youth Development Day 2026 banner (the banner sits above the headline on phones). There is deliberately no availability panel here: the landing page does not poll the catalog, and availability lives only in the Lending Hub;
-- "How borrowing works" in three steps, ending in one "Open the Lending Hub" action and the notice that logistics requests are *not yet available* online.
+- an oxblood masthead carrying the HAU·USC crest and the DOL mark; the lockup always returns home. The footer links the official HAU University Student Council Facebook page (`https://www.facebook.com/holyangeluniversitysc`), opening in a new tab;
+- a hero on flat oxblood: the headline "Borrow equipment from the USC Department of Logistics", a one-line lede, a gold "Browse the Lending Hub" action and a "How borrowing works" link. There is deliberately no availability panel here: the landing page does not poll the catalog, and availability lives only in the Lending Hub;
+- "How borrowing works" in three steps; step 2 says loans are arranged in person.
 - "Staff sign in" appears only in the masthead and footer.
 
 The Lending Hub (`/lending`):
 - the public, read-only catalogue, grouped by category, showing every listed item, Loanable or Consumable (a Consumable is marked "taken and not returned");
 - search, an Available-now switch, category chips and sorting;
-- live availability that refreshes every 15 s;
-- filters kept in the URL.
+- rows name only the exceptions ("USC staff only", a Consumable) and read "1 left" for the last one;
+- live availability that refreshes every 15 s, with "Updated <time>" naming the last change (every live view shares this status);
+- filters kept in the URL, and one line under the list saying loans are made in person.
 
-Staff sign-in (`/staff`) uses the original legacy Staff Login campus photograph behind a new, secure sign-in form. A signed-in visit goes straight to the workspace.
+Staff sign-in (`/staff`) is one centred card over the original legacy Staff Login campus photograph, under a flat 60% oxblood veil. A signed-in visit goes straight to the workspace.
 
 The public catalog DTO carries only: `id`, `name`, `category`, `unit`, `available`, `audience`.
 
@@ -186,9 +187,9 @@ Each Part must work end to end without depending on a later Part.
 - **Direction:**
   - Institutional oxblood for the masthead, hero, app bar and footer.
   - Warm paper for the work surfaces.
-  - Exception: phone Self-Service uses the "Dusk" theme (Earl, 2026-09-29): the same crest, mark, oxblood, gold and type in an after-hours key over the campus photograph, scoped to `.is-self-service` (docs/OFFLINE_SELF_SERVICE.md, section 16). Staff and public pages keep warm paper.
+  - Exception: phone Self-Service uses the "Dusk" theme (Earl, 2026-09-29), flattened in Part 4.6: the same crest, mark, oxblood, gold and type on a solid dark canvas, scoped to `.is-self-service`. Part 4.7 added an animated light/dark switch in its app bar (dark by default, remembered per phone); Part 4.8 put the campus photograph back behind the top of home (docs/OFFLINE_SELF_SERVICE.md, section 16). Staff and public pages keep warm paper.
   - Gold for primary actions on dark and for focus.
-  - Newsreader for display and IBM Plex Sans for UI (self-hosted).
+  - Newsreader only for page titles (h1) and the brand name; IBM Plex Sans for everything else (self-hosted).
 - **Density:** staff screens favour speed and density (a compact operations header, dot status tags, one shared sheet); public pages are more editorial.
 - **Feedback:** toasts sit bottom-left on desktop, clear of the side sheet and record panel; empty timelines draw nothing.
 - **Canonical brand files (`public/brand/`):**
@@ -198,9 +199,8 @@ Each Part must work end to end without depending on a later Part.
 | `hau-campus-dusk.webp` | The original **Staff Login background** of the legacy Logistics Management website: the production brand slot `/brand/login-background`, a 1654×951 PNG of 2.15 MB (sha256 `1e9b1873…af90c6`). Converted to WebP q84 at the same pixel size (191 KB), otherwise unaltered. |
 | `hau-usc-crest.webp` | The legacy `/brand/usc-logo` (a 1545×1999 PNG, sha256 `d1cb4968…3dda5`), trimmed and scaled to 240 px tall. |
 | `dol-mark.png` | The Part 1 cropped DOL mark (also the favicon). |
-| `ydd-2026-banner.jpg` | The landing hero image, set by Earl on 2026-09-29: the "Siglawang: Yabong ng Pamana" Youth Development Day 2026 banner (the HAU USC Facebook cover used by the legacy site, 960×356, sha256 `6ec7c5a7…`). Shown whole, never cropped or veiled, because it carries its own title. It replaced the earlier retained YDD photograph. |
 
-`public/touch-icon.png` is the iOS home-screen icon. `public/icons/` (192, 512 and a maskable 512) are the installed-app icons: the DOL mark on warm paper, like the touch icon, resized with Lanczos and quantized to 96 colours. The old site's combined lockup is not used; the crest and the mark are composed in code instead.
+`public/touch-icon.png` is the iOS home-screen icon. `public/icons/` (192, 512 and a maskable 512) are the installed-app icons: the DOL mark on warm paper, like the touch icon, resized with Lanczos and quantized to 96 colours. The old site's combined lockup is not used; the crest and the mark are composed in code instead. The Youth Development Day 2026 banner (Earl, 2026-09-29), `public/brand/ydd-2026-banner.jpg`, sits beside the landing hero's words (above them on narrow screens), shown whole. Part 4.6 removed it and Earl asked for it back the same day (Part 4.9). The worker suite also uploads it as a loan photo.
 
 `public/qr/logistics-self-service.svg` and `.png` are the one permanent Self-Service QR code (only `https://logistics.hausc.org/self-service`; version 4, error correction Q, 4-module quiet zone). `scripts/generate-self-service-qr.py` regenerates and decode-checks them.
 

@@ -60,8 +60,8 @@ export async function loadSession(section: Section): Promise<Session | null> {
     // Staff tools never work offline (there are no offline credentials); Self-Service does.
     const offline = error instanceof ApiError && error.status === 0;
     mount(app, html`<main id="main-content" class="container page-message">${offline
-      ? emptyState("Staff tools need a connection", "You're offline. Inventory, stock, loans and administration work only online, so nothing is changed on this device. Self-Service keeps working offline.", html`<a class="button button--secondary" href="${window.location.pathname}" data-route>Try again</a> <a class="button button--ghost" href="/self-service" data-route>Open Self-Service</a>`, "error")
-      : emptyState("The staff workspace is unavailable", failure(error), html`<a class="button button--secondary" href="/staff/inventory" data-route>Try again</a>`, "error")}</main>`);
+      ? emptyState("Staff tools need a connection", "You're offline. Inventory, stock, loans and administration work only online, so nothing is changed on this device. Self-Service keeps working offline.", html`<a class="button button--secondary" href="${window.location.pathname}" data-route>Try again</a> <a class="button button--ghost" href="/self-service" data-route>Open Self-Service</a>`, "error", 1)
+      : emptyState("The staff workspace is unavailable", failure(error), html`<a class="button button--secondary" href="/staff/inventory" data-route>Try again</a>`, "error", 1)}</main>`);
     return null;
   }
 }
@@ -72,7 +72,7 @@ export function shell(session: Session, section: Section, main: Html): void {
   mount(app, html`
     <header class="app-bar">
       <div class="app-bar__inner">
-        <a class="app-bar__brand" href="/staff/inventory" data-route aria-label="Logistics Hub staff workspace home">${MARK}<span class="app-bar__title" aria-hidden="true">Logistics Hub<small>Staff workspace</small></span></a>
+        <a class="app-bar__brand" href="/staff/inventory" data-route><span aria-hidden="true">${MARK}</span><span class="app-bar__title">Logistics Hub <small>Staff workspace</small></span></a>
         <nav class="app-nav" aria-label="Workspace">
           ${session.mustChangePassword ? "" : link("inventory", "/staff/inventory", "Inventory")}
           ${session.mustChangePassword ? "" : link("stock", "/staff/stock", "Stock & Pantry")}
@@ -102,35 +102,27 @@ export function staffLogin(): void {
   document.title = "Staff sign in · Department of Logistics";
   const ended = new URLSearchParams(window.location.search).has("expired");
   mount(app, html`<main id="main-content" class="auth">
-    <div class="auth__layout">
-      <section class="auth__intro" aria-hidden="true">
-        <p class="auth__eyebrow">Holy Angel University · University Student Council</p>
-        <p class="auth__statement">Department of Logistics</p>
-        <p class="auth__sub">Inventory, stock, pantry and loans, kept in one place.</p>
-      </section>
-      <section class="auth__panel" aria-labelledby="signin-title">
-        <a class="auth__brand" href="/" data-route aria-label="Department of Logistics home">${MARK}</a>
-        <h1 id="signin-title">Staff sign in</h1>
-        <p class="auth__lede">For Department of Logistics staff.</p>
-        <form id="staff-login" class="form" novalidate>
-          <div class="form-alert" id="login-alert" role="alert" hidden></div>
-          <div class="field">
-            <label for="username">Username</label>
-            <input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required />
+    <section class="auth__panel" aria-labelledby="signin-title">
+      <a class="auth__brand" href="/" data-route aria-label="Department of Logistics home">${MARK}</a>
+      <h1 id="signin-title">Staff sign in</h1>
+      <form id="staff-login" class="form" novalidate>
+        <div class="form-alert" id="login-alert" role="alert" hidden></div>
+        <div class="field">
+          <label for="username">Username</label>
+          <input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="input-group">
+            <input id="password" name="password" type="password" autocomplete="current-password" required aria-describedby="caps-hint" />
+            <button class="input-group__button" type="button" id="toggle-password" aria-label="Show password" aria-pressed="false">${icon("eye")}</button>
           </div>
-          <div class="field">
-            <label for="password">Password</label>
-            <div class="input-group">
-              <input id="password" name="password" type="password" autocomplete="current-password" required aria-describedby="caps-hint" />
-              <button class="input-group__button" type="button" id="toggle-password" aria-label="Show password" aria-pressed="false">${icon("eye")}</button>
-            </div>
-            <p class="field__hint field__hint--warn" id="caps-hint" hidden>Caps Lock is on.</p>
-          </div>
-          <button class="button button--primary button--block button--lg" type="submit">Sign in</button>
-        </form>
-        <p class="auth__foot">Accounts are issued by the Department of Logistics. Forgot your password? Ask an administrator to reset it.</p>
-      </section>
-    </div>
+          <p class="field__hint field__hint--warn" id="caps-hint" hidden>Caps Lock is on.</p>
+        </div>
+        <button class="button button--primary button--block button--lg" type="submit">Sign in</button>
+      </form>
+      <p class="auth__foot">Accounts are issued by the Department of Logistics. Forgot your password? Ask an administrator to reset it.</p>
+    </section>
     <p class="auth__back"><a class="text-link text-link--light" href="/" data-route>Back to the public site</a></p>
   </main>`);
   const form = document.querySelector<HTMLFormElement>("#staff-login")!;
@@ -495,7 +487,7 @@ export async function workspace(): Promise<void> {
       const loaded = await fetchDetail(id);
       if (loaded) renderDetail(loaded, tab);
     } catch (error) {
-      if (openId === id) mount(sheet.querySelector(".sheet__body")!, emptyState("Could not load this item", failure(error), "", "error"));
+      if (openId === id) mount(sheet.querySelector(".sheet__body")!, emptyState("Could not load this item", failure(error), "", "error", 3));
     }
   }
 
@@ -616,11 +608,11 @@ export async function workspace(): Promise<void> {
         ${tabs.map(([key, text]) => html`<button type="button" role="tab" id="tab-${key}" aria-controls="panel-${key}" aria-selected="${key === tab}" tabindex="${key === tab ? 0 : -1}">${text}</button>`)}
       </div>
       <section id="panel-overview" class="panel-stack" role="tabpanel" aria-labelledby="tab-overview" tabindex="0" ${tab === "overview" ? "" : html`hidden`}>${overviewMarkup(loaded)}</section>
-      ${lendable ? html`<section id="panel-loan" class="panel-stack" role="tabpanel" aria-labelledby="tab-loan" tabindex="0" ${tab === "loan" ? "" : html`hidden`}>
+      ${lendable ? html`<section id="panel-loan" class="panel-stack" role="tabpanel" aria-labelledby="tab-loan" ${tab === "loan" ? "" : html`hidden`}>
         ${item.status === "INACTIVE" ? html`<div class="callout">${icon("info")}<p>Inactive items cannot be lent. Reactivate it in Edit details first.</p></div>` : html`<form id="loan-form" class="form" novalidate aria-labelledby="lend-title"><h3 class="section-label" id="lend-title">Lend this item</h3>${loanFields("loan")}</form>`}
         <div id="item-loans" class="panel-stack">${itemLoansMarkup(loaded)}</div>
       </section>` : ""}
-      <section id="panel-details" role="tabpanel" aria-labelledby="tab-details" tabindex="0" ${tab === "details" ? "" : html`hidden`}>${detailsFormMarkup(item)}</section>
+      <section id="panel-details" role="tabpanel" aria-labelledby="tab-details" ${tab === "details" ? "" : html`hidden`}>${detailsFormMarkup(item)}</section>
       <section id="panel-history" role="tabpanel" aria-labelledby="tab-history" tabindex="0" ${tab === "history" ? "" : html`hidden`}><ol class="history" id="history">${historyMarkup(loaded)}</ol></section>`);
     const tabButtons = [...sheet.querySelectorAll<HTMLButtonElement>("[role=tab]")];
     const select = (target: HTMLButtonElement) => {

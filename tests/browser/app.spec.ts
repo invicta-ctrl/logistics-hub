@@ -14,18 +14,19 @@ test("landing shows the undistorted DOL mark beside the HAU·USC crest, and only
   let catalogRequests = 0;
   page.on("request", (request) => { if (request.url().includes("/api/public/catalog")) catalogRequests += 1; });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Logistics that keeps the work moving." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Borrow equipment from the USC Department of Logistics" })).toBeVisible();
   const box = (await page.locator(".site-header__brand .mark").boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(40);
   await expect(page.locator(".site-header__brand .crest")).toBeVisible();
-  const brand = page.getByRole("link", { name: "HAU University Student Council on Facebook (opens in a new tab)" });
-  await expect(brand).toHaveAttribute("href", "https://www.facebook.com/holyangeluniversitysc");
-  await expect(brand).toHaveAttribute("target", "_blank");
+  await expect(page.getByRole("img", { name: "Siglawang: Yabong ng Pamana, Youth Development Day 2026" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Department of Logistics home" })).toHaveAttribute("href", "/");
+  const facebook = page.getByRole("contentinfo").getByRole("link", { name: "Student Council on Facebook (opens in a new tab)" });
+  await expect(facebook).toHaveAttribute("href", "https://www.facebook.com/holyangeluniversitysc");
+  await expect(facebook).toHaveAttribute("target", "_blank");
   expect(Math.abs(box.width / box.height - 183 / 163)).toBeLessThan(0.02);
   // Availability lives only in the Lending Hub; the landing page does not poll the catalog.
   await expect(page.locator(".shelf")).toHaveCount(0);
   expect(catalogRequests).toBe(0);
-  await expect(page.getByText("Not yet available", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /Browse the Lending Hub/ })).toHaveAttribute("href", "/lending");
 });
 
@@ -36,10 +37,11 @@ test("Lending Hub groups by category, filters, and keeps filters in the URL", as
   await expect(page.getByRole("link", { name: "Department of Logistics home" })).toHaveAttribute("href", "/");
   await expect(page.getByRole("heading", { name: /Furniture/, level: 2 })).toBeVisible();
   await expect(page.getByText("3 pieces available")).toBeVisible();
-  // Loan period and maximum per loan are no longer item settings; the row states only who may borrow.
-  await expect(page.locator(".catalogue__row", { hasText: "Folding Table" }).locator(".catalogue__meta")).toHaveText("Students & USC staff");
+  // Rows name only the exception: who may not borrow, never loan periods or the usual audience.
+  await expect(page.locator(".catalogue__row", { hasText: "Folding Table" }).locator(".catalogue__meta")).toHaveCount(0);
+  await expect(page.locator(".catalogue__row", { hasText: "Cork Board" }).locator(".catalogue__meta")).toHaveText("USC staff only");
   await expect(page.getByText(/per loan|day loan/)).toHaveCount(0);
-  await expect(page.getByText("All out right now")).toBeVisible();
+  await expect(page.getByText("All out", { exact: true })).toBeVisible();
   await page.getByLabel("Available now").check();
   await expect(page.getByText("Cork Board")).toHaveCount(0);
   await expect(page).toHaveURL(/available=1/);
@@ -129,6 +131,25 @@ test("self-service fits phones, tablets and desktops, with every screen and shee
   // A borrow the records say is out explains itself instead of hiding the item.
   await page.goto("/self-service?do=borrow&item=ITM-0262");
   await expect(page.getByRole("dialog", { name: "Scissors" })).toContainText("The records show none left.");
+});
+
+test("self-service starts dark over the campus photo, switches to light, and remembers the choice on this phone", async ({ page }) => {
+  await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
+  await page.goto("/self-service");
+  await expect(page.locator(".ss-photo")).toBeVisible();
+  const toggle = page.getByRole("button", { name: "Dark theme" });
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("body")).toHaveAttribute("data-theme", "dark");
+  await toggle.click();
+  await expect(page.locator("body")).toHaveAttribute("data-theme", "light");
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await page.reload();
+  await expect(page.locator("body")).toHaveAttribute("data-theme", "light");
+  // The photograph belongs to home only.
+  await page.goto("/self-service?do=take");
+  await expect(page.locator(".ss-photo")).toBeHidden();
+  await page.goto("/lending");
+  await expect(page.locator("body")).not.toHaveAttribute("data-theme");
 });
 
 test("public routes fit every required viewport class", async ({ page }) => {
