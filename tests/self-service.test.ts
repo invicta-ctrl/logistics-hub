@@ -31,7 +31,7 @@ beforeEach(async () => {
 
 /** An item that has been on the shelf since yesterday, so simulated offline events happen after it existed. */
 async function item(fields: Record<string, unknown>, quantity: number): Promise<string> {
-  const base = { category: "SUPPLIES", unit: "piece", status: "ACTIVE", storageLocation: "Shelf B", reorderThreshold: 0, needsReview: false, notes: "private staff note", selfService: true };
+  const base = { category: "SUPPLIES", unit: "piece", status: "ACTIVE", storageLocation: "Shelf B", reorderThreshold: 0, needsReview: false, notes: "private staff note" };
   const response = await staff("/api/staff/items", "POST", { ...base, ...fields, openingQuantity: 0 });
   expect(response.status).toBe(201);
   const { id } = await response.json() as { id: string };
@@ -94,10 +94,9 @@ async function count(itemId: string, observed: number) {
 }
 
 describe("self-service catalog", () => {
-  it("offers only opted-in, eligible items with a minimal DTO, and fails closed", async () => {
+  it("offers eligible items by type with a minimal DTO, and fails closed", async () => {
     const water = await consumable("Bottled Water", 20);
     const scissors = await loanable("Scissors", 5, { aliases: "Gunting" });
-    await consumable("Staff-only Toner", 3, { selfService: false });
     await consumable("Unreviewed Snack", 3, { needsReview: true });
     await loanable("Unlisted Projector", 1, { lendingAudience: "NOT_AVAILABLE_FOR_LENDING" });
     const response = await call("/api/self-service/catalog");
@@ -110,10 +109,6 @@ describe("self-service catalog", () => {
     expect(JSON.stringify(body)).not.toContain("private staff note");
     const etag = response.headers.get("etag")!;
     expect((await call("/api/self-service/catalog", { headers: { "if-none-match": etag } })).status).toBe(304);
-  });
-
-  it("migrates every existing item to staff-only", () => {
-    expect(sqlite.prepare("SELECT COUNT(*) AS total FROM items WHERE self_service = 1").get()).toEqual({ total: 0 });
   });
 });
 
@@ -182,7 +177,7 @@ describe("Take", () => {
   });
 
   it("refuses an ineligible take while the person is there, and holds a late one without applying it", async () => {
-    const toner = await consumable("Toner", 5, { selfService: false });
+    const toner = await consumable("Toner", 5, { needsReview: true });
     const a = phone();
     const live = a.take(toner, 1);
     expect(await results(await a.sync([live]))).toEqual([{ id: live.id, outcome: "rejected", message: "This item is not available for self-service right now. Please ask Logistics staff." }]);
@@ -345,7 +340,7 @@ describe("Borrow and Return", () => {
 
   it("refuses a borrow without a valid photo, keeps a held borrow's photo for staff, and deletes it when dismissed", async () => {
     const scissors = await loanable("Scissors", 5);
-    const drill = await loanable("Drill", 1, { selfService: false });
+    const drill = await loanable("Drill", 1, { lendingAudience: "NOT_AVAILABLE_FOR_LENDING" });
     const a = phone();
     const late = a.borrow(scissors, 30);
     expect((await results(await a.sync([late], { photoFor: [] })))[0]).toMatchObject({ outcome: "rejected", message: "A photo is required. Take the photo again and borrow once more." });
@@ -436,7 +431,7 @@ describe("staff review", () => {
   });
 
   it("never applies a dismissed borrow, and never deletes an applied borrow's photo", async () => {
-    const drill = await loanable("Drill", 2, { selfService: false });
+    const drill = await loanable("Drill", 2, { lendingAudience: "NOT_AVAILABLE_FOR_LENDING" });
     const a = phone();
     const [one, two] = [a.borrow(drill, 30), a.borrow(drill, 29)];
     await a.sync([one, two]);
@@ -465,7 +460,7 @@ describe("staff review", () => {
   });
 
   it("refuses to apply a held borrow that has no photo", async () => {
-    const drill = await loanable("Drill", 1, { selfService: false });
+    const drill = await loanable("Drill", 1, { lendingAudience: "NOT_AVAILABLE_FOR_LENDING" });
     const a = phone();
     const borrow = a.borrow(drill, 30);
     await a.sync([borrow]);

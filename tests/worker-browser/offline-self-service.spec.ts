@@ -14,7 +14,7 @@ const COTTON = "ITM-0063";
 const BASE = `http://127.0.0.1:${process.env.E2E_PORT ?? "8792"}`;
 
 type Item = { name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; storageLocation: string | null;
-  reorderThreshold: number; lendingAudience: string; needsReview: boolean; notes: string | null; selfService: boolean; onHand: number; updatedAt: string | null };
+  reorderThreshold: number; lendingAudience: string; needsReview: boolean; notes: string | null; onHand: number; updatedAt: string | null };
 
 let staff: Page;
 let original: Record<string, Item> = {};
@@ -33,9 +33,9 @@ const item = async (id: string) => (await (await staff.request.get(`/api/staff/i
 
 async function setItem(id: string, changes: Partial<Item>): Promise<void> {
   const current = await item(id);
-  const { name, aliases, category, itemType, unit, status, storageLocation, reorderThreshold, lendingAudience, needsReview, notes, selfService } = current;
+  const { name, aliases, category, itemType, unit, status, storageLocation, reorderThreshold, lendingAudience, needsReview, notes } = current;
   const response = await staff.request.patch(`/api/staff/items/${id}`, {
-    data: { name, aliases, category, itemType, unit, status, storageLocation, reorderThreshold, lendingAudience, needsReview, notes, selfService, ...changes, updatedAt: current.updatedAt },
+    data: { name, aliases, category, itemType, unit, status, storageLocation, reorderThreshold, lendingAudience, needsReview, notes, ...changes, updatedAt: current.updatedAt },
     headers: { origin: BASE }
   });
   expect(response.status()).toBe(200);
@@ -114,14 +114,14 @@ test.describe.serial("offline self-service", () => {
   test.beforeAll(async ({ browser }) => {
     staff = await signIn(browser);
     original = { [WATER]: await item(WATER), [COTTON]: await item(COTTON) };
-    await setItem(WATER, { itemType: "Consumable", status: "ACTIVE", needsReview: false, selfService: true, storageLocation: "Pantry shelf" });
-    await setItem(COTTON, { status: "ACTIVE", needsReview: false, selfService: true, lendingAudience: "STUDENTS_AND_USC_STAFF" });
+    await setItem(WATER, { itemType: "Consumable", status: "ACTIVE", needsReview: false, storageLocation: "Pantry shelf" });
+    await setItem(COTTON, { status: "ACTIVE", needsReview: false, lendingAudience: "STUDENTS_AND_USC_STAFF" });
   });
 
   test.afterAll(async () => {
-    // Leave the migrated catalog as other tests expect it: nothing public, nothing self-service.
+    // Leave the migrated catalog as other tests expect it: nothing public or offered.
     for (const [id, before] of Object.entries(original)) {
-      await setItem(id, { itemType: before.itemType, status: before.status, needsReview: true, selfService: false, lendingAudience: before.lendingAudience, storageLocation: before.storageLocation });
+      await setItem(id, { itemType: before.itemType, status: before.status, needsReview: true, lendingAudience: before.lendingAudience, storageLocation: before.storageLocation });
     }
     await staff.close();
   });
@@ -137,7 +137,10 @@ test.describe.serial("offline self-service", () => {
     const catalog = await request.get("/api/self-service/catalog");
     expect(catalog.headers()["cache-control"]).toBe("no-store");
     const body = await catalog.json() as { items: Array<Record<string, unknown>> };
-    expect(body.items.map((entry) => entry.id).sort()).toEqual([WATER, COTTON].sort());
+    // Offered by type alone: a reviewed Consumable is taken, a listed Loanable borrowed.
+    expect(body.items.find((entry) => entry.id === WATER)).toMatchObject({ action: "TAKE" });
+    expect(body.items.find((entry) => entry.id === COTTON)).toMatchObject({ action: "BORROW" });
+    expect(body.items.every((entry) => entry.action === "TAKE" || entry.action === "BORROW")).toBe(true);
     expect(Object.keys(body.items[0]!).sort()).toEqual(["action", "aliases", "audience", "available", "category", "id", "location", "name", "unit"]);
   });
 

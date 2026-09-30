@@ -79,7 +79,7 @@ Workers Builds deploys every push to `main` automatically, but it does not apply
 
 A deploy that adds a binding needs the resource first: Part 4 adds the R2 bucket above, and a push without it fails the Workers Builds deploy (the live version keeps serving). Order for Part 4: create the bucket, apply `0014`, then push `main`.
 
-Migration `0015` (Part 4.5, phone Self-Service) is additive: `items.self_service` (default off, so nothing changes until staff turn it on), the new `self_service_events` table with a trigger that keeps a staff resolution final, then a revision bump. The Part 4 code never reads either, so it is safe to apply first. It adds no binding (loan photos from phones go to the same `EVIDENCE` bucket). Order for Part 4.5: apply `0015` to production, verify it, then push `main`:
+Migration `0015` (Part 4.5, phone Self-Service) is additive: `items.self_service` (no longer read once items are offered by type), the new `self_service_events` table with a trigger that keeps a staff resolution final, then a revision bump. The Part 4 code never reads either, so it is safe to apply first. It adds no binding (loan photos from phones go to the same `EVIDENCE` bucket). Order for Part 4.5: apply `0015` to production, verify it, then push `main`:
 
 ```
 npx wrangler d1 migrations list DB --remote        # shows 0015_self_service.sql as the only pending migration

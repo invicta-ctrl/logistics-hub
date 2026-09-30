@@ -9,13 +9,13 @@ export type Actor = { accountId: string };
 type ItemRow = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: number;
   lendingAudience: string; onHand: number; reorderThreshold: number; storageLocation: string | null; notes: string | null; updatedAt: string | null;
-  stockArea: string | null; expiresOn: string | null; selfService: number;
+  stockArea: string | null; expiresOn: string | null;
 };
 
 const ITEM_COLUMNS = `i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.unit, i.status, i.needs_review AS needsReview,
  i.lending_audience AS lendingAudience, COALESCE(b.on_hand, 0) AS onHand, i.reorder_threshold AS reorderThreshold,
  i.storage_location AS storageLocation, i.notes, i.updated_at AS updatedAt,
- i.stock_area AS stockArea, i.expires_on AS expiresOn, i.self_service AS selfService`;
+ i.stock_area AS stockArea, i.expires_on AS expiresOn`;
 export const BUMP_REVISION = "UPDATE catalog_revision SET value = value + 1 WHERE id = 1";
 /**
  * History is shown in business order: migrated rows keep their import order, then everything
@@ -83,7 +83,7 @@ export async function staffInventory(db: D1Database) {
     needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand,
     reorderThreshold: row.reorderThreshold, storageLocation: row.storageLocation, listed: isListedForLending(row),
     stockArea: row.stockArea, expiresOn: row.expiresOn, lastCountedAt: row.lastCountedAt, reorderStatus: row.reorderStatus, onLoan: row.onLoan,
-    selfService: row.selfService === 1, selfServiceReady: selfServiceGaps(row).length === 0,
+    selfServiceReady: selfServiceGaps(row).length === 0,
     // The legacy quantity is doubtful (migration discrepancy or a VERIFY record) until someone counts it.
     countNeeded: row.status !== "INACTIVE" && !row.lastCountedAt && ((row.migrationDelta ?? 0) !== 0 || row.status === "VERIFY")
   }));
@@ -118,7 +118,7 @@ export async function itemDetail(db: D1Database, id: string) {
   const row = item.results[0] as (ItemRow & Record<string, unknown>) | undefined;
   if (!row) throw new InputError(404, "Item not found.");
   return {
-    item: { ...row, needsReview: row.needsReview === 1, selfService: row.selfService === 1, listed: isListedForLending(row), listingGaps: listingGaps(row), selfServiceGaps: selfServiceGaps(row) },
+    item: { ...row, needsReview: row.needsReview === 1, listed: isListedForLending(row), listingGaps: listingGaps(row), selfServiceGaps: selfServiceGaps(row) },
     movements: movements.results,
     loans: loans.results,
     // Parsed here so the browser renders sentences, never raw JSON.
@@ -130,7 +130,7 @@ type ItemInput = {
   name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; storageLocation: string | null;
   reorderThreshold: number; lendingAudience: string; needsReview: boolean; notes: string | null;
   // Optional: an older form that omits them keeps the stored value.
-  stockArea?: string; expiresOn?: string | null; selfService?: boolean;
+  stockArea?: string; expiresOn?: string | null;
 };
 
 function text(body: Record<string, unknown>, key: string, label: string, max: number, required: boolean, multiline = false): string | null {
@@ -185,8 +185,7 @@ export function parseItemInput(body: unknown): ItemInput {
     needsReview: record.needsReview === true,
     notes: text(record, "notes", "Notes", 1000, false, true),
     ...(record.stockArea === undefined ? {} : { stockArea: choice(record, "stockArea", "stock area", STOCK_AREAS) }),
-    ...(record.expiresOn === undefined ? {} : { expiresOn: isoDate(record.expiresOn, "Expiry date") }),
-    ...(record.selfService === undefined ? {} : { selfService: record.selfService === true })
+    ...(record.expiresOn === undefined ? {} : { expiresOn: isoDate(record.expiresOn, "Expiry date") })
   };
   if (input.lendingAudience !== "NOT_AVAILABLE_FOR_LENDING" && input.itemType !== PUBLIC_LENDING_ITEM_TYPE) {
     throw new InputError(400, "Only Loanable items can be offered for lending.");
@@ -216,7 +215,7 @@ const EDITABLE: Array<[keyof ItemInput, string]> = [
   ["name", "name"], ["aliases", "aliases"], ["category", "category"], ["itemType", "item_type"], ["unit", "unit"], ["status", "status"],
   ["storageLocation", "storage_location"], ["reorderThreshold", "reorder_threshold"], ["lendingAudience", "lending_audience"],
   ["needsReview", "needs_review"], ["notes", "notes"],
-  ["stockArea", "stock_area"], ["expiresOn", "expires_on"], ["selfService", "self_service"]
+  ["stockArea", "stock_area"], ["expiresOn", "expires_on"]
 ];
 const stored = (value: ItemInput[keyof ItemInput]) => typeof value === "boolean" ? Number(value) : value;
 
@@ -263,10 +262,10 @@ export async function createItem(db: D1Database, actor: Actor, parsed: ItemInput
     const id = `ITM-${String(next).padStart(4, "0")}`;
     const statements = [
       db.prepare(`INSERT INTO items(id, name, aliases, category, item_type, unit, status, storage_location, reorder_threshold, lending_audience,
-        needs_review, notes, stock_area, expires_on, self_service, imported_from, imported_at, updated_at)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
+        needs_review, notes, stock_area, expires_on, imported_from, imported_at, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
         .bind(id, input.name, input.aliases, input.category, input.itemType, input.unit, input.status, input.storageLocation, input.reorderThreshold, input.lendingAudience,
-          Number(input.needsReview), input.notes, input.stockArea ?? "Inventory", input.expiresOn ?? null, Number(input.selfService ?? false), now, now),
+          Number(input.needsReview), input.notes, input.stockArea ?? "Inventory", input.expiresOn ?? null, now, now),
       audit(db, actor.accountId, "ITEM_CREATED", "ITEM", id, { ...input, openingQuantity }),
       db.prepare(BUMP_REVISION)
     ];

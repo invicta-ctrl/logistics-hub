@@ -86,17 +86,16 @@ export function isListedForLending(item: ListingCandidate): boolean {
 
 /* ---------- Self-service (phones, Part 4.5) ---------- */
 
-export type SelfServiceCandidate = ListingCandidate & { selfService: number | boolean };
+export type SelfServiceCandidate = ListingCandidate;
 export type SelfServiceAction = "TAKE" | "BORROW";
 
 /**
  * What still blocks an item from phone self-service, in the words staff see. Fail closed:
- * staff opt each item in; a Consumable must be Active and reviewed, a Loanable must also be
- * listed on the Lending Hub (so it has an audience).
+ * the item type decides (a Consumable is taken, a Loanable borrowed); a Consumable must be
+ * Active and reviewed, a Loanable must also be listed on the Lending Hub (so it has an audience).
  */
 export function selfServiceGaps(item: SelfServiceCandidate): string[] {
   const gaps: string[] = [];
-  if (!(item.selfService === 1 || item.selfService === true)) gaps.push("Turn on self-service");
   if (item.itemType === PUBLIC_LENDING_ITEM_TYPE) gaps.push(...listingGaps(item));
   else if (item.itemType !== "Consumable") gaps.push("Set the type to Loanable or Consumable");
   else {

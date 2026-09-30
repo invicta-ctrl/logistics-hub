@@ -38,10 +38,10 @@ After one online visit, the app is installed on the phone (a PWA) and keeps work
 
 ## 3. Eligibility (fail closed)
 
-`items.self_service` is off for every item until staff turn it on (Inventory → item → **Edit details → Phone self-service**). `selfServiceAction(item)` is the one rule:
+There is no per-item switch: the item type staff set (Inventory → item → **Edit details → Type**) decides, and eligible items are offered automatically. (`items.self_service` from migration 0015 is no longer read; dropping it needs its own migration.) `selfServiceAction(item)` is the one rule:
 
-- **TAKE**: Consumable, Active, reviewed, self-service on.
-- **BORROW**: Loanable, listed on the Lending Hub (so it has an audience), self-service on. A `USC_STAFF_ONLY` audience allows USC use only.
+- **TAKE**: Consumable, Active, reviewed.
+- **BORROW**: Loanable, Active, reviewed and listed on the Lending Hub (so it has an audience). A `USC_STAFF_ONLY` audience allows USC use only.
 - Anything else is not offered.
 
 Staff see what is missing (`selfServiceGaps()`) in the edit form and on the item's Overview. Inventory has a **Self-service** view and a row tag.

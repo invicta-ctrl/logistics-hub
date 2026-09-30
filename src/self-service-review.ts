@@ -145,7 +145,7 @@ export async function selfServiceReview(): Promise<void> {
     if (!review.open.length && !review.stockIssues.length) {
       return emptyState("Nothing needs attention", review.enabledItems
         ? "Records from phones reconcile on their own. Anything ambiguous will appear here."
-        : "No item is offered on Self-Service yet. Turn it on in an item's Edit details (Phone self-service).");
+        : "No item is offered on Self-Service yet. Active, reviewed Consumables are taken, and Loanables listed on the Lending Hub are borrowed.");
     }
     return html`${review.stockIssues.length ? html`<h2 class="section-label">Count needed</h2><ul class="review-list">${review.stockIssues.map(issueRow)}</ul>` : ""}
       ${review.open.length ? html`<h2 class="section-label">Records to check</h2><ul class="review-list">${review.open.map((entry) => reviewCard(entry, review.candidates))}</ul>` : ""}`;

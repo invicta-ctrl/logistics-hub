@@ -45,16 +45,16 @@ type SelfServiceEvent = {
  */
 export type Batch = { deviceId: string; sentAt: string; offsetMs: number; receivedAt: string; network: string; clientTag: string | null; events: unknown[] };
 
-type ItemRow = { id: string; itemType: string; status: string; needsReview: number; lendingAudience: string; selfService: number };
+type ItemRow = { id: string; itemType: string; status: string; needsReview: number; lendingAudience: string };
 
 /* ---------- Public catalog ---------- */
 
 /** The phone's catalog snapshot: only what self-service needs, never notes, history, borrowers or photos. */
 export async function selfServiceCatalog(db: D1Database) {
   const { results } = await db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.unit, i.item_type AS itemType, i.status, i.needs_review AS needsReview,
-      i.lending_audience AS lendingAudience, i.self_service AS selfService, i.storage_location AS location, COALESCE(b.on_hand, 0) AS onHand
+      i.lending_audience AS lendingAudience, i.storage_location AS location, COALESCE(b.on_hand, 0) AS onHand
     FROM items i LEFT JOIN inventory_balances b ON b.id = i.id
-    WHERE i.self_service = 1 AND i.status = 'ACTIVE' AND i.needs_review = 0 ORDER BY i.name COLLATE NOCASE`)
+    WHERE i.status = 'ACTIVE' AND i.needs_review = 0 ORDER BY i.name COLLATE NOCASE`)
     .all<ItemRow & { name: string; aliases: string | null; category: string; unit: string; location: string | null; onHand: number }>();
   const items = results.flatMap((row) => {
     const action = selfServiceAction(row);
@@ -377,7 +377,7 @@ export async function syncEvents(db: D1Database, bucket: R2Bucket, batch: Batch,
   // Everything the batch needs to know up front, in two queries.
   const [known, items] = await db.batch([
     db.prepare(`SELECT id, review FROM self_service_events WHERE id IN (${marks(ids)})`).bind(...ids),
-    db.prepare(`SELECT id, item_type AS itemType, status, needs_review AS needsReview, lending_audience AS lendingAudience, self_service AS selfService
+    db.prepare(`SELECT id, item_type AS itemType, status, needs_review AS needsReview, lending_audience AS lendingAudience
       FROM items WHERE id IN (${marks(itemIds)})`).bind(...itemIds)
   ]);
   const stored = new Map((known.results as Array<{ id: string; review: ReviewReason | null }>).map((row) => [row.id, row.review]));
@@ -438,16 +438,15 @@ function stockIssues(db: D1Database, since: string): D1PreparedStatement {
 /** The staff exception view in one revisioned payload: open reviews, stock issues, the last week's activity and loans an unmatched return could belong to. */
 export async function selfServiceReview(db: D1Database) {
   const since = new Date(Date.now() - 7 * 24 * 60 * MINUTE).toISOString();
-  const [open, issues, recent, candidates, enabled] = await db.batch([
+  const [open, issues, recent, candidates] = await db.batch([
     db.prepare(`${EVENT_COLUMNS} WHERE e.review IS NOT NULL AND e.resolved_at IS NULL ORDER BY e.received_at DESC LIMIT 200`),
     stockIssues(db, new Date(Date.now() - 30 * 24 * 60 * MINUTE).toISOString()),
     db.prepare(`${EVENT_COLUMNS} WHERE e.received_at >= ? ORDER BY e.occurred_at DESC LIMIT 200`).bind(since),
     db.prepare(`SELECT l.id, l.item_id AS itemId, l.quantity, l.purpose, l.borrower_name AS borrowerName, l.student_id AS studentId, l.created_at AS createdAt
       FROM loans l WHERE l.status = 'OUT' AND l.item_id IN (SELECT item_id FROM self_service_events WHERE review IN ('UNMATCHED_RETURN', 'RETURN_CONFLICT', 'CLOCK') AND event_type = 'RETURN' AND resolved_at IS NULL)
-      ORDER BY l.created_at`),
-    db.prepare("SELECT COUNT(*) AS total FROM items WHERE self_service = 1 AND status <> 'INACTIVE'")
+      ORDER BY l.created_at`)
   ]);
-  return { open: open.results, stockIssues: issues.results, recent: recent.results, candidates: candidates.results, enabledItems: (enabled.results[0] as { total: number }).total };
+  return { open: open.results, stockIssues: issues.results, recent: recent.results, candidates: candidates.results, enabledItems: (await selfServiceCatalog(db)).items.length };
 }
 
 type HeldEvent = {
