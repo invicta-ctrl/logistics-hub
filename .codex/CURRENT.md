@@ -2,7 +2,7 @@
 PROGRAM: Logistics Hub
 MILESTONE: PART-04.5_OFFLINE_SELF_SERVICE
 STATUS: PART_04_5_RELEASED_AND_DEPLOYED (2026-09-30); automated production checks pass; owner phone + signed-in staff acceptance pending
-BRANCH: main only. Slice branches slice/part-04-5-offline-self-service-pwa and slice/part-04-lending were fully merged and deleted 2026-09-30. Unmerged foreign branch origin/claude/affectionate-johnson-e3t123 (one handoff-note commit from another cloud session) is preserved for Earl to decide.
+BRANCH: main only. Slice branches slice/part-04-5-offline-self-service-pwa (2f65ec9) and slice/part-04-lending (64c037e) are fully merged into main and safe to delete; the local copy is gone but the cloud session's remote delete was refused (HTTP 403), so Earl deletes the two remote branches. Unmerged foreign branch origin/claude/affectionate-johnson-e3t123 (one handoff-note commit from another cloud session) is preserved for Earl to decide.
 ACTIVE_WRITER: none after this handoff (claude cloud yields); claim before editing
 SHARED_WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
 PRODUCTION: Worker logistics-hub; D1 logistics-hub (binding DB); R2 logistics-hub-evidence (binding EVIDENCE, private); https://logistics.hausc.org; never hau-usc-logistics-production/staging
