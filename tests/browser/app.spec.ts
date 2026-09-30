@@ -18,6 +18,7 @@ test("landing shows the undistorted DOL mark beside the HAU·USC crest, and only
   const box = (await page.locator(".site-header__brand .mark").boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(40);
   await expect(page.locator(".site-header__brand .crest")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Siglawang: Yabong ng Pamana, Youth Development Day 2026" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Department of Logistics home" })).toHaveAttribute("href", "/");
   const facebook = page.getByRole("contentinfo").getByRole("link", { name: "Student Council on Facebook (opens in a new tab)" });
   await expect(facebook).toHaveAttribute("href", "https://www.facebook.com/holyangeluniversitysc");

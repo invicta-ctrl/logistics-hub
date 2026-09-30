@@ -277,7 +277,11 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .site-nav :focus-visible { outline-color: var(--gold-action); }
 
 .hero { background: var(--brand-dark); color: var(--on-dark); }
-.hero__inner { padding-block: clamp(2.5rem, 6vw, 4.5rem); }
+.hero__inner { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); align-items: center; gap: clamp(2rem, 5vw, 4.5rem); padding-block: clamp(2.5rem, 6vw, 4.5rem); }
+.hero__copy { min-width: 0; }
+/* The Youth Development Day banner carries its own title, so it is shown whole, never cropped or veiled. */
+.hero__banner { margin: 0; overflow: hidden; border: 1px solid var(--on-dark-line); border-radius: var(--radius-lg); background: var(--brand-deep); }
+.hero__banner img { width: 100%; aspect-ratio: 960 / 356; object-fit: cover; }
 .hero h1 { max-width: 20ch; margin-bottom: var(--space-4); font-family: var(--serif); font-size: var(--text-display); font-weight: 400; letter-spacing: -.02em; line-height: 1.02; overflow-wrap: anywhere; }
 .hero__lede { max-width: 34rem; color: var(--on-dark-2); font-size: var(--text-lg); line-height: 1.6; }
 .hero__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); margin-top: var(--space-8); }
@@ -726,6 +730,8 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .stock-layout { grid-template-columns: minmax(0, 1fr); }
   .record-home { display: none; }
   .steps { grid-template-columns: 1fr; gap: var(--space-8); }
+  .hero__inner { grid-template-columns: minmax(0, 1fr); }
+  .hero__banner { order: -1; max-width: 44rem; }
   .app-bar__link { display: none; }
   .panels { grid-template-columns: 1fr; }
 }

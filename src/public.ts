@@ -70,12 +70,15 @@ export function landing(): void {
   page(html`<main id="main-content">
     <section class="hero" aria-labelledby="hero-title">
       <div class="container hero__inner">
-        <h1 id="hero-title">Borrow equipment from the USC Department of Logistics</h1>
-        <p class="hero__lede">Check what is on the shelf, then borrow it in person at the Logistics office.</p>
-        <div class="hero__actions">
-          <a class="button button--on-dark button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
-          <a class="text-link text-link--light hero__secondary" href="#steps-title">How borrowing works</a>
+        <div class="hero__copy">
+          <h1 id="hero-title">Borrow equipment from the USC Department of Logistics</h1>
+          <p class="hero__lede">Check what is on the shelf, then borrow it in person at the Logistics office.</p>
+          <div class="hero__actions">
+            <a class="button button--on-dark button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
+            <a class="text-link text-link--light hero__secondary" href="#steps-title">How borrowing works</a>
+          </div>
         </div>
+        <figure class="hero__banner"><img src="/brand/ydd-2026-banner.jpg" alt="Siglawang: Yabong ng Pamana, Youth Development Day 2026" width="960" height="356" fetchpriority="high" /></figure>
       </div>
     </section>
 

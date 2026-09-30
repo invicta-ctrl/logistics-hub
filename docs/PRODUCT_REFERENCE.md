@@ -200,7 +200,7 @@ Each Part must work end to end without depending on a later Part.
 | `hau-usc-crest.webp` | The legacy `/brand/usc-logo` (a 1545×1999 PNG, sha256 `d1cb4968…3dda5`), trimmed and scaled to 240 px tall. |
 | `dol-mark.png` | The Part 1 cropped DOL mark (also the favicon). |
 
-`public/touch-icon.png` is the iOS home-screen icon. `public/icons/` (192, 512 and a maskable 512) are the installed-app icons: the DOL mark on warm paper, like the touch icon, resized with Lanczos and quantized to 96 colours. The old site's combined lockup is not used; the crest and the mark are composed in code instead. The Youth Development Day 2026 banner (Earl, 2026-09-29) left the landing hero in Part 4.6 as a one-event poster; it survives only as the worker suite's upload fixture, `tests/worker-browser/loan-photo.jpg`.
+`public/touch-icon.png` is the iOS home-screen icon. `public/icons/` (192, 512 and a maskable 512) are the installed-app icons: the DOL mark on warm paper, like the touch icon, resized with Lanczos and quantized to 96 colours. The old site's combined lockup is not used; the crest and the mark are composed in code instead. The Youth Development Day 2026 banner (Earl, 2026-09-29), `public/brand/ydd-2026-banner.jpg`, sits beside the landing hero's words (above them on narrow screens), shown whole. Part 4.6 removed it and Earl asked for it back the same day (Part 4.9). The worker suite also uploads it as a loan photo.
 
 `public/qr/logistics-self-service.svg` and `.png` are the one permanent Self-Service QR code (only `https://logistics.hausc.org/self-service`; version 4, error correction Q, 4-module quiet zone). `scripts/generate-self-service-qr.py` regenerates and decode-checks them.
 
