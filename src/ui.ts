@@ -253,8 +253,9 @@ export function toast(message: string, tone: "ok" | "error" = "ok"): void {
   }, tone === "ok" ? 3500 : 6000);
 }
 
-export function emptyState(title: string, detail: string, action: Html | string = "", tone: "" | "error" = ""): Html {
-  return html`<div class="empty ${tone ? `empty--${tone}` : ""}">${icon(tone ? "alert" : "box")}<h2>${title}</h2><p>${detail}</p>${action}</div>`;
+/** `level` follows the surrounding outline: 1 when it is the whole page, 3 inside a sheet or titled section. */
+export function emptyState(title: string, detail: string, action: Html | string = "", tone: "" | "error" = "", level: 1 | 2 | 3 = 2): Html {
+  return html`<div class="empty ${tone ? `empty--${tone}` : ""}">${icon(tone ? "alert" : "box")}<h${level}>${title}</h${level}><p>${detail}</p>${action}</div>`;
 }
 
 /* ---------- Photos ---------- */

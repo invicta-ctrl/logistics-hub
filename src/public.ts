@@ -108,7 +108,7 @@ export function lending(): void {
         </div>
       </div>
     </div>
-    <div class="filterbar" role="search" aria-label="Filter the Lending Hub">
+    <search class="filterbar" aria-label="Filter the Lending Hub">
       <div class="container filterbar__inner">
         <div class="filterbar__row">
           <label class="search-field">${icon("search")}<span class="visually-hidden">Search the Lending Hub</span><input id="lending-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search equipment" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
@@ -119,7 +119,7 @@ export function lending(): void {
         </div>
         <div class="chips" id="lending-categories" role="group" aria-label="Category"></div>
       </div>
-    </div>
+    </search>
     <div class="container lending-layout">
       <p class="result-count" id="lending-count" aria-live="polite"></p>
       <div id="lending-results" aria-busy="true">${skeletonRows(6)}</div>

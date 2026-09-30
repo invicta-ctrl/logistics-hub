@@ -240,8 +240,8 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 
 /* ---------- Empty, loading, toast ---------- */
 .empty { display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-16) var(--space-6); border: 1px dashed var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); text-align: center; }
-.empty > .icon { width: 2rem; height: 2rem; margin-bottom: var(--space-1); color: var(--text-3); stroke-width: 1.25; }
-.empty h1, .empty h2 { font-size: var(--text-lg); }
+.empty > .icon { width: 1.5rem; height: 1.5rem; margin-bottom: var(--space-1); color: var(--text-3); stroke-width: 1.25; }
+.empty :is(h1, h2, h3) { font-size: var(--text-lg); }
 .empty p { max-width: 30rem; color: var(--text-2); font-size: var(--text-base); }
 .empty .button { margin-top: var(--space-3); }
 .empty--error { border-style: solid; border-color: var(--line-bad); }
@@ -322,7 +322,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .page-intro__lede { max-width: 42rem; margin-top: var(--space-2); color: var(--on-dark-2); }
 .page-intro .live-status { color: var(--on-dark-2); }
 .page-intro .live-status[data-state="updated"] { color: var(--ok-on-dark); }
-.filterbar { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: var(--bg); }
+.filterbar { display: block; position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: var(--bg); }
 .filterbar__inner { display: grid; gap: var(--space-3); padding-block: var(--space-4); }
 .filterbar__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .sort-toggle { display: inline-flex; padding: .1875rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--subtle); }
@@ -767,7 +767,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .data-table .col-desired { width: auto; }
   .activity-row { grid-template-columns: 3rem minmax(0, 1fr); padding-inline: var(--space-3); }
   .app-bar__inner { flex-wrap: wrap; gap: 0 var(--space-4); }
-  .app-bar__title { display: none; }
+  .app-bar__title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .app-nav { order: 3; width: calc(100% + var(--gutter) * 2); min-height: 2.75rem; margin-inline: calc(var(--gutter) * -1); padding-inline: calc(var(--gutter) - .75rem); overflow-x: auto; border-top: 1px solid var(--on-dark-line); }
   .account { padding-left: 0; border: 0; }
   /* The avatar already opens My account; the bar keeps room for the work sections. */

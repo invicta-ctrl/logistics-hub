@@ -173,7 +173,7 @@ export async function loansWorkspace(): Promise<void> {
   async function openLend(): Promise<void> {
     mount(lendSheet, sheetContent("Loans", "Lend an item", html`<div class="skeleton skeleton--block"></div>`));
     panel.open();
-    try { await loadItems(); } catch (error) { mount(lendSheet.querySelector(".sheet__body")!, emptyState("Items could not be loaded", error instanceof Error ? error.message : "Try again.", "", "error")); return; }
+    try { await loadItems(); } catch (error) { mount(lendSheet.querySelector(".sheet__body")!, emptyState("Items could not be loaded", error instanceof Error ? error.message : "Try again.", "", "error", 3)); return; }
     mount(lendSheet.querySelector(".sheet__body")!, html`
       <div class="field"><label for="lend-item">Item</label><input id="lend-item" list="lend-items" autocomplete="off" spellcheck="false" placeholder="Search by name or ID" aria-describedby="lend-card" /><datalist id="lend-items">${items.map((item) => html`<option value="${item.name} · ${item.id}">${item.onHand} on the shelf</option>`)}</datalist></div>
       <div class="record-card" id="lend-card" aria-live="polite"></div>
