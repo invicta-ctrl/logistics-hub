@@ -210,3 +210,9 @@ Earl must explicitly resolve the Part 4.5 branch-history conflict recorded in th
 - Post-prune branch inventory contains only local `main` and `origin/main`. The four MausBot specialist worktrees remain registered as detached worktrees and therefore do not consume branch budget.
 - Verification for this maintenance change: `node --check scripts/agent-lock.mjs` passed; `npm run typecheck` passed. Unknown untracked `NUL` remains preserved untouched.
 
+
+## 2026-10-01 Part 4 closure + Part 5/A12 acceptance (Forge, docs only)
+- **Authority:** Earl, verbatim: "that is stale, the main is already done with part 4 as a whole and ready to proceed with part 5" (owner confirmation; no agent ran new acceptance tests), and his Part 5 master prompt (Activity + Accountability, then Open-Unit Tracking, item-driven Borrow/Take/Use). The earlier lines here saying Part 4.5 acceptance is pending or "Part 5 stays PROPOSED / do not start Part 5" are superseded.
+- **Change:** the plan moved to `docs/specs/accepted/2026-09-30-part-05-activity-accountability-plan.md` (git rename) with an Acceptance record at the top: order, prompt-over-plan differences (phone Use mandatory, export/no-ledger rules, unsafe mode changes, gates), production and migration sequencing kept separate, open decisions (borrower identity in exports excluded until decided; axe dependency not approved). CURRENT, CURRENT_TASK and CURRENT_HANDOFF reconciled. No source, migration, production or `main` change.
+- **Branch:** `slice/part-05-activity` (local only, not pushed) from main `76f43b1`; `main` and `origin/main` unchanged. Untracked `NUL` untouched. Writer lock yielded after commit.
+- **Exact next action:** Nexus and Sentinel review the docs commit; then Forge starts stage 5.1 on this branch. The old A12 source file is not in the repo.

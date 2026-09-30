@@ -1,17 +1,35 @@
-# Part 5 Plan — Activity + Accountability (with the visual-cleanup record and Open-Unit Tracking)
+# Part 5 — Activity + Accountability (with the visual-cleanup record and Open-Unit Tracking A12)
 
 **Repository:** `invicta-ctrl/logistics-hub`
-**Status:** PROPOSED — PLANNING ONLY. Not accepted. Nothing here authorizes a migration, API or UI change, production write, or deployment.
+**Status:** ACCEPTED 2026-10-01 (Earl); see the Acceptance record below. Implementation still requires the gates in section 5; this file authorizes no production write, migration application or deployment.
 **Prepared:** 2026-09-30 for Earl
 **Accepted roadmap line (unchanged):** "5. Activity + Accountability: searchable operational history and safe exports." (`docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md`)
 **Rules that apply:** `AGENTS.md`, `.agents/PROJECT_POLICY.md` (anti-bloat, one active `slice/*` branch, `main` always green, D1 is structured truth, R2 is evidence, stock is movement-derived, no PII in the public repo).
+
+## Acceptance record (Earl, 2026-10-01)
+
+- **Part 4 closure (owner confirmation, not a bot test run).** Earl, verbatim: "that is stale, the main is already done with part 4 as a whole and ready to proceed with part 5." This supersedes the recorded "Part 4.5 owner phone + signed-in staff acceptance pending (gates Part 5)" wording in CURRENT and the handoffs. No Part 4.5 phone/staff acceptance run was performed by an agent for this record.
+- **Part 5 core and A12 are ACCEPTED** by Earl's Part 5 master prompt (2026-10-01: Activity + Accountability, then Open-Unit Tracking, with the Self-Service/PWA made item-driven). Where that prompt is more specific than the plan below, the prompt governs; the differences are listed here.
+- **Order:** one slice at a time. `slice/part-05-activity` (stages 5.1–5.4), merged and pruned to clean `main`; only then `slice/part-05b-open-units` (OU-1–OU-5). Slice 2 does not start before slice 1 is merged.
+- **Sentinel:** each slice needs an independent read-only verification of the exact candidate commit before integration; a material fix needs re-verification of the new commit.
+- **Activity (from the prompt):** `/staff/activity` reads `inventory_movements`, `loans`, `self_service_events` and `audit_log`; no second ledger and no new activity table unless evidence shows one is needed. Entries expose Manila-local time, actor, item, action, source, stock impact, reason/note and a stable event ID, never raw JSON. Added filter: needs-attention only (already in 2.4). Admin/security events are ADMIN/OWNER only, enforced server-side.
+- **CSV export (from the prompt):** the exact filtered query; UTF-8, Excel-friendly, fixed columns, quoting, formula-prefix neutralization (`=`, `+`, `-`, `@`, tab, CR), row cap with a truncation message, server-controlled filename, `Cache-Control: private, no-store`, rate limiting, and an audit record of actor, time, filters and row count. Never exported: password hashes, session tokens, recovery secrets, credentials, R2/photo keys, image bytes, network hashes, raw `details_json`, private infrastructure data.
+- **A12 (from the prompt):** Consumables are `WHOLE_UNIT` (default for every existing item, no auto-classification, staff opt in) or `OPEN_UNIT`; only outer units are counted, never sheets, millilitres, grams, length or percentages. Open, Use and Condition change stock by 0; Empty changes it by exactly −1 through the existing guarded movement path; `sealed = on_hand − open_units` is derived, never stored; `open_units ≤ on_hand`. The movement ledger stays the sole quantity authority.
+- **Phone Use is in scope, not optional (supersedes the "optional" wording in 4.6 and OU-4 below).** Self-Service is item-driven: Loanable → **Borrow**, Consumable + `WHOLE_UNIT` → **Take**, Consumable + `OPEN_UNIT` → **Use**. The generic user-facing Borrow/Consume choice is removed once the routing is verified. Use has no quantity question and stock delta 0; phones cannot mark Empty, set condition, reconcile or adjust stock. It reuses the sole immutable offline queue and sync path; no second offline system.
+- **Unsafe changes are blocked while open units exist:** `OPEN_UNIT → WHOLE_UNIT`, Consumable → Loanable, deactivation that invalidates state, and a physical count to zero, until explicitly reconciled. Open-unit records are never silently deleted or fabricated.
+- **Gates (union of prompt and plan):** the section 5 gate list, with touched pages checked at 390, 768 and 1366 px at minimum and the widths in AC-A8, plus keyboard and accessible-label checks, no horizontal overflow, final diff and anti-bloat review. Unrun tests are never claimed.
+- **Production stays separately authorized.** Acceptance authorizes no production mutation. Any D1 migration needs the exact target and release commit, a throwaway-D1 test, a Time Travel bookmark, the pending list, Earl's explicit authorization, Harbor applying it once, read-only post-checks and no reapply. Workers Builds deploys every push to `main` and does not apply migrations, so code that depends on an unapplied migration must not reach `main` before that migration is applied. Migration 0015 is already applied; never reapply it.
+- **Decisions in section 6 the prompt did not answer (still open, defaults are conservative):** borrower name and student ID are excluded from exports for all roles until Earl decides (plan recommendation: ADMIN/OWNER only); no dev dependency is added, so no axe check until Earl approves it; the home-page "Where to find us" line and deleting the merged leftover remote slice branches are outside Part 5.
+- The original A12 text (`PART_05_OPEN_UNIT_TRACKING_AMENDMENT.md`) is not in the repository; section 4 below is its record.
+
+---
 
 This one file holds the whole plan so it can be reviewed and accepted (or trimmed) in one place:
 
 1. Where the product stands today
 2. Part 5 core: Activity center and safe exports
 3. The visual-cleanup plan: what was accepted and what is done
-4. Open-Unit Tracking (proposed amendment A12)
+4. Open-Unit Tracking (amendment A12)
 5. Order of work, slices and gates
 6. Decisions needed from Earl
 
@@ -135,9 +153,9 @@ The plan ("Logistics Hub visual cleanup plan", 2026-09-30) was accepted by Earl 
 
 **How Part 5 must use it:** the Activity page uses the existing page header, filter bar, `.tag`, table/list rows, the shared sheet, `live()` status and empty states. It adds no new visual pattern.
 
-## 4. Open-Unit Tracking (proposed amendment A12)
+## 4. Open-Unit Tracking (amendment A12)
 
-Source: `PART_05_OPEN_UNIT_TRACKING_AMENDMENT.md` (Earl, 2026-09-30, PROPOSED). This section keeps its decisions in one place; the amendment text stays the detailed reference. **Nothing in this section is authorized until Earl accepts it.** It expands Part 5, changes inventory behavior, and needs a production migration.
+Source: `PART_05_OPEN_UNIT_TRACKING_AMENDMENT.md` (Earl, 2026-09-30), accepted 2026-10-01 (see the Acceptance record). It expands Part 5, changes inventory behavior, and needs a production migration, which is authorized separately.
 
 ### 4.1 The problem
 
@@ -167,7 +185,7 @@ Open a ream · Record use (no content quantity) · Set condition · Mark empty w
 
 - Whole-unit Consumables: current **Take** behavior, unchanged.
 - Open-unit Consumables: the phone shows **Use** (no how-many-sheets question). A Use event records activity only, never deducts, and syncs through the existing immutable, idempotent offline event path. Phones cannot mark a unit empty, set condition or correct state; those stay staff actions (a phone "empty" report, if ever wanted, would be a review-required event, not a stock movement).
-- This slice (self-service Use) is optional and can ship after the staff workflow. The current phone list ("Get an item") already shows Take or Borrow from the item's type, so "Use" would be a third label on the same list.
+- Self-service Use ships in OU-4 (mandatory, after the staff workflow). The current phone list ("Get an item") already shows Take or Borrow from the item's type, so "Use" would be a third label on the same list.
 
 ### 4.7 Invariants (must be enforced and tested)
 
@@ -206,7 +224,7 @@ Quantity with a quiet second line ("8 reams on hand" then "7 sealed · 1 open ·
 
 ### 4.12 Acceptance criteria (A12, condensed from AC-01 to AC-18)
 
-Configurable per item; usable with no content counting; open and use leave quantity unchanged; empty deducts exactly one; full audit trail; condition optional and quantity-neutral; multiple open units with a warning; open ≤ on-hand always; reconciliation without touching the ledger; count compatibility; existing behavior preserved; phone Use (if included) deducts nothing; idempotent under retries, double taps, sync replays and concurrency; responsive one-hand UX; activity/exports separate "use" from "exhausted"; no second quantity authority; migration changes no history and reclassifies nothing.
+Configurable per item; usable with no content counting; open and use leave quantity unchanged; empty deducts exactly one; full audit trail; condition optional and quantity-neutral; multiple open units with a warning; open ≤ on-hand always; reconciliation without touching the ledger; count compatibility; existing behavior preserved; phone Use deducts nothing; idempotent under retries, double taps, sync replays and concurrency; responsive one-hand UX; activity/exports separate "use" from "exhausted"; no second quantity authority; migration changes no history and reclassifies nothing.
 
 ### 4.13 Tests required
 
@@ -214,7 +232,7 @@ Unit/data: every invariant above, including retry and concurrent-empty cases, co
 
 ## 5. Order of work, slices and gates
 
-**Prerequisite (met):** Part 4.5 is on `main` and deployed; the visual cleanup is done; there is no active slice branch. Leftover remote `slice/part-04-6…4-10` branches are fully merged and only need deleting by someone with push rights (see the handoff).
+**Prerequisite (met, owner-confirmed):** Part 4.5 is on `main` and deployed; the visual cleanup is done; there is no active slice branch. Leftover remote `slice/part-04-6…4-10` branches are fully merged and only need deleting by someone with push rights (see the handoff).
 
 **Recommended order**
 
@@ -223,11 +241,11 @@ Unit/data: every invariant above, including retry and concurrent-empty cases, co
    - **5.2 Activity page:** `/staff/activity`, filters in the URL, live status, links to items and loans, mobile.
    - **5.3 Safe CSV export:** generation, injection guard, caps, audited exports, role rules.
    - **5.4 Polish and regression:** responsive/accessibility pass, empty and error states, docs, full gates. Merge to `main`, delete the slice, verify production.
-2. **Slice `slice/part-05b-open-units`** — A12, only after Earl accepts the amendment and after Part 5 core is merged (the Activity page is where its events become searchable). Internal order:
+2. **Slice `slice/part-05b-open-units`** — A12, only after Part 5 core is merged (the Activity page is where its events become searchable). Internal order:
    - **OU-1** spec acceptance, final schema, migration, item mode, invariants and pure data tests (stop until green);
    - **OU-2** staff workflow (open, use, condition, empty, Stock & Pantry actions, item summary, concurrency/idempotency);
    - **OU-3** activity, reconciliation, count integration, export semantics;
-   - **OU-4** phone `Use` (optional);
+   - **OU-4** phone `Use` and item-driven Borrow/Take/Use routing (mandatory; remove the generic Borrow/Consume choice after verification);
    - **OU-5** polish, migration verification, full regression, product-reference and handoff.
    The amendment text calls these 5A–5E; they are renamed OU-1 to OU-5 here so they do not collide with Part 5 core's 5.1 to 5.4.
 
@@ -235,7 +253,7 @@ Unit/data: every invariant above, including retry and concurrent-empty cases, co
 
 **Governance for each slice:** claim the writer lock, one active `slice/*` branch, commit and push each green checkpoint, merge to `main` immediately when green, delete the slice, update `.codex/CURRENT.md` and the handoff, and stop at the slice's stop condition. Production writes need Earl's explicit target and authority.
 
-## 6. Decisions needed from Earl before any of this starts
+## 6. Decisions (1, 5 and 6 answered by the Acceptance record; 2–4 and 7 open)
 
 1. **Accept Part 5 core as written?** (Yes / trim / change scope.)
 2. **Borrower identity in exports:** include borrower name and student ID for ADMIN and OWNER only (recommended), for all staff, or never?
@@ -245,6 +263,6 @@ Unit/data: every invariant above, including retry and concurrent-empty cases, co
 6. **Branch names:** `slice/part-05-activity` and `slice/part-05b-open-units` (the visual plan used a different name for a slice that is already finished).
 7. **Delete the merged leftover remote slice branches** (`slice/part-04-6-visual-cleanup` to `slice/part-04-10-fresh-public-pages`; someone with push rights).
 
-## Planning status
+## Status
 
-**PROPOSED.** This file authorizes nothing. Part 5 and A12 stay PROPOSED until Earl accepts them under project governance; only then is a slice branch created and the first migration written.
+**ACCEPTED** 2026-10-01 (see the Acceptance record). No branch, migration, code or production change has been made by the acceptance itself.

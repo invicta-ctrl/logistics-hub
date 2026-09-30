@@ -1,7 +1,5 @@
-# Current Bounded Task — PART-04.10 Fresh Public Pages
-INTENT: DEFECT FIX (service worker navigation strategy; no data or API change)
-OBJECTIVE: Earl's phone (2026-09-30) still showed the home page without the restored banner after the deploy.
-CAUSE: src/sw.ts served every public navigation from the saved shell, and a waiting version activates only when every tab closes (public pages never report idle to pwa.ts).
-FIX: only /self-service* opens from the cache; every other navigation goes to the network first and falls back to the saved shell offline. Phones still on the old worker switch once all of the site's tabs close.
-TEST: tests/worker-browser/offline-self-service.spec.ts, "public pages load fresh from the network, while Self-Service opens from the phone's cache" (fails on the previous worker).
-STATUS: COMPLETE (2026-09-30); merged to main. No active task until Earl accepts the next one.
+# Current Bounded Task — PART-05 Acceptance Reconciliation
+INTENT: DOCUMENTATION ONLY
+OBJECTIVE: Record Earl's Part 4 closure and accept Part 5 (Activity + Accountability, then Open-Unit Tracking A12) before any implementation.
+SCOPE: `docs/specs/accepted/2026-09-30-part-05-activity-accountability-plan.md` (moved from proposed/, with an Acceptance record), CURRENT, CURRENT_HANDOFF, SESSION_HANDOFF. No source, migration, production or main change.
+STATUS: docs checkpoint committed on slice/part-05-activity, awaiting Nexus and Sentinel review. Next task: Part 5 stage 5.1 (Activity read model and API).
