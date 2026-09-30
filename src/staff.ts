@@ -34,6 +34,8 @@ const VIEWS = {
 };
 type View = keyof typeof VIEWS;
 const NO_LOCATION = "__none";
+/** How staff see the type: their choice between lending an item out and using it up. */
+const TYPE_CHOICES: Record<string, string> = { Loanable: "Borrow (Loanable)", Consumable: "Consume (Consumable)" };
 const FIELD_LABELS: Record<string, string> = {
   name: "Name", aliases: "Other names", category: "Category", itemType: "Type", unit: "Unit", status: "Status", storageLocation: "Location",
   reorderThreshold: "Reorder level", lendingAudience: "Who may borrow", defaultLoanDays: "Loan period (days)", maximumLoanQty: "Maximum per loan",
@@ -685,7 +687,7 @@ export async function workspace(): Promise<void> {
         ${text("aliases", "Other names", item.aliases, html`maxlength="300" autocomplete="off"`, "Names people also use for it, separated by commas. Search finds these too.", true)}
         <div class="field-grid">
           ${text("category", "Category", item.category, html`required maxlength="100" autocomplete="off"`, "Letter case does not matter; an existing category is reused.")}
-          <div class="field"><label for="f-itemType">Type</label><select id="f-itemType" name="itemType" aria-describedby="f-itemType-hint">${options(types, item.itemType ?? "Loanable")}</select><p class="field__hint" id="f-itemType-hint">Loanable comes back; Consumable is used up.</p></div>
+          <div class="field"><label for="f-itemType">Borrow or consume</label><select id="f-itemType" name="itemType" aria-describedby="f-itemType-hint">${types.map((type) => html`<option value="${type}" ${type === (item.itemType ?? "Loanable") ? html`selected` : ""}>${TYPE_CHOICES[type] ?? label(type)}</option>`)}</select><p class="field__hint" id="f-itemType-hint">Your choice sets everything else: Borrow is lent and comes back; Consume is used up and never returned. Both appear on the Lending Hub and on phones.</p></div>
         </div>
         <div class="field-grid">
           ${text("unit", "Unit", item.unit, html`required maxlength="30" autocomplete="off" placeholder="piece, box, pack"`, "Singular, as counted.")}
@@ -708,7 +710,7 @@ export async function workspace(): Promise<void> {
       </div>
       <div class="form-section">
         <h3 class="form-section__title">Public Lending Hub</h3>
-        <div class="field"><label for="f-lendingAudience">Shown to</label><select id="f-lendingAudience" name="lendingAudience" aria-describedby="f-lendingAudience-hint">${options(LENDING_AUDIENCES, item.lendingAudience ?? "NOT_AVAILABLE_FOR_LENDING")}</select><p class="field__hint" id="f-lendingAudience-hint">Who sees it on the public page. Loans themselves are recorded in the Loan tab.</p></div>
+        <div class="field"><label for="f-lendingAudience">Shown to</label><select id="f-lendingAudience" name="lendingAudience" aria-describedby="f-lendingAudience-hint">${options(LENDING_AUDIENCES, item.lendingAudience ?? (creating ? "STUDENTS_AND_USC_STAFF" : "NOT_AVAILABLE_FOR_LENDING"))}</select><p class="field__hint" id="f-lendingAudience-hint">Who sees it on the public page. Loans themselves are recorded in the Loan tab.</p></div>
         <div class="listing-status" id="listing-preview" aria-live="polite"></div>
       </div>
       <div class="form-section form-section--last">
@@ -765,7 +767,7 @@ export async function workspace(): Promise<void> {
       element.className = `listing-status ${gaps.length ? "" : "is-listed"}`;
       mount(element, gaps.length
         ? html`${icon("info")}<div><p>Not shown publicly. Still needed:</p>${checklist(gaps.map((gap) => [gap, false]))}</div>`
-        : html`${icon("check")}<p>Will appear on the public Lending Hub.</p>`);
+        : html`${icon("check")}<p>Will appear on the public Lending Hub, and phones can ${values.itemType === PUBLIC_LENDING_ITEM_TYPE ? "borrow" : "take"} it.</p>`);
       const review = form.querySelector("#review-checklist");
       if (review) mount(review, checklist(reviewChecklist(values)));
       form.querySelector<HTMLElement>("[data-expiry]")!.hidden = values.stockArea !== "Pantry";
@@ -775,7 +777,13 @@ export async function workspace(): Promise<void> {
       duplicate.hidden = !twin;
       duplicate.textContent = twin ? `${twin.id} already uses this name. Check it is not the same item before saving.` : "";
     };
-    form.addEventListener("input", () => { dirty = true; preview(); });
+    form.addEventListener("input", (event) => {
+      dirty = true;
+      // Choosing Borrow or Consume lists the item, unless staff already picked who sees it.
+      const audience = form.querySelector<HTMLSelectElement>("#f-lendingAudience")!;
+      if ((event.target as HTMLElement).id === "f-itemType" && audience.value === "NOT_AVAILABLE_FOR_LENDING" && LISTABLE_ITEM_TYPES.has((event.target as HTMLSelectElement).value)) audience.value = "STUDENTS_AND_USC_STAFF";
+      preview();
+    });
     form.addEventListener("change", preview);
     form.addEventListener("click", (event) => {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[type=submit]");

@@ -83,6 +83,7 @@ The table shows ID, item (with type and other names), category, location, on-han
 - **Review & edit / Edit details:**
   - **Catalog:** name, other names, category and unit (typed freely; an existing spelling is reused regardless of letter case), type (**Loanable** or **Consumable**; *Unclassified* appears only while a migrated record still is), location, notes;
   - **Inventory settings:** status (Active, Verify, Inactive), reorder level, stock area (Inventory or Pantry) and, for pantry items, an optional earliest expiry;
+  - **Borrow or consume:** staff choose whether an item is lent out and returned (Loanable) or used up (Consumable); that one choice drives the Lending Hub, phone Borrow/Take and the Loan tab. Picking it for an unlisted item sets "Shown to" to Students & USC staff, and new items start listed;
   - **Public Lending Hub:** who it is shown to (there is no loan period or maximum per loan);
   - **Phone self-service:** automatic by item type (Consumable = Take, Loanable listed on the Lending Hub = Borrow); items show only their type, with no self-service status;
   - a "Details reviewed and verified" box;

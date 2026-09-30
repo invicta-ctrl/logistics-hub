@@ -38,7 +38,7 @@ After one online visit, the app is installed on the phone (a PWA) and keeps work
 
 ## 3. Eligibility (fail closed)
 
-There is no per-item switch: the item type staff set (Inventory → item → **Edit details → Type**) decides, and eligible items are offered automatically. (`items.self_service` from migration 0015 is no longer read; dropping it needs its own migration.) `selfServiceAction(item)` is the one rule:
+There is no per-item switch: the choice staff make (Inventory → item → **Edit details → Borrow or consume**, stored as the item type Loanable or Consumable) decides, and eligible items are offered automatically. (`items.self_service` from migration 0015 is no longer read; dropping it needs its own migration.) `selfServiceAction(item)` is the one rule:
 
 - **TAKE**: Consumable, Active, reviewed.
 - **BORROW**: Loanable, Active, reviewed and listed on the Lending Hub (so it has an audience). A `USC_STAFF_ONLY` audience allows USC use only.

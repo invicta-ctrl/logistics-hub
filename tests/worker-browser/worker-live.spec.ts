@@ -55,7 +55,7 @@ test("staff publish and stock changes reach an open public page live", async ({ 
   await page.getByRole("tab", { name: "Review & edit" }).click();
   await page.getByLabel("Shown to").selectOption("STUDENTS_AND_USC_STAFF");
   await page.getByLabel("Details reviewed and verified").check();
-  await expect(page.getByText("Will appear on the public Lending Hub.")).toBeVisible();
+  await expect(page.getByText(/Will appear on the public Lending Hub/)).toBeVisible();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Changes saved.")).toBeVisible();
 
@@ -172,7 +172,9 @@ test("migrated review: fill the gaps, mark reviewed, and move to the next record
   const sheet = page.getByRole("dialog");
   await sheet.getByLabel("Storage location").fill("E2E shelf  A");
   await sheet.getByLabel("Other names").fill("e2e alias, E2E ALIAS");
-  await sheet.getByLabel("Type", { exact: true }).selectOption("Consumable");
+  await sheet.getByLabel("Borrow or consume").selectOption("Consume (Consumable)");
+  // Choosing it lists the item, so staff do not set the audience separately.
+  await expect(sheet.getByLabel("Shown to")).toHaveValue("STUDENTS_AND_USC_STAFF");
   await page.getByRole("button", { name: /Mark reviewed & next/ }).click();
   await expect(page.getByText(`${first} reviewed. Opening the next record.`)).toBeVisible();
   await expect(page.getByRole("dialog", { name: second })).toBeVisible();
@@ -201,9 +203,9 @@ test("create, warn on a duplicate name, then deactivate without deleting", async
   await sheet.getByLabel("Name", { exact: true }).fill("E2E Extension Cord");
   await sheet.getByLabel("Category", { exact: true }).fill("office equipment and supplies");
   await sheet.getByLabel("Unit", { exact: true }).fill("piece");
-  await sheet.getByLabel("Shown to").selectOption("STUDENTS_AND_USC_STAFF");
-  await expect(sheet.getByLabel("Type", { exact: true }).locator("option")).toHaveText(["Loanable", "Consumable"]);
-  await sheet.getByLabel("Type", { exact: true }).selectOption("Loanable");
+  await expect(sheet.getByLabel("Shown to")).toHaveValue("STUDENTS_AND_USC_STAFF");
+  await expect(sheet.getByLabel("Borrow or consume").locator("option")).toHaveText(["Borrow (Loanable)", "Consume (Consumable)"]);
+  await sheet.getByLabel("Borrow or consume").selectOption("Borrow (Loanable)");
   await sheet.getByLabel("Opening quantity").fill("3");
   await page.getByRole("button", { name: "Create item" }).click();
   await expect(page.getByText(/Item ITM-\d+ created\./)).toBeVisible();

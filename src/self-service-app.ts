@@ -848,6 +848,12 @@ export async function selfService(): Promise<void> {
   window.addEventListener("offline", goneOffline);
   document.addEventListener("visibilitychange", wake);
   navigator.serviceWorker?.addEventListener("controllerchange", refreshReadiness);
+  // The service worker may have taken control before the listener above existed, so look again for a few seconds.
+  let settleReadinessTimer = 0;
+  const settleReadiness = (tries = 0) => void refreshReadiness().then(() => {
+    if (!(ready?.shell && ready.catalog) && tries < 15) settleReadinessTimer = window.setTimeout(() => settleReadiness(tries + 1), 1_000);
+  });
+  settleReadiness();
   // An update may apply itself when the person comes back to a screen with nothing unsaved.
   whenIdle(() => !dialog.open && (params().screen === "home" || params().screen === "activity"));
   onLeave(() => {
@@ -855,6 +861,7 @@ export async function selfService(): Promise<void> {
     unsubscribePwa();
     window.clearTimeout(syncTimer);
     window.clearTimeout(pollTimer);
+    window.clearTimeout(settleReadinessTimer);
     window.removeEventListener("online", backOnline);
     window.removeEventListener("offline", goneOffline);
     document.removeEventListener("visibilitychange", wake);
