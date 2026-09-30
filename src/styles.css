@@ -31,6 +31,7 @@
   --warn-ink: #5c4210;
   --bad-hover: #861a27;
   --scrim: rgb(28 25 23 / 40%);
+  --photo-veil: rgb(43 10 12 / 60%);
   --selection: rgb(201 150 42 / 30%);
   --highlight: rgb(239 199 106 / 26%);
   --ok: #17663f;
@@ -278,10 +279,10 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .site-nav__link[aria-current="page"] { color: var(--gold-action); }
 .site-nav :focus-visible { outline-color: var(--gold-action); }
 
-.hero { position: relative; isolation: isolate; overflow: hidden; background: radial-gradient(ellipse 70% 90% at 85% 40%, rgb(122 20 25 / 55%), transparent 70%), linear-gradient(180deg, var(--brand-dark), var(--brand-deep)); color: var(--on-dark); }
+.hero { background: var(--brand-dark); color: var(--on-dark); }
 .hero__grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); align-items: center; gap: clamp(2rem, 5vw, 4.5rem); padding-block: clamp(2.5rem, 6vw, 5rem); }
 /* The Youth Development Day banner carries its own title, so it is shown whole, never cropped or veiled. */
-.hero__banner { margin: 0; overflow: hidden; border: 1px solid rgb(242 209 92 / 28%); border-radius: var(--radius-lg); background: var(--brand-deep); box-shadow: var(--shadow-md); }
+.hero__banner { margin: 0; overflow: hidden; border: 1px solid var(--on-dark-line); border-radius: var(--radius-lg); background: var(--brand-deep); }
 .hero__banner img { width: 100%; aspect-ratio: 960 / 356; object-fit: cover; }
 .hero__copy { min-width: 0; }
 .hero__kicker { color: var(--gold-action); font-size: var(--text-sm); font-weight: 600; letter-spacing: .04em; }
@@ -322,7 +323,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .site-footer__base { padding-block: var(--space-5); border-top: 1px solid var(--on-dark-line); color: var(--on-dark-2); font-size: var(--text-sm); }
 
 /* Page intro (Lending Hub) continues the masthead */
-.page-intro { background: linear-gradient(180deg, var(--brand-dark), var(--brand-deep)); color: var(--on-dark); }
+.page-intro { background: var(--brand-dark); color: var(--on-dark); }
 .page-intro .container { padding-block: var(--space-6) var(--space-10); }
 .breadcrumb ol { display: flex; flex-wrap: wrap; gap: var(--space-2); color: var(--on-dark-2); font-size: var(--text-sm); }
 .breadcrumb li + li::before { margin-right: var(--space-2); color: var(--on-dark-line); content: "/"; }
@@ -334,7 +335,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .page-intro__lede { max-width: 42rem; margin-top: var(--space-2); color: var(--on-dark-2); }
 .page-intro .live-status { color: var(--on-dark-2); }
 .page-intro .live-status[data-state="updated"] { color: var(--ok-on-dark); }
-.filterbar { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: rgb(250 249 247 / 96%); backdrop-filter: blur(12px); }
+.filterbar { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: var(--bg); }
 .filterbar__inner { display: grid; gap: var(--space-3); padding-block: var(--space-4); }
 .filterbar__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .sort-toggle { display: inline-flex; padding: .1875rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--subtle); }
@@ -381,13 +382,13 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
    ========================================================================== */
 .auth { position: relative; isolation: isolate; display: flex; flex-direction: column; justify-content: center; gap: var(--space-6); padding: clamp(1.5rem, 6vh, 4rem) var(--gutter); background: var(--brand-dark); color: var(--on-dark); }
 .auth::before { position: absolute; inset: 0; z-index: -2; background: url("/brand/hau-campus-dusk.webp") 50% 45% / cover no-repeat; content: ""; }
-.auth::after { position: absolute; inset: 0; z-index: -1; background: linear-gradient(100deg, rgb(43 10 12 / 84%) 0%, rgb(64 7 10 / 46%) 50%, rgb(64 7 10 / 22%) 100%), linear-gradient(0deg, rgb(20 4 6 / 50%), transparent 40%); content: ""; }
+.auth::after { position: absolute; inset: 0; z-index: -1; background: var(--photo-veil); content: ""; }
 .auth__layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 25rem); align-items: center; gap: clamp(2rem, 6vw, 6rem); width: 100%; max-width: var(--container); margin-inline: auto; }
 .auth__intro { display: grid; gap: var(--space-3); max-width: 30rem; }
 .auth__eyebrow { color: var(--gold-action); font-size: var(--text-sm); font-weight: 600; letter-spacing: .04em; }
 .auth__statement { font-family: var(--serif); font-size: var(--text-display); line-height: 1.05; letter-spacing: -.02em; }
 .auth__sub { color: var(--on-dark-2); font-size: var(--text-lg); }
-.auth__panel { width: 100%; padding: clamp(1.5rem, 4vw, 2.25rem); border: 1px solid rgb(242 209 92 / 28%); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); box-shadow: var(--shadow-md); }
+.auth__panel { width: 100%; padding: clamp(1.5rem, 4vw, 2.25rem); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); box-shadow: var(--shadow-md); }
 .auth__brand { display: block; width: fit-content; margin-bottom: var(--space-5); border-radius: var(--radius); }
 .auth__brand .mark { height: 4rem; }
 .auth h1 { font-family: var(--serif); font-size: var(--text-2xl); font-weight: 500; }
