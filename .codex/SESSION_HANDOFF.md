@@ -202,3 +202,11 @@ Earl must explicitly resolve the Part 4.5 branch-history conflict recorded in th
 - `git worktree list --porcelain` shows all four MausBot worktrees as detached; no bot-specific permanent branches were created.
 - Forge remains on the existing writable/local-preview worktree. Unknown untracked `NUL` remains preserved untouched.
 
+## 2026-09-30 branch consolidation and prune
+- Earl explicitly requested pushing the MausBot workflow changes, verifying all remaining branches against `main`, pruning merged branches, and leaving `main` only.
+- Fetched `origin` first. The remote Part 4.6, 4.7, 4.8, 4.9, and 4.10 slice tips each had zero commits not in `origin/main`; local `slice/part-04-lending` was also an ancestor of `main`.
+- Local `slice/part-04-5-offline-self-service-pwa` had only the two MausBot governance commits not reachable by SHA from `main`; those changes were deliberately transplanted onto latest `main` with conflict-preserving reconciliation of the newer handoff history, then verified present in the accepted amendment, workflow docs, project policy, handoff, and writer-lock script before deleting the old local branch.
+- Pushed `main`, deleted remote `slice/part-04-6-visual-cleanup`, `slice/part-04-7-self-service-themes`, `slice/part-04-8-self-service-photo`, `slice/part-04-9-home-banner`, and `slice/part-04-10-fresh-public-pages`, deleted the two retained local Part 4/4.5 slice branches, and ran `git fetch origin --prune`.
+- Post-prune branch inventory contains only local `main` and `origin/main`. The four MausBot specialist worktrees remain registered as detached worktrees and therefore do not consume branch budget.
+- Verification for this maintenance change: `node --check scripts/agent-lock.mjs` passed; `npm run typecheck` passed. Unknown untracked `NUL` remains preserved untouched.
+
