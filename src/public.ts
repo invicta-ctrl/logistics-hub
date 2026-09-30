@@ -59,14 +59,6 @@ function terms(item: LendingItem): string {
 
 const skeletonRows = (count: number) => html`<ul class="catalogue" aria-hidden="true">${Array.from({ length: count }, () => html`<li class="catalogue__row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></li>`)}</ul>`;
 
-/** Staggers rows in after a filter change; CSP forbids inline styles, so the index is set via CSSOM. */
-function stagger(container: Element): void {
-  container.querySelectorAll<HTMLElement>(".catalogue__row").forEach((row, index) => row.style.setProperty("--i", String(Math.min(index, 14))));
-  container.classList.remove("is-entering");
-  void (container as HTMLElement).offsetWidth;
-  container.classList.add("is-entering");
-}
-
 /** Rolls each changed count from its previous value to the new one. */
 function rollCounts(container: Element, before: Map<string, number>, changed: Set<string>): void {
   for (const id of changed) {
@@ -94,7 +86,7 @@ export function landing(): void {
       </div>
     </section>
 
-    <section class="section reveal" aria-labelledby="steps-title">
+    <section class="section" aria-labelledby="steps-title">
       <div class="container">
         <h2 id="steps-title" class="section__title">How borrowing works</h2>
         <ol class="steps">
@@ -209,8 +201,7 @@ export function lending(): void {
             <ul class="catalogue">${members.map(row)}</ul></section>`;
         })}`
       : emptyState("Nothing matches those filters", "Try a shorter search, another category, or include items that are currently out.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
-    if (reason === "filter") stagger(results);
-    else rollCounts(results, before, changed);
+    if (reason === "data") rollCounts(results, before, changed);
     changed.clear();
   };
 
