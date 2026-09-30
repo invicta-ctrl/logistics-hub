@@ -9,14 +9,10 @@ const LOCKUP = html`<span class="lockup">${CREST}<span class="lockup__rule" aria
 const USC_FACEBOOK = "https://www.facebook.com/holyangeluniversitysc";
 
 function page(content: Html, current: "" | "home" | "lending"): void {
-  // On the landing page the lockup leads to the Student Council's official page; elsewhere it goes home.
-  const brand = current === "home"
-    ? html`<a class="site-header__brand" href="${USC_FACEBOOK}" target="_blank" rel="noopener noreferrer" aria-label="HAU University Student Council on Facebook (opens in a new tab)">${LOCKUP}</a>`
-    : html`<a class="site-header__brand" href="/" data-route aria-label="Department of Logistics home">${LOCKUP}</a>`;
   mount(app, html`
     <header class="site-header">
       <div class="container site-header__inner">
-        ${brand}
+        <a class="site-header__brand" href="/" data-route aria-label="Department of Logistics home">${LOCKUP}</a>
         <nav class="site-nav" aria-label="Main">
           <a class="site-nav__link" href="/lending" data-route ${current === "lending" ? html`aria-current="page"` : ""}>Lending Hub</a>
           <a class="button button--outline-light" href="/staff" data-route>Staff sign in</a>
@@ -37,7 +33,7 @@ function page(content: Html, current: "" | "home" | "lending"): void {
           <ul class="site-footer__links">
             <li><a href="/lending" data-route>Lending Hub</a></li>
             <li><a href="/staff" data-route>Staff sign in</a></li>
-            <li><span>Logistics requests <em>(not yet available)</em></span></li>
+            <li><a href="${USC_FACEBOOK}" target="_blank" rel="noopener noreferrer">Student Council on Facebook<span class="visually-hidden"> (opens in a new tab)</span></a></li>
           </ul>
         </nav>
       </div>

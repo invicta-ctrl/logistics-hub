@@ -310,7 +310,6 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .site-footer__links a { color: var(--on-dark); text-decoration: none; white-space: nowrap; }
 .site-footer__links a:hover { color: var(--gold-action); text-decoration: underline; }
 .site-footer__links a:focus-visible { outline-color: var(--gold-action); }
-.site-footer__links em { color: var(--on-dark-2); font-style: normal; }
 .site-footer__base { padding-block: var(--space-5); border-top: 1px solid var(--on-dark-line); color: var(--on-dark-2); font-size: var(--text-sm); }
 
 /* Page intro (Lending Hub) continues the masthead */

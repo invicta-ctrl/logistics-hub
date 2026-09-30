@@ -18,9 +18,10 @@ test("landing shows the undistorted DOL mark beside the HAU·USC crest, and only
   const box = (await page.locator(".site-header__brand .mark").boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(40);
   await expect(page.locator(".site-header__brand .crest")).toBeVisible();
-  const brand = page.getByRole("link", { name: "HAU University Student Council on Facebook (opens in a new tab)" });
-  await expect(brand).toHaveAttribute("href", "https://www.facebook.com/holyangeluniversitysc");
-  await expect(brand).toHaveAttribute("target", "_blank");
+  await expect(page.getByRole("link", { name: "Department of Logistics home" })).toHaveAttribute("href", "/");
+  const facebook = page.getByRole("contentinfo").getByRole("link", { name: "Student Council on Facebook (opens in a new tab)" });
+  await expect(facebook).toHaveAttribute("href", "https://www.facebook.com/holyangeluniversitysc");
+  await expect(facebook).toHaveAttribute("target", "_blank");
   expect(Math.abs(box.width / box.height - 183 / 163)).toBeLessThan(0.02);
   // Availability lives only in the Lending Hub; the landing page does not poll the catalog.
   await expect(page.locator(".shelf")).toHaveCount(0);

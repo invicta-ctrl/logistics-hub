@@ -21,7 +21,7 @@ It supersedes the older HAU-USC Logistics Management System for all new developm
 | any other path | A branded "page not found". |
 
 The landing page (`/`):
-- an oxblood masthead carrying the HAU·USC crest and the DOL mark. On this page only, the lockup opens the official HAU University Student Council Facebook page (`https://www.facebook.com/holyangeluniversitysc`) in a new tab; on other public pages it returns home;
+- an oxblood masthead carrying the HAU·USC crest and the DOL mark; the lockup always returns home. The footer links the official HAU University Student Council Facebook page (`https://www.facebook.com/holyangeluniversitysc`), opening in a new tab;
 - a hero on flat oxblood: the headline "Borrow equipment from the USC Department of Logistics", a one-line lede, a gold "Browse the Lending Hub" action and a "How borrowing works" link. There is deliberately no availability panel here: the landing page does not poll the catalog, and availability lives only in the Lending Hub;
 - "How borrowing works" in three steps; step 2 says loans are arranged in person.
 - "Staff sign in" appears only in the masthead and footer.
