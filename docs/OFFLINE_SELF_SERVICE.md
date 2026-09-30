@@ -202,9 +202,8 @@ The Self-service nav tab counts the records to check.
 
 ## 16. Design: "Dusk"
 
-Self-Service keeps the Hub's institutional language (crest and mark, oxblood and gold, Newsreader over IBM Plex, the legacy campus photograph) in an after-hours key, at Earl's request (2026-09-29). Everything is scoped to `.is-self-service`: the tokens at the top of `self-service.css` re-theme the shared components, and nothing outside Self-Service changes.
+Self-Service keeps the Hub's institutional language (crest and mark, oxblood and gold, Newsreader over IBM Plex) in an after-hours key, at Earl's request (2026-09-29). Everything is scoped to `.is-self-service`: the tokens at the top of `self-service.css` re-theme the shared components, and nothing outside Self-Service changes.
 
-- The campus photograph shows only on the home screen, fading into the page. An aurora drifts into place once and rests.
-- Frosted glass (`backdrop-filter`) is used only on the bar and the sheet; tiles and search are near-opaque, which keeps scrolling smooth on low-end phones.
-- Every animation is behind `prefers-reduced-motion: no-preference`; hover states are behind `hover: hover`.
+- Part 4.6 flattened it ("Flat dark"): no campus photograph, aurora, grain, frosted glass, gradients or glows. Surfaces are solid; Take and Borrow tiles carry the brand colour; the primary button is flat gold.
+- The only motion is the sheet opening and closing and the sync spinner, behind `prefers-reduced-motion: no-preference`; hover states are behind `hover: hover`.
 - Accessibility: buttons draw focus as a gold outline that their shadows cannot override; targets are at least 44 px; the tiles reflow to one column for large text; the first invalid field takes focus; low stock is said in words ("Only 2 left"), not only colour.
