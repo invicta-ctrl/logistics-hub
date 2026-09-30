@@ -192,3 +192,13 @@ Earl must explicitly resolve the Part 4.5 branch-history conflict recorded in th
 - Nexus uses `D:\Documents\MausBot\Nexus` as a non-repository coordination folder.
 - This workflow change does not authorize Part 5, a Part 4.5 release, another application of migration 0015, or any production mutation.
 
+
+
+### Verification
+- The MausBot governance changes were incorporated onto the latest `main` after fast-forwarding local `main` to `origin/main`.
+- `forge` writer-lock support was exercised successfully with `npm run agent:claim -- forge`; `node --check scripts/agent-lock.mjs` passed.
+- Created `D:\Documents\MausBot\Nexus` with `handoffs`, `task-briefs`, `reports`, and `temporary` subfolders.
+- Created and registered detached Git worktrees for Scout, Oracle, Sentinel, and Harbor under `D:\Documents\MausBot\worktrees\`; they remain detached and are repointed to exact reviewed commits.
+- `git worktree list --porcelain` shows all four MausBot worktrees as detached; no bot-specific permanent branches were created.
+- Forge remains on the existing writable/local-preview worktree. Unknown untracked `NUL` remains preserved untouched.
+
