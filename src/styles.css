@@ -369,21 +369,15 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 /* ==========================================================================
    Staff sign-in over the HAU campus photograph from the legacy login page
    ========================================================================== */
-.auth { position: relative; isolation: isolate; display: flex; flex-direction: column; justify-content: center; gap: var(--space-6); padding: clamp(1.5rem, 6vh, 4rem) var(--gutter); background: var(--brand-dark); color: var(--on-dark); }
+.auth { position: relative; isolation: isolate; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-6); padding: clamp(1.5rem, 6vh, 4rem) var(--gutter); background: var(--brand-dark); color: var(--on-dark); }
 .auth::before { position: absolute; inset: 0; z-index: -2; background: url("/brand/hau-campus-dusk.webp") 50% 45% / cover no-repeat; content: ""; }
 .auth::after { position: absolute; inset: 0; z-index: -1; background: var(--photo-veil); content: ""; }
-.auth__layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 25rem); align-items: center; gap: clamp(2rem, 6vw, 6rem); width: 100%; max-width: var(--container); margin-inline: auto; }
-.auth__intro { display: grid; gap: var(--space-3); max-width: 30rem; }
-.auth__eyebrow { color: var(--gold-action); font-size: var(--text-sm); font-weight: 600; letter-spacing: .04em; }
-.auth__statement { font-family: var(--serif); font-size: var(--text-display); line-height: 1.05; letter-spacing: -.02em; }
-.auth__sub { color: var(--on-dark-2); font-size: var(--text-lg); }
-.auth__panel { width: 100%; padding: clamp(1.5rem, 4vw, 2.25rem); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); box-shadow: var(--shadow-md); }
+.auth__panel { width: min(100%, 24rem); padding: clamp(1.5rem, 4vw, 2rem); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); box-shadow: var(--shadow-md); }
 .auth__brand { display: block; width: fit-content; margin-bottom: var(--space-5); border-radius: var(--radius); }
-.auth__brand .mark { height: 4rem; }
-.auth h1 { font-family: var(--serif); font-size: var(--text-2xl); font-weight: 500; }
-.auth__lede { margin: var(--space-1) 0 var(--space-6); color: var(--text-2); font-size: var(--text-base); }
+.auth__brand .mark { height: 3rem; }
+.auth h1 { margin-bottom: var(--space-5); font-family: var(--serif); font-size: var(--text-2xl); font-weight: 500; }
 .auth__foot { margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--line); color: var(--text-3); font-size: var(--text-sm); }
-.auth__back { width: 100%; max-width: var(--container); margin-inline: auto; font-size: var(--text-sm); }
+.auth__back { font-size: var(--text-sm); }
 .auth__back .text-link:focus-visible { outline-color: var(--gold-action); }
 
 /* ==========================================================================
@@ -757,9 +751,6 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .steps { grid-template-columns: 1fr; gap: var(--space-8); }
   .app-bar__link { display: none; }
   .panels { grid-template-columns: 1fr; }
-  .auth__layout { grid-template-columns: minmax(0, 1fr); justify-items: center; }
-  .auth__intro { justify-items: center; text-align: center; }
-  .auth__sub { display: none; }
 }
 @media (max-width: 760px) {
   .lockup__text { display: none; }
@@ -813,7 +804,6 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .sort-toggle button { flex: 1; }
   .form-actions { flex-wrap: wrap; }
   .form-actions .button { flex: 1 1 auto; }
-  .auth__intro { display: none; }
 }
 
 /* ==========================================================================

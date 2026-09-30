@@ -33,7 +33,7 @@ The Lending Hub (`/lending`):
 - live availability that refreshes every 15 s, with "Updated <time>" naming the last change (every live view shares this status);
 - filters kept in the URL, and one line under the list saying loans are made in person.
 
-Staff sign-in (`/staff`) uses the original legacy Staff Login campus photograph behind a new, secure sign-in form. A signed-in visit goes straight to the workspace.
+Staff sign-in (`/staff`) is one centred card over the original legacy Staff Login campus photograph, under a flat 60% oxblood veil. A signed-in visit goes straight to the workspace.
 
 The public catalog DTO carries only: `id`, `name`, `category`, `unit`, `available`, `audience`.
 

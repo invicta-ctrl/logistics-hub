@@ -102,35 +102,27 @@ export function staffLogin(): void {
   document.title = "Staff sign in · Department of Logistics";
   const ended = new URLSearchParams(window.location.search).has("expired");
   mount(app, html`<main id="main-content" class="auth">
-    <div class="auth__layout">
-      <section class="auth__intro" aria-hidden="true">
-        <p class="auth__eyebrow">Holy Angel University · University Student Council</p>
-        <p class="auth__statement">Department of Logistics</p>
-        <p class="auth__sub">Inventory, stock, pantry and loans, kept in one place.</p>
-      </section>
-      <section class="auth__panel" aria-labelledby="signin-title">
-        <a class="auth__brand" href="/" data-route aria-label="Department of Logistics home">${MARK}</a>
-        <h1 id="signin-title">Staff sign in</h1>
-        <p class="auth__lede">For Department of Logistics staff.</p>
-        <form id="staff-login" class="form" novalidate>
-          <div class="form-alert" id="login-alert" role="alert" hidden></div>
-          <div class="field">
-            <label for="username">Username</label>
-            <input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required />
+    <section class="auth__panel" aria-labelledby="signin-title">
+      <a class="auth__brand" href="/" data-route aria-label="Department of Logistics home">${MARK}</a>
+      <h1 id="signin-title">Staff sign in</h1>
+      <form id="staff-login" class="form" novalidate>
+        <div class="form-alert" id="login-alert" role="alert" hidden></div>
+        <div class="field">
+          <label for="username">Username</label>
+          <input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <div class="input-group">
+            <input id="password" name="password" type="password" autocomplete="current-password" required aria-describedby="caps-hint" />
+            <button class="input-group__button" type="button" id="toggle-password" aria-label="Show password" aria-pressed="false">${icon("eye")}</button>
           </div>
-          <div class="field">
-            <label for="password">Password</label>
-            <div class="input-group">
-              <input id="password" name="password" type="password" autocomplete="current-password" required aria-describedby="caps-hint" />
-              <button class="input-group__button" type="button" id="toggle-password" aria-label="Show password" aria-pressed="false">${icon("eye")}</button>
-            </div>
-            <p class="field__hint field__hint--warn" id="caps-hint" hidden>Caps Lock is on.</p>
-          </div>
-          <button class="button button--primary button--block button--lg" type="submit">Sign in</button>
-        </form>
-        <p class="auth__foot">Accounts are issued by the Department of Logistics. Forgot your password? Ask an administrator to reset it.</p>
-      </section>
-    </div>
+          <p class="field__hint field__hint--warn" id="caps-hint" hidden>Caps Lock is on.</p>
+        </div>
+        <button class="button button--primary button--block button--lg" type="submit">Sign in</button>
+      </form>
+      <p class="auth__foot">Accounts are issued by the Department of Logistics. Forgot your password? Ask an administrator to reset it.</p>
+    </section>
     <p class="auth__back"><a class="text-link text-link--light" href="/" data-route>Back to the public site</a></p>
   </main>`);
   const form = document.querySelector<HTMLFormElement>("#staff-login")!;
