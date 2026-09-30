@@ -157,3 +157,7 @@ Earl must explicitly resolve the Part 4.5 branch-history conflict recorded in th
 - Final gates on the slice head: typecheck + build; unit 100/100; browser 9/9; real Worker + D1 browser 19/19; privacy 0 matches; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`. No migration, no API or workflow change, no new dependency. The Youth Development Day banner moved from `public/brand/` to `tests/worker-browser/loan-photo.jpg` (test fixture only).
 - Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded.
 
+## 2026-09-30 Part 4.7 Self-Service light/dark switch (Claude Cloud)
+- Earl asked for "a light and dark animated option" after choosing "Flat dark". Slice `slice/part-04-7-self-service-themes` from main 402946e. Decisions in `.codex/CURRENT_TASK.md`; design notes in docs/OFFLINE_SELF_SERVICE.md section 16. Dark stays the default; the choice lives in `localStorage` (`ss-theme`), per phone.
+- Gates on the slice head: typecheck + build; unit 100/100; browser 10/10 (new theme test); real Worker + D1 browser 19/19; privacy; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`. Contrast checked in both themes (AA). No migration, API, workflow or dependency change.
+- Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded. Remote slice branches need deleting from Earl's machine (cloud push --delete disconnects).

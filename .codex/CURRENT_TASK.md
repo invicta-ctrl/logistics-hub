@@ -1,7 +1,7 @@
-# Current Bounded Task — PART-04.6 Visual Cleanup
-INTENT: PRODUCT POLISH (subtraction; no workflow or data change)
-OBJECTIVE: Earl's 2026-09-30 accepted visual cleanup plan (see .codex/PART_04_6_BRIEF.md): remove decorative effects and repeated copy, consolidate tokens, fix the semantic and contrast gaps, keep the identity.
-IN_SCOPE: src/styles.css; src/self-service.css; copy and markup in src/public.ts, src/staff.ts, src/ui.ts, src/loans-workspace.ts, src/self-service-app.ts; affected browser tests.
-OUT_OF_SCOPE: workflows, APIs, migrations, new dependencies, Part 5.
-BRIEF: .codex/PART_04_6_BRIEF.md
-STATUS: COMPLETE (2026-09-30); merged to main, slice branch deleted. No active task until Earl accepts the next one.
+# Current Bounded Task — PART-04.7 Self-Service Themes
+INTENT: PRODUCT POLISH (no workflow, data or API change)
+OBJECTIVE: Earl, 2026-09-30: "Give it a light and dark animated option" for phone Self-Service, after choosing "Flat dark".
+DECISIONS: dark stays the default (his Flat dark choice); a sun/moon switch in the app bar; the choice is kept per phone in localStorage; the new theme spreads as a circle from the switch (View Transitions), instant with reduced motion or no support. Staff and public pages are unchanged.
+IN_SCOPE: src/self-service.css (light and dark token sets); src/self-service-app.ts (switch); src/ui.ts (sun and moon icons); tests/browser/app.spec.ts; docs/OFFLINE_SELF_SERVICE.md section 16.
+OUT_OF_SCOPE: migrations, APIs, new dependencies, staff or public theming, Part 5.
+STATUS: COMPLETE (2026-09-30); merged to main. No active task until Earl accepts the next one. Part 4.6 details: .codex/PART_04_6_BRIEF.md.
