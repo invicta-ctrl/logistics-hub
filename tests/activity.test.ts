@@ -12,7 +12,7 @@ let adminCookie: string;
 
 type Event = {
   id: string; correlationId: string; at: string | null; source: string; type: string; summary: string; actor: string; itemId: string | null; change: number; stockChanged: boolean;
-  before: number | null; after: number | null; reason: string | null; note: string | null; withheld: boolean; fields: string[]; attention: boolean;
+  before: number | null; after: number | null; reason: string | null; note: string | null; fields: string[]; attention: boolean;
 };
 type Feed = { events: Event[]; nextCursor: string | null };
 
@@ -195,83 +195,80 @@ describe("activity read model", () => {
     expect(JSON.stringify(adminView)).not.toContain("KEY-1");
   });
 
-  it("never outputs borrower identity, photo keys, network or device data, and cannot search them, while benign reasons and notes show and search", async () => {
-    movement("ITM-T", "STOCK_IN", 2, "2026-09-30T01:00:00.000Z");
+  it("shows typed reasons and notes as written, from the writers' own lifecycle, and never outputs or searches structured identity, photo keys or network data", async () => {
+    movement("ITM-T", "STOCK_IN", 5, "2026-09-30T01:00:00.000Z");
     await lend("LN-P", "ITM-T", 1, "2026-09-30T02:00:00.000Z");
     await close("LN-P", "ITM-T", 1, "RETURNED", "2026-09-30T03:00:00.000Z");
-    phone("PH-1", "ITM-T", "RETURN", "2026-09-30T04:00:00.000Z", { applied: 0, review: "RETURN_CHECK", loan_id: "LN-P", note: "Juan says hi", reason: "class project" });
-    audit("AUD-LOAN", "2026-09-30T05:00:00.000Z", "LOAN_CLOSED", "ITEM", "ITM-T", '{"loanId":"LN-P","outcome":"LOST","quantity":1,"borrower":"Maria Borrower"}');
+    await lend("LN-D", "ITM-T", 1, "2026-09-30T04:00:00.000Z");
+    await close("LN-D", "ITM-T", 1, "DAMAGED", "2026-09-30T05:00:00.000Z", "Leg cracked in transit");
+    await lend("LN-L", "ITM-T", 1, "2026-09-30T06:00:00.000Z");
+    await close("LN-L", "ITM-T", 1, "LOST", "2026-09-30T07:00:00.000Z", "Left at the venue");
+    phone("PH-1", "ITM-T", "RETURN", "2026-09-30T08:00:00.000Z", { applied: 0, review: "RETURN_CHECK", loan_id: "LN-P", note: "Box was wet", reason: "class project" });
     const all = await feed("limit=100", adminCookie);
-    expect(all.events.length).toBeGreaterThan(4);
     const body = JSON.stringify(all);
-    for (const secret of ["Maria Borrower", "Juan", "Dela Cruz", "20-1234-567", "photo-secret", "loans/LN-P", "nettag99", "DEVICE-SECRET", "password", "details", "student"]) expect(body, secret).not.toContain(secret);
-    for (const query of ["q=Maria", "q=Juan", "q=20-1234", "q=photo-secret", "q=nettag99", "q=says%20hi"]) {
+    for (const secret of ["Maria Borrower", "Juan", "Dela Cruz", "20-1234-567", "photo-secret", "loans/LN-", "nettag99", "DEVICE-SECRET", "password", "details", "student"]) expect(body, secret).not.toContain(secret);
+    for (const query of ["q=Borrower", "q=Juan", "q=Dela%20Cruz", "q=20-1234", "q=photo-secret", "q=loans%2FLN", "q=nettag99"]) {
       expect((await feed(query, adminCookie)).events, query).toEqual([]);
       expect((await feed(query)).events, query).toEqual([]);
     }
-    // The reason a loan was made, the damage note and a phone record's reason are the operational context; a note naming the person is withheld whole.
     const byId = Object.fromEntries(all.events.map((event) => [event.id, event]));
-    expect(byId["mov:MOV-LN-P"]).toMatchObject({ reason: "Orientation booth", note: null, withheld: false });
-    expect(byId["mov:MOV-R-LN-P"]).toMatchObject({ note: "Returned with a scratch", withheld: false });
-    expect(byId["phone:PH-1"]).toMatchObject({ note: "class project", withheld: true });
-    for (const [query, id] of [["q=Orientation", "mov:MOV-LN-P"], ["q=scratch", "mov:MOV-R-LN-P"], ["q=class%20project", "phone:PH-1"]] as const) {
-      for (const cookie of [staffCookie, adminCookie]) expect((await feed(query, cookie)).events.map((event) => event.id), query).toEqual([id]);
+    expect(byId["mov:MOV-LN-P"]).toMatchObject({ reason: "Orientation booth", note: null });
+    expect(byId["mov:MOV-R-LN-P"]).toMatchObject({ note: "Returned with a scratch" });
+    expect(byId["phone:PH-1"]).toMatchObject({ note: "class project · Box was wet" });
+    // A damaged or lost closing has no movement; its one audit entry carries the loan's own return note, and no loan's life repeats an entry.
+    const closing = (type: string) => all.events.filter((event) => event.type === type);
+    expect(closing("LOAN_DAMAGED").map((event) => [event.correlationId, event.note])).toEqual([["LN-D", "Leg cracked in transit"]]);
+    expect(closing("LOAN_LOST").map((event) => [event.correlationId, event.note])).toEqual([["LN-L", "Left at the venue"]]);
+    for (const [loan, count] of [["LN-P", 3], ["LN-D", 2], ["LN-L", 2]] as const) expect(all.events.filter((event) => event.correlationId === loan).length, loan).toBe(count);
+    expect(all.events).toHaveLength(8);
+    for (const [query, ids] of [["q=Orientation", ["mov:MOV-LN-L", "mov:MOV-LN-D", "mov:MOV-LN-P"]], ["q=scratch", ["mov:MOV-R-LN-P"]], ["q=class%20project", ["phone:PH-1"]], ["q=wet", ["phone:PH-1"]]] as const) {
+      for (const cookie of [staffCookie, adminCookie]) expect((await feed(query, cookie)).events.map((event) => event.id), query).toEqual(ids);
     }
-    for (const event of all.events) expect(Object.keys(event).sort()).toEqual(["actor", "actorId", "after", "at", "attention", "before", "change", "correlationId", "fields", "id", "itemId", "itemName", "note", "quantity", "reason", "source", "stockChanged", "summary", "title", "type", "unit", "withheld"]);
+    for (const [query, type, loan] of [["q=cracked", "LOAN_DAMAGED", "LN-D"], ["q=venue", "LOAN_LOST", "LN-L"]] as const) {
+      for (const cookie of [staffCookie, adminCookie]) expect((await feed(query, cookie)).events.map((event) => [event.type, event.correlationId]), query).toEqual([[type, loan]]);
+    }
+    for (const event of all.events) expect(Object.keys(event).sort()).toEqual(["actor", "actorId", "after", "at", "attention", "before", "change", "correlationId", "fields", "id", "itemId", "itemName", "note", "quantity", "reason", "source", "stockChanged", "summary", "title", "type", "unit"]);
   });
 
-  it("withholds a note or reason that repeats its own record's person, however it is cased, spaced or copied, and never searches the hidden text", async () => {
-    movement("ITM-T", "STOCK_IN", 9, "2026-09-30T01:00:00.000Z");
-    const hiding = [
-      { reason: "for MARIA at the booth", note: "  maRiA   BORROWER was careful" },
-      { reason: "Mariaborrower's event", note: "id 20 1234-567 checked" },
-      { reason: "ID2012-34567x", note: "m.a.r.i.a borrower, maria, MARIA" }
-    ];
-    for (const [index, hide] of hiding.entries()) {
-      const at = (minute: number) => `2026-09-30T0${2 + index}:0${minute}:00.000Z`;
-      await lend(`LN-H${index}`, "ITM-T", 1, at(0), "ACC-1", { reason: hide.reason, studentId: "20-1234-567" });
-      await close(`LN-H${index}`, "ITM-T", 1, "RETURNED", at(1), hide.note);
-    }
-    // A movement a phone wrote, with a note copied from the person; its own person is on the phone record.
-    phone("PH-N", "ITM-T", "TAKE", "2026-09-30T06:00:00.000Z", { review: "COUNT_OVERLAP", reason: "Dela-Cruz wants it", note: "safe note" });
-    movement("ITM-T", "STOCK_OUT", -1, "2026-09-30T06:00:00.000Z", { id: "MOV-SS", related: "SELF_SERVICE", relatedId: "PH-N", notes: "JUAN took it" });
-    phone("PH-R", "ITM-T", "RETURN", "2026-09-30T07:00:00.000Z", { applied: 0, review: "RETURN_CHECK", resolved_at: "2026-09-30T08:00:00.000Z", resolved_by: "ACC-1", resolution_note: "Juan Dela Cruz verified by staff" });
-    phone("PH-K", "ITM-T", "RETURN", "2026-09-30T09:00:00.000Z", { applied: 0, review: "RETURN_CHECK", resolved_at: "2026-09-30T10:00:00.000Z", resolved_by: "ACC-1", resolution_note: "Checked the photo" });
-
-    const hidden = ["maria", "borrower", "20 1234", "2012-34567", "juan", "dela-cruz", "dela cruz", "wants it", "took it", "at the booth", "event", "careful", "verified"];
-    for (const cookie of [staffCookie, adminCookie]) {
+  it("keeps a typed note as written for STAFF, ADMIN and OWNER, in the feed and in the search, while the structured name and ID match nothing", async () => {
+    sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash, role) VALUES('ACC-3', 'owner.one', 'Owner One', ?, 'OWNER')").run(await hashPassword("correct horse battery"));
+    const ownerCookie = await signIn("owner.one");
+    movement("ITM-T", "STOCK_IN", 9, "2026-09-30T01:00:00.000Z", { notes: "Counted with MARIA present" });
+    await lend("LN-N", "ITM-T", 1, "2026-09-30T02:00:00.000Z", "ACC-1", { reason: "Booth for Maria", studentId: "20-9999-111" });
+    await close("LN-N", "ITM-T", 1, "RETURNED", "2026-09-30T03:00:00.000Z", "Maria brought it back");
+    phone("PH-R", "ITM-T", "RETURN", "2026-09-30T04:00:00.000Z", { applied: 0, review: "RETURN_CHECK", resolved_at: "2026-09-30T05:00:00.000Z", resolved_by: "ACC-1", resolution_note: "Juan confirmed it" });
+    for (const cookie of [staffCookie, adminCookie, ownerCookie]) {
       const { events } = await feed("limit=100", cookie);
-      const body = JSON.stringify(events).toLowerCase();
-      for (const word of hidden) expect(body, word).not.toContain(word);
       const byId = Object.fromEntries(events.map((event) => [event.id, event]));
-      for (const index of [0, 1, 2]) {
-        expect(byId[`mov:MOV-LN-H${index}`], `lend ${index}`).toMatchObject({ reason: null, withheld: true });
-        expect(byId[`mov:MOV-R-LN-H${index}`], `return ${index}`).toMatchObject({ note: null, withheld: true });
-      }
-      expect(byId["mov:MOV-SS"]).toMatchObject({ note: null, withheld: true });
-      expect(byId["phone:PH-N"]).toMatchObject({ note: "safe note", withheld: true });
-      expect(byId["resolve:PH-R"]).toMatchObject({ note: null, withheld: true });
-      expect(byId["resolve:PH-K"]).toMatchObject({ note: "Checked the photo", withheld: false });
-      for (const word of hidden) expect((await feed(`q=${encodeURIComponent(word)}`, cookie)).events, word).toEqual([]);
-      expect((await feed("q=Checked%20the%20photo", cookie)).events.map((event) => event.id)).toEqual(["resolve:PH-K"]);
+      expect(byId["mov:MOV-LN-N"]!.reason).toBe("Booth for Maria");
+      expect(byId["mov:MOV-R-LN-N"]!.note).toBe("Maria brought it back");
+      expect(byId["resolve:PH-R"]!.note).toBe("Juan confirmed it");
+      expect(events.find((event) => event.note === "Counted with MARIA present")).toBeTruthy();
+      expect((await feed("q=maria%20brought", cookie)).events.map((event) => event.id)).toEqual(["mov:MOV-R-LN-N"]);
+      expect((await feed("q=confirmed", cookie)).events.map((event) => event.id)).toEqual(["resolve:PH-R"]);
+      // Only the structured fields hold these; nothing typed repeats them.
+      for (const query of ["q=Borrower", "q=20-9999", "q=Dela", "q=20-1234"]) expect((await feed(query, cookie)).events, query).toEqual([]);
     }
   });
 
-  it("applies the same rule before filters and limits, and a hidden text cannot move the tag", async () => {
+  it("applies the search before the limit over the visible text, and moves the tag for a note but not for a structured identity", async () => {
     movement("ITM-T", "STOCK_IN", 9, "2026-09-30T01:00:00.000Z");
-    await lend("LN-Q", "ITM-T", 1, "2026-09-30T02:00:00.000Z", "ACC-1", { reason: "Maria booth needle" });
-    await lend("LN-Z", "ITM-T", 1, "2026-09-30T03:00:00.000Z", "ACC-1", { reason: "Orientation needle" });
-    // The older row matches the search only through hidden text, so it is not found; the newer one still is, at any limit.
-    expect((await feed("q=needle&limit=1")).events.map((event) => event.id)).toEqual(["mov:MOV-LN-Z"]);
-    expect((await feed("q=needle&limit=5")).events.map((event) => event.id)).toEqual(["mov:MOV-LN-Z"]);
+    await lend("LN-Q", "ITM-T", 1, "2026-09-30T02:00:00.000Z", "ACC-1", { reason: "Kiosk needle" });
+    await lend("LN-Z", "ITM-T", 1, "2026-09-30T03:00:00.000Z");
+    await lend("LN-Y", "ITM-T", 1, "2026-09-30T04:00:00.000Z");
+    await close("LN-Y", "ITM-T", 1, "DAMAGED", "2026-09-30T05:00:00.000Z", "Dented needle");
+    // The newer rows do not match; the older ones are still found at a limit of 1, and their cursor leads to the next match.
+    const first = await feed("q=needle&limit=1");
+    expect(first.events.map((event) => [event.type, event.correlationId])).toEqual([["LOAN_DAMAGED", "LN-Y"]]);
+    expect((await feed(`q=needle&limit=1&cursor=${encodeURIComponent(first.nextCursor!)}`)).events.map((event) => event.id)).toEqual(["mov:MOV-LN-Q"]);
     const tag = async (match?: string) => {
       const response = await call("/api/staff/activity?q=needle", staffCookie, match ? { "If-None-Match": match } : {});
       return { status: response.status, etag: response.headers.get("etag")! };
     };
     const before = await tag();
-    sqlite.prepare("UPDATE loans SET reason = 'Maria something else entirely' WHERE id = 'LN-Q'").run();
+    sqlite.prepare("UPDATE loans SET borrower_name = 'Somebody Else', student_id = '20-0000-000' WHERE id = 'LN-Q'").run();
     expect((await tag(before.etag)).status).toBe(304);
-    sqlite.prepare("UPDATE loans SET reason = 'Orientation needle too' WHERE id = 'LN-Q'").run();
+    sqlite.prepare("UPDATE loans SET reason = 'Kiosk needle, second table' WHERE id = 'LN-Q'").run();
     expect((await tag(before.etag)).status).toBe(200);
   });
 
