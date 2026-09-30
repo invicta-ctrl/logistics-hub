@@ -69,13 +69,48 @@ async function load(): Promise<void> {
   [snapshot, events, profile] = await Promise.all([store.catalog(), store.events(), store.getMeta<store.Profile>("profile").then((saved) => saved ?? { name: "", studentId: "" })]);
 }
 
+/* ---------- Theme ---------- */
+
+type Theme = "light" | "dark";
+const THEME_KEY = "ss-theme";
+const THEME_COLOR: Record<Theme, string> = { light: "#faf9f7", dark: "#140609" };
+
+/** Dark unless this phone chose light; the choice stays on the phone only. */
+function storedTheme(): Theme {
+  try { return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark"; } catch { return "dark"; }
+}
+
+function applyTheme(theme: Theme): void {
+  document.body.dataset.theme = theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOR[theme]);
+  document.querySelector("[data-theme-toggle]")?.setAttribute("aria-pressed", String(theme === "dark"));
+}
+
+/** The new theme spreads out from the switch as a circle where the browser can; otherwise it swaps at once. */
+function switchTheme(button: HTMLElement): void {
+  const next: Theme = document.body.dataset.theme === "dark" ? "light" : "dark";
+  try { localStorage.setItem(THEME_KEY, next); } catch { /* the choice lasts this visit only */ }
+  if (!document.startViewTransition || reducedMotion()) return applyTheme(next);
+  const box = button.getBoundingClientRect();
+  const x = box.left + box.width / 2;
+  const y = box.top + box.height / 2;
+  const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
+  document.startViewTransition(() => applyTheme(next)).ready.then(() => {
+    document.documentElement.animate({ clipPath: [`circle(0 at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+      { duration: 500, easing: "cubic-bezier(.2, .8, .2, 1)", pseudoElement: "::view-transition-new(root)" });
+  }).catch(() => undefined);
+}
+
 /* ---------- Frame ---------- */
 
 function frame(): Html {
   return html`<header class="ss-bar">
       <div class="ss-bar__inner">
         <a class="ss-bar__brand" href="/self-service" data-route aria-label="Self-Service home"><span class="ss-bar__marks" aria-hidden="true">${CREST}${MARK}</span><span class="ss-bar__title"><span>Self-Service</span><small>HAU USC Logistics</small></span></a>
-        <div data-region="pill"></div>
+        <div class="ss-bar__end">
+          <button class="ss-theme" type="button" data-theme-toggle aria-label="Dark theme" aria-pressed="${String(document.body.dataset.theme === "dark")}">${icon("sun")}${icon("moon")}</button>
+          <div data-region="pill"></div>
+        </div>
       </div>
       <div class="ss-update" data-region="update" hidden></div>
     </header>
@@ -110,7 +145,7 @@ function refreshRegions(): void {
   const updateRegion = region("update");
   if (updateRegion) {
     updateRegion.hidden = !hasUpdate();
-    mount(updateRegion, hasUpdate() ? html`<p>${icon("refresh")}A new version is ready.</p><button type="button" class="button button--on-dark button--sm" data-apply-update>Update</button>` : html``);
+    mount(updateRegion, hasUpdate() ? html`<p>${icon("refresh")}A new version is ready.</p><button type="button" class="button button--primary button--sm" data-apply-update>Update</button>` : html``);
   }
   const { screen } = params();
   const tiles = region("tiles");
@@ -649,10 +684,11 @@ export async function selfService(): Promise<void> {
   document.body.classList.add("is-self-service");
   const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
   const pageTheme = themeColor?.content ?? "";
-  themeColor?.setAttribute("content", "#140609");
+  applyTheme(storedTheme());
   onLeave(() => {
     document.body.classList.remove("is-self-service");
     delete document.body.dataset.ssScreen;
+    delete document.body.dataset.theme;
     themeColor?.setAttribute("content", pageTheme);
   });
   mount(app, frame());
@@ -742,6 +778,8 @@ export async function selfService(): Promise<void> {
     const openLoan = target.closest<HTMLAnchorElement>("[data-open-loan]");
     if (openLoan) { event.preventDefault(); go({ screen: "return", item: null, loan: openLoan.dataset.openLoan! }); return; }
     if (target.closest("[data-back]")) { event.preventDefault(); goBack(); return; }
+    const themeToggle = target.closest<HTMLElement>("[data-theme-toggle]");
+    if (themeToggle) { switchTheme(themeToggle); return; }
     if (target.closest("[data-done]")) { closeAnd(goHome); return; }
     const again = target.closest<HTMLElement>("[data-again]");
     // "Take something else" steps back to the list the item was picked from.

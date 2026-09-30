@@ -1,6 +1,24 @@
 /* Self-Service phone app: re-themes the shared components inside .is-self-service only. */
 
+/* Light is the shared paper palette plus the few roles Self-Service adds; dark re-themes every token. */
 .is-self-service {
+  --canvas: var(--bg);
+  --field: var(--surface);
+  --accent: var(--brand);
+  --accent-line: var(--brand);
+  --on-accent: var(--on-brand);
+  --primary: var(--brand);
+  --primary-hover: var(--brand-hover);
+  --on-primary: var(--on-brand);
+  --action: var(--brand);
+  --on-action: var(--on-brand);
+  --on-action-2: rgb(255 255 255 / 82%);
+  --on-action-line: rgb(255 255 255 / 30%);
+  color-scheme: light;
+  background: var(--canvas);
+  color: var(--text);
+}
+.is-self-service[data-theme="dark"] {
   --canvas: #140609;
   --bg: var(--canvas);
   --surface: #211015;
@@ -8,6 +26,7 @@
   --hover: rgb(255 236 214 / 7%);
   --line: rgb(255 226 196 / 10%);
   --line-strong: rgb(255 226 196 / 20%);
+  --line-field: rgb(255 226 196 / 42%);
   --text: #f7ece1;
   --text-2: rgb(247 236 225 / 76%);
   --text-3: rgb(247 236 225 / 60%);
@@ -15,7 +34,6 @@
   --brand-hover: #d34651;
   --brand-tint: rgb(194 58 69 / 16%);
   --gold: #e7bd62;
-  --gold-light: #f6d990;
   --ok: #6fdca5;
   --ok-dot: #3ecf8e;
   --ok-tint: rgb(62 207 142 / 12%);
@@ -25,23 +43,28 @@
   --bad: #ff9aa4;
   --bad-dot: #ff5d6e;
   --bad-tint: rgb(255 93 110 / 12%);
-  --action: #7d1a24;
-  --on-gold: #2a0a0c;
   --field: rgb(255 238 220 / 5%);
   --scrim: rgb(8 2 4 / 60%);
-  --focus: 0 0 0 2px var(--canvas), 0 0 0 4px var(--gold-light);
+  --accent: #f6d990;
+  --accent-line: var(--gold);
+  --on-accent: #2a0a0c;
+  --primary: var(--gold);
+  --primary-hover: var(--accent);
+  --on-primary: var(--on-accent);
+  --action: #7d1a24;
+  --on-action: var(--text);
+  --on-action-2: rgb(247 236 225 / 78%);
+  --focus: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent);
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
   --shadow-md: 0 10px 30px rgb(0 0 0 / 35%), 0 2px 6px rgb(0 0 0 / 25%);
   color-scheme: dark;
-  background: var(--canvas);
-  color: var(--text);
 }
 .is-self-service #app { position: relative; z-index: 0; min-height: 100dvh; }
 .is-self-service ::selection { background: var(--brand-tint); }
-.is-self-service :focus-visible { outline-color: var(--gold-light); }
+.is-self-service :focus-visible { outline-color: var(--accent); }
 .is-self-service input::placeholder, .is-self-service textarea::placeholder { color: var(--text-3); }
-.is-self-service input:not([type=checkbox], [type=radio]), .is-self-service select, .is-self-service textarea { border-color: var(--line-strong); background: var(--field); color: var(--text); }
-.is-self-service input:focus-visible, .is-self-service textarea:focus-visible { border-color: var(--gold); box-shadow: var(--focus); }
+.is-self-service input:not([type=checkbox], [type=radio]), .is-self-service select, .is-self-service textarea { border-color: var(--line-field); background: var(--field); color: var(--text); }
+.is-self-service input:focus-visible, .is-self-service textarea:focus-visible { border-color: var(--accent-line); box-shadow: var(--focus); }
 
 /* ---------- App bar ---------- */
 .ss-bar { position: sticky; top: 0; z-index: 30; padding-top: env(safe-area-inset-top); border-bottom: 1px solid var(--line); background: var(--canvas); color: var(--text); }
@@ -52,7 +75,15 @@
 .ss-bar__marks .mark { height: 1.75rem; }
 .ss-bar__title { display: grid; min-width: 0; font-family: var(--serif); font-size: 1.0625rem; font-weight: 500; line-height: 1.1; white-space: nowrap; }
 .ss-bar__title > * { overflow: hidden; text-overflow: ellipsis; }
-.ss-bar__title small { color: var(--gold); font-family: var(--sans); font-size: .625rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+.ss-bar__end { display: flex; flex: none; align-items: center; gap: .5rem; }
+/* The switch shows the current theme: the sun turns away as the moon turns in. */
+.ss-theme { display: grid; width: 2.75rem; height: 2.75rem; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--text-2); -webkit-tap-highlight-color: transparent; }
+.ss-theme .icon { grid-area: 1 / 1; width: 1.25rem; height: 1.25rem; transition: transform var(--dur-3) var(--ease), opacity var(--dur-2); }
+.ss-theme[aria-pressed="true"] .icon:first-child, .ss-theme[aria-pressed="false"] .icon:last-child { opacity: 0; transform: rotate(-90deg) scale(.5); }
+.ss-theme:focus-visible { outline: none; box-shadow: var(--focus); }
+/* The theme change supplies its own circular reveal, so the default cross-fade is switched off. */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+.ss-bar__title small { color: var(--accent-line); font-family: var(--sans); font-size: .625rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
 
 /* The sync pill: a small light. Quiet when all is well, specific when something waits. */
 .ss-pill { position: relative; display: inline-flex; flex: none; min-height: 2.125rem; align-items: center; gap: .5rem; padding: .25rem .8rem; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--text); font-size: var(--text-sm); font-weight: 500; text-decoration: none; white-space: nowrap; transition: background-color var(--dur-2), border-color var(--dur-2); }
@@ -61,9 +92,9 @@
 .ss-pill__dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--ok-dot); }
 .ss-pill--waiting .ss-pill__dot, .ss-pill--offline .ss-pill__dot { background: var(--warn-dot); }
 .ss-pill--offline { border-color: var(--warn-dot); }
-.ss-pill--review { border-color: var(--gold); }
-.ss-pill--review .ss-pill__dot { background: var(--gold-light); }
-.ss-pill--busy .ss-pill__dot { width: .8rem; height: .8rem; border: 2px solid var(--line-strong); border-top-color: var(--gold-light); background: none; animation: ss-spin .8s linear infinite; }
+.ss-pill--review { border-color: var(--accent-line); }
+.ss-pill--review .ss-pill__dot { background: var(--accent); }
+.ss-pill--busy .ss-pill__dot { width: .8rem; height: .8rem; border: 2px solid var(--line-strong); border-top-color: var(--accent); background: none; animation: ss-spin .8s linear infinite; }
 
 .ss-update { display: flex; max-width: 36rem; margin-inline: auto; align-items: center; justify-content: space-between; gap: .75rem; padding: .5rem 1rem .625rem; border-top: 1px solid var(--line); font-size: var(--text-sm); }
 .ss-update p { display: flex; align-items: center; gap: .5rem; color: var(--text-2); }
@@ -81,18 +112,18 @@
 .ss-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr)); gap: .75rem; }
 .ss-tile { position: relative; display: flex; min-height: 8.75rem; flex-direction: column; gap: .125rem; padding: 1rem; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2); }
 .ss-tile:focus-visible { outline: none; box-shadow: var(--focus); }
-.ss-tile__icon { display: grid; width: 2.75rem; height: 2.75rem; margin-bottom: auto; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--gold-light); }
+.ss-tile__icon { display: grid; width: 2.75rem; height: 2.75rem; margin-bottom: auto; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--accent); }
 .ss-tile__icon .icon { width: 1.375rem; height: 1.375rem; }
 .ss-tile__name { margin-top: .75rem; overflow-wrap: break-word; font-size: 1.25rem; font-weight: 600; line-height: 1.15; }
 /* Two lines always, so the names of neighbouring tiles sit level. */
 .ss-tile__detail { min-height: 2lh; color: var(--text-2); font-size: var(--text-sm); line-height: 1.35; }
-.ss-tile__badge { position: absolute; top: 1rem; right: 1rem; min-width: 1.5rem; padding: .125rem .55rem; border-radius: 999px; background: var(--gold-light); color: var(--on-gold); font-size: var(--text-sm); font-weight: 700; text-align: center; }
-/* Take and Borrow are the everyday actions, so they carry the brand colour. */
-.ss-tile--take, .ss-tile--borrow { border-color: var(--action); background: var(--action); }
+.ss-tile__badge { position: absolute; top: 1rem; right: 1rem; min-width: 1.5rem; padding: .125rem .55rem; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: var(--text-sm); font-weight: 700; text-align: center; }
+/* Take and Borrow are the everyday actions, so they carry the brand colour and re-point the tokens inside them. */
+.ss-tile--take, .ss-tile--borrow { --text-2: var(--on-action-2); --accent: var(--on-action); --line-strong: var(--on-action-line); border-color: var(--action); background: var(--action); color: var(--on-action); }
 
 .ss-find { scroll-margin-top: 4.5rem; }
 .ss-find .search-field input { min-height: 3.125rem; border-radius: var(--radius-lg); background: var(--surface); font-size: var(--text-md); }
-.ss-find .search-field > .icon, .ss-search > .icon { color: var(--gold); }
+.ss-find .search-field > .icon, .ss-search > .icon { color: var(--accent-line); }
 .ss-results { display: grid; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); }
 .ss-results li + li { border-top: 1px solid var(--line); }
 .ss-results__none { padding: 1rem; color: var(--text-3); font-size: var(--text-base); }
@@ -104,7 +135,7 @@
 .ss-ready p { margin-top: .125rem; color: var(--text-2); font-size: var(--text-sm); }
 .ss-ready--ok { background: var(--ok-tint); }
 .ss-ready--ok > .icon { color: var(--ok); }
-.ss-ready--todo > .icon { color: var(--gold-light); }
+.ss-ready--todo > .icon { color: var(--accent); }
 .ss-ready--bad { background: var(--bad-tint); }
 .ss-ready--bad > .icon { color: var(--bad); }
 
@@ -115,12 +146,11 @@
 .ss-install .button { grid-column: 1 / -1; min-height: 2.875rem; }
 
 /* ---------- Buttons ---------- */
-.is-self-service .button--primary { background: var(--gold); color: var(--on-gold); font-weight: 600; box-shadow: none; }
+.is-self-service .button--primary { background: var(--primary); color: var(--on-primary); font-weight: 600; box-shadow: none; }
 .is-self-service .button--secondary { border-color: var(--line-strong); background: var(--field); color: var(--text); box-shadow: none; }
 .is-self-service .button--ghost { color: var(--text-2); }
-.is-self-service .button--on-dark { color: var(--on-gold); }
 /* Focus is drawn as an outline, which no button background can hide. */
-.is-self-service .button:focus-visible { outline: 2px solid var(--gold-light); outline-offset: 3px; }
+.is-self-service .button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 /* ---------- Screens and lists ---------- */
 .ss-head { display: flex; align-items: center; gap: .5rem; margin-left: -.5rem; }
@@ -130,16 +160,16 @@
 .ss-back .icon { width: 1.375rem; height: 1.375rem; }
 .ss-lead { margin-top: -.5rem; color: var(--text-2); font-size: var(--text-base); }
 .ss-search input { min-height: 3rem; border-radius: var(--radius-lg); font-size: var(--text-md); }
-.ss-section { margin-top: .75rem; color: var(--gold); font-size: .6875rem; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; }
+.ss-section { margin-top: .75rem; color: var(--accent-line); font-size: .6875rem; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; }
 .ss-list { display: grid; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .ss-list li + li { border-top: 1px solid var(--line); }
 .ss-row { display: flex; min-height: 3.875rem; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem 1rem; color: var(--text); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: background-color var(--dur-1); }
 .ss-row:active { background: var(--hover); }
-.ss-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--gold-light); }
+.ss-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
 .ss-row__main { display: grid; min-width: 0; }
 .ss-row__name { overflow-wrap: anywhere; font-weight: 500; line-height: 1.3; }
 .ss-row__sub { overflow: hidden; color: var(--text-3); font-size: var(--text-sm); text-overflow: ellipsis; white-space: nowrap; }
-.ss-row__go { display: inline-flex; flex: none; align-items: center; gap: .125rem; color: var(--gold-light); font-size: var(--text-sm); font-weight: 600; }
+.ss-row__go { display: inline-flex; flex: none; align-items: center; gap: .125rem; color: var(--accent); font-size: var(--text-sm); font-weight: 600; }
 .ss-row--out .ss-row__name { color: var(--text-2); }
 .ss-row--skeleton { gap: 2rem; }
 .is-self-service .skeleton { background: linear-gradient(90deg, var(--subtle) 30%, var(--line) 50%, var(--subtle) 70%) 0 0 / 300% 100%; }
@@ -158,7 +188,7 @@
 .ss-sheet .sheet__header { border-top: 0; border-bottom-color: var(--line); }
 /* Nothing drags the sheet, so it shows no drag handle. */
 .ss-sheet .sheet__header::before { display: none; }
-.ss-sheet .sheet__kicker { color: var(--gold); font-size: .6875rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+.ss-sheet .sheet__kicker { color: var(--accent-line); font-size: .6875rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
 .ss-sheet .sheet__header h2 { font-size: var(--text-2xl); }
 .ss-sheet .icon-button { width: 2.75rem; height: 2.75rem; flex: none; color: var(--text-2); }
 .ss-form { gap: 1.125rem; }
@@ -174,26 +204,26 @@
 .ss-stepper:has(input:focus-visible) { box-shadow: var(--focus); }
 .ss-form .ss-stepper input { min-height: 0; border-color: var(--line-strong); border-radius: 0; font-size: var(--text-2xl); font-weight: 600; }
 .ss-form .ss-stepper input:focus-visible { box-shadow: none; }
-.ss-stepper .stepper__button { width: 4.25rem; border-color: var(--line-strong); background: var(--field); color: var(--gold-light); font-size: 1.5rem; }
+.ss-stepper .stepper__button { width: 4.25rem; border-color: var(--line-strong); background: var(--field); color: var(--accent); font-size: 1.5rem; }
 .ss-stepper .stepper__button:first-child { border-radius: var(--radius-lg) 0 0 var(--radius-lg); }
 .ss-stepper .stepper__button:last-child { border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
 .ss-stepper .stepper__button:active { background: var(--hover); }
 .ss-condition { grid-template-columns: repeat(3, 1fr); }
 .is-self-service .segmented { border-color: var(--line); border-radius: var(--radius-lg); background: var(--field); }
 .is-self-service .segmented label { min-height: 2.875rem; border-radius: var(--radius); color: var(--text-2); }
-.is-self-service .segmented label:has(input:checked) { background: var(--surface); color: var(--gold-light); box-shadow: inset 0 0 0 1px var(--gold); }
+.is-self-service .segmented label:has(input:checked) { background: var(--surface); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-line); }
 .ss-choices { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; padding: 0; border: 0; }
 .ss-choices legend { width: 100%; margin-bottom: .375rem; padding: 0; }
 .ss-choices label { position: relative; display: inline-flex; min-height: 2.75rem; align-items: center; padding: .375rem 1.05rem; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--field); color: var(--text-2); font-size: var(--text-base); font-weight: 500; cursor: pointer; transition: background-color var(--dur-2), border-color var(--dur-2), color var(--dur-2); }
 .ss-choices input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.ss-choices label:has(input:checked) { border-color: var(--gold); color: var(--gold-light); }
+.ss-choices label:has(input:checked) { border-color: var(--accent-line); color: var(--accent); }
 .ss-choices label:has(input:focus-visible) { box-shadow: var(--focus); }
 .ss-hint { display: flex; align-items: flex-start; gap: .5rem; color: var(--text-2); font-size: var(--text-sm); }
-.ss-hint .icon { width: 1rem; height: 1rem; margin-top: .1rem; flex: none; color: var(--gold-light); }
+.ss-hint .icon { width: 1rem; height: 1rem; margin-top: .1rem; flex: none; color: var(--accent); }
 .is-self-service .callout { border-color: var(--line-strong); background: var(--field); color: var(--text); }
-.is-self-service .callout .icon { color: var(--gold-light); }
+.is-self-service .callout .icon { color: var(--accent); }
 .is-self-service .photo-field__pick { min-height: 7.5rem; border-color: var(--line-strong); border-radius: var(--radius-lg); background: var(--field); color: var(--text-2); }
-.is-self-service .photo-field__pick .icon { color: var(--gold-light); }
+.is-self-service .photo-field__pick .icon { color: var(--accent); }
 .is-self-service .photo-field__preview { border-radius: var(--radius-lg); background: var(--canvas); }
 .is-self-service .photo-field__busy { border-radius: var(--radius-lg); background: var(--field); }
 .is-self-service .form-alert { border: 1px solid var(--bad-dot); background: var(--bad-tint); color: var(--bad); }
@@ -213,7 +243,7 @@
 .ss-receipt__sync .ss-state { display: block; }
 .ss-receipt__sync .ss-state > .icon, .ss-receipt__sync .ss-spinner { display: inline-block; margin-right: .375rem; vertical-align: -.15em; }
 .ss-receipt__tip { max-width: 22rem; color: var(--text-2); font-size: var(--text-sm); }
-.ss-receipt__tip strong { color: var(--gold-light); }
+.ss-receipt__tip strong { color: var(--accent); }
 .ss-receipt__actions { display: grid; width: 100%; gap: .5rem; margin-top: 1.25rem; }
 .ss-state { display: inline-flex; align-items: center; gap: .5rem; font-size: var(--text-sm); font-weight: 500; }
 .ss-state .icon { width: 1rem; height: 1rem; }
@@ -221,7 +251,7 @@
 .ss-state--wait { color: var(--text-2); }
 .ss-state--review { color: var(--warn); }
 .ss-state--bad { color: var(--bad); }
-.ss-spinner { width: .875rem; height: .875rem; border: 2px solid var(--line-strong); border-top-color: var(--gold-light); border-radius: 50%; animation: ss-spin .8s linear infinite; }
+.ss-spinner { width: .875rem; height: .875rem; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: 50%; animation: ss-spin .8s linear infinite; }
 
 /* ---------- My activity ---------- */
 .ss-sync { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .85rem 1rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
@@ -238,7 +268,7 @@
 .ss-event .tag { margin-top: .125rem; }
 .is-self-service .tag { color: var(--text-2); }
 .is-self-service .tag--ok { color: var(--ok); }
-.is-self-service .tag--gold { color: var(--gold-light); }
+.is-self-service .tag--gold { color: var(--accent); }
 .is-self-service .tag--bad { color: var(--bad); }
 .ss-housekeeping { display: flex; flex-wrap: wrap; gap: .5rem; }
 .ss-sync .button, .ss-housekeeping .button { min-height: 2.75rem; }
@@ -246,24 +276,25 @@
 /* ---------- Install steps ---------- */
 .ss-steps { display: grid; gap: .75rem; counter-reset: step; }
 .ss-steps li { position: relative; padding: .95rem 1rem .95rem 3.35rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); counter-increment: step; font-size: var(--text-base); }
-.ss-steps li::before { position: absolute; top: .85rem; left: 1rem; display: grid; width: 1.6rem; height: 1.6rem; place-items: center; border-radius: 50%; background: var(--gold-light); color: var(--on-gold); content: counter(step); font-size: var(--text-sm); font-weight: 700; }
-.ss-steps strong { color: var(--gold-light); }
-.ss-steps .icon { display: inline; width: 1.05em; height: 1.05em; margin-inline: .15em; vertical-align: -.15em; color: var(--gold-light); }
+.ss-steps li::before { position: absolute; top: .85rem; left: 1rem; display: grid; width: 1.6rem; height: 1.6rem; place-items: center; border-radius: 50%; background: var(--accent); color: var(--on-accent); content: counter(step); font-size: var(--text-sm); font-weight: 700; }
+.ss-steps strong { color: var(--accent); }
+.ss-steps .icon { display: inline; width: 1.05em; height: 1.05em; margin-inline: .15em; vertical-align: -.15em; color: var(--accent); }
 
 .is-self-service .toast { border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); }
 
 /* Hover states only where there is a real pointer, so they never stick after a tap. */
 @media (hover: hover) {
-  .ss-pill:hover { border-color: var(--gold); }
-  .ss-tile:hover { border-color: var(--gold); }
+  .ss-pill:hover { border-color: var(--accent-line); }
+  .ss-tile:hover { border-color: var(--accent-line); }
   .ss-back:hover { border-color: var(--line); background: var(--subtle); }
+  .ss-theme:hover { background: var(--subtle); color: var(--text); }
   .ss-row:hover { background: var(--hover); }
-  .is-self-service .button--primary:hover:not(:disabled) { background: var(--gold-light); }
-  .is-self-service .button--secondary:hover { border-color: var(--gold); background: var(--hover); }
+  .is-self-service .button--primary:hover:not(:disabled) { background: var(--primary-hover); }
+  .is-self-service .button--secondary:hover { border-color: var(--accent-line); background: var(--hover); }
   .is-self-service .button--ghost:hover { background: var(--subtle); color: var(--text); }
   .ss-sheet .icon-button:hover { background: var(--subtle); color: var(--text); }
   .ss-stepper .stepper__button:hover { background: var(--hover); }
-  .is-self-service .photo-field__pick:hover { border-color: var(--gold); color: var(--gold-light); }
+  .is-self-service .photo-field__pick:hover { border-color: var(--accent-line); color: var(--accent); }
 }
 
 /* ---------- Phones: the sheet rises from the bottom, as tall as its content ---------- */

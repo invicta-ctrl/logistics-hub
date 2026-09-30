@@ -132,6 +132,21 @@ test("self-service fits phones, tablets and desktops, with every screen and shee
   await expect(page.getByRole("dialog", { name: "Scissors" })).toContainText("The records show none left.");
 });
 
+test("self-service starts dark, switches to light, and remembers the choice on this phone", async ({ page }) => {
+  await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
+  await page.goto("/self-service");
+  const toggle = page.getByRole("button", { name: "Dark theme" });
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("body")).toHaveAttribute("data-theme", "dark");
+  await toggle.click();
+  await expect(page.locator("body")).toHaveAttribute("data-theme", "light");
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await page.reload();
+  await expect(page.locator("body")).toHaveAttribute("data-theme", "light");
+  await page.goto("/lending");
+  await expect(page.locator("body")).not.toHaveAttribute("data-theme");
+});
+
 test("public routes fit every required viewport class", async ({ page }) => {
   for (const viewport of [{ width: 320, height: 700 }, { width: 375, height: 700 }, { width: 768, height: 900 }, { width: 1024, height: 900 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(viewport);
