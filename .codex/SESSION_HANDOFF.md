@@ -1,9 +1,9 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-STATUS: PART_04_PRODUCTION_PARTIAL (unchanged; see Part 4 below) · PART_04_5_CODE_COMPLETE on `slice/part-04-5-offline-self-service-pwa` (local gates green; not merged, not deployed, remote 0015 not applied)
-ACTIVE_WRITER: none after this handoff (Claude Cloud yielded 2026-09-29; Earl's local lock is not visible from Cloud)
+STATUS: PART_04_PRODUCTION_ACCEPTANCE_COMPLETE; PART_04_5_STEP_2_BLOCKED_LOCAL_WORKER_BROWSER_GATE (2026-09-30; not merged, not deployed, remote 0015 not applied)
+ACTIVE_WRITER: none after this handoff (codex yields); claim before edits
 WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub (Cloud works in its own clone and pushes the slice)
-BRANCH: slice/part-04-5-offline-self-service-pwa (from main 41d00fe); main unchanged; slice/part-04-lending retained until Part 4 production acceptance
+BRANCH: slice/part-04-5-offline-self-service-pwa; tested code 1dc6639; main/origin/main 41b132d; both slices retained for later release cleanup
 LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` follows the pushed slice)
 
 ## Part 4.5 (Claude Cloud, 2026-09-29) — see `.codex/PART_04_5_BRIEF.md`, `docs/OFFLINE_SELF_SERVICE.md`
@@ -37,9 +37,7 @@ LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` follows the pushed slice
 - Fast-forwarded local main to the slice and pushed `main`; push reported `4f6cf4b..64c037e`. Exact deployment and production behavior are still unverified. Keep the slice branch until acceptance passes.
 
 ## Exact next action
-1. From a browser with local-file upload enabled, run the remaining synthetic production acceptance: Individual and USC loans, optional return date/overdue, evidence upload and authenticated retrieval, unauthorized rejection, good/damaged/lost returns, inventory effects, borrower statistics and history.
-2. Re-run the production smoke after any final executable change.
-3. Only after those checks pass, mark Part 4 complete, commit/push closeout docs, prove slice contained, delete local/remote slice, prune, leave clean main and yield the lock. Do not start Part 5.
+Resolve the failed offline Staff fallback gate in the latest checkpoint before resuming Step 2. Earl's explicit Step 2 stop condition was followed; no repair or test retry was attempted. Do not apply 0015 until all required gates pass. Step 3 also needs the previously recorded branch divergence resolved within Earl's no-merge-commit/no-force-push constraints. Do not start Part 5.
 
 ## Known facts and limitations
 - No item has a reorder level yet, so Low stock is empty until staff set levels.
@@ -49,3 +47,12 @@ LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` follows the pushed slice
 - Workers Builds build `64c037e54853ffbafb414c95042be53b01bd1ba2` succeeded and the live deployment list shows a new 100% deployment at 2026-09-29 15:32 UTC. Dashboard build details link the build to the exact GitHub commit. `npm run admin -- verify https://logistics.hausc.org` and the production weak-validator check pass.
 - Production UI verified landing, Lending Hub, authenticated Inventory/Loans navigation, synthetic item creation/deactivation, required quantity reasons, exact edit 8→10, relative edit 10→9, movement history, and required-photo validation. A synthetic public item was deactivated after testing.
 - Production evidence upload could not be exercised: Chrome's file chooser requires the ChatGPT extension's "Allow access to file URLs" setting, while the browser policy blocked opening `chrome://extensions`. Do not represent the photo or return flows as production-accepted until rerun.
+
+## 2026-09-30 Step 2 checkpoint — local gate failed; production untouched
+- Part 4 acceptance was completed in real production browsers, including a Staff-role run and isolated anonymous Chrome photo HTTP 401. Synthetic item restored to Inactive, not public. Main closure docs are `b787b756ead2d28a21f63abe5eff47f77b239b45`; main's latest checkpoint is `41b132d1bb1ea2a7a6e326a641a89a5a82f0db7f`. These supersede the historical Part 4 acceptance gaps above; do not repeat the synthetic loans.
+- Earl explicitly requested completion of Step 2. Read the current main handoff, verified no writer, claimed the codex lock, fetched/pruned, and checked out the existing remote-tracking Part 4.5 slice. Local and remote code head was exactly `1dc663918f23ba97fa376c9b1e0dc1f930d93030`; tracked tree was clean, unknown untracked `NUL` preserved untouched. Confirmed config targets Worker `logistics-hub`, D1 `logistics-hub` via `DB`, R2 `logistics-hub-evidence` via `EVIDENCE`. Wrangler OAuth authentication succeeded without printing account details.
+- Passed on this code: `npm run typecheck`; `npm test` 100/100; `npm run build`; `npm run test:browser` 9/9; `npm run verify:privacy` (0 secret/identity matches); `npm run verify:migration` (`ok: true`, expected single balance discrepancy).
+- **Failed:** `npm run test:browser:worker`, exit 1: 16 passed, 1 failed, 2 did not run. Test `tests/worker-browser/offline-self-service.spec.ts:143` (offline take, borrow with photo, reload, return, exactly-once sync) failed at line 177, `await page.goto("/staff")`, with `page.goto: net::ERR_FAILED at http://127.0.0.1:26062/staff`. It expected the heading `This page needs a connection` on the offline Staff fallback. The two subsequent serial offline tests did not run. Exact root cause is not yet established; no code repair or retry was made. Ignored trace and error context remain under `test-results/offline-self-service-offli-3361e-actly-once-when-back-online/`.
+- The suite migrated only its isolated LOCAL D1 in ignored `.wrangler/e2e-43000`; cleanup reported Windows EPERM after the failed run, so that evidence directory was preserved. This was not a remote migration.
+- Stopped per Earl's Step 2 rule. Wrangler deploy dry run, D1 bookmark capture, remote migrations list/apply and post-migration queries were not run after the failure. Remote 0015 was not applied by this session; no production Worker or R2 mutation, no Part 4.5 release and no Part 5 work occurred. Known Step 3 divergence remains: main and the slice have merge-base `41d00fe`; no history rewrite or merge exception has been granted.
+- Next exact action: authorize and perform a bounded repair of the failed offline Staff fallback, verify its regression and required gates, then resume Step 2's bookmark/list/apply/verification sequence. Never treat the earlier local 0015 test application as production evidence. Yield the writer lock at this handoff.
