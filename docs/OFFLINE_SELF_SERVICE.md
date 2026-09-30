@@ -44,7 +44,7 @@ There is no per-item switch: the item type staff set (Inventory → item → **E
 - **BORROW**: Loanable, Active, reviewed and listed on the Lending Hub (so it has an audience). A `USC_STAFF_ONLY` audience allows USC use only.
 - Anything else is not offered.
 
-Staff see what is missing (`selfServiceGaps()`) in the edit form and on the item's Overview. Inventory has a **Self-service** view and a row tag.
+Staff screens show only the item's type (Loanable or Consumable); there is no self-service status, tag or view on items.
 
 ## 4. The catalog snapshot — `GET /api/self-service/catalog`
 

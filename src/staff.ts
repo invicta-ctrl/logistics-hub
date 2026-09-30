@@ -1,4 +1,4 @@
-import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, selfServiceGaps, stockState } from "./catalog-policy";
+import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { ApiError, MARK, type Html, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
@@ -7,14 +7,13 @@ type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
   lendingAudience: string; onHand: number; reorderThreshold: number; storageLocation: string | null; listed: boolean;
   stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean; lastCountedAt: string | null; onLoan: number;
-  selfServiceReady: boolean;
 };
 type Inventory = { revision: number; items: Item[]; categories: string[]; locations: string[]; units: string[] };
 type Movement = { id: string; createdAt: string; movementType: string; signedQuantity: number; status: string; notes: string | null; reason: string | null; actor: string | null; afterQuantity: number; borrower: string | null; purpose: string | null };
 type Change = { from: unknown; to: unknown };
 type CatalogEvent = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
 type DetailItem = Item & {
-  notes: string | null; updatedAt: string | null; listingGaps: string[]; selfServiceGaps: string[];
+  notes: string | null; updatedAt: string | null; listingGaps: string[];
   legacyReportedAvailable: number | null; migratedOnHand: number; migrationDelta: number | null;
   legacySourceSheet: string | null; legacySourceRow: string | null; verificationNote: string | null; importedFrom: string | null;
 };
@@ -29,7 +28,6 @@ const VIEWS = {
   review: { label: "Needs review", test: (item: Item) => item.needsReview },
   ready: { label: "Ready to list", test: (item: Item) => item.itemType === PUBLIC_LENDING_ITEM_TYPE && !item.listed && active(item) },
   listed: { label: "On Lending Hub", test: (item: Item) => item.listed },
-  selfService: { label: "Self-service", test: (item: Item) => item.selfServiceReady },
   low: { label: "Low stock", test: (item: Item) => isLow(item) && active(item) },
   out: { label: "Out of stock", test: (item: Item) => item.onHand <= 0 && active(item) },
   inactive: { label: "Inactive", test: (item: Item) => !active(item) }
@@ -181,7 +179,6 @@ export function staffLogin(): void {
 function tags(item: Item): Html {
   const list: Html[] = [];
   if (item.listed) list.push(html`<span class="tag tag--ok">On Lending Hub</span>`);
-  if (item.selfServiceReady) list.push(html`<span class="tag tag--brand">Self-service</span>`);
   if (item.needsReview) list.push(html`<span class="tag tag--pending">Needs review</span>`);
   if (item.status !== "ACTIVE") list.push(html`<span class="tag ${item.status === "VERIFY" ? "tag--warn" : ""}">${label(item.status)}</span>`);
   if (item.onHand <= 0) list.push(html`<span class="tag tag--bad">Out of stock</span>`);
@@ -554,12 +551,6 @@ export async function workspace(): Promise<void> {
           ? html`<p class="card__text">Still needed before it can be listed:</p>${checklist(gaps.map((gap) => [gap, false]))}`
           : html`<p class="card__text">${label(item.lendingAudience)}. The public page shows live availability.</p>`}
       </section>
-      ${item.itemType === PUBLIC_LENDING_ITEM_TYPE || item.itemType === "Consumable" ? html`<section class="card ${item.selfServiceGaps.length ? "" : "card--ok"}" aria-labelledby="self-service-title">
-          <div class="card__head"><h3 id="self-service-title">${item.selfServiceGaps.length ? "Not offered on Self-Service" : `Offered on Self-Service: ${item.itemType === PUBLIC_LENDING_ITEM_TYPE ? "Borrow" : "Take"}`}</h3></div>
-          ${item.selfServiceGaps.length
-            ? html`<p class="card__text">Still needed before phones can ${item.itemType === PUBLIC_LENDING_ITEM_TYPE ? "borrow" : "take"} it:</p>${checklist(item.selfServiceGaps.map((gap) => [gap, false]))}`
-            : html`<p class="card__text">People ${item.itemType === PUBLIC_LENDING_ITEM_TYPE ? "borrow" : "take"} it with their own phone after scanning the Self-Service QR code. The item type decides which.</p>`}
-        </section>` : ""}
       <p class="provenance">${origin}</p>`;
   }
 
@@ -716,10 +707,9 @@ export async function workspace(): Promise<void> {
         ${creating ? number("openingQuantity", "Opening quantity", 0, 100_000, "Recorded as the item's first movement.") : ""}
       </div>
       <div class="form-section">
-        <h3 class="form-section__title">Public Lending Hub and phones</h3>
+        <h3 class="form-section__title">Public Lending Hub</h3>
         <div class="field"><label for="f-lendingAudience">Shown to</label><select id="f-lendingAudience" name="lendingAudience" aria-describedby="f-lendingAudience-hint">${options(LENDING_AUDIENCES, item.lendingAudience ?? "NOT_AVAILABLE_FOR_LENDING")}</select><p class="field__hint" id="f-lendingAudience-hint">Who sees it on the public page. Loans themselves are recorded in the Loan tab.</p></div>
         <div class="listing-status" id="listing-preview" aria-live="polite"></div>
-        <div class="listing-status" id="self-service-preview" aria-live="polite" hidden></div>
       </div>
       <div class="form-section form-section--last">
         <label class="checkbox"><input type="checkbox" name="reviewed" ${item.needsReview === false || creating ? html`checked` : ""} /><span>Details reviewed and verified</span></label>
@@ -776,13 +766,6 @@ export async function workspace(): Promise<void> {
       mount(element, gaps.length
         ? html`${icon("info")}<div><p>Not shown publicly. Still needed:</p>${checklist(gaps.map((gap) => [gap, false]))}</div>`
         : html`${icon("check")}<p>Will appear on the public Lending Hub.</p>`);
-      const selfService = form.querySelector<HTMLElement>("#self-service-preview")!;
-      const phoneGaps = selfServiceGaps(values);
-      selfService.hidden = values.itemType !== PUBLIC_LENDING_ITEM_TYPE && values.itemType !== "Consumable";
-      selfService.className = `listing-status ${phoneGaps.length ? "" : "is-listed"}`;
-      mount(selfService, phoneGaps.length
-        ? html`${icon("info")}<div><p>Not offered to phones yet. Still needed:</p>${checklist(phoneGaps.map((gap) => [gap, false]))}</div>`
-        : html`${icon("check")}<p>Phones will be able to ${values.itemType === PUBLIC_LENDING_ITEM_TYPE ? "borrow" : "take"} it.</p>`);
       const review = form.querySelector("#review-checklist");
       if (review) mount(review, checklist(reviewChecklist(values)));
       form.querySelector<HTMLElement>("[data-expiry]")!.hidden = values.stockArea !== "Pantry";

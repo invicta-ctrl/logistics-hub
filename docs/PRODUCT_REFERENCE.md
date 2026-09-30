@@ -84,7 +84,7 @@ The table shows ID, item (with type and other names), category, location, on-han
   - **Catalog:** name, other names, category and unit (typed freely; an existing spelling is reused regardless of letter case), type (**Loanable** or **Consumable**; *Unclassified* appears only while a migrated record still is), location, notes;
   - **Inventory settings:** status (Active, Verify, Inactive), reorder level, stock area (Inventory or Pantry) and, for pantry items, an optional earliest expiry;
   - **Public Lending Hub:** who it is shown to (there is no loan period or maximum per loan);
-  - **Phone self-service:** offered automatically by item type (Consumable = Take, Loanable listed on the Lending Hub = Borrow), with what is still missing before phones can take or borrow it (`selfServiceGaps()`); the Overview shows the same;
+  - **Phone self-service:** automatic by item type (Consumable = Take, Loanable listed on the Lending Hub = Borrow); items show only their type, with no self-service status;
   - a "Details reviewed and verified" box;
   - "Mark reviewed & next", which walks the current filtered list.
 - **History:** stock movements (including lent out and returned from loan, with the borrower) and catalog changes merged in one timeline, written as sentences with the actor and the time (never raw JSON).

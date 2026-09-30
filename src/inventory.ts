@@ -1,4 +1,4 @@
-import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, PUBLIC_LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, isListedForLending, listingGaps, selfServiceGaps } from "./catalog-policy";
+import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, PUBLIC_LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
 
 export class InputError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -83,7 +83,6 @@ export async function staffInventory(db: D1Database) {
     needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand,
     reorderThreshold: row.reorderThreshold, storageLocation: row.storageLocation, listed: isListedForLending(row),
     stockArea: row.stockArea, expiresOn: row.expiresOn, lastCountedAt: row.lastCountedAt, reorderStatus: row.reorderStatus, onLoan: row.onLoan,
-    selfServiceReady: selfServiceGaps(row).length === 0,
     // The legacy quantity is doubtful (migration discrepancy or a VERIFY record) until someone counts it.
     countNeeded: row.status !== "INACTIVE" && !row.lastCountedAt && ((row.migrationDelta ?? 0) !== 0 || row.status === "VERIFY")
   }));
@@ -118,7 +117,7 @@ export async function itemDetail(db: D1Database, id: string) {
   const row = item.results[0] as (ItemRow & Record<string, unknown>) | undefined;
   if (!row) throw new InputError(404, "Item not found.");
   return {
-    item: { ...row, needsReview: row.needsReview === 1, listed: isListedForLending(row), listingGaps: listingGaps(row), selfServiceGaps: selfServiceGaps(row) },
+    item: { ...row, needsReview: row.needsReview === 1, listed: isListedForLending(row), listingGaps: listingGaps(row) },
     movements: movements.results,
     loans: loans.results,
     // Parsed here so the browser renders sentences, never raw JSON.
