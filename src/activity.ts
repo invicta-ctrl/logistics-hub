@@ -147,7 +147,7 @@ function arms(admin: boolean): Arm[] {
       from: `audit_log a LEFT JOIN items i ON a.entity_type = 'ITEM' AND i.id = a.entity_id LEFT JOIN staff_accounts c ON c.id = a.actor_user_id
         LEFT JOIN loans l ON a.action = 'LOAN_CLOSED' AND l.id = ${AUDIT_LOAN}`,
       // Account and recovery events are refused here, before any search or page limit, unless the reader is ADMIN or OWNER.
-      where: `a.action <> 'LOAN_CREATED' AND NOT (a.action = 'LOAN_CLOSED' AND ${AUDIT_OUTCOME} = 'RETURNED')${admin ? "" : " AND a.entity_type = 'ITEM'"}`,
+      where: `a.action <> 'LOAN_CREATED' AND NOT (a.action = 'LOAN_CLOSED' AND COALESCE(${AUDIT_OUTCOME}, '') = 'RETURNED')${admin ? "" : " AND a.entity_type = 'ITEM'"}`,
       cols: {
         ...base, sid: "'audit:' || a.id", k: utc("a.created_at"), itemId: "i.id", itemName: "i.name", unit: "i.unit",
         src: "CASE WHEN a.action = 'LOAN_CLOSED' THEN 'LOAN' WHEN a.entity_type = 'ITEM' THEN 'CATALOG' ELSE 'ACCOUNT' END",

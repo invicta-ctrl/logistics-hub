@@ -315,6 +315,36 @@ describe("activity read model", () => {
     expect((await feed("attention=1")).events).toEqual([]);
   });
 
+  it("keeps a loan closing whose outcome is unknown, once, searchable and pageable, and drops only a confirmed good return", async () => {
+    const closing = (id: string, minute: number, details: string | null) => audit(id, `2026-09-30T02:${String(minute).padStart(2, "0")}:00.000Z`, "LOAN_CLOSED", "ITEM", "ITM-T", details);
+    closing("AUD-BAD", 1, "{not json");
+    closing("AUD-NONE", 2, null);
+    closing("AUD-MISSING", 3, '{"loanId":"LN-X","quantity":1}');
+    closing("AUD-NULL", 4, '{"loanId":"LN-X","outcome":null,"quantity":1}');
+    closing("AUD-UNKNOWN", 5, '{"loanId":"LN-X","outcome":"MISPLACED","quantity":1}');
+    closing("AUD-GOOD", 6, '{"loanId":"LN-X","outcome":"RETURNED","quantity":1}');
+    closing("AUD-DAMAGED", 7, '{"loanId":"LN-X","outcome":"DAMAGED","quantity":1}');
+    closing("AUD-LOST", 8, '{"loanId":"LN-X","outcome":"LOST","quantity":1}');
+    const unknown = ["audit:AUD-UNKNOWN", "audit:AUD-NULL", "audit:AUD-MISSING", "audit:AUD-NONE", "audit:AUD-BAD"];
+    for (const cookie of [staffCookie, adminCookie]) {
+      const { events } = await feed("limit=100", cookie);
+      expect(events.map((event) => event.id), "good return suppressed, everything else once").toEqual(["audit:AUD-LOST", "audit:AUD-DAMAGED", ...unknown]);
+      expect(events.filter((event) => event.type === "LOAN_CLOSED").map((event) => event.id)).toEqual(unknown);
+      expect((await feed("q=folding&limit=100", cookie)).events.map((event) => event.id)).toEqual(["audit:AUD-LOST", "audit:AUD-DAMAGED", ...unknown]);
+    }
+    // One per page: no entry is skipped or repeated across the cursor, and the tag is stable for the same page.
+    const seen: string[] = [];
+    for (let cursor = "", page = 0; page < 10; page += 1) {
+      const result = await feed(`limit=1${cursor}`);
+      seen.push(...result.events.map((event) => event.id));
+      if (!result.nextCursor) break;
+      cursor = `&cursor=${encodeURIComponent(result.nextCursor)}`;
+    }
+    expect(seen).toEqual(["audit:AUD-LOST", "audit:AUD-DAMAGED", ...unknown]);
+    const first = await call("/api/staff/activity?limit=100", staffCookie);
+    expect((await call("/api/staff/activity?limit=100", staffCookie, { "If-None-Match": first.headers.get("etag")! })).status).toBe(304);
+  });
+
   it("describes catalog changes by field names only, and survives malformed audit details", async () => {
     audit("AUD-1", "2026-09-30T01:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-R", '{"notes":{"from":"old secret","to":"new secret"},"storageLocation":{"from":"A","to":"B"},"password":{"from":"x","to":"y"}}');
     audit("AUD-2", "2026-09-30T02:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-R", "{not json");
