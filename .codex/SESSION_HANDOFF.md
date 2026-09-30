@@ -171,3 +171,8 @@ Earl must explicitly resolve the Part 4.5 branch-history conflict recorded in th
 - Earl: "The photo in the main website also is missing, fix". Slice `slice/part-04-9-home-banner` from main 5923729: the Youth Development Day banner returns to the landing hero (`public/brand/ydd-2026-banner.jpg`). Decisions in `.codex/CURRENT_TASK.md`.
 - Gates on the slice head: typecheck + build; unit 100/100; browser 10/10 (the landing test checks the banner); real Worker + D1 browser 19/19; privacy; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`; no overflow at 1366/1024/390.
 - Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded. Delete the remote slice branches from Earl's machine.
+
+## 2026-09-30 Part 4.10 public pages load fresh (Claude Cloud)
+- Earl's phone showed the home page without the Part 4.9 banner: the service worker served public pages from its saved shell until every tab closed. Slice `slice/part-04-10-fresh-public-pages` from main 0f27556 makes every navigation except `/self-service*` network-first with the saved shell as the offline fallback. Details in `.codex/CURRENT_TASK.md` and docs/OFFLINE_SELF_SERVICE.md section 9.
+- Gates on the slice head: typecheck + build; unit 100/100; browser 10/10; real Worker + D1 browser 20/20 (new test fails on the old worker); privacy; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`.
+- Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Phones still on the old worker pick it up once all of the site's tabs close. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded.

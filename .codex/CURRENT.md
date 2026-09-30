@@ -1,7 +1,7 @@
 # Current Work Pointer — Logistics Hub
 PROGRAM: Logistics Hub
-MILESTONE: PART-04.9_HOME_BANNER
-STATUS: PART_04_9_COMPLETE (2026-09-30): Youth Development Day banner back on the home page, merged to main and deployed by Workers Builds (after Part 4.8's Self-Service photo, Part 4.7's light/dark switch and Part 4.6's visual cleanup). Part 4.5 owner phone + signed-in staff acceptance still pending (it gates Part 5).
+MILESTONE: PART-04.10_FRESH_PUBLIC_PAGES
+STATUS: PART_04_10_COMPLETE (2026-09-30): public pages load fresh from the network (only /self-service opens from the phone's cache), merged to main and deployed by Workers Builds (after Part 4.9's home banner, 4.8's Self-Service photo, 4.7's light/dark switch and 4.6's visual cleanup). Part 4.5 owner phone + signed-in staff acceptance still pending (it gates Part 5).
 BRANCH: main (no active slice).
 ACTIVE_WRITER: none; claim before editing
 SHARED_WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
