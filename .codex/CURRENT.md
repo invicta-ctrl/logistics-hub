@@ -2,7 +2,7 @@
 PROGRAM: Logistics Hub
 MILESTONE: PART-04.5_OFFLINE_SELF_SERVICE
 STATUS: PART_04_5_RELEASED_AND_DEPLOYED (2026-09-30); automated production checks pass; owner phone + signed-in staff acceptance pending
-BRANCH: main = slice/part-04-5-offline-self-service-pwa = 63e1b16 (manifest-link fix on top of merge 5a0f368). Both slice branches are fully merged; delete after owner acceptance.
+BRANCH: main only. Slice branches slice/part-04-5-offline-self-service-pwa and slice/part-04-lending were fully merged and deleted 2026-09-30. Unmerged foreign branch origin/claude/affectionate-johnson-e3t123 (one handoff-note commit from another cloud session) is preserved for Earl to decide.
 ACTIVE_WRITER: none after this handoff (claude cloud yields); claim before editing
 SHARED_WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
 PRODUCTION: Worker logistics-hub; D1 logistics-hub (binding DB); R2 logistics-hub-evidence (binding EVIDENCE, private); https://logistics.hausc.org; never hau-usc-logistics-production/staging
@@ -16,4 +16,4 @@ ACCEPTED_SPEC: docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md
 CURRENT_TASK: .codex/CURRENT_TASK.md
 PART_04_BRIEF: .codex/PART_04_BRIEF.md
 PART_04_5_BRIEF: .codex/PART_04_5_BRIEF.md
-NEXT_EXACT_ACTION: Owner runs the signed-in acceptance in SESSION_HANDOFF (phone install, offline take/borrow/return syncs once, staff exception view, photo 200/401). Then delete slice/part-04-5-offline-self-service-pwa and slice/part-04-lending (both merged) and git fetch --prune. Do not reapply 0015. Do not start Part 5.
+NEXT_EXACT_ACTION: Owner runs the signed-in phone acceptance in SESSION_HANDOFF (install on Android, borrow, return with photo, staff Confirm returned updates stock, photo 200/401). Decide what to do with origin/claude/affectionate-johnson-e3t123. Do not reapply 0015. Do not start Part 5.
