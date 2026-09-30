@@ -104,7 +104,7 @@
 .ss-tile__name { margin-top: .75rem; overflow-wrap: break-word; font-family: var(--serif); font-size: 1.5rem; font-weight: 500; letter-spacing: -.015em; line-height: 1.1; }
 /* Two lines always, so the names of neighbouring tiles sit level. */
 .ss-tile__detail { min-height: 2lh; color: var(--text-2); font-size: var(--text-sm); line-height: 1.35; }
-.ss-tile__badge { position: absolute; top: 1rem; right: 1rem; min-width: 1.5rem; padding: .125rem .55rem; border-radius: 999px; background: linear-gradient(180deg, var(--gold-light), var(--gold)); box-shadow: 0 0 16px rgb(246 217 144 / 45%); color: #2a0a0c; font-size: var(--text-xs); font-weight: 700; text-align: center; }
+.ss-tile__badge { position: absolute; top: 1rem; right: 1rem; min-width: 1.5rem; padding: .125rem .55rem; border-radius: 999px; background: linear-gradient(180deg, var(--gold-light), var(--gold)); box-shadow: 0 0 16px rgb(246 217 144 / 45%); color: #2a0a0c; font-size: var(--text-sm); font-weight: 700; text-align: center; }
 /* Take and Borrow are the everyday actions: garnet glass, lit from within. */
 .ss-tile--take, .ss-tile--borrow { border-color: rgb(255 170 150 / 22%); background: linear-gradient(155deg, rgb(190 58 70 / 88%) 0%, rgb(112 18 30 / 90%) 58%, rgb(58 8 14 / 92%) 100%); box-shadow: inset 0 1px 0 rgb(255 220 200 / 22%), 0 18px 40px rgb(120 18 30 / 38%), var(--shadow-md); }
 
@@ -166,10 +166,10 @@
 .ss-count--low { color: var(--warn); }
 .ss-count--low strong { color: var(--warn); }
 .ss-count--out { color: var(--text-3); font-style: italic; }
-.ss-stamp { display: flex; align-items: flex-start; gap: .375rem; color: var(--text-3); font-size: var(--text-xs); }
+.ss-stamp { display: flex; align-items: flex-start; gap: .375rem; color: var(--text-3); font-size: var(--text-sm); }
 .ss-stamp .icon { width: .875rem; height: .875rem; margin-top: .1rem; flex: none; }
 .ss-empty { padding: 1.5rem 1rem; border: 1px dashed var(--line-strong); border-radius: 1rem; color: var(--text-2); font-size: var(--text-base); text-align: center; }
-.ss-fine { color: var(--text-3); font-size: var(--text-xs); line-height: 1.55; }
+.ss-fine { color: var(--text-3); font-size: var(--text-sm); line-height: 1.55; }
 
 /* ---------- Sheets ---------- */
 .is-self-service .ss-sheet { border: 1px solid var(--glass-edge); background: rgb(30 11 16 / 90%); color: var(--text); box-shadow: 0 -20px 60px rgb(0 0 0 / 55%); backdrop-filter: blur(30px) saturate(150%); -webkit-backdrop-filter: blur(30px) saturate(150%); }
@@ -186,7 +186,7 @@
 .ss-question legend { margin-bottom: .5rem; padding: 0; }
 .ss-form input:not([type=radio], [type=checkbox], [type=file]), .ss-form textarea { min-height: 3.125rem; border-radius: .875rem; font-size: var(--text-md); }
 .ss-estimate { display: grid; gap: .125rem; padding: .85rem 1rem; border: 1px solid var(--line); border-radius: .875rem; background: var(--glass); font-size: var(--text-base); font-weight: 500; }
-.ss-estimate small { color: var(--text-3); font-size: var(--text-xs); font-weight: 400; }
+.ss-estimate small { color: var(--text-3); font-size: var(--text-sm); font-weight: 400; }
 .ss-estimate--out { border-color: rgb(240 180 60 / 30%); background: var(--warn-tint); color: var(--warn); }
 /* One continuous control: square joins inside, rounded only at its outer ends, and one rounded focus ring. */
 .ss-stepper { height: 3.75rem; border-radius: .875rem; }
@@ -268,7 +268,7 @@
 /* ---------- Install steps ---------- */
 .ss-steps { display: grid; gap: .75rem; counter-reset: step; }
 .ss-steps li { position: relative; padding: .95rem 1rem .95rem 3.35rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--glass); counter-increment: step; font-size: var(--text-base); }
-.ss-steps li::before { position: absolute; top: .85rem; left: 1rem; display: grid; width: 1.6rem; height: 1.6rem; place-items: center; border-radius: 50%; background: linear-gradient(180deg, var(--gold-light), var(--gold)); color: #2a0a0c; content: counter(step); font-size: var(--text-xs); font-weight: 700; }
+.ss-steps li::before { position: absolute; top: .85rem; left: 1rem; display: grid; width: 1.6rem; height: 1.6rem; place-items: center; border-radius: 50%; background: linear-gradient(180deg, var(--gold-light), var(--gold)); color: #2a0a0c; content: counter(step); font-size: var(--text-sm); font-weight: 700; }
 .ss-steps strong { color: var(--gold-light); }
 .ss-steps .icon { display: inline; width: 1.05em; height: 1.05em; margin-inline: .15em; vertical-align: -.15em; color: var(--gold-light); }
 
@@ -370,19 +370,19 @@
 .review-card__what a { color: var(--brand); font-weight: 500; }
 .review-card__why { color: var(--text-2); font-size: var(--text-base); }
 .review-card__facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .5rem 1.5rem; margin: 0; font-size: var(--text-sm); }
-.review-card__facts dt { color: var(--text-3); font-size: var(--text-xs); }
+.review-card__facts dt { color: var(--text-3); font-size: var(--text-sm); }
 .review-card__facts dd { margin: 0; overflow-wrap: anywhere; }
 .review-card__photo { display: block; max-width: 100%; max-height: 20rem; margin: .75rem 0; border-radius: var(--radius-md, .5rem); object-fit: contain; background: rgb(0 0 0 / 8%); }
 .review-card__buttons { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .75rem; }
 .review-card__form input[name=note] { max-width: 28rem; }
 
 .poster-preview { display: grid; grid-template-columns: minmax(0, 1fr); justify-items: center; padding: clamp(1rem, 4vw, 1.5rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--subtle); }
-.poster { display: grid; width: min(100%, 26rem); aspect-ratio: 210 / 297; justify-items: center; align-content: center; gap: .5rem; padding: 2rem 1.5rem; border-top: .5rem solid var(--brand); background: #fff; box-shadow: var(--shadow-lg); text-align: center; }
+.poster { display: grid; width: min(100%, 26rem); aspect-ratio: 210 / 297; justify-items: center; align-content: center; gap: .5rem; padding: 2rem 1.5rem; border-top: .5rem solid var(--brand); background: #fff; box-shadow: var(--shadow-md); text-align: center; }
 .poster__lockup { display: flex; align-items: center; gap: .75rem; margin-bottom: .75rem; }
 .poster__lockup .crest { height: 3rem; }
 .poster__lockup .mark { height: 2.75rem; }
 .poster__rule { width: 1px; height: 2.25rem; background: var(--line-strong); }
-.poster__kicker { color: var(--brand); font-size: var(--text-xs); font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+.poster__kicker { color: var(--brand); font-size: var(--text-sm); font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
 .poster__title { font-family: var(--serif); font-size: clamp(1.4rem, 5vw, 2rem); font-weight: 500; letter-spacing: -.01em; }
 .poster__title span { color: var(--gold); }
 .poster__qr { width: 62%; height: auto; margin-block: .5rem; image-rendering: pixelated; }
