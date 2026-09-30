@@ -160,7 +160,9 @@ export function parseEvent(raw: unknown, batch: Pick<Batch, "sentAt" | "offsetMs
     if (typeof record.outcome !== "string" || !(LOAN_OUTCOMES as readonly string[]).includes(record.outcome)) throw bad("Choose Good condition, Damaged or Lost.");
     event.outcome = record.outcome as SelfServiceEvent["outcome"];
     event.note = cleanText(record.note, event.outcome === "LOST" ? "What happened" : "The damage", 300, event.outcome !== "RETURNED");
-    event.loanEventId = record.loanEventId === null || record.loanEventId === undefined ? null : uuid(record.loanEventId, "Malformed loan reference.");
+    // Only what this phone borrowed can be returned from it; anything else is returned at the desk.
+    if (record.loanEventId === null || record.loanEventId === undefined) throw bad("Only something borrowed on this phone can be returned here. Return anything else at the Logistics desk.");
+    event.loanEventId = uuid(record.loanEventId, "Malformed loan reference.");
   }
   return event;
 }

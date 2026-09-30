@@ -298,18 +298,19 @@ describe("Borrow and Return", () => {
     expect([loan(one.id)!.status, loan(two.id)!.status, onHand(scissors)]).toEqual(["DAMAGED", "LOST", 0]);
   });
 
-  it("holds every return not linked to this phone's borrow, with one answer whoever borrowed it", async () => {
+  it("refuses any return that is not for a borrow made on this phone, storing nothing", async () => {
     const scissors = await loanable("Scissors", 5);
     const [a, b] = [phone(), phone()];
     const borrow = a.borrow(scissors, 60);
     await a.sync([borrow]);
-    // The loan's own name and student ID, and a stranger's: the answers cannot tell them apart.
+    // The loan's own name and student ID, and a stranger's: neither can return it without the link.
     const sameDetails = b.giveBack(scissors, null, 10);
     const stranger = b.giveBack(scissors, null, 9, { person: { name: "Someone Else", studentId: "99-9999-999" } });
-    const message = "Return recorded. Logistics will match it to the loan.";
-    expect(await results(await b.sync([sameDetails, stranger]))).toEqual([{ id: sameDetails.id, outcome: "review", message }, { id: stranger.id, outcome: "review", message }]);
+    const answers = await results(await b.sync([sameDetails, stranger]));
+    expect(answers.map((result) => result.outcome)).toEqual(["rejected", "rejected"]);
+    expect(answers[0]!.message).toContain("Return anything else at the Logistics desk");
     expect(loan(borrow.id)).toMatchObject({ status: "OUT" });
-    expect([stored(sameDetails.id), stored(stranger.id)].map((row) => [row!.applied, row!.review])).toEqual([[0, "UNMATCHED_RETURN"], [0, "UNMATCHED_RETURN"]]);
+    expect([stored(sameDetails.id), stored(stranger.id)]).toEqual([undefined, undefined]);
     expect(onHand(scissors)).toBe(4);
   });
 
@@ -330,15 +331,15 @@ describe("Borrow and Return", () => {
     expect(stored(itsReturn.id)).toBeUndefined();
   });
 
-  it("lets staff match an unmatched return to an open loan, closing it when the return happened", async () => {
+  it("lets staff confirm a return against an open loan, closing it when the return happened", async () => {
     const scissors = await loanable("Scissors", 5);
     const [a, b] = [phone(), phone()];
     const borrow = a.borrow(scissors, 60, { person: { name: "Maria Santos", studentId: "21-0000-001" } });
     await a.sync([borrow]);
-    const unmatched = b.giveBack(scissors, null, 15, { person: { name: "M. Santos" } });
-    await b.sync([unmatched]);
+    const unmatched = a.giveBack(scissors, borrow.id, 15);
+    await a.sync([unmatched]);
     const queue = await review();
-    expect(queue.open.map((entry) => [entry.id, entry.review])).toEqual([[unmatched.id, "UNMATCHED_RETURN"]]);
+    expect(queue.open.map((entry) => [entry.id, entry.review])).toEqual([[unmatched.id, "RETURN_CHECK"]]);
     expect(queue.candidates.map((entry) => entry.id)).toEqual([`LN-SS-${borrow.id}`]);
     expect((await call(`/api/staff/self-service/${unmatched.id}/resolve`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: "{}" })).status).toBe(401);
     const resolved = await resolve(unmatched.id, { action: "match", loanId: `LN-SS-${borrow.id}`, note: "Same person" });
@@ -432,8 +433,8 @@ describe("staff review", () => {
     const [a, b] = [phone(), phone()];
     const [first, second] = [a.borrow(scissors, 60), a.borrow(scissors, 59)];
     await a.sync([first, second]);
-    const unmatched = b.giveBack(scissors, null, 15);
-    await b.sync([unmatched]);
+    const unmatched = a.giveBack(scissors, first.id, 15);
+    await a.sync([unmatched]);
     return { scissors, first: `LN-SS-${first.id}`, second: `LN-SS-${second.id}`, unmatched: unmatched.id };
   }
   const loanStatus = (id: string) => (sqlite.prepare("SELECT status FROM loans WHERE id = ?").get(id) as { status: string }).status;
@@ -549,12 +550,13 @@ describe("self-service security", () => {
 
   it("limits how many records one network can leave for staff in a day", async () => {
     const scissors = await loanable("Scissors", 5);
+    const drill = await loanable("Drill", 5, { lendingAudience: "NOT_AVAILABLE_FOR_LENDING" });
     for (let round = 0; round < 15; round += 1) {
       const a = phone();
-      expect((await results(await a.sync(Array.from({ length: 4 }, () => a.giveBack(scissors, null))))).every((result) => result.outcome === "review")).toBe(true);
+      expect((await results(await a.sync(Array.from({ length: 4 }, () => a.borrow(drill, 30))))).every((result) => result.outcome === "review")).toBe(true);
     }
     const a = phone();
-    expect((await results(await a.sync([a.giveBack(scissors, null)])))[0]).toMatchObject({ outcome: "rejected", message: "Too many records from this network need a staff check today. Please see Logistics staff." });
+    expect((await results(await a.sync([a.borrow(drill, 30)])))[0]).toMatchObject({ outcome: "rejected", message: "Too many records from this network need a staff check today. Please see Logistics staff." });
   });
 
   it("groups IPv6 addresses by their /64 network", () => {

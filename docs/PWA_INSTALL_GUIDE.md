@@ -87,7 +87,7 @@ The sync status is in the top bar:
 - Records send by themselves when you are back online with the app open. To send right away, open **My activity** and tap **Sync now**.
 - On iPhone and iPad, records are only sent while the app is open. On Android they may send by themselves, but opening the app is the sure way.
 - **Clear synced history** only removes records that were already sent. Records still waiting stay.
-- Return things from **Return** on the same phone you borrowed them with; the return is then linked to your loan. Every return needs a **photo of the item**. Logistics staff look at the photo and confirm it is back; the stock only updates once they do (the record says **Staff will check**). Something borrowed at the desk or on another phone can still be returned here, and staff match it to the loan.
+- **Return** lists only what you borrowed on this phone. Tap the item, take a **photo of it**, and send. Logistics staff look at the photo and confirm it is back; the stock only updates once they do (the record says **Staff will check**). Something borrowed at the Logistics desk, or on another phone, is returned at the desk.
 
 **Important: while any record is waiting to be sent, do not:**
 

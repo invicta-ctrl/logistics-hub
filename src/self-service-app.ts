@@ -121,7 +121,7 @@ function refreshRegions(): void {
   if (status) mount(status, html`${readinessCard()}${installCard()}`);
   if (screen === "activity") { renderActivity(); return; }
   const rows = region("rows");
-  if (rows && (screen === "take" || screen === "borrow" || screen === "return")) mount(rows, listRows(screen));
+  if (rows && (screen === "take" || screen === "borrow")) mount(rows, listRows(screen));
   const loans = region("loans");
   if (loans) mount(loans, loansSection());
 }
@@ -241,7 +241,7 @@ function countBadge(item: CatalogItem, available: number): Html {
 const SCREEN_COPY = {
   take: { title: "Take", lead: "Supplies you use up. Pick one, say how many, done.", empty: "Nothing is set up for self-service taking yet. Ask Logistics staff." },
   borrow: { title: "Borrow", lead: "Equipment you bring back. You'll need your name and a quick photo.", empty: "Nothing is set up for self-service borrowing yet. Ask Logistics staff." },
-  return: { title: "Return", lead: "Bring back what you borrowed.", empty: "" }
+  return: { title: "Return", lead: "Return what you borrowed on this phone. A photo of the item is needed.", empty: "" }
 } as const;
 
 function renderList(screen: "take" | "borrow" | "return"): void {
@@ -253,9 +253,9 @@ function renderList(screen: "take" | "borrow" | "return"): void {
   mount(main, html`<div class="ss-screen">
       ${back(copy.title)}
       <p class="ss-lead">${copy.lead}</p>
-      ${screen === "return" ? html`<div class="ss-screen" data-region="loans">${loansSection()}</div>` : ""}
+      ${screen === "return" ? html`<div class="ss-screen" data-region="loans">${loansSection()}</div>` : html`
       <div class="search-field ss-search">${icon("search")}<input type="search" data-search placeholder="Search ${screen === "take" ? "supplies" : "equipment"}…" aria-label="Search" autocomplete="off" enterkeyhint="search" /></div>
-      <div data-region="rows">${listRows(screen)}</div>
+      <div data-region="rows">${listRows(screen)}</div>`}
     </div>`);
 }
 
@@ -265,8 +265,8 @@ function loansSection(): Html {
   return html`${loans.length ? html`<h2 class="ss-section">On loan from this phone</h2>
       <ul class="ss-list">${loans.map((loan) => html`<li><a class="ss-row" href="/self-service?do=return&loan=${loan.id}" data-open-loan="${loan.id}">
         <span class="ss-row__main"><span class="ss-row__name">${loan.itemName}${loan.quantity > 1 ? ` ×${loan.quantity}` : ""}</span><span class="ss-row__sub">Borrowed ${when(loan.occurredAt)}${loan.state === "pending" ? " · waiting to sync" : ""}</span></span>
-        <span class="ss-row__go">Return ${icon("next")}</span></a></li>`)}</ul>` : ""}
-    <h2 class="ss-section">${loans.length ? "Returning something else?" : "What are you returning?"}</h2>`;
+        <span class="ss-row__go">Return ${icon("next")}</span></a></li>`)}</ul>`
+    : emptyNote("You haven't borrowed anything on this phone. Something borrowed at the Logistics desk is returned at the desk.")}`;
 }
 
 function back(title: string): Html {
@@ -275,16 +275,10 @@ function back(title: string): Html {
 
 let listQuery = "";
 
-function listRows(screen: "take" | "borrow" | "return"): Html {
+function listRows(screen: "take" | "borrow"): Html {
   if (!snapshot) return offline ? emptyNote("The catalog hasn't been downloaded to this phone yet. Connect to the internet once, then try again.") : skeleton();
   const available = estimate(snapshot, events);
   const waiting = pendingByItem(events);
-  if (screen === "return") {
-    const loanable = matching(snapshot.items.filter((item) => item.action === "BORROW"), listQuery);
-    return loanable.length ? html`<ul class="ss-list">${loanable.map((item) => html`<li><a class="ss-row" href="/self-service?do=return&item=${item.id}" data-open-item="${item.id}" data-screen="return">
-        <span class="ss-row__main"><span class="ss-row__name">${item.name}</span><span class="ss-row__sub">${categoryName(item.category)}</span></span><span class="ss-row__go">${icon("next")}</span></a></li>`)}</ul>`
-      : emptyNote("Nothing matches. Borrowed from the Logistics desk? Return it at the desk.");
-  }
   const action = screen === "take" ? "TAKE" : "BORROW";
   const offered = snapshot.items.filter((item) => item.action === action);
   if (!offered.length) return emptyNote(SCREEN_COPY[screen].empty);
@@ -394,9 +388,9 @@ function borrowSheet(item: CatalogItem): Html {
 
 const photoPick = (text = "Take a photo holding it") => html`<button type="button" class="photo-field__pick" data-pick aria-describedby="ss-photo-label ss-photo-hint">${icon("camera")}<span>${text}</span></button>`;
 
-function returnSheet(item: CatalogItem | undefined, loan: LocalEvent | undefined): Html {
-  const name = loan?.itemName ?? item?.name ?? "Item";
-  return sheetFrame(loan ? `Borrowed ${when(loan.occurredAt)}` : item ? categoryName(item.category) : "Return", `Return ${name}${loan && loan.quantity > 1 ? ` ×${loan.quantity}` : ""}`, html`
+/** Only a borrow made on this phone can be returned, so the loan is always known. */
+function returnSheet(loan: LocalEvent): Html {
+  return sheetFrame(`Borrowed ${when(loan.occurredAt)}`, `Return ${loan.itemName}${loan.quantity > 1 ? ` ×${loan.quantity}` : ""}`, html`
     <form class="form ss-form" data-form="RETURN" novalidate>
       <fieldset class="ss-question"><legend class="ss-legend">How is it?</legend><div class="segmented ss-condition">
         <label><input type="radio" name="outcome" value="RETURNED" checked /><span>Good</span></label><label><input type="radio" name="outcome" value="DAMAGED" /><span>Damaged</span></label><label><input type="radio" name="outcome" value="LOST" /><span>Lost</span></label>
@@ -408,11 +402,7 @@ function returnSheet(item: CatalogItem | undefined, loan: LocalEvent | undefined
         <div class="photo-field" data-photo>${photoPick("Take a photo of the item")}</div>
         <p class="field__hint" id="ss-photo-hint">Logistics staff check this photo before the stock is updated. It stays private to staff.</p>
       </div>
-      ${loan ? html`<p class="ss-hint">${icon("check")}Linked to your borrow on this phone, so Logistics knows exactly which loan this is.</p>` : html`
-        <p class="ss-hint">${icon("info")}Tell us who borrowed it so Logistics can match the loan.</p>
-        ${nameField("Borrower's name")}
-        ${studentIdField(false)}
-        ${quantityField(SELF_SERVICE_LIMITS.quantity)}`}
+      <p class="ss-hint">${icon("check")}Linked to your borrow on this phone, so Logistics knows exactly which loan this is.</p>
       <div class="form-alert" role="alert" hidden data-alert></div>
       <button class="button button--primary button--lg button--block" type="submit" data-submit>Return</button>
     </form>`);
@@ -705,10 +695,11 @@ export async function selfService(): Promise<void> {
     shown = `${screen}:${itemId}:${loanId}`;
     const loan = loanId ? events.find((event) => event.id === loanId && event.type === "BORROW") : undefined;
     const item = itemById(itemId) ?? (loan ? itemById(loan.itemId) : undefined);
-    if (!loan && !item) { if (snapshot) go({ item: null, loan: null }, true); return; }
+    // A return is only ever for a borrow made on this phone.
+    if (screen === "return" ? !loan : !item) { if (snapshot || screen === "return") go({ item: null, loan: null }, true); return; }
     const body = screen === "take" && item?.action === "TAKE" ? takeSheet(item)
       : screen === "borrow" && item?.action === "BORROW" ? borrowSheet(item)
-      : returnSheet(item, loan);
+      : returnSheet(loan!);
     mount(dialog, body);
     control.open();
     dirty = false;
@@ -785,7 +776,7 @@ export async function selfService(): Promise<void> {
       listQuery = input.value;
       const rows = region("rows");
       const { screen } = params();
-      if (rows && (screen === "take" || screen === "borrow" || screen === "return")) mount(rows, listRows(screen));
+      if (rows && (screen === "take" || screen === "borrow")) mount(rows, listRows(screen));
     }
   };
   const onFind = (event: Event) => { if ((event.target as HTMLElement).matches("[data-find]")) event.preventDefault(); };
