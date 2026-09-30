@@ -1,4 +1,4 @@
-import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, PUBLIC_LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
+import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_AUDIENCES, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
 
 export class InputError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -56,13 +56,14 @@ export async function publicCatalog(db: D1Database) {
   // unlisted rows never leave D1, and the DTO is filtered again in code.
   const audiences = [...PUBLIC_LENDING_AUDIENCES];
   const { results } = await db.prepare(`SELECT ${ITEM_COLUMNS} FROM items i LEFT JOIN inventory_balances b ON b.id = i.id
-    WHERE i.status = 'ACTIVE' AND i.needs_review = 0 AND i.item_type = ? AND i.lending_audience IN (${audiences.map(() => "?").join(",")})
-    ORDER BY i.name COLLATE NOCASE`).bind(PUBLIC_LENDING_ITEM_TYPE, ...audiences).all<ItemRow>();
+    WHERE i.status = 'ACTIVE' AND i.needs_review = 0 AND i.item_type IN (${[...LISTABLE_ITEM_TYPES].map(() => "?").join(",")}) AND i.lending_audience IN (${audiences.map(() => "?").join(",")})
+    ORDER BY i.name COLLATE NOCASE`).bind(...LISTABLE_ITEM_TYPES, ...audiences).all<ItemRow>();
   const items = results.filter(isListedForLending).map((row) => ({
     id: row.id,
     name: row.name,
     category: row.category,
     unit: row.unit,
+    itemType: row.itemType,
     available: Math.max(0, row.onHand),
     audience: row.lendingAudience
   }));
@@ -186,8 +187,8 @@ export function parseItemInput(body: unknown): ItemInput {
     ...(record.stockArea === undefined ? {} : { stockArea: choice(record, "stockArea", "stock area", STOCK_AREAS) }),
     ...(record.expiresOn === undefined ? {} : { expiresOn: isoDate(record.expiresOn, "Expiry date") })
   };
-  if (input.lendingAudience !== "NOT_AVAILABLE_FOR_LENDING" && input.itemType !== PUBLIC_LENDING_ITEM_TYPE) {
-    throw new InputError(400, "Only Loanable items can be offered for lending.");
+  if (input.lendingAudience !== "NOT_AVAILABLE_FOR_LENDING" && !LISTABLE_ITEM_TYPES.has(input.itemType)) {
+    throw new InputError(400, "Only Loanable or Consumable items can be listed on the Lending Hub.");
   }
   return input;
 }

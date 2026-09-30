@@ -1,6 +1,6 @@
 import { CREST, MARK, type Html, animateNumber, app, categoryName, emptyState, html, icon, label, live, mount, onLeave, plural, preservingFocus, units, writeParams } from "./ui";
 
-type LendingItem = { id: string; name: string; category: string; unit: string; available: number; audience: string };
+type LendingItem = { id: string; name: string; category: string; unit: string; itemType: string; available: number; audience: string };
 type Catalog = { revision: number; items: LendingItem[]; categories: string[] };
 type Sort = "name" | "available";
 
@@ -54,7 +54,7 @@ function availability(item: LendingItem): Html {
 }
 
 function terms(item: LendingItem): string {
-  return label(item.audience);
+  return item.itemType === "Consumable" ? `${label(item.audience)} · Consumable, taken and not returned` : label(item.audience);
 }
 
 const skeletonRows = (count: number) => html`<ul class="catalogue" aria-hidden="true">${Array.from({ length: count }, () => html`<li class="catalogue__row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></li>`)}</ul>`;
@@ -147,6 +147,7 @@ export function lending(): void {
       <aside class="aside-note" aria-labelledby="borrow-title">
         <h2 id="borrow-title">How to borrow</h2>
         <p>Loans are arranged in person with Department of Logistics staff, who record each loan and its return date with you. Online requests are not available yet.</p>
+        <p>Consumables are taken, not lent: once taken they are not returned.</p>
         <p>Only items reviewed by staff are listed here.</p>
       </aside>
     </div>

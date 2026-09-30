@@ -4,7 +4,9 @@ export const ITEM_TYPES = ["Loanable", "Consumable", "NEEDS_REVIEW"] as const;
 export const ITEM_STATUSES = ["ACTIVE", "VERIFY", "INACTIVE"] as const;
 export const LENDING_AUDIENCES = ["NOT_AVAILABLE_FOR_LENDING", "STUDENTS_AND_USC_STAFF", "USC_STAFF_ONLY"] as const;
 export const PUBLIC_LENDING_AUDIENCES = new Set<string>(["STUDENTS_AND_USC_STAFF", "USC_STAFF_ONLY"]);
+/** Loanable items are lent and come back; Consumables are taken and never return. Both are shown on the Lending Hub. */
 export const PUBLIC_LENDING_ITEM_TYPE = "Loanable";
+export const LISTABLE_ITEM_TYPES = new Set<string>(["Loanable", "Consumable"]);
 export const STOCK_AREAS = ["Inventory", "Pantry"] as const;
 /** Why stock moved. Kept short and operational; "OTHER" always needs a note. A count is its own reason. */
 export const MOVEMENT_REASONS = {
@@ -69,12 +71,12 @@ export type ListingCandidate = {
 /**
  * What still blocks an item from the public Lending Hub, in the words staff see.
  * An item is listed only when nothing is missing: explicitly reviewed, classified
- * Loanable, kept Active, and given an audience. Anything else fails closed.
+ * Loanable or Consumable, kept Active, and given an audience. Anything else fails closed.
  */
 export function listingGaps(item: ListingCandidate): string[] {
   const gaps: string[] = [];
-  if (item.itemType !== PUBLIC_LENDING_ITEM_TYPE) gaps.push("Set the type to Loanable");
-  if (!PUBLIC_LENDING_AUDIENCES.has(item.lendingAudience)) gaps.push("Choose who may borrow it");
+  if (!LISTABLE_ITEM_TYPES.has(item.itemType)) gaps.push("Set the type to Loanable or Consumable");
+  if (!PUBLIC_LENDING_AUDIENCES.has(item.lendingAudience)) gaps.push("Choose who may use it");
   if (item.status !== "ACTIVE") gaps.push("Set the status to Active");
   if (!(item.needsReview === 0 || item.needsReview === false)) gaps.push("Mark the details reviewed");
   return gaps;

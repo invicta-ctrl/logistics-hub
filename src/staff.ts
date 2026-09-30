@@ -1,4 +1,4 @@
-import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
+import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { ApiError, MARK, type Html, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
@@ -26,7 +26,7 @@ const isLow = (item: Pick<Item, "onHand" | "reorderThreshold" | "status">) => st
 const VIEWS = {
   all: { label: "All items", test: (_: Item) => true },
   review: { label: "Needs review", test: (item: Item) => item.needsReview },
-  ready: { label: "Ready to list", test: (item: Item) => item.itemType === PUBLIC_LENDING_ITEM_TYPE && !item.listed && active(item) },
+  ready: { label: "Ready to list", test: (item: Item) => LISTABLE_ITEM_TYPES.has(item.itemType) && !item.listed && active(item) },
   listed: { label: "On Lending Hub", test: (item: Item) => item.listed },
   low: { label: "Low stock", test: (item: Item) => isLow(item) && active(item) },
   out: { label: "Out of stock", test: (item: Item) => item.onHand <= 0 && active(item) },
@@ -747,8 +747,8 @@ export async function workspace(): Promise<void> {
       if (!Number.isInteger(value) || value < 0 || value > Number(input.max)) problems.push([input, `${form.querySelector(`label[for="${input.id}"]`)?.textContent?.trim()} must be a whole number from 0 to ${Number(input.max).toLocaleString()}.`]);
     }
     const values = readDetails(form);
-    if (values.lendingAudience !== "NOT_AVAILABLE_FOR_LENDING" && values.itemType !== PUBLIC_LENDING_ITEM_TYPE) {
-      problems.push([form.querySelector<HTMLElement>("#f-lendingAudience")!, "Only Loanable items can be offered for lending. Change the type, or choose Not lendable."]);
+    if (values.lendingAudience !== "NOT_AVAILABLE_FOR_LENDING" && !LISTABLE_ITEM_TYPES.has(values.itemType)) {
+      problems.push([form.querySelector<HTMLElement>("#f-lendingAudience")!, "Only Loanable or Consumable items can be listed. Change the type, or choose Not lendable."]);
     }
     return problems;
   }

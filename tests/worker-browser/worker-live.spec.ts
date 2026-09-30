@@ -203,9 +203,6 @@ test("create, warn on a duplicate name, then deactivate without deleting", async
   await sheet.getByLabel("Unit", { exact: true }).fill("piece");
   await sheet.getByLabel("Shown to").selectOption("STUDENTS_AND_USC_STAFF");
   await expect(sheet.getByLabel("Type", { exact: true }).locator("option")).toHaveText(["Loanable", "Consumable"]);
-  await sheet.getByLabel("Type", { exact: true }).selectOption("Consumable");
-  await page.getByRole("button", { name: "Create item" }).click();
-  await expect(sheet.getByRole("alert")).toContainText("Only Loanable items can be offered for lending.");
   await sheet.getByLabel("Type", { exact: true }).selectOption("Loanable");
   await sheet.getByLabel("Opening quantity").fill("3");
   await page.getByRole("button", { name: "Create item" }).click();

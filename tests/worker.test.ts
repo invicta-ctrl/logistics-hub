@@ -43,12 +43,16 @@ describe("public Lending Hub", () => {
     expect(await publicItems()).toEqual([]);
   });
 
-  it("publishes only reviewed Loanable items, with a safe DTO", async () => {
+  it("publishes only reviewed Loanable and Consumable items, with a safe DTO", async () => {
     const cookie = await signIn();
     const created = await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, openingQuantity: 4 })).json() as { id: string };
     await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: "Unreviewed Speaker", needsReview: true, openingQuantity: 2 });
+    const snack = await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: "Paper Plates", itemType: "Consumable", openingQuantity: 9 })).json() as { id: string };
     const items = await publicItems();
-    expect(items).toEqual([{ id: created.id, name: "Folding Table", category: "FURNITURE", unit: "piece", available: 4, audience: "STUDENTS_AND_USC_STAFF" }]);
+    expect(items).toEqual([
+      { id: created.id, name: "Folding Table", category: "FURNITURE", unit: "piece", itemType: "Loanable", available: 4, audience: "STUDENTS_AND_USC_STAFF" },
+      { id: snack.id, name: "Paper Plates", category: "FURNITURE", unit: "piece", itemType: "Consumable", available: 9, audience: "STUDENTS_AND_USC_STAFF" }
+    ]);
   });
 
   it("answers 304 until an inventory write changes the revision", async () => {
@@ -178,7 +182,7 @@ describe("catalog management", () => {
     const cookie = await signIn();
     const before = (await detail(cookie, "ITM-0005")).item;
     expect(before.listed).toBe(false);
-    expect(before.listingGaps).toEqual(expect.arrayContaining(["Choose who may borrow it", "Mark the details reviewed"]));
+    expect(before.listingGaps).toEqual(expect.arrayContaining(["Choose who may use it", "Mark the details reviewed"]));
     const reviewed = { ...before, itemType: "Loanable", lendingAudience: "USC_STAFF_ONLY", needsReview: false };
     await staff(cookie, "/api/staff/items/ITM-0005", "PATCH", reviewed);
     const listed = (await detail(cookie, "ITM-0005")).item;

@@ -27,7 +27,7 @@ The landing page (`/`):
 - "Staff sign in" appears only in the masthead and footer.
 
 The Lending Hub (`/lending`):
-- the public, read-only catalogue, grouped by category;
+- the public, read-only catalogue, grouped by category, showing every listed item, Loanable or Consumable (a Consumable is marked "taken and not returned");
 - search, an Available-now switch, category chips and sorting;
 - live availability that refreshes every 15 s;
 - filters kept in the URL.
