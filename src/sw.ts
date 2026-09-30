@@ -49,20 +49,20 @@ self.addEventListener("fetch", (event) => {
 });
 
 /**
- * Public pages open instantly from the cached shell. Staff pages go to the network first, so the
- * Worker's session check still decides who sees them; offline, they get the shell, which explains.
+ * Self-Service opens instantly from the cached shell, so it works with no connection. Every other
+ * page goes to the network first: visitors see a new version as soon as it is deployed, and the
+ * Worker's session check still decides who sees staff pages. Offline, they get the shell, which
+ * explains or shows what it can.
  */
 async function page(request: Request, url: URL): Promise<Response> {
   const cached = await caches.match(PAGE, { cacheName: SHELL });
-  if (url.pathname.startsWith("/staff")) {
-    // The original request keeps the browser's own redirect handling (the Worker may redirect to sign-in).
-    try {
-      return await fetch(request);
-    } catch {
-      return cached ?? Response.error();
-    }
+  if (url.pathname.startsWith("/self-service")) return cached ?? fetch(request);
+  // The original request keeps the browser's own redirect handling (the Worker may redirect to sign-in).
+  try {
+    return await fetch(request);
+  } catch {
+    return cached ?? Response.error();
   }
-  return cached ?? fetch(request);
 }
 
 async function cacheFirst(request: Request): Promise<Response> {
