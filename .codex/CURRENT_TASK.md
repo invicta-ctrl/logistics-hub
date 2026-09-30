@@ -1,7 +1,7 @@
-# Current Bounded Task — PART-04.5 Offline Self-Service + PWA + Single QR + Sync/Reconciliation
-INTENT: FEATURE_IMPLEMENTATION + PRODUCT POLISH + PERFORMANCE
-OBJECTIVE: Earl's 2026-09-29 Part 4.5 instruction (see .codex/PART_04_5_BRIEF.md): one permanent QR → /self-service on people's own phones (Take, Borrow, Return, My activity), an installable PWA that keeps working offline, an IndexedDB event queue, idempotent sync, reconciliation across phones, a staff exception view, private photos, update behaviour, tests and docs.
-IN_SCOPE: migration 0015; src/self-service.ts; src/loans.ts (shared lending statements); src/offline-{queue,store,sync}.ts; src/sw.ts + vite.config.ts; src/pwa.ts; src/self-service-app.ts + .css; src/self-service-review.ts; staff integration (item toggle, view, nav); public/manifest.webmanifest, public/icons, public/qr; tests; docs/OFFLINE_SELF_SERVICE.md, docs/PWA_INSTALL_GUIDE.md.
-OUT_OF_SCOPE: offline staff actions (no offline credentials), global settings/kill switch and server-side retention purge (Part 6), exports and the activity center (Part 5), multi-item loans, borrower accounts.
-BRIEF: .codex/PART_04_5_BRIEF.md
-STATUS: STEP_2_COMPLETE (2026-09-30). Corrected the offline test's cache-deletion order at 7eed18f. All required local gates green: typecheck, 100 unit tests, build, 9 browser tests, 19 Worker browser tests, privacy, migration-data verification, Wrangler dry run. Captured ignored Time Travel bookmark; only 0015 pending; applied once remotely; verified offered=0, events=0 and final-resolution trigger. Not released; Step 3 integration constraint remains. Do not reapply 0015; see SESSION_HANDOFF.
+# Current Bounded Task — PART-04.6 Visual Cleanup
+INTENT: PRODUCT POLISH (subtraction; no workflow or data change)
+OBJECTIVE: Earl's 2026-09-30 accepted visual cleanup plan (see .codex/PART_04_6_BRIEF.md): remove decorative effects and repeated copy, consolidate tokens, fix the semantic and contrast gaps, keep the identity.
+IN_SCOPE: src/styles.css; src/self-service.css; copy and markup in src/public.ts, src/staff.ts, src/ui.ts, src/loans-workspace.ts, src/self-service-app.ts; affected browser tests.
+OUT_OF_SCOPE: workflows, APIs, migrations, new dependencies, Part 5.
+BRIEF: .codex/PART_04_6_BRIEF.md
+STATUS: IN_PROGRESS (2026-09-30) on slice/part-04-6-visual-cleanup.
