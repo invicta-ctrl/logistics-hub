@@ -132,9 +132,10 @@ test("self-service fits phones, tablets and desktops, with every screen and shee
   await expect(page.getByRole("dialog", { name: "Scissors" })).toContainText("The records show none left.");
 });
 
-test("self-service starts dark, switches to light, and remembers the choice on this phone", async ({ page }) => {
+test("self-service starts dark over the campus photo, switches to light, and remembers the choice on this phone", async ({ page }) => {
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
   await page.goto("/self-service");
+  await expect(page.locator(".ss-photo")).toBeVisible();
   const toggle = page.getByRole("button", { name: "Dark theme" });
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("body")).toHaveAttribute("data-theme", "dark");
@@ -143,6 +144,9 @@ test("self-service starts dark, switches to light, and remembers the choice on t
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await page.reload();
   await expect(page.locator("body")).toHaveAttribute("data-theme", "light");
+  // The photograph belongs to home only.
+  await page.goto("/self-service?do=take");
+  await expect(page.locator(".ss-photo")).toBeHidden();
   await page.goto("/lending");
   await expect(page.locator("body")).not.toHaveAttribute("data-theme");
 });

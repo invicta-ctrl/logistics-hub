@@ -104,7 +104,8 @@ function switchTheme(button: HTMLElement): void {
 /* ---------- Frame ---------- */
 
 function frame(): Html {
-  return html`<header class="ss-bar">
+  return html`<div class="ss-photo" aria-hidden="true"></div>
+    <header class="ss-bar">
       <div class="ss-bar__inner">
         <a class="ss-bar__brand" href="/self-service" data-route aria-label="Self-Service home"><span class="ss-bar__marks" aria-hidden="true">${CREST}${MARK}</span><span class="ss-bar__title"><span>Self-Service</span><small>HAU USC Logistics</small></span></a>
         <div class="ss-bar__end">
@@ -536,7 +537,7 @@ let renderedScreen: Screen | null = null;
 function renderScreen(): void {
   const { screen } = params();
   renderedScreen = screen;
-  // The campus photograph belongs to home; other screens keep only the aurora (see self-service.css).
+  // The campus photograph belongs to home (see self-service.css).
   document.body.dataset.ssScreen = screen;
   if (screen === "home") renderHome();
   else if (screen === "activity") renderActivity();

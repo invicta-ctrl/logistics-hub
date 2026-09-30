@@ -14,6 +14,7 @@
   --on-action: var(--on-brand);
   --on-action-2: rgb(255 255 255 / 82%);
   --on-action-line: rgb(255 255 255 / 30%);
+  --photo-wash: linear-gradient(180deg, rgb(250 249 247 / 82%) 0%, rgb(250 249 247 / 74%) 9%, rgb(250 249 247 / 48%) 22%, rgb(250 249 247 / 50%) 32%, rgb(250 249 247 / 80%) 44%, rgb(250 249 247 / 90%) 70%, var(--canvas) 100%);
   color-scheme: light;
   background: var(--canvas);
   color: var(--text);
@@ -57,6 +58,7 @@
   --focus: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent);
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
   --shadow-md: 0 10px 30px rgb(0 0 0 / 35%), 0 2px 6px rgb(0 0 0 / 25%);
+  --photo-wash: linear-gradient(180deg, rgb(20 6 9 / 80%) 0%, rgb(20 6 9 / 72%) 9%, rgb(20 6 9 / 28%) 22%, rgb(20 6 9 / 30%) 32%, rgb(20 6 9 / 74%) 44%, rgb(20 6 9 / 88%) 70%, var(--canvas) 100%);
   color-scheme: dark;
 }
 .is-self-service #app { position: relative; z-index: 0; min-height: 100dvh; }
@@ -66,8 +68,15 @@
 .is-self-service input:not([type=checkbox], [type=radio]), .is-self-service select, .is-self-service textarea { border-color: var(--line-field); background: var(--field); color: var(--text); }
 .is-self-service input:focus-visible, .is-self-service textarea:focus-visible { border-color: var(--accent-line); box-shadow: var(--focus); }
 
+/* ---------- The campus at dusk, behind the top of home ---------- */
+/* The wash fades the photograph into the canvas and dims it under the words, so they stay readable in either theme. */
+.ss-photo { display: none; }
+[data-ss-screen="home"] .ss-photo { position: absolute; inset: 0 0 auto; z-index: -1; display: block; height: min(68vh, 44rem); background: var(--photo-wash), url("/brand/hau-campus-dusk.webp") center 38% / cover no-repeat; pointer-events: none; }
+
 /* ---------- App bar ---------- */
 .ss-bar { position: sticky; top: 0; z-index: 30; padding-top: env(safe-area-inset-top); border-bottom: 1px solid var(--line); background: var(--canvas); color: var(--text); }
+/* On home the bar sits on the photograph and scrolls away with it. */
+[data-ss-screen="home"] .ss-bar { position: relative; border-bottom-color: transparent; background: transparent; }
 .ss-bar__inner { display: flex; max-width: 36rem; min-height: 3.5rem; margin-inline: auto; align-items: center; justify-content: space-between; gap: .75rem; padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right)); }
 .ss-bar__brand { display: flex; min-width: 0; min-height: 2.75rem; align-items: center; gap: .625rem; border-radius: var(--radius); color: inherit; text-decoration: none; }
 .ss-bar__marks { display: flex; flex: none; align-items: center; gap: .375rem; }
@@ -76,9 +85,10 @@
 .ss-bar__title { display: grid; min-width: 0; font-family: var(--serif); font-size: 1.0625rem; font-weight: 500; line-height: 1.1; white-space: nowrap; }
 .ss-bar__title > * { overflow: hidden; text-overflow: ellipsis; }
 .ss-bar__end { display: flex; flex: none; align-items: center; gap: .5rem; }
-/* The switch shows the current theme: the sun turns away as the moon turns in. */
-.ss-theme { display: grid; width: 2.75rem; height: 2.75rem; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--text-2); -webkit-tap-highlight-color: transparent; }
-.ss-theme .icon { grid-area: 1 / 1; width: 1.25rem; height: 1.25rem; transition: transform var(--dur-3) var(--ease), opacity var(--dur-2); }
+/* The switch shows the current theme (the sun turns away as the moon turns in) and matches the sync pill beside it. */
+.ss-theme { position: relative; display: grid; width: 2.125rem; height: 2.125rem; flex: none; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface); color: var(--text); -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2); }
+.ss-theme::before { position: absolute; inset: -.3125rem; content: ""; }
+.ss-theme .icon { grid-area: 1 / 1; width: 1.125rem; height: 1.125rem; transition: transform var(--dur-3) var(--ease), opacity var(--dur-2); }
 .ss-theme[aria-pressed="true"] .icon:first-child, .ss-theme[aria-pressed="false"] .icon:last-child { opacity: 0; transform: rotate(-90deg) scale(.5); }
 .ss-theme:focus-visible { outline: none; box-shadow: var(--focus); }
 /* The theme change supplies its own circular reveal, so the default cross-fade is switched off. */
@@ -104,7 +114,7 @@
 .ss-screen, .ss-home { display: grid; gap: 1rem; }
 
 /* ---------- Home ---------- */
-.ss-hero { display: grid; gap: .375rem; padding: .75rem .125rem .5rem; }
+.ss-hero { position: relative; display: grid; min-height: clamp(12rem, 34vh, 18rem); align-content: end; gap: .375rem; padding: 1rem .125rem 1rem; }
 .ss-hero h1 { font-family: var(--serif); font-size: clamp(2.25rem, 10vw, 3rem); font-weight: 500; letter-spacing: -.03em; line-height: 1; }
 .ss-hero__hello { color: var(--text-2); font-size: var(--text-base); }
 
@@ -287,7 +297,7 @@
   .ss-pill:hover { border-color: var(--accent-line); }
   .ss-tile:hover { border-color: var(--accent-line); }
   .ss-back:hover { border-color: var(--line); background: var(--subtle); }
-  .ss-theme:hover { background: var(--subtle); color: var(--text); }
+  .ss-theme:hover { border-color: var(--accent-line); }
   .ss-row:hover { background: var(--hover); }
   .is-self-service .button--primary:hover:not(:disabled) { background: var(--primary-hover); }
   .is-self-service .button--secondary:hover { border-color: var(--accent-line); background: var(--hover); }
