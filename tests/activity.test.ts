@@ -12,7 +12,7 @@ let adminCookie: string;
 
 type Event = {
   id: string; correlationId: string; at: string | null; source: string; type: string; summary: string; actor: string; itemId: string | null; change: number; stockChanged: boolean;
-  before: number | null; after: number | null; reason: string | null; note: string | null; fields: string[]; attention: boolean;
+  before: number | null; after: number | null; reason: string | null; note: string | null; withheld: boolean; fields: string[]; attention: boolean;
 };
 type Feed = { events: Event[]; nextCursor: string | null };
 
@@ -49,10 +49,10 @@ function item(id: string, name: string, itemType: string, extra: Record<string, 
     .run(id, name, itemType, extra.stock_area ?? "Inventory", extra.storage_location ?? null, extra.aliases ?? null);
 }
 let counter = 0;
-function movement(itemId: string, type: string, signed: number, at: string, fields: { status?: string; actor?: string | null; notes?: string; reason?: string; id?: string; imported?: string; related?: string } = {}) {
+function movement(itemId: string, type: string, signed: number, at: string, fields: { status?: string; actor?: string | null; notes?: string; reason?: string; id?: string; imported?: string; related?: string; relatedId?: string } = {}) {
   const id = fields.id ?? `MOV-${++counter}`;
-  sqlite.prepare(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, notes, reason, status, imported_from, related_entity_type)
-    VALUES(?, ?, ?, ?, ?, ?, 'piece', ?, ?, ?, ?, ?, ?, ?)`).run(id, at, type, signed >= 0 ? "IN" : "OUT", itemId, Math.abs(signed), signed, fields.actor === undefined ? "ACC-1" : fields.actor, fields.notes ?? null, fields.reason ?? null, fields.status ?? "POSTED", fields.imported ?? null, fields.related ?? null);
+  sqlite.prepare(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, notes, reason, status, imported_from, related_entity_type, related_entity_id)
+    VALUES(?, ?, ?, ?, ?, ?, 'piece', ?, ?, ?, ?, ?, ?, ?, ?)`).run(id, at, type, signed >= 0 ? "IN" : "OUT", itemId, Math.abs(signed), signed, fields.actor === undefined ? "ACC-1" : fields.actor, fields.notes ?? null, fields.reason ?? null, fields.status ?? "POSTED", fields.imported ?? null, fields.related ?? null, fields.relatedId ?? null);
   return id;
 }
 function audit(id: string, at: string, action: string, entityType: string, entityId: string | null, details: string | null, actor: string | null = "ACC-1") {
@@ -64,11 +64,11 @@ function phone(id: string, itemId: string, type: string, occurredAt: string, fie
       client_tag, loan_id, applied, review, resolved_at, resolved_by, resolution_note) VALUES(?, 'DEVICE-SECRET-1', 1, ?, ?, 1, 'Juan Dela Cruz', '20-1234-567', 'INDIVIDUAL', ?, ?, ?, 'held/photo-secret.jpg', ?, ?, ?, ?, 'nettag99', ?, ?, ?, ?, ?, ?)`)
     .run(id, type, itemId, row.reason, row.return_outcome, row.note, occurredAt, occurredAt, occurredAt, occurredAt, row.loan_id, row.applied, row.review, row.resolved_at, row.resolved_by, row.resolution_note);
 }
-const lend = (loanId: string, itemId: string, quantity: number, at: string, actorId = "ACC-1") => env.DB.batch(lendStatements(env.DB, {
-  id: loanId, itemId, details: { purpose: "USC", borrowerName: "Maria Borrower", studentId: null, reason: "Orientation booth", quantity, returnBy: null }, photoKey: `loans/${loanId}`, movementId: `MOV-${loanId}`, key: `key-${loanId}`, actorId, at
+const lend = (loanId: string, itemId: string, quantity: number, at: string, actorId = "ACC-1", who: { reason?: string; studentId?: string } = {}) => env.DB.batch(lendStatements(env.DB, {
+  id: loanId, itemId, details: { purpose: "USC", borrowerName: "Maria Borrower", studentId: who.studentId ?? null, reason: who.reason ?? "Orientation booth", quantity, returnBy: null }, photoKey: `loans/${loanId}`, movementId: `MOV-${loanId}`, key: `key-${loanId}`, actorId, at
 }));
-const close = (loanId: string, itemId: string, quantity: number, outcome: "RETURNED" | "DAMAGED" | "LOST", at: string) => env.DB.batch(closeStatements(env.DB, {
-  loanId, itemId, quantity, outcome, note: "Returned with a scratch", actorId: "ACC-1", at, movementId: `MOV-R-${loanId}`
+const close = (loanId: string, itemId: string, quantity: number, outcome: "RETURNED" | "DAMAGED" | "LOST", at: string, note = "Returned with a scratch") => env.DB.batch(closeStatements(env.DB, {
+  loanId, itemId, quantity, outcome, note, actorId: "ACC-1", at, movementId: `MOV-R-${loanId}`
 }));
 
 describe("activity read model", () => {
@@ -195,7 +195,7 @@ describe("activity read model", () => {
     expect(JSON.stringify(adminView)).not.toContain("KEY-1");
   });
 
-  it("never outputs borrower identity, phone free text, photo keys, network or device data, and cannot search them", async () => {
+  it("never outputs borrower identity, photo keys, network or device data, and cannot search them, while benign reasons and notes show and search", async () => {
     movement("ITM-T", "STOCK_IN", 2, "2026-09-30T01:00:00.000Z");
     await lend("LN-P", "ITM-T", 1, "2026-09-30T02:00:00.000Z");
     await close("LN-P", "ITM-T", 1, "RETURNED", "2026-09-30T03:00:00.000Z");
@@ -204,12 +204,75 @@ describe("activity read model", () => {
     const all = await feed("limit=100", adminCookie);
     expect(all.events.length).toBeGreaterThan(4);
     const body = JSON.stringify(all);
-    for (const secret of ["Maria Borrower", "Juan", "Dela Cruz", "20-1234-567", "class project", "Orientation booth", "scratch", "photo-secret", "loans/LN-P", "nettag99", "DEVICE-SECRET", "password", "details", "student"]) expect(body, secret).not.toContain(secret);
-    for (const query of ["q=Maria", "q=Juan", "q=20-1234", "q=Orientation", "q=photo-secret", "q=nettag99", "q=class%20project"]) {
+    for (const secret of ["Maria Borrower", "Juan", "Dela Cruz", "20-1234-567", "photo-secret", "loans/LN-P", "nettag99", "DEVICE-SECRET", "password", "details", "student"]) expect(body, secret).not.toContain(secret);
+    for (const query of ["q=Maria", "q=Juan", "q=20-1234", "q=photo-secret", "q=nettag99", "q=says%20hi"]) {
       expect((await feed(query, adminCookie)).events, query).toEqual([]);
       expect((await feed(query)).events, query).toEqual([]);
     }
-    for (const event of all.events) expect(Object.keys(event).sort()).toEqual(["actor", "actorId", "after", "at", "attention", "before", "change", "correlationId", "fields", "id", "itemId", "itemName", "note", "quantity", "reason", "source", "stockChanged", "summary", "title", "type", "unit"]);
+    // The reason a loan was made, the damage note and a phone record's reason are the operational context; a note naming the person is withheld whole.
+    const byId = Object.fromEntries(all.events.map((event) => [event.id, event]));
+    expect(byId["mov:MOV-LN-P"]).toMatchObject({ reason: "Orientation booth", note: null, withheld: false });
+    expect(byId["mov:MOV-R-LN-P"]).toMatchObject({ note: "Returned with a scratch", withheld: false });
+    expect(byId["phone:PH-1"]).toMatchObject({ note: "class project", withheld: true });
+    for (const [query, id] of [["q=Orientation", "mov:MOV-LN-P"], ["q=scratch", "mov:MOV-R-LN-P"], ["q=class%20project", "phone:PH-1"]] as const) {
+      for (const cookie of [staffCookie, adminCookie]) expect((await feed(query, cookie)).events.map((event) => event.id), query).toEqual([id]);
+    }
+    for (const event of all.events) expect(Object.keys(event).sort()).toEqual(["actor", "actorId", "after", "at", "attention", "before", "change", "correlationId", "fields", "id", "itemId", "itemName", "note", "quantity", "reason", "source", "stockChanged", "summary", "title", "type", "unit", "withheld"]);
+  });
+
+  it("withholds a note or reason that repeats its own record's person, however it is cased, spaced or copied, and never searches the hidden text", async () => {
+    movement("ITM-T", "STOCK_IN", 9, "2026-09-30T01:00:00.000Z");
+    const hiding = [
+      { reason: "for MARIA at the booth", note: "  maRiA   BORROWER was careful" },
+      { reason: "Mariaborrower's event", note: "id 20 1234-567 checked" },
+      { reason: "ID2012-34567x", note: "m.a.r.i.a borrower, maria, MARIA" }
+    ];
+    for (const [index, hide] of hiding.entries()) {
+      const at = (minute: number) => `2026-09-30T0${2 + index}:0${minute}:00.000Z`;
+      await lend(`LN-H${index}`, "ITM-T", 1, at(0), "ACC-1", { reason: hide.reason, studentId: "20-1234-567" });
+      await close(`LN-H${index}`, "ITM-T", 1, "RETURNED", at(1), hide.note);
+    }
+    // A movement a phone wrote, with a note copied from the person; its own person is on the phone record.
+    phone("PH-N", "ITM-T", "TAKE", "2026-09-30T06:00:00.000Z", { review: "COUNT_OVERLAP", reason: "Dela-Cruz wants it", note: "safe note" });
+    movement("ITM-T", "STOCK_OUT", -1, "2026-09-30T06:00:00.000Z", { id: "MOV-SS", related: "SELF_SERVICE", relatedId: "PH-N", notes: "JUAN took it" });
+    phone("PH-R", "ITM-T", "RETURN", "2026-09-30T07:00:00.000Z", { applied: 0, review: "RETURN_CHECK", resolved_at: "2026-09-30T08:00:00.000Z", resolved_by: "ACC-1", resolution_note: "Juan Dela Cruz verified by staff" });
+    phone("PH-K", "ITM-T", "RETURN", "2026-09-30T09:00:00.000Z", { applied: 0, review: "RETURN_CHECK", resolved_at: "2026-09-30T10:00:00.000Z", resolved_by: "ACC-1", resolution_note: "Checked the photo" });
+
+    const hidden = ["maria", "borrower", "20 1234", "2012-34567", "juan", "dela-cruz", "dela cruz", "wants it", "took it", "at the booth", "event", "careful", "verified"];
+    for (const cookie of [staffCookie, adminCookie]) {
+      const { events } = await feed("limit=100", cookie);
+      const body = JSON.stringify(events).toLowerCase();
+      for (const word of hidden) expect(body, word).not.toContain(word);
+      const byId = Object.fromEntries(events.map((event) => [event.id, event]));
+      for (const index of [0, 1, 2]) {
+        expect(byId[`mov:MOV-LN-H${index}`], `lend ${index}`).toMatchObject({ reason: null, withheld: true });
+        expect(byId[`mov:MOV-R-LN-H${index}`], `return ${index}`).toMatchObject({ note: null, withheld: true });
+      }
+      expect(byId["mov:MOV-SS"]).toMatchObject({ note: null, withheld: true });
+      expect(byId["phone:PH-N"]).toMatchObject({ note: "safe note", withheld: true });
+      expect(byId["resolve:PH-R"]).toMatchObject({ note: null, withheld: true });
+      expect(byId["resolve:PH-K"]).toMatchObject({ note: "Checked the photo", withheld: false });
+      for (const word of hidden) expect((await feed(`q=${encodeURIComponent(word)}`, cookie)).events, word).toEqual([]);
+      expect((await feed("q=Checked%20the%20photo", cookie)).events.map((event) => event.id)).toEqual(["resolve:PH-K"]);
+    }
+  });
+
+  it("applies the same rule before filters and limits, and a hidden text cannot move the tag", async () => {
+    movement("ITM-T", "STOCK_IN", 9, "2026-09-30T01:00:00.000Z");
+    await lend("LN-Q", "ITM-T", 1, "2026-09-30T02:00:00.000Z", "ACC-1", { reason: "Maria booth needle" });
+    await lend("LN-Z", "ITM-T", 1, "2026-09-30T03:00:00.000Z", "ACC-1", { reason: "Orientation needle" });
+    // The older row matches the search only through hidden text, so it is not found; the newer one still is, at any limit.
+    expect((await feed("q=needle&limit=1")).events.map((event) => event.id)).toEqual(["mov:MOV-LN-Z"]);
+    expect((await feed("q=needle&limit=5")).events.map((event) => event.id)).toEqual(["mov:MOV-LN-Z"]);
+    const tag = async (match?: string) => {
+      const response = await call("/api/staff/activity?q=needle", staffCookie, match ? { "If-None-Match": match } : {});
+      return { status: response.status, etag: response.headers.get("etag")! };
+    };
+    const before = await tag();
+    sqlite.prepare("UPDATE loans SET reason = 'Maria something else entirely' WHERE id = 'LN-Q'").run();
+    expect((await tag(before.etag)).status).toBe(304);
+    sqlite.prepare("UPDATE loans SET reason = 'Orientation needle too' WHERE id = 'LN-Q'").run();
+    expect((await tag(before.etag)).status).toBe(200);
   });
 
   it("shows held and return phone records as their own entries, flags what needs a person, and records who resolved it", async () => {

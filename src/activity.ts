@@ -5,8 +5,8 @@ import { OPEN_REVIEW, balanceCtes } from "./self-service";
 /**
  * Activity: one newest-first feed of who did what, read from the tables that already record it.
  * It is a read model, never an authority: quantity stays the movement ledger's, loan state the
- * loans', review state the phone records'. Borrower names, student IDs and phone-typed free text
- * are never selected, so they cannot reach the output or a search.
+ * loans', review state the phone records'. Borrower names and student IDs are never selected. Typed
+ * free text (reasons, notes) is projected by `safe`, the one rule the output and the search share.
  *
  * Arms of one UNION ALL (each filtered and limited before the merge, so a page costs about the
  * page size, not the history):
@@ -44,6 +44,31 @@ const MANILA_OFFSET_MS = 8 * 60 * 60_000;
  * key, so it sorts last and is shown as "unknown" instead of as an invented time.
  */
 const utc = (column: string) => `COALESCE(CASE WHEN ${column} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*' THEN strftime('%Y-%m-%dT%H:%M:%fZ', ${column}) END, '${SENTINEL}')`;
+
+/**
+ * Free text staff or phones typed (loan reason, return note, movement note, phone note, resolution note)
+ * reaches the output and the search only through `safe`, so both follow one rule. The rule is source-linked:
+ * a text is withheld whole (NULL, never partly masked) when it repeats the borrower or person of the very
+ * loan or phone record it belongs to, as their full name in any casing or spacing, any name word of three
+ * or more letters, or their student ID with the separators ignored. It cannot know the name of someone the
+ * record does not link to, and it folds only ASCII and common accented capitals, so it is a guard on the
+ * known fields, not a detector of personal data in general.
+ */
+const SEPARATORS = [".", ",", ";", ":", "!", "?", "-", "_", "/", String.fromCharCode(92), "(", ")", '"', "'", "#", "@", "&", "\n", "\r", "\t"];
+const fold = (text: string) => `lower(${["Ñ", "É", "Á", "Í", "Ó", "Ú"].reduce((sql, letter) => `replace(${sql}, '${letter}', '${letter.toLowerCase()}')`, text)})`;
+const spaced = (text: string) => `trim(${SEPARATORS.reduce((sql, mark) => `replace(${sql}, '${mark.replace("'", "''")}', ' ')`, fold(text))})`;
+const squashed = (text: string) => `replace(${spaced(text)}, ' ', '')`;
+const repeats = (text: string, names: string[], ids: string[]) => [
+  ...names.flatMap((name) => [
+    `COALESCE(length(${squashed(name)}) >= 3 AND instr(${squashed(text)}, ${squashed(name)}) > 0, 0)`,
+    `EXISTS (WITH RECURSIVE word(w, rest) AS (SELECT '', ${spaced(name)} UNION ALL SELECT substr(rest, 1, instr(rest || ' ', ' ') - 1), substr(rest, instr(rest || ' ', ' ') + 1) FROM word WHERE rest <> '')
+      SELECT 1 FROM word WHERE length(w) >= 3 AND instr(' ' || ${spaced(text)} || ' ', ' ' || w || ' ') > 0)`
+  ]),
+  ...ids.map((id) => `COALESCE(length(${squashed(id)}) >= 4 AND instr(${squashed(text)}, ${squashed(id)}) > 0, 0)`)
+].join(" OR ");
+/** The text, or NULL when it is empty or repeats the record's own person (`names` and `ids` are SQL expressions). */
+const safe = (text: string, names: string[], ids: string[]) => `CASE WHEN ${text} IS NULL OR trim(${text}) = '' OR ${repeats(text, names, ids)} THEN NULL ELSE ${text} END`;
+const typed = (text: string) => `CASE WHEN ${text} IS NOT NULL AND trim(${text}) <> '' THEN 1 ELSE 0 END`;
 
 /* ---------- Query ---------- */
 
@@ -110,7 +135,7 @@ function manilaDay(day: string, plus: number): string | null {
   return new Date(start + plus * 86_400_000 - MANILA_OFFSET_MS).toISOString();
 }
 
-const COLUMNS = ["sid", "k", "src", "type", "itemId", "itemName", "unit", "actorId", "actor", "qty", "delta", "status", "reason", "outcome", "note", "corr", "purpose", "review", "details", "mov", "open"] as const;
+const COLUMNS = ["sid", "k", "src", "type", "itemId", "itemName", "unit", "actorId", "actor", "qty", "delta", "status", "reason", "outcome", "note", "corr", "purpose", "review", "details", "mov", "open", "hasReason", "hasNote"] as const;
 type Column = typeof COLUMNS[number];
 type Arm = {
   prefix: string; id: string; from: string; where: string; cols: Record<Column, string>;
@@ -121,19 +146,26 @@ const PHONE_TYPES = ["PHONE_TAKE", "PHONE_BORROW", "PHONE_RETURN"];
 const AUDIT_OUTCOME = "CASE WHEN json_valid(a.details_json) THEN json_extract(a.details_json, '$.outcome') END";
 
 function arms(admin: boolean): Arm[] {
-  const base = { qty: "NULL", delta: "0", status: "NULL", reason: "NULL", outcome: "NULL", note: "NULL", purpose: "NULL", review: "NULL", details: "NULL", mov: "NULL", open: "0" };
+  const base = { qty: "NULL", delta: "0", status: "NULL", reason: "NULL", outcome: "NULL", note: "NULL", purpose: "NULL", review: "NULL", details: "NULL", mov: "NULL", open: "0", hasReason: "0", hasNote: "0" };
   const item = { itemId: "i.id", itemName: "i.name", unit: "i.unit" };
+  // The people a text belongs to: the loan's borrower, or the phone record's person.
+  const owners: [string[], string[]] = [["l.borrower_name", "se.person_name"], ["l.student_id", "se.student_id"]];
+  const phoneOwner: [string[], string[]] = [["e.person_name"], ["e.student_id"]];
+  const movementReason = "CASE WHEN m.movement_type = 'LOAN_OUT' THEN l.reason END";
+  const movementNote = "CASE WHEN m.movement_type = 'LOAN_RETURN' THEN COALESCE(m.notes, l.return_note) ELSE m.notes END";
   const movementType = ["OPENING_BALANCE", "STOCK_IN", "STOCK_OUT", "COUNT_ADJUSTMENT", "LOAN_OUT", "LOAN_RETURN"];
   return [
     {
       prefix: "mov:", id: "m.id", sources: ["MOVEMENT", "LOAN", "PHONE"], moves: true, owns: (type) => movementType.includes(type),
       from: `inventory_movements m JOIN items i ON i.id = m.item_id LEFT JOIN staff_accounts a ON a.id = m.actor_user_id
-        LEFT JOIN loans l ON m.related_entity_type = 'LOAN' AND l.id = m.related_entity_id`,
+        LEFT JOIN loans l ON m.related_entity_type = 'LOAN' AND l.id = m.related_entity_id
+        LEFT JOIN self_service_events se ON m.related_entity_type = 'SELF_SERVICE' AND se.id = m.related_entity_id`,
       where: "1",
       cols: {
         ...base, ...item, sid: "'mov:' || m.id", k: utc("m.created_at"), src: "CASE m.related_entity_type WHEN 'LOAN' THEN 'LOAN' WHEN 'SELF_SERVICE' THEN 'PHONE' ELSE 'MOVEMENT' END",
         type: "m.movement_type", actorId: "m.actor_user_id", actor: actorName("a", "m.actor_user_id"), qty: "m.quantity",
-        delta: "CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END", status: "m.status", reason: "m.reason", note: "m.notes",
+        delta: "CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END", status: "m.status",
+        reason: `COALESCE(m.reason, ${safe(movementReason, ...owners)})`, note: safe(movementNote, ...owners), hasReason: typed(`COALESCE(m.reason, ${movementReason})`), hasNote: typed(movementNote),
         corr: "COALESCE(m.related_entity_id, m.id)", purpose: "l.purpose", mov: "m.id"
       }
     },
@@ -157,6 +189,7 @@ function arms(admin: boolean): Arm[] {
       cols: {
         ...base, ...item, sid: "'phone:' || e.id", k: utc("e.occurred_at"), src: "'PHONE'", type: "'PHONE_' || e.event_type", actorId: "'SELF_SERVICE'", actor: "'Self-service'",
         qty: "e.quantity", status: "CASE e.applied WHEN 1 THEN 'APPLIED' ELSE 'HELD' END", outcome: "e.return_outcome", corr: "COALESCE(e.loan_id, e.id)", purpose: "e.purpose",
+        reason: safe("e.reason", ...phoneOwner), note: safe("e.note", ...phoneOwner), hasReason: typed("e.reason"), hasNote: typed("e.note"),
         review: "e.review", open: `CASE WHEN ${OPEN_REVIEW} THEN 1 ELSE 0 END`
       }
     },
@@ -166,7 +199,7 @@ function arms(admin: boolean): Arm[] {
       where: "e.resolved_at IS NOT NULL",
       cols: {
         ...base, ...item, sid: "'resolve:' || e.id", k: utc("e.resolved_at"), src: "'PHONE'", type: "'REVIEW_RESOLVED'", actorId: "e.resolved_by", actor: "r.display_name",
-        qty: "e.quantity", note: "e.resolution_note", corr: "COALESCE(e.loan_id, e.id)", review: "e.review"
+        qty: "e.quantity", note: safe("e.resolution_note", ...phoneOwner), hasNote: typed("e.resolution_note"), corr: "COALESCE(e.loan_id, e.id)", review: "e.review"
       }
     }
   ];
@@ -213,7 +246,7 @@ export async function activityPage(db: D1Database, admin: boolean, { filters, cu
     if (filters.location) where.push(`i.storage_location = ${bind(filters.location)} COLLATE NOCASE`);
     if (filters.changed) where.push(`${cols.delta} ${filters.changed === "yes" ? "<>" : "="} 0`);
     if (filters.attention) where.push(`(${cols.itemId} IN (SELECT itemId FROM bad) OR ${cols.open} = 1)`);
-    if (pattern) where.push(`(i.name LIKE ${pattern} ESCAPE '\\' OR i.id LIKE ${pattern} ESCAPE '\\' OR i.aliases LIKE ${pattern} ESCAPE '\\' OR ${cols.actor} LIKE ${pattern} ESCAPE '\\' OR ${cols.note} LIKE ${pattern} ESCAPE '\\')`);
+    if (pattern) where.push(`(i.name LIKE ${pattern} ESCAPE '\\' OR i.id LIKE ${pattern} ESCAPE '\\' OR i.aliases LIKE ${pattern} ESCAPE '\\' OR ${cols.actor} LIKE ${pattern} ESCAPE '\\' OR ${cols.reason} LIKE ${pattern} ESCAPE '\\' OR ${cols.note} LIKE ${pattern} ESCAPE '\\')`);
     if (cursor) where.push(afterCursor(arm, cursor, bind));
     const list = COLUMNS.map((column) => `${cols[column]} AS ${column}`).join(", ");
     return `SELECT * FROM (SELECT ${list} FROM ${arm.from} WHERE ${where.join(" AND ")} ORDER BY ${cols.k} DESC, ${arm.id} DESC LIMIT ${size})`;
@@ -241,7 +274,7 @@ export async function activityPage(db: D1Database, admin: boolean, { filters, cu
 export type ActivityEvent = {
   id: string; correlationId: string; at: string | null; source: string; type: string; title: string; summary: string; actor: string; actorId: string | null;
   itemId: string | null; itemName: string | null; unit: string | null; quantity: number | null; change: number; stockChanged: boolean; before: number | null; after: number | null;
-  reason: string | null; note: string | null; fields: string[]; attention: boolean;
+  reason: string | null; note: string | null; withheld: boolean; fields: string[]; attention: boolean;
 };
 
 const PURPOSE: Record<string, string> = { INDIVIDUAL: " to an individual", USC: " for USC use" };
@@ -258,7 +291,11 @@ function toEvent(row: Row): ActivityEvent {
   const amount = quantity === null ? "" : `${quantity}${unit ? ` ${unit}` : ""} of `;
   const change = Number(row.delta);
   const after = typeof row.after === "number" ? row.after : null;
-  const reason = type.startsWith("PHONE_") || type === "REVIEW_RESOLVED" ? (row.review ? REVIEW_REASONS[row.review as keyof typeof REVIEW_REASONS] ?? null : null) : text(row.reason) ? LABELS[String(row.reason)] ?? String(row.reason) : null;
+  const phoneRecord = type.startsWith("PHONE_") || type === "REVIEW_RESOLVED";
+  const reason = phoneRecord ? (row.review ? REVIEW_REASONS[row.review as keyof typeof REVIEW_REASONS] ?? null : null) : text(row.reason) ? LABELS[String(row.reason)] ?? String(row.reason) : null;
+  // A phone record's typed reason and note are one context line; the loan and movement arms carry theirs in `reason` and `note`.
+  const note = phoneRecord ? [row.reason, row.note].filter((value) => text(value)).join(" · ") || null : text(row.note);
+  const withheld = (row.hasReason === 1 && !text(row.reason)) || (row.hasNote === 1 && !text(row.note));
   const fields = ["ITEM_UPDATED", "REORDER_UPDATED"].includes(type) ? Object.keys(details).filter((key) => key in FIELDS).map((key) => FIELDS[key]!) : [];
   const account = row.src === "ACCOUNT" && typeof details.username === "string" ? ` for ${details.username.slice(0, 60)}` : "";
   const purpose = PURPOSE[String(row.purpose)] ?? "";
@@ -289,7 +326,7 @@ function toEvent(row: Row): ActivityEvent {
     id: String(row.sid), correlationId: loan ?? (typeof row.corr === "string" && /^[A-Za-z0-9._-]{1,80}$/.test(row.corr) ? row.corr : String(row.sid)),
     at: known ? String(row.k) : null, source: String(row.src), type, title: TITLES[type] ?? type, summary, actor, actorId: text(row.actorId),
     itemId: text(row.itemId), itemName: text(row.itemName), unit, quantity, change, stockChanged: change !== 0, before: after === null ? null : after - change, after,
-    reason, note: type.startsWith("PHONE_") ? null : text(row.note), fields, attention: row.attention === 1
+    reason, note, withheld, fields, attention: row.attention === 1
   };
 }
 
