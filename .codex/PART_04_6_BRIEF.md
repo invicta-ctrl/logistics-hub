@@ -1,6 +1,6 @@
 # Part 4.6 Brief — Visual Cleanup
 
-STATUS: IN_PROGRESS (2026-09-30)
+STATUS: COMPLETE (2026-09-30); merged to main by fast-forward; slice branch deleted
 BRANCH: slice/part-04-6-visual-cleanup (from main 72475b8)
 INSTRUCTION: Earl, 2026-09-30: accepted the visual cleanup plan by choosing "Start cleanup" (plan: Claude Doc "Logistics Hub visual cleanup plan", main tab). Part 5 and Open-Unit Tracking (A12) in the same doc remain PROPOSED.
 
@@ -23,3 +23,13 @@ typecheck + build, `npm test`, `npm run test:browser`, screenshots at 1366 and 3
 
 ## Out of scope
 Workflow or data changes; the axe dev dependency (needs Earl's approval); Part 5.
+
+## Decisions made while implementing
+- Body text stays 16 px (the plan's scale said 17) so dense staff tables do not grow.
+- The Youth Development Day banner Earl chose on 2026-09-29 left the home hero, as the accepted plan says (one-event poster). The file is kept only as the worker suite's upload fixture, `tests/worker-browser/loan-photo.jpg`; restoring it is one figure in `landing()`.
+- Header "Staff sign in" is a plain nav link, so gold is used once per dark surface ("Browse the Lending Hub"); both header links stay visible on phones.
+- Availability reads "3 pieces available", "1 left", "All out". The live status on every live view reads "Updated <time of last change>" (shared `live()` helper), not only the Lending Hub.
+- Self-service took Earl's card default, "Flat dark" (no answer arrived): dark Dusk palette, crest and gold kept; photo, aurora, grain, glass, gradients, glows, sparks and cross-fades removed.
+- Contrast: `--text-3` darkened to #6f675e (≥4.5:1 on every light surface); new `--line-field` (#958d82, ≥3:1) for field borders and the switch track.
+- Also removed: route and screen cross-fades (View Transitions), CSS rules with no markup, the unreferenced `.loan-list--page` class.
+

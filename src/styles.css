@@ -750,6 +750,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .activity-row { grid-template-columns: 3rem minmax(0, 1fr); padding-inline: var(--space-3); }
   .app-bar__inner { flex-wrap: wrap; gap: 0 var(--space-4); }
   .app-bar__title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .app-bar__brand { padding-block: var(--space-2); }
   .app-nav { order: 3; width: calc(100% + var(--gutter) * 2); min-height: 2.75rem; margin-inline: calc(var(--gutter) * -1); padding-inline: calc(var(--gutter) - .75rem); overflow-x: auto; border-top: 1px solid var(--on-dark-line); }
   .account { padding-left: 0; border: 0; }
   /* The avatar already opens My account; the bar keeps room for the work sections. */
