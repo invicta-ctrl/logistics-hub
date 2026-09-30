@@ -12,6 +12,7 @@ PRODUCT_REFERENCE: docs/PRODUCT_REFERENCE.md (reference only; never overrides Ea
 RUNBOOK: docs/DEPLOYMENT.md
 SESSION_HANDOFF: .codex/SESSION_HANDOFF.md
 SHARED_WORKFLOW: docs/SHARED_AGENT_WORKFLOW.md
+WORKFLOW_AMENDMENT: docs/specs/accepted/2026-09-30-mausbot-multi-worktree-amendment.md
 ACCEPTED_SPEC: docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md
 CURRENT_TASK: .codex/CURRENT_TASK.md
 PART_04_BRIEF: .codex/PART_04_BRIEF.md

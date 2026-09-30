@@ -1,16 +1,24 @@
-# Shared Agent Workflow — Codex + Claude
+# Shared Agent Workflow — Codex + Claude + MausBot
 
 ## The entire workflow in one sentence
 
-**One shared worktree + one active slice branch + one writer + small verified commits + immediate merge to main when green + prune the finished branch.**
+**One writable worktree + optional detached read-only specialist worktrees + one active slice branch + one writer + small verified commits + immediate merge to main when green + prune the finished branch.**
 
 ## Workspace
 
-Both agents open:
+Codex, Claude, and Forge use the writable/local-preview worktree:
 
 `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`
 
-Do not create separate active worktrees for Codex and Claude.
+Approved MausBot specialist worktrees:
+- Scout: `D:\Documents\MausBot\worktrees\logistics-hub-scout`
+- Oracle: `D:\Documents\MausBot\worktrees\logistics-hub-oracle`
+- Sentinel: `D:\Documents\MausBot\worktrees\logistics-hub-sentinel`
+- Harbor: `D:\Documents\MausBot\worktrees\logistics-hub-harbor`
+
+These are detached Git worktrees, not active development branches. Refresh them to the exact commit under inspection before each assignment. Scout, Oracle, and Sentinel are read-only. Harbor performs release/deploy operations against an explicitly authorized exact commit and does not edit source.
+
+Do not create separate writable worktrees for Codex, Claude, or Forge.
 
 ## Branch budget
 
@@ -41,7 +49,7 @@ git pull --ff-only
 git switch -c slice/<part>-<scope>
 ```
 
-Both agents then take turns on that branch.
+Codex, Claude, and Forge take turns on that branch; only the current lock owner writes.
 
 ## Writer lock
 
@@ -58,7 +66,13 @@ or:
 npm run agent:claim -- claude
 ```
 
-If the other agent owns it, do not write.
+For MausBot Forge:
+
+```powershell
+npm run agent:claim -- forge
+```
+
+If another writer owns the lock, do not write.
 
 ## Local preview
 

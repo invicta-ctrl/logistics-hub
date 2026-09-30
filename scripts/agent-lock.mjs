@@ -3,7 +3,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 
 const [command = "status", requestedAgent] = process.argv.slice(2);
-const allowed = new Set(["codex", "claude"]);
+const allowed = new Set(["codex", "claude", "forge"]);
 const stateDir = path.resolve(".agent-state");
 const lockPath = path.join(stateDir, "lock.json");
 
@@ -36,7 +36,7 @@ if (command === "status") {
 }
 
 if (!allowed.has(requestedAgent)) {
-  console.error("Agent must be 'codex' or 'claude'.");
+  console.error("Agent must be 'codex', 'claude', or 'forge'.");
   process.exit(2);
 }
 
@@ -73,5 +73,5 @@ if (command === "yield") {
   process.exit(0);
 }
 
-console.error("Usage: node scripts/agent-lock.mjs status|claim|yield [codex|claude]");
+console.error("Usage: node scripts/agent-lock.mjs status|claim|yield [codex|claude|forge]");
 process.exit(2);

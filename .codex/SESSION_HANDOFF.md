@@ -85,6 +85,7 @@ Earl must explicitly resolve the Part 4.5 branch-history conflict recorded in th
 - Step 2 is complete. No unexpected data damage was observed and no restore was performed. The recovery bookmark remains verified and Git-ignored at `.wrangler/part4-5-pre-0015-20260930.json`; its value was never displayed or committed. Direct shell redirection was refused by the tool; the read-only JSON result was captured without display and saved with the file-write tool instead.
 - Only D1 logistics-hub schema was changed in production. Worker logistics-hub and R2 logistics-hub-evidence were not changed; neither legacy production/staging target was touched. No Part 4.5 live deployment or phone acceptance has occurred, and no Part 5 work began. Main remains 41b132d. The separate Step 3 branch-history constraint remains unresolved.
 - This checkpoint updates the current/task/handoff and brief records on the shared slice. Unknown untracked NUL is preserved untouched. Yield the codex writer lock at handoff. Next action is Step 3 integration resolution and release; never repeat migration 0015 without first verifying remote migration state.
+
 - The earlier photo upload tooling blocker was resolved and production photo/return acceptance was completed on 2026-09-30; see the closure checkpoint below.
 
 ## 2026-09-30 closure checkpoint — Part 4 production acceptance complete
@@ -182,3 +183,12 @@ Earl must explicitly resolve the Part 4.5 branch-history conflict recorded in th
 ## 2026-09-30 Part 5 plan written (Claude Cloud, planning only)
 - Earl asked for Part 5 as one plan file: `docs/specs/proposed/2026-09-30-part-05-activity-accountability-plan.md`. It holds Part 5 core (Activity center, filters, safe CSV exports), the visual-cleanup record (already built as Part 4.6-4.10; open items: axe dependency, "Where to find us" facts), and Open-Unit Tracking A12 with slices, invariants, gates and the decisions needed from Earl. PROPOSED only: no branch, migration, code or production change for Part 5 was made.
 - Also this session: phone home is one "Get an item" list (Borrow or Take from the item type); merged origin/main (Part 4.6-4.10 by another writer) into it; gates after the merge: unit 100/100, browser 10/10, Worker+D1 20/20, privacy clean.
+
+
+## 2026-09-30 MausBot multi-worktree workflow amendment
+- Earl explicitly approved `docs/specs/accepted/2026-09-30-mausbot-multi-worktree-amendment.md`.
+- The existing writable/local-preview worktree remains `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`; Forge is the normal MausBot writer and must use the writer lock.
+- Scout, Oracle, Sentinel, and Harbor use detached specialist worktrees under `D:\Documents\MausBot\worktrees\`; no bot-specific permanent branches are introduced.
+- Nexus uses `D:\Documents\MausBot\Nexus` as a non-repository coordination folder.
+- This workflow change does not authorize Part 5, a Part 4.5 release, another application of migration 0015, or any production mutation.
+

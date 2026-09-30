@@ -11,9 +11,10 @@ Authority: Earl current instruction -> accepted spec/amendment -> verified repos
 
 ## Non-negotiables
 
-- Shared worktree only: `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`.
-- One active writer. Claim the writer lock before edits; yield before handoff.
-- Both agents use the same active slice branch. No Codex/Claude-specific branches.
+- Writable/local-preview worktree: `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`.
+- Approved MausBot Scout, Oracle, Sentinel, and Harbor worktrees are detached/read-only specialist worktrees under the accepted MausBot amendment.
+- One active writer. Codex, Claude, or Forge must claim the writer lock before edits; yield before handoff.
+- The writable worktree uses the one active slice branch. No Codex/Claude/MausBot-specific long-lived branches.
 - Claude Cloud must commit and push each coherent working checkpoint to the one active `slice/*` branch so the local preview can auto-sync it. Unpushed cloud edits cannot appear locally.
 - `main` is always the latest verified working product.
 - At most one active short-lived `slice/<part>-<scope>` branch.

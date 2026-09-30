@@ -85,6 +85,8 @@ Authoritative local worktree:
 
 Exactly one active writer at a time. The active agent must claim the local writer lock before editing and yield it before the next agent writes.
 
+The accepted MausBot multi-worktree amendment permits detached, read-only specialist worktrees for Scout, Oracle, Sentinel, and Harbor while keeping the existing Logistics Hub shared worktree as the sole writable/local-preview worktree. These detached worktrees do not create branches and do not change the branch budget. Forge is the normal MausBot writer and must use the writable worktree and writer lock.
+
 The handoff file `.codex/SESSION_HANDOFF.md` is mandatory.
 
 When usage is near its limit:
