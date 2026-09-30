@@ -214,7 +214,7 @@ Unit/data: every invariant above, including retry and concurrent-empty cases, co
 
 ## 5. Order of work, slices and gates
 
-**Prerequisite (met):** Part 4.5 is on `main` and deployed; the visual cleanup is done; there is no active slice branch. The three leftover remote branches are merged and only need deleting by someone with push rights (see the handoff).
+**Prerequisite (met):** Part 4.5 is on `main` and deployed; the visual cleanup is done; there is no active slice branch. Leftover remote `slice/part-04-6…4-10` branches are fully merged and only need deleting by someone with push rights (see the handoff).
 
 **Recommended order**
 
@@ -243,7 +243,7 @@ Unit/data: every invariant above, including retry and concurrent-empty cases, co
 4. **Office location and hours** for the home page "Where to find us" line (from the visual plan).
 5. **Accept Open-Unit Tracking (A12)?** If yes, confirm: opt-in per item; default Whole unit; phone `Use` included in scope or deferred; and that its production migration will be a separate approval when the time comes.
 6. **Branch names:** `slice/part-05-activity` and `slice/part-05b-open-units` (the visual plan used a different name for a slice that is already finished).
-7. **Delete the three merged remote branches** (someone with push rights).
+7. **Delete the merged leftover remote slice branches** (`slice/part-04-6-visual-cleanup` to `slice/part-04-10-fresh-public-pages`; someone with push rights).
 
 ## Planning status
 
