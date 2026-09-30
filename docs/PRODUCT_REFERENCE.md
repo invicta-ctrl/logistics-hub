@@ -187,7 +187,7 @@ Each Part must work end to end without depending on a later Part.
 - **Direction:**
   - Institutional oxblood for the masthead, hero, app bar and footer.
   - Warm paper for the work surfaces.
-  - Exception: phone Self-Service uses the "Dusk" theme (Earl, 2026-09-29), flattened in Part 4.6: the same crest, mark, oxblood, gold and type on a solid dark canvas, scoped to `.is-self-service`. Part 4.7 added an animated light/dark switch in its app bar (dark by default, remembered per phone) (docs/OFFLINE_SELF_SERVICE.md, section 16). Staff and public pages keep warm paper.
+  - Exception: phone Self-Service uses the "Dusk" theme (Earl, 2026-09-29), flattened in Part 4.6: the same crest, mark, oxblood, gold and type on a solid dark canvas, scoped to `.is-self-service`. Part 4.7 added an animated light/dark switch in its app bar (dark by default, remembered per phone); Part 4.8 put the campus photograph back behind the top of home (docs/OFFLINE_SELF_SERVICE.md, section 16). Staff and public pages keep warm paper.
   - Gold for primary actions on dark and for focus.
   - Newsreader only for page titles (h1) and the brand name; IBM Plex Sans for everything else (self-hosted).
 - **Density:** staff screens favour speed and density (a compact operations header, dot status tags, one shared sheet); public pages are more editorial.

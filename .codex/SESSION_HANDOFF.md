@@ -161,3 +161,8 @@ Earl must explicitly resolve the Part 4.5 branch-history conflict recorded in th
 - Earl asked for "a light and dark animated option" after choosing "Flat dark". Slice `slice/part-04-7-self-service-themes` from main 402946e. Decisions in `.codex/CURRENT_TASK.md`; design notes in docs/OFFLINE_SELF_SERVICE.md section 16. Dark stays the default; the choice lives in `localStorage` (`ss-theme`), per phone.
 - Gates on the slice head: typecheck + build; unit 100/100; browser 10/10 (new theme test); real Worker + D1 browser 19/19; privacy; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`. Contrast checked in both themes (AA). No migration, API, workflow or dependency change.
 - Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded. Remote slice branches need deleting from Earl's machine (cloud push --delete disconnects).
+
+## 2026-09-30 Part 4.8 Self-Service photo back (Claude Cloud)
+- Earl: "The background photo on the self service disappeared and the icon and doesnt look good. Fix it". Slice `slice/part-04-8-self-service-photo` from main 2f308e3. Decisions in `.codex/CURRENT_TASK.md`; design notes in docs/OFFLINE_SELF_SERVICE.md section 16.
+- Gates on the slice head: typecheck + build; unit 100/100; browser 10/10 (the theme test now covers the photo); real Worker + D1 browser 19/19; privacy; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`. No migration, API, workflow or dependency change.
+- Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded. Delete the remote slice branch from Earl's machine.
