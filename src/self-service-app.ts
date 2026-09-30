@@ -14,10 +14,12 @@ import { CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, i
  * button closes a sheet or steps back; the router hands those changes to this module (ownQuery).
  */
 
-type Screen = "home" | "take" | "borrow" | "return" | "activity" | "install";
+type Screen = "home" | "get" | "take" | "borrow" | "return" | "activity" | "install";
 type Params = { screen: Screen; item: string | null; loan: string | null };
 
-const SCREENS = new Set<Screen>(["home", "take", "borrow", "return", "activity", "install"]);
+const SCREENS = new Set<Screen>(["home", "get", "take", "borrow", "return", "activity", "install"]);
+/** One list of everything offered. "take" and "borrow" stay valid addresses (old shortcuts, an item sheet) and show the same list. */
+const inList = (screen: Screen) => screen === "get" || screen === "take" || screen === "borrow";
 const FRESH_MS = 2 * 60_000;
 const CATALOG_POLL_MS = 30_000;
 
@@ -121,7 +123,7 @@ function refreshRegions(): void {
   if (status) mount(status, html`${readinessCard()}${installCard()}`);
   if (screen === "activity") { renderActivity(); return; }
   const rows = region("rows");
-  if (rows && (screen === "take" || screen === "borrow")) mount(rows, listRows(screen));
+  if (rows && inList(screen)) mount(rows, listRows());
   const loans = region("loans");
   if (loans) mount(loans, loansSection());
 }
@@ -149,10 +151,8 @@ function homeTiles(): Html {
   const counts = summary(events);
   const reviews = recentReviews();
   const activityBadge = counts.pending ? `${counts.pending} waiting` : reviews ? `${reviews} with staff` : "";
-  const hasTake = snapshot?.items.some((item) => item.action === "TAKE") ?? true;
-  const hasBorrow = snapshot?.items.some((item) => item.action === "BORROW") ?? true;
-  return html`${hasTake ? tile("take", "Take", "Supplies you use up", "basket") : ""}
-    ${hasBorrow ? tile("borrow", "Borrow", "Equipment you bring back", "handoff") : ""}
+  const anything = snapshot ? snapshot.items.length > 0 : true;
+  return html`${anything ? tile("get", "Get an item", "Borrow equipment or take supplies", "basket") : ""}
     ${tile("return", "Return", loans ? `${loans} on loan from this phone` : "Bring back what you borrowed", "giveBack", loans ? String(loans) : "")}
     ${tile("activity", "My activity", "What this phone recorded", "clock", activityBadge)}`;
 }
@@ -239,12 +239,11 @@ function countBadge(item: CatalogItem, available: number): Html {
 }
 
 const SCREEN_COPY = {
-  take: { title: "Take", lead: "Supplies you use up. Pick one, say how many, done.", empty: "Nothing is set up for self-service taking yet. Ask Logistics staff." },
-  borrow: { title: "Borrow", lead: "Equipment you bring back. You'll need your name and a quick photo.", empty: "Nothing is set up for self-service borrowing yet. Ask Logistics staff." },
+  get: { title: "Get an item", lead: "Pick what you need. Equipment is borrowed and returned; supplies are taken and used up.", empty: "Nothing is set up for self-service yet. Ask Logistics staff." },
   return: { title: "Return", lead: "Return what you borrowed on this phone. A photo of the item is needed.", empty: "" }
 } as const;
 
-function renderList(screen: "take" | "borrow" | "return"): void {
+function renderList(screen: "get" | "return"): void {
   const main = region("screen");
   if (!main) return;
   listQuery = "";
@@ -254,8 +253,8 @@ function renderList(screen: "take" | "borrow" | "return"): void {
       ${back(copy.title)}
       <p class="ss-lead">${copy.lead}</p>
       ${screen === "return" ? html`<div class="ss-screen" data-region="loans">${loansSection()}</div>` : html`
-      <div class="search-field ss-search">${icon("search")}<input type="search" data-search placeholder="Search ${screen === "take" ? "supplies" : "equipment"}…" aria-label="Search" autocomplete="off" enterkeyhint="search" /></div>
-      <div data-region="rows">${listRows(screen)}</div>`}
+      <div class="search-field ss-search">${icon("search")}<input type="search" data-search placeholder="Search items…" aria-label="Search" autocomplete="off" enterkeyhint="search" /></div>
+      <div data-region="rows">${listRows()}</div>`}
     </div>`);
 }
 
@@ -275,21 +274,20 @@ function back(title: string): Html {
 
 let listQuery = "";
 
-function listRows(screen: "take" | "borrow"): Html {
+function listRows(): Html {
   if (!snapshot) return offline ? emptyNote("The catalog hasn't been downloaded to this phone yet. Connect to the internet once, then try again.") : skeleton();
   const available = estimate(snapshot, events);
   const waiting = pendingByItem(events);
-  const action = screen === "take" ? "TAKE" : "BORROW";
-  const offered = snapshot.items.filter((item) => item.action === action);
-  if (!offered.length) return emptyNote(SCREEN_COPY[screen].empty);
+  const offered = snapshot.items;
+  if (!offered.length) return emptyNote(SCREEN_COPY.get.empty);
   const found = matching(offered, listQuery);
   if (!found.length) return emptyNote(`Nothing matches “${listQuery}”.`);
   // Recently used on this phone first, then by category.
-  const recent = [...new Set(events.filter((event) => event.type === action).sort((a, b) => b.seq - a.seq).map((event) => event.itemId))].slice(0, 3)
+  const recent = [...new Set(events.filter((event) => event.type === "TAKE" || event.type === "BORROW").sort((a, b) => b.seq - a.seq).map((event) => event.itemId))].slice(0, 3)
     .map((id) => found.find((item) => item.id === id)).filter((item): item is CatalogItem => Boolean(item));
   const byCategory = new Map<string, CatalogItem[]>();
   for (const item of found) byCategory.set(item.category, [...byCategory.get(item.category) ?? [], item]);
-  const row = (item: CatalogItem) => html`<li><a class="ss-row ${(available.get(item.id) ?? 0) <= 0 ? "ss-row--out" : ""}" href="/self-service?do=${screen}&item=${item.id}" data-open-item="${item.id}" data-screen="${screen}">
+  const row = (item: CatalogItem) => html`<li><a class="ss-row ${(available.get(item.id) ?? 0) <= 0 ? "ss-row--out" : ""}" href="/self-service?do=${item.action === "TAKE" ? "take" : "borrow"}&item=${item.id}" data-open-item="${item.id}" data-screen="${item.action === "TAKE" ? "take" : "borrow"}">
       <span class="ss-row__main"><span class="ss-row__name">${item.name}</span>${sub(item, waiting.get(item.id))}</span>
       ${countBadge(item, available.get(item.id) ?? 0)}</a></li>`;
   return html`${recent.length && !listQuery ? html`<h2 class="ss-section">Recent on this phone</h2><ul class="ss-list">${recent.map(row)}</ul>` : ""}
@@ -299,7 +297,7 @@ function listRows(screen: "take" | "borrow"): Html {
 
 /** Other names and where it is kept, plus anything of it still waiting on this phone. */
 function sub(item: CatalogItem, waiting = 0): Html {
-  const parts = [item.aliases, item.location, waiting ? `${waiting} waiting to sync` : null].filter(Boolean);
+  const parts = [item.action === "TAKE" ? "Take" : "Borrow", item.aliases, item.location, waiting ? `${waiting} waiting to sync` : null].filter(Boolean);
   return parts.length ? html`<span class="ss-row__sub">${parts.join(" · ")}</span>` : html``;
 }
 
@@ -512,8 +510,8 @@ function renderScreen(): void {
   if (screen === "home") renderHome();
   else if (screen === "activity") renderActivity();
   else if (screen === "install") renderInstall();
-  else renderList(screen);
-  document.title = screen === "home" ? "Self-Service · HAU USC Logistics" : `${screen === "activity" ? "My activity" : screen === "install" ? "Install" : SCREEN_COPY[screen].title} · Self-Service`;
+  else renderList(screen === "return" ? "return" : "get");
+  document.title = screen === "home" ? "Self-Service · HAU USC Logistics" : `${screen === "activity" ? "My activity" : screen === "install" ? "Install" : SCREEN_COPY[screen === "return" ? "return" : "get"].title} · Self-Service`;
 }
 
 /** Wires one sheet form to its action. The record is saved on the phone first, then synced. */
@@ -776,7 +774,7 @@ export async function selfService(): Promise<void> {
       listQuery = input.value;
       const rows = region("rows");
       const { screen } = params();
-      if (rows && (screen === "take" || screen === "borrow")) mount(rows, listRows(screen));
+      if (rows && inList(screen)) mount(rows, listRows());
     }
   };
   const onFind = (event: Event) => { if ((event.target as HTMLElement).matches("[data-find]")) event.preventDefault(); };

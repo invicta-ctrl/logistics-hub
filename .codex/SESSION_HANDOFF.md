@@ -151,3 +151,6 @@ Earl must explicitly resolve the Part 4.5 branch-history conflict recorded in th
 ## 2026-09-30 Staff choose Borrow or Consume (Earl)
 - Edit details now asks "Borrow or consume" (Borrow = Loanable, Consume = Consumable). The choice drives everything: Lending Hub listing, phone Borrow/Take, Loan tab. Choosing it for an item whose audience is "Not lendable" sets "Shown to" to Students & USC staff; new items start listed. The form previews "Will appear on the public Lending Hub, and phones can borrow/take it". No migration.
 - Fixed the intermittent "Ready for offline use" wait (a real race: the service worker could take control before the page's controllerchange listener existed, so readiness never refreshed): the Self-Service screen now re-checks readiness every second for up to 15 s at startup. Worker browser suite 19/19 on three consecutive runs afterwards.
+
+## 2026-09-30 One list on the phone (Earl)
+- The phone home now has one **Get an item** tile (plus Return and My activity) instead of separate Take and Borrow tiles. The list shows every offered item; each row says Borrow or Take (from the type staff chose) and opens the matching form. `?do=take` and `?do=borrow` still work and show the same list. Manifest shortcuts now: Get an item, Return, My activity. Gates: typecheck, build, unit 100/100, browser 9/9, Worker+D1 19/19.

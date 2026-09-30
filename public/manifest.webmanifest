@@ -15,8 +15,7 @@
     { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "Take supplies", "short_name": "Take", "url": "/self-service?do=take", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Borrow equipment", "short_name": "Borrow", "url": "/self-service?do=borrow", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Get an item", "short_name": "Get item", "url": "/self-service?do=get", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "Return something", "short_name": "Return", "url": "/self-service?do=return", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
     { "name": "My activity", "url": "/self-service?do=activity", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
   ]

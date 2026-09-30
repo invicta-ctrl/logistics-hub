@@ -101,7 +101,7 @@ async function forgetAnswers(page: Page): Promise<void> {
 }
 
 async function take(page: Page, name: RegExp, count: number, person: string): Promise<void> {
-  await page.getByRole("link", { name: /^Take/ }).first().click();
+  await page.getByRole("link", { name: /^Get an item/ }).click();
   await page.getByRole("link", { name }).click();
   for (let step = 1; step < count; step += 1) await page.getByRole("button", { name: "One more" }).click();
   await page.getByLabel("Your name").fill(person);
@@ -153,7 +153,7 @@ test.describe.serial("offline self-service", () => {
     await take(page, /Bottled Water/, 2, "Juan Dela Cruz");
     await expect(page.getByRole("link", { name: /Offline · 1 waiting/ })).toBeVisible();
 
-    await page.getByRole("link", { name: /^Borrow/ }).click();
+    await page.getByRole("link", { name: /^Get an item/ }).click();
     await page.getByRole("link", { name: /Cotton - roll/ }).click();
     await expect(page.getByLabel("Your full name")).toHaveValue("Juan Dela Cruz");
     await page.getByLabel("Student ID number").fill("20-1234-567");
