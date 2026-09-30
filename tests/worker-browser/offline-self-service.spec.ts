@@ -127,6 +127,7 @@ test.describe.serial("offline self-service", () => {
   });
 
   test("is an installable app with an offline shell, and never caches the API", async ({ request }) => {
+    expect(await (await request.get("/self-service")).text()).toContain('rel="manifest" href="/manifest.webmanifest"');
     const manifest = await request.get("/manifest.webmanifest");
     expect(manifest.headers()["content-type"]).toContain("application/manifest+json");
     expect(await manifest.json()).toMatchObject({ name: "Logistics Hub", start_url: "/self-service", display: "standalone", scope: "/" });
