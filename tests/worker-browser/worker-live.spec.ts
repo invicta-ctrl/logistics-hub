@@ -309,7 +309,7 @@ test("stock workspace on a 320 px phone records through a bottom sheet", async (
 });
 
 test("lend for individual and USC use with a photo, return one damaged, and read the dashboard", async ({ page }) => {
-  const photo = "public/brand/ydd-2026-banner.jpg";
+  const photo = "tests/worker-browser/loan-photo.jpg";
   await signIn(page);
   await page.goto("/staff/inventory?item=ITM-0262");
   await expect(page.getByLabel("Quantity on hand")).toHaveValue("10");

@@ -22,8 +22,8 @@ It supersedes the older HAU-USC Logistics Management System for all new developm
 
 The landing page (`/`):
 - an oxblood masthead carrying the HAU·USC crest and the DOL mark. On this page only, the lockup opens the official HAU University Student Council Facebook page (`https://www.facebook.com/holyangeluniversitysc`) in a new tab; on other public pages it returns home;
-- a hero on deep oxblood: the headline, a gold "Browse the Lending Hub" action and a "How borrowing works" link, beside the whole, uncropped Youth Development Day 2026 banner (the banner sits above the headline on phones). There is deliberately no availability panel here: the landing page does not poll the catalog, and availability lives only in the Lending Hub;
-- "How borrowing works" in three steps, ending in one "Open the Lending Hub" action and the notice that logistics requests are *not yet available* online.
+- a hero on flat oxblood: the headline "Borrow equipment from the USC Department of Logistics", a one-line lede, a gold "Browse the Lending Hub" action and a "How borrowing works" link. There is deliberately no availability panel here: the landing page does not poll the catalog, and availability lives only in the Lending Hub;
+- "How borrowing works" in three steps; step 2 says loans are arranged in person.
 - "Staff sign in" appears only in the masthead and footer.
 
 The Lending Hub (`/lending`):
@@ -198,9 +198,8 @@ Each Part must work end to end without depending on a later Part.
 | `hau-campus-dusk.webp` | The original **Staff Login background** of the legacy Logistics Management website: the production brand slot `/brand/login-background`, a 1654×951 PNG of 2.15 MB (sha256 `1e9b1873…af90c6`). Converted to WebP q84 at the same pixel size (191 KB), otherwise unaltered. |
 | `hau-usc-crest.webp` | The legacy `/brand/usc-logo` (a 1545×1999 PNG, sha256 `d1cb4968…3dda5`), trimmed and scaled to 240 px tall. |
 | `dol-mark.png` | The Part 1 cropped DOL mark (also the favicon). |
-| `ydd-2026-banner.jpg` | The landing hero image, set by Earl on 2026-09-29: the "Siglawang: Yabong ng Pamana" Youth Development Day 2026 banner (the HAU USC Facebook cover used by the legacy site, 960×356, sha256 `6ec7c5a7…`). Shown whole, never cropped or veiled, because it carries its own title. It replaced the earlier retained YDD photograph. |
 
-`public/touch-icon.png` is the iOS home-screen icon. `public/icons/` (192, 512 and a maskable 512) are the installed-app icons: the DOL mark on warm paper, like the touch icon, resized with Lanczos and quantized to 96 colours. The old site's combined lockup is not used; the crest and the mark are composed in code instead.
+`public/touch-icon.png` is the iOS home-screen icon. `public/icons/` (192, 512 and a maskable 512) are the installed-app icons: the DOL mark on warm paper, like the touch icon, resized with Lanczos and quantized to 96 colours. The old site's combined lockup is not used; the crest and the mark are composed in code instead. The Youth Development Day 2026 banner (Earl, 2026-09-29) left the landing hero in Part 4.6 as a one-event poster; it survives only as the worker suite's upload fixture, `tests/worker-browser/loan-photo.jpg`.
 
 `public/qr/logistics-self-service.svg` and `.png` are the one permanent Self-Service QR code (only `https://logistics.hausc.org/self-service`; version 4, error correction Q, 4-module quiet zone). `scripts/generate-self-service-qr.py` regenerates and decode-checks them.
 

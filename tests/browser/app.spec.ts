@@ -14,7 +14,7 @@ test("landing shows the undistorted DOL mark beside the HAU·USC crest, and only
   let catalogRequests = 0;
   page.on("request", (request) => { if (request.url().includes("/api/public/catalog")) catalogRequests += 1; });
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Logistics that keeps the work moving." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Borrow equipment from the USC Department of Logistics" })).toBeVisible();
   const box = (await page.locator(".site-header__brand .mark").boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(40);
   await expect(page.locator(".site-header__brand .crest")).toBeVisible();
@@ -25,7 +25,6 @@ test("landing shows the undistorted DOL mark beside the HAU·USC crest, and only
   // Availability lives only in the Lending Hub; the landing page does not poll the catalog.
   await expect(page.locator(".shelf")).toHaveCount(0);
   expect(catalogRequests).toBe(0);
-  await expect(page.getByText("Not yet available", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: /Browse the Lending Hub/ })).toHaveAttribute("href", "/lending");
 });
 

@@ -72,17 +72,13 @@ export function landing(): void {
   document.title = "Department of Logistics · HAU University Student Council";
   page(html`<main id="main-content">
     <section class="hero" aria-labelledby="hero-title">
-      <div class="container hero__grid">
-        <div class="hero__copy">
-          <p class="hero__kicker">Holy Angel University · University Student Council</p>
-          <h1 id="hero-title">Logistics that keeps the work moving.</h1>
-          <p class="hero__lede">The Department of Logistics supports the people and materials behind University Student Council work, and lends equipment to students and USC staff.</p>
-          <div class="hero__actions">
-            <a class="button button--gold button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
-            <a class="text-link text-link--light hero__secondary" href="#steps-title">How borrowing works</a>
-          </div>
+      <div class="container hero__inner">
+        <h1 id="hero-title">Borrow equipment from the USC Department of Logistics</h1>
+        <p class="hero__lede">Check what is on the shelf, then borrow it in person at the Logistics office.</p>
+        <div class="hero__actions">
+          <a class="button button--gold button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
+          <a class="text-link text-link--light hero__secondary" href="#steps-title">How borrowing works</a>
         </div>
-        <figure class="hero__banner"><img src="/brand/ydd-2026-banner.jpg" alt="Siglawang: Yabong ng Pamana, Youth Development Day 2026" width="960" height="356" fetchpriority="high" /></figure>
       </div>
     </section>
 
@@ -94,10 +90,6 @@ export function landing(): void {
           <li><span class="steps__n">2</span><h3>Visit the Department</h3><p>Speak with Department of Logistics staff. Loans are arranged in person; online requests are not open yet.</p></li>
           <li><span class="steps__n">3</span><h3>Borrow and return</h3><p>Staff record the loan and its return date with you, so the next person sees accurate availability.</p></li>
         </ol>
-        <div class="steps__foot">
-          <a class="button button--primary" href="/lending" data-route>Open the Lending Hub ${icon("arrow")}</a>
-          <p class="notice"><strong>Logistics requests</strong> for events are <span class="notice__status">Not yet available</span> online. Contact the Department of Logistics directly.</p>
-        </div>
       </div>
     </section>
 
