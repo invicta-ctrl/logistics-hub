@@ -430,18 +430,27 @@ const EVENT_COLUMNS = `SELECT e.id, e.event_type AS type, e.item_id AS itemId, i
   substr(e.device_id, 1, 6) AS device, e.client_tag AS network
   FROM self_service_events e JOIN items i ON i.id = e.item_id LEFT JOIN staff_accounts r ON r.id = e.resolved_by`;
 
+/** A held record nobody has resolved yet (self_service_events columns). */
+export const OPEN_REVIEW = "review IS NOT NULL AND resolved_at IS NULL";
+
+/**
+ * The CTEs behind "an item's balance went below zero": for the items `touched` selects (column item_id),
+ * `counted` is the last physical count and `running` every POSTED movement's balance in business order.
+ */
+export const balanceCtes = (touched: string) => `touched AS (${touched}),
+    counted AS (SELECT item_id, MAX(julianday(created_at)) AS at FROM inventory_movements
+      WHERE movement_type = 'COUNT_ADJUSTMENT' AND status = 'POSTED' AND imported_from IS NULL AND item_id IN (SELECT item_id FROM touched) GROUP BY item_id),
+    running AS (SELECT m.item_id AS itemId, m.created_at AS at, CASE WHEN m.imported_from IS NULL THEN julianday(m.created_at) ELSE 0 END AS t,
+      SUM(m.signed_quantity) OVER (PARTITION BY m.item_id ORDER BY ${HISTORY_ORDER}) AS balance
+      FROM inventory_movements m WHERE m.status = 'POSTED' AND m.item_id IN (SELECT item_id FROM touched))`;
+
 /**
  * Items whose balance, rebuilt in business order since their last physical count, went below
  * zero: something was recorded that the shelf could not have held. Derived on every read, so
  * it clears itself when a late return fills the gap or a new count is recorded.
  */
 function stockIssues(db: D1Database, since: string): D1PreparedStatement {
-  return db.prepare(`WITH touched AS (SELECT DISTINCT item_id FROM self_service_events WHERE received_at >= ?1 AND applied = 1),
-    counted AS (SELECT item_id, MAX(julianday(created_at)) AS at FROM inventory_movements
-      WHERE movement_type = 'COUNT_ADJUSTMENT' AND status = 'POSTED' AND imported_from IS NULL AND item_id IN (SELECT item_id FROM touched) GROUP BY item_id),
-    running AS (SELECT m.item_id AS itemId, m.created_at AS at, CASE WHEN m.imported_from IS NULL THEN julianday(m.created_at) ELSE 0 END AS t,
-      SUM(m.signed_quantity) OVER (PARTITION BY m.item_id ORDER BY ${HISTORY_ORDER}) AS balance
-      FROM inventory_movements m WHERE m.status = 'POSTED' AND m.item_id IN (SELECT item_id FROM touched))
+  return db.prepare(`WITH ${balanceCtes("SELECT DISTINCT item_id FROM self_service_events WHERE received_at >= ?1 AND applied = 1")}
     SELECT r.itemId, i.name AS itemName, i.unit, MIN(r.balance) AS lowest, MIN(CASE WHEN r.balance < 0 THEN r.at END) AS since,
       (SELECT on_hand FROM inventory_balances WHERE id = r.itemId) AS onHand,
       (SELECT COUNT(*) FROM loans WHERE item_id = r.itemId AND status = 'OUT') AS openLoans
@@ -453,7 +462,7 @@ function stockIssues(db: D1Database, since: string): D1PreparedStatement {
 export async function selfServiceReview(db: D1Database) {
   const since = new Date(Date.now() - 7 * 24 * 60 * MINUTE).toISOString();
   const [open, issues, recent, candidates] = await db.batch([
-    db.prepare(`${EVENT_COLUMNS} WHERE e.review IS NOT NULL AND e.resolved_at IS NULL ORDER BY e.received_at DESC LIMIT 200`),
+    db.prepare(`${EVENT_COLUMNS} WHERE ${OPEN_REVIEW} ORDER BY e.received_at DESC LIMIT 200`),
     stockIssues(db, new Date(Date.now() - 30 * 24 * 60 * MINUTE).toISOString()),
     db.prepare(`${EVENT_COLUMNS} WHERE e.received_at >= ? ORDER BY e.occurred_at DESC LIMIT 200`).bind(since),
     db.prepare(`SELECT l.id, l.item_id AS itemId, l.quantity, l.purpose, l.borrower_name AS borrowerName, l.student_id AS studentId, l.created_at AS createdAt

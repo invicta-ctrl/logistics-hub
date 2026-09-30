@@ -22,7 +22,8 @@ export const BUMP_REVISION = "UPDATE catalog_revision SET value = value + 1 WHER
  * recorded in the Hub in the order it happened (a phone that synced late slots into place).
  * julianday() compares the migrated "+08:00" and the Hub's "Z" timestamps correctly.
  */
-export const HISTORY_ORDER = "CASE WHEN m.imported_from IS NULL THEN julianday(m.created_at) ELSE 0 END, m.rowid";
+export const historyKey = (m: string) => `CASE WHEN ${m}.imported_from IS NULL THEN julianday(${m}.created_at) ELSE 0 END`;
+export const HISTORY_ORDER = `${historyKey("m")}, m.rowid`;
 /** A physical count this close to a movement (either side, in days) may or may not have seen it. */
 export const COUNT_TOLERANCE_DAYS = 5 / (24 * 60);
 /**

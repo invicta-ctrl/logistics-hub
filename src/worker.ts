@@ -1,3 +1,4 @@
+import { activityPage, activityTag, parseActivityQuery } from "./activity";
 import { type Account, changeOwnPassword, clearThrottle, createAccount, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, throttled, updateAccount, updateSelf } from "./accounts";
 import { InputError, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
@@ -50,6 +51,19 @@ function cookie(value: string, maxAge: number, secure: boolean): string {
 }
 
 const clientKey = (request: Request, purpose: string) => `${purpose}:${request.headers.get("CF-Connecting-IP") ?? "local"}`;
+
+/**
+ * Activity has no catalog revision to go by (it also reads the audit log and renames), so its ETag is a
+ * digest of this reader's own answer. The query runs on every refresh; only the body is saved on a 304.
+ */
+async function activity(request: Request, db: D1Database, account: Account, url: URL): Promise<Response> {
+  const admin = isAdmin(account);
+  const query = parseActivityQuery(url.searchParams);
+  const result = await activityPage(db, admin, query);
+  const etag = await activityTag(admin, query, result);
+  if (request.headers.get("If-None-Match")?.replace(/^W\//, "") === etag) return new Response(null, { status: 304, headers: { etag, "cache-control": "no-store" } });
+  return json(result, 200, { etag });
+}
 
 /** Answers 304 when the client already holds the current catalog revision. */
 async function revisioned(request: Request, db: D1Database, load: () => Promise<object>): Promise<Response> {
@@ -137,6 +151,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (path === "/api/staff/stock" && method === "GET") return revisioned(request, env.DB, () => stockOverview(env.DB));
   if (path === "/api/staff/loans" && method === "GET") return revisioned(request, env.DB, () => loansOverview(env.DB));
   if (path === "/api/staff/self-service" && method === "GET") return revisioned(request, env.DB, () => selfServiceReview(env.DB));
+  if (path === "/api/staff/activity" && method === "GET") return activity(request, env.DB, account, url);
   if (path === "/api/staff/reorders" && method === "POST") return json(await openReorder(env.DB, account, await body()), 201);
   const review = REVIEW_PATH.exec(path);
   if (review?.[2] === "resolve" && method === "POST") return json(await resolveReview(env.DB, env.EVIDENCE, account, review[1]!, await body()));
@@ -164,7 +179,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!form) throw new InputError(400, "Invalid loan form.");
     return json(await createLoan(env.DB, env.EVIDENCE, account, match[1]!, form), 201);
   }
-  const known = match || reorder || loan || review || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/reorders", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || reorder || loan || review || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/reorders", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 
