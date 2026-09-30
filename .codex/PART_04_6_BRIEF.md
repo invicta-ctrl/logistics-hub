@@ -26,7 +26,7 @@ Workflow or data changes; the axe dev dependency (needs Earl's approval); Part 5
 
 ## Decisions made while implementing
 - Body text stays 16 px (the plan's scale said 17) so dense staff tables do not grow.
-- The Youth Development Day banner Earl chose on 2026-09-29 left the home hero, as the accepted plan says (one-event poster). The file is kept only as the worker suite's upload fixture, `tests/worker-browser/loan-photo.jpg`; restoring it is one figure in `landing()`.
+- The Youth Development Day banner Earl chose on 2026-09-29 left the home hero, as the accepted plan says (one-event poster). The file is kept only as the worker suite's upload fixture, `tests/worker-browser/loan-photo.jpg`; restoring it is one figure in `landing()`. Earl asked for it back the same day; Part 4.9 restored it.
 - Header "Staff sign in" is a plain nav link, so gold is used once per dark surface ("Browse the Lending Hub"); both header links stay visible on phones.
 - Availability reads "3 pieces available", "1 left", "All out". The live status on every live view reads "Updated <time of last change>" (shared `live()` helper), not only the Lending Hub.
 - Self-service took Earl's card default, "Flat dark" (no answer arrived): dark Dusk palette, crest and gold kept; photo, aurora, grain, glass, gradients, glows, sparks and cross-fades removed. Earl asked for the photo back the same day; Part 4.8 restored it (docs/OFFLINE_SELF_SERVICE.md, section 16).

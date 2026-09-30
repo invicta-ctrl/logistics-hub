@@ -166,3 +166,8 @@ Earl must explicitly resolve the Part 4.5 branch-history conflict recorded in th
 - Earl: "The background photo on the self service disappeared and the icon and doesnt look good. Fix it". Slice `slice/part-04-8-self-service-photo` from main 2f308e3. Decisions in `.codex/CURRENT_TASK.md`; design notes in docs/OFFLINE_SELF_SERVICE.md section 16.
 - Gates on the slice head: typecheck + build; unit 100/100; browser 10/10 (the theme test now covers the photo); real Worker + D1 browser 19/19; privacy; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`. No migration, API, workflow or dependency change.
 - Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded. Delete the remote slice branch from Earl's machine.
+
+## 2026-09-30 Part 4.9 home banner back (Claude Cloud)
+- Earl: "The photo in the main website also is missing, fix". Slice `slice/part-04-9-home-banner` from main 5923729: the Youth Development Day banner returns to the landing hero (`public/brand/ydd-2026-banner.jpg`). Decisions in `.codex/CURRENT_TASK.md`.
+- Gates on the slice head: typecheck + build; unit 100/100; browser 10/10 (the landing test checks the banner); real Worker + D1 browser 19/19; privacy; migration ok:true (the one known balance mismatch); catalog; `wrangler deploy --dry-run`; no overflow at 1366/1024/390.
+- Main fast-forwarded to the slice and pushed; Workers Builds deploys it. Part 5 and A12 stay PROPOSED. Do not reapply 0015. Writer lock yielded. Delete the remote slice branches from Earl's machine.

@@ -1,7 +1,7 @@
 # Current Work Pointer — Logistics Hub
 PROGRAM: Logistics Hub
-MILESTONE: PART-04.8_SELF_SERVICE_PHOTO
-STATUS: PART_04_8_COMPLETE (2026-09-30): campus photo back behind Self-Service home and a redrawn theme switch, merged to main and deployed by Workers Builds (after Part 4.7's light/dark switch and Part 4.6's visual cleanup). Part 4.5 owner phone + signed-in staff acceptance still pending (it gates Part 5).
+MILESTONE: PART-04.9_HOME_BANNER
+STATUS: PART_04_9_COMPLETE (2026-09-30): Youth Development Day banner back on the home page, merged to main and deployed by Workers Builds (after Part 4.8's Self-Service photo, Part 4.7's light/dark switch and Part 4.6's visual cleanup). Part 4.5 owner phone + signed-in staff acceptance still pending (it gates Part 5).
 BRANCH: main (no active slice).
 ACTIVE_WRITER: none; claim before editing
 SHARED_WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
@@ -17,4 +17,4 @@ CURRENT_TASK: .codex/CURRENT_TASK.md
 PART_04_BRIEF: .codex/PART_04_BRIEF.md
 PART_04_5_BRIEF: .codex/PART_04_5_BRIEF.md
 PART_04_6_BRIEF: .codex/PART_04_6_BRIEF.md
-NEXT_EXACT_ACTION: Owner runs the signed-in phone acceptance in SESSION_HANDOFF and looks over the Part 4.6 visuals and the Part 4.7/4.8 theme switch and photo (decisions in PART_04_6_BRIEF). Part 5 and Open-Unit Tracking (A12) stay PROPOSED until Earl accepts them. Do not reapply 0015.
+NEXT_EXACT_ACTION: Owner runs the signed-in phone acceptance in SESSION_HANDOFF and looks over the Part 4.6 visuals and the Part 4.7–4.9 theme switch and photos (decisions in PART_04_6_BRIEF). Part 5 and Open-Unit Tracking (A12) stay PROPOSED until Earl accepts them. Do not reapply 0015.
