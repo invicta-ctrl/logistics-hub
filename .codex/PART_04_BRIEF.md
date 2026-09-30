@@ -1,6 +1,6 @@
 # Part 4 Brief — Lending (internal loans), quantity editor, two item types
 
-STATUS: DEPLOYED_PARTIAL (private R2, remote 0014, exact main deployment and core production checks verified; photo/return acceptance remains open)
+STATUS: PRODUCTION_ACCEPTANCE_COMPLETE (2026-09-30; private R2, remote 0014, deployed code and real-browser photo/return acceptance verified)
 BRANCH: slice/part-04-lending (from main 4f6cf4b)
 ACCEPTED_SPEC: docs/specs/accepted/2026-09-28-office-ops-reboot-v0.1.md (Part 4), as directed by Earl's current instruction below
 INSTRUCTION: Earl, 2026-09-29 (after Part 3 went live)

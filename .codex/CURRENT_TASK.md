@@ -4,4 +4,4 @@ OBJECTIVE: Earl's 2026-09-29 instruction (see .codex/PART_04_BRIEF.md): an alway
 IN_SCOPE: migration 0014; src/loans.ts; /api/staff/loans and loan routes; src/movement-form.ts (quantity editor); src/loan-form.ts; src/loans-workspace.ts; item sheet changes; tests; docs.
 OUT_OF_SCOPE: multi-item loans in one record, departments, borrower accounts, public requests (Request Center), exports and the activity center (Part 5), backups and settings (Part 6).
 BRIEF: .codex/PART_04_BRIEF.md
-STATUS: LOCAL_GREEN — merge waits for the private R2 bucket and verified remote migration 0014
+STATUS: PART_04_PRODUCTION_ACCEPTANCE_COMPLETE — 0014 and private R2 verified; Part 4 code live at 64c037e; real-browser Owner and Staff flows accepted 2026-09-30. See SESSION_HANDOFF for evidence. Part 4.5 Step 2 is next; Part 5 is out of scope.
