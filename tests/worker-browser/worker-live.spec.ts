@@ -165,6 +165,8 @@ test("migrated review: fill the gaps, mark reviewed, and move to the next record
   await page.getByRole("button", { name: /^Needs review/ }).click();
   await expect(page).toHaveURL(/view=review/);
   const reviewedBefore = Number((await page.locator("#review-meter strong").textContent())!.replace(/\D/g, ""));
+  // Other suites may add items; the meter counts every record.
+  const total = Number(/of ([\d,]+) records/.exec((await page.locator("#review-meter").textContent())!)![1]!.replace(/,/g, ""));
   const first = (await page.locator("tbody .row-link").first().textContent())!;
   const second = (await page.locator("tbody .row-link").nth(1).textContent())!;
   await page.locator("tbody .row-link").first().click();
@@ -178,7 +180,7 @@ test("migrated review: fill the gaps, mark reviewed, and move to the next record
   await page.getByRole("button", { name: /Mark reviewed & next/ }).click();
   await expect(page.getByText(`${first} reviewed. Opening the next record.`)).toBeVisible();
   await expect(page.getByRole("dialog", { name: second })).toBeVisible();
-  await expect(page.locator("#review-meter")).toContainText(`${reviewedBefore + 1} of 397 records reviewed`);
+  await expect(page.locator("#review-meter")).toContainText(`${reviewedBefore + 1} of ${total} records reviewed`);
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: /^All items/ }).click();
@@ -478,4 +480,89 @@ test("activity export: the filtered list as a safe CSV file, audited for the own
     await owner.setViewportSize({ width, height: 800 });
     expect(await owner.evaluate(() => document.querySelector(".app-bar__end")!.getBoundingClientRect().right <= window.innerWidth), `owner app bar at ${width}`).toBeTruthy();
   }
+});
+
+test("open units: opt in, open, use, mark low, open another, mark empty, close by a count, and read it all in History and Activity", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("button", { name: "New item" }).click();
+  const sheet = page.getByRole("dialog");
+  await sheet.getByLabel("Name", { exact: true }).fill("E2E Copy Paper");
+  await sheet.getByLabel("Category", { exact: true }).fill("school supplies");
+  await sheet.getByLabel("Unit", { exact: true }).fill("ream");
+  await expect(sheet.getByLabel("How is this item normally used?")).toBeHidden();
+  await sheet.getByLabel("Borrow or consume").selectOption("Consume (Consumable)");
+  await sheet.getByLabel("Shown to").selectOption("NOT_AVAILABLE_FOR_LENDING");
+  // Every item starts as Whole unit; staff opt in.
+  await expect(sheet.getByLabel("How is this item normally used?")).toHaveValue("WHOLE_UNIT");
+  await sheet.getByLabel("How is this item normally used?").selectOption("OPEN_UNIT");
+  await sheet.getByLabel("Opening quantity").fill("8");
+  await page.getByRole("button", { name: "Create item" }).click();
+  await expect(page.getByLabel("Quantity on hand")).toHaveValue("8");
+
+  const units = sheet.locator("#open-units");
+  await expect(units).toContainText("8 reams on hand · 8 sealed · 0 open");
+  await units.getByRole("button", { name: "Open a ream" }).click();
+  await expect(page.getByText("E2E Copy Paper: ream opened. Stock unchanged.")).toBeVisible();
+  await expect(units).toContainText("7 sealed · 1 open");
+  await units.getByRole("button", { name: "Record use" }).click();
+  await expect(page.getByText("Use recorded for E2E Copy Paper. Stock unchanged.")).toBeVisible();
+  await units.getByRole("button", { name: "Low", exact: true }).click();
+  await expect(units.getByRole("button", { name: "Low", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(sheet.locator("#quantity-context")).toContainText("7 sealed · 1 open · Low");
+  await expect(page.getByLabel("Quantity on hand")).toHaveValue("8");
+
+  // Changing how it is used is refused while a unit is open.
+  await page.getByRole("tab", { name: "Edit details" }).click();
+  await sheet.getByLabel("How is this item normally used?").selectOption("WHOLE_UNIT");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(sheet.locator("#details-alert")).toContainText("This item has open units");
+  await sheet.getByLabel("How is this item normally used?").selectOption("OPEN_UNIT");
+  await page.getByRole("tab", { name: "Overview" }).click();
+
+  // A second unit is allowed, after a warning.
+  await units.getByRole("button", { name: "Open another ream" }).click();
+  await expect(units).toContainText("1 ream is already open. Use the existing ream when possible.");
+  await units.getByRole("button", { name: "Open another", exact: true }).click();
+  await expect(units).toContainText("6 sealed · 2 open");
+
+  // Mark empty: an inline confirmation, then exactly one ream off.
+  await units.locator(".open-unit").first().getByRole("button", { name: "Mark empty" }).click();
+  await expect(units.locator(".inline-confirm")).toContainText("This will reduce on-hand stock from 8 to 7 reams.");
+  await expect(units.locator(".inline-confirm").getByRole("button", { name: "Mark empty" })).toBeFocused();
+  await units.locator(".inline-confirm").getByRole("button", { name: "Mark empty" }).click();
+  await expect(page.getByText("Marked empty. 7 reams on hand.")).toBeVisible();
+  await expect(page.getByLabel("Quantity on hand")).toHaveValue("7");
+  await expect(units).toContainText("6 sealed · 1 open");
+
+  // A count below the open units must close them in the same save.
+  await page.getByLabel("Quantity on hand").fill("0");
+  await sheet.getByRole("radio", { name: "Physical count" }).check();
+  await sheet.getByRole("button", { name: "Save count of 0" }).click();
+  await expect(sheet.locator("#stock-form").getByRole("alert")).toContainText("Tick the box");
+  await sheet.getByLabel(/Also close 1 open ream/).check();
+  await sheet.getByRole("button", { name: "Save count of 0" }).click();
+  await expect(page.getByText("E2E Copy Paper: 7 → 0 reams (physical count).")).toBeVisible();
+  await expect(units).toContainText("0 reams on hand · 0 sealed · 0 open");
+  await expect(units.getByRole("button", { name: "Open a ream" })).toBeDisabled();
+
+  await page.getByRole("tab", { name: "History" }).click();
+  const history = sheet.locator("#history");
+  for (const line of ["Count closed 1 open unit", "Open unit marked empty", "Another unit opened (1 already open)", "Open unit marked low", "Use recorded", "Unit opened"]) {
+    await expect(history).toContainText(line);
+  }
+  const id = (await page.locator(".sheet__kicker .mono").textContent())!;
+  await page.goto(`/staff/activity?item=${id}`);
+  const rows = page.locator(".activity-row");
+  await expect(rows).toHaveCount(9);
+  await expect(rows.nth(1)).toContainText("E2E Staff's count closed 1 open ream of E2E Copy Paper no longer on the shelf.");
+  await expect(rows.nth(2)).toContainText("E2E Staff marked an open ream of E2E Copy Paper empty: 7 reams on hand.");
+  await expect(rows.nth(2)).toContainText("8 → 7 reams");
+  // Opening, using and marking a condition are recorded and change nothing.
+  for (const index of [3, 4, 5, 6]) await expect(rows.nth(index)).toContainText("stock did not change");
+
+  // One-hand phone width: nothing scrolls sideways in the open sheet.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/staff/inventory?item=${id}`);
+  await expect(sheet.locator("#open-units")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });

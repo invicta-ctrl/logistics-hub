@@ -18,6 +18,8 @@ type Item = { name: string; aliases: string | null; category: string; itemType: 
 
 let staff: Page;
 let original: Record<string, Item> = {};
+/** An open-unit item this suite creates; it is made inactive again afterwards. */
+let paper: string | null = null;
 
 async function signIn(browser: Browser): Promise<Page> {
   const page = await browser.newPage();
@@ -123,6 +125,7 @@ test.describe.serial("offline self-service", () => {
     for (const [id, before] of Object.entries(original)) {
       await setItem(id, { itemType: before.itemType, status: before.status, needsReview: true, lendingAudience: before.lendingAudience, storageLocation: before.storageLocation });
     }
+    if (paper) await setItem(paper, { status: "INACTIVE" });
     await staff.close();
   });
 
@@ -250,6 +253,38 @@ test.describe.serial("offline self-service", () => {
     expect((await item(WATER)).onHand).toBe(before - 4);
     await a.context.close();
     await b.context.close();
+  });
+
+  test("an open-unit item is used, never taken: offline, double-tapped and replayed, stock never moves", async ({ browser }) => {
+    const created = await staff.request.post("/api/staff/items", { headers: { origin: BASE }, data: {
+      name: "E2E Printer Paper", category: "SCHOOL SUPPLIES", itemType: "Consumable", consumptionMode: "OPEN_UNIT", unit: "ream", status: "ACTIVE", storageLocation: "Office cabinet",
+      reorderThreshold: 0, lendingAudience: "NOT_AVAILABLE_FOR_LENDING", needsReview: false, notes: null, openingQuantity: 5
+    } });
+    expect(created.status()).toBe(201);
+    paper = (await created.json() as { id: string }).id;
+    const { context, page } = await phone(browser);
+    await context.setOffline(true);
+    await page.getByRole("link", { name: /^Get an item/ }).click();
+    await expect(page.getByRole("link", { name: /E2E Printer Paper/ })).toContainText("Use");
+    await page.getByRole("link", { name: /E2E Printer Paper/ }).click();
+    await expect(page.getByLabel("How many?")).toHaveCount(0);
+    await page.getByLabel("Your name").fill("Ana Reyes");
+    await page.getByRole("button", { name: "Record use" }).dblclick();
+    await expect(page.getByRole("heading", { name: "Use recorded" })).toBeVisible();
+    await page.getByRole("button", { name: "Done" }).click();
+    expect(await localState(page)).toEqual({ states: ["pending"], photos: 0 });
+
+    await context.setOffline(false);
+    await expect(page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });
+    const uses = async () => (await (await staff.request.get(`/api/staff/activity?item=${paper}&type=PHONE_USE`)).json() as { events: Array<{ summary: string; change: number }> }).events;
+    expect(await uses()).toEqual([expect.objectContaining({ summary: "A phone use of E2E Printer Paper was recorded; stock did not change.", change: 0 })]);
+    // The answer was lost and everything is sent again: still one use, still 5 reams.
+    await forgetAnswers(page);
+    await page.reload();
+    await expect(page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });
+    expect(await uses()).toHaveLength(1);
+    expect((await item(paper)).onHand).toBe(5);
+    await context.close();
   });
 
   test("staff see phone activity and can print the one QR poster", async () => {
