@@ -36,6 +36,7 @@ The earlier estimate, kept for provenance: `docs/MIGRATION_STATUS.md` (2026-09-2
 - **The 0016 indexes are justified by measurement.** Without them (run 2) the unfiltered page goes 10 ms (1,000) to 57 ms (20,000) to 230 ms (100,000): each arm sorts its whole table per request. With them: 8 / 11 / 17 ms. At production size (686 movements on 2026-10-01; the 1,000 tier) both are under 15 ms, so nothing is urgent today; the indexes matter as the ledger grows, and they are already written. No other index was added: the remaining slow shapes are not indexable.
 - **Inherent scans, with growth (run 1, 1,000 / 20,000 / 100,000 tier).** Text search (`LIKE '%q%'`, the plan walks the arm's ordering index and filters): unmatched or rare 10-11 / 37-52 / 296-309 ms; a common term or one combined with a date range stops early (10-11 / 20-33 / 21-39 ms). `attention`: 10 / 69 / 326 ms (it reads every item's movements to find a negative running balance at any age, as the ledger-authority design requires). `stockArea`: 8 / 27 / 93 ms. A leading-wildcard substring and a whole-ledger balance cannot use a B-tree index; a full-text table, a stored balance or a denormalized column would be a schema and authority change that the measurements at production size (about 10 ms) do not justify, and the accepted AC-A7 does not require them. Revisit if production passes about 20,000 movements or a slow search is reported; rerun the harness after any material change to `src/activity.ts`, per AC-A7.
 - **Export (Stage 5.3).** An export runs the same statement with no cursor and a limit of `EXPORT_ROWS` (2,000), then builds the CSV. Run 1: all 1,485 entries of the 1,000 tier in 36 ms; 2,000 entries in 111 ms at 20,000 and 280 ms at 100,000 movements; a text-filtered export 9 / 83 / 529 ms. The Worker-CPU part (row mapping and CSV text, everything but SQL) was measured separately at about 10 µs per entry (roughly 20 ms for a full 2,000-entry file; 5,000 would be about 50 ms), which is why the cap is 2,000: it holds all of production's history today (about 1,400 visible entries) and bounds the CPU of one request. That fits the Workers Paid CPU limit with a wide margin; whether production runs on the Free plan (10 ms CPU per request) is not recorded here, so a large export there could be refused: see the production check in `.codex/SESSION_HANDOFF.md`. Exports are rare and rate-limited (10 per 10 minutes per account).
+- **Re-run after the review fix (PR #3).** The phone-resolution entry now also selects what staff decided (one projected column in one arm, no filter or order change). The tables below are that re-run: every plan id and every row count is unchanged, the SQL ids are new because the statement text changed, and the timings are within run-to-run noise of the figures quoted above (which come from the run just before it).
 - **Limits of this evidence.** Local `node:sqlite`, not D1 (its latency and SQLite build are unmeasured); one machine; synthetic distributions; `activityPage` (and `activityCsv` for exports) only, without HTTP, sessions or the ETag digest (which costs a few ms and was measured earlier).
 
 ## Run 1 — 0016 indexes present
@@ -50,67 +51,67 @@ Method: 2 warm-up then 7 timed runs per query as ADMIN, through `activityPage` (
 
 | Query | Rows | Median ms | Max ms | SQL id | Plan id |
 |---|---|---|---|---|---|
-| unfiltered, 50 | 50 | 7.5 | 9.7 | 62dc228c1e | c80c5828ab |
-| unfiltered, 100 | 100 | 8.2 | 10.2 | 62dc228c1e | c80c5828ab |
-| deep cursor, 50 | 50 | 7.9 | 8.1 | 60f6ffdd02 | 6b9250a6a4 |
-| date range (a month) | 50 | 8.3 | 8.8 | cf9fcfe42d | 94439784f2 |
-| item | 1 | 6.3 | 7.7 | caf74707b3 | 4fe04c81a1 |
-| actor | 50 | 7.5 | 7.7 | 7ed339a8cf | c80c5828ab |
-| stockArea | 50 | 7.7 | 7.8 | 977f35ab74 | 43e7ba87bb |
-| location | 7 | 7.7 | 8.8 | 171e6522b6 | 43e7ba87bb |
-| source=LOAN | 50 | 6.4 | 9.1 | fe7d680a09 | 607d89e9d2 |
-| changed=yes | 50 | 3.6 | 4.2 | e63e462373 | b988fef532 |
-| attention | 50 | 9.9 | 19.5 | 80ff3e3d7f | cc408b0679 |
-| text, rare (few matches) | 0 | 10.2 | 13.0 | 74d800dcb2 | c80c5828ab |
-| text, unmatched | 0 | 10.8 | 14.0 | 74d800dcb2 | c80c5828ab |
-| text, common (fills the page) | 50 | 11.4 | 12.4 | 74d800dcb2 | c80c5828ab |
-| text + date range | 1 | 10.4 | 11.4 | f1e5e3758b | 94439784f2 |
-| export file, unfiltered | 1485 | 36.3 | 53.6 | 62dc228c1e | c80c5828ab |
-| export file, text | 22 | 8.9 | 9.9 | 74d800dcb2 | c80c5828ab |
+| unfiltered, 50 | 50 | 10.6 | 12.8 | 95bdaef99d | c80c5828ab |
+| unfiltered, 100 | 100 | 11.8 | 14.6 | 95bdaef99d | c80c5828ab |
+| deep cursor, 50 | 50 | 8.2 | 8.4 | 6fe9be9905 | 6b9250a6a4 |
+| date range (a month) | 50 | 9.4 | 11.2 | 763ce66a18 | 94439784f2 |
+| item | 1 | 7.4 | 9.9 | aa0623476c | 4fe04c81a1 |
+| actor | 50 | 8.5 | 8.7 | 961b981250 | c80c5828ab |
+| stockArea | 50 | 9.3 | 10.5 | edbafb106b | 43e7ba87bb |
+| location | 7 | 7.9 | 10.3 | 88ee1f5894 | 43e7ba87bb |
+| source=LOAN | 50 | 5.9 | 7.8 | fe7d680a09 | 607d89e9d2 |
+| changed=yes | 50 | 3.6 | 3.9 | e63e462373 | b988fef532 |
+| attention | 50 | 8.3 | 9.5 | 8cf9acef35 | cc408b0679 |
+| text, rare (few matches) | 0 | 8.6 | 8.9 | 2c158825e0 | c80c5828ab |
+| text, unmatched | 0 | 9.0 | 9.3 | 2c158825e0 | c80c5828ab |
+| text, common (fills the page) | 50 | 8.9 | 15.5 | 2c158825e0 | c80c5828ab |
+| text + date range | 1 | 8.7 | 12.9 | f1d75e2166 | 94439784f2 |
+| export file, unfiltered | 1485 | 32.2 | 53.0 | 95bdaef99d | c80c5828ab |
+| export file, text | 22 | 8.3 | 9.2 | 2c158825e0 | c80c5828ab |
 
 #### Tier 20000: 528 items, 21400 movements, 5000 audit rows, 800 loans, 5000 phone events
 
 | Query | Rows | Median ms | Max ms | SQL id | Plan id |
 |---|---|---|---|---|---|
-| unfiltered, 50 | 50 | 11.4 | 13.1 | 62dc228c1e | c80c5828ab |
-| unfiltered, 100 | 100 | 15.1 | 16.8 | 62dc228c1e | c80c5828ab |
-| deep cursor, 50 | 50 | 12.3 | 14.8 | 60f6ffdd02 | 6b9250a6a4 |
-| date range (a month) | 50 | 12.5 | 13.6 | cf9fcfe42d | 94439784f2 |
-| item | 50 | 7.8 | 8.0 | caf74707b3 | c734f00d4a |
-| actor | 50 | 12.6 | 13.4 | 7ed339a8cf | c80c5828ab |
-| stockArea | 50 | 26.8 | 29.5 | 977f35ab74 | cfba005778 |
-| location | 50 | 17.4 | 20.8 | 171e6522b6 | cfba005778 |
-| source=LOAN | 50 | 11.7 | 13.5 | fe7d680a09 | 607d89e9d2 |
-| changed=yes | 50 | 9.4 | 14.5 | e63e462373 | b988fef532 |
-| attention | 50 | 69.0 | 71.7 | 80ff3e3d7f | cc408b0679 |
-| text, rare (few matches) | 7 | 52.4 | 76.2 | 74d800dcb2 | c80c5828ab |
-| text, unmatched | 0 | 37.1 | 41.2 | 74d800dcb2 | c80c5828ab |
-| text, common (fills the page) | 50 | 19.5 | 25.3 | 74d800dcb2 | c80c5828ab |
-| text + date range | 42 | 33.4 | 38.1 | f1e5e3758b | 94439784f2 |
-| export file, unfiltered | 2000 | 110.8 | 125.2 | 62dc228c1e | c80c5828ab |
-| export file, text | 412 | 82.6 | 87.1 | 74d800dcb2 | c80c5828ab |
+| unfiltered, 50 | 50 | 16.0 | 16.6 | 95bdaef99d | c80c5828ab |
+| unfiltered, 100 | 100 | 20.6 | 23.5 | 95bdaef99d | c80c5828ab |
+| deep cursor, 50 | 50 | 12.8 | 13.0 | 6fe9be9905 | 6b9250a6a4 |
+| date range (a month) | 50 | 13.8 | 14.4 | 763ce66a18 | 94439784f2 |
+| item | 50 | 8.4 | 8.7 | aa0623476c | c734f00d4a |
+| actor | 50 | 13.2 | 13.4 | 961b981250 | c80c5828ab |
+| stockArea | 50 | 17.7 | 18.3 | edbafb106b | cfba005778 |
+| location | 50 | 12.3 | 18.5 | 88ee1f5894 | cfba005778 |
+| source=LOAN | 50 | 11.4 | 12.2 | fe7d680a09 | 607d89e9d2 |
+| changed=yes | 50 | 8.3 | 9.3 | e63e462373 | b988fef532 |
+| attention | 50 | 56.4 | 68.5 | 8cf9acef35 | cc408b0679 |
+| text, rare (few matches) | 7 | 60.5 | 79.3 | 2c158825e0 | c80c5828ab |
+| text, unmatched | 0 | 45.8 | 82.7 | 2c158825e0 | c80c5828ab |
+| text, common (fills the page) | 50 | 16.1 | 18.5 | 2c158825e0 | c80c5828ab |
+| text + date range | 42 | 23.6 | 27.3 | f1d75e2166 | 94439784f2 |
+| export file, unfiltered | 2000 | 118.5 | 174.1 | 95bdaef99d | c80c5828ab |
+| export file, text | 412 | 80.8 | 95.2 | 2c158825e0 | c80c5828ab |
 
 #### Tier 100000: 2222 items, 107000 movements, 25000 audit rows, 4000 loans, 25000 phone events
 
 | Query | Rows | Median ms | Max ms | SQL id | Plan id |
 |---|---|---|---|---|---|
-| unfiltered, 50 | 50 | 16.8 | 18.4 | 62dc228c1e | c80c5828ab |
-| unfiltered, 100 | 100 | 23.6 | 25.2 | 62dc228c1e | c80c5828ab |
-| deep cursor, 50 | 50 | 16.4 | 19.1 | 60f6ffdd02 | 6b9250a6a4 |
-| date range (a month) | 50 | 17.6 | 22.7 | cf9fcfe42d | 94439784f2 |
-| item | 50 | 9.8 | 11.4 | caf74707b3 | c734f00d4a |
-| actor | 50 | 19.6 | 24.5 | 7ed339a8cf | c80c5828ab |
-| stockArea | 50 | 92.6 | 101.2 | 977f35ab74 | cfba005778 |
-| location | 50 | 28.2 | 37.3 | 171e6522b6 | cfba005778 |
-| source=LOAN | 50 | 15.7 | 18.9 | fe7d680a09 | 607d89e9d2 |
-| changed=yes | 50 | 16.3 | 16.9 | e63e462373 | b988fef532 |
-| attention | 50 | 325.5 | 436.5 | 80ff3e3d7f | cc408b0679 |
-| text, rare (few matches) | 50 | 309.0 | 386.4 | 74d800dcb2 | c80c5828ab |
-| text, unmatched | 0 | 296.4 | 330.3 | 74d800dcb2 | c80c5828ab |
-| text, common (fills the page) | 50 | 20.7 | 26.0 | 74d800dcb2 | c80c5828ab |
-| text + date range | 50 | 38.7 | 58.4 | f1e5e3758b | 94439784f2 |
-| export file, unfiltered | 2000 | 279.7 | 289.6 | 62dc228c1e | c80c5828ab |
-| export file, text | 2000 | 529.3 | 789.0 | 74d800dcb2 | c80c5828ab |
+| unfiltered, 50 | 50 | 18.5 | 28.0 | 95bdaef99d | c80c5828ab |
+| unfiltered, 100 | 100 | 23.5 | 48.4 | 95bdaef99d | c80c5828ab |
+| deep cursor, 50 | 50 | 16.0 | 16.5 | 6fe9be9905 | 6b9250a6a4 |
+| date range (a month) | 50 | 17.6 | 21.5 | 763ce66a18 | 94439784f2 |
+| item | 50 | 9.5 | 11.3 | aa0623476c | c734f00d4a |
+| actor | 50 | 18.5 | 21.1 | 961b981250 | c80c5828ab |
+| stockArea | 50 | 94.2 | 155.5 | edbafb106b | cfba005778 |
+| location | 50 | 30.3 | 35.4 | 88ee1f5894 | cfba005778 |
+| source=LOAN | 50 | 19.0 | 19.7 | fe7d680a09 | 607d89e9d2 |
+| changed=yes | 50 | 13.2 | 15.8 | e63e462373 | b988fef532 |
+| attention | 50 | 321.7 | 365.3 | 8cf9acef35 | cc408b0679 |
+| text, rare (few matches) | 50 | 314.6 | 370.6 | 2c158825e0 | c80c5828ab |
+| text, unmatched | 0 | 293.9 | 355.9 | 2c158825e0 | c80c5828ab |
+| text, common (fills the page) | 50 | 27.1 | 31.8 | 2c158825e0 | c80c5828ab |
+| text + date range | 50 | 43.8 | 58.6 | f1d75e2166 | 94439784f2 |
+| export file, unfiltered | 2000 | 253.6 | 291.6 | 95bdaef99d | c80c5828ab |
+| export file, text | 2000 | 571.8 | 642.7 | 2c158825e0 | c80c5828ab |
 
 ### Distinct query plans (full EXPLAIN QUERY PLAN, by Plan id)
 
@@ -754,67 +755,67 @@ Method: 2 warm-up then 7 timed runs per query as ADMIN, through `activityPage` (
 
 | Query | Rows | Median ms | Max ms | SQL id | Plan id |
 |---|---|---|---|---|---|
-| unfiltered, 50 | 50 | 10.2 | 12.3 | 62dc228c1e | 22e4a5e256 |
-| unfiltered, 100 | 100 | 12.1 | 14.3 | 62dc228c1e | 22e4a5e256 |
-| deep cursor, 50 | 50 | 12.5 | 13.5 | 60f6ffdd02 | 22e4a5e256 |
-| date range (a month) | 50 | 9.6 | 11.7 | cf9fcfe42d | 22e4a5e256 |
-| item | 1 | 6.6 | 8.2 | caf74707b3 | 4fe04c81a1 |
-| actor | 50 | 10.2 | 11.1 | 7ed339a8cf | 22e4a5e256 |
-| stockArea | 50 | 9.8 | 13.0 | 977f35ab74 | 9ca63a8c21 |
-| location | 7 | 8.1 | 13.6 | 171e6522b6 | 9ca63a8c21 |
-| source=LOAN | 50 | 5.8 | 9.4 | fe7d680a09 | 64e8548ea6 |
-| changed=yes | 50 | 4.9 | 5.5 | e63e462373 | 6b73536ebe |
-| attention | 50 | 9.2 | 10.3 | 80ff3e3d7f | 72feb6976a |
-| text, rare (few matches) | 0 | 7.5 | 9.1 | 74d800dcb2 | 734f5a3b85 |
-| text, unmatched | 0 | 10.7 | 11.0 | 74d800dcb2 | 734f5a3b85 |
-| text, common (fills the page) | 50 | 13.9 | 14.2 | 74d800dcb2 | 734f5a3b85 |
-| text + date range | 1 | 15.7 | 17.3 | f1e5e3758b | 22e4a5e256 |
-| export file, unfiltered | 1485 | 37.4 | 44.2 | 62dc228c1e | 22e4a5e256 |
-| export file, text | 22 | 10.7 | 13.4 | 74d800dcb2 | 734f5a3b85 |
+| unfiltered, 50 | 50 | 13.5 | 15.7 | 95bdaef99d | 22e4a5e256 |
+| unfiltered, 100 | 100 | 11.0 | 13.8 | 95bdaef99d | 22e4a5e256 |
+| deep cursor, 50 | 50 | 10.8 | 11.6 | 6fe9be9905 | 22e4a5e256 |
+| date range (a month) | 50 | 10.0 | 12.0 | 763ce66a18 | 22e4a5e256 |
+| item | 1 | 7.1 | 7.5 | aa0623476c | 4fe04c81a1 |
+| actor | 50 | 8.3 | 9.2 | 961b981250 | 22e4a5e256 |
+| stockArea | 50 | 8.0 | 9.0 | edbafb106b | 9ca63a8c21 |
+| location | 7 | 8.7 | 10.0 | 88ee1f5894 | 9ca63a8c21 |
+| source=LOAN | 50 | 5.7 | 9.4 | fe7d680a09 | 64e8548ea6 |
+| changed=yes | 50 | 4.5 | 5.2 | e63e462373 | 6b73536ebe |
+| attention | 50 | 13.2 | 14.5 | 8cf9acef35 | 72feb6976a |
+| text, rare (few matches) | 0 | 10.4 | 11.7 | 2c158825e0 | 734f5a3b85 |
+| text, unmatched | 0 | 9.3 | 15.9 | 2c158825e0 | 734f5a3b85 |
+| text, common (fills the page) | 50 | 10.3 | 11.0 | 2c158825e0 | 734f5a3b85 |
+| text + date range | 1 | 10.5 | 17.5 | f1d75e2166 | 22e4a5e256 |
+| export file, unfiltered | 1485 | 35.7 | 51.5 | 95bdaef99d | 22e4a5e256 |
+| export file, text | 22 | 9.4 | 12.3 | 2c158825e0 | 734f5a3b85 |
 
 #### Tier 20000: 528 items, 21400 movements, 5000 audit rows, 800 loans, 5000 phone events
 
 | Query | Rows | Median ms | Max ms | SQL id | Plan id |
 |---|---|---|---|---|---|
-| unfiltered, 50 | 50 | 57.0 | 76.0 | 62dc228c1e | c77c161538 |
-| unfiltered, 100 | 100 | 59.7 | 80.5 | 62dc228c1e | c77c161538 |
-| deep cursor, 50 | 50 | 74.0 | 88.3 | 60f6ffdd02 | c77c161538 |
-| date range (a month) | 50 | 46.7 | 66.3 | cf9fcfe42d | c77c161538 |
-| item | 50 | 12.7 | 13.3 | caf74707b3 | c734f00d4a |
-| actor | 50 | 23.5 | 25.6 | 7ed339a8cf | 132f38b123 |
-| stockArea | 50 | 20.7 | 25.3 | 977f35ab74 | 95031aa7e0 |
-| location | 50 | 9.0 | 11.0 | 171e6522b6 | 95031aa7e0 |
-| source=LOAN | 50 | 21.4 | 22.4 | fe7d680a09 | 518e93c127 |
-| changed=yes | 50 | 35.3 | 40.5 | e63e462373 | 58b2484e14 |
-| attention | 50 | 97.1 | 107.9 | 80ff3e3d7f | 2611a40216 |
-| text, rare (few matches) | 7 | 32.7 | 33.6 | 74d800dcb2 | c77c161538 |
-| text, unmatched | 0 | 48.1 | 50.8 | 74d800dcb2 | c77c161538 |
-| text, common (fills the page) | 50 | 54.7 | 67.6 | 74d800dcb2 | c77c161538 |
-| text + date range | 42 | 49.9 | 54.5 | f1e5e3758b | c77c161538 |
-| export file, unfiltered | 2000 | 169.8 | 208.0 | 62dc228c1e | c77c161538 |
-| export file, text | 412 | 66.7 | 86.5 | 74d800dcb2 | c77c161538 |
+| unfiltered, 50 | 50 | 55.9 | 63.8 | 95bdaef99d | c77c161538 |
+| unfiltered, 100 | 100 | 57.6 | 77.2 | 95bdaef99d | c77c161538 |
+| deep cursor, 50 | 50 | 66.7 | 87.8 | 6fe9be9905 | c77c161538 |
+| date range (a month) | 50 | 48.6 | 52.0 | 763ce66a18 | c77c161538 |
+| item | 50 | 8.6 | 9.7 | aa0623476c | c734f00d4a |
+| actor | 50 | 22.1 | 23.2 | 961b981250 | 132f38b123 |
+| stockArea | 50 | 19.6 | 23.7 | edbafb106b | 95031aa7e0 |
+| location | 50 | 10.6 | 13.3 | 88ee1f5894 | 95031aa7e0 |
+| source=LOAN | 50 | 28.3 | 34.3 | fe7d680a09 | 518e93c127 |
+| changed=yes | 50 | 34.6 | 39.2 | e63e462373 | 58b2484e14 |
+| attention | 50 | 91.4 | 99.2 | 8cf9acef35 | 2611a40216 |
+| text, rare (few matches) | 7 | 31.8 | 36.0 | 2c158825e0 | c77c161538 |
+| text, unmatched | 0 | 29.4 | 30.4 | 2c158825e0 | c77c161538 |
+| text, common (fills the page) | 50 | 46.2 | 52.3 | 2c158825e0 | c77c161538 |
+| text + date range | 42 | 67.8 | 92.6 | f1d75e2166 | c77c161538 |
+| export file, unfiltered | 2000 | 162.1 | 214.7 | 95bdaef99d | c77c161538 |
+| export file, text | 412 | 53.9 | 55.3 | 2c158825e0 | c77c161538 |
 
 #### Tier 100000: 2222 items, 107000 movements, 25000 audit rows, 4000 loans, 25000 phone events
 
 | Query | Rows | Median ms | Max ms | SQL id | Plan id |
 |---|---|---|---|---|---|
-| unfiltered, 50 | 50 | 230.0 | 321.3 | 62dc228c1e | c77c161538 |
-| unfiltered, 100 | 100 | 250.4 | 300.7 | 62dc228c1e | c77c161538 |
-| deep cursor, 50 | 50 | 299.2 | 399.3 | 60f6ffdd02 | c77c161538 |
-| date range (a month) | 50 | 228.4 | 264.9 | cf9fcfe42d | c77c161538 |
-| item | 50 | 11.3 | 14.1 | caf74707b3 | c734f00d4a |
-| actor | 50 | 86.1 | 92.6 | 7ed339a8cf | 132f38b123 |
-| stockArea | 50 | 125.8 | 149.5 | 977f35ab74 | 95031aa7e0 |
-| location | 50 | 23.8 | 25.1 | 171e6522b6 | 95031aa7e0 |
-| source=LOAN | 50 | 85.3 | 115.5 | fe7d680a09 | 518e93c127 |
-| changed=yes | 50 | 147.9 | 155.4 | e63e462373 | 58b2484e14 |
-| attention | 50 | 532.5 | 606.4 | 80ff3e3d7f | 2611a40216 |
-| text, rare (few matches) | 50 | 168.3 | 172.2 | 74d800dcb2 | c77c161538 |
-| text, unmatched | 0 | 132.3 | 146.2 | 74d800dcb2 | c77c161538 |
-| text, common (fills the page) | 50 | 229.5 | 254.4 | 74d800dcb2 | c77c161538 |
-| text + date range | 50 | 199.0 | 256.1 | f1e5e3758b | c77c161538 |
-| export file, unfiltered | 2000 | 535.5 | 614.4 | 62dc228c1e | c77c161538 |
-| export file, text | 2000 | 398.9 | 436.0 | 74d800dcb2 | c77c161538 |
+| unfiltered, 50 | 50 | 204.6 | 262.2 | 95bdaef99d | c77c161538 |
+| unfiltered, 100 | 100 | 255.3 | 311.2 | 95bdaef99d | c77c161538 |
+| deep cursor, 50 | 50 | 268.4 | 335.0 | 6fe9be9905 | c77c161538 |
+| date range (a month) | 50 | 186.1 | 229.1 | 763ce66a18 | c77c161538 |
+| item | 50 | 10.0 | 13.1 | aa0623476c | c734f00d4a |
+| actor | 50 | 73.4 | 84.6 | 961b981250 | 132f38b123 |
+| stockArea | 50 | 111.8 | 137.6 | edbafb106b | 95031aa7e0 |
+| location | 50 | 24.0 | 28.4 | 88ee1f5894 | 95031aa7e0 |
+| source=LOAN | 50 | 75.4 | 92.5 | fe7d680a09 | 518e93c127 |
+| changed=yes | 50 | 161.9 | 207.8 | e63e462373 | 58b2484e14 |
+| attention | 50 | 509.7 | 587.8 | 8cf9acef35 | 2611a40216 |
+| text, rare (few matches) | 50 | 155.7 | 175.4 | 2c158825e0 | c77c161538 |
+| text, unmatched | 0 | 126.1 | 139.5 | 2c158825e0 | c77c161538 |
+| text, common (fills the page) | 50 | 246.3 | 264.5 | 2c158825e0 | c77c161538 |
+| text + date range | 50 | 192.8 | 223.5 | f1d75e2166 | c77c161538 |
+| export file, unfiltered | 2000 | 550.0 | 618.3 | 95bdaef99d | c77c161538 |
+| export file, text | 2000 | 413.1 | 472.6 | 2c158825e0 | c77c161538 |
 
 ### Distinct query plans (full EXPLAIN QUERY PLAN, by Plan id)
 

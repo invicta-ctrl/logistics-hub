@@ -24,8 +24,6 @@ type Key = typeof KEYS[number];
 type Filters = Partial<Record<Key, string>>;
 const CHANGED: Record<string, string> = { yes: "Changed stock", no: "Did not change stock" };
 
-/** Newest first, then by id: the Worker's own order, so merged pages never shuffle. */
-const newestFirst = (a: Entry, b: Entry) => (a.at ?? "") !== (b.at ?? "") ? ((a.at ?? "") < (b.at ?? "") ? 1 : -1) : a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 const entryCount = (count: number) => `${count.toLocaleString()} ${count === 1 ? "entry" : "entries"}`;
 
 export async function activityWorkspace(): Promise<void> {
@@ -171,15 +169,10 @@ export async function activityWorkspace(): Promise<void> {
       status: () => document.querySelector("#live-status"),
       onData: (page) => {
         if (current !== run) return;
-        if (olderLoaded) {
-          // Older pages stay below the refreshed first page; an entry on both keeps its newest version.
-          const fresh = new Set(page.events.map((entry) => entry.id));
-          entries = [...page.events, ...entries.filter((entry) => !fresh.has(entry.id))].sort(newestFirst);
-        } else {
-          entries = page.events;
-          nextCursor = page.nextCursor;
-        }
         loaded = true;
+        if (olderLoaded) return void reloadShown(page);
+        entries = page.events;
+        nextCursor = page.nextCursor;
         render();
       },
       onError: (error) => {
@@ -189,6 +182,33 @@ export async function activityWorkspace(): Promise<void> {
         if (!loaded) failed(`${error.message} Retrying automatically.`, false);
       }
     });
+  }
+
+  let reloads = 0;
+  /**
+   * The first page changed while older pages are shown: fetch those pages again too, so an entry that
+   * stopped matching the filters (a resolved record under "needs attention") does not linger below.
+   */
+  async function reloadShown(first: Page): Promise<void> {
+    const current = run;
+    const mine = ++reloads;
+    let list = first.events;
+    let cursor = first.nextCursor;
+    try {
+      while (cursor && list.length < entries.length) {
+        const next = await api<Page>(`/api/staff/activity?${query({ cursor })}`);
+        if (current !== run || mine !== reloads) return;
+        list = list.concat(next.events);
+        cursor = next.nextCursor;
+      }
+    } catch {
+      // Older pages could not be refreshed; show only what is known to be current.
+      [list, cursor, olderLoaded] = [first.events, first.nextCursor, false];
+    }
+    if (current !== run || mine !== reloads) return;
+    entries = list;
+    nextCursor = cursor;
+    render();
   }
 
   async function loadOlder(): Promise<void> {

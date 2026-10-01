@@ -162,3 +162,27 @@ test("public routes fit every required viewport class", async ({ page }) => {
     }
   }
 });
+
+test("activity: a live refresh also refreshes the older pages on screen, so an entry that stopped matching leaves", async ({ page }) => {
+  const entry = (id: string, minute: number) => ({ id: `phone:${id}`, correlationId: id, at: `2026-10-01T02:${String(minute).padStart(2, "0")}:00.000Z`, source: "PHONE", type: "PHONE_RETURN",
+    summary: `A phone return of 1 piece of Item ${id} was held for staff.`, actor: "Self-service", actorId: "SELF_SERVICE", itemId: `ITM-${id}`, itemName: `Item ${id}`, unit: "piece",
+    change: 0, stockChanged: false, before: null, after: null, reason: null, note: null, attention: true });
+  let version = 1;
+  await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", mustChangePassword: false, recovery: null, selfServiceReviews: 0 }) }));
+  await page.route("**/api/staff/activity?*", (route) => {
+    const url = new URL(route.request().url());
+    expect(url.searchParams.get("attention")).toBe("1");
+    // The older page loses D once staff resolve it: it no longer needs attention.
+    const body = url.searchParams.get("cursor") ? { events: version === 1 ? [entry("C", 3), entry("D", 2)] : [entry("C", 3)], nextCursor: null } : { events: [entry("A", 5), entry("B", 4)], nextCursor: "2026-10-01T02:04:00.000Z|phone:B" };
+    return route.fulfill({ contentType: "application/json", headers: { etag: `"v${version}"` }, body: JSON.stringify(body) });
+  });
+  await page.goto("/staff/activity?attention=1");
+  await expect(page.locator(".activity-row")).toHaveCount(2);
+  await page.getByRole("button", { name: "Load older" }).click();
+  await expect(page.locator(".activity-row")).toHaveCount(4);
+  version = 2;
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(page.locator(".activity-row")).toHaveCount(3);
+  await expect(page.locator(".activity-row", { hasText: "Item D" })).toHaveCount(0);
+  await expect(page.locator("#activity-count")).toHaveText("3 entries");
+});

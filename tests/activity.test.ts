@@ -305,6 +305,20 @@ describe("activity read model", () => {
     expect((await feed("source=PHONE&type=REVIEW_RESOLVED")).events.map((event) => event.id)).toEqual(["resolve:PH-DONE"]);
   });
 
+  it("says what staff decided on a held phone record: applied, confirmed, dismissed or only checked", async () => {
+    const by = (minute: number) => ({ resolved_at: `2026-09-30T06:0${minute}:00.000Z`, resolved_by: "ACC-1" });
+    phone("PH-A", "ITM-R", "TAKE", "2026-09-30T01:00:00.000Z", { applied: 1, review: "VOLUME", ...by(0) });
+    phone("PH-C", "ITM-T", "RETURN", "2026-09-30T02:00:00.000Z", { applied: 1, review: "RETURN_CHECK", ...by(1) });
+    phone("PH-D", "ITM-T", "RETURN", "2026-09-30T03:00:00.000Z", { applied: 0, review: "RETURN_CHECK", ...by(2) });
+    phone("PH-K", "ITM-R", "TAKE", "2026-09-30T04:00:00.000Z", { applied: 1, review: "COUNT_OVERLAP", ...by(3) });
+    expect((await feed("type=REVIEW_RESOLVED")).events.map((event) => [event.id, event.summary])).toEqual([
+      ["resolve:PH-K", "Staff One marked a phone take of 1 piece of Rice 5kg as checked; it had already been recorded."],
+      ["resolve:PH-D", "Staff One dismissed a phone return of 1 piece of Folding Table; nothing changed."],
+      ["resolve:PH-C", "Staff One confirmed a phone return of 1 piece of Folding Table; the loan is closed."],
+      ["resolve:PH-A", "Staff One applied a phone take of 1 piece of Rice 5kg that was held for staff."]
+    ]);
+  });
+
   it("flags an item whose balance went below zero, across every item and any age, and clears when a count fixes it", async () => {
     movement("ITM-R", "STOCK_IN", 5, "2026-06-01T00:00:00.000Z");
     movement("ITM-R", "STOCK_OUT", -8, "2026-06-02T00:00:00.000Z", { id: "MOV-SHORT" });
@@ -539,7 +553,8 @@ describe("activity export (CSV)", () => {
     expect(rows).toHaveLength(2001);
     expect(rows[0]![14]).toBe("mov:MOV-CAP-2001");
     expect(rows[1999]![14]).toBe("mov:MOV-CAP-2");
-    expect(rows[2000]).toEqual(["More entries match than one file holds (2,000). This file has the newest; narrow the filters, for example the dates, to export the rest."]);
+    // The notice keeps the fixed columns, so a strict importer still reads every row.
+    expect(rows[2000]).toEqual(["", "More entries match", "One file holds the newest 2,000 entries. Narrow the filters, for example the dates, to export the rest.", ...Array(12).fill("")]);
     expect(JSON.parse(exportAudits()[0]!.details)).toEqual({ rows: 2000, truncated: true, filters: {} });
   });
 

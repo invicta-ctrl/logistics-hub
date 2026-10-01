@@ -165,7 +165,10 @@ function arms(admin: boolean): Arm[] {
       where: "e.resolved_at IS NOT NULL",
       cols: {
         ...base, ...item, sid: "'resolve:' || e.id", k: utc("e.resolved_at"), src: "'PHONE'", type: "'REVIEW_RESOLVED'", actorId: "e.resolved_by", actor: "r.display_name",
-        qty: "e.quantity", note: "e.resolution_note", corr: "COALESCE(e.loan_id, e.id)", review: "e.review"
+        qty: "e.quantity", note: "e.resolution_note", corr: "COALESCE(e.loan_id, e.id)", review: "e.review",
+        // What staff decided, from facts the resolution froze: a COUNT_OVERLAP record was applied at sync and only checked;
+        // any other held record is applied (or matched) now, or dismissed and still unapplied.
+        outcome: "e.event_type || CASE WHEN e.review = 'COUNT_OVERLAP' THEN ':CHECKED' WHEN e.applied = 1 THEN ':ACCEPTED' ELSE ':DISMISSED' END"
       }
     }
   ];
@@ -280,7 +283,13 @@ function toEvent(row: Row): ActivityEvent {
     LOAN_DAMAGED: () => `${actor} closed a loan of ${item} as damaged; nothing went back to stock.`,
     LOAN_LOST: () => `${actor} closed a loan of ${item} as lost; nothing went back to stock.`,
     LOAN_CLOSED: () => `${actor} closed a loan of ${item}.`,
-    REVIEW_RESOLVED: () => `${actor} resolved a phone record for ${item}.`,
+    REVIEW_RESOLVED: () => {
+      const [kind, decision] = String(row.outcome).split(":");
+      const what = `a phone ${String(kind).toLowerCase()} of ${amount}${item}`;
+      if (decision === "CHECKED") return `${actor} marked ${what} as checked; it had already been recorded.`;
+      if (decision === "DISMISSED") return `${actor} dismissed ${what}; nothing changed.`;
+      return kind === "RETURN" ? `${actor} confirmed ${what}; the loan is closed.` : `${actor} applied ${what} that was held for staff.`;
+    },
     ITEM_CREATED: () => `${actor} added ${item} to the catalog.`,
     ITEM_UPDATED: () => `${actor} edited ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`,
     REORDER_OPENED: () => `${actor} put ${item} on the restock list.`,
@@ -344,7 +353,9 @@ function exportRow(event: ActivityEvent): Array<string | number | null> {
 /** UTF-8 with a byte-order mark and CRLF lines, so Excel opens it as it is; fixed columns; every text cell quoted and guarded. */
 export function activityCsv(events: ActivityEvent[], truncated: boolean): string {
   const lines = [EXPORT_COLUMNS.map(cell), ...events.map((event) => exportRow(event).map(cell))].map((row) => row.join(","));
-  if (truncated) lines.push(cell(`More entries match than one file holds (${EXPORT_ROWS.toLocaleString("en-US")}). This file has the newest; narrow the filters, for example the dates, to export the rest.`));
+  // The notice is a row of the same fixed columns, so a strict importer still reads every line.
+  if (truncated) lines.push(EXPORT_COLUMNS.map((_, column) => cell(column === 1 ? "More entries match" : column === 2
+    ? `One file holds the newest ${EXPORT_ROWS.toLocaleString("en-US")} entries. Narrow the filters, for example the dates, to export the rest.` : null)).join(","));
   return `\uFEFF${lines.join("\r\n")}\r\n`;
 }
 
