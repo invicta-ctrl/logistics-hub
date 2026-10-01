@@ -1,6 +1,6 @@
 # Current Work Pointer — Logistics Hub
 PROGRAM: Logistics Hub
-MILESTONE: PART-05_ACTIVITY_ACCOUNTABILITY (accepted; stage 5.1 Activity API/read model corrected twice per owner decisions A and B(ii), Sentinel F1/F2 and AC-A7 evidence in docs/ACTIVITY_PERF.md, checkpointed locally, awaiting Sentinel review; no UI yet)
+MILESTONE: PART-05_ACTIVITY_ACCOUNTABILITY (accepted; stage 5.1 Activity API/read model corrected twice per owner decisions A and B(ii), Sentinel F1/F2 and AC-A7 evidence in docs/ACTIVITY_PERF.md, checkpointed locally; required browser suites 10/10 and 20/20 passed; awaiting Sentinel's final gate result and production counts; no UI yet)
 STATUS: PART_04_10_COMPLETE (2026-09-30): public pages load fresh from the network (only /self-service opens from the phone's cache), merged to main and deployed by Workers Builds (after Part 4.9's home banner, 4.8's Self-Service photo, 4.7's light/dark switch and 4.6's visual cleanup). Part 4 (with 4.5–4.10) is closed by Earl's confirmation on 2026-10-01 (owner confirmation, not an agent test run); it no longer gates Part 5.
 BRANCH: slice/part-05-activity (the one active slice; local only, not pushed; carries the acceptance docs checkpoint).
 ACTIVE_WRITER: none after the second correction checkpoint (forge yields); claim before editing
