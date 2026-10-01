@@ -14,6 +14,7 @@ const UNIT_ID = /^OU-[0-9a-f-]{36}$/;
 const KEY = /^[A-Za-z0-9-]{8,64}$/;
 
 type Unit = { id: string; condition: string | null; closedAt: string | null; closeKind: string | null };
+const CLOSED = "That unit is no longer open. Refresh to see the latest.";
 
 /** Only an active open-unit Consumable is tracked (items columns, alias i). */
 export const TRACKED = "i.item_type = 'Consumable' AND i.consumption_mode = 'OPEN_UNIT' AND i.status <> 'INACTIVE'";
@@ -53,40 +54,47 @@ export async function openUnitAction(db: D1Database, actor: Actor, itemId: strin
   if (!unit) throw new InputError(404, "That open unit was not found. Refresh to see the latest.");
   // A repeated Empty (a retry or a double tap) is answered with the state it already produced.
   if (action === "empty" && unit.closeKind === "EMPTY") return summary(db, itemId);
-  if (unit.closedAt) throw new InputError(409, "That unit is no longer open. Refresh to see the latest.");
 
   if (action === "use") {
     const key = typeof record.key === "string" && KEY.test(record.key) ? record.key : null;
     if (!key) throw new InputError(400, "Missing request key.");
-    // Keyed by the request, so a retry or double tap records one use.
+    // Keyed by the request, so a retry or double tap records one use; written only while the unit is still open.
     await db.batch([
       db.prepare(`INSERT OR IGNORE INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
         SELECT ?1, ?2, ?3, 'UNIT_USED', 'ITEM', ?4, json_object('unitId', ?5) WHERE EXISTS (SELECT 1 FROM open_units WHERE id = ?5 AND item_id = ?4 AND closed_at IS NULL)`)
         .bind(`USE-${key}`, now, actor.accountId, itemId, unitId),
       db.prepare(`${BUMP_REVISION} AND changes() > 0`)
     ]);
-    return summary(db, itemId);
+    // Found for a first write and for a retry alike; missing when the unit closed first (someone emptied or corrected it).
+    const recorded = await db.prepare("SELECT entity_id AS itemId FROM audit_log WHERE id = ?").bind(`USE-${key}`).first<string>("itemId");
+    if (recorded === itemId) return summary(db, itemId);
+    throw new InputError(409, recorded ? "That request was already used for another item. Please try again." : CLOSED);
   }
+  if (unit.closedAt) throw new InputError(409, CLOSED);
 
   if (action === "condition") {
     const condition = record.condition;
     if (typeof condition !== "string" || !(OPEN_UNIT_CONDITIONS as readonly string[]).includes(condition)) throw new InputError(400, "Choose Plenty, Half or Low.");
-    await guarded(db.batch([
+    const [update] = await guarded(db.batch([
       db.prepare("UPDATE open_units SET condition = ?1, condition_at = ?2, condition_by = ?3 WHERE id = ?4 AND closed_at IS NULL AND condition IS NOT ?1")
         .bind(condition, now, actor.accountId, unitId),
       audit(db, actor.accountId, "UNIT_CONDITION", "ITEM", itemId, { unitId, condition: { from: unit.condition, to: condition } }, true),
       db.prepare(`${BUMP_REVISION} AND changes() > 0`)
     ]));
+    // Nothing changed: either it already had this condition, or the unit closed meanwhile.
+    if (!update!.meta.changes && await db.prepare("SELECT closed_at FROM open_units WHERE id = ?").bind(unitId).first<string>("closed_at")) throw new InputError(409, CLOSED);
     return summary(db, itemId);
   }
 
   if (action === "correct") {
-    await guarded(db.batch([
+    const [update] = await guarded(db.batch([
       db.prepare("UPDATE open_units SET closed_at = ?1, closed_by = ?2, close_kind = 'CORRECTED' WHERE id = ?3 AND closed_at IS NULL").bind(now, actor.accountId, unitId),
       // An open count above on-hand can only be a stored fault; closing a unit is how staff clear it.
       audit(db, actor.accountId, "UNIT_CORRECTED", "ITEM", itemId, { unitId, ...(item.open > item.onHand ? { resolvedDiscrepancy: true } : {}) }, true),
       db.prepare(`${BUMP_REVISION} AND changes() > 0`)
     ]));
+    // Someone else emptied or corrected it a moment earlier.
+    if (!update!.meta.changes) throw new InputError(409, CLOSED);
     return summary(db, itemId);
   }
 
@@ -107,7 +115,7 @@ export async function openUnitAction(db: D1Database, actor: Actor, itemId: strin
   ]));
   const closed = await db.prepare("SELECT close_kind AS closeKind FROM open_units WHERE id = ?").bind(unitId).first<string>("closeKind");
   if (closed === "EMPTY") return summary(db, itemId);
-  if (closed) throw new InputError(409, "That unit is no longer open. Refresh to see the latest.");
+  if (closed) throw new InputError(409, CLOSED);
   throw new InputError(409, "Nothing on hand to mark empty. Record a count first.");
 }
 

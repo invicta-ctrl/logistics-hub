@@ -133,6 +133,19 @@ describe("mark empty", () => {
     expect((await unitAction(id, { action: "correct", unitId: unit })).status).toBe(409);
   });
 
+  it("refuses a use, a condition or a correction that lands just after someone else closed the unit, and records none of them", async () => {
+    const id = await paper(3);
+    for (const body of [{ action: "use", key: crypto.randomUUID() }, { action: "condition", condition: "LOW" }, { action: "correct" }]) {
+      const unit = await open(id);
+      meanwhile(() => unitAction(id, { action: "empty", unitId: unit }));
+      const late = await unitAction(id, { ...body, unitId: unit });
+      expect(late.status, body.action).toBe(409);
+      expect((await late.json() as { error: string }).error).toBe("That unit is no longer open. Refresh to see the latest.");
+    }
+    expect(sqlite.prepare("SELECT action FROM audit_log WHERE entity_id = ? AND action IN ('UNIT_USED', 'UNIT_CONDITION', 'UNIT_CORRECTED')").all(id)).toEqual([]);
+    expect(onHand(id)).toBe(0);
+  });
+
   it("produces one deduction when two staff mark the same unit empty at once", async () => {
     const id = await paper(1);
     const unit = await open(id);
