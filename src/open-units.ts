@@ -10,7 +10,8 @@ import { type Actor, BUMP_REVISION, InputError, audit, guarded, openUnitsOf } fr
 
 const ACTIONS = ["open", "use", "condition", "empty", "correct"] as const;
 const UNIT_ID = /^OU-[0-9a-f-]{36}$/;
-const KEY = /^[A-Za-z0-9-]{8,80}$/;
+/** A request key; a use's entry ID is "USE-" and its key, which must fit an Activity cursor (80 characters). */
+const KEY = /^[A-Za-z0-9-]{8,64}$/;
 
 type Unit = { id: string; condition: string | null; closedAt: string | null; closeKind: string | null };
 

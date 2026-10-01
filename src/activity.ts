@@ -26,7 +26,8 @@ const ACTIVITY_TYPES = Object.keys(ACTIVITY_TITLES);
 /** Catalog and restock fields an audit entry may name; anything else in its JSON is never read. */
 const FIELDS: Record<string, string> = {
   name: "name", aliases: "aliases", category: "category", itemType: "type", unit: "unit", status: "status", storageLocation: "location", reorderThreshold: "restock level",
-  lendingAudience: "lending audience", needsReview: "review flag", notes: "notes", stockArea: "stock area", expiresOn: "expiry date", desiredQuantity: "quantity to restock", note: "note"
+  lendingAudience: "lending audience", needsReview: "review flag", notes: "notes", stockArea: "stock area", expiresOn: "expiry date", consumptionMode: "how it is used",
+  desiredQuantity: "quantity to restock", note: "note"
 };
 const MAX_LIMIT = 100;
 const SENTINEL = "0000-01-01T00:00:00.000Z";

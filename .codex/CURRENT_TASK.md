@@ -1,4 +1,13 @@
-# Current Bounded Task — PART-05 core (Activity + Accountability), stages 5.1–5.4
+# Current Bounded Task — PART-05B Open-Unit Tracking (A12), OU-1 to OU-5
+INTENT: finish Part 5 (A12) and hand it to release
+OBJECTIVE: open-unit Consumables (schema, invariants, staff workflow, reconciliation, Activity/export, item-driven phone Use, polish) with every local gate green; a PR to `main`, released only after its migrations are applied to production with Earl's authorization.
+SCOPE: `migrations/0017_open_units.sql`, `src/open-units.ts` (Worker actions), `src/open-unit-panel.ts` (shared staff controls), `src/inventory.ts` (mode, invariant messages, count reconciliation, item detail), `src/self-service.ts` (USE events), `src/activity.ts` (open-unit entries), `src/catalog-policy.ts` (modes, conditions, `selfServiceAction()`), `src/staff.ts`, `src/stock-workspace.ts`, `src/stock.ts`, `src/movement-form.ts`, `src/self-service-app.ts`, `src/offline-queue.ts`, `src/self-service-review.ts`, `src/styles.css`, tests (`tests/open-units.test.ts` and additions in the activity, self-service, migration, offline-queue, browser and Worker + D1 suites), docs.
+EXCLUDED: applying any migration to production, merging to `main` before that, deploy, new dependencies. Never reapply 0015.
+STATUS: CODE COMPLETE on slice/part-05b-open-units (Claude Cloud, 2026-10-01). Details and gate results: `.codex/SESSION_HANDOFF.md` (top section). Release blocked on production migrations 0016 + 0017 (Earl's authorization).
+
+---
+
+# Previous task — PART-05 core (Activity + Accountability), stages 5.1–5.4 (released)
 INTENT: finish Part 5 core and hand it to verification and release
 OBJECTIVE: Activity read model and API (5.1), `/staff/activity` (5.2), safe CSV export (5.3), polish and regression (5.4); every local gate green; a PR to `main` for Sentinel and Earl.
 SCOPE: `src/activity.ts`, `src/activity-workspace.ts`, the routes in `src/worker.ts`, shared labels in `src/catalog-policy.ts`, `live()` / `preservingFocus` in `src/ui.ts`, the nav link and item-history link in `src/staff.ts`, the compact app bar in `src/styles.css`, `tests/activity.test.ts`, `tests/activity-perf.test.ts`, `tests/worker-browser/worker-live.spec.ts`, index-only migration `0016` (not applied to production; optional), docs (`docs/ACTIVITY_PERF.md`, `docs/PRODUCT_REFERENCE.md`, `docs/DEPLOYMENT.md`, `.codex/*`).

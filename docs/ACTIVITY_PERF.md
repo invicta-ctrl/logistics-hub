@@ -29,6 +29,10 @@ The earlier estimate, kept for provenance: `docs/MIGRATION_STATUS.md` (2026-09-2
 
 `migrations/0016_activity_feed_index.sql` (five indexes, no data change) is applied to every disposable in-memory database that `migratedD1()` builds, so the feature tests and run 1 use the indexes. It is NOT applied to production D1: on 2026-10-01 none of its five index names existed there (see above). Applying it needs its own authorization (docs/DEPLOYMENT.md); the code does not depend on it. Run 2 measures the query as production runs it until then.
 
+## Part 5B recheck (2026-10-01)
+
+Part 5B changed the SQL slightly: the phone arm also lists `USE` events, an emptied open unit is typed from `related_entity_type`, and the audit arm also answers the Stock source (open-unit steps). Migration `0017` re-creates `idx_activity_phone` with the phone arm's new predicate, so the partial index still matches it. Rerun of tiers 1,000 and 20,000 with `0016` and `0017` applied (same container): every page shape returns the same rows and the **same plan id** as run 1 below, only the SQL ids changed; timings are of the same shape (1,000 tier: 3 to 12 ms per page, 39 ms for an export of everything). Between applying `0017` and merging, the code already live cannot use the re-created phone index (its predicate differs), so it sorts the phone events per request: 21 rows in production on 2026-10-01, negligible. The new statements are on the item sheet only (open units, uses recorded, units used up), each an indexed lookup for one item.
+
 ## Results and decision
 
 - **What changed since the first record (Stage 5.3), and why it was re-measured.** Each movement's balance after it was a correlated `SUM` per row over its item's earlier movements; it now joins the `running` balance CTE that the same statement already computed for its items (the "needs attention" check), so one window pass serves both. The per-row subquery was quadratic in an item's history and made a 5,000-row export of one busy item take about 6 s; the join makes it linear. The SQL and plan ids therefore all changed; the row counts did not.

@@ -9,6 +9,11 @@ EXCLUSIONS: no merge to `main`, no push to `main`, no deploy, no production or p
 CONSTRAINTS: public repo, so no PII, credentials, provider IDs, private exports or raw logs in commits. One writer at a time (see "Writer rule"). Smallest durable change; delete replaced code.
 STOP CONDITIONS: dirty or unknown state, a drifted branch, a refused command or tool, a secret in output, a failing gate. Preserve evidence and report; do not retry a refused command by another route.
 
+## Status update (Claude Cloud, 2026-10-01, later): Part 5 core released; Part 5B code complete
+
+- Part 5 core is on `main` and live (PR #3 and the follow-up PR #4). This WIP branch is merged and only needs deleting.
+- Part 5B (OU-1 to OU-5) is code complete on `slice/part-05b-open-units`, with a PR to `main`. It must not be merged before production migrations `0016` and `0017` are applied with Earl's authorization (`docs/DEPLOYMENT.md`, "Part 5B"). Current state: `.codex/SESSION_HANDOFF.md` (top section).
+
 ## Status update (Claude Cloud, 2026-10-01): Part 5 core is code complete
 
 - Stages 5.1–5.4 are done on this branch and every local gate is green (see `.codex/SESSION_HANDOFF.md`, top section, and `.codex/CURRENT.md`). A pull request from this branch to `main` is open for Sentinel and Earl; nothing was merged, pushed to `main` or deployed.

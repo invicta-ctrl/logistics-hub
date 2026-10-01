@@ -6,7 +6,8 @@ Part 4.5. How phone self-service works, where each behaviour lives, and how to c
 
 One permanent QR code opens `https://logistics.hausc.org/self-service`. A student or staff member uses **their own phone** to:
 
-- **Take** a consumable (water, paper),
+- **Take** a consumable (water, a pen),
+- **Use** an open-unit consumable (a ream of paper, a bottle of alcohol) with no amount, changing no stock (Part 5B),
 - **Borrow** equipment (with the Part 4 identity rules and a photo),
 - **Return** what they borrowed (good, damaged or lost),
 - see **My activity**.
@@ -40,7 +41,8 @@ After one online visit, the app is installed on the phone (a PWA) and keeps work
 
 There is no per-item switch: the choice staff make (Inventory → item → **Edit details → Borrow or consume**, stored as the item type Loanable or Consumable) decides, and eligible items are offered automatically. (`items.self_service` from migration 0015 is no longer read; dropping it needs its own migration.) `selfServiceAction(item)` is the one rule:
 
-- **TAKE**: Consumable, Active, reviewed.
+- **TAKE**: Consumable used as a whole unit (`items.consumption_mode = 'WHOLE_UNIT'`, the default), Active, reviewed.
+- **USE**: Consumable opened and used gradually (`consumption_mode = 'OPEN_UNIT'`, migration 0017), Active, reviewed. The phone shows Use instead of Take; the person never chooses.
 - **BORROW**: Loanable, Active, reviewed and listed on the Lending Hub (so it has an audience). A `USC_STAFF_ONLY` audience allows USC use only.
 - Anything else is not offered.
 
@@ -59,7 +61,7 @@ The phone keeps one full snapshot in IndexedDB and refreshes it on launch, every
 The wire part (sent unchanged on every retry):
 
 ```
-{ v: 1, id: UUID, seq: 1, 2, 3 …, type: TAKE | BORROW | RETURN, itemId, quantity (1–30),
+{ v: 1, id: UUID, seq: 1, 2, 3 …, type: TAKE | BORROW | USE | RETURN, itemId, quantity (1–30; always 1 for USE),
   occurredAt: ISO (phone clock), catalogRevision,
   person: { name, studentId? },
   purpose?, reason?, returnBy?            // BORROW (Individual: name + student ID; USC: name + reason)
@@ -81,6 +83,7 @@ One row per event id: who/what/when, `device_time`, `sent_at`, `occurred_at` (bu
 | --- | --- |
 | TAKE | an `inventory_movements` STOCK_OUT, reason CONSUMED, `related_entity_type = 'SELF_SERVICE'`, key `ss:<id>` |
 | BORROW | a loan `LN-SS-<id>` plus its LOAN_OUT movement (via `lendStatements`), photo in R2 |
+| USE | nothing: the event row (`applied = 1`, no movement) is the record that some of an open unit was used. Not counted against the hourly volume and never beside a count, because it moves no stock. A held Use (late and no longer eligible, or an implausible clock) is accepted or dismissed by staff and still changes nothing |
 | RETURN | nothing yet: it is held with its photo (`RETURN_CHECK`). Staff confirming it (`resolveReview` `match`) closes the loan via `closeStatements` (LOAN_RETURN only for a good return), which is what puts stock back |
 
 Records made by phones carry the actor id `SELF_SERVICE`; staff screens show it as "Self-service".
@@ -117,7 +120,7 @@ Answer: `{ revision, results: [{ id, outcome, message?, duplicate? }] }`:
 
 Self-service events are **physical facts**. The Worker preserves every valid event and never uses last-write-wins.
 
-1. **Eligibility.** Live and ineligible → `rejected` with a clear message. Late and ineligible → **held** (`NOT_ELIGIBLE`, or `USC_ONLY` for an individual borrow of a USC-only item), never applied: claiming an earlier time can never unlock a staff-only item.
+1. **Eligibility.** The item decides the action: a TAKE of an open-unit item, or a USE of a whole-unit one, is ineligible. Live and ineligible → `rejected` with a clear message. Late and ineligible → **held** (`NOT_ELIGIBLE`, or `USC_ONLY` for an individual borrow of a USC-only item), never applied: claiming an earlier time can never unlock a staff-only item.
 2. **Quantity never refuses a self-service event.** The phone keeps normal use within its estimate and warns when someone records more ("staff will be asked to recount"); the movement is posted anyway, because the item physically left. Staff stock movements keep their strict non-negative guard unchanged.
 3. **Volume.** More than 30 self-service units of one item in an hour → further takes and borrows are **held** (`VOLUME`). This bounds what an abusive client can do to the records; staff apply or dismiss. The check reads before it writes, so two requests at the same instant can both pass it; the request limits (section 11) bound that.
 4. **Counts are observations.** A physical count recorded more than 5 minutes after an event already saw its effect, so the event's movement is stored with status `SUPERSEDED` (kept as evidence, excluded from on-hand). This is decided **inside the INSERT** (`countAwareStatus()`), so a count saved a moment earlier is always seen. Within 5 minutes of a count → posted and flagged `COUNT_OVERLAP`.

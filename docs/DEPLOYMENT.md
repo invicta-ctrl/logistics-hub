@@ -94,6 +94,16 @@ After the push deploys: `npm run admin -- verify https://logistics.hausc.org`, t
 
 Part 5 (Activity and exports) needs no migration and no binding: its code reads existing tables only, so `main` can be pushed without touching D1. Migration `0016` adds five read indexes and nothing else; production works without it (`docs/ACTIVITY_PERF.md`: about 10 ms per page at today's size) and it matters only as the ledger grows. Applying it is a separate, explicitly authorized step (bookmark, list, apply once, then check the five index names in `sqlite_master`), never bundled into a release. After the push deploys: as Staff, open **Activity**, search, filter and **Load older**; export the whole list once with **Export CSV** (if the export fails with a resource error, the Workers plan's CPU limit is the likely cause: narrow the dates and see `docs/ACTIVITY_PERF.md`); as an Owner, confirm the export appears under **Accounts & exports**; signed out, `POST /api/staff/activity/export` answers 401 or 403.
 
+Part 5B (Open-Unit Tracking) **needs migration `0017` before its code reaches `main`**: the code reads `items.consumption_mode` and `open_units` on every inventory and phone catalog request. `0017` is safe for the code already live (Part 5 core): it adds a column with a default (`WHOLE_UNIT` for every item, nothing reclassified), the empty `open_units` table, triggers that do nothing while no unit is open, and rebuilds `self_service_events` with the same columns, rows, indexes and resolution trigger so its `CHECK` also accepts `USE`. No quantity or movement is touched. `wrangler d1 migrations apply` applies pending migrations in order, so `0016` (Part 5's read indexes) goes first. Order, from the release commit, with Earl's explicit authorization:
+
+```bash
+npx wrangler d1 time-travel info DB                # record the bookmark (rollback point) before anything changes
+npx wrangler d1 migrations list DB --remote        # must list exactly 0016_activity_feed_index.sql and 0017_open_units.sql
+npx wrangler d1 migrations apply DB --remote       # applies both, once; never re-run 0015
+```
+
+Then, read-only: `SELECT COUNT(*) FROM items WHERE consumption_mode <> 'WHOLE_UNIT'` is 0; `SELECT COUNT(*) FROM open_units` is 0; `self_service_events` has the same row count as before; `sqlite_master` lists `open_units`, the four `open_units`/`items`/`inventory_movements` triggers, `self_service_events_resolved_final` and the six `self_service_events` indexes; the on-hand total over `inventory_balances` is unchanged. Only then merge the Part 5B pull request to `main`. Rollback before the merge: restore the bookmark (`npx wrangler d1 time-travel restore DB --bookmark=<bookmark>`), which also discards anything recorded since. After the deploy: in Inventory, set a ream-type Consumable to **Open and use gradually**, open a unit, record a use, mark it empty (on hand −1), and check the item's History and Activity; on a phone, the item shows **Use**.
+
 ## Operating notes
 
 - The public Lending Hub is empty until staff publish items from *Ready to list*. This is fail-closed by design.

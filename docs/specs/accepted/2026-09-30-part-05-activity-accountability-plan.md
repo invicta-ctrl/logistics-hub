@@ -275,3 +275,14 @@ Unit/data: every invariant above, including retry and concurrent-empty cases, co
 ## Status
 
 **ACCEPTED** 2026-10-01 (see the Acceptance record). No branch, migration, code or production change has been made by the acceptance itself.
+
+**Part 5 core: released** 2026-10-01 (see the last owner decision above and `docs/DEPLOYMENT.md`).
+
+**Part 5B (A12, OU-1 to OU-5): code complete on `slice/part-05b-open-units`, not on `main`** (Claude Cloud, 2026-10-01, under Earl's "continue and complete the full part 5 plan"; MausBot was not used, as for Part 5 core). Final schema and decisions taken at implementation, all within section 4:
+- `migrations/0017_open_units.sql`: `items.consumption_mode` (`WHOLE_UNIT` default, `OPEN_UNIT`); `open_units` (id, item, request key, opened at/by, optional condition at/by, closed at/by, close kind, movement); a rebuilt `self_service_events` whose `CHECK` also accepts `USE`. No quantity column anywhere.
+- Invariants 6 and 8 are enforced by **database triggers** for every writer, not only by the new code: an open unit cannot be inserted beyond on-hand, a POSTED negative movement cannot leave open units above on-hand, an item with open units cannot become Whole unit, Loanable or Inactive, and an open unit can be neither reopened nor deleted.
+- A unit closes once, as `EMPTY` (with its −1 STOCK_OUT, `related_entity_type = 'OPEN_UNIT'`, key `ou-empty:<unit>`), `CORRECTED` ("Not really open", no movement) or `COUNTED` (a count below the open units that the user explicitly asked to reconcile; the oldest open units close in the count's own batch, linked to its movement).
+- Activity: open, use, condition, correction and count closure are audit entries shown as Stock entries with change 0; an emptied unit is `UNIT_EMPTIED` (−1); a phone use is `PHONE_USE` (0). "Uses recorded" and "units used up" are separate types and separate figures on the item; nothing estimates content used.
+- Phone Use: `selfServiceAction()` derives Borrow, Take or Use from the item; a `USE` event has quantity 1 by rule (no amount asked), no movement, no volume or count-overlap check, and goes through the same queue and sync. The phone app never had a user-facing Borrow/Consume choice beyond the item's own action; an old address that names another action now opens the item's own sheet.
+- Verified on the candidate: typecheck, 142 unit tests (invariants, concurrency, retries, migration on live-shaped data), the mocked browser suite, the Worker + D1 suite (which applies `0017` to a throwaway local D1 through `wrangler d1 migrations apply`), privacy, migration and catalog checks, `wrangler deploy --dry-run`, and the touched pages at 390, 768 and 1366 px with no horizontal overflow.
+- **Release is blocked on production migrations `0016` and `0017`**, which need Earl's explicit authorization and must be applied before the pull request is merged (`docs/DEPLOYMENT.md`, Part 5B).
