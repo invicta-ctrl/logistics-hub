@@ -92,6 +92,8 @@ The trigger was added to `0015` on 2026-09-29, before the migration reached prod
 
 After the push deploys: `npm run admin -- verify https://logistics.hausc.org`, then open `https://logistics.hausc.org/self-service` on a phone (it should say there is nothing to take or borrow yet), `…/manifest.webmanifest` (`application/manifest+json`) and `…/sw.js` (`Cache-Control: no-cache`). Turn on self-service for one real item from its Edit details, take or borrow it from a phone, and confirm the record under **Self-service** in the staff workspace.
 
+Part 5 (Activity and exports) needs no migration and no binding: its code reads existing tables only, so `main` can be pushed without touching D1. Migration `0016` adds five read indexes and nothing else; production works without it (`docs/ACTIVITY_PERF.md`: about 10 ms per page at today's size) and it matters only as the ledger grows. Applying it is a separate, explicitly authorized step (bookmark, list, apply once, then check the five index names in `sqlite_master`), never bundled into a release. After the push deploys: as Staff, open **Activity**, search, filter and **Load older**; export the whole list once with **Export CSV** (if the export fails with a resource error, the Workers plan's CPU limit is the likely cause: narrow the dates and see `docs/ACTIVITY_PERF.md`); as an Owner, confirm the export appears under **Accounts & exports**; signed out, `POST /api/staff/activity/export` answers 401 or 403.
+
 ## Operating notes
 
 - The public Lending Hub is empty until staff publish items from *Ready to list*. This is fail-closed by design.

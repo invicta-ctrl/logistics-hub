@@ -9,7 +9,14 @@ EXCLUSIONS: no merge to `main`, no push to `main`, no deploy, no production or p
 CONSTRAINTS: public repo, so no PII, credentials, provider IDs, private exports or raw logs in commits. One writer at a time (see "Writer rule"). Smallest durable change; delete replaced code.
 STOP CONDITIONS: dirty or unknown state, a drifted branch, a refused command or tool, a secret in output, a failing gate. Preserve evidence and report; do not retry a refused command by another route.
 
-## Where things stand (verified 2026-10-01)
+## Status update (Claude Cloud, 2026-10-01): Part 5 core is code complete
+
+- Stages 5.1–5.4 are done on this branch and every local gate is green (see `.codex/SESSION_HANDOFF.md`, top section, and `.codex/CURRENT.md`). A pull request from this branch to `main` is open for Sentinel and Earl; nothing was merged, pushed to `main` or deployed.
+- The production-counts blocker below is closed: the two approved read-only `SELECT`s ran once each (items 549, inventory_movements 686, audit_log 658, loans 12, self_service_events 21; no 0016 index). Recorded in `docs/ACTIVITY_PERF.md`.
+- Still owed: Sentinel's verification of the exact PR head; Earl's merge; the post-deploy checks in `docs/DEPLOYMENT.md`; branch cleanup; then Part 5B. Linux / Node 22.22.0 was used here (`node:sqlite` works with an experimental warning); the browser suites ran with `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` because the image's Chromium predates Playwright 1.63's.
+- The sections below describe the branch as it was handed over (Stage 5.1 only) and are kept as the record of that handoff.
+
+## Where things stood at handoff (verified 2026-10-01)
 
 - Base: `main` = `origin/main` = `76f43b126f2a3ae8203baeba5c5a46d8a04ecf74` (verified locally and by a read-only `git ls-remote`). The WIP branch is built on that baseline.
 - Commits on top of `main` (oldest first): `bf63206` accept Part 5 + A12; `1cc389c` acceptance fixes, owner prompt source; `4c0b437` Stage 5.1 read model and API; `181a4d2` privacy repair (superseded); `eb47f62` owner decisions A, B(ii), AC-A7 recorded; `8bb774c` typed reasons/notes as written; `3204cba` unknown loan closings kept, reproducible AC-A7 harness; `a0ef769` owner standing approval and release sequence; `50818da` browser results recorded. Those are the nine predecessor Part 5 commits through `50818da`; the handoff documentation commits follow, and the pushed HEAD is the latest of them (confirm with `git log`; no SHA or count here can name itself).
@@ -35,7 +42,7 @@ Source `3204cba` (docs-only changes after it). Windows 11, Node 26.3.0.
 - AC-A7: `docs/ACTIVITY_PERF.md` has the commands, fixture construction, tiers (1,070 / 21,400 / 107,000 movements) with and without 0016, full `EXPLAIN QUERY PLAN` per statement, SQL and plan ids (a rerun reproduced them; timings vary). Limits: local `node:sqlite`, not D1 latency; the EXPLAIN pass adds overhead; synthetic data; production row counts are not recorded.
 - Reproduce the perf run (about 25 s per run, no network): `ACTIVITY_PERF=1 ACTIVITY_PERF_OUT=perf.md npx --no-install vitest run tests/activity-perf.test.ts` and the same with `ACTIVITY_PERF_NO_0016=1`. It is skipped in `npm test` unless `ACTIVITY_PERF=1`.
 
-## Open blocker: production-scale counts and index names (UNKNOWN)
+## Open blocker at handoff: production-scale counts and index names (CLOSED 2026-10-01, see the status update)
 
 The approved read-only production check could not be run from the local host: its tool permissions blocked the commands before Cloudflare was reached (a broader command allowlist was proposed, NOT approved and NOT performed). Counts and index presence are therefore unknown; nothing here claims them. Do not retry a refused command by another route or relax a control.
 

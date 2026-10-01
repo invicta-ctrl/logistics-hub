@@ -380,7 +380,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .app-bar { position: sticky; top: 0; z-index: 30; border-bottom: 1px solid var(--on-dark-line); background: var(--brand-dark); color: var(--on-dark); }
 .app-bar__inner { display: flex; min-height: var(--app-bar); align-items: center; gap: var(--space-6); max-width: 90rem; margin-inline: auto; padding-inline: var(--gutter); }
 .app-bar :focus-visible { outline-color: var(--gold-action); }
-.app-bar__brand { display: flex; align-items: center; gap: var(--space-3); border-radius: var(--radius); text-decoration: none; }
+.app-bar__brand { display: flex; flex: none; align-items: center; gap: var(--space-3); border-radius: var(--radius); text-decoration: none; }
 .app-bar__brand .mark { height: 2.5rem; }
 .app-bar__title { display: grid; font-family: var(--serif); font-size: var(--text-md); line-height: 1.15; white-space: nowrap; }
 .app-bar__title small { color: var(--on-dark-2); font-family: var(--sans); font-size: var(--text-sm); }
@@ -723,14 +723,23 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
    ========================================================================== */
 @media (max-width: 1100px) {
   .col-location { display: none; }
-  .app-bar__title small { display: none; }
 }
 @media (hover: none) {
   .search-field kbd { display: none; }
   .search-field input { padding-right: var(--space-10); }
 }
-@media (max-width: 1180px) {
+@media (max-width: 1320px) {
   .app-bar__link { display: none; }
+}
+@media (max-width: 1180px) {
+  /* Below desktop width the bar keeps room for the work sections: the mark and the avatar stand for their text, and the avatar opens My account. */
+  .app-bar__inner { gap: var(--space-4); }
+  .app-bar__title, .account__name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .account { padding-left: 0; border: 0; }
+  .app-nav a[href="/staff/account"]:not([aria-current]) { display: none; }
+}
+@media (min-width: 761px) and (max-width: 1180px) {
+  .app-nav a { padding-inline: var(--space-2); font-size: var(--text-sm); }
 }
 @media (max-width: 960px) {
   .stock-layout { grid-template-columns: minmax(0, 1fr); }
@@ -738,7 +747,6 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .steps { grid-template-columns: 1fr; gap: var(--space-8); }
   .hero__inner { grid-template-columns: minmax(0, 1fr); }
   .hero__banner { order: -1; max-width: 44rem; }
-  .app-bar__link { display: none; }
   .panels { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
@@ -761,13 +769,9 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .data-table .col-desired { width: auto; }
   .activity-row { grid-template-columns: 3rem minmax(0, 1fr); padding-inline: var(--space-3); }
   .app-bar__inner { flex-wrap: wrap; gap: 0 var(--space-4); }
-  .app-bar__title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .app-bar__brand { padding-block: var(--space-2); }
   .app-nav { order: 3; width: calc(100% + var(--gutter) * 2); min-height: 2.75rem; margin-inline: calc(var(--gutter) * -1); padding-inline: calc(var(--gutter) - .75rem); overflow-x: auto; border-top: 1px solid var(--on-dark-line); }
-  .account { padding-left: 0; border: 0; }
-  /* The avatar already opens My account; the bar keeps room for the work sections. */
-  .app-nav a[href="/staff/account"]:not([aria-current]) { display: none; }
-  .account__name, #staff-logout span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #staff-logout span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .page-header__actions { width: 100%; justify-content: space-between; }
   .search-field { flex-basis: 0; }
   .filters-toggle { display: inline-flex; flex: none; }

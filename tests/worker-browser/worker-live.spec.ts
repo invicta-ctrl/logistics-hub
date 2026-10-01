@@ -434,6 +434,8 @@ test("activity: one list of who did what, filters kept in the URL, older pages, 
   for (const width of [320, 375, 390, 768, 1024, 1366, 1440]) {
     await page.setViewportSize({ width, height: 800 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `activity at ${width}`).toBeTruthy();
+    // The root clips sideways overflow, so also check that the bar's account and sign out stay on screen.
+    expect(await page.evaluate(() => document.querySelector(".app-bar__end")!.getBoundingClientRect().right <= window.innerWidth), `app bar at ${width}`).toBeTruthy();
   }
   await page.setViewportSize({ width: 390, height: 800 });
   await page.getByRole("button", { name: /^Filters/ }).click();
@@ -471,4 +473,9 @@ test("activity export: the filtered list as a safe CSV file, audited for the own
   await owner.getByRole("button", { name: "Accounts & exports" }).click();
   await expect(owner.locator(".activity-row", { hasText: "E2E Staff exported 1 activity entry to a file, filtered by search." })).toHaveCount(1);
   await expect(owner.locator("#activity-results")).not.toContainText("blade");
+  // The owner's bar has the most sections (Administration too); it still fits from phone to desktop.
+  for (const width of [320, 390, 768, 1024, 1180, 1281, 1366]) {
+    await owner.setViewportSize({ width, height: 800 });
+    expect(await owner.evaluate(() => document.querySelector(".app-bar__end")!.getBoundingClientRect().right <= window.innerWidth), `owner app bar at ${width}`).toBeTruthy();
+  }
 });

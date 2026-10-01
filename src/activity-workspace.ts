@@ -129,7 +129,7 @@ export async function activityWorkspace(): Promise<void> {
     for (const entry of entries) if (entry.actorId && entry.actorId !== "SELF_SERVICE") actors.set(entry.actorId, entry.actor);
     const text = entries.length ? `${entryCount(entries.length)}${nextCursor ? " shown, older ones below" : ""}` : "No entries";
     if (count.textContent !== text) count.textContent = text;
-    preservingFocus(results, () => mount(results, entries.length ? html`<ol class="activity-list">${entries.map(row)}</ol>` : filtered()
+    preservingFocus(results, () => mount(results, entries.length ? html`<ol class="activity-list" aria-label="Activity, newest first">${entries.map(row)}</ol>` : filtered()
       ? emptyState("Nothing matches", "Try another search or filter, or clear them to see everything.", html`<button class="button button--secondary" type="button" data-remove="everything">Clear search and filters</button>`)
       : emptyState("No activity yet", "Stock changes, loans, phone records and catalog edits appear here as they happen.")), "a");
     more.hidden = !entries.length;

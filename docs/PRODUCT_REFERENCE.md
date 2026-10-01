@@ -124,6 +124,13 @@ Records made on phones reconcile on their own; this page shows only what needs a
 - **Last 7 days:** every self-service record and its state.
 - **QR code & poster:** the one QR code, a print-ready A4 poster ("Borrow · Take · Return — Scan for Logistics Self-Service — Install it once for offline access — logistics.hausc.org/self-service") and SVG/PNG downloads.
 
+### Activity (`/staff/activity`)
+
+One newest-first list of who did what, to which item, when, from where, and whether stock changed. It reads the tables that already record everything (`inventory_movements`, `loans`, `self_service_events`, `audit_log`) through `GET /api/staff/activity` (`src/activity.ts`); it is never an authority for quantity, loans or reviews.
+- **Entries** read as plain sentences ("Maria Santos lent 2 pieces of Scissors for USC use."), with Manila time, a source tag (Stock, Loans, Self-service, Catalog, and for ADMIN/OWNER Accounts & exports), the stock change ("+4", "−1", "no change") with before → after, the item ID, the loan reference, and the typed reason and note as written. A good return and a loan's creation are not repeated (their movements say it); damaged or lost closings are. Selecting an entry opens its item; a held phone record links to Self-service review. The item sheet's History tab links back to **All activity for this item**.
+- **Search and filters** (all in the URL, so a link restores the same list): text (item name, ID or other names, staff name, reason, note; never a borrower's name or student ID), source tabs, and a Filters sheet (a side panel on desktop, a bottom sheet on phones) for type, who, item, date range (Manila days), stock area, location, changed / did not change stock, and needs attention only. Filters in use show as removable chips. The Worker applies every filter before it cuts a page, so **Load older** (cursor paging) continues the same question. The first page refreshes live.
+- **Export CSV** downloads exactly the filtered list, newest first, up to 2,000 entries per file (more is said in the file and on screen). Text cells are quoted and guarded against spreadsheet formulas; typed loan and phone reasons and notes are left blank in files (they stay on the page); borrower identity, photos, phone and network tags and raw audit details are never in a file. Each export is recorded (who, when, which filters, how many rows) and shows to ADMIN/OWNER under Accounts & exports; 10 exports per 10 minutes per account.
+
 ### Administration and My account
 - **Administration (`/staff/admin`, ADMIN and OWNER only):** the accounts table, create, manage (profile, role, reset, sign out everywhere, enable or disable), and security activity.
 - **My account (`/staff/account`):** password, profile, sign out other devices, and (for an OWNER) the recovery key.
@@ -132,8 +139,8 @@ Records made on phones reconcile on their own; this page shows only what needs a
 ## Roles
 | Role | Can |
 | --- | --- |
-| STAFF | Everything in Inventory, Catalog, Stock & Pantry and Loans, and their own account |
-| ADMIN | STAFF, plus managing STAFF accounts |
+| STAFF | Everything in Inventory, Catalog, Stock & Pantry, Loans, Self-service and Activity (operational entries only, and their exports), and their own account |
+| ADMIN | STAFF, plus managing STAFF accounts, and account, recovery and export entries in Activity |
 | OWNER | Everything, including roles, other owners and the recovery key |
 
 Every rule is enforced by the Worker (`src/accounts.ts`, `src/worker.ts`). The browser only hides controls.
@@ -146,7 +153,8 @@ Every rule is enforced by the Worker (`src/accounts.ts`, `src/worker.ts`). The b
 | 3 Stock + Pantry | Stock workspace, movement reasons, counts, low stock, restock list, pantry, optional expiry, activity; whole-product polish | **Complete** — local + GitHub verified; production D1 migrated 2026-09-29 |
 | 4 Lending | Internal loans by purpose (Individual use with student ID, USC use with reason), photo evidence (R2), return / damaged / lost, overdue, borrower rankings; quantity editor with required reasons; two item types | **Deployed, production acceptance partial** — R2, migration 0014, core navigation and quantity/history checks verified; photo upload/retrieval and return outcomes remain open |
 | 4.5 Offline Self-Service | One permanent QR, `/self-service` (Take, Borrow, Return, My activity) on people's own phones, installable PWA that works offline, IndexedDB event queue, idempotent sync and reconciliation, staff exception view, printable poster | **Code complete on `slice/part-04-5-offline-self-service-pwa`**; production needs migration 0015 first (see `docs/DEPLOYMENT.md`) and Part 4 acceptance |
-| 5 Activity + Accountability | Full activity center and safe exports | Planned |
+| 5 Activity + Accountability | Activity page (`/staff/activity`): one searchable, filterable history across stock, loans, phones and catalog (account events for ADMIN/OWNER), cursor paging, live refresh; safe, audited CSV exports | **Code complete on `handoff/part-05-activity-cloud`** (stages 5.1–5.4, local gates green); awaiting Sentinel verification and Earl's merge; no migration needed (`0016` indexes optional, separately authorized) |
+| 5B Open-Unit Tracking | Whole-unit vs open-unit Consumables, open/use/empty, item-driven phone Borrow/Take/Use | Accepted (A12); starts after Part 5 is merged; needs its own production migration |
 | 6 Admin + Hardening | System settings, backups, final production hardening | Planned |
 
 Each Part must work end to end without depending on a later Part.
@@ -169,6 +177,8 @@ Each Part must work end to end without depending on a later Part.
 - **Lending is fail-closed.** An item is public only when it is Active, reviewed, type Loanable, and has an audience. `listingGaps()` in `src/catalog-policy.ts` is the single source of that rule. Migrated Loanable items are never auto-published.
 - **Migration evidence stays visible.** ITM-0001 derives 7 from the ledger while the legacy system reported 8 (delta −1). It is shown to staff, not corrected.
 - **Audit.** `audit_log` records who changed what and when, with no passwords, hashes, keys or tokens. The events are ITEM_CREATED, ITEM_UPDATED (as a field diff), REORDER_OPENED/UPDATED/RESTOCKED and LOAN_CREATED/LOAN_CLOSED on the item, plus account and recovery events.
+- **Activity is a read model.** `/api/staff/activity` only reads; quantity stays the ledger's. Account and recovery entries are removed in SQL for STAFF before search and paging. Structured borrower name, student ID and phone person name are never selected or searched; typed reasons and notes show to signed-in staff as written.
+- **Exports are safe by construction and audited.** A file is the page's own query (no separate export logic), capped, formula-guarded, never cached, rate-limited per account, and recorded in `audit_log` (`ACTIVITY_EXPORTED`, entity `EXPORT`) before it is returned. Owner decision B(ii): typed text from loans and phone records is blank in files.
 - **Privacy.** The public repository holds no staff or borrower PII, credentials, provider IDs or private exports (`npm run verify:privacy`). Borrower names, student IDs and photos live only in D1 and R2 and are served only to signed-in staff; photo keys are loan IDs.
 - **Self-service is fail-closed and event-based.** An item is offered on phones only when staff turn it on and `selfServiceAction()` in `src/catalog-policy.ts` allows it (Consumable: Active and reviewed; Loanable: also listed). Phones never write quantities: each action is an immutable event with a client-generated id, stored once in `self_service_events` and applied through the same ledger and lending statements staff use (`lendStatements`, `closeStatements`). Replays are no-ops. History is ordered by when things happened, not when they synced. A physical count supersedes earlier offline movements it already saw. Phone records are never refused for quantity (the shelf is the truth), but staff movements keep their strict guard. Anything that cannot be applied safely is held for staff, never guessed. Details: `docs/OFFLINE_SELF_SERVICE.md`.
 
