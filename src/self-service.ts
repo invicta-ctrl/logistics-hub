@@ -440,7 +440,7 @@ export const OPEN_REVIEW = "review IS NOT NULL AND resolved_at IS NULL";
 export const balanceCtes = (touched: string) => `touched AS (${touched}),
     counted AS (SELECT item_id, MAX(julianday(created_at)) AS at FROM inventory_movements
       WHERE movement_type = 'COUNT_ADJUSTMENT' AND status = 'POSTED' AND imported_from IS NULL AND item_id IN (SELECT item_id FROM touched) GROUP BY item_id),
-    running AS (SELECT m.item_id AS itemId, m.created_at AS at, CASE WHEN m.imported_from IS NULL THEN julianday(m.created_at) ELSE 0 END AS t,
+    running AS (SELECT m.id AS movementId, m.item_id AS itemId, m.created_at AS at, CASE WHEN m.imported_from IS NULL THEN julianday(m.created_at) ELSE 0 END AS t,
       SUM(m.signed_quantity) OVER (PARTITION BY m.item_id ORDER BY ${HISTORY_ORDER}) AS balance
       FROM inventory_movements m WHERE m.status = 'POSTED' AND m.item_id IN (SELECT item_id FROM touched))`;
 

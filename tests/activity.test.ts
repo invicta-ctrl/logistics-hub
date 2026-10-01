@@ -429,3 +429,133 @@ describe("activity read model", () => {
     });
   });
 });
+
+describe("activity export (CSV)", () => {
+  const COLUMNS = ["Time (Manila)", "Activity", "Description", "Actor", "Source", "Item ID", "Item", "Unit", "Change", "Before", "After", "Reason", "Note", "Reference", "Entry ID"];
+  const download = (query = "", cookie: string | undefined = staffCookie, headers: Record<string, string> = { origin }) =>
+    worker.fetch(new Request(`${origin}/api/staff/activity/export${query ? `?${query}` : ""}`, { method: "POST", headers: { ...(cookie ? { cookie } : {}), ...headers } }), env);
+  /** RFC 4180: quoted fields may hold commas, quotes, CR and LF; rows end with CRLF. */
+  function parseCsv(text: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = "";
+    let quoted = false;
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i]!;
+      if (quoted) {
+        if (char !== '"') field += char;
+        else if (text[i + 1] === '"') { field += '"'; i += 1; } else quoted = false;
+      } else if (char === '"') quoted = true;
+      else if (char === ",") { row.push(field); field = ""; }
+      else if (char === "\r" && text[i + 1] === "\n") { row.push(field); rows.push(row); row = []; field = ""; i += 1; }
+      else field += char;
+    }
+    return rows;
+  }
+  const exported = async (query = "", cookie = staffCookie) => {
+    const response = await download(query, cookie);
+    expect(response.status, query).toBe(200);
+    // Response.text() would drop the byte-order mark; the bytes must carry it for Excel.
+    const text = new TextDecoder("utf-8", { ignoreBOM: true }).decode(await response.arrayBuffer());
+    expect(text.startsWith("\uFEFF")).toBe(true);
+    expect(text.endsWith("\r\n")).toBe(true);
+    const [header, ...rows] = parseCsv(text.slice(1));
+    expect(header).toEqual(COLUMNS);
+    return { response, text, rows };
+  };
+  const exportAudits = () => sqlite.prepare("SELECT actor_user_id AS actor, entity_type AS entity, details_json AS details FROM audit_log WHERE action = 'ACTIVITY_EXPORTED' ORDER BY created_at, rowid").all() as Array<{ actor: string; entity: string; details: string }>;
+
+  it("exports exactly the filtered list as a guarded, Excel-ready file, with typed loan and phone text left blank", async () => {
+    movement("ITM-T", "STOCK_IN", 5, "2026-09-30T01:00:00.000Z", { id: "MOV-F1", notes: '=HYPERLINK("http://evil.example","open")' });
+    movement("ITM-R", "STOCK_IN", 3, "2026-09-30T01:10:00.000Z", { id: "MOV-F2", notes: "+1 bag" });
+    movement("ITM-R", "STOCK_OUT", -1, "2026-09-30T01:20:00.000Z", { id: "MOV-F3", reason: "CONSUMED", notes: "-2 short, \"quoted\"\r\nsecond line" });
+    movement("ITM-R", "STOCK_OUT", -1, "2026-09-30T01:30:00.000Z", { id: "MOV-F4", reason: "CONSUMED", notes: "@SUM(A1)" });
+    movement("ITM-R", "STOCK_OUT", -1, "2026-09-30T01:40:00.000Z", { id: "MOV-F5", reason: "CONSUMED", notes: "\tTabbed" });
+    await lend("LN-E", "ITM-T", 1, "2026-09-30T02:00:00.000Z", "ACC-1", { reason: "=cmd|' /C calc'!A0", studentId: "20-5555-123" });
+    await close("LN-E", "ITM-T", 1, "DAMAGED", "2026-09-30T03:00:00.000Z", "Cracked by Juan");
+    phone("PH-X", "ITM-T", "RETURN", "2026-09-30T04:00:00.000Z", { applied: 0, review: "RETURN_CHECK", loan_id: "LN-E", note: "Left at gym", reason: "class project",
+      resolved_at: "2026-09-30T04:30:00.000Z", resolved_by: "ACC-1", resolution_note: "Checked with the borrower" });
+    audit("AUD-ACC", "2026-09-30T05:00:00.000Z", "ACCOUNT_CREATED", "ACCOUNT", "ACC-9", '{"username":"new.person","role":"STAFF"}', "ACC-2");
+
+    const { response, text, rows } = await exported();
+    expect(response.headers.get("content-type")).toBe("text/csv; charset=utf-8");
+    expect(response.headers.get("content-disposition")).toMatch(/^attachment; filename="logistics-activity-\d{8}-\d{4}\.csv"$/);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("x-export-truncated")).toBe("0");
+    expect(response.headers.get("x-export-rows")).toBe(String(rows.length));
+    // The file is the page's own list, in the page's order, with the page's role scope (no account entry for STAFF).
+    const page = await feed("limit=100");
+    expect(rows.map((row) => row[14])).toEqual(page.events.map((event) => event.id));
+    expect(rows.some((row) => row[4] === "Accounts & exports")).toBe(false);
+    const byId = Object.fromEntries(rows.map((row) => [row[14], row]));
+
+    // Every text cell that a spreadsheet would run starts with an apostrophe; numbers stay numbers.
+    expect(byId["mov:MOV-F1"]![12]).toBe(`'=HYPERLINK("http://evil.example","open")`);
+    expect(byId["mov:MOV-F2"]![12]).toBe("'+1 bag");
+    expect(byId["mov:MOV-F3"]![12]).toBe("'-2 short, \"quoted\"\r\nsecond line");
+    expect(byId["mov:MOV-F4"]![12]).toBe("'@SUM(A1)");
+    expect(byId["mov:MOV-F5"]![12]).toBe("'\tTabbed");
+    expect(text).toContain(',-1,3,2,"Consumed or used",');
+    expect(byId["mov:MOV-F1"]!.slice(0, 11)).toEqual(["2026-09-30 09:00:00", "Stock in", "Staff One received 5 pieces of Folding Table.", "Staff One", "Stock", "ITM-T", "Folding Table", "piece", "5", "0", "5"]);
+
+    // B(ii): the loan's typed reason and the closing, phone and resolution notes are blank; the fixed review reason stays.
+    expect(byId["mov:MOV-LN-E"]!.slice(11, 13)).toEqual(["", ""]);
+    expect(rows.find((row) => row[1] === "Returned damaged")![12]).toBe("");
+    expect(byId["phone:PH-X"]!.slice(11, 13)).toEqual(["A return with a photo, waiting for staff to confirm the item is back before stock is updated", ""]);
+    expect(byId["resolve:PH-X"]![12]).toBe("");
+    for (const secret of ["cmd|", "Cracked by Juan", "Left at gym", "class project", "Checked with the borrower", "Maria Borrower", "20-5555-123", "Juan", "20-1234-567",
+      "photo-secret", "loans/LN-", "DEVICE-SECRET", "nettag99", "password", "details", "new.person"]) expect(text, secret).not.toContain(secret);
+
+    // ADMIN gets the account entry; a filter narrows the file exactly as it narrows the page.
+    expect((await exported("", adminCookie)).rows.some((row) => row[1] === "Account created" && row[4] === "Accounts & exports")).toBe(true);
+    const narrowed = await exported("q=HYPERLINK&source=MOVEMENT");
+    expect(narrowed.rows.map((row) => row[14])).toEqual((await feed("q=HYPERLINK&source=MOVEMENT")).events.map((event) => event.id));
+    expect(narrowed.rows).toHaveLength(1);
+
+    // Each export is audited with who, which filters and how many rows; only ADMIN and OWNER see those entries.
+    expect(exportAudits().map((row) => [row.actor, row.entity, JSON.parse(row.details)])).toEqual([
+      ["ACC-1", "EXPORT", { rows: rows.length, truncated: false, filters: {} }],
+      // ADMIN's file also holds the account entry and STAFF's own export entry.
+      ["ACC-2", "EXPORT", { rows: rows.length + 2, truncated: false, filters: {} }],
+      ["ACC-1", "EXPORT", { rows: 1, truncated: false, filters: { q: "HYPERLINK", source: "MOVEMENT" } }]
+    ]);
+    expect((await feed("type=ACTIVITY_EXPORTED")).events).toEqual([]);
+    const seen = await feed("type=ACTIVITY_EXPORTED", adminCookie);
+    expect(seen.events.map((event) => [event.source, event.summary])).toEqual([
+      ["ACCOUNT", "Staff One exported 1 activity entry to a file, filtered by search, source."],
+      ["ACCOUNT", `Admin One exported ${rows.length + 2} activity entries to a file.`],
+      ["ACCOUNT", `Staff One exported ${rows.length} activity entries to a file.`]
+    ]);
+    expect(JSON.stringify(seen)).not.toContain("HYPERLINK");
+  });
+
+  it("caps a file and says so in the file, the headers and the audit entry", async () => {
+    sqlite.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2001)
+      INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, status)
+      SELECT 'MOV-CAP-' || i, strftime('%Y-%m-%dT%H:%M:%fZ', '2026-09-01', '+' || i || ' minutes'), 'STOCK_IN', 'IN', 'ITM-R', 1, 'piece', 1, 'ACC-1', 'POSTED' FROM n`);
+    const { response, rows } = await exported();
+    expect(response.headers.get("x-export-truncated")).toBe("1");
+    expect(response.headers.get("x-export-rows")).toBe("2000");
+    expect(rows).toHaveLength(2001);
+    expect(rows[0]![14]).toBe("mov:MOV-CAP-2001");
+    expect(rows[1999]![14]).toBe("mov:MOV-CAP-2");
+    expect(rows[2000]).toEqual(["More entries match than one file holds (2,000). This file has the newest; narrow the filters, for example the dates, to export the rest."]);
+    expect(JSON.parse(exportAudits()[0]!.details)).toEqual({ rows: 2000, truncated: true, filters: {} });
+  });
+
+  it("refuses cross-site, anonymous and GET callers, rejects a bad filter without counting it, and limits exports per account", async () => {
+    expect((await download("", staffCookie, {})).status).toBe(403);
+    expect((await download("", staffCookie, { origin: "https://evil.example" })).status).toBe(403);
+    expect((await worker.fetch(new Request(`${origin}/api/staff/activity/export`, { method: "POST", headers: { origin } }), env)).status).toBe(401);
+    expect((await call("/api/staff/activity/export", staffCookie)).status).toBe(405);
+    for (const query of ["from=2026-02-30", "source=ELSE", "limit=0"]) expect((await download(query)).status, query).toBe(400);
+    expect(exportAudits()).toEqual([]);
+    for (let i = 0; i < 10; i += 1) expect((await download()).status).toBe(200);
+    const refused = await download();
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("retry-after")).toBe("600");
+    expect(exportAudits()).toHaveLength(10);
+    // The limit is per account.
+    expect((await download("", adminCookie)).status).toBe(200);
+  });
+});

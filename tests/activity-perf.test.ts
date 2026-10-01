@@ -3,7 +3,7 @@ import { cpus } from "node:os";
 import { writeFileSync } from "node:fs";
 import { describe, it } from "vitest";
 import { migratedD1 } from "./d1-sqlite";
-import { activityPage, type ActivityQuery } from "../src/activity";
+import { EXPORT_ROWS, activityCsv, activityPage, type ActivityQuery } from "../src/activity";
 
 /**
  * AC-A7 evidence harness for the Activity query. Skipped in `npm test`; run it with
@@ -37,7 +37,10 @@ const CASES: [string, Partial<ActivityQuery["filters"]>, string | null, number][
   ["text, rare (few matches)", { q: "scratch 12" }, null, 50],
   ["text, unmatched", { q: "zzzqqq" }, null, 50],
   ["text, common (fills the page)", { q: "Perf Item" }, null, 50],
-  ["text + date range", { q: "scratch", from: "2026-08-01", to: "2026-08-31" }, null, 50]
+  ["text + date range", { q: "scratch", from: "2026-08-01", to: "2026-08-31" }, null, 50],
+  // An export is the same query, cursor-less, up to EXPORT_ROWS, plus building the CSV text (Worker CPU).
+  ["export file, unfiltered", {}, null, EXPORT_ROWS],
+  ["export file, text", { q: "scratch" }, null, EXPORT_ROWS]
 ];
 
 describe.skipIf(!process.env.ACTIVITY_PERF)("activity performance (AC-A7)", () => {
@@ -127,6 +130,7 @@ describe.skipIf(!process.env.ACTIVITY_PERF)("activity performance (AC-A7)", () =
         for (let i = 0; i < RUNS; i += 1) {
           const start = performance.now();
           result = await activityPage(d1, true, query);
+          if (limit > 100) activityCsv(result.events, result.nextCursor !== null);
           times.push(performance.now() - start);
         }
         times.sort((a, b) => a - b);

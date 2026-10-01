@@ -1,6 +1,6 @@
-import { activityPage, activityTag, parseActivityQuery } from "./activity";
+import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, changeOwnPassword, clearThrottle, createAccount, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, throttled, updateAccount, updateSelf } from "./accounts";
-import { InputError, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
+import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { openReorder, stockOverview, updateReorder } from "./stock";
@@ -63,6 +63,23 @@ async function activity(request: Request, db: D1Database, account: Account, url:
   const etag = await activityTag(admin, query, result);
   if (request.headers.get("If-None-Match")?.replace(/^W\//, "") === etag) return new Response(null, { status: 304, headers: { etag, "cache-control": "no-store" } });
   return json(result, 200, { etag });
+}
+
+/**
+ * The CSV of exactly the filtered list, newest first, up to EXPORT_ROWS. A POST because it writes its
+ * own audit entry (who, when, which filters, how many rows) before any byte leaves; so it is
+ * same-origin like every staff write, limited per account, and never cached.
+ */
+async function activityExport(db: D1Database, account: Account, url: URL): Promise<Response> {
+  const { filters } = parseActivityQuery(url.searchParams);
+  if (await throttled(db, `activity-export:${account.accountId}`, 10, 10 * 60_000)) return json({ error: "Too many exports in a short time. Please wait a few minutes." }, 429, { "retry-after": "600" });
+  const { events, nextCursor } = await activityPage(db, isAdmin(account), { filters, cursor: null, limit: EXPORT_ROWS });
+  const truncated = nextCursor !== null;
+  await audit(db, account.accountId, "ACTIVITY_EXPORTED", "EXPORT", "ACTIVITY", { rows: events.length, truncated, filters }).run();
+  return new Response(activityCsv(events, truncated), { headers: {
+    "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="${exportName(new Date())}"`, "cache-control": "private, no-store",
+    "x-export-rows": String(events.length), "x-export-truncated": truncated ? "1" : "0"
+  } });
 }
 
 /** Answers 304 when the client already holds the current catalog revision. */
@@ -152,6 +169,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (path === "/api/staff/loans" && method === "GET") return revisioned(request, env.DB, () => loansOverview(env.DB));
   if (path === "/api/staff/self-service" && method === "GET") return revisioned(request, env.DB, () => selfServiceReview(env.DB));
   if (path === "/api/staff/activity" && method === "GET") return activity(request, env.DB, account, url);
+  if (path === "/api/staff/activity/export" && method === "POST") return activityExport(env.DB, account, url);
   if (path === "/api/staff/reorders" && method === "POST") return json(await openReorder(env.DB, account, await body()), 201);
   const review = REVIEW_PATH.exec(path);
   if (review?.[2] === "resolve" && method === "POST") return json(await resolveReview(env.DB, env.EVIDENCE, account, review[1]!, await body()));
@@ -179,7 +197,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!form) throw new InputError(400, "Invalid loan form.");
     return json(await createLoan(env.DB, env.EVIDENCE, account, match[1]!, form), 201);
   }
-  const known = match || reorder || loan || review || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/reorders", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || reorder || loan || review || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 

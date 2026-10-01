@@ -1,5 +1,5 @@
 import { ACTIVITY_SOURCES, ACTIVITY_TITLES, LABELS, REVIEW_REASONS, STOCK_AREAS, type ActivitySource, units } from "./catalog-policy";
-import { InputError, actorName, historyKey } from "./inventory";
+import { InputError, actorName } from "./inventory";
 import { OPEN_REVIEW, balanceCtes } from "./self-service";
 
 /**
@@ -224,12 +224,11 @@ export async function activityPage(db: D1Database, admin: boolean, { filters, cu
   const bad = `bad AS (SELECT r.itemId FROM running r LEFT JOIN counted c ON c.item_id = r.itemId WHERE r.t >= COALESCE(c.at, 0) GROUP BY r.itemId HAVING MIN(r.balance) < 0)`;
   const page = `page AS MATERIALIZED (${parts.join(" UNION ALL ")} ORDER BY k DESC, sid DESC LIMIT ${size})`;
   const warned = filters.attention ? [balanceCtes("SELECT id AS item_id FROM items"), bad, page] : [page, balanceCtes("SELECT DISTINCT itemId AS item_id FROM page WHERE itemId IS NOT NULL"), bad];
+  // A POSTED movement's balance after it is its item's running total in business order, which `running` already holds.
   const { results } = await db.prepare(`WITH ${warned.join(", ")}
-    SELECT p.*, CASE WHEN p.mov IS NOT NULL AND p.status = 'POSTED' THEN
-        (SELECT SUM(r.signed_quantity) FROM inventory_movements x JOIN inventory_movements r ON r.item_id = x.item_id AND r.status = 'POSTED'
-          WHERE x.id = p.mov AND (${historyKey("r")}, r.rowid) <= (${historyKey("x")}, x.rowid)) END AS after,
+    SELECT p.*, CASE WHEN p.status = 'POSTED' THEN r.balance END AS after,
       CASE WHEN p.open = 1 OR p.itemId IN (SELECT itemId FROM bad) THEN 1 ELSE 0 END AS attention
-    FROM page p ORDER BY p.k DESC, p.sid DESC`).bind(...binds).all<Row>();
+    FROM page p LEFT JOIN running r ON p.mov IS NOT NULL AND r.movementId = p.mov ORDER BY p.k DESC, p.sid DESC`).bind(...binds).all<Row>();
   const more = results.length > limit;
   const rows = results.slice(0, limit);
   return { events: rows.map(toEvent), nextCursor: more ? `${rows[rows.length - 1]!.k}|${rows[rows.length - 1]!.sid}` : null };
@@ -244,7 +243,10 @@ export type ActivityEvent = {
 };
 
 const PURPOSE: Record<string, string> = { INDIVIDUAL: " to an individual", USC: " for USC use" };
-const signed = (change: number) => (change > 0 ? `+${change}` : `${change}`);
+/** How an export entry names the filters it used; their values stay in the audit row only. */
+const FILTER_NAMES: Record<string, string> = {
+  q: "search", source: "source", type: "type", actor: "person", item: "item", from: "start date", to: "end date", stockArea: "stock area", location: "location", changed: "stock change", attention: "needs attention"
+};
 
 function toEvent(row: Row): ActivityEvent {
   const text = (value: unknown) => typeof value === "string" && value ? value : null;
@@ -261,31 +263,33 @@ function toEvent(row: Row): ActivityEvent {
   const reason = phoneRecord ? (row.review ? REVIEW_REASONS[row.review as keyof typeof REVIEW_REASONS] ?? null : null) : text(row.reason) ? LABELS[String(row.reason)] ?? String(row.reason) : null;
   // A phone record's typed reason and note are one context line; the loan and movement arms carry theirs in `reason` and `note`.
   const note = phoneRecord ? [row.reason, row.note].filter((value) => text(value)).join(" · ") || null : text(row.note);
-  const fields = ["ITEM_UPDATED", "REORDER_UPDATED"].includes(type) ? Object.keys(details).filter((key) => key in FIELDS).map((key) => FIELDS[key]!) : [];
+  const fields = ["ITEM_UPDATED", "REORDER_UPDATED"].includes(type) ? Object.keys(details).filter((key) => key in FIELDS).map((key) => FIELDS[key]!)
+    : type === "ACTIVITY_EXPORTED" && details.filters && typeof details.filters === "object" ? Object.keys(details.filters).filter((key) => key in FILTER_NAMES).map((key) => FILTER_NAMES[key]!) : [];
   const account = row.src === "ACCOUNT" && typeof details.username === "string" ? ` for ${details.username.slice(0, 60)}` : "";
   const purpose = PURPOSE[String(row.purpose)] ?? "";
   const held = row.status === "HELD";
   const outcome = text(row.outcome) ? ` (${String(row.outcome).toLowerCase()})` : "";
-  const sentence: Record<string, string> = {
-    OPENING_BALANCE: `${amount}${item} was carried over as the opening balance.`,
-    ISSUE: `${amount}${item} was issued in the legacy system.`,
-    STOCK_IN: `${actor} received ${amount}${item}${reason ? ` (${reason.toLowerCase()})` : ""}.`,
-    STOCK_OUT: `${actor} took out ${amount}${item}${reason ? ` (${reason.toLowerCase()})` : ""}.`,
-    COUNT_ADJUSTMENT: `${actor} counted ${item}${after === null ? "" : `: ${after}${unit ? ` ${units(after, unit)}` : ""} on hand`}.`,
-    LOAN_OUT: `${actor} lent ${amount}${item}${purpose}.`,
-    LOAN_RETURN: `${actor} took back ${amount}${item}.`,
-    LOAN_DAMAGED: `${actor} closed a loan of ${item} as damaged; nothing went back to stock.`,
-    LOAN_LOST: `${actor} closed a loan of ${item} as lost; nothing went back to stock.`,
-    LOAN_CLOSED: `${actor} closed a loan of ${item}.`,
-    REVIEW_RESOLVED: `${actor} resolved a phone record for ${item}.`,
-    ITEM_CREATED: `${actor} added ${item} to the catalog.`,
-    ITEM_UPDATED: `${actor} edited ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`,
-    REORDER_OPENED: `${actor} put ${item} on the restock list.`,
-    REORDER_UPDATED: `${actor} updated the restock entry for ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`,
-    REORDER_RESTOCKED: `${actor} received a restock of ${amount}${item}.`
+  const sentence: Record<string, () => string> = {
+    OPENING_BALANCE: () => `${amount}${item} was carried over as the opening balance.`,
+    ISSUE: () => `${amount}${item} was issued in the legacy system.`,
+    STOCK_IN: () => `${actor} received ${amount}${item}${reason ? ` (${reason.toLowerCase()})` : ""}.`,
+    STOCK_OUT: () => `${actor} took out ${amount}${item}${reason ? ` (${reason.toLowerCase()})` : ""}.`,
+    COUNT_ADJUSTMENT: () => `${actor} counted ${item}${after === null ? "" : `: ${after}${unit ? ` ${units(after, unit)}` : ""} on hand`}.`,
+    LOAN_OUT: () => `${actor} lent ${amount}${item}${purpose}.`,
+    LOAN_RETURN: () => `${actor} took back ${amount}${item}.`,
+    LOAN_DAMAGED: () => `${actor} closed a loan of ${item} as damaged; nothing went back to stock.`,
+    LOAN_LOST: () => `${actor} closed a loan of ${item} as lost; nothing went back to stock.`,
+    LOAN_CLOSED: () => `${actor} closed a loan of ${item}.`,
+    REVIEW_RESOLVED: () => `${actor} resolved a phone record for ${item}.`,
+    ITEM_CREATED: () => `${actor} added ${item} to the catalog.`,
+    ITEM_UPDATED: () => `${actor} edited ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`,
+    REORDER_OPENED: () => `${actor} put ${item} on the restock list.`,
+    REORDER_UPDATED: () => `${actor} updated the restock entry for ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`,
+    REORDER_RESTOCKED: () => `${actor} received a restock of ${amount}${item}.`,
+    ACTIVITY_EXPORTED: () => `${actor} exported ${details.rows === 1 ? "1 activity entry" : `${typeof details.rows === "number" ? details.rows : "some"} activity entries`} to a file${fields.length ? `, filtered by ${fields.join(", ")}` : ""}${details.truncated === true ? " (the newest; more matched)" : ""}.`
   };
-  const phone = `A phone ${type.slice(6).toLowerCase()} of ${amount}${item}${outcome} was ${held ? "held for staff" : "recorded"}${reason ? `: ${reason}` : ""}.`;
-  const summary = `${(type.startsWith("PHONE_") ? phone : sentence[type]) ?? `${ACTIVITY_TITLES[type] ?? "Change"}${account} by ${actor}.`}${row.status === "SUPERSEDED" ? " It did not change stock: a later count already covers it." : ""}`;
+  const phone = () => `A phone ${type.slice(6).toLowerCase()} of ${amount}${item}${outcome} was ${held ? "held for staff" : "recorded"}${reason ? `: ${reason}` : ""}.`;
+  const summary = `${(type.startsWith("PHONE_") ? phone() : sentence[type]?.()) ?? `${ACTIVITY_TITLES[type] ?? "Change"}${account} by ${actor}.`}${row.status === "SUPERSEDED" ? " It did not change stock: a later count already covers it." : ""}`;
   const loan = typeof row.corr === "string" && /^LN-[A-Za-z0-9-]{1,60}$/.test(row.corr) ? row.corr : null;
   const known = row.k !== SENTINEL;
   return {
@@ -305,6 +309,49 @@ function parse(value: unknown): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/* ---------- Export (CSV) ---------- */
+
+/**
+ * One file holds at most this many entries; when more match, the file and the person exporting are told.
+ * Building a file costs about 10 µs of Worker CPU per entry (docs/ACTIVITY_PERF.md), so the cap also bounds that.
+ */
+export const EXPORT_ROWS = 2_000;
+const EXPORT_COLUMNS = ["Time (Manila)", "Activity", "Description", "Actor", "Source", "Item ID", "Item", "Unit", "Change", "Before", "After", "Reason", "Note", "Reference", "Entry ID"];
+/** A spreadsheet runs a text cell that starts like a formula; a leading apostrophe keeps it text. */
+const FORMULA = /^[=+\-@\t\r\n\uFF1D\uFF0B\uFF0D\uFF20]/;
+
+function cell(value: string | number | null): string {
+  if (value === null) return "";
+  if (typeof value === "number") return String(value);
+  return `"${(FORMULA.test(value) ? `'${value}` : value).replaceAll('"', '""')}"`;
+}
+
+/**
+ * One file row. Owner decision B(ii): typed text from a loan or a phone record (loan reason, return
+ * note, phone reason and note, resolution note) is left blank in a file, though the signed-in page shows
+ * it. A cell is filled only from fields that carry no typed person-linked text: catalog names, staff
+ * names, the fixed reason lists (a phone record's review reason is one) and a stock movement's own note.
+ */
+function exportRow(event: ActivityEvent): Array<string | number | null> {
+  const personal = event.source === "LOAN" || event.source === "PHONE";
+  const at = event.at === null ? null : new Date(Date.parse(event.at) + MANILA_OFFSET_MS).toISOString().slice(0, 19).replace("T", " ");
+  return [at, event.title, event.summary, event.actor, ACTIVITY_SOURCES[event.source as ActivitySource] ?? event.source, event.itemId, event.itemName, event.unit,
+    event.change, event.before, event.after, event.source === "LOAN" ? null : event.reason, personal ? null : event.note, event.correlationId, event.id];
+}
+
+/** UTF-8 with a byte-order mark and CRLF lines, so Excel opens it as it is; fixed columns; every text cell quoted and guarded. */
+export function activityCsv(events: ActivityEvent[], truncated: boolean): string {
+  const lines = [EXPORT_COLUMNS.map(cell), ...events.map((event) => exportRow(event).map(cell))].map((row) => row.join(","));
+  if (truncated) lines.push(cell(`More entries match than one file holds (${EXPORT_ROWS.toLocaleString("en-US")}). This file has the newest; narrow the filters, for example the dates, to export the rest.`));
+  return `\uFEFF${lines.join("\r\n")}\r\n`;
+}
+
+/** A file name the server chooses, never from input: logistics-activity-YYYYMMDD-HHMM.csv in Manila time. */
+export function exportName(now: Date): string {
+  const manila = new Date(now.getTime() + MANILA_OFFSET_MS).toISOString();
+  return `logistics-activity-${manila.slice(0, 10).replaceAll("-", "")}-${manila.slice(11, 16).replace(":", "")}.csv`;
 }
 
 /**

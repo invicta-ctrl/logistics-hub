@@ -224,7 +224,7 @@ const stored = (value: ItemInput[keyof ItemInput]) => typeof value === "boolean"
  * The one audit writer. Details must never contain passwords, hashes, keys or tokens.
  * With `afterChange`, the row is written only when the previous statement in the batch changed a row.
  */
-export function audit(db: D1Database, actorId: string | null, action: string, entityType: "ITEM" | "ACCOUNT" | "RECOVERY", entityId: string, details: unknown, afterChange = false): D1PreparedStatement {
+export function audit(db: D1Database, actorId: string | null, action: string, entityType: "ITEM" | "ACCOUNT" | "RECOVERY" | "EXPORT", entityId: string, details: unknown, afterChange = false): D1PreparedStatement {
   return db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json) SELECT ?, ?, ?, ?, ?, ?, ?${afterChange ? " WHERE changes() > 0" : ""}`)
     .bind(crypto.randomUUID(), new Date().toISOString(), actorId, action, entityType, entityId, JSON.stringify(details));
 }

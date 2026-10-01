@@ -442,3 +442,33 @@ test("activity: one list of who did what, filters kept in the URL, older pages, 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Filters" })).toBeHidden();
 });
+
+test("activity export: the filtered list as a safe CSV file, audited for the owner to see", async ({ page, browser, baseURL }) => {
+  await signIn(page);
+  await page.goto("/staff/activity?q=blade+bent");
+  await expect(page.locator(".activity-row")).toHaveCount(1);
+  const [file] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export CSV" }).click()]);
+  expect(file.suggestedFilename()).toMatch(/^logistics-activity-\d{8}-\d{4}\.csv$/);
+  const bytes = await (await import("node:fs/promises")).readFile((await file.path())!);
+  expect([...bytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  const text = bytes.toString("utf8").slice(1);
+  const lines = text.split("\r\n");
+  expect(lines[0]).toBe('"Time (Manila)","Activity","Description","Actor","Source","Item ID","Item","Unit","Change","Before","After","Reason","Note","Reference","Entry ID"');
+  expect(lines).toHaveLength(3);
+  expect(lines[1]).toContain('"Returned damaged","E2E Staff closed a loan of Scissors as damaged; nothing went back to stock.","E2E Staff","Loans","ITM-0262","Scissors"');
+  // The page shows the typed damage note; the file leaves it blank (owner decision B(ii)), and never holds the borrower.
+  for (const secret of ["One blade bent", "Test Borrower One", "TEST-0001"]) expect(text).not.toContain(secret);
+  await expect(page.getByText("Exported 1 entry.")).toBeVisible();
+
+  const owner = await (await browser.newContext()).newPage();
+  // The owner administration tests above replace the owner's password with a recovery key; either one may be current.
+  let signedIn = false;
+  for (const password of [process.env.E2E_OWNER_PASSWORD!, "recovered owner pass"]) {
+    signedIn ||= (await owner.request.post("/api/staff/login", { headers: { origin: baseURL! }, data: { username: process.env.E2E_OWNER_USERNAME, password } })).ok();
+  }
+  expect(signedIn).toBe(true);
+  await owner.goto("/staff/activity");
+  await owner.getByRole("button", { name: "Accounts & exports" }).click();
+  await expect(owner.locator(".activity-row", { hasText: "E2E Staff exported 1 activity entry to a file, filtered by search." })).toHaveCount(1);
+  await expect(owner.locator("#activity-results")).not.toContainText("blade");
+});

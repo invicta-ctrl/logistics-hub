@@ -1,7 +1,7 @@
 import { ACTIVITY_SOURCES, ACTIVITY_TITLES, ACTIVITY_TYPES, STOCK_AREAS, type ActivitySource } from "./catalog-policy";
 import { signed } from "./movement-form";
 import { type Session, loadSession, shell } from "./staff";
-import { type Html, api, emptyState, expired, failure, formatDate, formatDateTime, html, icon, live, mount, officeDay, onLeave, preservingFocus, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { type Html, ApiError, api, emptyState, expired, failure, formatDate, formatDateTime, html, icon, live, mount, officeDay, onLeave, preservingFocus, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 /*
  * Activity (/staff/activity): one newest-first list of who did what, read from GET /api/staff/activity.
@@ -39,7 +39,10 @@ export async function activityWorkspace(): Promise<void> {
   shell(session, "activity", html`
     <header class="page-header">
       <div class="page-header__title"><h1>Activity</h1><p>Who did what, to which item, and whether stock changed.</p></div>
-      <div class="page-header__actions"><p class="live-status" id="live-status">Connecting…</p></div>
+      <div class="page-header__actions">
+        <p class="live-status" id="live-status">Connecting…</p>
+        <button class="button button--secondary" type="button" id="activity-export" title="Download this filtered list as a CSV file. Typed loan and phone notes are left out of files.">${icon("install")}Export CSV</button>
+      </div>
     </header>
     <div class="views" id="activity-sources" role="group" aria-label="Source"></div>
     <div class="table-toolbar">
@@ -210,6 +213,32 @@ export async function activityWorkspace(): Promise<void> {
     }
   }
 
+  let exporting = false;
+  /** The Worker builds the file from the same filters (and audits it); the browser only saves it. */
+  async function exportFile(button: HTMLButtonElement): Promise<void> {
+    if (exporting) return;
+    exporting = true;
+    button.setAttribute("aria-busy", "true");
+    try {
+      const question = query();
+      const response = await fetch(`/api/staff/activity/export${question ? `?${question}` : ""}`, { method: "POST", credentials: "same-origin" })
+        .catch(() => { throw new ApiError(0, "You appear to be offline. Check your connection and try again."); });
+      if (!response.ok) throw new ApiError(response.status, ((await response.json().catch(() => ({}))) as { error?: string }).error ?? "The export failed. Please try again.");
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(await response.blob());
+      link.download = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1] ?? "logistics-activity.csv";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+      const rows = Number(response.headers.get("x-export-rows"));
+      toast(response.headers.get("x-export-truncated") === "1" ? `Exported the newest ${entryCount(rows)}. More match: narrow the filters to export the rest.` : `Exported ${entryCount(rows)}.`);
+    } catch (error) {
+      toast(failure(error), "error");
+    } finally {
+      exporting = false;
+      button.removeAttribute("aria-busy");
+    }
+  }
+
   function setFilter(key: Key, value: string): void {
     if ((filters[key] ?? "") === value) return;
     filters = { ...filters, [key]: value };
@@ -296,6 +325,8 @@ export async function activityWorkspace(): Promise<void> {
     document.querySelector<HTMLElement>(`[data-source="${CSS.escape(filters.source ?? "")}"]`)?.focus();
   });
   document.querySelector("#activity-filters")!.addEventListener("click", openFilters);
+  const exportButton = document.querySelector<HTMLButtonElement>("#activity-export")!;
+  exportButton.addEventListener("click", () => void exportFile(exportButton));
   older.addEventListener("click", () => void loadOlder());
   let searchTimer = 0;
   onLeave(() => window.clearTimeout(searchTimer));
