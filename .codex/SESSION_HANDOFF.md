@@ -1,10 +1,19 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-STATUS: PART_05_CORE_CODE_COMPLETE (2026-10-01, Claude Cloud; stages 5.1–5.4 on handoff/part-05-activity-cloud; all local gates green; PR to main opened; awaiting Sentinel verification of the exact head and Earl's merge; not deployed)
+STATUS: PART_05_CORE_RELEASED (2026-10-01, Claude Cloud; `main` = 1a498a1, deployed and verified signed-out; next is Part 5B)
 ACTIVE_WRITER: none (Claude Cloud yields after this checkpoint); claim before edits
 WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub (Cloud works in its own clone and pushes the slice)
-BRANCH: handoff/part-05-activity-cloud (pushed; the one active Part 5 slice; local slice/part-05-activity is its ancestor with no unique commits); the Part 4 and 4.5 history below is closed
+BRANCH: main (Part 5 core merged; handoff/part-05-activity-cloud is merged and due for deletion; local slice/part-05-activity on Earl's machine is fully merged too); the Part 4 and 4.5 history below is closed
 LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live` follows the pushed slice)
+
+## Part 5 core release (Claude Cloud, 2026-10-01) — `main` 1a498a1
+- **Authority:** Earl, verbatim: "no need to wait for mausbot, take over the task and complete it", then "i cant see it because the website havent been updated/the main is unchange, remember when the main is updated the website updates right?". Sentinel's verification was waived for this release (recorded in the accepted plan's Acceptance record); Claude Cloud verified the candidate itself.
+- **Pre-merge production check (read-only):** the exact statements the Worker sends (staff page, admin export at limit 2,001, needs attention) were run on production D1 wrapped in `SELECT count(*)`, so only aggregates came back; 0 rows written. All run on D1 (`MATERIALIZED` CTEs, window functions, `json_valid` included): page 23 ms, attention 11 ms, full admin export 31 ms of SQL for 1,332 entries (all 686 movements with a balance). The Workers plan could not be read from the Worker's metadata, so the CPU of a full export (about 13 ms) stays an owner check.
+- **Release:** PR #3 head 1a498a1 (all gates green: typecheck, build, `npm test` 123, `test:browser` 11/11, `test:browser:worker` 22/22, privacy, migration ok, catalog, dry-run); `main` fast-forwarded 76f43b1..1a498a1 (GitHub marks PR #3 merged, 15:35 UTC). Workers Builds production build: success. No migration, no binding; `0016` stays optional and unapplied.
+- **Production verification (signed out, https://logistics.hausc.org):** live main bundle `index-3nunG-W4.js` and `activity-workspace-8V65nXTN.js` equal the local build of 1a498a1; `/staff/activity` 302 → `/staff`; `GET /api/staff/activity` 401; `POST /api/staff/activity/export` 403 without or with a foreign Origin, 401 same-origin signed out; `GET` export 401; public catalog 200.
+- **Owner acceptance items (no staff credentials in cloud):** sign in; Activity loads, search, Filters, Load older; one full Export CSV (if it fails with a resource error, the Workers Free plan's 10 ms CPU limit is the cause: narrow the dates); as Owner, the export appears under Accounts & exports.
+- **Preview builds:** Workers Builds non-production branch builds fail for every branch regardless of code (dashboard setting, see PR #3 comment); production builds are unaffected.
+- **Exact next action:** Part 5B (A12 Open-Unit Tracking) on `slice/part-05b-open-units` from this `main`; its migration needs Earl's explicit authorization before code that depends on it reaches `main`.
 
 ## Part 5 cloud continuation (Claude Cloud, 2026-10-01) — branch handoff/part-05-activity-cloud
 - **Writer:** Claude Cloud, working directly on the WIP branch per `.codex/PART_05_CLOUD_HANDOFF.md` (the local worktree must not write while this runs; `npm run agent:*` does not span machines). Linux, Node 22.22.0 (the handoff's Node 26.3.0 is not available here; `npm test` 119 passed, `npm run test:browser` 10/10 on entry). Playwright 1.63 expects Chromium 1243; the image has 1194, so browser suites run with `PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` (no code change).

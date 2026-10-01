@@ -1,6 +1,6 @@
 # Current Handoff — Part 4 (closed) / Part 5 (core code complete)
 
-Part 5 core (Activity + Accountability, stages 5.1–5.4) is code complete on `handoff/part-05-activity-cloud` with all local gates green and a PR to `main` open; it waits for Sentinel and Earl's merge. Read `.codex/CURRENT.md` and the top of `.codex/SESSION_HANDOFF.md` first; the Part 4 notes below are history.
+Part 5 core (Activity + Accountability, stages 5.1–5.4) is released: `main` 1a498a1 (PR #3), deployed and verified signed-out on 2026-10-01. Next is Part 5B (Open-Unit Tracking). Read `.codex/CURRENT.md` and the top of `.codex/SESSION_HANDOFF.md` first; the Part 4 notes below are history.
 
 Earl confirmed on 2026-10-01 that Part 4 is complete on `main` as a whole (owner confirmation; no agent ran new acceptance). Part 5 and A12 are accepted in `docs/specs/accepted/2026-09-30-part-05-activity-accountability-plan.md`; the statements below that say "Part 5 must not start" or "do not start Part 5" are historical and superseded. Production writes and migrations stay separately authorized.
 
