@@ -196,6 +196,9 @@ describe("activity read model", () => {
     expect(adminView.events.map((event) => event.type)).toEqual(["ACCOUNT_CREATED", "OWNER_RECOVERY_USED", "ACCOUNT_CREATED"]);
     expect(adminView.events[0]).toMatchObject({ source: "ACCOUNT", summary: "Admin One created account for hidden.person." === "" ? "" : expect.stringContaining("hidden.person") });
     expect((await feed("source=ACCOUNT", adminCookie)).events).toHaveLength(6);
+    // The Owner Console's first-owner setup reads as itself, not as a raw code.
+    audit("AUD-BOOT", "2026-09-29T00:00:00.000Z", "OWNER_BOOTSTRAPPED", "ACCOUNT", "ACC-2", '{"username":"admin.one"}', "ACC-2");
+    expect((await feed("type=OWNER_BOOTSTRAPPED", adminCookie)).events.map((event) => [event.title, event.summary])).toEqual([["First owner set up", "Admin One was set up as the first owner from the Owner Console."]]);
     expect(JSON.stringify(adminView)).not.toContain("KEY-1");
   });
 

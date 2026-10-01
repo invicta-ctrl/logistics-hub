@@ -295,6 +295,7 @@ function toEvent(row: Row): ActivityEvent {
     REORDER_OPENED: () => `${actor} put ${item} on the restock list.`,
     REORDER_UPDATED: () => `${actor} updated the restock entry for ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`,
     REORDER_RESTOCKED: () => `${actor} received a restock of ${amount}${item}.`,
+    OWNER_BOOTSTRAPPED: () => `${actor} was set up as the first owner from the Owner Console.`,
     ACTIVITY_EXPORTED: () => `${actor} exported ${details.rows === 1 ? "1 activity entry" : `${typeof details.rows === "number" ? details.rows : "some"} activity entries`} to a file${fields.length ? `, filtered by ${fields.join(", ")}` : ""}${details.truncated === true ? " (the newest; more matched)" : ""}.`
   };
   const phone = () => `A phone ${type.slice(6).toLowerCase()} of ${amount}${item}${outcome} was ${held ? "held for staff" : "recorded"}${reason ? `: ${reason}` : ""}.`;
