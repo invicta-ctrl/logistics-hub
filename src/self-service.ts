@@ -1,10 +1,10 @@
 import { LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, STUDENT_ID_PATTERN, selfServiceAction } from "./catalog-policy";
 import { throttled } from "./accounts";
-import { type Actor, BUMP_REVISION, COUNT_TOLERANCE_DAYS, HISTORY_ORDER, InputError, catalogRevision, countAwareStatus } from "./inventory";
+import { type Actor, BUMP_REVISION, COUNT_TOLERANCE_DAYS, HISTORY_ORDER, InputError, catalogRevision, countAwareStatus, guarded } from "./inventory";
 import { LOAN_ID, type LoanDetails, SELF_SERVICE_ACTOR, cleanText, closeStatements, lendStatements, loanDetails, officeDay, readPhoto } from "./loans";
 
 /*
- * Phone self-service (Part 4.5). A phone records Take, Borrow and Return as immutable events,
+ * Phone self-service (Part 4.5; Use in Part 5B). A phone records Take, Borrow, Use and Return as immutable events,
  * offline if need be, and syncs them here. Each event is stored once under its own id, then
  * either applied through the canonical ledger and lending statements, or held for a staff
  * decision. The rules, with examples, are in docs/OFFLINE_SELF_SERVICE.md.
@@ -18,7 +18,7 @@ const LIVE_MS = 2 * MINUTE;
 /** Recorded after it was sent, or older than this: the phone's clock cannot be trusted. */
 const CLOCK_SLACK_MS = 10 * MINUTE;
 const MAX_AGE_MS = 30 * 24 * 60 * MINUTE;
-const EVENT_TYPES = ["TAKE", "BORROW", "RETURN"] as const;
+const EVENT_TYPES = ["TAKE", "BORROW", "RETURN", "USE"] as const;
 /** The database's refusal to change a resolved review (trigger in migration 0015). */
 const RESOLVED = "self_service_event_resolved";
 /** Loans a phone created: `LN-SS-<event id>`, a namespace no staff loan uses. */
@@ -45,14 +45,14 @@ type SelfServiceEvent = {
  */
 export type Batch = { deviceId: string; sentAt: string; offsetMs: number; receivedAt: string; network: string; clientTag: string | null; events: unknown[] };
 
-type ItemRow = { id: string; itemType: string; status: string; needsReview: number; lendingAudience: string };
+type ItemRow = { id: string; itemType: string; status: string; needsReview: number; lendingAudience: string; consumptionMode: string };
 
 /* ---------- Public catalog ---------- */
 
 /** The phone's catalog snapshot: only what self-service needs, never notes, history, borrowers or photos. */
 export async function selfServiceCatalog(db: D1Database) {
   const { results } = await db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.unit, i.item_type AS itemType, i.status, i.needs_review AS needsReview,
-      i.lending_audience AS lendingAudience, i.storage_location AS location, COALESCE(b.on_hand, 0) AS onHand
+      i.lending_audience AS lendingAudience, i.consumption_mode AS consumptionMode, i.storage_location AS location, COALESCE(b.on_hand, 0) AS onHand
     FROM items i LEFT JOIN inventory_balances b ON b.id = i.id
     WHERE i.status = 'ACTIVE' AND i.needs_review = 0 ORDER BY i.name COLLATE NOCASE`)
     .all<ItemRow & { name: string; aliases: string | null; category: string; unit: string; location: string | null; onHand: number }>();
@@ -133,10 +133,12 @@ export function parseEvent(raw: unknown, batch: Pick<Batch, "sentAt" | "offsetMs
   if (!EVENT_TYPES.includes(type)) throw bad("Unknown action.");
   if (typeof record.itemId !== "string" || !ITEM_ID.test(record.itemId)) throw bad("Unknown item.");
   const quantity = whole(record.quantity, 1, SELF_SERVICE_LIMITS.quantity, `Quantity must be a whole number from 1 to ${SELF_SERVICE_LIMITS.quantity}.`);
+  // A use names no amount: it records that an open unit was used, and changes no stock.
+  if (type === "USE" && quantity !== 1) throw bad("A use has no amount.");
   const catalogRevision = record.catalogRevision === null || record.catalogRevision === undefined ? null : whole(record.catalogRevision, 0, 2 ** 31, "Malformed catalog revision.");
   const person = (record.person && typeof record.person === "object" ? record.person : {}) as Record<string, unknown>;
   const personName = cleanText(person.name, "Your name", 120, true)!;
-  const studentId = type === "TAKE" ? null : cleanText(person.studentId, "Student ID number", 30, false)?.toUpperCase() ?? null;
+  const studentId = type === "TAKE" || type === "USE" ? null : cleanText(person.studentId, "Student ID number", 30, false)?.toUpperCase() ?? null;
   if (studentId && !STUDENT_ID_PATTERN.test(studentId)) throw bad("Student ID number may use only letters, digits and dashes.");
 
   const deviceMs = isoTime(record.occurredAt, "Malformed time.");
@@ -247,7 +249,7 @@ type Context = { overlap: boolean; recentUnits: number };
 async function context(db: D1Database, itemId: string, at: string, receivedAt: string): Promise<Context> {
   const row = await db.prepare(`SELECT EXISTS (SELECT 1 FROM inventory_movements WHERE item_id = ?1 AND movement_type = 'COUNT_ADJUSTMENT' AND status = 'POSTED'
         AND imported_from IS NULL AND julianday(created_at) BETWEEN julianday(?2) - ?3 AND julianday(?2) + ?3) AS overlap,
-      (SELECT COALESCE(SUM(quantity), 0) FROM self_service_events WHERE item_id = ?1 AND event_type <> 'RETURN' AND applied = 1
+      (SELECT COALESCE(SUM(quantity), 0) FROM self_service_events WHERE item_id = ?1 AND event_type IN ('TAKE', 'BORROW') AND applied = 1
         AND received_at > strftime('%Y-%m-%dT%H:%M:%fZ', ?4, '-1 hour')) AS recentUnits`)
     .bind(itemId, at, COUNT_TOLERANCE_DAYS, receivedAt).first<{ overlap: number; recentUnits: number }>();
   return { overlap: row?.overlap === 1, recentUnits: row?.recentUnits ?? 0 };
@@ -284,9 +286,10 @@ async function uploadPhoto(bucket: R2Bucket, event: SelfServiceEvent, photoPart:
 }
 
 /**
- * Take and Borrow. Ineligible while the person is still here: refused. Anything that cannot
+ * Take, Borrow and Use. Ineligible while the person is still here: refused. Anything that cannot
  * be applied safely (ineligible late, implausible clock, over the hourly volume) is held for
- * staff with all its evidence, including a borrow's photo. Otherwise it is applied.
+ * staff with all its evidence, including a borrow's photo. Otherwise it is applied. A Use only
+ * records that an open unit was used: no movement, so no volume limit or count overlap applies.
  */
 async function applyOut(db: D1Database, bucket: R2Bucket, event: SelfServiceEvent, batch: Batch, item: ItemRow, photoPart: unknown): Promise<SyncResult> {
   const uscOnly = event.type === "BORROW" && item.lendingAudience === "USC_STAFF_ONLY" && event.loan!.purpose !== "USC";
@@ -301,6 +304,10 @@ async function applyOut(db: D1Database, bucket: R2Bucket, event: SelfServiceEven
   }
   let result: SyncResult;
   try {
+    if (event.type === "USE") {
+      const held: ReviewReason | null = event.clockIssue ? "CLOCK" : !eligible ? "NOT_ELIGIBLE" : null;
+      return held ? await hold(db, event, batch, held) : await write(db, event, [eventRow(db, event, batch, { applied: 1, review: null })], null);
+    }
     const facts = await context(db, event.itemId, event.occurredAt, batch.receivedAt);
     const held: ReviewReason | null = event.clockIssue ? "CLOCK" : uscOnly ? "USC_ONLY" : !eligible ? "NOT_ELIGIBLE"
       : facts.recentUnits + event.quantity > SELF_SERVICE_LIMITS.unitsPerItemHour ? "VOLUME" : null;
@@ -391,7 +398,7 @@ export async function syncEvents(db: D1Database, bucket: R2Bucket, batch: Batch,
   // Everything the batch needs to know up front, in two queries.
   const [known, items] = await db.batch([
     db.prepare(`SELECT id, review FROM self_service_events WHERE id IN (${marks(ids)})`).bind(...ids),
-    db.prepare(`SELECT id, item_type AS itemType, status, needs_review AS needsReview, lending_audience AS lendingAudience
+    db.prepare(`SELECT id, item_type AS itemType, status, needs_review AS needsReview, lending_audience AS lendingAudience, consumption_mode AS consumptionMode
       FROM items WHERE id IN (${marks(itemIds)})`).bind(...itemIds)
   ]);
   const stored = new Map((known.results as Array<{ id: string; review: ReviewReason | null }>).map((row) => [row.id, row.review]));
@@ -501,7 +508,7 @@ export async function resolveReview(db: D1Database, bucket: R2Bucket, actor: Act
   // Marks the review resolved; `fields` may set more columns, bound from ?5 on.
   const resolve = (fields = "", ...extra: string[]) => db.prepare(`UPDATE self_service_events SET ${fields}resolved_at = ?1, resolved_by = ?2, resolution_note = ?3 WHERE id = ?4`)
     .bind(...resolution, id, ...extra);
-  const run = (statements: D1PreparedStatement[]) => db.batch([...statements, db.prepare(BUMP_REVISION)]).catch((error: unknown) => {
+  const run = (statements: D1PreparedStatement[]) => guarded(db.batch([...statements, db.prepare(BUMP_REVISION)])).catch((error: unknown) => {
     if (error instanceof Error && error.message.includes(RESOLVED)) throw new InputError(409, "Someone else resolved this a moment ago. Refresh to see the latest.");
     throw error;
   });
@@ -517,6 +524,11 @@ export async function resolveReview(db: D1Database, bucket: R2Bucket, actor: Act
   if (action === "apply") {
     if (event.type === "RETURN") throw new InputError(400, "Match a return to its loan instead.");
     if (event.type === "BORROW" && !event.photoKey) throw new InputError(400, "This borrow has no photo. Dismiss it and lend the item at the desk instead.");
+    // A held use changes no stock: applying it only accepts the record.
+    if (event.type === "USE") {
+      await run([resolve("applied = 1, ")]);
+      return { resolved: true };
+    }
     const loanId = loanIdFor(event.id);
     await run(event.type === "TAKE"
       ? [resolve("applied = 1, movement_id = ?5, ", movementId), takeStatement(db, movementId, event.id, event.itemId, event.quantity, event.occurredAt)]

@@ -1,5 +1,6 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, changeOwnPassword, clearThrottle, createAccount, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, throttled, updateAccount, updateSelf } from "./accounts";
+import { openUnitAction } from "./open-units";
 import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
@@ -15,7 +16,7 @@ export type Env = {
 
 const SESSION_NAME = "lh_staff_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
-const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans)?$/;
+const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units)?$/;
 const LOAN_PATH = /^\/api\/staff\/loans\/(LN-[A-Za-z0-9-]{1,60})\/(return|photo)$/;
 const REORDER_PATH = /^\/api\/staff\/reorders\/(RO-[A-Za-z0-9-]{1,60})$/;
 const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|photo)$/;
@@ -192,6 +193,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     return json(await updateItem(env.DB, account, match[1]!, parseItemInput(input), input?.updatedAt));
   }
   if (match?.[2] === "/movements" && method === "POST") return json(await recordMovement(env.DB, account, match[1]!, await body()));
+  if (match?.[2] === "/open-units" && method === "POST") return json(await openUnitAction(env.DB, account, match[1]!, await body()));
   if (match?.[2] === "/loans" && method === "POST") {
     const form = await request.formData().catch(() => null);
     if (!form) throw new InputError(400, "Invalid loan form.");

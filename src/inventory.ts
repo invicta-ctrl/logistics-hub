@@ -1,4 +1,4 @@
-import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_AUDIENCES, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
+import { CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_AUDIENCES, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
 
 export class InputError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -9,13 +9,13 @@ export type Actor = { accountId: string };
 type ItemRow = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: number;
   lendingAudience: string; onHand: number; reorderThreshold: number; storageLocation: string | null; notes: string | null; updatedAt: string | null;
-  stockArea: string | null; expiresOn: string | null;
+  stockArea: string | null; expiresOn: string | null; consumptionMode: string;
 };
 
 const ITEM_COLUMNS = `i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.unit, i.status, i.needs_review AS needsReview,
  i.lending_audience AS lendingAudience, COALESCE(b.on_hand, 0) AS onHand, i.reorder_threshold AS reorderThreshold,
  i.storage_location AS storageLocation, i.notes, i.updated_at AS updatedAt,
- i.stock_area AS stockArea, i.expires_on AS expiresOn`;
+ i.stock_area AS stockArea, i.expires_on AS expiresOn, i.consumption_mode AS consumptionMode`;
 export const BUMP_REVISION = "UPDATE catalog_revision SET value = value + 1 WHERE id = 1";
 /**
  * History is shown in business order: migrated rows keep their import order, then everything
@@ -42,6 +42,25 @@ export const LOAN_COLUMNS = `SELECT l.id, l.item_id AS itemId, i.name AS itemNam
   l.closed_at AS closedAt, ${actorName("c", "l.created_by")} AS createdBy, ${actorName("x", "l.closed_by")} AS closedBy
   FROM loans l JOIN items i ON i.id = l.item_id LEFT JOIN staff_accounts c ON c.id = l.created_by LEFT JOIN staff_accounts x ON x.id = l.closed_by`;
 const OPEN_REORDERS = [...OPEN_REORDER_STATUSES].map((status) => `'${status}'`).join(",");
+
+/** The database's refusals that keep open units within stock (migration 0017), in the words staff read. */
+export async function guarded<T>(work: Promise<T>): Promise<T> {
+  try {
+    return await work;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("open_units_exceed_on_hand")) throw new InputError(409, "That would leave fewer units on hand than are open. Mark an open unit empty or correct the open units first.");
+    if (message.includes("open_units_block_change")) throw new InputError(409, "This item has open units. Mark them empty or correct them before changing how it is used, its type, or making it inactive.");
+    if (message.includes("open_unit_closed")) throw new InputError(409, "That unit is no longer open. Refresh to see the latest.");
+    throw error;
+  }
+}
+
+/** An item's open units, oldest first, with who opened them. */
+export function openUnitsOf(db: D1Database, itemId: string): D1PreparedStatement {
+  return db.prepare(`SELECT o.id, o.opened_at AS openedAt, COALESCE(a.display_name, 'Staff') AS openedBy, o.condition, o.condition_at AS conditionAt
+    FROM open_units o LEFT JOIN staff_accounts a ON a.id = o.opened_by WHERE o.item_id = ? AND o.closed_at IS NULL ORDER BY o.opened_at, o.id`).bind(itemId);
+}
 
 export async function catalogRevision(db: D1Database): Promise<number> {
   return (await db.prepare("SELECT value FROM catalog_revision WHERE id = 1").first<number>("value")) ?? 0;
@@ -70,20 +89,23 @@ export async function publicCatalog(db: D1Database) {
   return { items, categories: distinct(items.map((item) => item.category)) };
 }
 
-type StaffRow = ItemRow & { lastCountedAt: string | null; migrationDelta: number | null; reorderStatus: string | null; onLoan: number };
+type StaffRow = ItemRow & { lastCountedAt: string | null; migrationDelta: number | null; reorderStatus: string | null; onLoan: number; openUnits: number; openCondition: string | null };
 
 export async function staffInventory(db: D1Database) {
   // lastCountedAt counts only physical counts recorded in the Hub, not migrated rows.
   const { results } = await db.prepare(`SELECT ${ITEM_COLUMNS}, b.migration_delta AS migrationDelta,
       (SELECT MAX(m.created_at) FROM inventory_movements m WHERE m.item_id = i.id AND m.movement_type = 'COUNT_ADJUSTMENT' AND m.imported_from IS NULL) AS lastCountedAt,
       (SELECT r.status FROM reorders r WHERE r.item_id = i.id AND r.status IN (${OPEN_REORDERS})) AS reorderStatus,
-      (SELECT COALESCE(SUM(l.quantity), 0) FROM loans l WHERE l.item_id = i.id AND l.status = 'OUT') AS onLoan
+      (SELECT COALESCE(SUM(l.quantity), 0) FROM loans l WHERE l.item_id = i.id AND l.status = 'OUT') AS onLoan,
+      (SELECT COUNT(*) FROM open_units o WHERE o.item_id = i.id AND o.closed_at IS NULL) AS openUnits,
+      (SELECT o.condition FROM open_units o WHERE o.item_id = i.id AND o.closed_at IS NULL ORDER BY CASE o.condition WHEN 'LOW' THEN 0 WHEN 'HALF' THEN 1 WHEN 'PLENTY' THEN 2 ELSE 3 END LIMIT 1) AS openCondition
     FROM items i LEFT JOIN inventory_balances b ON b.id = i.id ORDER BY i.name COLLATE NOCASE`).all<StaffRow>();
   const items = results.map((row) => ({
     id: row.id, name: row.name, aliases: row.aliases, category: row.category, itemType: row.itemType, unit: row.unit, status: row.status,
     needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand,
     reorderThreshold: row.reorderThreshold, storageLocation: row.storageLocation, listed: isListedForLending(row),
     stockArea: row.stockArea, expiresOn: row.expiresOn, lastCountedAt: row.lastCountedAt, reorderStatus: row.reorderStatus, onLoan: row.onLoan,
+    consumptionMode: row.consumptionMode, openUnits: row.openUnits, openCondition: row.openCondition,
     // The legacy quantity is doubtful (migration discrepancy or a VERIFY record) until someone counts it.
     countNeeded: row.status !== "INACTIVE" && !row.lastCountedAt && ((row.migrationDelta ?? 0) !== 0 || row.status === "VERIFY")
   }));
@@ -99,13 +121,13 @@ export async function staffInventory(db: D1Database) {
 type AuditRow = { at: string; action: string; details: string | null; actor: string | null };
 
 export async function itemDetail(db: D1Database, id: string) {
-  const [item, movements, events, loans] = await db.batch([
+  const [item, movements, events, loans, units, uses] = await db.batch([
     db.prepare(`SELECT ${ITEM_COLUMNS}, b.legacy_reported_available_qty AS legacyReportedAvailable, b.migrated_on_hand AS migratedOnHand,
       b.migration_delta AS migrationDelta, i.legacy_source_sheet AS legacySourceSheet, i.legacy_source_row AS legacySourceRow,
       i.verification_note AS verificationNote, i.imported_from AS importedFrom
       FROM items i LEFT JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?`).bind(id),
     db.prepare(`SELECT * FROM (SELECT m.id, m.created_at AS createdAt, m.movement_type AS movementType, m.signed_quantity AS signedQuantity, m.status,
-      m.notes, m.reason, ${actorName("a", "m.actor_user_id")} AS actor, ROW_NUMBER() OVER (ORDER BY ${HISTORY_ORDER}) AS seq,
+      m.notes, m.reason, m.related_entity_type AS related, ${actorName("a", "m.actor_user_id")} AS actor, ROW_NUMBER() OVER (ORDER BY ${HISTORY_ORDER}) AS seq,
       COALESCE(l.borrower_name, s.person_name) AS borrower, l.purpose,
       SUM(CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END) OVER (ORDER BY ${HISTORY_ORDER}) AS afterQuantity
       FROM inventory_movements m LEFT JOIN staff_accounts a ON a.id = m.actor_user_id
@@ -113,7 +135,12 @@ export async function itemDetail(db: D1Database, id: string) {
       LEFT JOIN self_service_events s ON m.related_entity_type = 'SELF_SERVICE' AND s.id = m.related_entity_id WHERE m.item_id = ?) ORDER BY seq DESC LIMIT 50`).bind(id),
     db.prepare(`SELECT l.created_at AS at, l.action, l.details_json AS details, ${actorName("a", "l.actor_user_id")} AS actor FROM audit_log l
       LEFT JOIN staff_accounts a ON a.id = l.actor_user_id WHERE l.entity_type = 'ITEM' AND l.entity_id = ? ORDER BY l.created_at DESC, l.rowid DESC LIMIT 50`).bind(id),
-    db.prepare(`${LOAN_COLUMNS} WHERE l.item_id = ? ORDER BY l.status = 'OUT' DESC, l.created_at DESC LIMIT 20`).bind(id)
+    db.prepare(`${LOAN_COLUMNS} WHERE l.item_id = ? ORDER BY l.status = 'OUT' DESC, l.created_at DESC LIMIT 20`).bind(id),
+    openUnitsOf(db, id),
+    // Two separate measures, never mixed: uses recorded (staff and phones, no stock change) and units used up (each one -1).
+    db.prepare(`SELECT (SELECT COUNT(*) FROM audit_log WHERE entity_type = 'ITEM' AND entity_id = ?1 AND action = 'UNIT_USED')
+        + (SELECT COUNT(*) FROM self_service_events WHERE item_id = ?1 AND event_type = 'USE' AND applied = 1) AS usesRecorded,
+      (SELECT COUNT(*) FROM inventory_movements WHERE item_id = ?1 AND related_entity_type = 'OPEN_UNIT' AND status = 'POSTED') AS unitsEmptied`).bind(id)
   ]);
   const row = item.results[0] as (ItemRow & Record<string, unknown>) | undefined;
   if (!row) throw new InputError(404, "Item not found.");
@@ -121,6 +148,8 @@ export async function itemDetail(db: D1Database, id: string) {
     item: { ...row, needsReview: row.needsReview === 1, listed: isListedForLending(row), listingGaps: listingGaps(row) },
     movements: movements.results,
     loans: loans.results,
+    openUnits: units!.results,
+    ...(uses!.results[0] as { usesRecorded: number; unitsEmptied: number }),
     // Parsed here so the browser renders sentences, never raw JSON.
     events: (events.results as AuditRow[]).map((event) => ({ at: event.at, action: event.action, actor: event.actor, details: event.details ? JSON.parse(event.details) as Record<string, unknown> : {} }))
   };
@@ -130,7 +159,7 @@ type ItemInput = {
   name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; storageLocation: string | null;
   reorderThreshold: number; lendingAudience: string; needsReview: boolean; notes: string | null;
   // Optional: an older form that omits them keeps the stored value.
-  stockArea?: string; expiresOn?: string | null;
+  stockArea?: string; expiresOn?: string | null; consumptionMode?: string;
 };
 
 function text(body: Record<string, unknown>, key: string, label: string, max: number, required: boolean, multiline = false): string | null {
@@ -187,6 +216,9 @@ export function parseItemInput(body: unknown): ItemInput {
     ...(record.stockArea === undefined ? {} : { stockArea: choice(record, "stockArea", "stock area", STOCK_AREAS) }),
     ...(record.expiresOn === undefined ? {} : { expiresOn: isoDate(record.expiresOn, "Expiry date") })
   };
+  // Only a Consumable is opened and used gradually; anything else is stored as a whole unit.
+  if (input.itemType !== "Consumable") input.consumptionMode = "WHOLE_UNIT";
+  else if (record.consumptionMode !== undefined) input.consumptionMode = choice(record, "consumptionMode", "way it is used", CONSUMPTION_MODES);
   if (input.lendingAudience !== "NOT_AVAILABLE_FOR_LENDING" && !LISTABLE_ITEM_TYPES.has(input.itemType)) {
     throw new InputError(400, "Only Loanable or Consumable items can be listed on the Lending Hub.");
   }
@@ -215,7 +247,7 @@ const EDITABLE: Array<[keyof ItemInput, string]> = [
   ["name", "name"], ["aliases", "aliases"], ["category", "category"], ["itemType", "item_type"], ["unit", "unit"], ["status", "status"],
   ["storageLocation", "storage_location"], ["reorderThreshold", "reorder_threshold"], ["lendingAudience", "lending_audience"],
   ["needsReview", "needs_review"], ["notes", "notes"],
-  ["stockArea", "stock_area"], ["expiresOn", "expires_on"]
+  ["stockArea", "stock_area"], ["expiresOn", "expires_on"], ["consumptionMode", "consumption_mode"]
 ];
 const stored = (value: ItemInput[keyof ItemInput]) => typeof value === "boolean" ? Number(value) : value;
 
@@ -243,12 +275,12 @@ export async function updateItem(db: D1Database, actor: Actor, id: string, parse
   const changed = EDITABLE.filter(([key]) => input[key] !== undefined && current[key] !== stored(input[key]));
   if (!changed.length) return { changed: 0, updatedAt: current.updatedAt };
   const now = new Date().toISOString();
-  const [update] = await db.batch([
+  const [update] = await guarded(db.batch([
     db.prepare(`UPDATE items SET ${changed.map(([, column]) => `${column} = ?`).join(", ")}, updated_at = ? WHERE id = ? AND updated_at IS ?`)
       .bind(...changed.map(([key]) => stored(input[key])), now, id, expectedUpdatedAt),
     audit(db, actor.accountId, "ITEM_UPDATED", "ITEM", id, Object.fromEntries(changed.map(([key]) => [key, { from: current[key], to: stored(input[key]) }])), true),
     db.prepare(`${BUMP_REVISION} AND changes() > 0`)
-  ]);
+  ]));
   if (!update!.meta.changes) throw new InputError(409, STALE);
   return { changed: changed.length, updatedAt: now };
 }
@@ -262,10 +294,10 @@ export async function createItem(db: D1Database, actor: Actor, parsed: ItemInput
     const id = `ITM-${String(next).padStart(4, "0")}`;
     const statements = [
       db.prepare(`INSERT INTO items(id, name, aliases, category, item_type, unit, status, storage_location, reorder_threshold, lending_audience,
-        needs_review, notes, stock_area, expires_on, imported_from, imported_at, updated_at)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
+        needs_review, notes, stock_area, expires_on, consumption_mode, imported_from, imported_at, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
         .bind(id, input.name, input.aliases, input.category, input.itemType, input.unit, input.status, input.storageLocation, input.reorderThreshold, input.lendingAudience,
-          Number(input.needsReview), input.notes, input.stockArea ?? "Inventory", input.expiresOn ?? null, now, now),
+          Number(input.needsReview), input.notes, input.stockArea ?? "Inventory", input.expiresOn ?? null, input.consumptionMode ?? "WHOLE_UNIT", now, now),
       audit(db, actor.accountId, "ITEM_CREATED", "ITEM", id, { ...input, openingQuantity }),
       db.prepare(BUMP_REVISION)
     ];
@@ -308,19 +340,31 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
     const received = await db.prepare("SELECT 1 FROM inventory_movements WHERE idempotency_key = ?").bind(key).first();
     if (!open && !received) throw new InputError(409, "That restock entry is already closed. Refresh to see the latest list.");
   }
+  // A count below the open units must say so: it closes the extra ones (oldest first) in the same batch.
+  const reconcile = kind === "COUNT" && record.reconcileOpen === true;
   const movement = MOVEMENTS[kind];
   const movementId = `MOV-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
+  const statements: D1PreparedStatement[] = [];
+  if (reconcile) {
+    // Guarded exactly like the count below (same balance, unused key), so both happen or neither does.
+    statements.push(db.prepare(`UPDATE open_units SET closed_at = ?1, closed_by = ?2, close_kind = 'COUNTED', movement_id = ?3
+      WHERE id IN (SELECT id FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY opened_at DESC, id DESC) AS n FROM open_units WHERE item_id = ?4 AND closed_at IS NULL) WHERE n > ?5)
+        AND (SELECT on_hand FROM inventory_balances WHERE id = ?4) = ?6 AND NOT EXISTS (SELECT 1 FROM inventory_movements WHERE idempotency_key = ?7)`)
+      .bind(now, actor.accountId, movementId, itemId, quantity, expected, key),
+    db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
+      SELECT ?1, ?2, ?3, 'UNIT_RECONCILED', 'ITEM', ?4, json_object('closed', changes(), 'counted', ?5) WHERE changes() > 0`)
+      .bind(crypto.randomUUID(), now, actor.accountId, itemId, quantity));
+  }
   // One statement computes the signed quantity from the live balance and applies
   // the guard, so concurrent writers cannot drive stock negative or double-count.
-  const statements = [
+  statements.push(
     db.prepare(`INSERT OR IGNORE INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, idempotency_key, notes, reason, status)
       SELECT ?2, ?3, '${movement.type}', '${movement.direction}', i.id, ABS(${movement.signed}), i.unit, ${movement.signed}, ?4, ?5, ?6, ?8, 'POSTED'
       FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?7 AND ${movement.guard} AND (?9 IS NULL OR b.on_hand = ?9)`)
       .bind(quantity, movementId, now, actor.accountId, key, note, itemId, reason, expected),
     // changes() still refers to the INSERT, so a retry or refused write leaves the revision untouched.
-    db.prepare(`${BUMP_REVISION} AND changes() > 0`)
-  ];
+    db.prepare(`${BUMP_REVISION} AND changes() > 0`));
   if (reorderId) {
     // Closes the restock entry only if this request's movement was actually written.
     statements.push(db.prepare(`UPDATE reorders SET status = 'RESTOCKED', movement_id = ?1, closed_at = ?2, updated_at = ?2, updated_by = ?3
@@ -328,7 +372,16 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
       .bind(movementId, now, actor.accountId, reorderId, itemId));
     statements.push(audit(db, actor.accountId, "REORDER_RESTOCKED", "ITEM", itemId, { quantity }, true));
   }
-  await db.batch(statements);
+  try {
+    await db.batch(statements);
+  } catch (error) {
+    // The database keeps open units within on-hand (migration 0017); say what to do instead.
+    if (!(error instanceof Error && error.message.includes("open_units_exceed_on_hand"))) throw error;
+    const open = await db.prepare("SELECT COUNT(*) AS open FROM open_units WHERE item_id = ? AND closed_at IS NULL").bind(itemId).first<number>("open") ?? 0;
+    throw new InputError(409, kind === "COUNT"
+      ? `${open} ${open === 1 ? "unit is" : "units are"} open, more than the ${quantity} you counted. Close the extra open units with this count, or correct them first.`
+      : `${open} of the units on hand ${open === 1 ? "is" : "are"} open, so ${quantity} cannot be taken out. Mark an open unit empty instead, or correct the open units first.`);
+  }
   // Found for a first write and for an idempotent retry alike.
   const written = await db.prepare(`SELECT m.item_id AS itemId, m.signed_quantity AS change, b.on_hand AS onHand
     FROM inventory_movements m JOIN inventory_balances b ON b.id = m.item_id WHERE m.idempotency_key = ?`).bind(key).first<{ itemId: string; change: number; onHand: number }>();

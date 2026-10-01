@@ -192,6 +192,39 @@ describe("Take", () => {
   });
 });
 
+describe("Use (open-unit Consumables)", () => {
+  it("is offered instead of Take, records who used it, and never changes stock, however often it is replayed", async () => {
+    const paper = await consumable("A4 Bond Paper", 8, { consumptionMode: "OPEN_UNIT" });
+    const water = await consumable("Bottled Water", 5);
+    const catalog = await (await call("/api/self-service/catalog")).json() as { items: Array<{ id: string; action: string }> };
+    expect(catalog.items.map((entry) => [entry.id, entry.action])).toEqual([[paper, "USE"], [water, "TAKE"]]);
+    const device = phone();
+    const use = { ...device.take(paper, 1), type: "USE" };
+    expect(await results(await device.sync([use]))).toEqual([{ id: use.id, outcome: "accepted" }]);
+    expect(await results(await device.sync([use]))).toEqual([{ id: use.id, outcome: "accepted", duplicate: true }]);
+    expect(onHand(paper)).toBe(8);
+    expect(stored(use.id)).toMatchObject({ event_type: "USE", quantity: 1, applied: 1, movement_id: null, review: null, student_id: null });
+    // No amount is ever asked or accepted.
+    const amount = { ...device.take(paper, 2), type: "USE" };
+    expect(await results(await device.sync([amount]))).toEqual([{ id: amount.id, outcome: "rejected", message: "A use has no amount." }]);
+  });
+
+  it("routes by the item, never the person: a take of an open-unit item is refused live and held late, a use of a whole-unit item likewise", async () => {
+    const paper = await consumable("A4 Bond Paper", 8, { consumptionMode: "OPEN_UNIT" });
+    const water = await consumable("Bottled Water", 5);
+    const device = phone();
+    const [take, use] = [device.take(paper, 1), { ...device.take(water, 1), type: "USE" }];
+    expect((await results(await device.sync([take, use]))).map((result) => result.outcome)).toEqual(["rejected", "rejected"]);
+    const [lateTake, lateUse] = [device.take(paper, 1, 60), { ...device.take(water, 1, 60), type: "USE" }];
+    expect((await results(await device.sync([lateTake, lateUse]))).map((result) => result.outcome)).toEqual(["review", "review"]);
+    expect([onHand(paper), onHand(water)]).toEqual([8, 5]);
+    // Applying a held use only accepts the record.
+    expect((await resolve(lateUse.id, { action: "apply" })).status).toBe(200);
+    expect(stored(lateUse.id)).toMatchObject({ applied: 1, movement_id: null });
+    expect(onHand(water)).toBe(5);
+  });
+});
+
 describe("Borrow and Return", () => {
   it("lends offline with the Part 4 rules and a photo in R2 that only staff can open", async () => {
     const scissors = await loanable("Scissors", 5);

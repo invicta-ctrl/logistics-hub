@@ -8,6 +8,13 @@ export const PUBLIC_LENDING_AUDIENCES = new Set<string>(["STUDENTS_AND_USC_STAFF
 export const PUBLIC_LENDING_ITEM_TYPE = "Loanable";
 export const LISTABLE_ITEM_TYPES = new Set<string>(["Loanable", "Consumable"]);
 export const STOCK_AREAS = ["Inventory", "Pantry"] as const;
+/**
+ * How a Consumable is used: taken a whole unit at a time, or opened and used gradually (a ream, a bottle).
+ * Either way only outer units are counted. Every item starts WHOLE_UNIT; staff opt an item in.
+ */
+export const CONSUMPTION_MODES = ["WHOLE_UNIT", "OPEN_UNIT"] as const;
+/** A rough label for an open unit. Never an amount: it does not change stock. */
+export const OPEN_UNIT_CONDITIONS = ["PLENTY", "HALF", "LOW"] as const;
 /** Why stock moved. Kept short and operational; "OTHER" always needs a note. A count is its own reason. */
 export const MOVEMENT_REASONS = {
   IN: ["DELIVERY", "RETURNED", "DONATION", "OTHER"],
@@ -46,7 +53,12 @@ export const LABELS: Record<string, string> = {
   INDIVIDUAL: "Individual use",
   USC: "USC use",
   OUT: "On loan",
-  LOST: "Lost"
+  LOST: "Lost",
+  WHOLE_UNIT: "Whole unit",
+  OPEN_UNIT: "Open and use gradually",
+  PLENTY: "Plenty",
+  HALF: "Half-ish",
+  LOW: "Low"
 };
 
 /** "1 piece", "3 pieces", "2 boxes": units are stored singular. */
@@ -94,8 +106,8 @@ export function isListedForLending(item: ListingCandidate): boolean {
 
 /* ---------- Self-service (phones, Part 4.5) ---------- */
 
-export type SelfServiceCandidate = ListingCandidate;
-export type SelfServiceAction = "TAKE" | "BORROW";
+export type SelfServiceCandidate = ListingCandidate & { consumptionMode?: string };
+export type SelfServiceAction = "TAKE" | "BORROW" | "USE";
 
 /**
  * What still blocks an item from phone self-service, in the words staff see. Fail closed:
@@ -113,10 +125,14 @@ export function selfServiceGaps(item: SelfServiceCandidate): string[] {
   return gaps;
 }
 
-/** The one self-service rule: a Consumable can be taken, a Loanable borrowed, anything else is not offered. */
+/**
+ * The one self-service rule, decided by the item, never by the person: a Loanable is borrowed, a
+ * whole-unit Consumable taken, an open-unit Consumable used (no amount, no stock change); anything else is not offered.
+ */
 export function selfServiceAction(item: SelfServiceCandidate): SelfServiceAction | null {
   if (selfServiceGaps(item).length) return null;
-  return item.itemType === PUBLIC_LENDING_ITEM_TYPE ? "BORROW" : "TAKE";
+  if (item.itemType === PUBLIC_LENDING_ITEM_TYPE) return "BORROW";
+  return item.consumptionMode === "OPEN_UNIT" ? "USE" : "TAKE";
 }
 
 /* ---------- Activity (Part 5) ---------- */
@@ -126,9 +142,13 @@ export const ACTIVITY_SOURCES = { MOVEMENT: "Stock", LOAN: "Loans", PHONE: "Self
 export type ActivitySource = keyof typeof ACTIVITY_SOURCES;
 /** Every Activity entry type and its title, grouped by the source it usually belongs to (a phone take is a stock-out movement). */
 export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
-  MOVEMENT: { OPENING_BALANCE: "Opening balance", STOCK_IN: "Stock in", STOCK_OUT: "Stock out", COUNT_ADJUSTMENT: "Count", ISSUE: "Issued (legacy system)" },
+  MOVEMENT: {
+    OPENING_BALANCE: "Opening balance", STOCK_IN: "Stock in", STOCK_OUT: "Stock out", COUNT_ADJUSTMENT: "Count", ISSUE: "Issued (legacy system)",
+    UNIT_OPENED: "Unit opened", UNIT_USED: "Use recorded", UNIT_CONDITION: "Condition set", UNIT_EMPTIED: "Unit marked empty", UNIT_CORRECTED: "Open unit corrected",
+    UNIT_RECONCILED: "Open units closed by a count"
+  },
   LOAN: { LOAN_OUT: "Lent", LOAN_RETURN: "Returned", LOAN_DAMAGED: "Returned damaged", LOAN_LOST: "Reported lost", LOAN_CLOSED: "Loan closed" },
-  PHONE: { PHONE_TAKE: "Phone take", PHONE_BORROW: "Phone borrow", PHONE_RETURN: "Phone return", REVIEW_RESOLVED: "Review resolved" },
+  PHONE: { PHONE_TAKE: "Phone take", PHONE_BORROW: "Phone borrow", PHONE_RETURN: "Phone return", PHONE_USE: "Phone use", REVIEW_RESOLVED: "Review resolved" },
   CATALOG: { ITEM_CREATED: "Item added", ITEM_UPDATED: "Item edited", REORDER_OPENED: "Restock requested", REORDER_UPDATED: "Restock updated", REORDER_RESTOCKED: "Restocked" },
   ACCOUNT: {
     ACCOUNT_CREATED: "Account created", ACCOUNT_UPDATED: "Account updated", PASSWORD_RESET: "Password reset", PASSWORD_CHANGED: "Password changed", SESSIONS_REVOKED: "Sessions ended",

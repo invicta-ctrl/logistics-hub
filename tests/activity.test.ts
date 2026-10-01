@@ -322,6 +322,35 @@ describe("activity read model", () => {
     ]);
   });
 
+  it("tells open-unit work apart: opens, uses and conditions change nothing, an emptied unit is exactly -1", async () => {
+    sqlite.exec("UPDATE items SET unit = 'ream', consumption_mode = 'OPEN_UNIT' WHERE id = 'ITM-R'");
+    movement("ITM-R", "STOCK_IN", 8, "2026-09-30T00:00:00.000Z");
+    audit("AU-1", "2026-09-30T01:00:00.000Z", "UNIT_OPENED", "ITEM", "ITM-R", JSON.stringify({ unitId: "OU-1", alreadyOpen: 0 }));
+    audit("AU-2", "2026-09-30T01:10:00.000Z", "UNIT_OPENED", "ITEM", "ITM-R", JSON.stringify({ unitId: "OU-2", alreadyOpen: 1 }));
+    audit("AU-3", "2026-09-30T01:20:00.000Z", "UNIT_USED", "ITEM", "ITM-R", JSON.stringify({ unitId: "OU-1" }));
+    audit("AU-4", "2026-09-30T01:30:00.000Z", "UNIT_CONDITION", "ITEM", "ITM-R", JSON.stringify({ unitId: "OU-1", condition: { from: null, to: "LOW" } }));
+    phone("PH-USE", "ITM-R", "USE", "2026-09-30T01:40:00.000Z", { applied: 1 });
+    movement("ITM-R", "STOCK_OUT", -1, "2026-09-30T01:50:00.000Z", { id: "MOV-EMPTY", related: "OPEN_UNIT", relatedId: "OU-1", reason: "CONSUMED" });
+    audit("AU-5", "2026-09-30T02:00:00.000Z", "UNIT_CORRECTED", "ITEM", "ITM-R", JSON.stringify({ unitId: "OU-2" }));
+    audit("AU-6", "2026-09-30T02:10:00.000Z", "UNIT_RECONCILED", "ITEM", "ITM-R", JSON.stringify({ closed: 2, counted: 3 }));
+    const result = await feed("item=ITM-R");
+    expect(result.events.map((event) => [event.type, event.source, event.change, event.summary])).toEqual([
+      ["UNIT_RECONCILED", "MOVEMENT", 0, "Staff One's count closed 2 open reams of Rice 5kg no longer on the shelf."],
+      ["UNIT_CORRECTED", "MOVEMENT", 0, "Staff One closed an open ream of Rice 5kg that was not really open; stock did not change."],
+      ["UNIT_EMPTIED", "MOVEMENT", -1, "Staff One marked an open ream of Rice 5kg empty: 7 reams on hand."],
+      ["PHONE_USE", "PHONE", 0, "A phone use of Rice 5kg was recorded; stock did not change."],
+      ["UNIT_CONDITION", "MOVEMENT", 0, "Staff One marked an open ream of Rice 5kg as low; stock did not change."],
+      ["UNIT_USED", "MOVEMENT", 0, "Staff One recorded a use of an open ream of Rice 5kg; stock did not change."],
+      ["UNIT_OPENED", "MOVEMENT", 0, "Staff One opened another ream of Rice 5kg (1 already open); stock did not change."],
+      ["UNIT_OPENED", "MOVEMENT", 0, "Staff One opened a ream of Rice 5kg; stock did not change."],
+      ["STOCK_IN", "MOVEMENT", 8, "Staff One received 8 reams of Rice 5kg."]
+    ]);
+    // Uses recorded and units used up are separate entry types, so each filters (and exports) on its own.
+    expect(types(await feed("type=UNIT_EMPTIED"))).toEqual(["UNIT_EMPTIED"]);
+    expect(types(await feed("source=MOVEMENT&changed=no"))).toEqual(["UNIT_RECONCILED", "UNIT_CORRECTED", "UNIT_CONDITION", "UNIT_USED", "UNIT_OPENED", "UNIT_OPENED"]);
+    expect(types(await feed("source=PHONE"))).toEqual(["PHONE_USE"]);
+  });
+
   it("flags an item whose balance went below zero, across every item and any age, and clears when a count fixes it", async () => {
     movement("ITM-R", "STOCK_IN", 5, "2026-06-01T00:00:00.000Z");
     movement("ITM-R", "STOCK_OUT", -8, "2026-06-02T00:00:00.000Z", { id: "MOV-SHORT" });

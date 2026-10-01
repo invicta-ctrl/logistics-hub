@@ -12,12 +12,12 @@ import { OPEN_REVIEW, balanceCtes } from "./self-service";
  * Arms of one UNION ALL (each filtered and limited before the merge, so a page costs about the
  * page size, not the history):
  *   mov     inventory_movements, enriched with loans. The only arm that owns a quantity change: a
- *           POSTED movement counts, a SUPERSEDED one (kept as evidence) is 0.
- *   audit   audit_log. LOAN_CREATED and a good LOAN_CLOSED repeat a movement, so they are dropped;
+ *           POSTED movement counts, a SUPERSEDED one (kept as evidence) is 0. An open unit's -1 is UNIT_EMPTIED.
+ *   audit   audit_log. Open-unit opens, uses, conditions and corrections are Stock entries (change 0). LOAN_CREATED and a good LOAN_CLOSED repeat a movement, so they are dropped;
  *           damaged/lost closings stay (no movement exists for them, change 0). Account and
  *           recovery events exist only for ADMIN and OWNER.
- *   phone   self_service_events that are not just a duplicate of a movement: returns, held records
- *           and anything a review was opened on.
+ *   phone   self_service_events that are not just a duplicate of a movement: returns, uses (which
+ *           change no stock), held records and anything a review was opened on.
  *   resolve the staff resolution of such a held record.
  */
 
@@ -111,14 +111,15 @@ type Arm = {
   sources: readonly string[]; owns: (type: string) => boolean; moves: boolean;
 };
 
-const PHONE_TYPES = ["PHONE_TAKE", "PHONE_BORROW", "PHONE_RETURN"];
+const PHONE_TYPES = ["PHONE_TAKE", "PHONE_BORROW", "PHONE_RETURN", "PHONE_USE"];
+const UNIT_AUDIT = ["UNIT_OPENED", "UNIT_USED", "UNIT_CONDITION", "UNIT_CORRECTED", "UNIT_RECONCILED"].map((action) => `'${action}'`).join(", ");
 const AUDIT_LOAN = "CASE WHEN json_valid(a.details_json) THEN json_extract(a.details_json, '$.loanId') END";
 const AUDIT_OUTCOME = "CASE WHEN json_valid(a.details_json) THEN json_extract(a.details_json, '$.outcome') END";
 
 function arms(admin: boolean): Arm[] {
   const base = { qty: "NULL", delta: "0", status: "NULL", reason: "NULL", outcome: "NULL", note: "NULL", purpose: "NULL", review: "NULL", details: "NULL", mov: "NULL", open: "0" };
   const item = { itemId: "i.id", itemName: "i.name", unit: "i.unit" };
-  const movementType = ["OPENING_BALANCE", "STOCK_IN", "STOCK_OUT", "COUNT_ADJUSTMENT", "ISSUE", "LOAN_OUT", "LOAN_RETURN"];
+  const movementType = ["OPENING_BALANCE", "STOCK_IN", "STOCK_OUT", "COUNT_ADJUSTMENT", "ISSUE", "LOAN_OUT", "LOAN_RETURN", "UNIT_EMPTIED"];
   return [
     {
       prefix: "mov:", id: "m.id", sources: ["MOVEMENT", "LOAN", "PHONE"], moves: true, owns: (type) => movementType.includes(type),
@@ -127,7 +128,7 @@ function arms(admin: boolean): Arm[] {
       where: "1",
       cols: {
         ...base, ...item, sid: "'mov:' || m.id", k: utc("m.created_at"), src: "CASE m.related_entity_type WHEN 'LOAN' THEN 'LOAN' WHEN 'SELF_SERVICE' THEN 'PHONE' ELSE 'MOVEMENT' END",
-        type: "m.movement_type", actorId: "m.actor_user_id", actor: actorName("a", "m.actor_user_id"), qty: "m.quantity",
+        type: "CASE WHEN m.related_entity_type = 'OPEN_UNIT' THEN 'UNIT_EMPTIED' ELSE m.movement_type END", actorId: "m.actor_user_id", actor: actorName("a", "m.actor_user_id"), qty: "m.quantity",
         delta: "CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END", status: "m.status",
         reason: "COALESCE(m.reason, CASE WHEN m.movement_type = 'LOAN_OUT' THEN l.reason END)",
         note: "CASE WHEN m.movement_type = 'LOAN_RETURN' THEN COALESCE(m.notes, l.return_note) ELSE m.notes END",
@@ -135,7 +136,7 @@ function arms(admin: boolean): Arm[] {
       }
     },
     {
-      prefix: "audit:", id: "a.id", sources: admin ? ["CATALOG", "LOAN", "ACCOUNT"] : ["CATALOG", "LOAN"], moves: false, owns: (type) => !movementType.includes(type) && !PHONE_TYPES.includes(type) && type !== "REVIEW_RESOLVED",
+      prefix: "audit:", id: "a.id", sources: admin ? ["MOVEMENT", "CATALOG", "LOAN", "ACCOUNT"] : ["MOVEMENT", "CATALOG", "LOAN"], moves: false, owns: (type) => !movementType.includes(type) && !PHONE_TYPES.includes(type) && type !== "REVIEW_RESOLVED",
       // A closing entry's loan is its own (`loans.id` is the key): the join adds no row and supplies the typed return note.
       from: `audit_log a LEFT JOIN items i ON a.entity_type = 'ITEM' AND i.id = a.entity_id LEFT JOIN staff_accounts c ON c.id = a.actor_user_id
         LEFT JOIN loans l ON a.action = 'LOAN_CLOSED' AND l.id = ${AUDIT_LOAN}`,
@@ -143,7 +144,7 @@ function arms(admin: boolean): Arm[] {
       where: `a.action <> 'LOAN_CREATED' AND NOT (a.action = 'LOAN_CLOSED' AND COALESCE(${AUDIT_OUTCOME}, '') = 'RETURNED')${admin ? "" : " AND a.entity_type = 'ITEM'"}`,
       cols: {
         ...base, sid: "'audit:' || a.id", k: utc("a.created_at"), itemId: "i.id", itemName: "i.name", unit: "i.unit",
-        src: "CASE WHEN a.action = 'LOAN_CLOSED' THEN 'LOAN' WHEN a.entity_type = 'ITEM' THEN 'CATALOG' ELSE 'ACCOUNT' END",
+        src: `CASE WHEN a.action = 'LOAN_CLOSED' THEN 'LOAN' WHEN a.action IN (${UNIT_AUDIT}) THEN 'MOVEMENT' WHEN a.entity_type = 'ITEM' THEN 'CATALOG' ELSE 'ACCOUNT' END`,
         type: `CASE WHEN a.action = 'LOAN_CLOSED' THEN CASE ${AUDIT_OUTCOME} WHEN 'DAMAGED' THEN 'LOAN_DAMAGED' WHEN 'LOST' THEN 'LOAN_LOST' ELSE 'LOAN_CLOSED' END ELSE a.action END`,
         actorId: "a.actor_user_id", actor: actorName("c", "a.actor_user_id"), details: "a.details_json", note: "l.return_note", corr: AUDIT_LOAN
       }
@@ -151,7 +152,7 @@ function arms(admin: boolean): Arm[] {
     {
       prefix: "phone:", id: "e.id", sources: ["PHONE"], moves: false, owns: (type) => PHONE_TYPES.includes(type),
       from: "self_service_events e JOIN items i ON i.id = e.item_id",
-      where: "(e.review IS NOT NULL OR e.event_type = 'RETURN' OR e.applied = 0)",
+      where: "(e.review IS NOT NULL OR e.event_type IN ('RETURN', 'USE') OR e.applied = 0)",
       cols: {
         ...base, ...item, sid: "'phone:' || e.id", k: utc("e.occurred_at"), src: "'PHONE'", type: "'PHONE_' || e.event_type", actorId: "'SELF_SERVICE'", actor: "'Self-service'",
         qty: "e.quantity", status: "CASE e.applied WHEN 1 THEN 'APPLIED' ELSE 'HELD' END", outcome: "e.return_outcome", corr: "COALESCE(e.loan_id, e.id)", purpose: "e.purpose",
@@ -272,12 +273,23 @@ function toEvent(row: Row): ActivityEvent {
   const purpose = PURPOSE[String(row.purpose)] ?? "";
   const held = row.status === "HELD";
   const outcome = text(row.outcome) ? ` (${String(row.outcome).toLowerCase()})` : "";
+  // An open unit is named by its counting word ("an open ream"); a count of open units is never a stock amount.
+  const one = unit ?? "unit";
+  const closed = typeof details.closed === "number" ? details.closed : 0;
+  const alreadyOpen = typeof details.alreadyOpen === "number" ? details.alreadyOpen : 0;
+  const condition = details.condition && typeof details.condition === "object" ? LABELS[String((details.condition as { to?: unknown }).to)] : undefined;
   const sentence: Record<string, () => string> = {
     OPENING_BALANCE: () => `${amount}${item} was carried over as the opening balance.`,
     ISSUE: () => `${amount}${item} was issued in the legacy system.`,
     STOCK_IN: () => `${actor} received ${amount}${item}${reason ? ` (${reason.toLowerCase()})` : ""}.`,
     STOCK_OUT: () => `${actor} took out ${amount}${item}${reason ? ` (${reason.toLowerCase()})` : ""}.`,
     COUNT_ADJUSTMENT: () => `${actor} counted ${item}${after === null ? "" : `: ${after}${unit ? ` ${units(after, unit)}` : ""} on hand`}.`,
+    UNIT_OPENED: () => `${actor} opened ${alreadyOpen ? "another" : "a"} ${one} of ${item}${alreadyOpen ? ` (${alreadyOpen} already open)` : ""}; stock did not change.`,
+    UNIT_USED: () => `${actor} recorded a use of an open ${one} of ${item}; stock did not change.`,
+    UNIT_CONDITION: () => `${actor} marked an open ${one} of ${item} as ${condition ? condition.toLowerCase() : "changed"}; stock did not change.`,
+    UNIT_EMPTIED: () => `${actor} marked an open ${one} of ${item} empty${after === null ? "" : `: ${after} ${units(after, one)} on hand`}.`,
+    UNIT_CORRECTED: () => `${actor} closed an open ${one} of ${item} that was not really open; stock did not change.${details.resolvedDiscrepancy === true ? " This cleared an open-unit discrepancy." : ""}`,
+    UNIT_RECONCILED: () => `${actor}'s count closed ${closed} open ${units(closed, one)} of ${item} no longer on the shelf.`,
     LOAN_OUT: () => `${actor} lent ${amount}${item}${purpose}.`,
     LOAN_RETURN: () => `${actor} took back ${amount}${item}.`,
     LOAN_DAMAGED: () => `${actor} closed a loan of ${item} as damaged; nothing went back to stock.`,
@@ -285,7 +297,7 @@ function toEvent(row: Row): ActivityEvent {
     LOAN_CLOSED: () => `${actor} closed a loan of ${item}.`,
     REVIEW_RESOLVED: () => {
       const [kind, decision] = String(row.outcome).split(":");
-      const what = `a phone ${String(kind).toLowerCase()} of ${amount}${item}`;
+      const what = `a phone ${String(kind).toLowerCase()} of ${kind === "USE" ? "" : amount}${item}`;
       if (decision === "CHECKED") return `${actor} marked ${what} as checked; it had already been recorded.`;
       if (decision === "DISMISSED") return `${actor} dismissed ${what}; nothing changed.`;
       return kind === "RETURN" ? `${actor} confirmed ${what}; the loan is closed.` : `${actor} applied ${what} that was held for staff.`;
@@ -298,7 +310,9 @@ function toEvent(row: Row): ActivityEvent {
     OWNER_BOOTSTRAPPED: () => `${actor} was set up as the first owner from the Owner Console.`,
     ACTIVITY_EXPORTED: () => `${actor} exported ${details.rows === 1 ? "1 activity entry" : `${typeof details.rows === "number" ? details.rows : "some"} activity entries`} to a file${fields.length ? `, filtered by ${fields.join(", ")}` : ""}${details.truncated === true ? " (the newest; more matched)" : ""}.`
   };
-  const phone = () => `A phone ${type.slice(6).toLowerCase()} of ${amount}${item}${outcome} was ${held ? "held for staff" : "recorded"}${reason ? `: ${reason}` : ""}.`;
+  const phone = () => type === "PHONE_USE"
+    ? `A phone use of ${item} was ${held ? "held for staff" : "recorded"}${reason ? `: ${reason}` : "; stock did not change"}.`
+    : `A phone ${type.slice(6).toLowerCase()} of ${amount}${item}${outcome} was ${held ? "held for staff" : "recorded"}${reason ? `: ${reason}` : ""}.`;
   const summary = `${(type.startsWith("PHONE_") ? phone() : sentence[type]?.()) ?? `${ACTIVITY_TITLES[type] ?? "Change"}${account} by ${actor}.`}${row.status === "SUPERSEDED" ? " It did not change stock: a later count already covers it." : ""}`;
   const loan = typeof row.corr === "string" && /^LN-[A-Za-z0-9-]{1,60}$/.test(row.corr) ? row.corr : null;
   const known = row.k !== SENTINEL;

@@ -35,3 +35,31 @@ describe("0011 role migration on a database that is already in use", () => {
     db.close();
   });
 });
+
+describe("0017 open units on a database that is already in use", () => {
+  it("keeps every phone record, quantity and classification, and only adds the Use type", async () => {
+    const { DatabaseSync } = await import("node:sqlite");
+    const fs = await import("node:fs");
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    const apply = (file: string) => { db.exec("BEGIN"); db.exec(fs.readFileSync(`migrations/${file}`, "utf8")); db.exec("COMMIT"); };
+    const files = fs.readdirSync("migrations").sort();
+    files.filter((file) => file < "0017").forEach(apply);
+    db.exec(`INSERT INTO self_service_events(id, device_id, seq, event_type, item_id, quantity, person_name, device_time, sent_at, occurred_at, received_at, applied, review, resolved_at, resolved_by)
+      VALUES('E-1', 'D-1', 1, 'TAKE', 'ITM-0001', 2, 'Juan', '2026-09-30T00:00:00Z', '2026-09-30T00:00:00Z', '2026-09-30T00:00:00Z', '2026-09-30T00:00:00Z', 0, 'VOLUME', '2026-09-30T01:00:00Z', 'ACC-1')`);
+    const before = db.prepare("SELECT id, on_hand FROM inventory_balances ORDER BY id").all();
+    const types = db.prepare("SELECT item_type, COUNT(*) AS n FROM items GROUP BY item_type ORDER BY item_type").all();
+    files.filter((file) => file >= "0017").forEach(apply);
+    expect(db.prepare("SELECT id, on_hand FROM inventory_balances ORDER BY id").all()).toEqual(before);
+    expect(db.prepare("SELECT item_type, COUNT(*) AS n FROM items GROUP BY item_type ORDER BY item_type").all()).toEqual(types);
+    expect(db.prepare("SELECT DISTINCT consumption_mode AS mode FROM items").all()).toEqual([{ mode: "WHOLE_UNIT" }]);
+    expect(db.prepare("SELECT id, quantity, review, resolved_by FROM self_service_events").all()).toEqual([{ id: "E-1", quantity: 2, review: "VOLUME", resolved_by: "ACC-1" }]);
+    expect(() => db.exec("UPDATE self_service_events SET note = 'x'")).toThrow(/self_service_event_resolved/);
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'self_service_events' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((row) => row.name))
+      .toEqual(["idx_activity_phone", "idx_activity_resolved", "idx_self_service_events_item", "idx_self_service_events_loan", "idx_self_service_events_open", "idx_self_service_events_received"]);
+    expect(() => db.exec(`INSERT INTO self_service_events(id, device_id, seq, event_type, item_id, quantity, person_name, device_time, sent_at, occurred_at, received_at, applied)
+      VALUES('E-2', 'D-1', 2, 'USE', 'ITM-0001', 1, 'Juan', 'x', 'x', 'x', 'x', 1)`)).not.toThrow();
+    expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+    db.close();
+  });
+});
