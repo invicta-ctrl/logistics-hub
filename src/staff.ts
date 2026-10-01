@@ -1,15 +1,17 @@
-import { ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
+import { CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
+import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { ApiError, MARK, type Html, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
   lendingAudience: string; onHand: number; reorderThreshold: number; storageLocation: string | null; listed: boolean;
   stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean; lastCountedAt: string | null; onLoan: number;
+  consumptionMode: string; openUnits: number; openCondition: string | null;
 };
 type Inventory = { revision: number; items: Item[]; categories: string[]; locations: string[]; units: string[] };
-type Movement = { id: string; createdAt: string; movementType: string; signedQuantity: number; status: string; notes: string | null; reason: string | null; actor: string | null; afterQuantity: number; borrower: string | null; purpose: string | null };
+type Movement = { id: string; createdAt: string; movementType: string; signedQuantity: number; status: string; notes: string | null; reason: string | null; related: string | null; actor: string | null; afterQuantity: number; borrower: string | null; purpose: string | null };
 type Change = { from: unknown; to: unknown };
 type CatalogEvent = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
 type DetailItem = Item & {
@@ -17,11 +19,15 @@ type DetailItem = Item & {
   legacyReportedAvailable: number | null; migratedOnHand: number; migrationDelta: number | null;
   legacySourceSheet: string | null; legacySourceRow: string | null; verificationNote: string | null; importedFrom: string | null;
 };
-type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[] };
+type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; usesRecorded: number; unitsEmptied: number };
 type SortKey = "id" | "name" | "category" | "storageLocation" | "onHand";
 type Tab = "overview" | "loan" | "details" | "history";
 
 const active = (item: Item) => item.status !== "INACTIVE";
+const tracksOpenUnits = (item: Pick<Item, "itemType" | "consumptionMode">) => item.itemType === "Consumable" && item.consumptionMode === "OPEN_UNIT";
+/** What the open sheet shows of an item's stock; when the list says otherwise, the sheet refreshes. */
+const stockSignature = (onHand: number, open: number, condition: string | null) => `${onHand}|${open}|${condition ?? ""}`;
+const worstCondition = (units: OpenUnit[]) => ["LOW", "HALF", "PLENTY"].find((condition) => units.some((unit) => unit.condition === condition)) ?? null;
 const isLow = (item: Pick<Item, "onHand" | "reorderThreshold" | "status">) => stockState(item) === "LOW";
 const VIEWS = {
   all: { label: "All items", test: (_: Item) => true },
@@ -39,7 +45,7 @@ const TYPE_CHOICES: Record<string, string> = { Loanable: "Borrow (Loanable)", Co
 const FIELD_LABELS: Record<string, string> = {
   name: "Name", aliases: "Other names", category: "Category", itemType: "Type", unit: "Unit", status: "Status", storageLocation: "Location",
   reorderThreshold: "Reorder level", lendingAudience: "Who may borrow", defaultLoanDays: "Loan period (days)", maximumLoanQty: "Maximum per loan",
-  needsReview: "Review", notes: "Internal notes", stockArea: "Stock area", expiresOn: "Earliest expiry"
+  needsReview: "Review", notes: "Internal notes", stockArea: "Stock area", expiresOn: "Earliest expiry", consumptionMode: "Normally used"
 };
 const LENDING_FIELDS = ["lendingAudience", "defaultLoanDays", "maximumLoanQty"];
 
@@ -176,6 +182,7 @@ function tags(item: Item): Html {
   if (item.listed) list.push(html`<span class="tag tag--ok">On Lending Hub</span>`);
   if (item.needsReview) list.push(html`<span class="tag tag--pending">Needs review</span>`);
   if (item.status !== "ACTIVE") list.push(html`<span class="tag ${item.status === "VERIFY" ? "tag--warn" : ""}">${label(item.status)}</span>`);
+  if (item.openUnits > item.onHand) list.push(html`<span class="tag tag--warn">Open units need review</span>`);
   if (item.onHand <= 0) list.push(html`<span class="tag tag--bad">Out of stock</span>`);
   else if (isLow(item)) list.push(html`<span class="tag tag--warn">Low stock</span>`);
   return html`<span class="tags">${list}</span>`;
@@ -210,6 +217,12 @@ function formatValue(field: string, value: unknown): string {
 /** Turns one audited catalog change into a headline staff can scan. */
 function eventTitle(event: CatalogEvent): string {
   if (event.action === "ITEM_CREATED") return "Item created";
+  const condition = (event.details.condition as Change | undefined)?.to;
+  if (event.action === "UNIT_OPENED") return Number(event.details.alreadyOpen) > 0 ? `Another unit opened (${String(event.details.alreadyOpen)} already open)` : "Unit opened";
+  if (event.action === "UNIT_USED") return "Use recorded";
+  if (event.action === "UNIT_CONDITION") return `Open unit marked ${label(String(condition)).toLowerCase()}`;
+  if (event.action === "UNIT_CORRECTED") return event.details.resolvedDiscrepancy ? "Open unit closed as not opened · discrepancy cleared" : "Open unit closed as not opened";
+  if (event.action === "UNIT_RECONCILED") return `Count closed ${plural(Number(event.details.closed), "open unit")}`;
   if (event.action === "REORDER_OPENED") return "Added to the restock list";
   if (event.action === "REORDER_RESTOCKED") return `Restocked (+${String(event.details.quantity)})`;
   if (event.action === "LOAN_CLOSED") return event.details.outcome === "LOST" ? "Loan closed · lost" : "Loan closed · returned damaged";
@@ -307,7 +320,7 @@ export async function workspace(): Promise<void> {
     <td class="col-item"><button type="button" class="row-link">${item.name}</button><span class="cell-sub">${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}</span></td>
     <td class="col-category">${categoryName(item.category)}</td>
     <td class="col-location">${item.storageLocation ?? html`<span class="muted">Not set</span>`}</td>
-    <td class="col-qty"><span class="qty" data-qty="${item.id}">${item.onHand}</span> <span class="qty-unit">${units(item.onHand, item.unit)}</span></td>
+    <td class="col-qty"><span class="qty" data-qty="${item.id}">${item.onHand}</span> <span class="qty-unit">${units(item.onHand, item.unit)}</span>${item.openUnits ? html`<span class="cell-sub">${sealedLine(item.onHand, item.openUnits, item.openCondition)}</span>` : ""}</td>
     <td class="col-status">${tags(item)}</td></tr>`;
 
   const matches = (item: Item, query: string) => !query || `${item.name} ${item.id} ${item.aliases ?? ""} ${item.category} ${item.storageLocation ?? ""}`.toLowerCase().includes(query);
@@ -373,8 +386,9 @@ export async function workspace(): Promise<void> {
       if (filters.location && filters.location !== NO_LOCATION && !data.locations.includes(filters.location)) filters = { ...filters, location: "" };
       inventory = data;
       render();
-      // Refresh the open sheet when another staff member changes its quantity.
-      if (openChanged && openId && detail?.item.onHand !== data.items.find((item) => item.id === openId)?.onHand) void refreshStock(openId);
+      // Refresh the open sheet when another staff member changes its quantity or open units.
+      const shown = data.items.find((item) => item.id === openId);
+      if (openId && detail && shown && (openChanged || stockSignature(shown.onHand, shown.openUnits, shown.openCondition) !== stockSignature(detail.item.onHand, detail.openUnits.length, worstCondition(detail.openUnits)))) void refreshStock(openId);
       if (pendingItem) { openItem(pendingItem); pendingItem = null; }
     },
     onError: (error) => {
@@ -497,9 +511,11 @@ export async function workspace(): Promise<void> {
     try {
       const loaded = await fetchDetail(id);
       if (!loaded || !detail) return;
-      detail = { ...detail, item: { ...detail.item, onHand: loaded.item.onHand }, movements: loaded.movements, loans: loaded.loans };
+      detail = { ...detail, item: { ...detail.item, onHand: loaded.item.onHand }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
+        openUnits: loaded.openUnits, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied };
       mount(sheet.querySelector("#quantity-context")!, quantityContext(detail));
       mount(sheet.querySelector("#history")!, historyMarkup(detail));
+      openPanel?.render();
       const loanList = sheet.querySelector("#item-loans");
       if (loanList) mount(loanList, itemLoansMarkup(detail));
       const out = detail.loans.filter((loan) => loan.status === "OUT").length;
@@ -510,10 +526,10 @@ export async function workspace(): Promise<void> {
     } catch { /* the next live refresh retries */ }
   }
 
-  function quantityContext({ item, loans }: Detail): Html {
+  function quantityContext({ item, loans, openUnits }: Detail): Html {
     const state = stockState(item);
     const out = loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
-    return html`${state === "OUT" ? html`<span class="tag tag--bad">Out of stock</span>` : state === "LOW" ? html`<span class="tag tag--warn">Low stock</span>` : item.reorderThreshold > 0 ? html`<span class="tag tag--ok">Above reorder level</span>` : ""}
+    return html`${tracksOpenUnits(item) || openUnits.length ? html`<span class="quantity__sealed">${sealedLine(item.onHand, openUnits.length, worstCondition(openUnits))}</span>` : ""}${state === "OUT" ? html`<span class="tag tag--bad">Out of stock</span>` : state === "LOW" ? html`<span class="tag tag--warn">Low stock</span>` : item.reorderThreshold > 0 ? html`<span class="tag tag--ok">Above reorder level</span>` : ""}
       <span>${item.reorderThreshold > 0 ? `Reorder level ${item.reorderThreshold}` : "No reorder level set"}</span>
       ${out ? html`<button type="button" class="text-link" data-goto="loan">${out} more on loan</button>` : ""}`;
   }
@@ -525,6 +541,7 @@ export async function workspace(): Promise<void> {
     const origin = item.importedFrom === "LOGISTICS_HUB" ? "Created in the Logistics Hub" : item.legacySourceSheet ? `Migrated from the legacy system · ${categoryName(item.legacySourceSheet)}, row ${item.legacySourceRow ?? "?"}` : "Migrated from the legacy system";
     return html`
       <form id="stock-form" class="form quantity" novalidate aria-label="Update the quantity">${quantityEditor("stock")}<p class="quantity__context" id="quantity-context">${quantityContext(detail)}</p></form>
+      ${tracksOpenUnits(item) || detail.openUnits.length ? html`<div id="open-units"></div>` : ""}
       ${delta !== 0 ? html`<div class="callout">${icon("info")}<p><strong>Migration evidence.</strong> At migration the legacy snapshot reported ${item.legacyReportedAvailable} ${units(item.legacyReportedAvailable ?? 0, item.unit)}, but the migrated movement ledger derives ${item.migratedOnHand}. The difference is preserved as recorded, not guessed. Once a physical count confirms the real figure, record it with a Count.</p></div>` : ""}
       ${item.verificationNote ? html`<div class="callout">${icon("alert")}<p><strong>Verify:</strong> ${item.verificationNote}</p></div>` : ""}
       ${item.needsReview ? html`<section class="card card--review" aria-labelledby="review-title">
@@ -550,6 +567,7 @@ export async function workspace(): Promise<void> {
   }
 
   let stockForm: ReturnType<typeof bindQuantityEditor> | null = null;
+  let openPanel: ReturnType<typeof bindOpenUnits> | null = null;
   let loanForm: ReturnType<typeof bindLoanForm> | null = null;
   let known: Borrower[] = [];
   let knownLoaded = false;
@@ -575,7 +593,7 @@ export async function workspace(): Promise<void> {
         const quantity = movement.signedQuantity;
         const tone = quantity > 0 ? "is-in" : quantity < 0 ? "is-out" : "";
         return { at: movement.createdAt, markup: html`<li class="history__item ${tone}">
-          <div><p class="history__title">${movementTitle(movement.movementType, quantity, movement.reason, movement.borrower)}${movement.purpose ? html` <span class="muted">(${movement.purpose === "USC" ? "USC use" : "individual use"})</span>` : ""}${movement.status === "SUPERSEDED" ? html` <span class="muted">(recorded offline before a later count, so not counted again)</span>` : movement.status !== "POSTED" ? ` (${movement.status.toLowerCase()})` : ""}</p>
+          <div><p class="history__title">${movementTitle(movement.related === "OPEN_UNIT" ? "UNIT_EMPTIED" : movement.movementType, quantity, movement.reason, movement.borrower)}${movement.purpose ? html` <span class="muted">(${movement.purpose === "USC" ? "USC use" : "individual use"})</span>` : ""}${movement.status === "SUPERSEDED" ? html` <span class="muted">(recorded offline before a later count, so not counted again)</span>` : movement.status !== "POSTED" ? ` (${movement.status.toLowerCase()})` : ""}</p>
             <p class="history__meta"><time datetime="${movement.createdAt}">${formatDateTime(movement.createdAt)}</time> · ${movement.actor ?? "Legacy system"}</p>
             ${movement.notes ? html`<p class="history__note">${movement.notes}</p>` : ""}</div>
           <p class="history__qty ${tone}">${signed(quantity)}<span class="history__after">${movement.afterQuantity - quantity} → ${movement.afterQuantity}</span></p></li>` };
@@ -648,7 +666,11 @@ export async function workspace(): Promise<void> {
       const loan = giveBack && detail?.loans.find((entry) => entry.id === giveBack.dataset.return);
       if (loan) openReturn(loan, async () => { await refreshStock(loan.itemId); await poll.refresh(); });
     });
-    const target = () => detail ? { id: detail.item.id, name: detail.item.name, unit: detail.item.unit, onHand: detail.item.onHand } : null;
+    const target = () => detail ? { id: detail.item.id, name: detail.item.name, unit: detail.item.unit, onHand: detail.item.onHand, openUnits: detail.openUnits.length } : null;
+    const openHost = sheet.querySelector<HTMLElement>("#open-units");
+    openPanel = openHost ? bindOpenUnits(openHost, () => detail && { ...detail.item, openUnits: detail.openUnits, usesRecorded: detail.usesRecorded, unitsEmptied: detail.unitsEmptied },
+      async () => { await refreshStock(item.id); await poll.refresh(); }) : null;
+    openPanel?.render();
     stockForm = bindQuantityEditor(sheet.querySelector<HTMLFormElement>("#stock-form")!, {
       target,
       onRecorded: async (recorded) => { await refreshStock(recorded.id); await poll.refresh(); }
@@ -683,6 +705,7 @@ export async function workspace(): Promise<void> {
           ${text("category", "Category", item.category, html`required maxlength="100" autocomplete="off"`, "Letter case does not matter; an existing category is reused.")}
           <div class="field"><label for="f-itemType">Borrow or consume</label><select id="f-itemType" name="itemType" aria-describedby="f-itemType-hint">${types.map((type) => html`<option value="${type}" ${type === (item.itemType ?? "Loanable") ? html`selected` : ""}>${TYPE_CHOICES[type] ?? label(type)}</option>`)}</select><p class="field__hint" id="f-itemType-hint">Your choice sets everything else: Borrow is lent and comes back; Consume is used up and never returned. Both appear on the Lending Hub and on phones.</p></div>
         </div>
+        <div class="field" data-consumption ${(item.itemType ?? "Loanable") === "Consumable" ? "" : html`hidden`}><label for="f-consumptionMode">How is this item normally used?</label><select id="f-consumptionMode" name="consumptionMode" aria-describedby="f-consumptionMode-hint">${options(CONSUMPTION_MODES, item.consumptionMode ?? "WHOLE_UNIT")}</select><p class="field__hint" id="f-consumptionMode-hint">Open and use gradually suits reams, bottles, rolls and boxes: staff open one unit at a time and mark it empty when it runs out. Stock is still counted in whole units.</p></div>
         <div class="field-grid">
           ${text("unit", "Unit", item.unit, html`required maxlength="30" autocomplete="off" placeholder="piece, box, pack"`, "Singular, as counted.")}
           ${text("storageLocation", "Storage location", item.storageLocation, html`maxlength="120" list="location-options" autocomplete="off" placeholder="Office cabinet 2"`, "Where staff find it.", true)}
@@ -727,7 +750,7 @@ export async function workspace(): Promise<void> {
       itemType: String(values.get("itemType")), status: String(values.get("status")), storageLocation: String(values.get("storageLocation") ?? ""),
       reorderThreshold: whole("reorderThreshold"), lendingAudience: String(values.get("lendingAudience")),
       needsReview: values.get("reviewed") !== "on", notes: String(values.get("notes") ?? ""),
-      stockArea: String(values.get("stockArea") ?? "Inventory"), expiresOn: String(values.get("expiresOn") ?? ""),
+      stockArea: String(values.get("stockArea") ?? "Inventory"), expiresOn: String(values.get("expiresOn") ?? ""), consumptionMode: String(values.get("consumptionMode") ?? "WHOLE_UNIT"),
       ...(values.has("openingQuantity") ? { openingQuantity: whole("openingQuantity") } : {})
     };
   }
@@ -761,10 +784,11 @@ export async function workspace(): Promise<void> {
       element.className = `listing-status ${gaps.length ? "" : "is-listed"}`;
       mount(element, gaps.length
         ? html`${icon("info")}<div><p>Not shown publicly. Still needed:</p>${checklist(gaps.map((gap) => [gap, false]))}</div>`
-        : html`${icon("check")}<p>Will appear on the public Lending Hub, and phones can ${values.itemType === PUBLIC_LENDING_ITEM_TYPE ? "borrow" : "take"} it.</p>`);
+        : html`${icon("check")}<p>Will appear on the public Lending Hub, and phones can ${values.itemType === PUBLIC_LENDING_ITEM_TYPE ? "borrow" : values.consumptionMode === "OPEN_UNIT" ? "record using" : "take"} it.</p>`);
       const review = form.querySelector("#review-checklist");
       if (review) mount(review, checklist(reviewChecklist(values)));
       form.querySelector<HTMLElement>("[data-expiry]")!.hidden = values.stockArea !== "Pantry";
+      form.querySelector<HTMLElement>("[data-consumption]")!.hidden = values.itemType !== "Consumable";
       const duplicate = form.querySelector<HTMLElement>("#duplicate-hint")!;
       const name = values.name.trim().toLowerCase();
       const twin = name ? inventory?.items.find((entry) => entry.id !== item.id && entry.name.toLowerCase() === name) : undefined;

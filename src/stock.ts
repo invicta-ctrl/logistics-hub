@@ -27,8 +27,8 @@ async function listReorders(db: D1Database) {
  * only the Hub's own movements are listed.
  */
 async function recentActivity(db: D1Database) {
-  const { results } = await db.prepare(`SELECT id, createdAt, itemId, itemName, unit, movementType, change, afterQuantity, reason, notes, actor FROM (
-      SELECT m.id, m.created_at AS createdAt, m.item_id AS itemId, i.name AS itemName, i.unit, m.movement_type AS movementType,
+  const { results } = await db.prepare(`SELECT id, createdAt, itemId, itemName, unit, movementType, related, change, afterQuantity, reason, notes, actor FROM (
+      SELECT m.id, m.created_at AS createdAt, m.item_id AS itemId, i.name AS itemName, i.unit, m.movement_type AS movementType, m.related_entity_type AS related,
         m.signed_quantity AS change, m.reason, m.notes, ${actorName("a", "m.actor_user_id")} AS actor, m.imported_from AS importedFrom,
         CASE WHEN m.imported_from IS NULL THEN julianday(m.created_at) ELSE 0 END AS happened, m.rowid AS seq,
         SUM(CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END) OVER (PARTITION BY m.item_id ORDER BY ${HISTORY_ORDER}) AS afterQuantity

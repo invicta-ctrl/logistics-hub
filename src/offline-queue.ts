@@ -13,7 +13,7 @@ export type CatalogItem = {
 };
 export type Snapshot = { revision: number; items: CatalogItem[]; fetchedAt: number; checkedAt: number };
 
-export type EventType = "TAKE" | "BORROW" | "RETURN";
+export type EventType = "TAKE" | "BORROW" | "USE" | "RETURN";
 export type Outcome = "RETURNED" | "DAMAGED" | "LOST";
 
 /** What the phone sends. Immutable once saved: a retry sends exactly the same record. */
@@ -107,14 +107,14 @@ function reflected(event: LocalEvent, snapshot: Snapshot): boolean {
 
 /**
  * Estimated available now: the last server snapshot minus this phone's takes and borrows it
- * does not include yet, plus this phone's good returns. Other phones' offline activity cannot
+ * does not include yet, plus this phone's good returns (a use changes nothing). Other phones' offline activity cannot
  * be known, so the screen always calls this an estimate.
  */
 export function estimate(snapshot: Snapshot, events: LocalEvent[]): Map<string, number> {
   const available = new Map(snapshot.items.map((item) => [item.id, item.available]));
   for (const event of events) {
     if (reflected(event, snapshot) || !available.has(event.itemId)) continue;
-    const change = event.type === "RETURN" ? (event.outcome === "RETURNED" ? event.quantity : 0) : -event.quantity;
+    const change = event.type === "RETURN" ? (event.outcome === "RETURNED" ? event.quantity : 0) : event.type === "USE" ? 0 : -event.quantity;
     available.set(event.itemId, available.get(event.itemId)! + change);
   }
   for (const [id, count] of available) if (count < 0) available.set(id, 0);

@@ -1,6 +1,6 @@
 import "@fontsource/newsreader/latin-400-italic.css";
 import "./self-service.css";
-import { SELF_SERVICE_LIMITS, STUDENT_ID_PATTERN } from "./catalog-policy";
+import { SELF_SERVICE_LIMITS, STUDENT_ID_PATTERN, type SelfServiceAction } from "./catalog-policy";
 import { type CatalogItem, type LocalEvent, type Snapshot, estimate, openLoans, pendingByItem, summary } from "./offline-queue";
 import * as store from "./offline-store";
 import { type Draft, clearHistory, nextAttemptAt, onSyncMessage, record, refreshCatalog, syncNow } from "./offline-sync";
@@ -14,12 +14,18 @@ import { CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, i
  * button closes a sheet or steps back; the router hands those changes to this module (ownQuery).
  */
 
-type Screen = "home" | "get" | "take" | "borrow" | "return" | "activity" | "install";
+type Screen = "home" | "get" | "take" | "borrow" | "use" | "return" | "activity" | "install";
 type Params = { screen: Screen; item: string | null; loan: string | null };
 
-const SCREENS = new Set<Screen>(["home", "get", "take", "borrow", "return", "activity", "install"]);
-/** One list of everything offered. "take" and "borrow" stay valid addresses (old shortcuts, an item sheet) and show the same list. */
-const inList = (screen: Screen) => screen === "get" || screen === "take" || screen === "borrow";
+const SCREENS = new Set<Screen>(["home", "get", "take", "borrow", "use", "return", "activity", "install"]);
+/** One list of everything offered. "take", "borrow" and "use" stay valid addresses (old shortcuts, an item sheet) and show the same list. */
+const inList = (screen: Screen) => screen === "get" || screen === "take" || screen === "borrow" || screen === "use";
+/**
+ * The item decides what a person does with it, never a choice on the phone: a Loanable is borrowed,
+ * a whole-unit Consumable taken, an open-unit one (a ream, a bottle) used, with no amount asked.
+ */
+const SCREEN_FOR: Record<SelfServiceAction, Screen> = { TAKE: "take", BORROW: "borrow", USE: "use" };
+const ACTION_WORD: Record<SelfServiceAction, string> = { TAKE: "Take", BORROW: "Borrow", USE: "Use" };
 const FRESH_MS = 2 * 60_000;
 const CATALOG_POLL_MS = 30_000;
 
@@ -245,8 +251,8 @@ function renderResults(query: string): void {
   results.hidden = !found.length && !query.trim();
   const available = estimate(snapshot, events);
   mount(results, found.length
-    ? html`${found.map((item) => html`<li><a class="ss-row" href="/self-service?do=${item.action === "TAKE" ? "take" : "borrow"}&item=${item.id}" data-open-item="${item.id}" data-screen="${item.action === "TAKE" ? "take" : "borrow"}">
-        <span class="ss-row__main"><span class="ss-row__name">${item.name}</span><span class="ss-row__sub">${item.action === "TAKE" ? "Take" : "Borrow"} · ${categoryName(item.category)}</span></span>
+    ? html`${found.map((item) => html`<li><a class="ss-row" href="/self-service?do=${SCREEN_FOR[item.action]}&item=${item.id}" data-open-item="${item.id}" data-screen="${SCREEN_FOR[item.action]}">
+        <span class="ss-row__main"><span class="ss-row__name">${item.name}</span><span class="ss-row__sub">${ACTION_WORD[item.action]} · ${categoryName(item.category)}</span></span>
         ${countBadge(item, available.get(item.id) ?? 0)}</a></li>`)}`
     : html`<li class="ss-results__none">Nothing matches “${query}”.</li>`);
 }
@@ -266,13 +272,13 @@ function matching(items: CatalogItem[], query: string): CatalogItem[] {
 
 function countBadge(item: CatalogItem, available: number): Html {
   if (available <= 0) return html`<span class="ss-count ss-count--out">None left</span>`;
-  const noun = item.action === "TAKE" ? "left" : "available";
+  const noun = item.action === "BORROW" ? "available" : "left";
   // Low stock says so in words as well as colour.
   return available <= 2 ? html`<span class="ss-count ss-count--low">Only <strong>${available}</strong> ${noun}</span>` : html`<span class="ss-count"><strong>${available}</strong> ${noun}</span>`;
 }
 
 const SCREEN_COPY = {
-  get: { title: "Get an item", lead: "Pick what you need. Equipment is borrowed and returned; supplies are taken and used up.", empty: "Nothing is set up for self-service yet. Ask Logistics staff." },
+  get: { title: "Get an item", lead: "Pick what you need. Equipment is borrowed and returned; supplies are taken. Shared supplies, like a ream of paper, are just recorded as used.", empty: "Nothing is set up for self-service yet. Ask Logistics staff." },
   return: { title: "Return", lead: "Return what you borrowed on this phone. A photo of the item is needed.", empty: "" }
 } as const;
 
@@ -316,11 +322,11 @@ function listRows(): Html {
   const found = matching(offered, listQuery);
   if (!found.length) return emptyNote(`Nothing matches “${listQuery}”.`);
   // Recently used on this phone first, then by category.
-  const recent = [...new Set(events.filter((event) => event.type === "TAKE" || event.type === "BORROW").sort((a, b) => b.seq - a.seq).map((event) => event.itemId))].slice(0, 3)
+  const recent = [...new Set(events.filter((event) => event.type !== "RETURN").sort((a, b) => b.seq - a.seq).map((event) => event.itemId))].slice(0, 3)
     .map((id) => found.find((item) => item.id === id)).filter((item): item is CatalogItem => Boolean(item));
   const byCategory = new Map<string, CatalogItem[]>();
   for (const item of found) byCategory.set(item.category, [...byCategory.get(item.category) ?? [], item]);
-  const row = (item: CatalogItem) => html`<li><a class="ss-row ${(available.get(item.id) ?? 0) <= 0 ? "ss-row--out" : ""}" href="/self-service?do=${item.action === "TAKE" ? "take" : "borrow"}&item=${item.id}" data-open-item="${item.id}" data-screen="${item.action === "TAKE" ? "take" : "borrow"}">
+  const row = (item: CatalogItem) => html`<li><a class="ss-row ${(available.get(item.id) ?? 0) <= 0 ? "ss-row--out" : ""}" href="/self-service?do=${SCREEN_FOR[item.action]}&item=${item.id}" data-open-item="${item.id}" data-screen="${SCREEN_FOR[item.action]}">
       <span class="ss-row__main"><span class="ss-row__name">${item.name}</span>${sub(item, waiting.get(item.id))}</span>
       ${countBadge(item, available.get(item.id) ?? 0)}</a></li>`;
   return html`${recent.length && !listQuery ? html`<h2 class="ss-section">Recent on this phone</h2><ul class="ss-list">${recent.map(row)}</ul>` : ""}
@@ -330,7 +336,7 @@ function listRows(): Html {
 
 /** Other names and where it is kept, plus anything of it still waiting on this phone. */
 function sub(item: CatalogItem, waiting = 0): Html {
-  const parts = [item.action === "TAKE" ? "Take" : "Borrow", item.aliases, item.location, waiting ? `${waiting} waiting to sync` : null].filter(Boolean);
+  const parts = [ACTION_WORD[item.action], item.aliases, item.location, waiting ? `${waiting} waiting to sync` : null].filter(Boolean);
   return parts.length ? html`<span class="ss-row__sub">${parts.join(" · ")}</span>` : html``;
 }
 
@@ -349,14 +355,14 @@ function when(iso: string): string {
   return DAY.format(date) === DAY.format(new Date()) ? formatTime(iso) : DAY_TIME.format(date);
 }
 
-/* ---------- Sheets: Take, Borrow, Return ---------- */
+/* ---------- Sheets: Take, Borrow, Use, Return ---------- */
 
 function estimateLine(item: CatalogItem): Html {
   if (!snapshot) return html``;
   const count = estimate(snapshot, events).get(item.id) ?? 0;
   const mine = pendingByItem(events).get(item.id) ?? 0;
   const noun = units(count, item.unit);
-  const main = count <= 0 ? "The records show none left." : fresh() ? `${count} ${noun} ${item.action === "TAKE" ? "left" : "available"}.` : `About ${count} ${noun} ${item.action === "TAKE" ? "left" : "available"}.`;
+  const main = count <= 0 ? "The records show none left." : fresh() ? `${count} ${noun} ${item.action === "BORROW" ? "available" : "left"}.` : `About ${count} ${noun} ${item.action === "BORROW" ? "available" : "left"}.`;
   const note = [mine ? `Includes your ${mine} not yet sent.` : "", fresh() ? "" : `Last synced ${formatTime(new Date(snapshot.fetchedAt).toISOString())}; other offline records may not be counted yet.`].filter(Boolean).join(" ");
   return html`<p class="ss-estimate ${count <= 0 ? "ss-estimate--out" : ""}"><span>${main}</span>${note ? html`<small>${note}</small>` : ""}</p>`;
 }
@@ -385,6 +391,20 @@ function takeSheet(item: CatalogItem): Html {
       <button class="button button--primary button--lg button--block" type="submit" data-submit><span data-qty-label>Take 1 ${units(1, item.unit)}</span></button>
     </form>`);
 }
+
+/** An open-unit item: the person only says who used it. No amount, and stock does not change. */
+function useSheet(item: CatalogItem): Html {
+  return sheetFrame(`Use · ${categoryName(item.category)}`, item.name, html`
+    ${estimateLine(item)}
+    <p class="ss-hint">${icon("info")}Nothing to count: this records that you used some. Logistics staff mark an open ${item.unit} empty when it runs out.</p>
+    <form class="form ss-form" data-form="USE" novalidate>
+      ${nameField("Your name")}
+      <div class="form-alert" role="alert" hidden data-alert></div>
+      <button class="button button--primary button--lg button--block" type="submit" data-submit>Record use</button>
+    </form>`);
+}
+
+const SHEETS: Record<SelfServiceAction, (item: CatalogItem) => Html> = { TAKE: takeSheet, BORROW: borrowSheet, USE: useSheet };
 
 function borrowSheet(item: CatalogItem): Html {
   const uscOnly = item.audience === "USC_STAFF_ONLY";
@@ -439,7 +459,7 @@ function returnSheet(loan: LocalEvent): Html {
     </form>`);
 }
 
-const VERB: Record<string, string> = { TAKE: "Taken", BORROW: "Borrowed", RETURNED: "Return sent", DAMAGED: "Damaged return sent", LOST: "Reported lost" };
+const VERB: Record<string, string> = { TAKE: "Taken", BORROW: "Borrowed", USE: "Use recorded", RETURNED: "Return sent", DAMAGED: "Damaged return sent", LOST: "Reported lost" };
 const verb = (event: LocalEvent) => VERB[event.type === "RETURN" ? event.outcome ?? "RETURNED" : event.type];
 
 /** Shown in the sheet after saving: calm, specific, and it updates itself when the record syncs. */
@@ -452,7 +472,7 @@ function receipt(event: LocalEvent): Html {
       ${event.type === "BORROW" ? html`<p class="ss-receipt__tip">Return it from <strong>Return</strong> on this phone, so it links to this loan.</p>` : ""}
       <div class="ss-receipt__actions">
         <button type="button" class="button button--primary button--lg button--block" data-done>Done</button>
-        ${event.type !== "RETURN" ? html`<button type="button" class="button button--ghost button--block" data-again="${event.type === "TAKE" ? "take" : "borrow"}">${event.type === "TAKE" ? "Take something else" : "Borrow something else"}</button>` : ""}
+        ${event.type !== "RETURN" ? html`<button type="button" class="button button--ghost button--block" data-again="${SCREEN_FOR[event.type]}">${ACTION_WORD[event.type]} something else</button>` : ""}
       </div>
     </div>`;
 }
@@ -497,7 +517,7 @@ function renderActivity(): void {
             <p class="ss-event__when">${verb(event)} ${when(event.occurredAt)}</p>
             ${event.message && event.state !== "synced" ? html`<p class="ss-event__note">${event.message}</p>` : ""}</div>
           <span class="tag tag--${tone === "wait" ? "pending" : tone === "review" ? "gold" : tone}">${text}</span></li>`;
-      })}</ul>` : emptyNote("Nothing yet. What you take, borrow and return with this phone shows up here.")}
+      })}</ul>` : emptyNote("Nothing yet. What you take, borrow, use and return with this phone shows up here.")}
       <div class="ss-housekeeping">
         <button type="button" class="button button--ghost button--sm" data-clear ${events.some((event) => event.state !== "pending") ? "" : "disabled"}>Clear synced history</button>
         ${profile.name ? html`<button type="button" class="button button--ghost button--sm" data-forget>Forget my details</button>` : ""}
@@ -657,13 +677,13 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     submit.disabled = true;
     const target = loan ? { itemId: loan.itemId, itemName: loan.itemName, unit: loan.unit } : { itemId: item!.id, itemName: item!.name, unit: item!.unit };
     const person = loan ? loan.person : { name, ...(studentId ? { studentId } : {}) };
-    const draft: Draft = type === "TAKE" ? { type, ...target, quantity: count, person: { name } }
+    const draft: Draft = type === "TAKE" || type === "USE" ? { type, ...target, quantity: count, person: { name } }
       : type === "BORROW" ? { type, ...target, quantity: count, person, purpose, ...(purpose === "USC" ? { reason } : {}), returnBy: String(data.get("returnBy") || "") || null }
       : { type, ...target, quantity: loan?.quantity ?? count, person, loanEventId: loan?.id ?? null, outcome, ...(outcome === "RETURNED" ? {} : { note }) };
     try {
       const saved = await record(draft, photo ?? undefined);
       if (type !== "RETURN" && name) {
-        profile = { name, studentId: type === "TAKE" ? profile.studentId : studentId || profile.studentId };
+        profile = { name, studentId: type === "BORROW" ? studentId || profile.studentId : profile.studentId };
         void store.setMeta("profile", profile);
       }
       dirty = false;
@@ -726,9 +746,8 @@ export async function selfService(): Promise<void> {
     const item = itemById(itemId) ?? (loan ? itemById(loan.itemId) : undefined);
     // A return is only ever for a borrow made on this phone.
     if (screen === "return" ? !loan : !item) { if (snapshot || screen === "return") go({ item: null, loan: null }, true); return; }
-    const body = screen === "take" && item?.action === "TAKE" ? takeSheet(item)
-      : screen === "borrow" && item?.action === "BORROW" ? borrowSheet(item)
-      : returnSheet(loan!);
+    // The item's own action decides the sheet, whatever an old link or shortcut asked for.
+    const body = screen === "return" ? returnSheet(loan!) : SHEETS[item!.action](item!);
     mount(dialog, body);
     control.open();
     dirty = false;

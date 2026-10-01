@@ -57,6 +57,8 @@ describe("the phone's queue", () => {
     const giveBack = local("RETURN", { loanEventId: borrow.id, outcome: "RETURNED" });
     expect(estimate(snapshot(4, 8), [synced, giveBack]).get("ITM-0001")).toBe(5);
     expect(estimate(snapshot(0), [local("TAKE", { quantity: 3 })]).get("ITM-0001")).toBe(0);
+    // A use of an open unit changes no stock, pending or not.
+    expect(estimate(snapshot(5), [local("USE"), local("USE")]).get("ITM-0001")).toBe(5);
   });
 
   it("tracks open loans and never forgets pending records or open loans", () => {

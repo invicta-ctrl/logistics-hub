@@ -114,8 +114,35 @@ test("loan due labels derive overdue from an open loan's return date", async ({ 
 
 const selfServiceCatalog = { revision: 3, serverTime: "2026-09-30T01:00:00.000Z", categories: ["PANTRY", "SCHOOL SUPPLIES"], items: [
   { id: "ITM-0043", name: "Bottled Water", aliases: null, category: "PANTRY", unit: "piece", action: "TAKE", available: 18, location: "Pantry shelf", audience: null },
-  { id: "ITM-0262", name: "Scissors", aliases: "Gunting", category: "SCHOOL SUPPLIES", unit: "piece", action: "BORROW", available: 0, location: "Cabinet B", audience: "STUDENTS_AND_USC_STAFF" }
+  { id: "ITM-0262", name: "Scissors", aliases: "Gunting", category: "SCHOOL SUPPLIES", unit: "piece", action: "BORROW", available: 0, location: "Cabinet B", audience: "STUDENTS_AND_USC_STAFF" },
+  { id: "ITM-0300", name: "A4 Bond Paper", aliases: null, category: "SCHOOL SUPPLIES", unit: "ream", action: "USE", available: 8, location: "Office cabinet", audience: null }
 ] };
+
+test("self-service: the item decides Borrow, Take or Use, and a use asks no amount and saves on the phone", async ({ page }) => {
+  await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
+  // Kept offline, so the record waits on the phone.
+  await page.route("**/api/self-service/sync", (route) => route.abort());
+  await page.goto("/self-service?do=get");
+  for (const [name, action] of [["Bottled Water", "Take"], ["Scissors", "Borrow"], ["A4 Bond Paper", "Use"]]) {
+    await expect(page.locator(".ss-row", { hasText: name }).locator(".ss-row__sub")).toContainText(action);
+  }
+  // An old "take" link to an open-unit item still opens Use: the phone never offers the person a choice.
+  await page.goto("/self-service?do=take&item=ITM-0300");
+  const sheet = page.getByRole("dialog", { name: "A4 Bond Paper" });
+  await expect(sheet).toContainText("Use · School Supplies");
+  await expect(sheet.getByLabel("How many?")).toHaveCount(0);
+  await expect(sheet.getByRole("radio")).toHaveCount(0);
+  await sheet.getByLabel("Your name").fill("Ana Reyes");
+  await sheet.getByRole("button", { name: "Record use" }).click();
+  const receipt = page.getByRole("dialog", { name: "Use recorded" });
+  await expect(receipt).toContainText("Saved on this phone");
+  await expect(receipt.getByRole("button", { name: "Use something else" })).toBeVisible();
+  await receipt.getByRole("button", { name: "Done" }).click();
+  // The estimate is unchanged: a use takes nothing off the shelf.
+  await page.goto("/self-service?do=get");
+  await expect(page.locator(".ss-row", { hasText: "A4 Bond Paper" }).first()).toContainText("1 waiting to sync");
+  await expect(page.locator(".ss-row", { hasText: "A4 Bond Paper" }).first()).toContainText("8 left");
+});
 
 test("self-service fits phones, tablets and desktops, with every screen and sheet inside the viewport", async ({ page }) => {
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));

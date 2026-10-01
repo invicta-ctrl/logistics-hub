@@ -654,6 +654,21 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .loan-row__photo { font-size: var(--text-sm); }
 .loan-list--closed .loan-row__who strong { font-weight: 500; }
 
+/* Open units (Part 5B): one row per open unit, condition chips, Mark empty as the one primary action. */
+.open-units[aria-busy="true"] { opacity: .7; }
+.open-unit-list { display: grid; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.open-unit { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
+.open-unit:last-child { border-bottom: 0; }
+.open-unit__title { font-weight: 600; }
+.open-unit .chips--flush { margin: 0; }
+.open-unit__actions { flex-wrap: wrap; justify-content: flex-start; white-space: normal; }
+.inline-confirm { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line-warn); border-radius: var(--radius); background: var(--warn-tint); color: var(--warn-ink); font-size: var(--text-sm); }
+.inline-confirm__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.quantity__sealed { color: var(--text-2); font-weight: 500; }
+@media (pointer: coarse) {
+  .open-units .button--sm, .open-units .chip, .inline-confirm .button--sm { min-height: 2.75rem; }
+}
+
 .photo-field { display: grid; gap: var(--space-2); }
 .photo-field__pick { display: flex; min-height: 6rem; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); border: 1.5px dashed var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); color: var(--text-2); font-size: var(--text-base); font-weight: 500; transition: border-color var(--dur-2), background-color var(--dur-2), color var(--dur-2); }
 .photo-field__pick:hover { border-color: var(--brand); background: var(--brand-tint); color: var(--brand); }

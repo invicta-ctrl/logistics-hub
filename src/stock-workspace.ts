@@ -1,5 +1,6 @@
 import { stockState } from "./catalog-policy";
 import { type Preset, bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
+import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { loadSession, shell } from "./staff";
 import {
   type Html, api, categoryName, emptyState, expired, failure, formatDate, formatDateTime, formatTime, html, icon, label, live, mount,
@@ -9,16 +10,18 @@ import {
 type StockItem = {
   id: string; name: string; aliases: string | null; category: string; unit: string; status: string; onHand: number; reorderThreshold: number;
   storageLocation: string | null; stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean;
+  itemType: string; consumptionMode: string; openUnits: number; openCondition: string | null;
 };
 type Reorder = { id: string; itemId: string; itemName: string; unit: string; status: string; desiredQuantity: number | null; note: string | null; updatedAt: string; closedAt: string | null; updatedBy: string | null };
-type Activity = { id: string; createdAt: string; itemId: string; itemName: string; unit: string; movementType: string; change: number; afterQuantity: number; reason: string | null; notes: string | null; actor: string | null };
+type Activity = { id: string; createdAt: string; itemId: string; itemName: string; unit: string; movementType: string; related: string | null; change: number; afterQuantity: number; reason: string | null; notes: string | null; actor: string | null };
 type Stock = { revision: number; items: StockItem[]; reorders: Reorder[]; activity: Activity[] };
 type View = "attention" | "restock" | "pantry" | "activity";
-type Focus = "all" | "out" | "low" | "count" | "expiring";
+type Focus = "all" | "out" | "low" | "count" | "expiring" | "open";
 
 const EXPIRING_DAYS = 14;
 const isOpen = (reorder: Reorder) => reorder.status === "NEEDS_RESTOCK" || reorder.status === "PLANNED";
 const daysUntil = (isoDay: string) => Math.round((Date.parse(`${isoDay}T00:00:00Z`) - Date.parse(`${officeDay()}T00:00:00Z`)) / 86_400_000);
+const tracked = (item: StockItem) => item.itemType === "Consumable" && item.consumptionMode === "OPEN_UNIT";
 const expiring = (item: StockItem) => item.stockArea === "Pantry" && Boolean(item.expiresOn) && daysUntil(item.expiresOn!) <= EXPIRING_DAYS;
 
 /** Why an item needs attention, most urgent first; empty when it does not. */
@@ -30,10 +33,12 @@ function reasons(item: StockItem): Array<Exclude<Focus, "all">> {
   if (state === "LOW") list.push("low");
   if (item.countNeeded) list.push("count");
   if (expiring(item)) list.push("expiring");
+  // Only a stored fault can leave more units open than on hand; the database refuses to create it.
+  if (item.openUnits > item.onHand) list.push("open");
   return list;
 }
 
-const FOCUS: Record<Exclude<Focus, "all">, string> = { out: "Out of stock", low: "Low stock", count: "Needs count", expiring: "Expiring" };
+const FOCUS: Record<Exclude<Focus, "all">, string> = { out: "Out of stock", low: "Low stock", count: "Needs count", expiring: "Expiring", open: "Open units need review" };
 
 function expiryTag(item: StockItem): Html {
   if (!item.expiresOn) return html`<span class="muted">—</span>`;
@@ -49,12 +54,13 @@ function whyTags(item: StockItem): Html {
     if (reason === "out") return html`<span class="tag tag--bad">Out of stock</span>`;
     if (reason === "low") return html`<span class="tag tag--warn">${item.onHand < item.reorderThreshold ? `Low · ${item.reorderThreshold - item.onHand} short of level` : "Low · at reorder level"}</span>`;
     if (reason === "count") return html`<span class="tag tag--pending">Needs count</span>`;
+    if (reason === "open") return html`<span class="tag tag--warn">Open units need review</span>`;
     return expiryTag(item);
   })}${item.reorderStatus ? html`<span class="tag tag--gold">${label(item.reorderStatus)}</span>` : ""}</span>`;
 }
 
 const itemCell = (item: { id: string; name: string; storageLocation?: string | null }) => html`<td class="col-item"><a class="row-link" href="/staff/inventory?item=${item.id}" data-route>${item.name}</a><span class="cell-sub"><span class="mono">${item.id}</span>${item.storageLocation !== undefined ? html` · ${item.storageLocation ?? "No location"}` : ""}</span></td>`;
-const qtyCell = (onHand: number, unit: string) => html`<td class="col-qty"><span class="qty">${onHand}</span> <span class="qty-unit">${units(onHand, unit)}</span></td>`;
+const qtyCell = (onHand: number, unit: string, item?: StockItem) => html`<td class="col-qty"><span class="qty">${onHand}</span> <span class="qty-unit">${units(onHand, unit)}</span>${item?.openUnits ? html`<span class="cell-sub">${sealedLine(onHand, item.openUnits, item.openCondition)}</span>` : ""}</td>`;
 const levelCell = (item: StockItem) => html`<td class="col-level">${item.reorderThreshold > 0 ? item.reorderThreshold : html`<span class="muted">Not set</span>`}</td>`;
 
 export async function stockWorkspace(): Promise<void> {
@@ -84,6 +90,7 @@ export async function stockWorkspace(): Promise<void> {
               <datalist id="record-items"></datalist>
             </div>
             <div class="record-card" id="record-card" aria-live="polite"><p class="muted">Choose an item to see what is on the shelf.</p></div>
+            <div id="record-open-units"></div>
             ${quantityEditor("record")}
           </form>
           <ol class="receipts" id="receipts" aria-label="Recorded this session"></ol>
@@ -94,7 +101,7 @@ export async function stockWorkspace(): Promise<void> {
 
   const params = new URLSearchParams(window.location.search);
   let view: View = (["attention", "restock", "pantry", "activity"] as const).find((value) => value === params.get("view")) ?? "attention";
-  let focus: Focus = (["all", "out", "low", "count", "expiring"] as const).find((value) => value === params.get("show")) ?? "all";
+  let focus: Focus = (["all", "out", "low", "count", "expiring", "open"] as const).find((value) => value === params.get("show")) ?? "all";
   let todayOnly = params.get("range") !== "recent";
   let stock: Stock | null = null;
   let selected: StockItem | null = null;
@@ -133,12 +140,30 @@ export async function stockWorkspace(): Promise<void> {
     }
   });
 
+  /* An open-unit item's units, loaded when it is chosen (the list carries only how many are open). */
+  let openUnits: { itemId: string; units: OpenUnit[]; usesRecorded: number; unitsEmptied: number } | null = null;
+  const openPanel = bindOpenUnits(document.querySelector<HTMLElement>("#record-open-units")!,
+    () => selected && openUnits?.itemId === selected.id ? { ...selected, openUnits: openUnits.units, usesRecorded: openUnits.usesRecorded, unitsEmptied: openUnits.unitsEmptied } : null,
+    async () => { await poll.refresh(); });
+  async function loadOpenUnits(item: StockItem): Promise<void> {
+    try {
+      const detail = await api<{ openUnits: OpenUnit[]; usesRecorded: number; unitsEmptied: number }>(`/api/staff/items/${encodeURIComponent(item.id)}`);
+      if (selected?.id !== item.id) return;
+      openUnits = { itemId: item.id, units: detail.openUnits, usesRecorded: detail.usesRecorded, unitsEmptied: detail.unitsEmptied };
+      openPanel.render();
+    } catch (error) { toast(failure(error), "error"); }
+  }
+
   function select(item: StockItem | null): void {
+    const changed = item?.id !== selected?.id || item?.openUnits !== selected?.openUnits || item?.openCondition !== selected?.openCondition || item?.onHand !== selected?.onHand;
     selected = item;
+    if (!item || !tracked(item) && !item.openUnits) openUnits = null;
+    else if (changed) void loadOpenUnits(item);
+    openPanel.render();
     const card = document.querySelector("#record-card")!;
     if (!item) { mount(card, html`<p class="muted">Choose an item to see what is on the shelf.</p>`); movement.refresh(); return; }
     mount(card, html`<p class="record-card__name">${item.name} <span class="mono muted">${item.id}</span></p>
-      <p class="record-card__meta"><strong>${item.onHand}</strong> ${units(item.onHand, item.unit)} on hand · ${item.storageLocation ?? "No location"} · reorder level ${item.reorderThreshold > 0 ? item.reorderThreshold : "not set"}</p>
+      <p class="record-card__meta"><strong>${item.onHand}</strong> ${units(item.onHand, item.unit)} on hand${item.openUnits ? ` (${sealedLine(item.onHand, item.openUnits, item.openCondition)})` : ""} · ${item.storageLocation ?? "No location"} · reorder level ${item.reorderThreshold > 0 ? item.reorderThreshold : "not set"}</p>
       ${reasons(item).length || item.reorderStatus ? whyTags(item) : ""}`);
     movement.refresh();
   }
@@ -173,7 +198,7 @@ export async function stockWorkspace(): Promise<void> {
     const needing = data.items.filter((item) => reasons(item).length);
     const counts = Object.fromEntries((Object.keys(FOCUS) as Array<keyof typeof FOCUS>).map((key) => [key, needing.filter((item) => reasons(item).includes(key)).length]));
     const shown = needing.filter((item) => focus === "all" || reasons(item).includes(focus))
-      .sort((a, b) => ["out", "low", "count", "expiring"].indexOf(reasons(a)[0]!) - ["out", "low", "count", "expiring"].indexOf(reasons(b)[0]!) || a.name.localeCompare(b.name));
+      .sort((a, b) => ["out", "open", "low", "count", "expiring"].indexOf(reasons(a)[0]!) - ["out", "open", "low", "count", "expiring"].indexOf(reasons(b)[0]!) || a.name.localeCompare(b.name));
     const unset = data.items.filter((item) => item.status !== "INACTIVE" && item.reorderThreshold <= 0).length;
     return html`<div class="chips chips--flush" role="group" aria-label="Show">
         ${[["all", "Everything", needing.length], ...Object.entries(FOCUS).map(([key, text]) => [key, text, counts[key]])].map(([key, text, count]) =>
@@ -183,9 +208,10 @@ export async function stockWorkspace(): Promise<void> {
       ${shown.length ? html`<div class="data-table-wrap"><table class="data-table data-table--static">
         <caption class="visually-hidden">Items that need attention</caption>
         <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Why</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
-        <tbody>${shown.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit)}${levelCell(item)}<td>${whyTags(item)}</td>
+        <tbody>${shown.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit, item)}${levelCell(item)}<td>${whyTags(item)}</td>
           <td class="col-actions"><span class="row-actions">
-            <button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="${reasons(item)[0] === "count" ? "COUNT" : "DELIVERY"}">${reasons(item)[0] === "count" ? "Count" : "Stock in"}</button>
+            ${reasons(item)[0] === "open" ? html`<button type="button" class="button button--secondary button--sm" data-open-units="${item.id}">Open units</button>`
+              : html`<button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="${reasons(item)[0] === "count" ? "COUNT" : "DELIVERY"}">${reasons(item)[0] === "count" ? "Count" : "Stock in"}</button>`}
             ${item.reorderStatus ? "" : html`<button type="button" class="button button--ghost button--sm" data-restock="${item.id}">Add to restock</button>`}
           </span></td></tr>`)}</tbody></table></div>`
         : emptyState(focus === "all" ? "Nothing needs attention" : `No items: ${FOCUS[focus as keyof typeof FOCUS]}`, focus === "all" ? "Every active item is in stock, above its reorder level, counted where needed, and not near expiry." : "Try another filter.")}`;
@@ -225,9 +251,11 @@ export async function stockWorkspace(): Promise<void> {
     return html`<div class="data-table-wrap"><table class="data-table data-table--static">
       <caption class="visually-hidden">Pantry items</caption>
       <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Expiry</th><th scope="col">Status</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
-      <tbody>${pantry.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit)}${levelCell(item)}<td>${expiryTag(item)}</td>
+      <tbody>${pantry.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit, item)}${levelCell(item)}<td>${expiryTag(item)}</td>
         <td>${stockState(item) === "OUT" ? html`<span class="tag tag--bad">Out of stock</span>` : stockState(item) === "LOW" ? html`<span class="tag tag--warn">Low stock</span>` : html`<span class="tag tag--ok">In stock</span>`}</td>
-        <td class="col-actions"><span class="row-actions"><button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="CONSUMED" data-delta="-1">Use</button><button type="button" class="button button--ghost button--sm" data-record-item="${item.id}" data-reason="DELIVERY">Restock</button></span></td></tr>`)}</tbody></table></div>`;
+        <td class="col-actions"><span class="row-actions">${tracked(item)
+          ? html`<button type="button" class="button button--secondary button--sm" data-open-units="${item.id}">Open units</button>`
+          : html`<button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="CONSUMED" data-delta="-1">Use</button>`}<button type="button" class="button button--ghost button--sm" data-record-item="${item.id}" data-reason="DELIVERY">Restock</button></span></td></tr>`)}</tbody></table></div>`;
   }
 
   function activityMarkup(data: Stock): Html {
@@ -239,7 +267,7 @@ export async function stockWorkspace(): Promise<void> {
       ${entries.length ? html`<ol class="activity-list">${entries.map((entry) => html`<li class="activity-row ${entry.change > 0 ? "is-in" : entry.change < 0 ? "is-out" : ""}">
           <p class="activity-row__change">${signed(entry.change)}</p>
           <div class="activity-row__main">
-            <p><a class="row-link" href="/staff/inventory?item=${entry.itemId}" data-route>${entry.itemName}</a> <span class="muted">· ${movementTitle(entry.movementType, entry.change, entry.reason)}</span></p>
+            <p><a class="row-link" href="/staff/inventory?item=${entry.itemId}" data-route>${entry.itemName}</a> <span class="muted">· ${movementTitle(entry.related === "OPEN_UNIT" ? "UNIT_EMPTIED" : entry.movementType, entry.change, entry.reason)}</span></p>
             <p class="cell-sub">${entry.afterQuantity - entry.change} → ${entry.afterQuantity} ${units(entry.afterQuantity, entry.unit)} · ${entry.actor ?? "Unknown"} · <time datetime="${entry.createdAt}">${todayOnly ? formatTime(entry.createdAt) : formatDateTime(entry.createdAt)}</time>${entry.notes ? ` · ${entry.notes}` : ""}</p>
           </div></li>`)}</ol>`
         : emptyState(todayOnly ? "No stock changes today" : "No stock activity yet", todayOnly ? "Movements recorded today appear here as they happen." : "Stock in, stock out and counts appear here.")}`;
@@ -311,6 +339,8 @@ export async function stockWorkspace(): Promise<void> {
     if (range) { todayOnly = range.dataset.range === "today"; render(); return; }
     const record = target.closest<HTMLButtonElement>("[data-record-item]");
     if (record) return startRecord(record.dataset.recordItem!, { reason: record.dataset.reason, delta: record.dataset.delta ? Number(record.dataset.delta) : undefined });
+    const openUnitsButton = target.closest<HTMLButtonElement>("[data-open-units]");
+    if (openUnitsButton) return startRecord(openUnitsButton.dataset.openUnits!, {});
     const add = target.closest<HTMLButtonElement>("[data-restock]");
     if (add) return void restock(add.dataset.restock!);
     const receive = target.closest<HTMLButtonElement>("[data-receive]");

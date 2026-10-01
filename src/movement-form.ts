@@ -1,19 +1,21 @@
 import { MOVEMENT_REASONS } from "./catalog-policy";
-import { type Html, api, failure, html, icon, label, mount, setMessage, toast, units } from "./ui";
+import { type Html, api, failure, html, icon, label, mount, plural, setMessage, toast, units } from "./ui";
 
-export type Target = { id: string; name: string; unit: string; onHand: number };
+/** `openUnits`: how many of an open-unit item's units are open; a change may not go below them. */
+export type Target = { id: string; name: string; unit: string; onHand: number; openUnits?: number };
 export type Recorded = { onHand: number; change: number };
 /** A row action's starting point: move the figure by `delta` (or to `total`) and suggest a reason. */
 export type Preset = { delta?: number; total?: number; reason?: string; reorderId?: string | null; context?: string };
 
 const TITLES: Record<string, string> = {
   OPENING_BALANCE: "Opening balance", STOCK_IN: "Stock in", STOCK_OUT: "Stock out", COUNT_ADJUSTMENT: "Count", ISSUE: "Issued (legacy system)",
-  LOAN_OUT: "Lent out", LOAN_RETURN: "Returned from loan"
+  LOAN_OUT: "Lent out", LOAN_RETURN: "Returned from loan", UNIT_EMPTIED: "Open unit marked empty"
 };
 
 /** "Stock out · Damaged", "Count · confirmed", "Lent out · Juan": a movement as staff say it. */
 export function movementTitle(type: string, change: number, reason: string | null, borrower: string | null = null): string {
   if (type === "COUNT_ADJUSTMENT") return change === 0 ? "Count · confirmed" : "Count correction";
+  if (type === "UNIT_EMPTIED") return TITLES[type]!;
   if (borrower) return `${TITLES[type] ?? type} · ${borrower}`;
   return reason ? `${TITLES[type] ?? type} · ${label(reason)}` : TITLES[type] ?? type;
 }
@@ -46,6 +48,7 @@ export function quantityEditor(prefix: string): Html {
     <div class="qty-editor__details" data-details hidden>
       <fieldset class="reason-picker"><legend>Reason <span class="field__required">required</span></legend><div class="reason-picker__options" data-reasons></div></fieldset>
       <div class="field"><label for="${prefix}-note"><span data-note-label>Note</span> <span class="field__optional" data-note-optional>optional</span></label><input id="${prefix}-note" name="note" maxlength="500" autocomplete="off" /></div>
+      <label class="checkbox" data-reconcile hidden><input type="checkbox" name="reconcileOpen" /><span data-reconcile-text></span></label>
       <div class="form-alert" role="alert" hidden data-alert></div>
       <div class="form-actions"><button class="button button--primary" type="submit" data-submit>Save</button><button class="button button--ghost" type="button" data-cancel>Cancel</button></div>
     </div>
@@ -119,6 +122,14 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
       mount(reasonsBox, html`${REASONS[direction].map((reason) => html`<label class="reason-chip"><input type="radio" name="reason" value="${reason}" ${reason === (wanted ?? previous) || (direction === "same") ? html`checked` : ""} /><span>${label(reason)}</span></label>`)}`);
     }
     const reason = chosen();
+    // Below the open units, a count must close the extra ones (explicitly); any other change is refused.
+    const opened = target.openUnits ?? 0;
+    const reconcile = form.querySelector<HTMLElement>("[data-reconcile]")!;
+    reconcile.hidden = !(reason === "COUNT" && total < opened);
+    if (!reconcile.hidden) {
+      const extra = opened - total;
+      form.querySelector("[data-reconcile-text]")!.textContent = `Also close ${extra === 1 ? `1 open ${target.unit}` : `the ${extra} oldest open ${units(extra, target.unit)}`}: the count found ${extra === 1 ? "it" : "them"} gone (${opened} open now).`;
+    }
     const noteRequired = reason === "OTHER";
     form.querySelector("[data-note-optional]")!.textContent = noteRequired ? "required" : "optional";
     note.required = noteRequired;
@@ -136,6 +147,7 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
     shownReasons = "";
     input.value = options.target() ? String(base) : "";
     note.value = "";
+    form.querySelector<HTMLInputElement>("input[name=reconcileOpen]")!.checked = false;
     context.hidden = true;
     key = crypto.randomUUID();
     setMessage(alert, "");
@@ -184,9 +196,13 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
     const reason = chosen();
     if (!reason) return invalid(reasonsBox.querySelector("input") ?? input, "Choose a reason.");
     if (note.required && !note.value.trim()) return invalid(note, "Add a short note for “Other”.");
+    const open = target.openUnits ?? 0;
+    const reconcile = form.querySelector<HTMLInputElement>("input[name=reconcileOpen]")!;
+    if (total < open && reason !== "COUNT") return invalid(input, `${plural(open, target.unit)} ${open === 1 ? "is" : "are"} open. Mark an open ${target.unit} empty instead, or record a count.`);
+    if (total < open && !reconcile.checked) return invalid(reconcile, `Tick the box to close the open ${units(open - total, target.unit)} this count found gone.`);
     const delta = total - base;
     const body = reason === "COUNT"
-      ? { kind: "COUNT", quantity: total, note: note.value.trim() || "Physical count", expectedOnHand: base, key }
+      ? { kind: "COUNT", quantity: total, note: note.value.trim() || "Physical count", expectedOnHand: base, key, reconcileOpen: total < open }
       : { kind: delta > 0 ? "IN" : "OUT", quantity: Math.abs(delta), reason, note: note.value, expectedOnHand: base, key, reorderId: delta > 0 ? reorderId : null };
     submit.disabled = true;
     setMessage(alert, "");
