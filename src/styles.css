@@ -656,6 +656,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 
 /* Open units (Part 5B): one row per open unit, condition chips, Mark empty as the one primary action. */
 .open-units[aria-busy="true"] { opacity: .7; }
+#record-open-units:empty { display: none; }
 .open-unit-list { display: grid; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .open-unit { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
 .open-unit:last-child { border-bottom: 0; }

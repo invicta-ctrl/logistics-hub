@@ -10,7 +10,7 @@ import { type Html, CREST, MARK, api, emptyState, expired, failure, formatDateTi
  */
 
 type Entry = {
-  id: string; type: "TAKE" | "BORROW" | "RETURN"; itemId: string; itemName: string; unit: string; quantity: number; personName: string;
+  id: string; type: "TAKE" | "BORROW" | "USE" | "RETURN"; itemId: string; itemName: string; unit: string; quantity: number; personName: string;
   studentId: string | null; purpose: string | null; reason: string | null; returnOutcome: string | null; note: string | null; returnBy: string | null;
   occurredAt: string; receivedAt: string; deviceTime: string; loanId: string | null; applied: number; review: ReviewReason | null; hasPhoto: number;
   resolvedAt: string | null; resolutionNote: string | null; resolvedBy: string | null; device: string; network: string | null;
@@ -26,10 +26,12 @@ const QR_URL = "logistics.hausc.org/self-service";
 function verb(entry: Entry): string {
   if (entry.type === "TAKE") return "Take";
   if (entry.type === "BORROW") return "Borrow";
+  if (entry.type === "USE") return "Use";
   return entry.returnOutcome === "DAMAGED" ? "Return (damaged)" : entry.returnOutcome === "LOST" ? "Reported lost" : "Return";
 }
 
-const quantityText = (entry: Entry) => `${entry.quantity} ${units(entry.quantity, entry.unit)}`;
+/** A use of an open unit names no amount (Part 5B). */
+const quantityText = (entry: Entry) => entry.type === "USE" ? "no amount, stock unchanged" : `${entry.quantity} ${units(entry.quantity, entry.unit)}`;
 
 /** The phone's own clock is shown only when it disagrees with the corrected time by more than five minutes. */
 function timing(entry: Entry): Html {
@@ -73,7 +75,7 @@ function actions(entry: Entry, candidates: Candidate[]): Html {
         <select id="loan-${entry.id}" name="loanId"><option value="">Choose an open loan…</option>${loans.map((loan) => html`<option value="${loan.id}" ${loan.quantity === entry.quantity ? "" : "disabled"}>${loan.borrowerName}${loan.studentId ? ` (${loan.studentId})` : ""} · ${loan.quantity} · since ${formatDateTime(loan.createdAt)}${loan.quantity === entry.quantity ? "" : " · different quantity"}</option>`)}</select></div>
       ${note}<div class="review-card__buttons"><button type="button" class="button button--primary button--sm" data-act="match">Match and close loan</button><button type="button" class="button button--ghost button--sm" data-act="dismiss">Dismiss</button></div>`;
   }
-  return html`${note}<div class="review-card__buttons"><button type="button" class="button button--primary button--sm" data-act="apply">${entry.type === "TAKE" ? "Apply the take" : "Apply the loan"}</button><button type="button" class="button button--ghost button--sm" data-act="dismiss">Dismiss</button>${photo}</div>`;
+  return html`${note}<div class="review-card__buttons"><button type="button" class="button button--primary button--sm" data-act="apply">${entry.type === "TAKE" ? "Apply the take" : entry.type === "USE" ? "Accept the use" : "Apply the loan"}</button><button type="button" class="button button--ghost button--sm" data-act="dismiss">Dismiss</button>${photo}</div>`;
 }
 
 function reviewCard(entry: Entry, candidates: Candidate[]): Html {

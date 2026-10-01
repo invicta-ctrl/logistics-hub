@@ -575,6 +575,24 @@ describe("activity export (CSV)", () => {
     expect(JSON.stringify(seen)).not.toContain("HYPERLINK");
   });
 
+  it("exports open-unit work as its own rows: uses recorded at 0, each unit used up at exactly -1, never an estimated amount", async () => {
+    sqlite.exec("UPDATE items SET unit = 'ream', consumption_mode = 'OPEN_UNIT' WHERE id = 'ITM-R'");
+    movement("ITM-R", "STOCK_IN", 8, "2026-09-30T00:00:00.000Z");
+    audit("AU-O", "2026-09-30T01:00:00.000Z", "UNIT_OPENED", "ITEM", "ITM-R", JSON.stringify({ unitId: "OU-1", alreadyOpen: 0 }));
+    audit("AU-U", "2026-09-30T01:10:00.000Z", "UNIT_USED", "ITEM", "ITM-R", JSON.stringify({ unitId: "OU-1" }));
+    phone("PH-U", "ITM-R", "USE", "2026-09-30T01:20:00.000Z", { applied: 1, note: "for the flyers" });
+    movement("ITM-R", "STOCK_OUT", -1, "2026-09-30T01:30:00.000Z", { id: "MOV-E", related: "OPEN_UNIT", relatedId: "OU-1", reason: "CONSUMED" });
+    const { rows } = await exported("item=ITM-R");
+    const pick = (row: string[]) => [row[1], row[8], row[9], row[10], row[12]];
+    expect(rows.map(pick)).toEqual([
+      ["Unit marked empty", "-1", "8", "7", ""],
+      ["Phone use", "0", "", "", ""],
+      ["Use recorded", "0", "", "", ""],
+      ["Unit opened", "0", "", "", ""],
+      ["Stock in", "8", "0", "8", ""]
+    ]);
+  });
+
   it("caps a file and says so in the file, the headers and the audit entry", async () => {
     sqlite.exec(`WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2001)
       INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, status)

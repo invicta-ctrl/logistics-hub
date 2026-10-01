@@ -90,9 +90,9 @@ export async function stockWorkspace(): Promise<void> {
               <datalist id="record-items"></datalist>
             </div>
             <div class="record-card" id="record-card" aria-live="polite"><p class="muted">Choose an item to see what is on the shelf.</p></div>
-            <div id="record-open-units"></div>
             ${quantityEditor("record")}
           </form>
+          <div id="record-open-units"></div>
           <ol class="receipts" id="receipts" aria-label="Recorded this session"></ol>
         </div>
       </aside>
@@ -141,15 +141,15 @@ export async function stockWorkspace(): Promise<void> {
   });
 
   /* An open-unit item's units, loaded when it is chosen (the list carries only how many are open). */
-  let openUnits: { itemId: string; units: OpenUnit[]; usesRecorded: number; unitsEmptied: number } | null = null;
+  let openUnits: { itemId: string; units: OpenUnit[] } | null = null;
   const openPanel = bindOpenUnits(document.querySelector<HTMLElement>("#record-open-units")!,
-    () => selected && openUnits?.itemId === selected.id ? { ...selected, openUnits: openUnits.units, usesRecorded: openUnits.usesRecorded, unitsEmptied: openUnits.unitsEmptied } : null,
-    async () => { await poll.refresh(); });
+    () => selected && openUnits?.itemId === selected.id ? { ...selected, openUnits: openUnits.units } : null,
+    async (summary) => { if (selected) openUnits = { itemId: selected.id, units: summary.openUnits }; await poll.refresh(); });
   async function loadOpenUnits(item: StockItem): Promise<void> {
     try {
-      const detail = await api<{ openUnits: OpenUnit[]; usesRecorded: number; unitsEmptied: number }>(`/api/staff/items/${encodeURIComponent(item.id)}`);
+      const detail = await api<{ openUnits: OpenUnit[] }>(`/api/staff/items/${encodeURIComponent(item.id)}`);
       if (selected?.id !== item.id) return;
-      openUnits = { itemId: item.id, units: detail.openUnits, usesRecorded: detail.usesRecorded, unitsEmptied: detail.unitsEmptied };
+      openUnits = { itemId: item.id, units: detail.openUnits };
       openPanel.render();
     } catch (error) { toast(failure(error), "error"); }
   }
@@ -201,7 +201,7 @@ export async function stockWorkspace(): Promise<void> {
       .sort((a, b) => ["out", "open", "low", "count", "expiring"].indexOf(reasons(a)[0]!) - ["out", "open", "low", "count", "expiring"].indexOf(reasons(b)[0]!) || a.name.localeCompare(b.name));
     const unset = data.items.filter((item) => item.status !== "INACTIVE" && item.reorderThreshold <= 0).length;
     return html`<div class="chips chips--flush" role="group" aria-label="Show">
-        ${[["all", "Everything", needing.length], ...Object.entries(FOCUS).map(([key, text]) => [key, text, counts[key]])].map(([key, text, count]) =>
+        ${[["all", "Everything", needing.length], ...Object.entries(FOCUS).filter(([key]) => key !== "open" || counts.open || focus === "open").map(([key, text]) => [key, text, counts[key]])].map(([key, text, count]) =>
           html`<button type="button" class="chip" data-focus="${key}" aria-pressed="${key === focus}">${text}<span class="chip__count">${count}</span></button>`)}
       </div>
       ${unset ? html`<p class="hint-line">${icon("info")}<span>${plural(unset, "active item")} ${unset === 1 ? "has" : "have"} no reorder level, so ${unset === 1 ? "it is" : "they are"} never called low. Set levels in <a class="text-link" href="/staff/inventory" data-route>Inventory</a>.</span></p>` : ""}
