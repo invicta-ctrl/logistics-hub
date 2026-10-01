@@ -45,7 +45,7 @@ const LENDING_FIELDS = ["lendingAudience", "defaultLoanDays", "maximumLoanQty"];
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
 export type Session = { id: string; username: string; displayName: string; role: Role; mustChangePassword: boolean; recovery: { configured: boolean; createdAt: string | null } | null; selfServiceReviews: number };
-type Section = "inventory" | "stock" | "loans" | "self-service" | "admin" | "account";
+type Section = "inventory" | "stock" | "loans" | "self-service" | "activity" | "admin" | "account";
 
 export const ROLE_LABELS: Record<Role, string> = { STAFF: "Staff", ADMIN: "Administrator", OWNER: "Owner" };
 
@@ -78,6 +78,7 @@ export function shell(session: Session, section: Section, main: Html): void {
           ${session.mustChangePassword ? "" : link("stock", "/staff/stock", "Stock & Pantry")}
           ${session.mustChangePassword ? "" : link("loans", "/staff/loans", "Loans")}
           ${session.mustChangePassword ? "" : html`<a href="/staff/self-service" data-route ${section === "self-service" ? html`aria-current="page"` : ""}>Self-service${session.selfServiceReviews ? html` <span class="nav-badge" aria-hidden="true">${session.selfServiceReviews}</span><span class="visually-hidden">, ${session.selfServiceReviews} ${session.selfServiceReviews === 1 ? "record" : "records"} to check</span>` : ""}</a>`}
+          ${session.mustChangePassword ? "" : link("activity", "/staff/activity", "Activity")}
           ${session.role !== "STAFF" && !session.mustChangePassword ? link("admin", "/staff/admin", "Administration") : ""}
           ${link("account", "/staff/account", "My account")}
         </nav>
@@ -613,7 +614,8 @@ export async function workspace(): Promise<void> {
         <div id="item-loans" class="panel-stack">${itemLoansMarkup(loaded)}</div>
       </section>` : ""}
       <section id="panel-details" role="tabpanel" aria-labelledby="tab-details" ${tab === "details" ? "" : html`hidden`}>${detailsFormMarkup(item)}</section>
-      <section id="panel-history" role="tabpanel" aria-labelledby="tab-history" tabindex="0" ${tab === "history" ? "" : html`hidden`}><ol class="history" id="history">${historyMarkup(loaded)}</ol></section>`);
+      <section id="panel-history" class="panel-stack" role="tabpanel" aria-labelledby="tab-history" tabindex="0" ${tab === "history" ? "" : html`hidden`}><ol class="history" id="history">${historyMarkup(loaded)}</ol>
+        <p><a class="text-link" href="/staff/activity?item=${item.id}" data-route>All activity for this item ${icon("arrow")}</a></p></section>`);
     const tabButtons = [...sheet.querySelectorAll<HTMLButtonElement>("[role=tab]")];
     const select = (target: HTMLButtonElement) => {
       tabButtons.forEach((entry) => {

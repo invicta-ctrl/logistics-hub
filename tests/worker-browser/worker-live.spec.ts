@@ -372,3 +372,73 @@ test("lend for individual and USC use with a photo, return one damaged, and read
   await expect(page.locator(".loan-row").first()).toContainText("One blade bent");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });
+
+test("activity: one list of who did what, filters kept in the URL, older pages, and no borrower identity in search", async ({ page }) => {
+  await signIn(page);
+  await page.getByRole("link", { name: "Activity" }).click();
+  await expect(page.getByRole("heading", { name: "Activity", level: 1 })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Activity" })).toHaveAttribute("aria-current", "page");
+  // Staff never get account and security entries; that source is not even offered.
+  await expect(page.getByRole("button", { name: "Accounts & exports" })).toHaveCount(0);
+  await expect(page.locator("#activity-count")).toHaveText("50 entries shown, older ones below");
+  await page.getByRole("button", { name: "Load older" }).click();
+  await expect(page.locator("#activity-count")).toHaveText("100 entries shown, older ones below");
+  await expect(page.getByRole("button", { name: "Load older" })).toBeFocused();
+
+  // The lending test's damaged return shows with its typed note, and its USC reason is searchable.
+  const search = page.getByRole("searchbox", { name: "Search activity" });
+  await search.fill("blade bent");
+  await expect(page).toHaveURL(/q=blade\+bent/);
+  await expect(page.locator(".activity-row")).toHaveCount(1);
+  await expect(page.locator(".activity-row")).toContainText("closed a loan of Scissors as damaged");
+  await expect(page.locator(".activity-row")).toContainText("Note: One blade bent");
+  await search.fill("Banner cutting");
+  await expect(page.locator(".activity-row").first()).toContainText("lent 1 piece of Scissors for USC use");
+  // The structured borrower name and student ID are never searched.
+  for (const identity of ["Test Borrower One", "TEST-0001"]) {
+    await search.fill(identity);
+    await expect(page.getByRole("heading", { name: "Nothing matches" })).toBeVisible();
+  }
+
+  await search.fill("");
+  await expect(page).not.toHaveURL(/q=/);
+  await expect(page.locator(".activity-row").first()).toBeVisible();
+  await page.getByRole("button", { name: "Loans", exact: true }).click();
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  const sheet = page.getByRole("dialog", { name: "Filters" });
+  await sheet.getByLabel("Type").selectOption("LOAN_OUT");
+  await sheet.getByRole("button", { name: "Show results" }).click();
+  await expect(page).toHaveURL(/source=LOAN&type=LOAN_OUT/);
+  // Every entry is a loan going out (phones lend too); the two Scissors loans are among them.
+  const lent = async () => {
+    await expect(page.locator(".activity-row", { hasText: "lent 1 piece of Scissors for USC use" })).toHaveCount(1);
+    await expect(page.locator(".activity-row", { hasText: "lent 2 pieces of Scissors to an individual" })).toHaveCount(1);
+    await expect(page.locator(".activity-row").filter({ hasNotText: / lent \d+ \S+ of / })).toHaveCount(0);
+  };
+  await lent();
+  await expect(page.getByRole("button", { name: "Remove filter: Type: Lent" })).toBeVisible();
+  // A shared link restores the same question.
+  await page.reload();
+  await lent();
+  await page.getByRole("button", { name: "Remove filter: Type: Lent" }).click();
+  await expect(page).toHaveURL(/\/staff\/activity\?source=LOAN$/);
+
+  // An entry opens its item; the item's history leads back to its activity.
+  await page.locator(".activity-row__summary").first().click();
+  await expect(page.getByRole("dialog", { name: "Scissors" })).toBeVisible();
+  await page.getByRole("tab", { name: "History" }).click();
+  await page.getByRole("link", { name: /All activity for this item/ }).click();
+  await expect(page).toHaveURL(/item=ITM-0262/);
+  await expect(page.getByRole("button", { name: "Remove filter: Item: Scissors" })).toBeVisible();
+
+  for (const width of [320, 375, 390, 768, 1024, 1366, 1440]) {
+    await page.setViewportSize({ width, height: 800 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `activity at ${width}`).toBeTruthy();
+  }
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  await expect(page.getByRole("dialog", { name: "Filters" }).getByLabel("Type")).toBeFocused();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Filters" })).toBeHidden();
+});

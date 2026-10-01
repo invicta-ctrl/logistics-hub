@@ -86,6 +86,7 @@ describe("activity read model", () => {
     expect(events[2]).toMatchObject({ before: 8, after: 10, stockChanged: true, source: "LOAN", correlationId: "LN-A" });
     expect(events[0]).toMatchObject({ source: "LOAN", correlationId: "LN-B", stockChanged: false });
     expect(events[1]!.summary).toBe("Staff One lent 1 piece of Folding Table for USC use.");
+    expect(events[3]!.summary).toBe("Staff One lent 2 pieces of Folding Table for USC use.");
     expect(new Set(events.map((event) => event.id)).size).toBe(events.length);
     expect(events.every((event) => /^(mov|audit|phone|resolve):/.test(event.id))).toBe(true);
   });
@@ -101,6 +102,9 @@ describe("activity read model", () => {
     expect(types(await feed("changed=yes"))).toEqual(["STOCK_IN"]);
     expect(types(await feed("changed=no"))).toEqual(["COUNT_ADJUSTMENT", "STOCK_OUT"]);
     expect((await feed("q=Shelf%20check")).events.map((event) => event.type)).toEqual(["COUNT_ADJUSTMENT"]);
+    // The one legacy ISSUE movement reads as itself, and its type can be chosen.
+    movement("ITM-R", "ISSUE", -1, "2026-09-29T00:00:00.000Z", { actor: null });
+    expect((await feed("type=ISSUE")).events.map((event) => [event.title, event.summary])).toEqual([["Issued (legacy system)", "1 piece of Rice 5kg was issued in the legacy system."]]);
   });
 
   it("orders by the real instant across Z and +08:00, and reads dates as Manila days", async () => {

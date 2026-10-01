@@ -49,6 +49,12 @@ export const LABELS: Record<string, string> = {
   LOST: "Lost"
 };
 
+/** "1 piece", "3 pieces", "2 boxes": units are stored singular. */
+export function units(count: number, unit: string): string {
+  if (Math.abs(count) === 1 || /s$/i.test(unit)) return unit;
+  return /(x|ch|sh)$/i.test(unit) ? `${unit}es` : `${unit}s`;
+}
+
 export type StockCandidate = { onHand: number; reorderThreshold: number; status: string };
 
 /**
@@ -112,6 +118,24 @@ export function selfServiceAction(item: SelfServiceCandidate): SelfServiceAction
   if (selfServiceGaps(item).length) return null;
   return item.itemType === PUBLIC_LENDING_ITEM_TYPE ? "BORROW" : "TAKE";
 }
+
+/* ---------- Activity (Part 5) ---------- */
+
+/** Where an Activity entry comes from, in the words staff see. ACCOUNT entries exist only for ADMIN and OWNER. */
+export const ACTIVITY_SOURCES = { MOVEMENT: "Stock", LOAN: "Loans", PHONE: "Self-service", CATALOG: "Catalog", ACCOUNT: "Accounts & exports" } as const;
+export type ActivitySource = keyof typeof ACTIVITY_SOURCES;
+/** Every Activity entry type and its title, grouped by the source it usually belongs to (a phone take is a stock-out movement). */
+export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
+  MOVEMENT: { OPENING_BALANCE: "Opening balance", STOCK_IN: "Stock in", STOCK_OUT: "Stock out", COUNT_ADJUSTMENT: "Count", ISSUE: "Issued (legacy system)" },
+  LOAN: { LOAN_OUT: "Lent", LOAN_RETURN: "Returned", LOAN_DAMAGED: "Returned damaged", LOAN_LOST: "Reported lost", LOAN_CLOSED: "Loan closed" },
+  PHONE: { PHONE_TAKE: "Phone take", PHONE_BORROW: "Phone borrow", PHONE_RETURN: "Phone return", REVIEW_RESOLVED: "Review resolved" },
+  CATALOG: { ITEM_CREATED: "Item added", ITEM_UPDATED: "Item edited", REORDER_OPENED: "Restock requested", REORDER_UPDATED: "Restock updated", REORDER_RESTOCKED: "Restocked" },
+  ACCOUNT: {
+    ACCOUNT_CREATED: "Account created", ACCOUNT_UPDATED: "Account updated", PASSWORD_RESET: "Password reset", PASSWORD_CHANGED: "Password changed", SESSIONS_REVOKED: "Sessions ended",
+    RECOVERY_KEY_ROTATED: "Recovery key replaced", RECOVERY_KEY_REVOKED: "Recovery key revoked", OWNER_RECOVERY_USED: "Owner recovery used", ACTIVITY_EXPORTED: "Activity exported"
+  }
+};
+export const ACTIVITY_TITLES: Record<string, string> = Object.assign({}, ...Object.values(ACTIVITY_TYPES));
 
 /** A student ID number as the office writes it: letters, digits and dashes. */
 export const STUDENT_ID_PATTERN = /^[A-Z0-9][A-Z0-9-]{2,29}$/;

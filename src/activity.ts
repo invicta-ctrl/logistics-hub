@@ -1,4 +1,4 @@
-import { LABELS, REVIEW_REASONS, STOCK_AREAS } from "./catalog-policy";
+import { ACTIVITY_SOURCES, ACTIVITY_TITLES, LABELS, REVIEW_REASONS, STOCK_AREAS, type ActivitySource, units } from "./catalog-policy";
 import { InputError, actorName, historyKey } from "./inventory";
 import { OPEN_REVIEW, balanceCtes } from "./self-service";
 
@@ -21,15 +21,8 @@ import { OPEN_REVIEW, balanceCtes } from "./self-service";
  *   resolve the staff resolution of such a held record.
  */
 
-export const ACTIVITY_SOURCES = ["MOVEMENT", "LOAN", "PHONE", "CATALOG", "ACCOUNT"] as const;
-const TITLES: Record<string, string> = {
-  OPENING_BALANCE: "Opening balance", STOCK_IN: "Stock in", STOCK_OUT: "Stock out", COUNT_ADJUSTMENT: "Count", LOAN_OUT: "Lent", LOAN_RETURN: "Returned",
-  LOAN_DAMAGED: "Returned damaged", LOAN_LOST: "Reported lost", LOAN_CLOSED: "Loan closed", PHONE_TAKE: "Phone take", PHONE_BORROW: "Phone borrow", PHONE_RETURN: "Phone return",
-  REVIEW_RESOLVED: "Review resolved", ITEM_CREATED: "Item added", ITEM_UPDATED: "Item edited", REORDER_OPENED: "Restock requested", REORDER_UPDATED: "Restock updated",
-  REORDER_RESTOCKED: "Restocked", ACCOUNT_CREATED: "Account created", ACCOUNT_UPDATED: "Account updated", PASSWORD_RESET: "Password reset", PASSWORD_CHANGED: "Password changed",
-  SESSIONS_REVOKED: "Sessions ended", RECOVERY_KEY_ROTATED: "Recovery key replaced", RECOVERY_KEY_REVOKED: "Recovery key revoked", OWNER_RECOVERY_USED: "Owner recovery used"
-};
-const ACTIVITY_TYPES = Object.keys(TITLES);
+const SOURCES = Object.keys(ACTIVITY_SOURCES) as ActivitySource[];
+const ACTIVITY_TYPES = Object.keys(ACTIVITY_TITLES);
 /** Catalog and restock fields an audit entry may name; anything else in its JSON is never read. */
 const FIELDS: Record<string, string> = {
   name: "name", aliases: "aliases", category: "category", itemType: "type", unit: "unit", status: "status", storageLocation: "location", reorderThreshold: "restock level",
@@ -86,7 +79,7 @@ export function parseActivityQuery(params: URLSearchParams): ActivityQuery {
   };
   const filters: ActivityFilters = {
     q: text("q", 80), item: match("item", /^ITM-[A-Za-z0-9-]{1,24}$/), actor: match("actor", /^(ACC-[A-Za-z0-9-]{1,60}|SELF_SERVICE|SYSTEM)$/),
-    source: pick("source", ACTIVITY_SOURCES), type: pick("type", ACTIVITY_TYPES), from: day("from"), to: day("to"),
+    source: pick("source", SOURCES), type: pick("type", ACTIVITY_TYPES), from: day("from"), to: day("to"),
     stockArea: pick("stockArea", STOCK_AREAS), location: text("location", 80), changed: pick("changed", ["yes", "no"] as const), attention: pick("attention", ["1"] as const) ? true : undefined
   };
   if (filters.from && filters.to && filters.from > filters.to) throw new InputError(400, "The start date must not be after the end date.");
@@ -125,7 +118,7 @@ const AUDIT_OUTCOME = "CASE WHEN json_valid(a.details_json) THEN json_extract(a.
 function arms(admin: boolean): Arm[] {
   const base = { qty: "NULL", delta: "0", status: "NULL", reason: "NULL", outcome: "NULL", note: "NULL", purpose: "NULL", review: "NULL", details: "NULL", mov: "NULL", open: "0" };
   const item = { itemId: "i.id", itemName: "i.name", unit: "i.unit" };
-  const movementType = ["OPENING_BALANCE", "STOCK_IN", "STOCK_OUT", "COUNT_ADJUSTMENT", "LOAN_OUT", "LOAN_RETURN"];
+  const movementType = ["OPENING_BALANCE", "STOCK_IN", "STOCK_OUT", "COUNT_ADJUSTMENT", "ISSUE", "LOAN_OUT", "LOAN_RETURN"];
   return [
     {
       prefix: "mov:", id: "m.id", sources: ["MOVEMENT", "LOAN", "PHONE"], moves: true, owns: (type) => movementType.includes(type),
@@ -261,7 +254,7 @@ function toEvent(row: Row): ActivityEvent {
   const item = text(row.itemName) ?? "an item";
   const unit = text(row.unit);
   const quantity = typeof row.qty === "number" ? row.qty : typeof details.quantity === "number" ? details.quantity : typeof details.desiredQuantity === "number" ? details.desiredQuantity : null;
-  const amount = quantity === null ? "" : `${quantity}${unit ? ` ${unit}` : ""} of `;
+  const amount = quantity === null ? "" : `${quantity}${unit ? ` ${units(quantity, unit)}` : ""} of `;
   const change = Number(row.delta);
   const after = typeof row.after === "number" ? row.after : null;
   const phoneRecord = type.startsWith("PHONE_") || type === "REVIEW_RESOLVED";
@@ -275,9 +268,10 @@ function toEvent(row: Row): ActivityEvent {
   const outcome = text(row.outcome) ? ` (${String(row.outcome).toLowerCase()})` : "";
   const sentence: Record<string, string> = {
     OPENING_BALANCE: `${amount}${item} was carried over as the opening balance.`,
+    ISSUE: `${amount}${item} was issued in the legacy system.`,
     STOCK_IN: `${actor} received ${amount}${item}${reason ? ` (${reason.toLowerCase()})` : ""}.`,
     STOCK_OUT: `${actor} took out ${amount}${item}${reason ? ` (${reason.toLowerCase()})` : ""}.`,
-    COUNT_ADJUSTMENT: `${actor} counted ${item}${after === null ? "" : `: ${after}${unit ? ` ${unit}` : ""} on hand`}.`,
+    COUNT_ADJUSTMENT: `${actor} counted ${item}${after === null ? "" : `: ${after}${unit ? ` ${units(after, unit)}` : ""} on hand`}.`,
     LOAN_OUT: `${actor} lent ${amount}${item}${purpose}.`,
     LOAN_RETURN: `${actor} took back ${amount}${item}.`,
     LOAN_DAMAGED: `${actor} closed a loan of ${item} as damaged; nothing went back to stock.`,
@@ -291,12 +285,12 @@ function toEvent(row: Row): ActivityEvent {
     REORDER_RESTOCKED: `${actor} received a restock of ${amount}${item}.`
   };
   const phone = `A phone ${type.slice(6).toLowerCase()} of ${amount}${item}${outcome} was ${held ? "held for staff" : "recorded"}${reason ? `: ${reason}` : ""}.`;
-  const summary = `${(type.startsWith("PHONE_") ? phone : sentence[type]) ?? `${TITLES[type] ?? "Change"}${account} by ${actor}.`}${row.status === "SUPERSEDED" ? " It did not change stock: a later count already covers it." : ""}`;
+  const summary = `${(type.startsWith("PHONE_") ? phone : sentence[type]) ?? `${ACTIVITY_TITLES[type] ?? "Change"}${account} by ${actor}.`}${row.status === "SUPERSEDED" ? " It did not change stock: a later count already covers it." : ""}`;
   const loan = typeof row.corr === "string" && /^LN-[A-Za-z0-9-]{1,60}$/.test(row.corr) ? row.corr : null;
   const known = row.k !== SENTINEL;
   return {
     id: String(row.sid), correlationId: loan ?? (typeof row.corr === "string" && /^[A-Za-z0-9._-]{1,80}$/.test(row.corr) ? row.corr : String(row.sid)),
-    at: known ? String(row.k) : null, source: String(row.src), type, title: TITLES[type] ?? type, summary, actor, actorId: text(row.actorId),
+    at: known ? String(row.k) : null, source: String(row.src), type, title: ACTIVITY_TITLES[type] ?? type, summary, actor, actorId: text(row.actorId),
     itemId: text(row.itemId), itemName: text(row.itemName), unit, quantity, change, stockChanged: change !== 0, before: after === null ? null : after - change, after,
     reason, note, fields, attention: row.attention === 1
   };

@@ -568,6 +568,12 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .activity-row.is-in .activity-row__change { color: var(--ok); }
 .activity-row.is-out .activity-row__change { color: var(--bad); }
 .activity-row__main .row-link { display: inline; }
+.activity-row__main .activity-row__summary { display: block; }
+.activity-row__change--none { color: var(--text-3); font-size: var(--text-sm); font-weight: 400; }
+.activity-row__note { margin-top: var(--space-1); color: var(--text-2); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.activity-row .cell-sub a { color: var(--brand); }
+.activity-more { display: grid; justify-items: center; gap: var(--space-2); margin-top: var(--space-4); font-size: var(--text-sm); }
+.chip .icon { width: .875rem; height: .875rem; }
 
 /* Administration and My account */
 .data-table--static tbody tr { cursor: default; }

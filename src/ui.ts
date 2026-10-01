@@ -119,12 +119,12 @@ export function writeParams(values: Record<string, string | null | undefined>): 
   window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
 }
 
-/** Re-renders a live region while keeping keyboard focus on the same keyed row. */
-export function preservingFocus(container: Element, render: () => void): void {
+/** Re-renders a live region while keeping keyboard focus on the same keyed row (its first `control`). */
+export function preservingFocus(container: Element, render: () => void, control = "button"): void {
   const active = document.activeElement;
   const key = active && container.contains(active) ? active.closest<HTMLElement>("[data-key]")?.dataset.key : undefined;
   render();
-  if (key) container.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"] button`)?.focus({ preventScroll: true });
+  if (key) container.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"] ${control}`)?.focus({ preventScroll: true });
 }
 
 /* ---------- Formatting ---------- */
@@ -141,11 +141,7 @@ export function categoryName(value: string): string {
   }).join(" ");
 }
 
-/** "1 piece", "3 pieces", "2 boxes": units are stored singular. */
-export function units(count: number, unit: string): string {
-  if (Math.abs(count) === 1 || /s$/i.test(unit)) return unit;
-  return /(x|ch|sh)$/i.test(unit) ? `${unit}es` : `${unit}s`;
-}
+export { units } from "./catalog-policy";
 
 export const plural = (count: number, word: string): string => `${count.toLocaleString()} ${word}${count === 1 ? "" : "s"}`;
 
@@ -337,7 +333,7 @@ type LiveOptions<T> = { interval: number; onData: (data: T) => void; onError?: (
  * Keeps a view current by polling an ETag'd endpoint. Unchanged data costs one
  * tiny 304; polling pauses while the tab is hidden and resumes on return.
  */
-export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => Promise<void> } {
+export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => Promise<void>; stop: () => void } {
   let etag = "";
   let timer = 0;
   let settle = 0;
@@ -385,8 +381,9 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
     if (!stopped && document.visibilityState === "visible") timer = window.setTimeout(tick, options.interval);
   };
   const resume = () => { if (document.visibilityState === "visible") void tick(); };
+  const stop = () => { stopped = true; window.clearTimeout(timer); window.clearTimeout(settle); document.removeEventListener("visibilitychange", resume); };
   document.addEventListener("visibilitychange", resume);
-  onLeave(() => { stopped = true; window.clearTimeout(timer); window.clearTimeout(settle); document.removeEventListener("visibilitychange", resume); });
+  onLeave(stop);
   void tick();
-  return { refresh: tick };
+  return { refresh: tick, stop };
 }
