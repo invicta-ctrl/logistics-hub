@@ -16,7 +16,9 @@
   ],
   // Loan photos: staff-only, streamed through the Worker, never public.
   "r2_buckets": [
-    { "binding": "EVIDENCE", "bucket_name": "logistics-hub-evidence" }
+    { "binding": "EVIDENCE", "bucket_name": "logistics-hub-evidence" },
+    // Item profile photos (V1.2): catalog images only, never borrower or evidence photos.
+    { "binding": "CATALOG_MEDIA", "bucket_name": "logistics-hub-catalog-media" }
   ],
   "assets": {
     "directory": "./dist",
