@@ -46,7 +46,7 @@ const EVENT_TEXT: Record<string, (event: Event) => string> = {
 export async function administration(): Promise<void> {
   const session = await loadSession("admin");
   if (!session) return;
-  if (session.role === "STAFF") { navigate("/staff/inventory", true); return; }
+  if (session.role === "STAFF") { navigate("/staff/items", true); return; }
   document.title = "Administration · Staff workspace";
   shell(session, "admin", html`
     <header class="page-header">
@@ -73,7 +73,7 @@ export async function administration(): Promise<void> {
     </section>` : ""}
     ${session.selfServiceClosed ? html`<section class="ss-trial" aria-labelledby="ss-trial-title">
       <h2 id="ss-trial-title" class="section-title">Test Self-Service</h2>
-      <p>Self-Service is closed for maintenance, and everyone else sees the maintenance page. Here it works as it would on a phone, but every record you make is held in <a href="/staff/self-service" data-route>Self-service</a> as a test and changes nothing unless someone applies it. Dismiss your tests there when you are done.</p>
+      <p>Self-Service is closed for maintenance, and everyone else sees the maintenance page. Here it works as it would on a phone, but every record you make is held in <a href="/staff/self-service" data-route>Self-Service</a> as a test and changes nothing unless someone applies it. Dismiss your tests there when you are done.</p>
       <iframe class="ss-trial__frame" src="/self-service" title="Self-Service in test mode" loading="lazy"></iframe>
     </section>` : ""}
     <section class="activity" aria-labelledby="activity-title">
@@ -130,7 +130,7 @@ export async function administration(): Promise<void> {
       <div class="field-grid"><div class="field"><label for="c-name">Display name</label><input id="c-name" name="displayName" required maxlength="80" autocomplete="off" /></div>
       <div class="field"><label for="c-username">Username</label><input id="c-username" name="username" required maxlength="64" autocapitalize="none" spellcheck="false" autocomplete="off" /></div></div>
       <div class="field"><label for="c-role">Role</label><select id="c-role" name="role">${assignable(session!).map((role) => html`<option value="${role}">${ROLE_LABELS[role]}</option>`)}</select>
-        <p class="field__hint">Staff: inventory only. Administrator: also manages staff accounts. Owner: everything, including recovery.</p></div>
+        <p class="field__hint">Staff: items, stock, loans, Self-Service and activity. Administrator: also manages staff accounts. Owner: everything, including recovery.</p></div>
       ${passwordFields("c")}
       <div class="form-alert" id="create-alert" role="alert" hidden></div>
       <div class="form-actions"><button class="button button--primary" type="submit">Create account</button></div>
@@ -319,7 +319,7 @@ export async function myAccount(): Promise<void> {
     try {
       await api("/api/staff/me/password", { method: "POST", body: JSON.stringify({ currentPassword: values.get("currentPassword"), newPassword: values.get("newPassword") }) });
       toast("Password changed. Your other devices were signed out.");
-      if (session.mustChangePassword) navigate("/staff/inventory", true);
+      if (session.mustChangePassword) navigate("/staff/items", true);
       else { passwordForm.reset(); setMessage(alert, ""); }
     } catch (error) { setMessage(alert, failure(error)); }
   });

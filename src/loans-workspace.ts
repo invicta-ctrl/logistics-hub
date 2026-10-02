@@ -56,7 +56,7 @@ export async function loansWorkspace(): Promise<void> {
   function outMarkup(overview: Overview): Html {
     // Overdue first, then the longest out.
     const open = overview.open.filter(matches).sort((a, b) => Number(isOverdue(b, overview.today)) - Number(isOverdue(a, overview.today)) || a.createdAt.localeCompare(b.createdAt));
-    if (!open.length) return search.value.trim() ? emptyState("No loans match", "Try another name, student ID or item.") : emptyState("Nothing is out on loan", "Lend from an item's Loan tab in Inventory, or with Lend an item above.");
+    if (!open.length) return search.value.trim() ? emptyState("No loans match", "Try another name, student ID or item.") : emptyState("Nothing is out on loan", "Lend from an item's Loan tab in Items, or with Lend an item above.");
     return html`<ul class="loan-list">${open.map((loan) => loanRow(loan, true))}</ul>`;
   }
 
@@ -106,7 +106,7 @@ export async function loansWorkspace(): Promise<void> {
         <h2 class="subsection__title" id="board-items">Most borrowed items</h2>
         <div class="leaderboard">
         ${items.length ? html`<ol class="rank-list">${items.map((row) => html`<li class="rank-row">
-            <div class="rank-row__main"><p class="rank-row__name"><a class="row-link" href="/staff/inventory?item=${row.itemId}" data-route>${row.itemName}</a></p><span class="rank-row__bar rank-row__bar--item" data-share="${(row.loans / topItem).toFixed(3)}" aria-hidden="true"></span><p class="rank-row__meta">${plural(row.units, "piece")} in total</p></div>
+            <div class="rank-row__main"><p class="rank-row__name"><a class="row-link" href="/staff/items?item=${row.itemId}" data-route>${row.itemName}</a></p><span class="rank-row__bar rank-row__bar--item" data-share="${(row.loans / topItem).toFixed(3)}" aria-hidden="true"></span><p class="rank-row__meta">${plural(row.units, "piece")} in total</p></div>
             <p class="rank-row__value"><strong>${row.loans}</strong> ${row.loans === 1 ? "loan" : "loans"}</p></li>`)}</ol>`
           : html`<p class="muted leaderboard__empty">Nothing was lent in this period.</p>`}
         </div>

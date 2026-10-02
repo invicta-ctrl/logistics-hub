@@ -77,7 +77,7 @@ describe("staff boundary", () => {
       expect(response.status, `${method} ${path}`).toBe(401);
     }
     expect(sqlite.prepare("SELECT COUNT(*) AS total FROM inventory_movements").get()).toEqual(before);
-    const page = await call("/staff/inventory");
+    const page = await call("/staff/items");
     expect(page.status).toBe(302);
     expect(page.headers.get("location")).toBe(`${origin}/staff`);
   });
@@ -101,8 +101,14 @@ describe("staff boundary", () => {
     const cookie = await signIn();
     const response = await call("/staff", { headers: { cookie } });
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(`${origin}/staff/inventory`);
+    expect(response.headers.get("location")).toBe(`${origin}/staff/items`);
     expect((await call("/staff")).status).toBe(200);
+  });
+
+  it("sends saved Inventory links to Items, keeping the open item", async () => {
+    const response = await call("/staff/inventory?item=ITM-0001");
+    expect(response.status).toBe(301);
+    expect(response.headers.get("location")).toBe(`${origin}/staff/items?item=ITM-0001`);
   });
 
   it("ends sessions for disabled accounts", async () => {
