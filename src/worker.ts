@@ -1,5 +1,6 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, changeOwnPassword, clearThrottle, createAccount, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
+import { itemPhoto, putItemPhoto, removeItemPhoto } from "./item-media";
 import { openUnitAction } from "./open-units";
 import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
@@ -13,6 +14,8 @@ export type Env = {
   DB: D1Database;
   ASSETS: Fetcher;
   EVIDENCE: R2Bucket;
+  /** Item profile photos: a separate bucket from loan evidence, so a fault in one route cannot reach the other. */
+  CATALOG_MEDIA: R2Bucket;
   SESSION_SECRET?: string;
 };
 
@@ -32,7 +35,8 @@ async function selfServiceClosed(request: Request, env: Env): Promise<boolean> {
 
 const SESSION_NAME = "lh_staff_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
-const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units)?$/;
+const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo)?$/;
+const MEDIA_PATH = /^\/api\/staff\/media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
 const LOAN_PATH = /^\/api\/staff\/loans\/(LN-[A-Za-z0-9-]{1,60})\/(return|photo)$/;
 const REORDER_PATH = /^\/api\/staff\/reorders\/(RO-[A-Za-z0-9-]{1,60})$/;
 const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|photo)$/;
@@ -214,6 +218,8 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (typeof opening !== "number" || !Number.isInteger(opening) || opening < 0 || opening > 100_000) throw new InputError(400, "Opening quantity must be a whole number from 0 to 100000.");
     return json(await createItem(env.DB, account, parseItemInput(input), opening), 201);
   }
+  const media = MEDIA_PATH.exec(path);
+  if (media && method === "GET") return itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!);
   const match = ITEM_PATH.exec(path);
   if (match && !match[2] && method === "GET") return json(await itemDetail(env.DB, match[1]!));
   if (match && !match[2] && method === "PATCH") {
@@ -221,13 +227,19 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     return json(await updateItem(env.DB, account, match[1]!, parseItemInput(input), input?.updatedAt));
   }
   if (match?.[2] === "/movements" && method === "POST") return json(await recordMovement(env.DB, account, match[1]!, await body()));
+  if (match?.[2] === "/photo" && method === "PUT") {
+    const form = await request.formData().catch(() => null);
+    if (!form) throw new InputError(400, "Invalid photo form.");
+    return json(await putItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, form));
+  }
+  if (match?.[2] === "/photo" && method === "DELETE") return json(await removeItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
   if (match?.[2] === "/open-units" && method === "POST") return json(await openUnitAction(env.DB, account, match[1]!, await body()));
   if (match?.[2] === "/loans" && method === "POST") {
     const form = await request.formData().catch(() => null);
     if (!form) throw new InputError(400, "Invalid loan form.");
     return json(await createLoan(env.DB, env.EVIDENCE, account, match[1]!, form), 201);
   }
-  const known = match || reorder || loan || review || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || media || reorder || loan || review || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 
