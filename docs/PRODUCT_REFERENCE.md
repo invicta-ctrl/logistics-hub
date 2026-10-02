@@ -64,7 +64,8 @@ The table shows ID, item (with type and other names), category, location, on-han
 - Self-service (turned on for phones);
 - Low stock (at or below the reorder level);
 - Out of stock;
-- Inactive.
+- Inactive;
+- Used gradually? (active whole-unit Consumables counted in reams, boxes, bottles, jars, rolls, packs, cans, tubs, pouches or containers: a suggestion only, with a hint that nothing changes until staff choose "Open and use gradually" for an item).
 
 **Filters:** category, location (including *No location set*) and type. On phones they fold behind one "Filters" button.
 

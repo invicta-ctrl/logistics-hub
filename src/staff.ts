@@ -1,4 +1,4 @@
-import { CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
+import { CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
@@ -36,7 +36,8 @@ const VIEWS = {
   listed: { label: "On Lending Hub", test: (item: Item) => item.listed },
   low: { label: "Low stock", test: (item: Item) => isLow(item) && active(item) },
   out: { label: "Out of stock", test: (item: Item) => item.onHand <= 0 && active(item) },
-  inactive: { label: "Inactive", test: (item: Item) => !active(item) }
+  inactive: { label: "Inactive", test: (item: Item) => !active(item) },
+  gradual: { label: "Used gradually?", test: openUnitCandidate }
 };
 type View = keyof typeof VIEWS;
 const NO_LOCATION = "__none";
@@ -356,11 +357,13 @@ export async function workspace(): Promise<void> {
       && matches(item, query)).sort(compare);
     shownIds = shown.map((item) => item.id);
     document.querySelector("#inventory-count")!.textContent = shown.length === items.length ? plural(items.length, "item") : `${shown.length.toLocaleString()} of ${plural(items.length, "item")}`;
+    const hint = view === "gradual" ? html`<p class="hint-line">${icon("info")}<span>Consumables counted in reams, rolls, packs, bottles and similar units are often opened and used a little at a time. Nothing changes here: to track open units for one, choose “Open and use gradually” in its Edit details.</span></p>` : "";
     preservingFocus(results, () => mount(results, shown.length
-      ? html`<div class="data-table-wrap"><table class="data-table">
+      ? html`${hint}<div class="data-table-wrap"><table class="data-table">
           <caption class="visually-hidden">Inventory items. Select an item to see, review or edit it.</caption>
           <thead><tr>${sortHeader("id", "ID", "col-id")}${sortHeader("name", "Item", "col-item")}${sortHeader("category", "Category", "col-category")}${sortHeader("storageLocation", "Location", "col-location")}${sortHeader("onHand", "On hand", "col-qty")}<th scope="col" class="col-status">Status</th></tr></thead>
           <tbody>${shown.map(row)}</tbody></table></div>`
+      : view === "gradual" && !query && !Object.values(filters).some(Boolean) ? emptyState("No likely items left", "No active Consumable counted in reams, rolls, packs, bottles or similar units is still used as a whole unit.")
       : emptyState(view === "review" && !query ? "Every record is reviewed" : "No items match", view === "review" && !query ? "Nothing is waiting for review with these filters." : "Try another search, filter, or view.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
     for (const [id, was] of changed) {
       const cell = results.querySelector(`[data-qty="${CSS.escape(id)}"]`);

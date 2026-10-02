@@ -566,3 +566,16 @@ test("open units: opt in, open, use, mark low, open another, mark empty, close b
   await expect(sheet.locator("#open-units")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });
+
+test("open units: the review view suggests whole-unit Consumables by their unit word and changes nothing", async ({ page }) => {
+  await signIn(page);
+  await page.goto("/staff/inventory?view=gradual");
+  await expect(page.getByRole("button", { name: /^Used gradually\?/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("Nothing changes here", { exact: false })).toBeVisible();
+  const units = await page.locator("tbody .qty-unit").allTextContents();
+  expect(units.length).toBeGreaterThan(0);
+  for (const unit of units) expect(unit).toMatch(/^(reams?|box(es)?|bottles?|jars?|rolls?|packs?|cans?|tubs?|pouch(es)?|containers?)$/);
+  // Already opened and used gradually (the test above), so not suggested again.
+  await expect(page.locator("tbody")).not.toContainText("E2E Copy Paper");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+});

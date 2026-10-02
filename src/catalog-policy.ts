@@ -15,6 +15,16 @@ export const STOCK_AREAS = ["Inventory", "Pantry"] as const;
 export const CONSUMPTION_MODES = ["WHOLE_UNIT", "OPEN_UNIT"] as const;
 /** A rough label for an open unit. Never an amount: it does not change stock. */
 export const OPEN_UNIT_CONDITIONS = ["PLENTY", "HALF", "LOW"] as const;
+/** Counting words of things usually opened and used a little at a time (units are stored singular). */
+const OPEN_UNIT_WORDS = new Set(["ream", "box", "bottle", "jar", "roll", "pack", "can", "tub", "pouch", "container"]);
+
+/**
+ * A whole-unit Consumable that is probably opened and used gradually, judged only by its unit word.
+ * It only suggests: nothing changes until staff choose "Open and use gradually" for the item.
+ */
+export function openUnitCandidate(item: { itemType: string; consumptionMode: string; status: string; unit: string }): boolean {
+  return item.itemType === "Consumable" && item.consumptionMode !== "OPEN_UNIT" && item.status !== "INACTIVE" && OPEN_UNIT_WORDS.has(item.unit.trim().toLowerCase());
+}
 /** Why stock moved. Kept short and operational; "OTHER" always needs a note. A count is its own reason. */
 export const MOVEMENT_REASONS = {
   IN: ["DELIVERY", "RETURNED", "DONATION", "OTHER"],
