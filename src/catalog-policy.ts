@@ -160,7 +160,7 @@ export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
   },
   LOAN: { LOAN_OUT: "Lent", LOAN_RETURN: "Returned", LOAN_DAMAGED: "Returned damaged", LOAN_LOST: "Reported lost", LOAN_CLOSED: "Loan closed" },
   PHONE: { PHONE_TAKE: "Phone take", PHONE_BORROW: "Phone borrow", PHONE_RETURN: "Phone return", PHONE_USE: "Phone use", REVIEW_RESOLVED: "Review resolved" },
-  CATALOG: { ITEM_CREATED: "Item added", ITEM_UPDATED: "Item edited", REORDER_OPENED: "Restock requested", REORDER_UPDATED: "Restock updated", REORDER_RESTOCKED: "Restocked" },
+  CATALOG: { ITEM_CREATED: "Item added", ITEM_UPDATED: "Item edited", ITEM_PHOTO_ADDED: "Photo added", ITEM_PHOTO_REPLACED: "Photo replaced", ITEM_PHOTO_REMOVED: "Photo removed", REORDER_OPENED: "Restock requested", REORDER_UPDATED: "Restock updated", REORDER_RESTOCKED: "Restocked" },
   ACCOUNT: {
     ACCOUNT_CREATED: "Account created", ACCOUNT_UPDATED: "Account updated", PASSWORD_RESET: "Password reset", PASSWORD_CHANGED: "Password changed", SESSIONS_REVOKED: "Sessions ended",
     RECOVERY_KEY_ROTATED: "Recovery key replaced", RECOVERY_KEY_REVOKED: "Recovery key revoked", OWNER_RECOVERY_USED: "Owner recovery used", OWNER_BOOTSTRAPPED: "First owner set up",
