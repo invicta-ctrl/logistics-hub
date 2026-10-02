@@ -37,6 +37,8 @@ type SelfServiceEvent = {
   occurredAt: string; live: boolean; clockIssue: boolean;
   loan: LoanDetails | null;
   loanEventId: string | null; outcome: typeof LOAN_OUTCOMES[number] | null; note: string | null;
+  /** Made in the Administration test panel: always held for staff, never applied by itself. */
+  test: boolean;
 };
 
 /**
@@ -150,7 +152,7 @@ export function parseEvent(raw: unknown, batch: Pick<Batch, "sentAt" | "offsetMs
   const event: SelfServiceEvent = {
     id, seq, type, itemId: record.itemId, quantity, catalogRevision, personName, studentId, deviceTime: new Date(deviceMs).toISOString(),
     occurredAt: new Date(occurred).toISOString(), live: !clockIssue && sentMs - deviceMs <= LIVE_MS, clockIssue,
-    loan: null, loanEventId: null, outcome: null, note: null
+    loan: null, loanEventId: null, outcome: null, note: null, test: record.test === true
   };
   if (type === "BORROW") {
     // The staff form's rules, with "today" being the day the borrow happened (for an untrusted
@@ -181,7 +183,8 @@ const PHONE_MESSAGES: Record<ReviewReason, string> = {
   VOLUME: "Saved for staff to confirm: a lot of this item was recorded in the last hour.",
   CLOCK: "Saved for staff to confirm: your phone's clock looked wrong.",
   COUNT_OVERLAP: "Recorded. Staff will recount this item.",
-  ERROR: "Saved for staff to check."
+  ERROR: "Saved for staff to check.",
+  TEST: "Test saved. It waits for staff and changes nothing."
 };
 function answer(id: string, review: ReviewReason | null, duplicate = false): SyncResult {
   return { id, outcome: review ? "review" : "accepted", ...(review ? { message: PHONE_MESSAGES[review] } : {}), ...(duplicate ? { duplicate: true as const } : {}) };
@@ -305,11 +308,11 @@ async function applyOut(db: D1Database, bucket: R2Bucket, event: SelfServiceEven
   let result: SyncResult;
   try {
     if (event.type === "USE") {
-      const held: ReviewReason | null = event.clockIssue ? "CLOCK" : !eligible ? "NOT_ELIGIBLE" : null;
+      const held: ReviewReason | null = event.test ? "TEST" : event.clockIssue ? "CLOCK" : !eligible ? "NOT_ELIGIBLE" : null;
       return held ? await hold(db, event, batch, held) : await write(db, event, [eventRow(db, event, batch, { applied: 1, review: null })], null);
     }
     const facts = await context(db, event.itemId, event.occurredAt, batch.receivedAt);
-    const held: ReviewReason | null = event.clockIssue ? "CLOCK" : uscOnly ? "USC_ONLY" : !eligible ? "NOT_ELIGIBLE"
+    const held: ReviewReason | null = event.test ? "TEST" : event.clockIssue ? "CLOCK" : uscOnly ? "USC_ONLY" : !eligible ? "NOT_ELIGIBLE"
       : facts.recentUnits + event.quantity > SELF_SERVICE_LIMITS.unitsPerItemHour ? "VOLUME" : null;
     const review: ReviewReason | null = facts.overlap ? "COUNT_OVERLAP" : null;
     const movementId = `MOV-${crypto.randomUUID()}`;
@@ -374,7 +377,7 @@ async function applyReturn(db: D1Database, bucket: R2Bucket, event: SelfServiceE
   if (loan && loan.status === event.outcome) return write(db, event, [eventRow(db, event, batch, { applied: 0, review: null, loanId: loan.id })], null);
   const stored = await uploadPhoto(bucket, event, photoPart, "return it once more", `returns/${event.id}`);
   if ("outcome" in stored) return stored;
-  const review: ReviewReason = event.clockIssue ? "CLOCK" : !loan ? "UNMATCHED_RETURN"
+  const review: ReviewReason = event.test ? "TEST" : event.clockIssue ? "CLOCK" : !loan ? "UNMATCHED_RETURN"
     : loan.quantity !== event.quantity || loan.status !== "OUT" ? "RETURN_CONFLICT" : "RETURN_CHECK";
   let result: SyncResult;
   try {

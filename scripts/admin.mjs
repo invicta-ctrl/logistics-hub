@@ -233,7 +233,7 @@ async function verify(url, { database }) {
   console.log(c.dim(`  ${url}`));
   const home = await get("/");
   check(home?.status === 200 && home.headers.get("content-type")?.includes("text/html"), "Landing page serves HTML", `HTTP ${home?.status ?? "unreachable"}`);
-  check(home?.headers.get("content-security-policy")?.includes("default-src 'self'") && home.headers.get("x-frame-options") === "DENY", "Security headers present", "CSP / X-Frame-Options missing");
+  check(home?.headers.get("content-security-policy")?.includes("default-src 'self'") && home.headers.get("x-frame-options") === "SAMEORIGIN", "Security headers present", "CSP / X-Frame-Options missing");
   check((await get("/lending"))?.status === 200, "Lending Hub route", "");
   const catalog = await get("/api/public/catalog");
   const body = catalog?.status === 200 ? await catalog.json().catch(() => null) : null;

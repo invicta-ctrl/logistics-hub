@@ -3,7 +3,7 @@ import "./self-service.css";
 import { SELF_SERVICE_LIMITS, STUDENT_ID_PATTERN, type SelfServiceAction } from "./catalog-policy";
 import { type CatalogItem, type LocalEvent, type Snapshot, estimate, openLoans, pendingByItem, summary } from "./offline-queue";
 import * as store from "./offline-store";
-import { type Draft, clearHistory, nextAttemptAt, onSyncMessage, record, refreshCatalog, syncNow } from "./offline-sync";
+import { type Draft, clearHistory, nextAttemptAt, onSyncMessage, record, refreshCatalog, startTesting, syncNow } from "./offline-sync";
 import { type Readiness, applyUpdate, canPromptInstall, hasUpdate, isStandalone, onPwaChange, platform, promptInstall, readiness, requestBackgroundSync, requestPersistence, whenIdle } from "./pwa";
 import { CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, units } from "./ui";
 
@@ -41,6 +41,8 @@ let offline = !navigator.onLine;
 let dirty = false;
 /** The office has closed Self-Service (the Worker says so); undefined until this phone has heard either way. */
 let paused: boolean | undefined;
+/** Shown inside Administration's test panel (only this site may frame it): records are tests the server holds for staff. */
+const testing = window.self !== window.top;
 
 /* Formatting in the office's time zone, whatever the phone's own setting. */
 const DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" });
@@ -124,6 +126,7 @@ function frame(): Html {
         </div>
       </div>
       <div class="ss-update" data-region="update" hidden></div>
+      ${testing ? html`<p class="ss-test">${icon("info")}<span><strong>Test mode.</strong> Records you make are held for staff review and change nothing. Self-Service stays closed to everyone else.</span></p>` : ""}
     </header>
     <main id="main-content" class="ss" data-region="screen"></main>
     <dialog class="sheet ss-sheet" id="ss-sheet" aria-labelledby="sheet-title"></dialog>`;
@@ -903,7 +906,8 @@ export async function selfService(): Promise<void> {
     if (closed !== paused) {
       const redraw = Boolean(closed) !== Boolean(paused) && renderedScreen !== null;
       paused = closed;
-      void store.setMeta("paused", closed);
+      // A test never tells this browser's own Self-Service that it is open.
+      if (!testing) void store.setMeta("paused", closed);
       if (redraw) show();
     }
     if (result !== "updated") refreshRegions();
@@ -953,8 +957,9 @@ export async function selfService(): Promise<void> {
     whenIdle(() => false);
   });
 
+  if (testing) startTesting();
   await load();
-  paused = await store.getMeta<boolean>("paused");
+  paused = testing ? undefined : await store.getMeta<boolean>("paused");
   // Launch: fetch the latest catalog, then send anything waiting from earlier. A phone that has never
   // heard from the office waits a moment for it, so a closed Self-Service does not flash open first.
   const launched = poll();

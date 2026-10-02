@@ -55,7 +55,7 @@ function phone() {
     take: (itemId: string, quantity: number, minutesAgo = 0) => event("TAKE", itemId, { quantity }, minutesAgo),
     borrow: (itemId: string, minutesAgo = 0, fields: Record<string, unknown> = {}) => event("BORROW", itemId, { purpose: "INDIVIDUAL", ...fields }, minutesAgo),
     giveBack: (itemId: string, loanEventId: string | null, minutesAgo = 0, fields: Record<string, unknown> = {}) => event("RETURN", itemId, { loanEventId, outcome: "RETURNED", ...fields }, minutesAgo),
-    sync: async (events: Array<Record<string, unknown>>, options: { photoFor?: string[]; photo?: Uint8Array<ArrayBuffer>; origin?: string; sentAt?: string } = {}) => {
+    sync: async (events: Array<Record<string, unknown>>, options: { photoFor?: string[]; photo?: Uint8Array<ArrayBuffer>; origin?: string; sentAt?: string; headers?: Record<string, string> } = {}) => {
       const form = new FormData();
       form.set("batch", JSON.stringify({ deviceId, sentAt: options.sentAt ?? new Date().toISOString(), events }));
       const withPhoto = options.photoFor ?? events.filter((entry) => entry.type === "BORROW" || entry.type === "RETURN").map((entry) => entry.id as string);
@@ -63,7 +63,7 @@ function phone() {
       // Serialised like a browser would, so the Worker sees a real Content-Length.
       const request = new Request(`${origin}/api/self-service/sync`, { method: "POST", headers: { origin: options.origin ?? origin }, body: form });
       const body = await request.arrayBuffer();
-      return call("/api/self-service/sync", { method: "POST", headers: { origin: options.origin ?? origin, "content-type": request.headers.get("content-type")!, "content-length": String(body.byteLength) }, body });
+      return call("/api/self-service/sync", { method: "POST", headers: { ...options.headers, origin: options.origin ?? origin, "content-type": request.headers.get("content-type")!, "content-length": String(body.byteLength) }, body });
     }
   };
 }
@@ -125,6 +125,40 @@ describe("self-service catalog", () => {
     expect((await call("/api/self-service/sync", { method: "POST", headers: { origin: "https://evil.example" }, body: "x" })).status).toBe(403);
     env.SELF_SERVICE = "open";
     expect(await results(await a.sync([take]))).toEqual([{ id: take.id, outcome: "accepted" }]);
+    expect(onHand(water)).toBe(18);
+  });
+
+  it("opens only to an administrator testing it, and holds every test record for staff without changing anything", async () => {
+    const water = await consumable("Bottled Water", 20);
+    const scissors = await loanable("Scissors", 5);
+    sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash, role) VALUES('ACC-2', 'admin.one', 'Admin One', ?, 'ADMIN')").run(await hashPassword("correct horse battery"));
+    const login = await call("/api/staff/login", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ username: "admin.one", password: "correct horse battery" }) });
+    const admin = { "x-self-service-test": "1", cookie: login.headers.get("set-cookie")!.split(";")[0]! };
+    env.SELF_SERVICE = "paused";
+    expect((await (await staff("/api/staff/session")).json() as { selfServiceClosed: boolean }).selfServiceClosed).toBe(true);
+    // The header alone, or a staff member without administration, still meets a closed Self-Service.
+    for (const headers of [{ "x-self-service-test": "1" }, { "x-self-service-test": "1", cookie }, { cookie: admin.cookie }] as Array<Record<string, string>>) {
+      expect((await call("/api/self-service/catalog", { headers })).status).toBe(503);
+    }
+    expect((await call("/api/self-service/catalog", { headers: admin })).status).toBe(200);
+    const a = phone();
+    const take = { ...a.take(water, 2), test: true };
+    const borrow = { ...a.borrow(scissors, 0, { person: { name: "Ana Reyes", studentId: "20-1234-567" } }), test: true };
+    const giveBack = { ...a.giveBack(scissors, borrow.id), test: true };
+    expect((await a.sync([take], { headers: { "x-self-service-test": "1", cookie } })).status).toBe(503);
+    expect((await results(await a.sync([take, borrow, giveBack], { headers: admin }))).map((result) => result.outcome)).toEqual(["review", "review", "review"]);
+    expect([onHand(water), onHand(scissors), loan(borrow.id)]).toEqual([20, 5, undefined]);
+    expect((await review()).open.map((entry) => entry.review)).toEqual(["TEST", "TEST", "TEST"]);
+    // Refusals are tested too: an invalid record is still refused.
+    expect((await results(await a.sync([{ ...a.take(water, 99), test: true }], { headers: admin })))[0]!.outcome).toBe("rejected");
+    // A test record that reaches an open Self-Service later (from any page) is still only held.
+    env.SELF_SERVICE = "open";
+    const late = { ...a.take(water, 1), test: true };
+    expect((await results(await a.sync([late])))[0]!.outcome).toBe("review");
+    expect(onHand(water)).toBe(20);
+    // Staff decide: applied, a test take changes stock like any held take; dismissed, nothing changes.
+    expect((await resolve(take.id, { action: "apply" })).status).toBe(200);
+    expect((await resolve(late.id, { action: "dismiss" })).status).toBe(200);
     expect(onHand(water)).toBe(18);
   });
 });

@@ -18,6 +18,13 @@ const CHANNEL = "logistics-hub";
  */
 const deadline = (ms: number) => typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(ms) : undefined;
 let channel: BroadcastChannel | null = null;
+/** Set in the Administration test panel: requests ask to pass a closed Self-Service, and new records are tests. */
+let testing = false;
+const testHeaders = (): Record<string, string> => testing ? { "x-self-service-test": "1" } : {};
+
+export function startTesting(): void {
+  testing = true;
+}
 
 /**
  * Tells every open page (including this one) that local data changed. A BroadcastChannel
@@ -43,7 +50,7 @@ export async function refreshCatalog(): Promise<"updated" | "unchanged" | "offli
   const current = await store.catalog();
   let response: Response;
   try {
-    response = await fetch("/api/self-service/catalog", { headers: current ? { "if-none-match": `"r${current.revision}"` } : {}, signal: deadline(15_000) });
+    response = await fetch("/api/self-service/catalog", { headers: { ...testHeaders(), ...current ? { "if-none-match": `"r${current.revision}"` } : {} }, signal: deadline(15_000) });
   } catch {
     return "offline";
   }
@@ -74,7 +81,7 @@ export async function record(draft: Draft, photo?: Blob): Promise<LocalEvent> {
   const id = crypto.randomUUID();
   const occurredAt = new Date().toISOString();
   const saved = await store.saveEvent((seq) => ({
-    ...draft, v: 1, id, seq, occurredAt, catalogRevision: snapshot?.revision ?? null,
+    ...draft, v: 1, id, seq, occurredAt, catalogRevision: snapshot?.revision ?? null, ...testing ? { test: true as const } : {},
     state: "pending", attempts: 0, nextAttemptAt: 0, hasPhoto: Boolean(photo)
   }), photo && bytes ? { type: photo.type || "image/jpeg", bytes } : undefined);
   announce({ type: "changed" });
@@ -118,7 +125,7 @@ async function drain(force: boolean): Promise<SyncReport> {
     }
     let response: Response | null = null;
     try {
-      response = await fetch("/api/self-service/sync", { method: "POST", body: form, credentials: "same-origin", signal: deadline(45_000) });
+      response = await fetch("/api/self-service/sync", { method: "POST", body: form, headers: testHeaders(), credentials: "same-origin", signal: deadline(45_000) });
     } catch {
       offline = true;
     }

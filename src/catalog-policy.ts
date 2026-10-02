@@ -196,6 +196,7 @@ export const REVIEW_REASONS = {
   VOLUME: "More of this item was recorded in an hour than self-service allows",
   CLOCK: "The phone's clock was implausible, so the time cannot be trusted",
   COUNT_OVERLAP: "Happened within minutes of a physical count; the count may already include it",
-  ERROR: "Could not be applied automatically"
+  ERROR: "Could not be applied automatically",
+  TEST: "A test made in Administration while Self-Service is closed; it changes nothing unless applied"
 } as const;
 export type ReviewReason = keyof typeof REVIEW_REASONS;

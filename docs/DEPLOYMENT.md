@@ -108,7 +108,7 @@ Then, read-only: `SELECT COUNT(*) FROM items WHERE consumption_mode <> 'WHOLE_UN
 
 ## Operating notes
 
-- **Self-Service is closed for maintenance** (`"vars": { "SELF_SERVICE": "paused" }` in `wrangler.jsonc`). To reopen it, set `"open"` (or remove the line) and merge to `main`; Workers Builds deploys it, and phones show the normal screens on their next check (about 30 s, or when reopened). Records phones saved before the closure are sent then. Local end-to-end tests always run it open.
+- **Self-Service is closed for maintenance** (`"vars": { "SELF_SERVICE": "paused" }` in `wrangler.jsonc`). To reopen it, set `"open"` (or remove the line) and merge to `main`; Workers Builds deploys it, and phones show the normal screens on their next check (about 30 s, or when reopened). Records phones saved before the closure are sent then. Local end-to-end tests always run it open. While closed, administrators test it in Administration → Test Self-Service; their records wait in Self-service as tests (Dismiss them when done).
 - The public Lending Hub is empty until staff publish items from *Ready to list*. This is fail-closed by design.
 - Quantities change only through Stock in, Stock out and Count. The ledger is append-only.
 - `ITM-0001` intentionally stays at 7 (movement-derived) against the legacy 8.

@@ -190,6 +190,45 @@ test("self-service closed for maintenance: every address sends people to DOL sta
   await expect(page.getByRole("heading", { name: "What do you need?" })).toBeVisible();
 });
 
+test("administration tests a closed Self-Service in its own panel: records are tests, and it stays closed everywhere else", async ({ page }) => {
+  const session = { authenticated: true, id: "ACC-1", username: "owner.one", displayName: "Owner One", role: "OWNER", mustChangePassword: false, recovery: { configured: true, createdAt: null }, selfServiceReviews: 0, selfServiceClosed: true };
+  await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(session) }));
+  await page.route("**/api/staff/admin/accounts", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ accounts: [] }) }));
+  await page.route("**/api/staff/admin/activity", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ events: [] }) }));
+  // Like the Worker: open only to a test request (which it also checks belongs to an administrator).
+  await page.route("**/api/self-service/catalog", (route) => route.request().headers()["x-self-service-test"] === "1"
+    ? route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) })
+    : route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Self-Service is under maintenance.", maintenance: true }) }));
+  const sent: Array<{ test: string | undefined; body: string }> = [];
+  await page.route("**/api/self-service/sync", (route) => {
+    const body = route.request().postData() ?? "";
+    sent.push({ test: route.request().headers()["x-self-service-test"], body });
+    const id = /"v":1,"id":"([^"]+)"/.exec(body)![1];
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify({ revision: 4, results: [{ id, outcome: "review", message: "Test saved. It waits for staff and changes nothing." }] }) });
+  });
+  await page.goto("/staff/admin");
+  const panel = page.frameLocator("iframe.ss-trial__frame");
+  await expect(panel.getByText("Test mode.")).toBeVisible();
+  await expect(panel.getByRole("heading", { name: "What do you need?" })).toBeVisible();
+  await panel.getByRole("link", { name: /Get an item/ }).click();
+  await panel.locator(".ss-row", { hasText: "Bottled Water" }).first().click();
+  const sheet = panel.getByRole("dialog", { name: "Bottled Water" });
+  await sheet.getByLabel("Your name").fill("Owner One");
+  await sheet.getByRole("button", { name: "Take 1 piece" }).click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]!.test).toBe("1");
+  expect(sent[0]!.body).toContain('"test":true');
+  // Outside the panel, Self-Service is still closed, even in this browser.
+  await page.goto("/self-service");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Self-Service is under maintenance");
+  await expect(page.getByText("Test mode.")).toHaveCount(0);
+  // Open again, Administration has no test panel.
+  session.selfServiceClosed = false;
+  await page.goto("/staff/admin");
+  await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();
+  await expect(page.locator("iframe.ss-trial__frame")).toHaveCount(0);
+});
+
 test("self-service starts dark over the campus photo, switches to light, and remembers the choice on this phone", async ({ page }) => {
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
   await page.goto("/self-service");

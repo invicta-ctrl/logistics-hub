@@ -22,6 +22,8 @@ export type WireEvent = {
   person: { name: string; studentId?: string };
   purpose?: "INDIVIDUAL" | "USC"; reason?: string; returnBy?: string | null;
   loanEventId?: string | null; outcome?: Outcome; note?: string;
+  /** Made in the Administration test panel: the server always holds it for staff. */
+  test?: true;
 };
 
 /**
@@ -41,7 +43,7 @@ export type LocalEvent = WireEvent & {
 export type ServerResult = { id: string; outcome: "accepted" | "review" | "rejected" | "retry"; message?: string; duplicate?: boolean };
 
 const MINUTE = 60_000;
-const WIRE_KEYS = ["v", "id", "seq", "type", "itemId", "quantity", "occurredAt", "catalogRevision", "person", "purpose", "reason", "returnBy", "loanEventId", "outcome", "note"] as const;
+const WIRE_KEYS = ["v", "id", "seq", "type", "itemId", "quantity", "occurredAt", "catalogRevision", "person", "purpose", "reason", "returnBy", "loanEventId", "outcome", "note", "test"] as const;
 /** Synced history kept on the phone. Open loans stay until they are returned. */
 export const RETENTION_MS = 30 * 24 * 60 * MINUTE;
 

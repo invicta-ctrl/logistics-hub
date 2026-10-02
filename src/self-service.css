@@ -108,6 +108,8 @@
 
 .ss-update { display: flex; max-width: 36rem; margin-inline: auto; align-items: center; justify-content: space-between; gap: .75rem; padding: .5rem 1rem .625rem; border-top: 1px solid var(--line); font-size: var(--text-sm); }
 .ss-update p { display: flex; align-items: center; gap: .5rem; color: var(--text-2); }
+.ss-test { display: flex; max-width: 36rem; margin-inline: auto; gap: .5rem; padding: .5rem 1rem .625rem; border-top: 1px solid var(--line); background: linear-gradient(var(--warn-tint), var(--warn-tint)), var(--canvas); font-size: var(--text-sm); }
+.ss-test .icon { flex: none; margin-top: .125rem; color: var(--warn); }
 
 /* ---------- Layout ---------- */
 .ss { width: 100%; max-width: 36rem; margin-inline: auto; padding: 1.25rem max(1rem, env(safe-area-inset-left)) calc(3rem + env(safe-area-inset-bottom)); }

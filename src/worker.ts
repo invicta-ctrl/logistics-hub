@@ -19,6 +19,14 @@ export type Env = {
 /** Phones keep anything waiting and show the maintenance screen on this answer (offline-sync.ts). */
 const selfServicePaused = () => json({ error: "Self-Service is under maintenance. Please ask DOL staff in person.", maintenance: true }, 503);
 
+/** Closed to this request: everyone, except an administrator testing it from Administration (admin.ts), whose records are held as tests. */
+async function selfServiceClosed(request: Request, env: Env): Promise<boolean> {
+  if (env.SELF_SERVICE !== "paused") return false;
+  if (request.headers.get("x-self-service-test") !== "1") return true;
+  const account = await accountFor(request, env);
+  return !account || !isAdmin(account) || account.mustChangePassword;
+}
+
 const SESSION_NAME = "lh_staff_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units)?$/;
@@ -40,9 +48,10 @@ function secureHeaders(response: Response, url: URL): Response {
   const headers = new Headers(response.headers);
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  headers.set("X-Frame-Options", "DENY");
+  // Only this site may frame a page: Administration shows Self-Service in a test panel.
+  headers.set("X-Frame-Options", "SAMEORIGIN");
   headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  headers.set("Content-Security-Policy", "default-src 'self'; style-src 'self'; font-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  headers.set("Content-Security-Policy", "default-src 'self'; style-src 'self'; font-src 'self'; script-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'");
   if (url.protocol === "https:") headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   if (url.pathname.startsWith("/staff") || url.pathname.startsWith("/api/")) headers.set("X-Robots-Tag", "noindex, nofollow");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
@@ -150,7 +159,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (path === "/api/staff/session" && method === "GET") {
     const { accountId, sessionId, ...profile } = account;
     const reviews = await env.DB.prepare("SELECT COUNT(*) AS total FROM self_service_events WHERE review IS NOT NULL AND resolved_at IS NULL").first<number>("total");
-    return json({ authenticated: true, id: accountId, ...profile, recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews ?? 0 });
+    return json({ authenticated: true, id: accountId, ...profile, recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews ?? 0, selfServiceClosed: env.SELF_SERVICE === "paused" });
   }
   if (path === "/api/staff/me" && method === "PATCH") return json(await updateSelf(env.DB, account, await body()));
   if (path === "/api/staff/me/password" && method === "POST") return json(await changeOwnPassword(env.DB, account, await body()));
@@ -215,7 +224,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
 async function selfServiceSync(request: Request, env: Env, url: URL): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405, { allow: "POST" });
   if (!sameOrigin(request, url)) return json({ error: "Invalid request origin." }, 403);
-  if (env.SELF_SERVICE === "paused") return selfServicePaused();
+  if (await selfServiceClosed(request, env)) return selfServicePaused();
   const size = Number(request.headers.get("content-length"));
   if (!size) return json({ error: "Missing content length." }, 411);
   if (size > MAX_SYNC_BYTES) return json({ error: "Too much at once." }, 413);
@@ -264,7 +273,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/recovery/owner") return recovery(request, env, url);
   if (path === "/api/self-service/catalog") {
     if (request.method !== "GET") return json({ error: "Method not allowed." }, 405, { allow: "GET" });
-    return env.SELF_SERVICE === "paused" ? selfServicePaused() : revisioned(request, env.DB, () => selfServiceCatalog(env.DB));
+    return await selfServiceClosed(request, env) ? selfServicePaused() : revisioned(request, env.DB, () => selfServiceCatalog(env.DB));
   }
   if (path === "/api/self-service/sync") return selfServiceSync(request, env, url);
   if (path.startsWith("/api/staff/")) return staffApi(request, env, url);

@@ -55,6 +55,11 @@ export async function administration(): Promise<void> {
       <h2 id="accounts-title" class="visually-hidden">Accounts</h2>
       <div id="accounts"><div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 4 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span></div>`)}</div></div>
     </section>
+    ${session.selfServiceClosed ? html`<section class="ss-trial" aria-labelledby="ss-trial-title">
+      <h2 id="ss-trial-title" class="section-title">Test Self-Service</h2>
+      <p>Self-Service is closed for maintenance, and everyone else sees the maintenance page. Here it works as it would on a phone, but every record you make is held in <a href="/staff/self-service" data-route>Self-service</a> as a test and changes nothing unless someone applies it. Dismiss your tests there when you are done.</p>
+      <iframe class="ss-trial__frame" src="/self-service" title="Self-Service in test mode" loading="lazy"></iframe>
+    </section>` : ""}
     <section class="activity" aria-labelledby="activity-title">
       <h2 id="activity-title" class="section-title">Security activity</h2>
       <ol class="history" id="activity"></ol>
