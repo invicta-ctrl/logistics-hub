@@ -5,8 +5,8 @@ BRANCH: `slice/part-06-plan`, started at `c0c6e9963a9f846adf362a4ddeae683fc1eff3
 AUTHORITY: Earl's `D:\Download\LOGISTICS_HUB_PART_6_CODEX_MASTER_PROMPT.md` (UTF-8 SHA-256 `f7c4f1ac5e11dcea2087f68bb03dfcb4a34a292cdf0f2f981794df311892d5ac`), the accepted reboot specification, the MausBot amendment, and the current repository state.
 SCOPE: read-only source audit; rendered local-preview baseline at required routes and widths; proposed plan/checklist/current/handoff documentation; a coherent committed and pushed documentation checkpoint.
 EXCLUDED: Part 6 implementation, source/UI/dependency/schema/config changes, production/provider mutation, test-form submissions, recovery-key generation, plan acceptance, merge to `main`, and reapplying migrations 0015, 0016, or 0017.
-STATUS: IN PROGRESS. The baseline matrix, source audit, and proposed plan are not complete or verified. The preview remains local at `http://127.0.0.1:8791`; Self-Service remains paused. The known untracked `NUL` stays untouched.
-NEXT ACTION: first recover the existing local preview credential format through its safe seed mechanism if authentication is required for the baseline (never print, commit, or overwrite credentials); then capture the non-mutating rendered baseline and audit evidence, complete the proposed plan, commit/push it, verify local/remote equality, then yield the `codex` lock.
+STATUS: DRAFT COMPLETE (2026-10-02, Claude Cloud). The rendered baseline (65 checks, 5 widths), keyboard/motion/large-text checks, the bounded source audit and the proposed plan (findings R1–R4, S1–S7; slices 6.1–6.5; decisions D1–D7) are in `docs/specs/proposed/2026-10-02-part-06-admin-hardening-plan.md`. Not reconciled with the controlling prompt; not accepted. The local preview at `http://127.0.0.1:8791` was not touched; Self-Service remains paused. The known untracked `NUL` stays untouched.
+NEXT ACTION: reconcile the plan with `D:\Download\LOGISTICS_HUB_PART_6_CODEX_MASTER_PROMPT.md` (D1), then Earl decides D2–D7 and accepts or amends the plan. No implementation before acceptance.
 
 ---
 
