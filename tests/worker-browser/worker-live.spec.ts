@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 
 const username = process.env.E2E_USERNAME!;
@@ -652,5 +653,160 @@ test("open units: the review view suggests whole-unit Consumables by their unit 
   for (const unit of units) expect(unit).toMatch(/^(reams?|box(es)?|bottles?|jars?|rolls?|packs?|cans?|tubs?|pouch(es)?|containers?)$/);
   // Already opened and used gradually (the test above), so not suggested again.
   await expect(page.locator("tbody")).not.toContainText("E2E Copy Paper");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+});
+
+/** The committed banner with an EXIF block that says "rotate 90°" and carries a location string, as a phone camera would. */
+function phonePhoto(orientation: number): Buffer {
+  const banner = fs.readFileSync("public/brand/ydd-2026-banner.jpg");
+  const tiff = Buffer.from([0x49, 0x49, 0x2a, 0x00, 8, 0, 0, 0, 1, 0, 0x12, 0x01, 3, 0, 1, 0, 0, 0, orientation, 0, 0, 0, 0, 0, 0, 0]);
+  const body = Buffer.concat([Buffer.from("Exif\0\0"), tiff, Buffer.from("GPSLatitude=14.5995;GPSLongitude=120.9842")]);
+  return Buffer.concat([banner.subarray(0, 2), Buffer.from([0xff, 0xe1, (body.length + 2) >> 8, (body.length + 2) & 255]), body, banner.subarray(2)]);
+}
+
+test("item photos: add with a preview, view large, replace, remove, with the list and history following", async ({ page }) => {
+  // Counts how often the page asks the browser for a view transition (the thumbnail growing into the viewer).
+  await page.addInitScript(() => {
+    (window as unknown as { transitions: number }).transitions = 0;
+    const start = document.startViewTransition?.bind(document);
+    if (start) document.startViewTransition = ((update: () => void) => { (window as unknown as { transitions: number }).transitions += 1; return start(update); }) as typeof document.startViewTransition;
+  });
+  const transitions = () => page.evaluate(() => (window as unknown as { transitions: number }).transitions);
+  const measure = (url: string) => page.evaluate(async (target) => {
+    const response = await fetch(target);
+    const blob = await response.blob();
+    const bitmap = await createImageBitmap(blob);
+    return { width: bitmap.width, height: bitmap.height, bytes: blob.size, type: response.headers.get("content-type"), cache: response.headers.get("cache-control"), text: await blob.text() };
+  }, url);
+  const detail = async () => (await (await page.request.get("/api/staff/items/ITM-0262")).json() as { item: { photo: { id: string; width: number; height: number } | null } }).item.photo;
+
+  await signIn(page);
+  await page.goto("/staff/items?item=ITM-0262");
+  const sheet = page.getByRole("dialog", { name: "Scissors" });
+  const panel = sheet.locator("#photo-panel");
+  await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
+  await expect(sheet.locator(".profile__stock")).toContainText("on hand");
+
+  // Something that is not a picture is refused in words, and nothing is shown or saved.
+  await panel.locator("input[type=file]").setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("not an image") });
+  await expect(panel.getByRole("alert")).toContainText("could not be read");
+  await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
+  expect(await detail()).toBeNull();
+
+  // A photo taken sideways: the preview comes first, and Cancel saves nothing.
+  await panel.locator("input[type=file]").setInputFiles({ name: "camera.jpg", mimeType: "image/jpeg", buffer: phonePhoto(6) });
+  await expect(panel.getByRole("img", { name: "Preview of the new photo of Scissors" })).toBeVisible();
+  await panel.getByRole("button", { name: "Cancel" }).click();
+  await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
+  expect(await detail()).toBeNull();
+  await panel.locator("input[type=file]").setInputFiles({ name: "camera.jpg", mimeType: "image/jpeg", buffer: phonePhoto(6) });
+  await panel.getByRole("button", { name: "Save photo" }).click();
+  await expect(page.getByText("Photo saved.")).toBeVisible();
+  await expect(panel.getByRole("button", { name: "View photo of Scissors" })).toBeVisible();
+
+  // Stored upright (960x356 landscape turned to portrait), small, clean and cached for good; the original is never uploaded.
+  const photo = (await detail())!;
+  expect(photo.height).toBeGreaterThan(photo.width);
+  expect(photo).toMatchObject({ width: 356, height: 960 });
+  const display = await measure(`/api/staff/media/${photo.id}/display`);
+  const thumb = await measure(`/api/staff/media/${photo.id}/thumb`);
+  expect(display).toMatchObject({ width: 356, height: 960, type: "image/jpeg", cache: "private, max-age=31536000, immutable" });
+  expect(thumb).toMatchObject({ height: 320, type: "image/jpeg" });
+  expect(thumb.bytes).toBeLessThan(display.bytes);
+  expect(display.bytes).toBeLessThan(200_000);
+  for (const stored of [display.text, thumb.text]) expect(stored).not.toMatch(/Exif|GPS|14\.5995/);
+
+  // The viewer: opens over the profile with a view transition, closes with Escape, with Back, and with its button.
+  const viewer = page.getByRole("dialog", { name: "Photo of Scissors" });
+  const history = () => page.evaluate(() => window.history.length);
+  // Closing the viewer hands its history entry back a moment later; a person never acts inside that moment, a test must wait for it.
+  const settled = () => expect.poll(() => page.evaluate(() => !window.history.state?.viewer)).toBe(true);
+  const before = await history();
+  await panel.getByRole("button", { name: "View photo of Scissors" }).click();
+  await expect(viewer).toBeVisible();
+  await expect(viewer.getByRole("img", { name: "Photo of Scissors" })).toBeVisible();
+  expect(await viewer.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(356);
+  expect(await transitions()).toBeGreaterThan(0);
+  expect(await history()).toBe(before + 1);
+  await page.keyboard.press("Escape");
+  await expect(viewer).toBeHidden();
+  await expect(sheet).toBeVisible();
+  await expect(panel.getByRole("button", { name: "View photo of Scissors" })).toBeFocused();
+  await expect.poll(() => page.evaluate(() => Boolean(window.history.state?.viewer))).toBe(false);
+  await panel.getByRole("button", { name: "View photo of Scissors" }).click();
+  await expect(viewer).toBeVisible();
+  await page.goBack();
+  await expect(viewer).toBeHidden();
+  // Back closed only the viewer: the same page, with the same item open and not reloaded.
+  await expect(page).toHaveURL(/\/staff\/items\?item=ITM-0262$/);
+  await expect(sheet).toBeVisible();
+  await expect(panel.getByRole("button", { name: "View photo of Scissors" })).toBeFocused();
+  await panel.getByRole("button", { name: "View photo of Scissors" }).click();
+  await viewer.getByRole("button", { name: "Close photo" }).click();
+  await expect(viewer).toBeHidden();
+  await settled();
+  // With reduced motion the viewer opens at once, with no transition.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const count = await transitions();
+  await panel.getByRole("button", { name: "View photo of Scissors" }).click();
+  await expect(viewer).toBeVisible();
+  expect(await transitions()).toBe(count);
+  await page.keyboard.press("Escape");
+  await expect(viewer).toBeHidden();
+  await settled();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+
+  // The list shows the small variant, only for rows near the screen, and the thumbnail opens the viewer too.
+  await sheet.getByRole("button", { name: "Close" }).click();
+  const row = page.locator('tr[data-key="ITM-0262"]');
+  await expect(row.locator(".thumb img")).toHaveAttribute("src", `/api/staff/media/${photo.id}/thumb`);
+  await expect(row.locator(".thumb img")).toHaveAttribute("loading", "lazy");
+  await expect(row.locator(".thumb")).toHaveCSS("width", "40px");
+  await row.locator(".thumb").click();
+  await expect(viewer).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(viewer).toBeHidden();
+  await settled();
+  await expect(page.locator("tr[data-key] .thumb--empty").first()).toBeVisible();
+  expect(await page.locator("tr[data-key] .thumb img").count()).toBe(1);
+
+  // Replace: a new photo takes the place, and the old address stops working.
+  await row.getByRole("button", { name: "Scissors" }).click();
+  await expect(panel.getByRole("button", { name: "Change photo" })).toBeVisible();
+  // Opening the picker and walking away from it must leave the profile open (the picker's own cancel must not close the sheet).
+  await panel.getByRole("button", { name: "Change photo" }).click();
+  await page.waitForTimeout(500);
+  await expect(sheet).toBeVisible();
+  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), panel.getByRole("button", { name: "Change photo" }).click()]);
+  await chooser.setFiles({ name: "upright.jpg", mimeType: "image/jpeg", buffer: phonePhoto(1) });
+  await expect(panel.getByRole("img", { name: /Preview of the new photo/ })).toBeVisible();
+  await panel.getByRole("button", { name: "Save photo" }).click();
+  await expect(page.getByText("Photo saved.")).toBeVisible();
+  const replaced = (await detail())!;
+  expect(replaced.id).not.toBe(photo.id);
+  expect(replaced.width).toBeGreaterThan(replaced.height);
+  expect((await page.request.get(`/api/staff/media/${photo.id}/thumb`)).status()).toBe(404);
+  await expect(row.locator(".thumb img")).toHaveAttribute("src", `/api/staff/media/${replaced.id}/thumb`);
+
+  // Remove asks first; Keep changes nothing.
+  await panel.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(panel.getByRole("group", { name: "Confirm" })).toContainText("Remove this photo?");
+  await panel.getByRole("button", { name: "Keep" }).click();
+  expect(await detail()).not.toBeNull();
+  await panel.getByRole("button", { name: "Remove", exact: true }).click();
+  await panel.getByRole("button", { name: "Remove photo" }).click();
+  await expect(page.getByText("Photo removed.")).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
+  expect(await detail()).toBeNull();
+  expect((await page.request.get(`/api/staff/media/${replaced.id}/display`)).status()).toBe(404);
+  await expect(row.locator(".thumb--empty")).toBeVisible();
+
+  // History and Activity read it as sentences.
+  await sheet.getByRole("tab", { name: "History" }).click();
+  const titles = await sheet.locator(".history__title").allTextContents();
+  expect(titles.slice(0, 3)).toEqual(["Photo removed", "Photo replaced", "Photo added"]);
+  await page.goto("/staff/activity?item=ITM-0262");
+  await expect(page.locator(".activity-row").first()).toContainText("E2E Staff removed the photo of Scissors.");
+  await expect(page.locator(".activity-row").nth(2)).toContainText("E2E Staff added a photo to Scissors.");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });
