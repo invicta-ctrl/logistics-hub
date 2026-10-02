@@ -84,8 +84,10 @@ export function verifyReleaseTree({ manifest, releaseDir, expectedSha, git }) {
   const stray = fs.readdirSync(releaseDir).filter((name) => /^(wrangler\.(json|toml)|\.env.*|\.dev\.vars.*)$/.test(name));
   if (stray.length) stop("UNEXPECTED_CONFIG", `The release root contains ${stray.join(", ")}; only wrangler.jsonc may configure it.`);
   const configText = fs.readFileSync(path.join(releaseDir, "wrangler.jsonc"), "utf8");
-  for (const name of manifest.target.forbidden) if (configText.includes(name)) stop("WRONG_RESOURCE", `wrangler.jsonc mentions ${name}, which no release may touch.`);
   const config = parseJsonc(configText);
+  // Every key and value of the parsed config, not its comments: the real file carries a comment that warns against the old resources.
+  const configJson = JSON.stringify(config);
+  for (const name of manifest.target.forbidden) if (configJson.includes(name)) stop("WRONG_RESOURCE", `wrangler.jsonc configures ${name}, which no release may touch.`);
   const d1 = manifest.target.d1;
   if (config.name !== manifest.target.worker) stop("WRONG_RESOURCE", `The Worker is "${config.name}", not "${manifest.target.worker}".`);
   const bound = config.d1_databases ?? [];

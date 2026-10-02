@@ -229,8 +229,9 @@ describe("it refuses before touching Cloudflare", () => {
       "a missing binding": WRANGLER.replace(/\s*\{ "binding": "CATALOG_MEDIA"[^}]*\},/, ""),
       "a renamed binding": WRANGLER.replace('"binding": "DB"', '"binding": "DATABASE"')
     };
-    // Even a comment that names an old resource is refused: nothing about a release may mention them.
-    cases["a comment naming the old staging resources"] = WRANGLER.replace("// The Worker", "// was hau-usc-logistics-staging\n  // The Worker");
+    // Any configured value that names an old resource is refused, wherever it sits in the file.
+    cases["the old staging name in an unrelated value"] = WRANGLER.replace('"name": "logistics-hub",', '"name": "logistics-hub",\n  "vars": { "BUCKET": "hau-usc-logistics-staging" },');
+    cases["the old production name as a key"] = WRANGLER.replace('"name": "logistics-hub",', '"name": "logistics-hub",\n  "vars": { "hau-usc-logistics-production": "x" },');
     for (const [name, wrangler] of Object.entries(cases)) {
       const result = await run({ release: makeRelease({ wrangler }) });
       expect(stopped(result.report), name).toBe("PRECHECK/WRONG_RESOURCE");
@@ -258,6 +259,15 @@ describe("it refuses before touching Cloudflare", () => {
       expect(stopped(result.report), name).toBe("PRECHECK/WRONG_RESOURCE");
       expect(result.world.calls, name).toBe(0);
     }
+  });
+
+  it("accepts the repository's real wrangler.jsonc, whose comment warns against the old resources", async () => {
+    const real = fs.readFileSync("wrangler.jsonc", "utf8");
+    expect(real).toContain("hau-usc-logistics-production");
+    const withBinding = real.includes("CATALOG_MEDIA") ? real : real.replace('{ "binding": "EVIDENCE", "bucket_name": "logistics-hub-evidence" }', '{ "binding": "EVIDENCE", "bucket_name": "logistics-hub-evidence" },\n    { "binding": "CATALOG_MEDIA", "bucket_name": "logistics-hub-catalog-media" }');
+    expect(withBinding).toContain("CATALOG_MEDIA");
+    const result = await run({ release: makeRelease({ wrangler: withBinding }) });
+    expect(result.report.result, JSON.stringify(result.report.stopped)).toBe("READY_TO_MERGE");
   });
 
   it("when the pending migration is not the file the manifest pins, or is missing", async () => {
