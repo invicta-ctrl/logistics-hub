@@ -433,7 +433,7 @@ export async function workspace(): Promise<void> {
       render();
       // Refresh the open sheet when another staff member changes its quantity or open units.
       const shown = data.items.find((item) => item.id === openId);
-      if (openId && detail && shown && (openChanged || stockSignature(shown.onHand, shown.openUnits, shown.openCondition) !== stockSignature(detail.item.onHand, detail.openUnits.length, worstCondition(detail.openUnits)))) void refreshStock(openId);
+      if (openId && detail && shown && (openChanged || (shown.photoId ?? null) !== (detail.item.photo?.id ?? null) || stockSignature(shown.onHand, shown.openUnits, shown.openCondition) !== stockSignature(detail.item.onHand, detail.openUnits.length, worstCondition(detail.openUnits)))) void refreshStock(openId);
       if (pendingItem) { openItem(pendingItem); pendingItem = null; }
     },
     onError: (error) => {
@@ -562,8 +562,9 @@ export async function workspace(): Promise<void> {
     try {
       const loaded = await fetchDetail(id);
       if (!loaded || !detail) return;
-      detail = { ...detail, item: { ...detail.item, onHand: loaded.item.onHand }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
+      detail = { ...detail, item: { ...detail.item, onHand: loaded.item.onHand, photo: loaded.item.photo }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
         openUnits: loaded.openUnits, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied };
+      photo?.render(loaded.item.photo);
       mount(sheet.querySelector("#profile-info")!, profileInfo(detail));
       mount(sheet.querySelector("#quantity-context")!, quantityContext(detail));
       mount(sheet.querySelector("#history")!, historyMarkup(detail));
@@ -745,7 +746,7 @@ export async function workspace(): Promise<void> {
     photo = photoPanel(sheet.querySelector<HTMLElement>("#photo-panel")!, {
       itemId: item.id, name: item.name, photo: item.photo,
       view: (shown) => void openViewer(shown.id, item.name, () => sheet.querySelector<HTMLElement>("#photo-panel [data-view] img")),
-      changed: async (next) => { if (detail) detail = { ...detail, item: { ...detail.item, photo: next } }; await refreshStock(item.id); await poll.refresh(); },
+      changed: async (next) => { if (detail?.item.id === item.id) detail = { ...detail, item: { ...detail.item, photo: next } }; await refreshStock(item.id); await poll.refresh(); },
       // Someone else changed the photo first: show theirs, and the list with it.
       refresh: async () => { const loaded = await fetchDetail(item.id); if (loaded && detail) { detail = { ...detail, item: { ...detail.item, photo: loaded.item.photo } }; photo?.render(loaded.item.photo); } await poll.refresh(); }
     });
