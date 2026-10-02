@@ -4,6 +4,8 @@ export type Loan = {
   id: string; itemId: string; itemName: string; unit: string; quantity: number; purpose: "INDIVIDUAL" | "USC"; borrowerName: string;
   studentId: string | null; reason: string | null; returnBy: string | null; status: string; returnNote: string | null;
   createdAt: string; closedAt: string | null; createdBy: string | null; closedBy: string | null;
+  /** 0 once the photo has been removed by retention. */
+  hasPhoto?: number;
 };
 export type Borrower = { name: string; studentId: string };
 type LoanTarget = { id: string; name: string; unit: string; onHand: number };
@@ -39,7 +41,7 @@ export function loanRow(loan: Loan, withItem = false): Html {
     </div>
     <div class="loan-row__actions">
       ${out ? html`<button type="button" class="button button--secondary button--sm" data-return="${loan.id}">Return</button>` : ""}
-      <a class="text-link loan-row__photo" href="/api/staff/loans/${loan.id}/photo" target="_blank" rel="noopener">Photo<span class="visually-hidden"> of this loan (opens in a new tab)</span></a>
+      ${loan.hasPhoto === 0 ? "" : html`<a class="text-link loan-row__photo" href="/api/staff/loans/${loan.id}/photo" target="_blank" rel="noopener">Photo<span class="visually-hidden"> of this loan (opens in a new tab)</span></a>`}
     </div></li>`;
 }
 

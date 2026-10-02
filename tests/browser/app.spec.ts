@@ -236,6 +236,54 @@ test("administration tests a closed Self-Service in its own panel: records are t
   await expect(page.locator("iframe.ss-trial__frame")).toHaveCount(0);
 });
 
+test("administration: the owner switches Self-Service and removes old personal details after seeing what is due; an administrator has no retention section", async ({ page }) => {
+  const session = { authenticated: true, id: "ACC-1", username: "owner.one", displayName: "Owner One", role: "OWNER", mustChangePassword: false, recovery: { configured: true, createdAt: null }, selfServiceReviews: 0, selfServiceClosed: false };
+  const reply = (body: unknown) => ({ contentType: "application/json", body: JSON.stringify(body) });
+  await page.route("**/api/staff/session", (route) => route.fulfill(reply(session)));
+  await page.route("**/api/staff/admin/accounts", (route) => route.fulfill(reply({ accounts: [] })));
+  await page.route("**/api/staff/admin/activity", (route) => route.fulfill(reply({ events: [] })));
+  await page.route("**/api/self-service/catalog", (route) => route.fulfill({ status: 503, ...reply({ maintenance: true }) }));
+  let due = { loans: 2, phoneRecords: 1, photos: 3 };
+  let erased = 0;
+  await page.route("**/api/staff/admin/retention", (route) => {
+    if (route.request().method() === "GET") return route.fulfill(reply(due));
+    erased += 1;
+    const batch = { ...due, more: false };
+    due = { loans: 0, phoneRecords: 0, photos: 0 };
+    return route.fulfill(reply(batch));
+  });
+  const changes: string[] = [];
+  await page.route("**/api/staff/admin/self-service", (route) => {
+    const { state } = route.request().postDataJSON() as { state: string };
+    changes.push(state);
+    session.selfServiceClosed = state === "paused";
+    return route.fulfill(reply({ state }));
+  });
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.goto("/staff/admin");
+  const retention = page.getByRole("region", { name: "Old personal details" });
+  await expect(retention.getByText("Ready to remove: 2 loans, 1 phone record and 3 photos.")).toBeVisible();
+  await retention.getByRole("button", { name: "Remove old personal details" }).click();
+  await expect(retention.getByText("Nothing is old enough to remove yet.")).toBeVisible();
+  await expect(retention.getByRole("button", { name: "Remove old personal details" })).toBeDisabled();
+  expect(erased).toBe(1);
+  const switcher = page.getByRole("region", { name: "Self-Service on phones" });
+  await expect(switcher.getByText("Open", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Test Self-Service" })).toHaveCount(0);
+  await switcher.getByRole("button", { name: "Close for maintenance" }).click();
+  await expect(switcher.getByText("Closed for maintenance")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Test Self-Service" })).toBeVisible();
+  await switcher.getByRole("button", { name: "Reopen Self-Service" }).click();
+  await expect(switcher.getByText("Open", { exact: true })).toBeVisible();
+  expect(changes).toEqual(["paused", "open"]);
+  // An administrator can switch Self-Service but has no retention section (the owner alone removes details).
+  session.role = "ADMIN";
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Self-Service on phones" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Old personal details" })).toHaveCount(0);
+});
+
 test("self-service starts dark over the campus photo, switches to light, and remembers the choice on this phone", async ({ page }) => {
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
   await page.goto("/self-service");

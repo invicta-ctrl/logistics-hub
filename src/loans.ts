@@ -1,5 +1,6 @@
 import { LOAN_OUTCOMES, LOAN_PURPOSES, PUBLIC_LENDING_ITEM_TYPE, STUDENT_ID_PATTERN } from "./catalog-policy";
 import { type Actor, BUMP_REVISION, InputError, LOAN_COLUMNS, audit, countAwareStatus, isoDate } from "./inventory";
+import { ERASED } from "./retention";
 
 export const LOAN_ID = /^LN-[A-Za-z0-9-]{1,60}$/;
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
@@ -212,7 +213,7 @@ export async function loansOverview(db: D1Database) {
     bind(db.prepare(`${periods}, grouped AS (
         SELECT p.period, l.purpose, ${who} AS who, MAX(l.borrower_name) AS name, MAX(l.student_id) AS studentId, COUNT(*) AS loans,
           SUM(l.quantity) AS units, SUM(l.status = 'OUT') AS outNow, SUM(l.status IN ('DAMAGED', 'LOST')) AS problems, MAX(l.created_at) AS lastAt
-        FROM periods p JOIN loans l ON l.created_at >= p.since GROUP BY p.period, l.purpose, who)
+        FROM periods p JOIN loans l ON l.created_at >= p.since AND l.borrower_name <> '${ERASED}' GROUP BY p.period, l.purpose, who)
       SELECT period, purpose, name, studentId, loans, units, outNow, problems, lastAt FROM (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY period, purpose ORDER BY loans DESC, units DESC, lastAt DESC) AS rank FROM grouped)
       WHERE rank <= 10 ORDER BY period, purpose, rank`)),
@@ -221,11 +222,11 @@ export async function loansOverview(db: D1Database) {
           ROW_NUMBER() OVER (PARTITION BY p.period ORDER BY COUNT(*) DESC, SUM(l.quantity) DESC) AS rank
         FROM periods p JOIN loans l ON l.created_at >= p.since JOIN items i ON i.id = l.item_id GROUP BY p.period, l.item_id)
       WHERE rank <= 8 ORDER BY period, rank`)),
-    bind(db.prepare(`${periods} SELECT p.period, l.purpose, COUNT(*) AS loans, SUM(l.quantity) AS units, COUNT(DISTINCT ${who}) AS borrowers,
+    bind(db.prepare(`${periods} SELECT p.period, l.purpose, COUNT(*) AS loans, SUM(l.quantity) AS units, COUNT(DISTINCT CASE WHEN l.borrower_name = '${ERASED}' THEN NULL ELSE ${who} END) AS borrowers,
         SUM(l.status IN ('DAMAGED', 'LOST')) AS problems FROM periods p JOIN loans l ON l.created_at >= p.since GROUP BY p.period, l.purpose`)),
     // Earlier borrowers, newest spelling first, so a returning student is filled in from their ID.
     db.prepare(`SELECT borrower_name AS name, student_id AS studentId, MAX(created_at) AS lastAt FROM loans
-      WHERE student_id IS NOT NULL GROUP BY student_id ORDER BY lastAt DESC LIMIT 500`)
+      WHERE student_id IS NOT NULL AND borrower_name <> '${ERASED}' GROUP BY student_id ORDER BY lastAt DESC LIMIT 500`)
   ]);
   return { today: officeDay(), open: open.results, closed: closed.results, borrowers: borrowers.results, items: items.results, totals: totals.results, known: known.results };
 }

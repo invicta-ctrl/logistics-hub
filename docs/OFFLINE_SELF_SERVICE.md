@@ -172,7 +172,7 @@ The Self-service nav tab counts the records to check.
 - Self-service can never read loans, names or photos; photos stream only to signed-in staff (`private, no-store`). Output is always escaped (`html`\`\``).
 - On the phone, personal data (the remembered name and student ID, pending records, photos) lives only in IndexedDB. Photos are deleted as soon as the server answers for their borrow. Settled history is forgotten after 30 days, and **Clear synced history** / **Forget my details** clear it sooner. Pending records and open loans are never forgotten.
 - **Staff offline**: staff screens need a live session and never work offline; there are no offline credentials. Staff can use Self-Service like anyone else.
-- **Retention on the server**: names on takes are kept for accountability like other records. A purge policy belongs to Part 6 (Admin + Hardening).
+- **Retention on the server** (Part 6.4): names, student IDs and photos on phone records are kept for accountability for one year after the record is settled (applied, checked or dismissed; never while it waits for staff or belongs to a loan still out), then the Owner can erase them from Administration → Old personal details, which shows what is due first. The record stays with its id, item, quantity, times and decision, so a late resend from a phone is still recognised; free text people typed is kept. Photos are deleted from R2 before the database is updated. Migration `0019` allows exactly this one change to a resolved record.
 
 ## 12. Failure recovery
 

@@ -36,6 +36,7 @@ const EVENT_TEXT: Record<string, (event: Event) => string> = {
   OWNER_BOOTSTRAPPED: () => "was set up as the first owner (Owner Console)",
   RECOVERY_KEY_ROTATED: () => "issued a new owner recovery key",
   RECOVERY_KEY_REVOKED: () => "revoked the owner recovery key",
+  RETENTION_ERASED: (event) => { const { loans = 0, phoneRecords = 0 } = event.details as { loans?: number; phoneRecords?: number }; return `removed names, student IDs and photos from ${plural(loans, "old loan")} and ${plural(phoneRecords, "old phone record")}`; },
   SETTING_CHANGED: (event) => (event.details as { to?: string }).to === "open" ? "reopened Self-Service" : "closed Self-Service for maintenance",
   OWNER_RECOVERY_USED: (event) => `Owner recovery key used for ${String((event.details as { username?: string }).username)}; password reset and sessions ended`
 };
@@ -56,13 +57,20 @@ export async function administration(): Promise<void> {
       <h2 id="accounts-title" class="visually-hidden">Accounts</h2>
       <div id="accounts"><div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 4 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span></div>`)}</div></div>
     </section>
-    <section class="ss-switch" aria-labelledby="ss-switch-title">
+    <section class="admin-block" aria-labelledby="ss-switch-title">
       <h2 id="ss-switch-title" class="section-title">Self-Service on phones</h2>
       <p><span class="tag ${session.selfServiceClosed ? "tag--warn" : "tag--ok"}">${session.selfServiceClosed ? "Closed for maintenance" : "Open"}</span></p>
       <p>${session.selfServiceClosed ? "Phones show the maintenance screen and record nothing, and people are sent to DOL staff in person. Records already waiting on a phone are kept and sent once it reopens." : "People can take, borrow, use and return with their own phones."}</p>
       <div class="form-alert" id="ss-alert" role="alert" hidden></div>
       <button type="button" class="button ${session.selfServiceClosed ? "button--primary" : "button--secondary"}" id="ss-toggle">${session.selfServiceClosed ? "Reopen Self-Service" : "Close for maintenance"}</button>
     </section>
+    ${session.role === "OWNER" ? html`<section class="admin-block" aria-labelledby="ret-title">
+      <h2 id="ret-title" class="section-title">Old personal details</h2>
+      <p>Who borrowed or took something is kept for accountability: two years after a loan closes and one year after a phone record is settled. After that you can remove the borrower's name, student ID and photo. The record itself (the item, quantity, dates and stock) stays, and free text people typed is not touched. This cannot be undone, so take a backup first (Deployment runbook, Backups and restore).</p>
+      <p id="ret-status" role="status">Checking…</p>
+      <div class="form-alert" id="ret-alert" role="alert" hidden></div>
+      <button type="button" class="button button--danger" id="ret-run" disabled>Remove old personal details</button>
+    </section>` : ""}
     ${session.selfServiceClosed ? html`<section class="ss-trial" aria-labelledby="ss-trial-title">
       <h2 id="ss-trial-title" class="section-title">Test Self-Service</h2>
       <p>Self-Service is closed for maintenance, and everyone else sees the maintenance page. Here it works as it would on a phone, but every record you make is held in <a href="/staff/self-service" data-route>Self-service</a> as a test and changes nothing unless someone applies it. Dismiss your tests there when you are done.</p>
@@ -207,6 +215,33 @@ export async function administration(): Promise<void> {
     });
   }
 
+  const retention = document.querySelector<HTMLElement>("#ret-status");
+  const retentionAlert = document.querySelector<HTMLElement>("#ret-alert");
+  async function checkRetention(): Promise<void> {
+    if (!retention) return;
+    try {
+      const due = await api<{ loans: number; phoneRecords: number; photos: number }>("/api/staff/admin/retention");
+      const none = !due.loans && !due.phoneRecords;
+      retention.textContent = none ? "Nothing is old enough to remove yet." : `Ready to remove: ${plural(due.loans, "loan")}, ${plural(due.phoneRecords, "phone record")} and ${plural(due.photos, "photo")}.`;
+      document.querySelector<HTMLButtonElement>("#ret-run")!.disabled = none;
+    } catch (error) { retention.textContent = ""; setMessage(retentionAlert!, failure(error)); }
+  }
+  document.querySelector("#ret-run")?.addEventListener("click", async () => {
+    if (!window.confirm("Remove the names, student IDs and photos listed above? This cannot be undone.")) return;
+    const total = { loans: 0, phoneRecords: 0 };
+    try {
+      // One request erases a bounded number of rows; ask again while more are due.
+      for (let more = true; more;) {
+        const batch = await api<{ loans: number; phoneRecords: number; more: boolean }>("/api/staff/admin/retention", { method: "POST" });
+        total.loans += batch.loans;
+        total.phoneRecords += batch.phoneRecords;
+        more = batch.more && batch.loans + batch.phoneRecords > 0;
+      }
+      setMessage(retentionAlert!, "");
+      toast(`Removed details from ${plural(total.loans, "loan")} and ${plural(total.phoneRecords, "phone record")}.`);
+    } catch (error) { setMessage(retentionAlert!, failure(error)); }
+    await Promise.all([checkRetention(), load()]);
+  });
   document.querySelector("#ss-toggle")!.addEventListener("click", async () => {
     const closing = !session.selfServiceClosed;
     if (!window.confirm(closing ? "Close Self-Service for maintenance? Phones will show the maintenance screen and record nothing until you reopen it." : "Reopen Self-Service? Phones can take, borrow, use and return again.")) return;
@@ -223,7 +258,7 @@ export async function administration(): Promise<void> {
     const row = rows.find((entry) => entry.id === button?.dataset.manage);
     if (row) openManage(row);
   });
-  await load();
+  await Promise.all([load(), checkRetention()]);
 }
 
 /* ---------- My account ---------- */

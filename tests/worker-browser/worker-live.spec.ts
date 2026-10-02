@@ -145,6 +145,8 @@ test.describe("owner administration", () => {
   test("owner closes and reopens Self-Service from Administration, and phones see it at once", async ({ page, request }) => {
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("link", { name: "Administration" }).click();
+    // The owner's retention check answers from the real database: a fresh one has nothing due.
+    await expect(page.getByRole("region", { name: "Old personal details" }).getByText("Nothing is old enough to remove yet.")).toBeVisible();
     const section = page.getByRole("region", { name: "Self-Service on phones" });
     await expect(section.getByText("Open", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Test Self-Service" })).toHaveCount(0);

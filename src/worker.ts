@@ -4,6 +4,7 @@ import { openUnitAction } from "./open-units";
 import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
+import { eraseOldDetails, retentionPreview } from "./retention";
 import { selfServiceState, setSelfService } from "./settings";
 import { openReorder, stockOverview, updateReorder } from "./stock";
 import { heldPhoto, networkOf, readBatch, resolveReview, reviewDecisions, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
@@ -179,6 +180,12 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (path === "/api/staff/admin/accounts" && method === "POST") return json(await createAccount(env.DB, account, await body()), 201);
     if (path === "/api/staff/admin/activity" && method === "GET") return json(await securityActivity(env.DB));
     if (path === "/api/staff/admin/self-service" && method === "PATCH") return json(await setSelfService(env.DB, account, await body()));
+    if (path === "/api/staff/admin/retention") {
+      if (account.role !== "OWNER") return json({ error: "Removing old personal details is for the owner." }, 403);
+      if (method === "GET") return json(await retentionPreview(env.DB));
+      if (method === "POST") return json(await eraseOldDetails(env.DB, env.EVIDENCE, account));
+      return json({ error: "Method not allowed." }, 405);
+    }
     const target = ACCOUNT_PATH.exec(path);
     if (target && !target[2] && method === "PATCH") return json(await updateAccount(env.DB, account, target[1]!, await body()));
     if (target?.[2] === "/password" && method === "POST") return json(await resetPassword(env.DB, account, target[1]!, await body()));

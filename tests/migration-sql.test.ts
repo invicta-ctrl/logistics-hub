@@ -71,3 +71,25 @@ describe("0018 system settings", () => {
     expect(() => sqlite.exec("UPDATE system_settings SET value = 'maybe' WHERE key = 'self_service'")).toThrow(/CHECK/);
   });
 });
+
+describe("0019 retention erasure", () => {
+  const insert = (id: string, resolved: boolean) => `INSERT INTO self_service_events(id, device_id, seq, event_type, item_id, quantity, person_name, student_id, photo_key, device_time, sent_at, occurred_at, received_at, applied, review, resolved_at, resolved_by)
+    VALUES('${id}', 'D-1', 1, 'TAKE', 'ITM-0001', 2, 'Juan', '20-1234-567', 'held/${id}', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 0, 'VOLUME', ${resolved ? "'2026-01-02T00:00:00Z', 'ACC-1'" : "NULL, NULL"})`;
+
+  it("lets a resolved phone record change in exactly one way: its identity replaced by the erased marker", () => {
+    const { sqlite: db } = migratedD1();
+    db.exec(insert("E-RESOLVED", true));
+    for (const change of ["note = 'x'", "quantity = 3", "person_name = 'Someone else'", "resolved_by = 'ACC-2'", "applied = 1", "person_name = '[removed]'", "person_name = '[removed]', student_id = NULL", "student_id = NULL, photo_key = NULL"]) {
+      expect(() => db.exec(`UPDATE self_service_events SET ${change} WHERE id = 'E-RESOLVED'`), change).toThrow(/self_service_event_resolved/);
+    }
+    // Identity erased together with another change is still refused.
+    expect(() => db.exec("UPDATE self_service_events SET person_name = '[removed]', student_id = NULL, photo_key = NULL, note = 'x' WHERE id = 'E-RESOLVED'")).toThrow(/self_service_event_resolved/);
+    db.exec("UPDATE self_service_events SET person_name = '[removed]', student_id = NULL, photo_key = NULL WHERE id = 'E-RESOLVED'");
+    expect(db.prepare("SELECT person_name, student_id, photo_key, note, quantity FROM self_service_events WHERE id = 'E-RESOLVED'").get()).toMatchObject({ person_name: "[removed]", student_id: null, photo_key: null, quantity: 2 });
+    // Erasing again is allowed (a retry); a record not yet resolved stays editable as before.
+    db.exec("UPDATE self_service_events SET person_name = '[removed]', student_id = NULL, photo_key = NULL WHERE id = 'E-RESOLVED'");
+    db.exec(insert("E-WAITING", false));
+    db.exec("UPDATE self_service_events SET note = 'edited' WHERE id = 'E-WAITING'");
+  });
+});
+

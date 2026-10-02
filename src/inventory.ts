@@ -38,7 +38,7 @@ export const countAwareStatus = (item: string, at: string) => `CASE WHEN EXISTS 
 export const actorName = (account: string, actorId: string) => `COALESCE(${account}.display_name, CASE ${actorId} WHEN 'SELF_SERVICE' THEN 'Self-service' END)`;
 /** One loan as staff see it; the photo is served separately and never inlined. */
 export const LOAN_COLUMNS = `SELECT l.id, l.item_id AS itemId, i.name AS itemName, i.unit, l.quantity, l.purpose, l.borrower_name AS borrowerName,
-  l.student_id AS studentId, l.reason, l.return_by AS returnBy, l.status, l.return_note AS returnNote, l.created_at AS createdAt,
+  l.student_id AS studentId, l.photo_key <> '' AS hasPhoto, l.reason, l.return_by AS returnBy, l.status, l.return_note AS returnNote, l.created_at AS createdAt,
   l.closed_at AS closedAt, ${actorName("c", "l.created_by")} AS createdBy, ${actorName("x", "l.closed_by")} AS closedBy
   FROM loans l JOIN items i ON i.id = l.item_id LEFT JOIN staff_accounts c ON c.id = l.created_by LEFT JOIN staff_accounts x ON x.id = l.closed_by`;
 const OPEN_REORDERS = [...OPEN_REORDER_STATUSES].map((status) => `'${status}'`).join(",");
@@ -255,7 +255,7 @@ const stored = (value: ItemInput[keyof ItemInput]) => typeof value === "boolean"
  * The one audit writer. Details must never contain passwords, hashes, keys or tokens.
  * With `afterChange`, the row is written only when the previous statement in the batch changed a row.
  */
-export function audit(db: D1Database, actorId: string | null, action: string, entityType: "ITEM" | "ACCOUNT" | "RECOVERY" | "EXPORT" | "SETTING", entityId: string, details: unknown, afterChange = false): D1PreparedStatement {
+export function audit(db: D1Database, actorId: string | null, action: string, entityType: "ITEM" | "ACCOUNT" | "RECOVERY" | "EXPORT" | "SETTING" | "RETENTION", entityId: string, details: unknown, afterChange = false): D1PreparedStatement {
   return db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json) SELECT ?, ?, ?, ?, ?, ?, ?${afterChange ? " WHERE changes() > 0" : ""}`)
     .bind(crypto.randomUUID(), new Date().toISOString(), actorId, action, entityType, entityId, JSON.stringify(details));
 }
