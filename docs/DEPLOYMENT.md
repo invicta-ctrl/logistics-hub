@@ -106,6 +106,35 @@ Then, read-only: `SELECT COUNT(*) FROM items WHERE consumption_mode <> 'WHOLE_UN
 
 **Applied 2026-10-02** (Earl, from his worktree: `0016` from `main`, then `0017` from `slice/part-05b-open-units`, each with `wrangler d1 migrations apply DB --remote`; `d1_migrations` now lists 17). Before it, a throwaway D1 built from production's exact schema took both migrations as one request each and showed the triggers working on real D1 (it was deleted afterwards). Pre-change point for Time Travel: 2026-10-02T02:11:43Z. Read-only post-checks matched the pre-change snapshot: 549 items with the same types, none reclassified (all `WHOLE_UNIT`), 689 movements, 97,000 units on hand, the 22 phone records identical (same ids, states and text lengths, including the return still waiting for staff), 0 open units, revision 203 → 204, no foreign-key problems, every index and trigger present and no leftover table. Then `main` was fast-forwarded to the PR #5 head. After the deploy: in Inventory, set a ream-type Consumable to **Open and use gradually**, open a unit, record a use, mark it empty (on hand −1), and check the item's History and Activity; on a phone, the item shows **Use**.
 
+## Backups and restore
+
+What protects what (Part 6.2, decision D3):
+
+| Data | Protection | Gap |
+|---|---|---|
+| D1: items, movements, loans, phone records, accounts, audit | Time Travel (`npx wrangler d1 time-travel info DB`; restore with `time-travel restore`), plus a SQL dump on demand | The Time Travel window depends on the Cloudflare plan: read it from the Cloudflare docs for the plan in use, do not assume it |
+| R2 evidence photos | none | No copy, no versioning. A deleted photo (by retention, or by deleting the bucket) cannot be brought back; D1 keeps only its key. Accepted because the photos are short-lived evidence and Part 6.4 erases them on schedule |
+| Worker code | Git (`main`) and `npx wrangler rollback` | none |
+
+**Take a dump** (read-only on production) before any migration, retention run or bulk change, beside the Time Travel bookmark:
+
+```
+npx wrangler d1 export DB --remote --output data/private/backup-YYYYMMDD.sql
+```
+
+The file holds every account's password hash, student IDs and names. It stays under `data/private/` (ignored by Git) or other private storage; never commit, attach or paste it.
+
+**Restore from a dump** into a new, empty database, never over the live one (`wrangler d1 execute --file` leaves a failed import unapplied, so a retry is safe):
+
+```
+npx wrangler d1 create logistics-hub-restore
+npx wrangler d1 execute logistics-hub-restore --remote --file data/private/backup-YYYYMMDD.sql
+```
+
+Then compare it with what you expect (`SELECT COUNT(*)` on `items`, `inventory_movements`, `staff_accounts`, `loans`, `self_service_events`; `d1_migrations` lists every migration) before pointing anything at it. To undo a bad change in place, use Time Travel restore instead (it also discards what was recorded since the bookmark). Pointing the Worker at a restored database means changing `database_id` in `wrangler.jsonc`, which is an owner decision.
+
+**Rehearsed on 2026-10-02 (Claude Cloud, local only):** a local D1 migrated through 0017 with an owner account was exported with `wrangler d1 export DB --local` and restored into an empty local database with `wrangler d1 execute --file`. Result: all 49 schema objects (tables, indexes, 8 triggers, 1 view) identical; 16 tables with 922 rows, equal table by table (397 items, 393 movements, 17 `d1_migrations`); `PRAGMA foreign_key_check` clean. **Not rehearsed:** any remote restore or Time Travel restore. That needs a throwaway remote database or Earl's own run; until then both remote paths are documented but unproven here.
+
 ## Operating notes
 
 - **Self-Service is closed for maintenance** (`"vars": { "SELF_SERVICE": "paused" }` in `wrangler.jsonc`). To reopen it, set `"open"` (or remove the line) and merge to `main`; Workers Builds deploys it, and phones show the normal screens on their next check (about 30 s, or when reopened). Records phones saved before the closure are sent then. Local end-to-end tests always run it open. While closed, administrators test it in Administration → Test Self-Service; their records wait in Self-service as tests (Dismiss them when done).
