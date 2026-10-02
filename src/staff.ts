@@ -118,10 +118,22 @@ export function shell(session: Session, section: Section, main: Html): void {
     </div>
     <main id="main-content" class="app-main">${main}</main>`);
   // Both openers (the avatar and, on phones, More) report whether the menu is open.
+  const menu = document.querySelector<HTMLElement>("#staff-menu")!;
   const openers = document.querySelectorAll('[popovertarget="staff-menu"]');
-  openers.forEach((opener) => opener.setAttribute("aria-expanded", "false"));
-  document.querySelector("#staff-menu")!.addEventListener("toggle", (event) => {
-    openers.forEach((opener) => opener.setAttribute("aria-expanded", String((event as ToggleEvent).newState === "open")));
+  const expanded = (open: boolean) => openers.forEach((opener) => opener.setAttribute("aria-expanded", String(open)));
+  expanded(false);
+  menu.addEventListener("toggle", (event) => expanded((event as ToggleEvent).newState === "open"));
+  // Without the Popover API (iOS before 17) the openers simply show and hide the menu.
+  const native = "showPopover" in HTMLElement.prototype;
+  if (!native) {
+    menu.hidden = true;
+    openers.forEach((opener) => opener.addEventListener("click", () => { menu.hidden = !menu.hidden; expanded(!menu.hidden); }));
+  }
+  // A choice closes the menu at once, even for the page already shown or while the next page loads.
+  menu.addEventListener("click", (event) => {
+    if (!(event.target as Element).closest("a")) return;
+    if (native) menu.hidePopover();
+    else { menu.hidden = true; expanded(false); }
   });
   document.querySelector("#staff-logout")!.addEventListener("click", async () => {
     try { await api("/api/staff/logout", { method: "POST" }); } catch { /* the session is dropped client-side regardless */ }

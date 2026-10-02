@@ -76,6 +76,15 @@ document.addEventListener("click", (event) => {
   if (link.pathname !== window.location.pathname || link.search !== window.location.search) navigate(link.pathname + link.search);
 });
 
+// Pointing at, touching or tabbing to a link starts loading its page's code, so the switch itself rarely waits on the network.
+const warm = (event: Event) => {
+  const link = (event.target as Element).closest?.<HTMLAnchorElement>("a[data-route]");
+  const load = link && link.origin === window.location.origin ? ROUTES[link.pathname.replace(/\/+$/, "") || "/"] : undefined;
+  if (load) void Promise.resolve().then(load).catch(() => { /* the real navigation reports failures */ });
+};
+document.addEventListener("pointerover", warm);
+document.addEventListener("focusin", warm);
+
 // "/" jumps to the page's search field, as in most catalog and admin tools.
 document.addEventListener("keydown", (event) => {
   if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey) return;

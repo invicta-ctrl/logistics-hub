@@ -275,6 +275,10 @@ test("phones get the daily sections in a bottom bar and the rest under More", as
   await menu.getByRole("link", { name: "Activity" }).click();
   await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
   await expect(page.locator("#staff-menu")).toBeHidden();
+  // Choosing the page already shown still closes the menu.
+  await more.click();
+  await menu.getByRole("link", { name: "Activity" }).click();
+  await expect(menu).toBeHidden();
   // The last control on the page scrolls clear of the bottom bar when it takes focus (WCAG 2.4.11).
   await expect(page.locator(".activity-row").first()).toBeVisible();
   const last = await page.locator("#main-content").locator("button:visible, a:visible").last().elementHandle();

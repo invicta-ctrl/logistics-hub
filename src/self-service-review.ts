@@ -161,7 +161,7 @@ export async function selfServiceReview(): Promise<void> {
   }
 
   function activity(review: Review): Html {
-    if (!review.recent.length) return emptyState("No self-service activity this week", "Takes, borrows and returns recorded with phones appear here.");
+    if (!review.recent.length) return emptyState("No Self-Service activity this week", "Takes, borrows and returns recorded with phones appear here.");
     return html`<div class="data-table-wrap"><table class="data-table data-table--static">
         <caption class="visually-hidden">Self-Service records this week</caption>
         <thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Who</th><th scope="col">State</th></tr></thead>

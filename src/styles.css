@@ -423,7 +423,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .account__name small { color: var(--on-dark-2); font-size: var(--text-sm); font-weight: 400; }
 .avatar { display: inline-grid; width: 2rem; height: 2rem; flex: none; place-items: center; border-radius: 50%; background: var(--gold-action); color: var(--brand-deep); font-size: var(--text-sm); font-weight: 600; line-height: 1; }
 /* Account menu (a popover: Escape and an outside click close it). On phones it is the More sheet. */
-.menu { position: fixed; inset: calc(var(--app-bar) - var(--space-1)) max(var(--gutter), calc((100vw - 90rem) / 2 + var(--gutter))) auto auto; width: min(18rem, calc(100vw - 2 * var(--gutter))); margin: 0; padding: var(--space-2); overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-lg); color: var(--text); overscroll-behavior: contain; }
+.menu { position: fixed; inset: calc(var(--app-bar) - var(--space-1)) max(var(--gutter), calc((100% - 90rem) / 2 + var(--gutter))) auto auto; width: min(18rem, calc(100vw - 2 * var(--gutter))); margin: 0; padding: var(--space-2); overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-lg); color: var(--text); overscroll-behavior: contain; }
 .menu::backdrop { background: transparent; }
 .menu__identity { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); padding: var(--space-2) var(--space-3) var(--space-3); border-bottom: 1px solid var(--line); }
 .menu__identity p { display: grid; min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
@@ -568,7 +568,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 @keyframes qty-up { 0%, 50% { color: var(--ok); } }
 @keyframes qty-down { 0%, 50% { color: var(--bad); } }
 
-/* Stock & Pantry */
+/* Stock */
 .stock-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 22rem); align-items: start; gap: var(--space-8); }
 .stock-main { min-width: 0; }
 .stock-main .views { margin-bottom: var(--space-4); }
@@ -838,7 +838,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .activity-row:has(.activity-row__change:empty) { grid-template-columns: minmax(0, 1fr); }
   .activity-row__change:empty { display: none; }
   /* Phones: the four daily sections and More sit in a bottom bar within thumb reach; More opens the account menu as a sheet. */
-  html { scroll-padding-bottom: calc(var(--bottom-bar) + var(--safe-bottom) + var(--space-4)); }
+  html:has(.app-nav) { scroll-padding-bottom: calc(var(--bottom-bar) + var(--safe-bottom) + var(--space-4)); }
   .app-bar__inner { gap: var(--space-3); }
   .app-nav { position: fixed; right: 0; bottom: 0; left: 0; z-index: 30; display: grid; min-height: calc(var(--bottom-bar) + var(--safe-bottom)); grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; padding: 0 var(--space-1) var(--safe-bottom); border-top: 1px solid var(--on-dark-line); background: var(--brand-dark); }
   .app-nav__link { min-width: 0; flex-direction: column; justify-content: center; gap: .1875rem; padding: var(--space-2) var(--space-1); font-size: .75rem; font-weight: 600; }
@@ -852,7 +852,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .app-nav__link .nav-badge { position: absolute; top: .25rem; left: calc(50% + .375rem); min-width: 1.125rem; height: 1.125rem; margin: 0; font-size: .6875rem; }
   .app-nav__link--more { display: none; }
   .app-nav__more { display: flex; }
-  .app-main { padding-bottom: calc(var(--bottom-bar) + var(--safe-bottom) + var(--space-10)); }
+  #app:has(.app-nav) .app-main { padding-bottom: calc(var(--bottom-bar) + var(--safe-bottom) + var(--space-10)); }
   body:has(.app-nav) .toasts { bottom: calc(var(--bottom-bar) + var(--safe-bottom) + var(--space-3)); }
   .menu { inset: auto 0 0; width: 100%; max-height: 85dvh; padding: var(--space-3) var(--space-3) calc(var(--space-3) + var(--safe-bottom)); border-width: 1px 0 0; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
   .menu::backdrop { background: var(--scrim); }
@@ -904,8 +904,9 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .app-nav__link[aria-current="page"]::after, .app-nav__more.is-current::after { animation: indicator-in var(--dur-2) var(--ease) backwards; }
   /* The account menu drops in under the avatar; on phones it slides up as a sheet. Closing reverses it, and a
      second tap mid-animation simply turns it around (transitions, not keyframes). */
-  .menu { opacity: 0; transform: translateY(-.25rem); transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease), overlay var(--dur-2) allow-discrete, display var(--dur-2) allow-discrete; }
-  .menu:popover-open { opacity: 1; transform: none; }
+  /* Written against :not(:popover-open) so a browser without popovers drops these rules and shows its fallback menu plainly. */
+  .menu { transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease), overlay var(--dur-2) allow-discrete, display var(--dur-2) allow-discrete; }
+  .menu:not(:popover-open) { opacity: 0; transform: translateY(-.25rem); }
   @starting-style { .menu:popover-open { opacity: 0; transform: translateY(-.25rem); } }
   @keyframes indicator-in { from { transform: scaleX(0); } }
   @keyframes sheet-in { from { transform: translateX(2rem); opacity: 0; } }
@@ -915,7 +916,8 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   @media (max-width: 760px) {
     @keyframes sheet-in { from { transform: translateY(100%); } }
     @keyframes sheet-out { to { transform: translateY(100%); } }
-    .menu { opacity: 1; transform: translateY(100%); transition-duration: var(--dur-3); }
+    .menu { transition-duration: var(--dur-3); }
+    .menu:not(:popover-open) { opacity: 1; transform: translateY(100%); }
     @starting-style { .menu:popover-open { opacity: 1; transform: translateY(100%); } }
   }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
