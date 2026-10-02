@@ -1,9 +1,9 @@
-# Current Bounded Task — PART-05B Open-Unit Tracking (A12), OU-1 to OU-5
-INTENT: finish Part 5 (A12) and hand it to release
-OBJECTIVE: open-unit Consumables (schema, invariants, staff workflow, reconciliation, Activity/export, item-driven phone Use, polish) with every local gate green; a PR to `main`, released only after its migrations are applied to production with Earl's authorization.
-SCOPE: `migrations/0017_open_units.sql`, `src/open-units.ts` (Worker actions), `src/open-unit-panel.ts` (shared staff controls), `src/inventory.ts` (mode, invariant messages, count reconciliation, item detail), `src/self-service.ts` (USE events), `src/activity.ts` (open-unit entries), `src/catalog-policy.ts` (modes, conditions, `selfServiceAction()`), `src/staff.ts`, `src/stock-workspace.ts`, `src/stock.ts`, `src/movement-form.ts`, `src/self-service-app.ts`, `src/offline-queue.ts`, `src/self-service-review.ts`, `src/styles.css`, tests (`tests/open-units.test.ts` and additions in the activity, self-service, migration, offline-queue, browser and Worker + D1 suites), docs.
-EXCLUDED: applying any migration to production, merging to `main` before that, deploy, new dependencies. Never reapply 0015.
-STATUS: RELEASED 2026-10-02: production migrations 0016 + 0017 applied (Earl) and checked, then `main` fast-forwarded to c00d43d (PR #5 merged). Details: `.codex/SESSION_HANDOFF.md` (top section). Owner's signed-in production check pending.
+# Current Bounded Task — NONE (Part 5 production accepted; Part 6 planning next)
+INTENT: no active implementation; preserve the verified Part 5 production state while Part 6 awaits an accepted plan.
+OBJECTIVE: Part 5 is closed. The next implementation task is Part 6 (Admin + Hardening) only after Earl accepts a dedicated plan/spec.
+SCOPE: status/governance only; no Part 6 implementation is authorized yet.
+EXCLUDED: Part 6 code or architecture changes before an accepted plan; production mutations; reapplying migrations 0015, 0016 or 0017.
+STATUS: PART_05_PRODUCTION_ACCEPTED 2026-10-02: production migrations 0016 + 0017 were applied once and checked before Part 5B release; Earl confirmed the final signed-in Part 5B production acceptance check complete. Details: `.codex/SESSION_HANDOFF.md` (top section).
 
 ---
 
