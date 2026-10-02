@@ -178,7 +178,7 @@ async function photoScenes(browser, url, dir) {
   for (const [size, viewport] of Object.entries(SIZES)) {
     const { context, page } = await resume(browser, state, viewport);
     await page.goto(`${url}/staff/items`);
-    await page.waitForSelector(".thumb img");
+    await page.waitForSelector("img.thumb");
     await page.waitForLoadState("networkidle");
     await shot(page, `photos-list-${size}`);
     await page.goto(`${url}/staff/items?item=${scissors}`);
