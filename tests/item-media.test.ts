@@ -21,7 +21,7 @@ const segment = (marker: number, payload: number[]) => [0xff, marker, (payload.l
 function jpeg(options: { width?: number; height?: number; before?: number[]; after?: number[]; marker?: number; components?: number; precision?: number } = {}): Uint8Array {
   const { width = 8, height = 6, before = [], after = [], marker = 0xc0, components = 3, precision = 8 } = options;
   const frame = segment(marker, [precision, height >> 8, height & 255, width >> 8, width & 255, components, ...Array.from({ length: components }, (_, index) => [index + 1, 0x11, 0]).flat()]);
-  return Uint8Array.from([0xff, 0xd8, ...before, ...segment(0xdb, [0, ...Array(64).fill(1)]), ...frame, ...segment(0xc4, [0, ...Array(16).fill(0), 0]),
+  return Uint8Array.from([0xff, 0xd8, ...before, ...segment(0xdb, [0, ...Array(64).fill(1)]), ...frame, ...segment(0xc4, [0, ...Array(16).fill(0)]),
     ...segment(0xda, [components, ...Array.from({ length: components }, (_, index) => [index + 1, 0]).flat(), 0, 63, 0]), 0x12, 0xff, 0x00, 0x34, 0xff, 0xd0, 0x56, 0xff, 0xd9, ...after]);
 }
 const ascii = (text: string) => [...text].map((char) => char.charCodeAt(0));
@@ -80,6 +80,20 @@ describe("cleanJpeg", () => {
       ["a stray marker", jpeg({ before: segment(0xf0, [1, 2]) })]
     ];
     for (const [name, bytes] of cases) expect(() => cleanJpeg(bytes, "display"), name).toThrow();
+  });
+
+  it("refuses text hidden beside a table, frame or scan header", () => {
+    const stuffed = (marker: number, payload: number[], extra: number[]) => segment(marker, [...payload, ...extra]);
+    const hide = ascii("GPSLatitude=14.5");
+    const table = [0, ...Array(64).fill(1)];
+    const counts = [0, ...Array(16).fill(0)];
+    for (const [name, before] of [
+      ["a quantisation table", stuffed(0xdb, table, hide)],
+      ["a Huffman table", stuffed(0xc4, counts, hide)],
+      ["a restart interval", stuffed(0xdd, [0, 4], hide)]
+    ] as Array<[string, number[]]>) expect(() => cleanJpeg(jpeg({ before }), "display"), name).toThrow(/not a valid JPEG/);
+    // A genuine restart interval and two tables in one segment are fine.
+    expect(cleanJpeg(jpeg({ before: [...segment(0xdd, [0, 4]), ...segment(0xdb, [...table, ...table])] }), "display").width).toBe(8);
   });
 
   it("refuses a frame larger than its variant allows or with no size", () => {
@@ -185,6 +199,25 @@ describe("adding a photo", () => {
   });
 });
 
+describe("when the answer is lost", () => {
+  it("keeps the new files when the database may have committed before it errored, so nothing dangles", async () => {
+    const batch = env.DB.batch.bind(env.DB);
+    env.DB.batch = (async (statements: D1PreparedStatement[]) => { await batch(statements); throw new Error("timeout after commit"); }) as D1Database["batch"];
+    expect((await put()).status).toBe(500);
+    env.DB.batch = batch;
+    const [row] = rows();
+    expect(row).toBeDefined();
+    expect(keys()).toEqual([`items/${row!.mediaId}/display`, `items/${row!.mediaId}/thumb`]);
+    expect((await staff(`/api/staff/media/${row!.mediaId}/thumb`)).status).toBe(200);
+  });
+
+  it("refuses an oversized body before reading it", async () => {
+    const response = await call(`/api/staff/items/${ITEM}/photo`, { method: "PUT", headers: { origin, cookie, "content-length": "5000000" }, body: photoForm(null) });
+    expect(response.status).toBe(413);
+    expect(keys()).toEqual([]);
+  });
+});
+
 describe("replacing a photo", () => {
   it("switches the reference, then removes the old files, and audits it", async () => {
     const first = await add();
@@ -284,13 +317,13 @@ describe("removing a photo", () => {
 });
 
 describe("serving a photo", () => {
-  it("streams either variant to a signed-in staff member with a cache that never goes stale", async () => {
+  it("streams either variant to a signed-in staff member with a day-long private cache", async () => {
     const id = await add();
     for (const variant of ["display", "thumb"]) {
       const response = await staff(`/api/staff/media/${id}/${variant}`);
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("image/jpeg");
-      expect(response.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
+      expect(response.headers.get("cache-control")).toBe("private, max-age=86400");
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
       expect([...new Uint8Array(await response.arrayBuffer()).subarray(0, 2)]).toEqual([0xff, 0xd8]);
     }

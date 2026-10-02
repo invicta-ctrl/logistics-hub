@@ -42,6 +42,8 @@ const REORDER_PATH = /^\/api\/staff\/reorders\/(RO-[A-Za-z0-9-]{1,60})$/;
 const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|photo)$/;
 /** A sync carries at most a few compressed photos; anything larger is not from the app. */
 const MAX_SYNC_BYTES = 12 * 1024 * 1024;
+/** An item photo upload is a 1 MB and a 150 KB JPEG plus form framing. */
+const MAX_PHOTO_BODY = 1_300_000;
 const ACCOUNT_PATH = /^\/api\/staff\/admin\/accounts\/(ACC-[A-Za-z0-9-]{1,60})(\/password|\/sessions\/revoke)?$/;
 // Paths still usable while an account must replace a password someone else set.
 const PASSWORD_CHANGE_ALLOWED = new Set(["/api/staff/session", "/api/staff/me/password"]);
@@ -228,6 +230,8 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   }
   if (match?.[2] === "/movements" && method === "POST") return json(await recordMovement(env.DB, account, match[1]!, await body()));
   if (match?.[2] === "/photo" && method === "PUT") {
+    // Two small JPEGs: refuse a larger body before reading it into memory.
+    if (Number(request.headers.get("content-length")) > MAX_PHOTO_BODY) throw new InputError(413, "That photo is too large.");
     const form = await request.formData().catch(() => null);
     if (!form) throw new InputError(400, "Invalid photo form.");
     return json(await putItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, form));
