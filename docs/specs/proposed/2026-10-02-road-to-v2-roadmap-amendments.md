@@ -1,6 +1,6 @@
 # Road to V2 — proposed amendments after V1.1
 
-STATUS: PROPOSED (needs Earl's acceptance; changes no accepted spec and no parked branch)
+STATUS: PARTLY DECIDED 2026-10-02. Items 4–7 are accepted, and branch protection (part of item 1) is declined; see `docs/specs/accepted/road-to-v2/2026-10-02-roadmap-amendments.md`. The rest is still a proposal.
 AUTHOR: Claude Cloud, on the `road-to-v2/v1.1-experience-foundation` branch, 2026-10-02
 INPUTS: all fifteen accepted specs (V1.1 here; V1.2–V1.15 read from their parked branches without changing them), the repository state, and what building V1.1 showed.
 
