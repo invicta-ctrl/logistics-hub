@@ -114,6 +114,9 @@ export function navigate(path: string, replace = false, state: object = {}): voi
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+/** The address the current view rendered, or last mirrored into the URL: the router treats a popstate to it as no change. */
+export const shown = { address: "" };
+
 /** Mirrors view state (filters, sort, open item) into the query string without adding history entries. */
 export function writeParams(values: Record<string, string | null | undefined>): void {
   const params = new URLSearchParams(window.location.search);
@@ -123,6 +126,7 @@ export function writeParams(values: Record<string, string | null | undefined>): 
   }
   const query = params.toString();
   window.history.replaceState(window.history.state, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+  shown.address = window.location.pathname + window.location.search;
 }
 
 /** Re-renders a live region while keeping keyboard focus on the same keyed row (its first `control`). */
@@ -216,7 +220,8 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
     const fallback = window.setTimeout(finish, 400);
     dialog.addEventListener("animationend", finish);
   };
-  dialog.addEventListener("cancel", (event) => { event.preventDefault(); close(); });
+  // A file input inside the sheet also fires a bubbling "cancel" when its picker is dismissed; only Escape on the dialog itself closes it.
+  dialog.addEventListener("cancel", (event) => { if (event.target !== dialog) return; event.preventDefault(); close(); });
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog || (event.target as HTMLElement).closest("[data-close]")) close();
   });
@@ -267,6 +272,23 @@ export function emptyState(title: string, detail: string, action: Html | string 
 const MAX_PHOTO_EDGE = 1600;
 
 /**
+ * Draws a decoded photo no larger than `edge` px on its long side and encodes it as JPEG. The bitmap is already
+ * upright (decoded with `imageOrientation: "from-image"`), and a canvas carries no EXIF or location, so the
+ * result is oriented and clean. Transparency lands on white, not black.
+ */
+export function jpegOf(bitmap: ImageBitmap, edge: number, quality: number): Promise<Blob> {
+  const scale = Math.min(1, edge / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d")!;
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("encode")), "image/jpeg", quality));
+}
+
+/**
  * Shrinks a camera photo to at most 1600 px as JPEG, so it uploads quickly on school Wi-Fi and
  * stays small on the phone. A browser that cannot decode it sends the original, up to `maxBytes`.
  */
@@ -274,13 +296,7 @@ export async function shrinkPhoto(file: File, maxBytes = 8 * 1024 * 1024): Promi
   let photo: Blob | null;
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-    const scale = Math.min(1, MAX_PHOTO_EDGE / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    photo = await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("encode")), "image/jpeg", 0.82));
+    try { photo = await jpegOf(bitmap, MAX_PHOTO_EDGE, 0.82); } finally { bitmap.close(); }
   } catch {
     photo = /^image\/(jpeg|png|webp)$/.test(file.type) ? file : null;
   }
