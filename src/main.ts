@@ -6,7 +6,7 @@ import "@fontsource/newsreader/latin-500.css";
 import "./styles.css";
 import { landing, lending, notFound, offlinePage } from "./public";
 import { startPwa } from "./pwa";
-import { handOverQuery, leave, navigate, toast } from "./ui";
+import { handOverQuery, leave, navigate, shown, toast } from "./ui";
 
 type View = () => void | Promise<void>;
 
@@ -37,7 +37,7 @@ async function render(): Promise<void> {
   const current = ++navigation;
   const moveFocus = loaded && window.self === window.top;
   loaded = true;
-  rendered = window.location.pathname + window.location.search;
+  shown.address = window.location.pathname + window.location.search;
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/items", true);
   let view: View;
@@ -102,12 +102,11 @@ window.addEventListener("unhandledrejection", (event) => {
   toast("Something went wrong. Please try again.", "error");
 });
 
-// A same-page #fragment jump also fires popstate; only a new path or query is a new view.
-let rendered = "";
+// A same-page #fragment jump, or an overlay's own history entry (the photo viewer), also fires popstate; only a new path or query is a new view.
 window.addEventListener("popstate", () => {
-  if (window.location.pathname + window.location.search === rendered) return;
-  if (window.location.pathname === new URL(rendered, window.location.href).pathname && handOverQuery()) {
-    rendered = window.location.pathname + window.location.search;
+  if (window.location.pathname + window.location.search === shown.address) return;
+  if (window.location.pathname === new URL(shown.address, window.location.href).pathname && handOverQuery()) {
+    shown.address = window.location.pathname + window.location.search;
     return;
   }
   render();
