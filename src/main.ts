@@ -29,9 +29,14 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
 };
 
 let navigation = 0;
+// A fresh page load already starts at the top, so only in-app navigation moves focus to the page body. It never does inside a
+// frame (Administration's Self-Service test panel): that would pull focus out of the page around it.
+let loaded = false;
 
 async function render(): Promise<void> {
   const current = ++navigation;
+  const moveFocus = loaded && window.self === window.top;
+  loaded = true;
   rendered = window.location.pathname + window.location.search;
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/inventory", true);
@@ -55,6 +60,7 @@ async function render(): Promise<void> {
   leave();
   void view();
   window.scrollTo(0, 0);
+  if (!moveFocus) return;
   window.requestAnimationFrame(() => {
     const main = document.querySelector<HTMLElement>("#main-content");
     main?.setAttribute("tabindex", "-1");

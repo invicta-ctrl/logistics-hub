@@ -260,7 +260,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
    Public site
    ========================================================================== */
 .site-header { position: relative; z-index: 30; border-bottom: 1px solid var(--on-dark-line); background: var(--brand-dark); color: var(--on-dark); }
-.site-header__inner { display: flex; min-height: 4.75rem; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.site-header__inner { display: flex; min-height: 4.75rem; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); }
 .site-header__brand { display: block; min-width: 0; padding-block: var(--space-3); border-radius: var(--radius); text-decoration: none; }
 .site-header__brand:focus-visible { outline-color: var(--gold-action); }
 .lockup { display: flex; align-items: center; gap: var(--space-3); }
@@ -270,7 +270,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .lockup__text { display: grid; padding-left: var(--space-1); line-height: 1.25; }
 .lockup__text strong { font-family: var(--serif); font-size: var(--text-lg); font-weight: 500; letter-spacing: -.005em; }
 .lockup__text span { color: var(--on-dark-2); font-size: var(--text-sm); letter-spacing: .02em; }
-.site-nav { display: flex; align-items: center; gap: var(--space-2); }
+.site-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .site-nav__link { display: inline-flex; min-height: 2.5rem; align-items: center; padding-inline: var(--space-3); border-radius: var(--radius); color: var(--on-dark-2); font-size: var(--text-base); font-weight: 500; text-decoration: none; white-space: nowrap; }
 .site-nav__link:hover { background: var(--on-dark-hover); color: var(--on-dark); }
 .site-nav__link[aria-current="page"] { color: var(--gold-action); }
@@ -285,6 +285,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .hero h1 { max-width: 20ch; margin-bottom: var(--space-4); font-family: var(--serif); font-size: var(--text-display); font-weight: 400; letter-spacing: -.02em; line-height: 1.02; overflow-wrap: anywhere; }
 .hero__lede { max-width: 34rem; color: var(--on-dark-2); font-size: var(--text-lg); line-height: 1.6; }
 .hero__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); margin-top: var(--space-8); }
+.hero__actions .button { white-space: normal; }
 .hero__secondary { min-height: 2.75rem; }
 .hero :focus-visible { outline-color: var(--gold-action); }
 
@@ -305,7 +306,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .site-footer__marks .mark { height: 3.25rem; }
 .site-footer__name { margin-bottom: var(--space-1); color: var(--on-dark); font-family: var(--serif); font-size: var(--text-lg); }
 .site-footer__links { display: grid; gap: var(--space-2); }
-.site-footer__links a { color: var(--on-dark); text-decoration: none; white-space: nowrap; }
+.site-footer__links a { color: var(--on-dark); text-decoration: none; }
 .site-footer__links a:hover { color: var(--gold-action); text-decoration: underline; }
 .site-footer__links a:focus-visible { outline-color: var(--gold-action); }
 .site-footer__base { padding-block: var(--space-5); border-top: 1px solid var(--on-dark-line); color: var(--on-dark-2); font-size: var(--text-sm); }
@@ -444,7 +445,7 @@ th.col-id { font-family: var(--sans); font-size: var(--text-sm); }
 th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 0; }
 .col-location { color: var(--text-2); }
 .col-status { width: 14rem; }
-.row-link { display: block; padding: 0; border: 0; background: none; color: var(--text); font-weight: 500; text-align: left; }
+.row-link { display: block; min-height: 1.5rem; padding: 0; border: 0; background: none; color: var(--text); font-weight: 500; text-align: left; }
 .row-link:hover { color: var(--brand); text-decoration: underline; }
 .row-link:focus-visible { border-radius: 2px; outline-offset: 3px; }
 .cell-sub { display: block; margin-top: .0625rem; color: var(--text-3); font-size: var(--text-sm); }

@@ -227,6 +227,8 @@ test("staff workspace fits a 320 px phone", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await signIn(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  // The item-name button in each row is at least 24 px tall (WCAG 2.2 target size minimum).
+  expect((await page.locator("tbody .row-link").first().boundingBox())!.height).toBeGreaterThanOrEqual(24);
   await page.locator("tbody .row-link").first().click();
   await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
