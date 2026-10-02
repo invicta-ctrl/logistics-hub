@@ -360,7 +360,7 @@ export async function workspace(): Promise<void> {
   const direction = (id: string) => { const was = changed.get(id); if (was === undefined) return ""; const now = previous.get(id) ?? was; return now > was ? "is-changed is-up" : "is-changed is-down"; };
   const row = (item: Item) => html`<tr data-key="${item.id}" class="${[direction(item.id), item.id === openId ? "is-open" : "", active(item) ? "" : "is-inactive"].join(" ")}">
     <td class="col-id">${item.id}</td>
-    <td class="col-item"><div class="item-cell">${rowThumb(item.photoId)}<div class="item-cell__text"><button type="button" class="row-link">${item.name}</button><span class="cell-sub"><span class="cell-id">${item.id} · </span>${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}</span></div></div></td>
+    <td class="col-item ${item.photoId ? "" : "col-item--bare"}">${rowThumb(item.photoId)}<button type="button" class="row-link">${item.name}</button><span class="cell-sub"><span class="cell-id">${item.id} · </span>${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}</span></td>
     <td class="col-category">${categoryName(item.category)}</td>
     <td class="col-location">${item.storageLocation ?? html`<span class="muted">Not set</span>`}</td>
     <td class="col-qty"><span class="qty" data-qty="${item.id}">${item.onHand}</span> <span class="qty-unit">${units(item.onHand, item.unit)}</span>${item.openUnits ? html`<span class="cell-sub">${sealedLine(item.onHand, item.openUnits, item.openCondition)}</span>` : ""}</td>
@@ -484,7 +484,7 @@ export async function workspace(): Promise<void> {
     const thumb = target.closest<HTMLElement>("[data-photo]");
     if (thumb) {
       const id = thumb.closest<HTMLElement>("tr[data-key]")!.dataset.key!;
-      void openViewer(thumb.dataset.photo!, inventory?.items.find((entry) => entry.id === id)?.name ?? id, () => results.querySelector<HTMLElement>(`tr[data-key="${CSS.escape(id)}"] [data-photo] img`));
+      void openViewer(thumb.dataset.photo!, inventory?.items.find((entry) => entry.id === id)?.name ?? id, () => results.querySelector<HTMLElement>(`tr[data-key="${CSS.escape(id)}"] img[data-photo]`));
       return;
     }
     const sort = target.closest<HTMLButtonElement>("[data-sort]");
