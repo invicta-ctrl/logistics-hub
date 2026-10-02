@@ -56,7 +56,7 @@ function actions(entry: Entry, candidates: Candidate[]): Html {
   const photo = (entry.type === "BORROW" || entry.type === "RETURN") && (entry.hasPhoto || (entry.type === "BORROW" && entry.loanId))
     ? html`<a class="text-link" href="${entry.applied && entry.loanId ? `/api/staff/loans/${entry.loanId}/photo` : `/api/staff/self-service/${entry.id}/photo`}" target="_blank" rel="noopener">Photo<span class="visually-hidden"> (opens in a new tab)</span></a>` : "";
   if (entry.applied) {
-    return html`${note}<div class="review-card__buttons"><button type="button" class="button button--secondary button--sm" data-act="dismiss">Mark checked</button><a class="text-link" href="/staff/inventory?item=${entry.itemId}" data-route>Open item</a>${photo}</div>`;
+    return html`${note}<div class="review-card__buttons"><button type="button" class="button button--secondary button--sm" data-act="dismiss">Mark checked</button><a class="text-link" href="/staff/items?item=${entry.itemId}" data-route>Open item</a>${photo}</div>`;
   }
   if (entry.review === "RETURN_CHECK" && entry.loanId) {
     const loan = candidates.find((candidate) => candidate.id === entry.loanId);
@@ -69,7 +69,7 @@ function actions(entry: Entry, candidates: Candidate[]): Html {
     const loans = candidates.filter((loan) => loan.itemId === entry.itemId);
     if (!loans.length) {
       return html`<p class="field__hint">No open loan of this item. If it came back anyway, record a count from the item, then dismiss this.</p>
-        ${note}<div class="review-card__buttons"><button type="button" class="button button--primary button--sm" data-act="dismiss">Dismiss</button><a class="text-link" href="/staff/inventory?item=${entry.itemId}" data-route>Open item</a></div>`;
+        ${note}<div class="review-card__buttons"><button type="button" class="button button--primary button--sm" data-act="dismiss">Dismiss</button><a class="text-link" href="/staff/items?item=${entry.itemId}" data-route>Open item</a></div>`;
     }
     return html`<div class="field"><label for="loan-${entry.id}">Loan it belongs to</label>
         <select id="loan-${entry.id}" name="loanId"><option value="">Choose an open loan…</option>${loans.map((loan) => html`<option value="${loan.id}" ${loan.quantity === entry.quantity ? "" : "disabled"}>${loan.borrowerName}${loan.studentId ? ` (${loan.studentId})` : ""} · ${loan.quantity} · since ${formatDateTime(loan.createdAt)}${loan.quantity === entry.quantity ? "" : " · different quantity"}</option>`)}</select></div>
@@ -82,7 +82,7 @@ function reviewCard(entry: Entry, candidates: Candidate[]): Html {
   return html`<li class="review-card" data-key="${entry.id}">
       <form class="review-card__form" data-entry="${entry.id}" novalidate>
         <header class="review-card__head">
-          <p class="review-card__what"><strong>${verb(entry)}</strong> · ${quantityText(entry)} · <a href="/staff/inventory?item=${entry.itemId}" data-route>${entry.itemName}</a></p>
+          <p class="review-card__what"><strong>${verb(entry)}</strong> · ${quantityText(entry)} · <a href="/staff/items?item=${entry.itemId}" data-route>${entry.itemName}</a></p>
           <span class="tag ${entry.applied ? "tag--gold" : "tag--warn"}">${entry.applied ? "Recorded · check" : "Waiting for you"}</span>
         </header>
         <p class="review-card__why">${entry.review ? REVIEW_REASONS[entry.review] : ""}.</p>
@@ -94,9 +94,9 @@ function reviewCard(entry: Entry, candidates: Candidate[]): Html {
 
 function issueRow(issue: Issue): Html {
   return html`<li class="review-card review-card--issue">
-      <header class="review-card__head"><p class="review-card__what"><a href="/staff/inventory?item=${issue.itemId}" data-route>${issue.itemName}</a></p><span class="tag tag--bad">Below zero</span></header>
+      <header class="review-card__head"><p class="review-card__what"><a href="/staff/items?item=${issue.itemId}" data-route>${issue.itemName}</a></p><span class="tag tag--bad">Below zero</span></header>
       <p class="review-card__why">Records show ${issue.lowest} ${units(issue.lowest, issue.unit)} since ${formatDateTime(issue.since)}: more was recorded than the shelf could hold.${issue.openLoans ? ` ${plural(issue.openLoans, "loan")} out; one may be wrong.` : ""}${issue.onHand === issue.lowest ? "" : ` On hand now: ${issue.onHand}.`} Count the shelf to correct it.</p>
-      <p class="review-card__buttons"><a class="button button--secondary button--sm" href="/staff/inventory?item=${issue.itemId}" data-route>Open item to count</a></p>
+      <p class="review-card__buttons"><a class="button button--secondary button--sm" href="/staff/items?item=${issue.itemId}" data-route>Open item to count</a></p>
     </li>`;
 }
 
@@ -117,22 +117,22 @@ function poster(): Html {
       <a class="button button--secondary" href="/qr/logistics-self-service.svg" download>QR as SVG</a>
       <a class="button button--secondary" href="/qr/logistics-self-service.png" download>QR as PNG</a>
     </div>
-    <p class="hint-line">${icon("info")}<span>The code only ever opens ${QR_URL}. What people see behind it follows the catalog: turn Self-service on for an item in its Edit details. Print it at least 4 cm wide.</span></p>`;
+    <p class="hint-line">${icon("info")}<span>The code only ever opens ${QR_URL}. What people see behind it follows the catalog: turn Self-Service on for an item in its Edit details. Print it at least 4 cm wide.</span></p>`;
 }
 
 export async function selfServiceReview(): Promise<void> {
   const session = await loadSession("self-service");
   if (!session) return;
-  document.title = "Self-service · Staff workspace";
+  document.title = "Self-Service · Staff workspace";
   shell(session, "self-service", html`
     <header class="page-header">
-      <div class="page-header__title"><h1>Self-service</h1><p id="ss-summary">Loading…</p></div>
+      <div class="page-header__title"><h1>Self-Service</h1><p id="ss-summary">Loading…</p></div>
       <div class="page-header__actions">
         <p class="live-status" id="live-status">Connecting…</p>
         <a class="button button--secondary" href="/self-service" target="_blank" rel="noopener">Open Self-Service ${icon("external")}<span class="visually-hidden">(opens in a new tab)</span></a>
       </div>
     </header>
-    <div class="views" id="ss-views" role="group" aria-label="Self-service views"></div>
+    <div class="views" id="ss-views" role="group" aria-label="Self-Service views"></div>
     <div id="ss-results" aria-busy="true"><div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 4 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></div>`)}</div></div>`);
 
   const query = new URLSearchParams(window.location.search);
@@ -161,13 +161,13 @@ export async function selfServiceReview(): Promise<void> {
   }
 
   function activity(review: Review): Html {
-    if (!review.recent.length) return emptyState("No self-service activity this week", "Takes, borrows and returns recorded with phones appear here.");
+    if (!review.recent.length) return emptyState("No Self-Service activity this week", "Takes, borrows and returns recorded with phones appear here.");
     return html`<div class="data-table-wrap"><table class="data-table data-table--static">
-        <caption class="visually-hidden">Self-service records this week</caption>
+        <caption class="visually-hidden">Self-Service records this week</caption>
         <thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Who</th><th scope="col">State</th></tr></thead>
         <tbody>${review.recent.map((entry) => html`<tr>
           <td>${timing(entry)}</td>
-          <td>${verb(entry)} · ${quantityText(entry)} · <a href="/staff/inventory?item=${entry.itemId}" data-route>${entry.itemName}</a></td>
+          <td>${verb(entry)} · ${quantityText(entry)} · <a href="/staff/items?item=${entry.itemId}" data-route>${entry.itemName}</a></td>
           <td>${entry.personName}${entry.studentId ? html` <span class="mono muted">${entry.studentId}</span>` : ""}</td>
           <td>${entry.resolvedAt ? html`<span class="tag">Checked${entry.resolvedBy ? ` by ${entry.resolvedBy}` : ""}</span>` : entry.review ? html`<span class="tag ${entry.applied ? "tag--gold" : "tag--warn"}">${entry.applied ? "Recorded · check" : "Waiting for you"}</span>` : html`<span class="tag tag--ok">Recorded</span>`}</td>
         </tr>`)}</tbody></table></div>`;
@@ -179,7 +179,7 @@ export async function selfServiceReview(): Promise<void> {
     onData: (next) => { data = next; render(); },
     onError: (error) => {
       if (error.status === 401) expired();
-      else if (!data) { results.removeAttribute("aria-busy"); mount(results, emptyState("Self-service could not be loaded", `${error.message} Retrying automatically.`, "", "error")); }
+      else if (!data) { results.removeAttribute("aria-busy"); mount(results, emptyState("Self-Service could not be loaded", `${error.message} Retrying automatically.`, "", "error")); }
     }
   });
   render();
