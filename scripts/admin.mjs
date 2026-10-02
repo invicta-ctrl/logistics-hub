@@ -241,7 +241,7 @@ async function verify(url, { database }) {
   const etag = catalog?.headers.get("etag");
   check(Boolean(etag) && (await get("/api/public/catalog", { headers: { "if-none-match": etag } }))?.status === 304, "Live-update revision (ETag/304)", "");
   check((await get("/api/staff/session"))?.status === 401, "Staff API requires sign-in", "");
-  const shell = await get("/staff/inventory");
+  const shell = await get("/staff/items");
   check(shell?.status === 302 && shell.headers.get("location")?.endsWith("/staff"), "Staff pages redirect when signed out", `HTTP ${shell?.status}`);
   const write = await get("/api/staff/items/ITM-0001/movements", { method: "POST", headers: { origin: new URL(url).origin, "content-type": "application/json" }, body: JSON.stringify({ kind: "IN", quantity: 1, key: "verify-anonymous-write" }) });
   check(write?.status === 401, "Anonymous stock writes are rejected", `HTTP ${write?.status}`);

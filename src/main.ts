@@ -19,7 +19,7 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
   "/lending": () => lending,
   "/self-service": () => import("./self-service-app").then((module) => module.selfService),
   "/staff": () => import("./staff").then((module) => module.staffLogin),
-  "/staff/inventory": () => import("./staff").then((module) => module.workspace),
+  "/staff/items": () => import("./staff").then((module) => module.workspace),
   "/staff/stock": () => import("./stock-workspace").then((module) => module.stockWorkspace),
   "/staff/loans": () => import("./loans-workspace").then((module) => module.loansWorkspace),
   "/staff/self-service": () => import("./self-service-review").then((module) => module.selfServiceReview),
@@ -39,7 +39,7 @@ async function render(): Promise<void> {
   loaded = true;
   rendered = window.location.pathname + window.location.search;
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
-  if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/inventory", true);
+  if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/items", true);
   let view: View;
   try {
     view = await (ROUTES[path] ?? (() => notFound))();

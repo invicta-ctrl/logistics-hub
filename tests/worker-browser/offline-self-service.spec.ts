@@ -27,7 +27,7 @@ async function signIn(browser: Browser): Promise<Page> {
   await page.getByRole("textbox", { name: "Username" }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Inventory" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Items" })).toBeVisible();
   return page;
 }
 
@@ -219,7 +219,7 @@ test.describe.serial("offline self-service", () => {
     expect((await item(COTTON)).onHand).toBe(cottonBefore);
 
     const loans = await (await staff.request.get("/api/staff/loans")).json() as { closed: Array<{ id: string; itemId: string; status: string; createdBy: string; studentId: string }> };
-    const loan = loans.closed.find((entry) => entry.itemId === COTTON && entry.createdBy === "Self-service");
+    const loan = loans.closed.find((entry) => entry.itemId === COTTON && entry.createdBy === "Self-Service");
     expect(loan).toMatchObject({ status: "RETURNED", studentId: "20-1234-567" });
     const photo = await staff.request.get(`/api/staff/loans/${loan!.id}/photo`);
     expect(photo.status()).toBe(200);
@@ -235,7 +235,7 @@ test.describe.serial("offline self-service", () => {
     expect((await item(COTTON)).onHand).toBe(cottonBefore);
     const after = await (await staff.request.get("/api/staff/loans")).json() as { open: Array<{ itemId: string }>; closed: Array<{ itemId: string; createdBy: string }> };
     expect(after.open.filter((entry) => entry.itemId === COTTON)).toEqual([]);
-    expect(after.closed.filter((entry) => entry.itemId === COTTON && entry.createdBy === "Self-service")).toHaveLength(1);
+    expect(after.closed.filter((entry) => entry.itemId === COTTON && entry.createdBy === "Self-Service")).toHaveLength(1);
     await context.close();
   });
 
@@ -289,7 +289,7 @@ test.describe.serial("offline self-service", () => {
 
   test("staff see phone activity and can print the one QR poster", async () => {
     await staff.goto("/staff/self-service?view=activity");
-    await expect(staff.getByRole("heading", { name: "Self-service" })).toBeVisible();
+    await expect(staff.getByRole("heading", { name: "Self-Service" })).toBeVisible();
     await expect(staff.locator("#ss-results")).toContainText("Juan Dela Cruz");
     await expect(staff.locator("#ss-results")).toContainText("Cotton - roll");
     await staff.getByRole("button", { name: "QR code & poster" }).click();
