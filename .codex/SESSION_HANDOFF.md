@@ -1,5 +1,18 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+STATUS: PART-06.0 PLANNING IN PROGRESS (2026-10-02). This is a documentation-only checkpoint, not Part 6 plan acceptance or implementation.
+ACTIVE_WRITER: codex (lock verified as owned by codex at 2026-10-02T06:29:29.413Z)
+WORKTREE: `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`
+BRANCH: `slice/part-06-plan`, baseline `c0c6e9963a9f846adf362a4ddeae683fc1eff375`; use `git rev-parse HEAD` after each checkpoint for the current documentation commit.
+AUTHORITY: `D:\Download\LOGISTICS_HUB_PART_6_CODEX_MASTER_PROMPT.md`, read as UTF-8; SHA-256 `f7c4f1ac5e11dcea2087f68bb03dfcb4a34a292cdf0f2f981794df311892d5ac`. The durable proposed record is `docs/specs/proposed/2026-10-02-part-06-admin-hardening-plan.md`.
+COMPLETED: reconciled the authoritative worktree, baseline, single slice, known untracked `NUL`, and codex writer lock. Began the required repository-native Part 6 control packet.
+NOT YET DONE: rendered local browser matrix; authenticated Admin/Owner/Staff inspection; bounded source audit findings; proposed 6.1–6.5 sequencing; final Part 6.0 documentation checkpoint and remote-equality verification.
+CONSTRAINTS: no Part 6 implementation, source/UI/dependency/schema/config change, test form submission, recovery-key generation, production/provider operation, migration, merge to `main`, or plan acceptance. Do not restart `npm run dev:live` unless the existing preview is unavailable. Self-Service remains paused; migrations 0015, 0016, and 0017 are already applied to production and must not be retried.
+PLANNED BASELINE: `/`, `/lending`, `/staff` signed out, authenticated inventory/item sheet, stock, loans, activity, administration (Owner and Admin), staff self-service, and paused `/self-service`, at 320, 390, 768, 1024, and 1366 px (1440 px when desktop behavior differs). Screenshots stay outside Git under the designated visualizations path. Check keyboard/focus, forms without saving, reduced motion, and large text where feasible.
+NEXT EXACT ACTION: before authenticated browser work, recover the existing local-preview credential format through its safe seed mechanism if required; do not print, commit, or overwrite credentials. Then finish the non-mutating rendered baseline and source audit, complete the proposed plan, review its complete diff, commit/push the slice checkpoint, verify `HEAD == origin/slice/part-06-plan` with a fresh remote check, update this handoff with actual evidence, then yield `codex`.
+
+## Previous checkpoint — Part 5 (historical; superseded for the active task)
+
 STATUS: PART_05_PRODUCTION_ACCEPTED + SELF_SERVICE_CLOSED (2026-10-02): Earl confirmed the final signed-in Part 5B production acceptance check complete. Part 5 is closed. Phone Self-Service remains intentionally closed for maintenance on production (PR #8); people are sent to DOL staff in person until Earl instructs reopening. Administrators can test it in Administration → Test Self-Service (PR #10, `main` 78892e5, live 05:55 UTC).
 ACTIVE_WRITER: none (Claude Cloud yields after this checkpoint); claim before edits
 WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub (authoritative writable/local-preview worktree; synced from `origin/main` on 2026-10-02; known untracked `NUL` preserved)

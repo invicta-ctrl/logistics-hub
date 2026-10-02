@@ -1,9 +1,12 @@
-# Current Bounded Task — NONE (Part 5 production accepted; Part 6 planning next)
-INTENT: no active implementation; preserve the verified Part 5 production state while Part 6 awaits an accepted plan.
-OBJECTIVE: Part 5 is closed. The next implementation task is Part 6 (Admin + Hardening) only after Earl accepts a dedicated plan/spec.
-SCOPE: status/governance only; no Part 6 implementation is authorized yet.
-EXCLUDED: Part 6 code or architecture changes before an accepted plan; production mutations; reapplying migrations 0015, 0016 or 0017.
-STATUS: PART_05_PRODUCTION_ACCEPTED 2026-10-02: production migrations 0016 + 0017 were applied once and checked before Part 5B release; Earl confirmed the final signed-in Part 5B production acceptance check complete. Details: `.codex/SESSION_HANDOFF.md` (top section).
+# Current Bounded Task — PART-06.0 BASELINE AUDIT + PROPOSED PLAN
+INTENT: documentation planning and rendered local baseline only.
+OBJECTIVE: turn Earl's Part 6 master prompt into a bounded, proposed Admin + Hardening plan that another local or cloud writer can resume without chat history.
+BRANCH: `slice/part-06-plan`, started at `c0c6e9963a9f846adf362a4ddeae683fc1eff375`; derive the current documentation checkpoint with `git rev-parse HEAD` rather than copying a self-referential SHA here.
+AUTHORITY: Earl's `D:\Download\LOGISTICS_HUB_PART_6_CODEX_MASTER_PROMPT.md` (UTF-8 SHA-256 `f7c4f1ac5e11dcea2087f68bb03dfcb4a34a292cdf0f2f981794df311892d5ac`), the accepted reboot specification, the MausBot amendment, and the current repository state.
+SCOPE: read-only source audit; rendered local-preview baseline at required routes and widths; proposed plan/checklist/current/handoff documentation; a coherent committed and pushed documentation checkpoint.
+EXCLUDED: Part 6 implementation, source/UI/dependency/schema/config changes, production/provider mutation, test-form submissions, recovery-key generation, plan acceptance, merge to `main`, and reapplying migrations 0015, 0016, or 0017.
+STATUS: IN PROGRESS. The baseline matrix, source audit, and proposed plan are not complete or verified. The preview remains local at `http://127.0.0.1:8791`; Self-Service remains paused. The known untracked `NUL` stays untouched.
+NEXT ACTION: first recover the existing local preview credential format through its safe seed mechanism if authentication is required for the baseline (never print, commit, or overwrite credentials); then capture the non-mutating rendered baseline and audit evidence, complete the proposed plan, commit/push it, verify local/remote equality, then yield the `codex` lock.
 
 ---
 
