@@ -15,7 +15,13 @@ APPLIES TO: every Road-to-V2 branch; the shared `CLAUDE.md` carries the operatin
 
 ## Renumbering
 
-Version order equals execution order. Each renamed branch was created from the old branch's tip, so its history is kept. The old names were removed only after the new branches were pushed.
+Version order equals execution order. Each renamed branch was created from the old branch's tip, so its history is kept. On 2026-10-02 every old tip was verified to be an ancestor of its new branch.
+
+**Owner action: delete the six old branch names.** The agent's environment did not permit remote branch deletion. Until Earl deletes them, they are **superseded and must not be implemented**: `road-to-v2/v1.3-smart-locations`, `road-to-v2/v1.4-catalog-pwa`, `road-to-v2/v1.6-physical-inventory`, `road-to-v2/v1.7-kits-containers`, `road-to-v2/v1.8-self-service-2` and `road-to-v2/v1.9-staff-directory`. Deleting them loses nothing, because each tip is contained in its new branch:
+
+```
+git push origin --delete road-to-v2/v1.3-smart-locations road-to-v2/v1.4-catalog-pwa road-to-v2/v1.6-physical-inventory road-to-v2/v1.7-kits-containers road-to-v2/v1.8-self-service-2 road-to-v2/v1.9-staff-directory
+```
 
 | New version and branch | Was | Old tip |
 |---|---|---|
