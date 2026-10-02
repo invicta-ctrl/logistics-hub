@@ -28,11 +28,27 @@ function exifOrientation(bytes: Uint8Array, from: number, to: number): number {
   return 1;
 }
 
+/** Whether a table, frame or scan header holds exactly what it declares (and nothing more). */
+function tablesFit(bytes: Uint8Array, marker: number, at: number, end: number): boolean {
+  const body = at + 4;
+  if (marker === 0xdd) return end - at === 6;
+  if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) return end - at === 10 + 3 * (bytes[at + 9] ?? 0);
+  if (marker === 0xda) return end - at === 8 + 2 * (bytes[body] ?? 0);
+  // DQT: tables of 64 or 128 values after a precision byte; DHT: 16 counts and that many symbols after a class byte.
+  let next = body;
+  while (next < end) {
+    next += marker === 0xdb ? 1 + (bytes[next]! >> 4 ? 128 : 64) : 17 + bytes.subarray(next + 1, next + 17).reduce((sum, count) => sum + count, 0);
+  }
+  return next === end;
+}
+
 /**
  * Checks a browser-made JPEG by its own bytes and returns it rebuilt: only the tables, frame and scan data a
- * decoder needs. Every APPn (EXIF, GPS, thumbnails, ICC), comment and anything after the end marker is dropped, so
- * nothing about where or with what a photo was taken is stored, whatever client sent it. A photo that still carries a
- * rotation is refused (the browser applies it to the pixels before encoding); so is anything not 8-bit, grey or YCbCr.
+ * decoder needs. Every APPn (EXIF, GPS, thumbnails, ICC), comment and anything after the end marker is dropped, and
+ * each table, frame and scan header must be exactly as long as its contents say, so no text hides beside them. The
+ * compressed scan itself cannot be inspected without decoding it, which is why this guarantee is for what a browser
+ * makes. A photo that still carries a rotation is refused (the browser applies it to the pixels before encoding); so
+ * is anything not 8-bit, grey or YCbCr.
  */
 export function cleanJpeg(bytes: Uint8Array, variant: Variant): { bytes: Uint8Array; width: number; height: number } {
   const refuse = (why: string): never => { throw new InputError(400, `The ${variant} photo ${why}`); };
@@ -69,8 +85,9 @@ export function cleanJpeg(bytes: Uint8Array, variant: Variant): { bytes: Uint8Ar
     } else if (marker !== 0xfe) {
       // Tables, the frame and scans only: anything else (arithmetic or lossless coding, stray markers) is not from a browser.
       if (![0xdb, 0xc4, 0xdd, 0xc0, 0xc1, 0xc2, 0xda].includes(marker!)) refuse("must be an ordinary JPEG.");
+      if (!tablesFit(bytes, marker!, at, end)) refuse("is not a valid JPEG.");
       if (marker === 0xc0 || marker === 0xc1 || marker === 0xc2) {
-        if (width || end < at + 10) refuse("is not a valid JPEG.");
+        if (width) refuse("is not a valid JPEG.");
         height = u16(bytes, at + 5);
         width = u16(bytes, at + 7);
         const components = bytes[at + 9];
@@ -141,7 +158,10 @@ export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Acto
     ]);
     if (!write!.meta.changes) throw new InputError(409, CHANGED);
   } catch (error) {
-    await dropObjects(bucket, mediaId);
+    // An error after the batch committed (a timeout the client never saw an answer to) would leave D1 pointing at these files:
+    // keep them whenever the reference may exist, since an unused file is harmless and a dangling reference is not.
+    const referenced = error instanceof InputError ? false : await db.prepare("SELECT 1 FROM item_media WHERE media_id = ?").bind(mediaId).first().then(Boolean, () => true);
+    if (!referenced) await dropObjects(bucket, mediaId);
     throw error;
   }
   if (expected) await dropObjects(bucket, expected);
@@ -163,12 +183,13 @@ export async function removeItemPhoto(db: D1Database, bucket: R2Bucket, actor: A
 }
 
 /**
- * Streams one variant to a signed-in staff member. The id is random and a replacement gets a new one, so the
- * bytes behind a URL never change and the browser may keep them; "private" keeps shared caches out.
+ * Streams one variant to a signed-in staff member. The id is random and a replacement gets a new one, so the bytes
+ * behind a URL never change and a browser may keep them for a day (a list of photos then costs no requests);
+ * "private" keeps shared caches out, and a day bounds how long a removed photo can linger in a browser.
  */
 export async function itemPhoto(bucket: R2Bucket, mediaId: string, variant: string): Promise<Response> {
   if (!MEDIA_ID.test(mediaId) || !Object.hasOwn(VARIANTS, variant)) throw new InputError(404, "Not found.");
   const object = await bucket.get(key(mediaId, variant as Variant));
   if (!object) throw new InputError(404, "Not found.");
-  return new Response(object.body, { headers: { "content-type": "image/jpeg", "cache-control": "private, max-age=31536000, immutable" } });
+  return new Response(object.body, { headers: { "content-type": "image/jpeg", "cache-control": "private, max-age=86400" } });
 }
