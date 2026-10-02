@@ -293,6 +293,11 @@ test("staff workspace fits a 320 px phone", async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   // The item-name button in each row is at least 24 px tall (WCAG 2.2 target size minimum).
   expect((await page.locator("tbody .row-link").first().boundingBox())!.height).toBeGreaterThanOrEqual(24);
+  // At 200% text the account button, every section and the page's primary action stay reachable on screen.
+  await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+  expect(await page.evaluate(onScreen)).toBeTruthy();
+  expect(await page.evaluate(() => document.querySelector("#new-item")!.getBoundingClientRect().right <= window.innerWidth)).toBeTruthy();
+  await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
   await page.locator("tbody .row-link").first().click();
   await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
