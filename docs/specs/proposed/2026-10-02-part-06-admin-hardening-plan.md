@@ -1,6 +1,6 @@
 # Proposed Part 6 — Administration + Hardening
 
-**Status:** BUILT AND VERIFIED LOCALLY on Earl's instruction of 2026-10-02 ("figure them out and continue finishing the entire part 06 plan"); D2–D7 settled in section 5, D1 open; outcome in section 6. Nothing is merged to `main` or applied to production; it waits for Earl to apply migrations `0018` and `0019`.
+**Status:** BUILT AND VERIFIED LOCALLY on Earl's instruction of 2026-10-02 ("figure them out and continue finishing the entire part 06 plan"); D2–D7 settled in section 5, D1 open; outcome in section 6. On Earl's "merge to main now" the migration-free slices (6.1, 6.2, 6.5a) were fast-forwarded to `main` (`238b081`, 2026-10-02); 6.3 and 6.4 are held because production has neither `0018` nor `0019` (read-only check of `d1_migrations`) and the Worker they ship reads `system_settings` on every staff session request. Nothing is applied to production.
 
 **Read first:** the controlling prompt (`D:\Download\LOGISTICS_HUB_PART_6_CODEX_MASTER_PROMPT.md`, UTF-8, SHA-256 `f7c4f1ac5e11dcea2087f68bb03dfcb4a34a292cdf0f2f981794df311892d5ac`) was **not available to the session that finished this draft** (Claude Cloud; the file exists only on Earl's PC). The slices, criteria and decisions below come from repository evidence and the roadmap alone. The prompt has not been compared with them. If it differs, the prompt wins. Before acceptance, someone with the file must reconcile it with sections 3–5 and record the result here.
 
@@ -72,7 +72,7 @@ Because 6.3 and 6.4 need migrations that only Earl may apply to production, the 
 
 ## 6. Outcome (2026-10-02, Claude Cloud)
 
-Built on `slice/part-06-plan`, one gated commit per slice (`git log c0c6e99..` lists them). Nothing is merged, applied to production or deployed.
+Built on `slice/part-06-plan`, one gated commit per slice (`git log c0c6e99..` lists them). 6.1, 6.2 and 6.5a are on `main` (fast-forward to `238b081`, re-gated on that exact commit: build, 151 unit, 28 mocked and 25 real-Worker browser tests, privacy, dry-run still carrying `SELF_SERVICE: paused`); 6.3 and 6.4 are on the branch only. Nothing is applied to production.
 
 | Slice | What exists | Findings it closes |
 |---|---|---|
