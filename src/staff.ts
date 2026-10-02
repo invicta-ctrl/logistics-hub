@@ -2,7 +2,7 @@ import { CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDIN
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
-import { ApiError, MARK, type Html, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { ApiError, MARK, type Html, type IconName, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
@@ -52,9 +52,19 @@ const LENDING_FIELDS = ["lendingAudience", "defaultLoanDays", "maximumLoanQty"];
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
 export type Session = { id: string; username: string; displayName: string; role: Role; mustChangePassword: boolean; recovery: { configured: boolean; createdAt: string | null } | null; selfServiceReviews: number; selfServiceClosed: boolean };
-type Section = "inventory" | "stock" | "loans" | "self-service" | "activity" | "admin" | "account";
+type Section = "items" | "stock" | "loans" | "self-service" | "activity" | "admin" | "account";
 
 export const ROLE_LABELS: Record<Role, string> = { STAFF: "Staff", ADMIN: "Administrator", OWNER: "Owner" };
+
+/** The staff sections in working order. On phones the first four sit in the bottom bar; `more` ones move under More. */
+const SECTIONS: ReadonlyArray<{ id: Section; href: string; text: string; icon: IconName; more?: true }> = [
+  { id: "items", href: "/staff/items", text: "Items", icon: "box" },
+  { id: "stock", href: "/staff/stock", text: "Stock", icon: "stack" },
+  { id: "loans", href: "/staff/loans", text: "Loans", icon: "swap" },
+  { id: "self-service", href: "/staff/self-service", text: "Self-Service", icon: "phone" },
+  { id: "activity", href: "/staff/activity", text: "Activity", icon: "clock", more: true },
+  { id: "admin", href: "/staff/admin", text: "Administration", icon: "shield", more: true }
+];
 
 /** Loads the signed-in account, or routes to sign-in / the forced password change. */
 export async function loadSession(section: Section): Promise<Session | null> {
@@ -67,36 +77,64 @@ export async function loadSession(section: Section): Promise<Session | null> {
     // Staff tools never work offline (there are no offline credentials); Self-Service does.
     const offline = error instanceof ApiError && error.status === 0;
     mount(app, html`<main id="main-content" class="container page-message">${offline
-      ? emptyState("Staff tools need a connection", "You're offline. Inventory, stock, loans and administration work only online, so nothing is changed on this device. Self-Service keeps working offline.", html`<a class="button button--secondary" href="${window.location.pathname}" data-route>Try again</a> <a class="button button--ghost" href="/self-service" data-route>Open Self-Service</a>`, "error", 1)
-      : emptyState("The staff workspace is unavailable", failure(error), html`<a class="button button--secondary" href="/staff/inventory" data-route>Try again</a>`, "error", 1)}</main>`);
+      ? emptyState("Staff tools need a connection", "You're offline. Items, stock, loans and administration work only online, so nothing is changed on this device. Self-Service keeps working offline.", html`<a class="button button--secondary" href="${window.location.pathname}" data-route>Try again</a> <a class="button button--ghost" href="/self-service" data-route>Open Self-Service</a>`, "error", 1)
+      : emptyState("The staff workspace is unavailable", failure(error), html`<a class="button button--secondary" href="/staff/items" data-route>Try again</a>`, "error", 1)}</main>`);
     return null;
   }
 }
 
-/** The one staff app shell: brand, section navigation by role, account and sign out. */
+/**
+ * The one staff app shell. Desktop and tablet show every section in the top bar; phones move them to a
+ * bottom bar with More. The avatar opens the account menu (My account, Lending Hub, Sign out), which on
+ * phones also lists the sections behind More, so each destination has exactly one place per layout.
+ */
 export function shell(session: Session, section: Section, main: Html): void {
-  const link = (target: Section, href: string, text: string) => html`<a href="${href}" data-route ${section === target ? html`aria-current="page"` : ""}>${text}</a>`;
+  const current = (id: Section) => section === id ? html`aria-current="page"` : "";
+  const sections = session.mustChangePassword ? [] : SECTIONS.filter((entry) => entry.id !== "admin" || session.role !== "STAFF");
+  const reviews = session.selfServiceReviews;
+  const badge = (id: Section) => id === "self-service" && reviews
+    ? html`<span class="nav-badge" aria-hidden="true">${reviews}</span><span class="visually-hidden">, ${reviews} ${reviews === 1 ? "record" : "records"} to check</span>` : "";
+  const overflow = sections.filter((entry) => entry.more);
+  const avatar = html`<span class="avatar" aria-hidden="true">${initials(session.displayName)}</span>`;
   mount(app, html`
     <header class="app-bar">
       <div class="app-bar__inner">
-        <a class="app-bar__brand" href="/staff/inventory" data-route><span aria-hidden="true">${MARK}</span><span class="app-bar__title">Logistics Hub <small>Staff workspace</small></span></a>
-        <nav class="app-nav" aria-label="Workspace">
-          ${session.mustChangePassword ? "" : link("inventory", "/staff/inventory", "Inventory")}
-          ${session.mustChangePassword ? "" : link("stock", "/staff/stock", "Stock & Pantry")}
-          ${session.mustChangePassword ? "" : link("loans", "/staff/loans", "Loans")}
-          ${session.mustChangePassword ? "" : html`<a href="/staff/self-service" data-route ${section === "self-service" ? html`aria-current="page"` : ""}>Self-service${session.selfServiceReviews ? html` <span class="nav-badge" aria-hidden="true">${session.selfServiceReviews}</span><span class="visually-hidden">, ${session.selfServiceReviews} ${session.selfServiceReviews === 1 ? "record" : "records"} to check</span>` : ""}</a>`}
-          ${session.mustChangePassword ? "" : link("activity", "/staff/activity", "Activity")}
-          ${session.role !== "STAFF" && !session.mustChangePassword ? link("admin", "/staff/admin", "Administration") : ""}
-          ${link("account", "/staff/account", "My account")}
-        </nav>
-        <div class="app-bar__end">
-          <a class="app-bar__link" href="/lending" target="_blank" rel="noopener">Public Lending Hub ${icon("external")}<span class="visually-hidden">(opens in a new tab)</span></a>
-          <a class="account" href="/staff/account" data-route><span class="account__avatar" aria-hidden="true">${initials(session.displayName)}</span><span class="account__name">${session.displayName}<small>${ROLE_LABELS[session.role]}</small></span></a>
-          <button class="button button--ghost button--sm app-bar__signout" type="button" id="staff-logout">${icon("signOut")}<span>Sign out</span></button>
-        </div>
+        <a class="app-bar__brand" href="/staff/items" data-route><span aria-hidden="true">${MARK}</span><span class="app-bar__title">Logistics Hub <small>Staff workspace</small></span></a>
+        ${sections.length ? html`<nav class="app-nav" aria-label="Sections">
+          ${sections.map((entry) => html`<a class="app-nav__link ${entry.more ? "app-nav__link--more" : ""}" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}<span class="app-nav__text">${entry.text}${badge(entry.id)}</span></a>`)}
+          <button class="app-nav__link app-nav__more ${overflow.some((entry) => entry.id === section) || section === "account" ? "is-current" : ""}" type="button" popovertarget="staff-menu">${icon("dots")}<span class="app-nav__text">More</span></button>
+        </nav>` : ""}
+        <button class="account" type="button" popovertarget="staff-menu">${avatar}<span class="account__name"><span class="visually-hidden">Account: </span>${session.displayName}<small>${ROLE_LABELS[session.role]}</small></span></button>
       </div>
     </header>
+    <div class="menu" id="staff-menu" popover>
+      <div class="menu__identity">${avatar}<p><strong>${session.displayName}</strong><span>${ROLE_LABELS[session.role]} · <span class="mono">${session.username}</span></span></p></div>
+      ${overflow.length ? html`<ul class="menu__list menu__list--more" aria-label="More sections">${overflow.map((entry) => html`<li><a class="menu__item" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}${entry.text}</a></li>`)}</ul>` : ""}
+      <ul class="menu__list">
+        <li><a class="menu__item" href="/staff/account" data-route ${current("account")}>${icon("user")}My account</a></li>
+        <li><a class="menu__item" href="/lending" target="_blank" rel="noopener">${icon("external")}Public Lending Hub<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+        <li><button class="menu__item" type="button" id="staff-logout">${icon("signOut")}Sign out</button></li>
+      </ul>
+    </div>
     <main id="main-content" class="app-main">${main}</main>`);
+  // Both openers (the avatar and, on phones, More) report whether the menu is open.
+  const menu = document.querySelector<HTMLElement>("#staff-menu")!;
+  const openers = document.querySelectorAll('[popovertarget="staff-menu"]');
+  const expanded = (open: boolean) => openers.forEach((opener) => opener.setAttribute("aria-expanded", String(open)));
+  expanded(false);
+  menu.addEventListener("toggle", (event) => expanded((event as ToggleEvent).newState === "open"));
+  // Without the Popover API (iOS before 17) the openers simply show and hide the menu.
+  const native = "showPopover" in HTMLElement.prototype;
+  if (!native) {
+    menu.hidden = true;
+    openers.forEach((opener) => opener.addEventListener("click", () => { menu.hidden = !menu.hidden; expanded(!menu.hidden); }));
+  }
+  // A choice closes the menu at once, even for the page already shown or while the next page loads.
+  menu.addEventListener("click", (event) => {
+    if (!(event.target as Element).closest("a")) return;
+    if (native) menu.hidePopover();
+    else { menu.hidden = true; expanded(false); }
+  });
   document.querySelector("#staff-logout")!.addEventListener("click", async () => {
     try { await api("/api/staff/logout", { method: "POST" }); } catch { /* the session is dropped client-side regardless */ }
     navigate("/staff", true);
@@ -166,7 +204,7 @@ export function staffLogin(): void {
     setMessage(alert, "");
     try {
       const result = await api<{ mustChangePassword: boolean }>("/api/staff/login", { method: "POST", body: JSON.stringify({ username: values.get("username"), password: values.get("password") }) });
-      navigate(result.mustChangePassword ? "/staff/account" : "/staff/inventory");
+      navigate(result.mustChangePassword ? "/staff/account" : "/staff/items");
     } catch (error) {
       setMessage(alert, error instanceof Error ? error.message : "Sign-in failed.");
       button.disabled = false;
@@ -243,13 +281,13 @@ function eventTitle(event: CatalogEvent): string {
 /* ---------- Workspace ---------- */
 
 export async function workspace(): Promise<void> {
-  const session = await loadSession("inventory");
+  const session = await loadSession("items");
   if (!session) return;
-  document.title = "Inventory · Staff workspace";
-  shell(session, "inventory", html`
+  document.title = "Items · Staff workspace";
+  shell(session, "items", html`
       <header class="page-header">
         <div class="page-header__title">
-          <h1>Inventory</h1>
+          <h1>Items</h1>
           <div class="review-meter" id="review-meter" hidden></div>
         </div>
         <div class="page-header__actions">
@@ -257,9 +295,9 @@ export async function workspace(): Promise<void> {
           <button class="button button--primary" type="button" id="new-item">${icon("plus")}New item</button>
         </div>
       </header>
-      <div class="views" id="views" role="group" aria-label="Inventory views"></div>
+      <div class="views" id="views" role="group" aria-label="Item views"></div>
       <div class="table-toolbar">
-        <label class="search-field">${icon("search")}<span class="visually-hidden">Search inventory</span><input id="inventory-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search name, other name, ID, category, location" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
+        <label class="search-field">${icon("search")}<span class="visually-hidden">Search items</span><input id="inventory-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search name, other name, ID, category, location" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
         <button class="button button--secondary filters-toggle" type="button" id="filters-toggle" aria-expanded="false" aria-controls="table-filters">${icon("filter")}<span>Filters</span></button>
         <div class="table-filters" id="table-filters">
           <div class="select-field"><label class="visually-hidden" for="filter-category">Category</label><select id="filter-category"></select></div>
@@ -318,7 +356,7 @@ export async function workspace(): Promise<void> {
   const direction = (id: string) => { const was = changed.get(id); if (was === undefined) return ""; const now = previous.get(id) ?? was; return now > was ? "is-changed is-up" : "is-changed is-down"; };
   const row = (item: Item) => html`<tr data-key="${item.id}" class="${[direction(item.id), item.id === openId ? "is-open" : "", active(item) ? "" : "is-inactive"].join(" ")}">
     <td class="col-id">${item.id}</td>
-    <td class="col-item"><button type="button" class="row-link">${item.name}</button><span class="cell-sub">${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}</span></td>
+    <td class="col-item"><button type="button" class="row-link">${item.name}</button><span class="cell-sub"><span class="cell-id">${item.id} · </span>${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}</span></td>
     <td class="col-category">${categoryName(item.category)}</td>
     <td class="col-location">${item.storageLocation ?? html`<span class="muted">Not set</span>`}</td>
     <td class="col-qty"><span class="qty" data-qty="${item.id}">${item.onHand}</span> <span class="qty-unit">${units(item.onHand, item.unit)}</span>${item.openUnits ? html`<span class="cell-sub">${sealedLine(item.onHand, item.openUnits, item.openCondition)}</span>` : ""}</td>
@@ -360,7 +398,7 @@ export async function workspace(): Promise<void> {
     const hint = view === "gradual" ? html`<p class="hint-line">${icon("info")}<span>Consumables counted in reams, rolls, packs, bottles and similar units are often opened and used a little at a time. Nothing changes here: to track open units for one, choose “Open and use gradually” in its Edit details.</span></p>` : "";
     preservingFocus(results, () => mount(results, shown.length
       ? html`${hint}<div class="data-table-wrap"><table class="data-table">
-          <caption class="visually-hidden">Inventory items. Select an item to see, review or edit it.</caption>
+          <caption class="visually-hidden">Items. Select an item to see, review or edit it.</caption>
           <thead><tr>${sortHeader("id", "ID", "col-id")}${sortHeader("name", "Item", "col-item")}${sortHeader("category", "Category", "col-category")}${sortHeader("storageLocation", "Location", "col-location")}${sortHeader("onHand", "On hand", "col-qty")}<th scope="col" class="col-status">Status</th></tr></thead>
           <tbody>${shown.map(row)}</tbody></table></div>`
       : view === "gradual" && !query && !Object.values(filters).some(Boolean) ? emptyState("No likely items left", "No active Consumable counted in reams, rolls, packs, bottles or similar units is still used as a whole unit.")
@@ -398,7 +436,7 @@ export async function workspace(): Promise<void> {
       if (error.status === 401) expired();
       else if (!inventory) {
         results.removeAttribute("aria-busy");
-        mount(results, emptyState("Inventory could not be loaded", `${error.message} Retrying automatically.`, "", "error"));
+        mount(results, emptyState("Items could not be loaded", `${error.message} Retrying automatically.`, "", "error"));
       }
     }
   });
@@ -717,13 +755,13 @@ export async function workspace(): Promise<void> {
         <div class="field"><label for="f-notes">Internal notes <span class="field__optional">optional</span></label><textarea id="f-notes" name="notes" maxlength="1000" rows="3">${item.notes ?? ""}</textarea></div>
       </div>
       <div class="form-section">
-        <h3 class="form-section__title">Inventory settings</h3>
+        <h3 class="form-section__title">Stock settings</h3>
         <div class="field-grid">
           <div class="field"><label for="f-status">Status</label><select id="f-status" name="status" aria-describedby="f-status-hint">${options(ITEM_STATUSES, item.status ?? "ACTIVE")}</select><p class="field__hint" id="f-status-hint">Inactive items leave the Lending Hub. Nothing is deleted.</p></div>
           ${number("reorderThreshold", "Reorder level", item.reorderThreshold, 100_000, "Low stock at or below this. 0 turns it off.")}
         </div>
         <div class="field-grid">
-          <div class="field"><label for="f-stockArea">Stock area</label><select id="f-stockArea" name="stockArea" aria-describedby="f-stockArea-hint">${options(STOCK_AREAS, item.stockArea ?? "Inventory")}</select><p class="field__hint" id="f-stockArea-hint">Pantry items appear in Stock &amp; Pantry → Pantry.</p></div>
+          <div class="field"><label for="f-stockArea">Stock area</label><select id="f-stockArea" name="stockArea" aria-describedby="f-stockArea-hint">${options(STOCK_AREAS, item.stockArea ?? "Inventory")}</select><p class="field__hint" id="f-stockArea-hint">Pantry items appear in Stock → Pantry.</p></div>
           <div class="field" data-expiry ${(item.stockArea ?? "Inventory") === "Pantry" ? "" : html`hidden`}><label for="f-expiresOn">Earliest expiry <span class="field__optional">optional</span></label><input id="f-expiresOn" name="expiresOn" type="date" value="${item.expiresOn ?? ""}" aria-describedby="f-expiresOn-hint" /><p class="field__hint" id="f-expiresOn-hint">The soonest date on the shelf.</p></div>
         </div>
         ${creating ? number("openingQuantity", "Opening quantity", 0, 100_000, "Recorded as the item's first movement.") : ""}

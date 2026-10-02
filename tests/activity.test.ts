@@ -97,7 +97,7 @@ describe("activity read model", () => {
     movement("ITM-R", "COUNT_ADJUSTMENT", 0, "2026-09-30T03:00:00.000Z", { notes: "Shelf check" });
     const { events } = await feed();
     expect(events.map((event) => [event.type, event.change, event.before, event.after])).toEqual([["COUNT_ADJUSTMENT", 0, 5, 5], ["STOCK_OUT", 0, null, null], ["STOCK_IN", 5, 0, 5]]);
-    expect(events[1]).toMatchObject({ actor: "Self-service", source: "MOVEMENT", stockChanged: false });
+    expect(events[1]).toMatchObject({ actor: "Self-Service", source: "MOVEMENT", stockChanged: false });
     expect(events[1]!.summary).toContain("a later count already covers it");
     expect(types(await feed("changed=yes"))).toEqual(["STOCK_IN"]);
     expect(types(await feed("changed=no"))).toEqual(["COUNT_ADJUSTMENT", "STOCK_OUT"]);
@@ -295,12 +295,12 @@ describe("activity read model", () => {
     const { events } = await feed();
     expect(events.map((event) => event.id)).toEqual(["resolve:PH-DONE", "phone:PH-DONE", "phone:PH-HELD", "phone:PH-OVERLAP", "mov:MOV-OVERLAP", "mov:MOV-TAKE", "mov:" + events.at(-1)!.id.slice(4)]);
     const byId = Object.fromEntries(events.map((event) => [event.id, event]));
-    expect(byId["phone:PH-HELD"]).toMatchObject({ type: "PHONE_RETURN", source: "PHONE", actor: "Self-service", attention: true, stockChanged: false, change: 0 });
+    expect(byId["phone:PH-HELD"]).toMatchObject({ type: "PHONE_RETURN", source: "PHONE", actor: "Self-Service", attention: true, stockChanged: false, change: 0 });
     expect(byId["phone:PH-HELD"]!.summary).toContain("held for staff");
     expect(byId["phone:PH-HELD"]!.reason).toContain("could not be matched");
     expect(byId["phone:PH-OVERLAP"]!.reason).toContain("physical count");
     expect(byId["phone:PH-OVERLAP"]!.summary).toContain("recorded");
-    expect(byId["mov:MOV-OVERLAP"]).toMatchObject({ change: -1, source: "PHONE", actor: "Self-service" });
+    expect(byId["mov:MOV-OVERLAP"]).toMatchObject({ change: -1, source: "PHONE", actor: "Self-Service" });
     expect(byId["resolve:PH-DONE"]).toMatchObject({ type: "REVIEW_RESOLVED", actor: "Staff One", note: "Checked the photo", attention: false });
     expect(byId["phone:PH-DONE"]!.attention).toBe(false);
     // "Needs attention" leads with the records a person has to act on.

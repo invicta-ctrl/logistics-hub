@@ -21,7 +21,8 @@
     "test:browser:worker": "node scripts/run-worker-browser-tests.mjs",
     "verify:migration": "node scripts/verify-migration-data.mjs",
     "verify:catalog": "node scripts/report-public-catalog.mjs",
-    "verify:privacy": "node scripts/privacy-scan.mjs"
+    "verify:privacy": "node scripts/privacy-scan.mjs",
+    "evidence": "node scripts/visual-evidence.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260928.1",

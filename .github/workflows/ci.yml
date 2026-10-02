@@ -1,0 +1,51 @@
+# The local gates every slice already runs, repeated on GitHub so a red change is visible before it
+# reaches main (Workers Builds deploys every push to main; this check does not block it by itself).
+name: CI
+
+on:
+  push:
+    branches: [main, "road-to-v2/**", "slice/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm run verify:privacy
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+
+  worker-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser:worker
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: worker-e2e-traces
+          path: test-results/
+          retention-days: 7
