@@ -401,7 +401,7 @@ export async function workspace(): Promise<void> {
     document.querySelector("#inventory-count")!.textContent = shown.length === items.length ? plural(items.length, "item") : `${shown.length.toLocaleString()} of ${plural(items.length, "item")}`;
     const hint = view === "gradual" ? html`<p class="hint-line">${icon("info")}<span>Consumables counted in reams, rolls, packs, bottles and similar units are often opened and used a little at a time. Nothing changes here: to track open units for one, choose “Open and use gradually” in its Edit details.</span></p>` : "";
     preservingFocus(results, () => mount(results, shown.length
-      ? html`${hint}<div class="data-table-wrap"><table class="data-table">
+      ? html`${hint}<div class="data-table-wrap"><table class="data-table data-table--items">
           <caption class="visually-hidden">Items. Select an item to see, review or edit it.</caption>
           <thead><tr>${sortHeader("id", "ID", "col-id")}${sortHeader("name", "Item", "col-item")}${sortHeader("category", "Category", "col-category")}${sortHeader("storageLocation", "Location", "col-location")}${sortHeader("onHand", "On hand", "col-qty")}<th scope="col" class="col-status">Status</th></tr></thead>
           <tbody>${shown.map(row)}</tbody></table></div>`
@@ -680,8 +680,8 @@ export async function workspace(): Promise<void> {
     const out = loaded.loans.filter((loan) => loan.status === "OUT").length;
     const tabs: Array<[Tab, string]> = [["overview", "Overview"], ...(lendable ? [["loan", out ? `Loan · ${out} out` : "Loan"] as [Tab, string]] : []), ["details", item.needsReview ? "Review & edit" : "Edit details"], ["history", "History"]];
     if (tab === "loan" && !lendable) tab = "overview";
-    sheetShell(html`<span class="mono">${item.id}</span> · ${categoryName(item.category)}`, item.name, html`
-      <section class="profile" aria-label="Item profile"><div class="profile__photo" id="photo-panel"></div><div class="profile__info" id="profile-info">${profileInfo(loaded)}</div></section>
+    sheetShell(html`<span class="mono">${item.id}</span>`, item.name, html`
+      <section class="profile" id="photo-panel" aria-label="Item profile"><div class="profile__photo" data-tile></div><div class="profile__info"><div id="profile-info">${profileInfo(loaded)}</div><div class="profile__actions" data-actions></div></div></section>
       <div class="tabs" role="tablist" aria-label="Item sections">
         ${tabs.map(([key, text]) => html`<button type="button" role="tab" id="tab-${key}" aria-controls="panel-${key}" aria-selected="${key === tab}" tabindex="${key === tab ? 0 : -1}">${text}</button>`)}
       </div>

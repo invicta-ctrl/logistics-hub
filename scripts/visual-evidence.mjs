@@ -170,13 +170,14 @@ async function photoScenes(browser, url, dir) {
   const art = await first.page.evaluate(drawPhotos);
   const inventory = await (await first.page.request.get(`${url}/api/staff/inventory`)).json();
   const scissors = "ITM-0262", tape = "ITM-0263";
-  const shown = inventory.items.filter((item) => item.name.toLowerCase().includes("sc") && item.id !== tape).map((item) => item.id);
+  // The first screen of the list: every third item has no photo.
+  const shown = inventory.items.slice(0, 14).map((item) => item.id);
   const timings = { withoutPhotos: await listLoad(browser, url, state, SIZES.desktop) };
-  await seedPhotos(first.page, url, shown.filter((_, index) => index % 3 !== 2), art);
+  await seedPhotos(first.page, url, [...new Set([scissors, ...shown.filter((_, index) => index % 3 !== 2)])], art);
   await first.context.close();
   for (const [size, viewport] of Object.entries(SIZES)) {
     const { context, page } = await resume(browser, state, viewport);
-    await page.goto(`${url}/staff/items?q=sc`);
+    await page.goto(`${url}/staff/items`);
     await page.waitForSelector(".thumb img");
     await page.waitForLoadState("networkidle");
     await shot(page, `photos-list-${size}`);
@@ -189,6 +190,7 @@ async function photoScenes(browser, url, dir) {
     await page.waitForTimeout(400);
     await shot(page, `photos-viewer-${size}`);
     await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !window.history.state?.viewer);
     await page.goto(`${url}/staff/items?item=${tape}`);
     await page.waitForSelector("#photo-panel .photo-tile--add");
     await shot(page, `photos-missing-${size}`);
@@ -199,7 +201,8 @@ async function photoScenes(browser, url, dir) {
   }
   // 300 items with a photo: the weight and loading of the whole list.
   const owner = await resume(browser, state, SIZES.desktop);
-  await seedPhotos(owner.page, url, inventory.items.map((item) => item.id).filter((id, index) => index % 2 === 0 && id !== tape).slice(0, 300), art);
+  const current = await (await owner.page.request.get(`${url}/api/staff/inventory`)).json();
+  await seedPhotos(owner.page, url, current.items.filter((item) => !item.photoId && item.id !== tape).map((item) => item.id).filter((_, index) => index % 2 === 0).slice(0, 300 - shown.length), art);
   await owner.context.close();
   timings.with300Photos = await listLoad(browser, url, state, SIZES.desktop);
   return timings;
@@ -222,7 +225,9 @@ async function capture(url, dir) {
           await page.waitForLoadState("networkidle");
           await shot(page, `${role.toLowerCase()}-${size}-${name}`);
         }
-        // The account menu; on phones it is the More sheet.
+        // The account menu (from a page with nothing modal open); on phones it is the More sheet.
+        await page.goto(`${url}/staff/items`);
+        await page.waitForSelector("tbody tr");
         const opener = size === "phone" ? page.getByRole("button", { name: "More" }) : page.getByRole("button", { name: /^Account:/ });
         if (await opener.count()) { await opener.click(); await shot(page, `${role.toLowerCase()}-${size}-menu`); }
         await context.close();
