@@ -5,6 +5,11 @@
 //
 //   npm run evidence -- --out docs/visual-research/v1.2 [--base main] [--pages items,stock]
 //
+// Besides /staff/<name> pages, --pages understands two scenes: item-profile (an item's open profile; works on any
+// ref, so before and after compare) and item-photos (item photos: list, profile, viewer, upload preview, missing
+// photo, and list weight/loading with 300 photos; runs only where the item photo panel exists). Its pictures are
+// drawn here in the browser, so no image file enters the repository.
+//
 // Screenshots are JPEG so they are small enough to commit; inspect them before you do.
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -64,6 +69,142 @@ async function signIn(browser, url, username, [width, height, scale]) {
   return { context, page };
 }
 
+/** A fresh context at `viewport` that is already signed in (the login is limited to 5 a minute, so scenes share one). */
+async function resume(browser, state, [width, height, scale]) {
+  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, reducedMotion: "reduce", storageState: state });
+  return { context, page: await context.newPage() };
+}
+
+/** Eight fictional product shots (box, bottle, roll; landscape and portrait), drawn on canvases: full-size and thumbnail JPEGs. */
+function drawPhotos() {
+  const draw = (width, height, hue, shape, edge) => {
+    const scale = edge / Math.max(width, height);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    const c = canvas.getContext("2d");
+    c.scale(scale, scale);
+    const backdrop = c.createLinearGradient(0, 0, 0, height);
+    backdrop.addColorStop(0, `hsl(${hue} 18% 95%)`);
+    backdrop.addColorStop(1, `hsl(${hue} 16% 82%)`);
+    c.fillStyle = backdrop;
+    c.fillRect(0, 0, width, height);
+    c.fillStyle = "rgb(0 0 0 / 14%)";
+    c.beginPath();
+    c.ellipse(width / 2, height * 0.79, width * 0.27, height * 0.04, 0, 0, 7);
+    c.fill();
+    c.fillStyle = `hsl(${hue} 60% 44%)`;
+    if (shape === 0) {
+      c.fillRect(width * 0.3, height * 0.38, width * 0.4, height * 0.4);
+      c.fillStyle = `hsl(${hue} 60% 58%)`;
+      c.beginPath(); c.moveTo(width * 0.3, height * 0.38); c.lineTo(width * 0.38, height * 0.3); c.lineTo(width * 0.78, height * 0.3); c.lineTo(width * 0.7, height * 0.38); c.fill();
+      c.fillStyle = "rgb(255 255 255 / 85%)"; c.fillRect(width * 0.36, height * 0.5, width * 0.28, height * 0.1);
+    } else if (shape === 1) {
+      c.beginPath(); c.roundRect(width * 0.38, height * 0.36, width * 0.24, height * 0.42, width * 0.04); c.fill();
+      c.fillRect(width * 0.45, height * 0.26, width * 0.1, height * 0.1);
+      c.fillStyle = `hsl(${hue} 30% 22%)`; c.fillRect(width * 0.43, height * 0.22, width * 0.14, height * 0.05);
+      c.fillStyle = "rgb(255 255 255 / 85%)"; c.fillRect(width * 0.4, height * 0.5, width * 0.2, height * 0.12);
+    } else {
+      c.beginPath(); c.ellipse(width / 2, height * 0.6, width * 0.22, height * 0.18, 0, 0, 7); c.fill();
+      c.fillStyle = `hsl(${hue} 18% 90%)`;
+      c.beginPath(); c.ellipse(width / 2, height * 0.6, width * 0.09, height * 0.07, 0, 0, 7); c.fill();
+    }
+    return canvas.toDataURL("image/jpeg", 0.82).split(",")[1];
+  };
+  return Array.from({ length: 8 }, (_, index) => {
+    const portrait = index % 3 === 2;
+    const [width, height] = portrait ? [960, 1280] : [1280, 960];
+    return { display: draw(width, height, (index * 47) % 360, index % 3, 1280), thumb: draw(width, height, (index * 47) % 360, index % 3, 320) };
+  });
+}
+
+/** Gives items photos through the real endpoint, as signed in as the owner. */
+async function seedPhotos(page, url, ids, art) {
+  for (const [index, id] of ids.entries()) {
+    const picture = art[index % art.length];
+    const response = await page.request.put(`${url}/api/staff/items/${id}/photo`, { headers: { origin: url }, multipart: {
+      display: { name: "display.jpg", mimeType: "image/jpeg", buffer: Buffer.from(picture.display, "base64") },
+      thumb: { name: "thumb.jpg", mimeType: "image/jpeg", buffer: Buffer.from(picture.thumb, "base64") }, expected: "" } });
+    if (!response.ok()) throw new Error(`seeding a photo for ${id} failed: ${response.status()}`);
+  }
+}
+
+/** Items list cold load, as a staff member sees it: time to rows, picture requests and bytes, layout shift, and after scrolling the whole list. */
+async function listLoad(browser, url, state, viewport) {
+  const runs = [];
+  for (let run = 0; run < 5; run++) {
+    const { context, page } = await resume(browser, state, viewport);
+    await page.addInitScript(() => {
+      window.__shift = 0;
+      new PerformanceObserver((list) => { for (const entry of list.getEntries()) if (!entry.hadRecentInput) window.__shift += entry.value; }).observe({ type: "layout-shift", buffered: true });
+    });
+    let requests = 0, bytes = 0;
+    page.on("response", async (response) => { if (response.url().includes("/api/staff/media/")) { requests++; bytes += Number(response.headers()["content-length"] ?? (await response.body().catch(() => "")).length); } });
+    await (await context.newCDPSession(page)).send("Network.clearBrowserCache");
+    const start = Date.now();
+    await page.goto(`${url}/staff/items`);
+    await page.waitForSelector("tbody tr");
+    const rowsMs = Date.now() - start;
+    await page.waitForLoadState("networkidle");
+    const atLoad = { requests, bytes };
+    for (let y = 0; y < 60; y++) { await page.evaluate(() => window.scrollBy(0, 1200)); await page.waitForTimeout(40); }
+    await page.waitForLoadState("networkidle");
+    runs.push({ rowsMs, requestsAtLoad: atLoad.requests, kbAtLoad: Math.round(atLoad.bytes / 1024), requestsAfterScroll: requests, kbAfterScroll: Math.round(bytes / 1024), shift: Number((await page.evaluate(() => window.__shift)).toFixed(4)) });
+    await context.close();
+  }
+  const pick = (key) => median(runs.map((entry) => entry[key]));
+  return { rowsMs: pick("rowsMs"), requestsAtLoad: pick("requestsAtLoad"), kbAtLoad: pick("kbAtLoad"), requestsAfterScroll: pick("requestsAfterScroll"), kbAfterScroll: pick("kbAfterScroll"), layoutShift: pick("shift") };
+}
+
+async function photoScenes(browser, url, dir) {
+  const shot = (page, name) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80 });
+  const first = await signIn(browser, url, "owner.demo", SIZES.desktop);
+  await first.page.goto(`${url}/staff/items?item=ITM-0262`);
+  await first.page.waitForSelector("dialog[open] .tabs");
+  if (!(await first.page.locator("#photo-panel").count())) {
+    console.log("item-photos: this ref has no item photos, skipped");
+    await first.context.close();
+    return {};
+  }
+  const state = await first.context.storageState();
+  const art = await first.page.evaluate(drawPhotos);
+  const inventory = await (await first.page.request.get(`${url}/api/staff/inventory`)).json();
+  const scissors = "ITM-0262", tape = "ITM-0263";
+  const shown = inventory.items.filter((item) => item.name.toLowerCase().includes("sc") && item.id !== tape).map((item) => item.id);
+  const timings = { withoutPhotos: await listLoad(browser, url, state, SIZES.desktop) };
+  await seedPhotos(first.page, url, shown.filter((_, index) => index % 3 !== 2), art);
+  await first.context.close();
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    const { context, page } = await resume(browser, state, viewport);
+    await page.goto(`${url}/staff/items?q=sc`);
+    await page.waitForSelector(".thumb img");
+    await page.waitForLoadState("networkidle");
+    await shot(page, `photos-list-${size}`);
+    await page.goto(`${url}/staff/items?item=${scissors}`);
+    await page.waitForSelector(".photo-tile img");
+    await page.waitForLoadState("networkidle");
+    await shot(page, `photos-profile-${size}`);
+    await page.locator(".photo-tile[data-view]").click();
+    await page.waitForSelector("dialog.viewer[open] img");
+    await page.waitForTimeout(400);
+    await shot(page, `photos-viewer-${size}`);
+    await page.keyboard.press("Escape");
+    await page.goto(`${url}/staff/items?item=${tape}`);
+    await page.waitForSelector("#photo-panel .photo-tile--add");
+    await shot(page, `photos-missing-${size}`);
+    await page.locator("#photo-panel input[type=file]").setInputFiles({ name: "tape.jpg", mimeType: "image/jpeg", buffer: Buffer.from(art[2].display, "base64") });
+    await page.waitForSelector("#photo-panel .photo-tile--preview img");
+    await shot(page, `photos-upload-${size}`);
+    await context.close();
+  }
+  // 300 items with a photo: the weight and loading of the whole list.
+  const owner = await resume(browser, state, SIZES.desktop);
+  await seedPhotos(owner.page, url, inventory.items.map((item) => item.id).filter((id, index) => index % 2 === 0 && id !== tape).slice(0, 300), art);
+  await owner.context.close();
+  timings.with300Photos = await listLoad(browser, url, state, SIZES.desktop);
+  return timings;
+}
+
 async function capture(url, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
@@ -75,7 +216,9 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          await page.goto(`${url}/staff/${name}`);
+          if (name === "item-photos") continue;
+          await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
+          if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
           await shot(page, `${role.toLowerCase()}-${size}-${name}`);
         }
@@ -103,6 +246,7 @@ async function capture(url, dir) {
       swap.push(Date.now() - start);
     }
     const timings = { coldLoadToFirstRowMs: median(cold), sectionSwitchMs: median(swap) };
+    if (pages.includes("item-photos")) Object.assign(timings, { itemPhotos: await photoScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);
     await context.close();
     return timings;
