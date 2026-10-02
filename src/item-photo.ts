@@ -98,8 +98,9 @@ export async function openViewer(photoId: string, name: string, source: () => HT
 export type PhotoPanel = { render: (photo: Photo | null) => void };
 
 /**
- * The photo block of an item profile: add, change (with a preview before anything is saved) and remove.
- * `refresh` re-reads the item after another person changed the photo first; `changed` runs after every save.
+ * The photo of an item profile: add, change (with a preview before anything is saved) and remove. `host` holds a
+ * `[data-tile]` for the picture and a `[data-actions]` beside it for the buttons. `refresh` re-reads the item after
+ * another person changed the photo first; `changed` runs after every save.
  */
 export function photoPanel(host: HTMLElement, options: { itemId: string; name: string; photo: Photo | null; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo) => void }): PhotoPanel {
   const { itemId, name } = options;
@@ -108,31 +109,37 @@ export function photoPanel(host: HTMLElement, options: { itemId: string; name: s
   let state: "" | "preparing" | "saving" | "removing" = "";
   let confirming = false;
   let error = "";
-  mount(host, html`<div data-body></div><input class="visually-hidden" type="file" accept="image/*" tabindex="-1" aria-label="Choose a photo of ${name}" />`);
-  const body = host.querySelector<HTMLElement>("[data-body]")!;
-  const input = host.querySelector<HTMLInputElement>("input")!;
+  const tile = host.querySelector<HTMLElement>("[data-tile]")!;
+  const actions = host.querySelector<HTMLElement>("[data-actions]")!;
+  const input = document.createElement("input");
+  input.className = "visually-hidden";
+  input.type = "file";
+  input.accept = "image/*";
+  input.tabIndex = -1;
+  input.setAttribute("aria-label", `Choose a photo of ${name}`);
+  host.append(input);
   const busy = () => state !== "";
+  const show = (picture: Html, buttons: Html) => { mount(tile, picture); mount(actions, buttons); };
 
   const draw = () => {
     const alert = error ? html`<p class="form-alert" role="alert">${icon("alert")}<span>${error}</span></p>` : "";
-    if (state === "preparing") return mount(body, html`<div class="photo-tile photo-tile--busy" role="status">Preparing the photo…</div>`);
+    if (state === "preparing") return show(html`<div class="photo-tile photo-tile--busy" role="status">Preparing the photo…</div>`, html``);
     if (staged) {
-      return mount(body, html`<div class="photo-tile photo-tile--preview"><img src="${staged.preview}" alt="Preview of the new photo of ${name}" /></div>
-        <div class="photo-actions"><button type="button" class="button button--primary button--sm" data-save ${busy() ? "disabled" : ""}>${state === "saving" ? "Saving…" : "Save photo"}</button>
+      return show(html`<div class="photo-tile photo-tile--preview"><img src="${staged.preview}" alt="Preview of the new photo of ${name}" /></div>`, html`<div class="photo-actions"><button type="button" class="button button--primary button--sm" data-save ${busy() ? "disabled" : ""}>${state === "saving" ? "Saving…" : "Save photo"}</button>
           <button type="button" class="button button--secondary button--sm" data-pick ${busy() ? "disabled" : ""}>Choose another</button>
           <button type="button" class="button button--ghost button--sm" data-cancel ${busy() ? "disabled" : ""}>Cancel</button></div>${alert}`);
     }
     if (!photo) {
-      return mount(body, html`<button type="button" class="photo-tile photo-tile--add" data-pick aria-describedby="photo-hint-${itemId}">${icon("camera")}<span>Add photo</span></button>
-        <p class="field__hint" id="photo-hint-${itemId}">Show the item itself, not people or documents.</p>${alert}`);
+      return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick aria-describedby="photo-hint-${itemId}">${icon("camera")}<span>Add photo</span></button>`,
+        html`<p class="field__hint" id="photo-hint-${itemId}">Show the item itself, not people or documents.</p>${alert}`);
     }
-    mount(body, html`<button type="button" class="photo-tile" data-view aria-label="View photo of ${name}"><img src="${photoUrl(photo.id, "thumb")}" alt="" width="160" height="160" /></button>
-      ${confirming
+    show(html`<button type="button" class="photo-tile" data-view aria-label="View photo of ${name}"><img src="${photoUrl(photo.id, "thumb")}" alt="" width="160" height="160" /></button>`,
+      html`${confirming
         ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this photo? The item keeps its stock and history.</p>
             <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : "Remove photo"}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>`
         : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> photo</span></button><button type="button" class="button button--ghost button--sm" data-remove>Remove</button></div>`}${alert}`);
   };
-  const focus = (selector: string) => body.querySelector<HTMLElement>(selector)?.focus();
+  const focus = (selector: string) => host.querySelector<HTMLElement>(selector)?.focus();
 
   input.addEventListener("change", async () => {
     const file = input.files?.[0];
@@ -163,7 +170,7 @@ export function photoPanel(host: HTMLElement, options: { itemId: string; name: s
     draw();
   };
 
-  body.addEventListener("click", async (event) => {
+  host.addEventListener("click", async (event) => {
     const target = event.target as HTMLElement;
     if (busy()) return;
     if (target.closest("[data-pick]")) input.click();
