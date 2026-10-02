@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
 import { networkOf } from "../src/self-service";
@@ -21,7 +21,11 @@ const call = (path: string, init: RequestInit = {}) => worker.fetch(new Request(
 const staff = (path: string, method = "GET", body?: unknown) =>
   call(path, { method, headers: { origin, cookie, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
 
+// A phone sync sweeps stale rows on a 2% random draw, and that sweep is one more database batch, which moved the "fail the
+// second batch" injection below onto the wrong statement about one run in fifty. The draw is pinned so every run takes one path.
+afterEach(() => vi.restoreAllMocks());
 beforeEach(async () => {
+  vi.spyOn(Math, "random").mockReturnValue(0.5);
   const database = migratedD1();
   sqlite = database.sqlite;
   const r2 = memoryR2();
