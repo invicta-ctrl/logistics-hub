@@ -295,10 +295,10 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   }
   if (path.startsWith("/api/staff/")) return staffApi(request, env, url);
   if (path.startsWith("/api/")) return json({ error: "Not found." }, 404);
-  // Every staff page below /staff requires a live session before any HTML is served;
-  // a signed-in visit to the login page goes straight to the workspace.
   // Items lived at /staff/inventory until V1.1; keep saved links and bookmarks working.
   if (path === "/staff/inventory") return Response.redirect(new URL(`/staff/items${url.search}`, url), 301);
+  // Every staff page below /staff requires a live session before any HTML is served;
+  // a signed-in visit to the login page goes straight to the workspace.
   if (path.startsWith("/staff/")) {
     const account = await accountFor(request, env);
     if (!account) return Response.redirect(new URL("/staff", url), 302);
