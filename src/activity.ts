@@ -304,7 +304,23 @@ function toEvent(row: Row): ActivityEvent {
       return kind === "RETURN" ? `${actor} confirmed ${what}; the loan is closed.` : `${actor} applied ${what} that was held for staff.`;
     },
     ITEM_CREATED: () => `${actor} added ${item} to the catalog.`,
-    ITEM_UPDATED: () => `${actor} edited ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`,
+    ITEM_UPDATED: () => {
+      // Status, type and usage are fixed lists, so their values can be named; every other field is named, never quoted.
+      const change = (field: string) => details[field] && typeof details[field] === "object" ? details[field] as { from?: unknown; to?: unknown } : null;
+      const name = (value: unknown) => typeof value === "string" && LABELS[value] ? LABELS[value] : "another type";
+      const done: Array<[string, string]> = [];
+      if (change("status")?.to === "INACTIVE") done.push([`deactivated ${item}`, "deactivated it"]);
+      else if (change("status")?.from === "INACTIVE") done.push([`reactivated ${item}`, "reactivated it"]);
+      if (change("itemType")) done.push([`changed ${item} from ${name(change("itemType")!.from)} to ${name(change("itemType")!.to)}`, `changed it from ${name(change("itemType")!.from)} to ${name(change("itemType")!.to)}`]);
+      if (change("consumptionMode")) {
+        const how = change("consumptionMode")!.to === "OPEN_UNIT" ? "to be opened and used gradually" : "to be used a whole unit at a time";
+        done.push([`set ${item} ${how}`, `set it ${how}`]);
+      }
+      if (!done.length) return `${actor} edited ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`;
+      const named = new Set(["type", "how it is used", ...(done.some(([, it]) => it.endsWith("activated it")) ? ["status"] : [])]);
+      const others = fields.filter((field) => !named.has(field));
+      return `${actor} ${[done[0]![0], ...done.slice(1).map(([, it]) => it)].join(" and ")}${others.length ? `, and edited ${others.join(", ")}` : ""}.`;
+    },
     REORDER_OPENED: () => `${actor} put ${item} on the restock list.`,
     REORDER_UPDATED: () => `${actor} updated the restock entry for ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`,
     REORDER_RESTOCKED: () => `${actor} received a restock of ${amount}${item}.`,

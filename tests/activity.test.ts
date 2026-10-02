@@ -395,6 +395,21 @@ describe("activity read model", () => {
     expect((await call("/api/staff/activity?limit=100", staffCookie, { "If-None-Match": first.headers.get("etag")! })).status).toBe(304);
   });
 
+  it("says plainly when an item is deactivated, reactivated, reclassified or switched to open units", async () => {
+    audit("AUD-D", "2026-09-30T01:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-R", JSON.stringify({ status: { from: "ACTIVE", to: "INACTIVE" }, notes: { from: "a", to: "b" } }));
+    audit("AUD-R", "2026-09-30T02:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-R", JSON.stringify({ status: { from: "INACTIVE", to: "VERIFY" } }));
+    audit("AUD-T", "2026-09-30T03:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-T", JSON.stringify({ itemType: { from: "NEEDS_REVIEW", to: "Loanable" }, status: { from: "VERIFY", to: "ACTIVE" } }));
+    audit("AUD-O", "2026-09-30T04:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-R", JSON.stringify({ consumptionMode: { from: "WHOLE_UNIT", to: "OPEN_UNIT" } }));
+    audit("AUD-B", "2026-09-30T05:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-T", JSON.stringify({ itemType: { from: "Loanable", to: "<b>x</b>" } }));
+    expect((await feed("type=ITEM_UPDATED")).events.map((event) => event.summary)).toEqual([
+      "Staff One changed Folding Table from Loanable to another type.",
+      "Staff One set Rice 5kg to be opened and used gradually.",
+      "Staff One changed Folding Table from Unclassified to Loanable, and edited status.",
+      "Staff One reactivated Rice 5kg.",
+      "Staff One deactivated Rice 5kg, and edited notes."
+    ]);
+  });
+
   it("describes catalog changes by field names only, and survives malformed audit details", async () => {
     audit("AUD-1", "2026-09-30T01:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-R", '{"notes":{"from":"old secret","to":"new secret"},"storageLocation":{"from":"A","to":"B"},"password":{"from":"x","to":"y"}}');
     audit("AUD-2", "2026-09-30T02:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-R", "{not json");

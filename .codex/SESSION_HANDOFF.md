@@ -6,6 +6,10 @@ WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub (Earl's wor
 BRANCH: main (no active slice). Merged and due for deletion: slice/part-05b-open-units, slice/part-05-activity-fixes, handoff/part-05-activity-cloud (the cloud session cannot delete remote branches).
 LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live`; it applies 0016 + 0017 to the local preview database)
 
+## Part 5 follow-up: Activity sentences for status and type changes (Claude Cloud, 2026-10-02) — slice/part-05-activity-sentences
+- **Why:** checked against Earl's Part 5 brief (`LOGISTICS_HUB_PART_5_CLAUDE_CODE_PROMPT.md`, "Activity entries": classification changes, deactivation/reactivation as clear sentences). An item edit read "Staff One edited Scissors: type, status."; it now reads "Staff One deactivated Scissors.", "… reactivated …", "… changed Scissors from Unclassified to Loanable …" or "… set Rice to be opened and used gradually …", then ", and edited <other fields>". Only the fixed values of status, type and usage are named; any other field is still named, never quoted (an unknown value reads "another type").
+- **Gates:** typecheck, build, `npm test` 145 (+1 skipped), `test:browser` 12/12, `test:browser:worker` 25/25, privacy, migration, catalog, dry-run.
+
 ## Part 5 follow-up: open-unit review view (Claude Cloud, 2026-10-02) — slice/part-05-open-unit-candidates
 - **Authority:** Earl, "continue with the rest of part 5". The one product item of the accepted plan not yet built was the optional A12 review view (section 4.3); everything else left is an owner item (signed-in check, "Where to find us" facts, branch deletion) or explicitly deferred (dropping `items.self_service`, no axe dependency).
 - **What:** Inventory view **Used gradually?** (`?view=gradual`): active `WHOLE_UNIT` Consumables whose unit is ream, box, bottle, jar, roll, pack, can, tub, pouch or container (`openUnitCandidate()` in `src/catalog-policy.ts`; 37 in the seed catalog), with a hint that nothing changes until staff choose "Open and use gradually"; its own empty state. Read-only, no migration, no Worker change.
