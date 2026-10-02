@@ -1,5 +1,11 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Road to V2 — V1.1 Experience Foundation (in progress, 2026-10-02)
+- **Gate:** Earl stated "V1 is closed" on 2026-10-02 (the repo had no explicit V1 close record; Earl's instruction is the authority). Branch `road-to-v2/v1.1-experience-foundation`, already on top of `origin/main` `a81ba7c`; authority `docs/specs/accepted/road-to-v2/v1.1-experience-foundation.md`. Sibling `road-to-v2/*` branches untouched.
+- **Done and pushed (Claude Cloud):** new staff shell (Items | Stock | Loans | Self-Service | Activity | Administration; avatar menu for My account, Lending Hub, Sign out; phone bottom bar + More), `/staff/inventory` → `/staff/items` 301, copy pass, tokens and CSS-only motion, tablet table and large-text fixes, `docs/visual-research/v1.1.md` with before/after screenshots. No migration, no dependency, no production change.
+- **Verified:** typecheck/build, `npm test` 159 (+1 skipped), `test:browser` 29/29, `test:browser:worker` 27/27, privacy scan.
+- **Next:** on Earl's `finish`: final reconciliation, `docs/road-to-v2/releases/v1.1.md`, integrate to `main`. The local writer lock cannot be seen from the cloud; run `npm run agent:status` before writing locally.
+
 STATUS: PART 6 COMPLETE ON MAIN (2026-10-02). Part 6 is complete on main: 6.1 (per-username login limit, stale-session sweep), 6.2 (backup and restore runbook), 6.5a (focus, large-text and target-size fixes, accessibility spec), 6.3 (Self-Service open/closed setting in Administration, migration 0018) and 6.4 (Owner-only removal of old names, student IDs and photos, migration 0019). Earl applied 0018 and 0019 to production on 2026-10-02 before the merge (docs/DEPLOYMENT.md, Part 6). Decision D1 (reconcile the plan with Earl's controlling prompt, unreadable from the cloud) is still open.
 ACTIVE_WRITER: none (claude-cloud yielded). Codex's lock (verified 06:29Z) was never yielded in the repo record and the lock is a local file the cloud cannot see: run `npm run agent:status` locally and review the local edits (see the migration record below) before pulling.
 WORKTREE: `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`
