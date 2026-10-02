@@ -759,18 +759,18 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   // The list shows the small variant, only for rows near the screen, and the thumbnail opens the viewer too.
   await sheet.getByRole("button", { name: "Close" }).click();
   const row = page.locator('tr[data-key="ITM-0262"]');
-  await expect(row.locator(".thumb img")).toHaveAttribute("src", `/api/staff/media/${photo.id}/thumb`);
-  await expect(row.locator(".thumb img")).toHaveAttribute("loading", "lazy");
-  await expect(row.locator(".thumb")).toHaveCSS("width", "40px");
+  await expect(row.locator("img.thumb")).toHaveAttribute("src", `/api/staff/media/${photo.id}/thumb`);
+  await expect(row.locator("img.thumb")).toHaveAttribute("loading", "lazy");
+  await expect(row.locator("img.thumb")).toHaveCSS("width", "40px");
   // Decorative beside the name (the same photo opens from the profile), so screen readers hear the name once.
-  expect(await row.locator(".thumb img").getAttribute("alt")).toBe("");
-  await row.locator(".thumb").click();
+  expect(await row.locator("img.thumb").getAttribute("alt")).toBe("");
+  await row.locator("img.thumb").click();
   await expect(viewer).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(viewer).toBeHidden();
   await settled();
-  await expect(page.locator("tr[data-key] .thumb--empty").first()).toBeVisible();
-  expect(await page.locator("tr[data-key] .thumb img").count()).toBe(1);
+  await expect(page.locator("tr[data-key] .col-item--bare").first()).toBeVisible();
+  expect(await page.locator("tr[data-key] img.thumb").count()).toBe(1);
 
   // Replace: a new photo takes the place, and the old address stops working.
   await row.getByRole("button", { name: "Scissors" }).click();
@@ -788,7 +788,7 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   expect(replaced.id).not.toBe(photo.id);
   expect(replaced.width).toBeGreaterThan(replaced.height);
   expect((await page.request.get(`/api/staff/media/${photo.id}/thumb`)).status()).toBe(404);
-  await expect(row.locator(".thumb img")).toHaveAttribute("src", `/api/staff/media/${replaced.id}/thumb`);
+  await expect(row.locator("img.thumb")).toHaveAttribute("src", `/api/staff/media/${replaced.id}/thumb`);
 
   // Remove asks first; Keep changes nothing.
   await panel.getByRole("button", { name: "Remove", exact: true }).click();
@@ -801,7 +801,7 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
   expect(await detail()).toBeNull();
   expect((await page.request.get(`/api/staff/media/${replaced.id}/display`)).status()).toBe(404);
-  await expect(row.locator(".thumb--empty")).toBeVisible();
+  await expect(row.locator(".col-item--bare")).toBeVisible();
 
   // History and Activity read it as sentences.
   await sheet.getByRole("tab", { name: "History" }).click();
