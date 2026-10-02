@@ -1,6 +1,6 @@
 // @ts-nocheck: exercises a plain .mjs tool against a fake Cloudflare.
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createPublicKey, generateKeyPairSync } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,7 +16,8 @@ import * as ops from "../scripts/ops/production-release.mjs";
 
 const manifest = JSON.parse(fs.readFileSync("ops/releases/v1.2.json", "utf8"));
 const ACCOUNT = "0123456789abcdef0123456789abcdef";
-const PASSPHRASE = "correct-horse-battery-staple-passphrase";
+const rsa = (bits) => generateKeyPairSync("rsa", { modulusLength: bits, publicKeyEncoding: { type: "spki", format: "pem" }, privateKeyEncoding: { type: "pkcs8", format: "pem" } });
+const KEYS = rsa(3072);
 const PII = "PII-MARKER-Juan-Dela-Cruz-20-1234-567";
 const BOOKMARK = "00000085-0000024c-00004c6d-8e61117bf38d7adb71b934ebbf891683";
 const fixture0020 = fs.readFileSync("tests/fixtures/ops/0020_item_media.sql", "utf8");
@@ -37,7 +38,7 @@ const temp = (prefix: string) => { const dir = fs.mkdtempSync(path.join(os.tmpdi
 afterEach(() => { while (cleanups.length) fs.rmSync(cleanups.pop()!, { recursive: true, force: true }); });
 
 /** A release checkout in a throwaway git repo: base commit on origin/main, the release commit on the release branch. */
-function makeRelease({ wrangler = WRANGLER, pending = fixture0020, onBranch = true, dirty = false, withPending = true } = {}) {
+function makeRelease({ wrangler = WRANGLER, pending = fixture0020, onBranch = true, dirty = false, withPending = true, files = {} } = {}) {
   const dir = temp("lh-release-");
   const git = (args, test = false) => {
     const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8" });
@@ -54,7 +55,8 @@ function makeRelease({ wrangler = WRANGLER, pending = fixture0020, onBranch = tr
   for (const name of BASE_MIGRATIONS()) fs.copyFileSync(path.join("migrations", name), path.join(dir, "migrations", name));
   if (withPending) fs.writeFileSync(path.join(dir, "migrations", "0020_item_media.sql"), pending);
   fs.writeFileSync(path.join(dir, "wrangler.jsonc"), wrangler);
-  git(["add", "-A"]);
+  for (const [name, content] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), content);
+  git(["add", "-A", "-f"]);
   git(["commit", "-q", "-m", "release"]);
   const sha = git(["rev-parse", "HEAD"]);
   if (onBranch) git(["update-ref", `refs/remotes/origin/${manifest.branch}`, "HEAD"]);
@@ -71,8 +73,9 @@ function makeWorld(options = {}) {
   db.exec("CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL)");
   const applied = files.filter((name) => !(options.unapplied ?? []).includes(name));
   for (const name of [...applied, ...(options.extraApplied ?? [])]) db.prepare("INSERT INTO d1_migrations(name) VALUES (?)").run(name);
-  const buckets = new Map([["logistics-hub-evidence", { name: "logistics-hub-evidence", creation_date: "2026-09-29T15:17:28.423Z", object_count: 12 }]]);
-  for (const name of options.buckets ?? []) buckets.set(name, { name, creation_date: "2026-10-02T00:00:00.000Z", object_count: 0 });
+  const buckets = new Map([["logistics-hub-evidence", { name: "logistics-hub-evidence", creation_date: "2026-09-29T15:17:28.423Z" }]]);
+  for (const name of options.buckets ?? []) buckets.set(name, { name, creation_date: "2026-10-02T00:00:00.000Z" });
+  if (options.noCreationDate) delete buckets.get("logistics-hub-evidence").creation_date;
   if (options.noEvidence) buckets.delete("logistics-hub-evidence");
   const publicManaged = new Set(options.publicManaged ?? []);
   const world = { db, buckets, log: [], calls: 0, exportText: "" };
@@ -100,19 +103,16 @@ function makeWorld(options = {}) {
     if (a === "d1" && b === "migrations") {
       world.log.push("apply");
       if (options.applyFails) return result(1, "", "migration failed");
+      if (options.applyNoop) return result(0);
       db.exec(fixture0020);
       db.prepare("INSERT INTO d1_migrations(name) VALUES (?)").run("0020_item_media.sql");
       options.afterApply?.(db, world);
       return result(0);
     }
-    if (a === "r2" && b === "bucket" && c === "info") {
-      const bucket = buckets.get(d);
-      return bucket ? result(0, JSON.stringify(bucket)) : result(1, "", "A request to the Cloudflare API failed. The specified bucket does not exist. [code: 10006]");
-    }
     if (a === "r2" && b === "bucket" && c === "create") {
       world.log.push(`create:${d}`);
       if (options.createFails) return result(1, "", "create failed");
-      buckets.set(d, { name: d, creation_date: "2026-10-02T12:00:00.000Z", object_count: 0 });
+      buckets.set(d, { name: d, creation_date: "2026-10-02T12:00:00.000Z" });
       if (options.createdPublic) publicManaged.add(d);
       return result(0);
     }
@@ -120,7 +120,7 @@ function makeWorld(options = {}) {
   };
   world.rest = async (requestPath) => {
     if (options.badList && requestPath.includes("per_page")) return { status: 200, body: { success: true, result: "nope" } };
-    if (requestPath.includes("per_page")) return { status: 200, body: { success: true, result: { buckets: [...buckets.keys()].map((name) => ({ name })) } } };
+    if (requestPath.includes("per_page")) return { status: 200, body: { success: true, result: { buckets: [...buckets.values()] } } };
     const name = requestPath.split("/")[5];
     if (requestPath.endsWith("/managed")) return { status: 200, body: { success: true, result: { enabled: publicManaged.has(name) } } };
     return { status: 200, body: { success: true, result: { domains: [] } } };
@@ -129,11 +129,11 @@ function makeWorld(options = {}) {
 }
 
 /** Runs the release against a world; returns the report, the world and the release. */
-async function run({ mode = "prepare", world = makeWorld(), release = makeRelease(), expectedSha, confirm, passphrase = PASSPHRASE, mayChange } = {}) {
+async function run({ mode = "prepare", world = makeWorld(), release = makeRelease(), expectedSha, confirm, backupKey = KEYS.publicKey, mayChange } = {}) {
   const sha = expectedSha ?? release.sha;
   const backupDir = path.join(temp("lh-backup-"), "backup");
   const cloud = ops.createCloud({ exec: world.exec, rest: world.rest, manifest, accountId: ACCOUNT, mayChange: mayChange ?? mode === "prepare" });
-  const report = await ops.runRelease({ manifest, releaseDir: release.dir, expectedSha: sha, mode, confirm: confirm ?? (mode === "prepare" ? `PREPARE v1.2 ${sha}` : undefined), cloud, git: release.git, backupDir, passphrase });
+  const report = await ops.runRelease({ manifest, releaseDir: release.dir, expectedSha: sha, mode, confirm: confirm ?? (mode === "prepare" ? `PREPARE v1.2 ${sha}` : undefined), cloud, git: release.git, backupDir, backupKey });
   return { report, world, release, backupDir };
 }
 const stopped = (report) => `${report.stopped?.step}/${report.stopped?.code}`;
@@ -155,15 +155,24 @@ describe("a prepared release", () => {
     const sealed = fs.readFileSync(path.join(backupDir, file));
     expect(file).toMatch(/^v1\.2-d1-.*\.sql\.enc$/);
     expect(sealed.includes(Buffer.from(PII))).toBe(false);
-    expect(ops.decryptBackup(sealed, PASSPHRASE).toString()).toBe(world.exportText);
-    expect(report.backup).toMatchObject({ file, encryptedSha256: sha256(sealed), decryptsToExport: true });
+    expect(ops.openBackup(sealed, KEYS.privateKey).toString()).toBe(world.exportText);
+    expect(report.backup).toMatchObject({ file, encryptedSha256: sha256(sealed) });
+    expect(report.backupKey).toEqual({ fingerprintSha256: sha256(createPublicKey(KEYS.publicKey).export({ type: "spki", format: "der" })), rsaBits: 3072 });
     expect(JSON.stringify(report)).not.toContain(PII);
-    expect(JSON.stringify(report)).not.toContain(PASSPHRASE);
+    expect(JSON.stringify(report)).not.toContain("PRIVATE KEY");
     expect(fs.readdirSync(os.tmpdir()).filter((name) => name.startsWith("lh-ops-"))).toEqual(tmpBefore);
     expect(ops.reportMarkdown(report)).toContain("READY_TO_MERGE");
     // The new table exists, empty; the old data is where it was.
     expect(world.db.prepare("SELECT COUNT(*) AS n FROM item_media").get().n).toBe(0);
     expect(world.buckets.has("logistics-hub-catalog-media")).toBe(true);
+  });
+
+  it("never lists the account's other buckets, and the report stays free of production rows", async () => {
+    const { report } = await run({ world: makeWorld({ buckets: ["unrelated-secret-bucket"] }) });
+    expect(report.result).toBe("READY_TO_MERGE");
+    expect(JSON.stringify(report)).not.toContain("unrelated-secret-bucket");
+    expect(report.before.buckets).toEqual({ total: 2, manifestBuckets: ["logistics-hub-evidence"] });
+    expect(report.after.buckets).toEqual({ total: 3, manifestBuckets: ["logistics-hub-catalog-media", "logistics-hub-evidence"] });
   });
 
   it("changes nothing in preflight mode, and the adapter refuses every change then", async () => {
@@ -177,16 +186,25 @@ describe("a prepared release", () => {
 });
 
 describe("it refuses before touching Cloudflare", () => {
-  it("without the typed confirmation, or with a weak backup passphrase", async () => {
+  it("without the typed confirmation", async () => {
     for (const confirm of ["", "PREPARE v1.2", `prepare v1.2 ${"a".repeat(40)}`, `PREPARE v1.1 ${makeRelease().sha}`]) {
       const result = await run({ confirm: confirm || "nope" });
       expect(stopped(result.report), confirm).toBe("PRECHECK/NOT_CONFIRMED");
       expect(result.world.calls).toBe(0);
     }
-    const weak = await run({ passphrase: "short" });
-    expect(stopped(weak.report)).toBe("PRECHECK/WEAK_PASSPHRASE");
-    expect(weak.world.calls).toBe(0);
-    expect((await run({ passphrase: null })).report.stopped.code).toBe("WEAK_PASSPHRASE");
+  });
+
+  it("without a usable backup key, in preflight too (so a bad secret shows up before anything is prepared)", async () => {
+    const small = rsa(2048);
+    const cases = { "no key": [null, "NO_BACKUP_KEY"], "an empty key": ["  ", "NO_BACKUP_KEY"], "text that is not a key": ["not a key", "BAD_BACKUP_KEY"], "a private key pasted by mistake": [KEYS.privateKey, "BAD_BACKUP_KEY"], "a 2048-bit key": [small.publicKey, "BAD_BACKUP_KEY"] };
+    for (const mode of ["preflight", "prepare"]) {
+      for (const [name, [backupKey, code]] of Object.entries(cases)) {
+        const result = await run({ mode, backupKey });
+        expect(stopped(result.report), `${name} (${mode})`).toBe(`PRECHECK/${code}`);
+        expect(result.world.calls, name).toBe(0);
+      }
+    }
+    expect(JSON.stringify((await run({ backupKey: KEYS.privateKey })).report)).not.toContain("BEGIN PRIVATE KEY");
   });
 
   it("on the wrong, malformed, unreachable or uncommitted commit", async () => {
@@ -213,6 +231,28 @@ describe("it refuses before touching Cloudflare", () => {
     };
     // Even a comment that names an old resource is refused: nothing about a release may mention them.
     cases["a comment naming the old staging resources"] = WRANGLER.replace("// The Worker", "// was hau-usc-logistics-staging\n  // The Worker");
+    for (const [name, wrangler] of Object.entries(cases)) {
+      const result = await run({ release: makeRelease({ wrangler }) });
+      expect(stopped(result.report), name).toBe("PRECHECK/WRONG_RESOURCE");
+      expect(result.world.calls, name).toBe(0);
+    }
+  });
+
+  it("when the release carries a config or environment file wrangler would honour instead", async () => {
+    for (const name of [".env", ".env.local", ".dev.vars", "wrangler.json", "wrangler.toml"]) {
+      const result = await run({ release: makeRelease({ files: { [name]: "CLOUDFLARE_API_BASE_URL=https://evil.example\n" } }) });
+      expect(stopped(result.report), name).toBe("PRECHECK/UNEXPECTED_CONFIG");
+      expect(result.world.calls, name).toBe(0);
+    }
+  });
+
+  it("when the D1 binding carries keys that would change where wrangler reads or records migrations", async () => {
+    const cases = {
+      "migrations_table": WRANGLER.replace('"migrations_dir": "migrations"', '"migrations_dir": "migrations", "migrations_table": "other_table"'),
+      "another migrations_dir": WRANGLER.replace('"migrations_dir": "migrations"', '"migrations_dir": "elsewhere"'),
+      "account_id": WRANGLER.replace('"migrations_dir": "migrations"', '"migrations_dir": "migrations", "account_id": "ffffffffffffffffffffffffffffffff"'),
+      "a second database": WRANGLER.replace('"d1_databases": [', '"d1_databases": [{ "binding": "OTHER", "database_name": "other", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }, ')
+    };
     for (const [name, wrangler] of Object.entries(cases)) {
       const result = await run({ release: makeRelease({ wrangler }) });
       expect(stopped(result.report), name).toBe("PRECHECK/WRONG_RESOURCE");
@@ -282,6 +322,8 @@ describe("the read-only preflight stops on any unexpected production state, chan
   it("when production cannot be read, or answers in an unexpected shape", async () => {
     await stopsWith({ d1Down: true }, "D1_UNREACHABLE");
     await stopsWith({ badList: true }, "UNEXPECTED_RESPONSE");
+    // Without the evidence bucket's creation date the run could not prove afterwards that it is the same bucket.
+    await stopsWith({ noCreationDate: true }, "UNEXPECTED_RESPONSE");
   });
 
   it("when the table this release adds already exists", async () => {
@@ -352,6 +394,14 @@ describe("it stops, and says so, when a change does not go as expected", () => {
     expect(report.result).toBe("STOPPED");
   });
 
+  it("when wrangler reports success but the migration was never recorded", async () => {
+    const { report, world } = await run({ world: makeWorld({ applyNoop: true }) });
+    expect(stopped(report)).toBe("APPLY_MIGRATIONS/APPLY_NOT_RECORDED");
+    expect(world.log).toContain("apply");
+    expect(report.result).toBe("STOPPED");
+    expect(report.rollback.bookmark).toBe(BOOKMARK);
+  });
+
   const mismatch = async (afterApply, expected) => {
     const { report } = await run({ world: makeWorld({ afterApply }) });
     expect(report.result).toBe("STOPPED");
@@ -370,45 +420,95 @@ describe("it stops, and says so, when a change does not go as expected", () => {
   it("when the new table is not empty", async () => {
     await mismatch((db) => db.exec("INSERT INTO item_media(item_id, media_id, width, height, created_at) SELECT id, '00000000-0000-0000-0000-000000000000', 1, 1, 'x' FROM items LIMIT 1"), "item_media has 1 rows");
   });
-  it("when the evidence bucket lost objects, or a bucket appeared that the manifest does not list", async () => {
-    await mismatch((_db, world) => { world.buckets.get("logistics-hub-evidence").object_count = 3; }, "fewer objects");
+  it("when the evidence bucket was replaced, or a bucket appeared that the manifest does not list", async () => {
+    await mismatch((_db, world) => { world.buckets.get("logistics-hub-evidence").creation_date = "2026-10-02T13:00:00.000Z"; }, "created at a different time");
     await mismatch((_db, world) => { world.buckets.set("stray-bucket", { name: "stray-bucket" }); }, "bucket list");
     await mismatch((_db, world) => world.buckets.delete("logistics-hub-evidence"), "logistics-hub-evidence");
   });
 });
 
 describe("the private backup", () => {
-  it("is encrypted and authenticated", () => {
+  it("is encrypted to the owner's public key and authenticated; only the private key opens it", () => {
     const plain = Buffer.from(`CREATE TABLE items(id);\n${PII}\n`);
-    const sealed = ops.encryptBackup(plain, PASSPHRASE);
+    const sealed = ops.sealBackup(plain, KEYS.publicKey);
     expect(sealed.includes(Buffer.from(PII))).toBe(false);
-    expect(ops.decryptBackup(sealed, PASSPHRASE).equals(plain)).toBe(true);
-    expect(ops.encryptBackup(plain, PASSPHRASE).equals(sealed)).toBe(false);
-    expect(() => ops.decryptBackup(sealed, `${PASSPHRASE}x`)).toThrow();
+    expect(ops.openBackup(sealed, KEYS.privateKey).equals(plain)).toBe(true);
+    expect(ops.sealBackup(plain, KEYS.publicKey).equals(sealed)).toBe(false);
+    expect(() => ops.openBackup(sealed, rsa(3072).privateKey)).toThrow();
     const tampered = Buffer.from(sealed);
     tampered[tampered.length - 1] ^= 1;
-    expect(() => ops.decryptBackup(tampered, PASSPHRASE)).toThrow();
-    expect(() => ops.decryptBackup(Buffer.from("not a backup at all, just text"), PASSPHRASE)).toThrow(/not an encrypted/);
-    expect(() => ops.encryptBackup(plain, "short")).toThrow(/at least 24/);
+    expect(() => ops.openBackup(tampered, KEYS.privateKey)).toThrow();
+    const wrapped = Buffer.from(sealed);
+    wrapped[12] ^= 1;
+    expect(() => ops.openBackup(wrapped, KEYS.privateKey)).toThrow();
+    expect(() => ops.openBackup(Buffer.from("not a backup at all, just text"), KEYS.privateKey)).toThrow(/not an encrypted/);
+    expect(() => ops.sealBackup(plain, KEYS.privateKey)).toThrow(/PRIVATE key/);
+    expect(() => ops.sealBackup(plain, rsa(2048).publicKey)).toThrow(/3072/);
+  });
+
+  it("the decrypt command opens a backup with the private key file", () => {
+    const dir = temp("lh-decrypt-");
+    const plain = Buffer.from(`CREATE TABLE items(id);\n${PII}\n`);
+    fs.writeFileSync(path.join(dir, "b.sql.enc"), ops.sealBackup(plain, KEYS.publicKey));
+    fs.writeFileSync(path.join(dir, "private.pem"), KEYS.privateKey);
+    const result = spawnSync(process.execPath, ["scripts/ops/production-release.mjs", "decrypt", "--in", path.join(dir, "b.sql.enc"), "--key", path.join(dir, "private.pem"), "--file", path.join(dir, "out.sql")], { encoding: "utf8" });
+    expect(result.status, result.stderr).toBe(0);
+    expect(fs.readFileSync(path.join(dir, "out.sql"), "utf8")).toBe(plain.toString());
   });
 });
 
-describe("secrets", () => {
+describe("secrets and the wrangler sandbox", () => {
+  const workdirFor = () => ops.prepareWorkdir({ manifest, releaseDir: makeRelease().dir });
+
+  it("prepareWorkdir gives wrangler only a config generated from the manifest and the .sql migrations", () => {
+    const release = makeRelease();
+    for (const stray of [".env", ".env.local", ".dev.vars", "wrangler.json", "wrangler.toml", "package.json"]) fs.writeFileSync(path.join(release.dir, stray), "SECRET=1");
+    fs.writeFileSync(path.join(release.dir, "migrations", "notes.txt"), "x");
+    fs.writeFileSync(path.join(release.dir, "migrations", "0021_Bad.sql"), "DROP TABLE items;");
+    const dir = ops.prepareWorkdir({ manifest, releaseDir: release.dir });
+    expect(fs.readdirSync(dir).sort()).toEqual([".home", "migrations", "wrangler.jsonc"]);
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "wrangler.jsonc"), "utf8"))).toEqual({ name: "logistics-hub", d1_databases: [{ binding: "DB", database_name: "logistics-hub", database_id: manifest.target.d1.id, migrations_dir: "migrations" }] });
+    const migrations = fs.readdirSync(path.join(dir, "migrations"));
+    expect(migrations).toContain("0020_item_media.sql");
+    expect(migrations.every((name) => /^\d{4}_[a-z0-9_]+\.sql$/.test(name))).toBe(true);
+  });
+
+  it("wrangler gets a minimal environment: the two Cloudflare variables, a private HOME, and nothing else inherited", () => {
+    const dir = temp("lh-bin-");
+    const fake = path.join(dir, "wrangler.js");
+    fs.writeFileSync(fake, 'console.log(JSON.stringify({ env: process.env, cwd: process.cwd() }));');
+    const inherited = { CLOUDFLARE_API_TOKEN: "tok-dummy-1234", CLOUDFLARE_ACCOUNT_ID: ACCOUNT, OPS_BACKUP_PUBLIC_KEY: "key-dummy", GITHUB_TOKEN: "gh-dummy-1", CLOUDFLARE_API_BASE_URL: "https://evil.example", CLOUDFLARE_ENV: "x", WRANGLER_LOG: "debug", AWS_SECRET_ACCESS_KEY: "aws-dummy" };
+    const before = Object.fromEntries(Object.keys(inherited).map((name) => [name, process.env[name]]));
+    Object.assign(process.env, inherited);
+    try {
+      const work = workdirFor();
+      const { stdout } = ops.wranglerExec({ wranglerBin: fake, workdir: () => work, redact: (text) => text })([]);
+      const seen = JSON.parse(stdout);
+      expect(fs.realpathSync(seen.cwd)).toBe(fs.realpathSync(work));
+      expect(Object.keys(seen.env).filter((name) => /^(CLOUDFLARE|GITHUB|OPS_|AWS|WRANGLER_LOG)/.test(name)).sort()).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"]);
+      expect(seen.env.HOME).toBe(path.join(work, ".home"));
+      expect(seen.env.CLOUDFLARE_API_BASE_URL).toBeUndefined();
+    } finally {
+      for (const [name, value] of Object.entries(before)) value === undefined ? delete process.env[name] : (process.env[name] = value);
+    }
+  });
+
   it("are stripped from everything wrangler prints", () => {
     const dir = temp("lh-bin-");
     const fake = path.join(dir, "wrangler.js");
-    fs.writeFileSync(fake, 'console.log("token=" + process.env.CLOUDFLARE_API_TOKEN); console.error("pass=" + process.env.OPS_BACKUP_PASSPHRASE);');
+    fs.writeFileSync(fake, 'console.log("token=" + process.env.CLOUDFLARE_API_TOKEN); console.error("account=" + process.env.CLOUDFLARE_ACCOUNT_ID);');
+    const before = [process.env.CLOUDFLARE_API_TOKEN, process.env.CLOUDFLARE_ACCOUNT_ID];
     process.env.CLOUDFLARE_API_TOKEN = "tok-dummy-1234";
-    process.env.OPS_BACKUP_PASSPHRASE = "pass-dummy-5678";
+    process.env.CLOUDFLARE_ACCOUNT_ID = "acct-dummy-5678";
     try {
-      const redact = (text) => ["tok-dummy-1234", "pass-dummy-5678"].reduce((out, secret) => out.split(secret).join("***"), String(text));
-      const { stdout, stderr } = ops.wranglerExec({ wranglerBin: fake, cwd: dir, redact })([]);
+      const redact = (text) => ["tok-dummy-1234", "acct-dummy-5678"].reduce((out, secret) => out.split(secret).join("***"), String(text));
+      const { stdout, stderr } = ops.wranglerExec({ wranglerBin: fake, workdir: workdirFor, redact })([]);
       expect(stdout).toContain("token=***");
-      expect(stderr).toContain("pass=***");
+      expect(stderr).toContain("account=***");
       expect(stdout + stderr).not.toMatch(/dummy-\d{4}/);
     } finally {
-      delete process.env.CLOUDFLARE_API_TOKEN;
-      delete process.env.OPS_BACKUP_PASSPHRASE;
+      before[0] === undefined ? delete process.env.CLOUDFLARE_API_TOKEN : (process.env.CLOUDFLARE_API_TOKEN = before[0]);
+      before[1] === undefined ? delete process.env.CLOUDFLARE_ACCOUNT_ID : (process.env.CLOUDFLARE_ACCOUNT_ID = before[1]);
     }
   });
 
@@ -422,6 +522,11 @@ describe("secrets", () => {
     const local = spawnSync(process.execPath, ["scripts/ops/production-release.mjs", "--release", "v1.2", "--expected-sha", "a".repeat(40), "--mode", "prepare", "--out", out], { encoding: "utf8", env: { ...env, CLOUDFLARE_API_TOKEN: "x", CLOUDFLARE_ACCOUNT_ID: ACCOUNT } });
     expect(JSON.parse(fs.readFileSync(path.join(out, "report.json"), "utf8")).stopped.code).toBe("NOT_IN_GITHUB");
     expect(local.status).toBe(1);
+    const branch = spawnSync(process.execPath, ["scripts/ops/production-release.mjs", "--release", "v1.2", "--expected-sha", "a".repeat(40), "--mode", "preflight", "--out", out], { encoding: "utf8", env: { ...env, CLOUDFLARE_API_TOKEN: "tok-dummy-1234", CLOUDFLARE_ACCOUNT_ID: ACCOUNT, GITHUB_ACTIONS: "true", GITHUB_REF: "refs/heads/feature" } });
+    expect(branch.status).toBe(1);
+    const stoppedReport = JSON.parse(fs.readFileSync(path.join(out, "report.json"), "utf8"));
+    expect(stoppedReport.stopped.code).toBe("NOT_MAIN");
+    expect(fs.readFileSync(path.join(out, "report.json"), "utf8") + fs.readFileSync(path.join(out, "report.md"), "utf8")).not.toContain("tok-dummy-1234");
   });
 });
 
@@ -433,6 +538,14 @@ describe("the manifest and the workflow", () => {
     if (fs.existsSync("migrations/0020_item_media.sql")) expect(sha256(fs.readFileSync("migrations/0020_item_media.sql"))).toBe(manifest.migrations.pending[0].sha256);
     expect(() => ops.loadManifest("ops/releases/v1.2.json", "v1.3")).toThrow(/does not belong|NO_MANIFEST|no release manifest/);
     expect(() => ops.loadManifest("ops/releases/v1.2.json", "latest")).toThrow(/look like v1.2/);
+  });
+
+  it("a manifest that names an unknown count to keep unchanged is refused", () => {
+    const dir = temp("lh-manifest-");
+    const bad = structuredClone(manifest);
+    bad.expect.unchanged = ["items", "secrets"];
+    fs.writeFileSync(path.join(dir, "v1.2.json"), JSON.stringify(bad));
+    expect(() => ops.loadManifest(path.join(dir, "v1.2.json"), "v1.2")).toThrow(/incomplete or does not belong/);
   });
 
   it("the schema the manifest says 0020 adds is exactly what 0020 adds (checked on SQLite)", async () => {
@@ -454,7 +567,7 @@ describe("the manifest and the workflow", () => {
 
   it("takes credentials only from the environment's secrets, into one step, never inline", () => {
     const uses = [...workflow.matchAll(/\$\{\{\s*secrets\.([A-Z_]+)\s*\}\}/g)].map((match) => match[1]).sort();
-    expect(uses).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "OPS_BACKUP_PASSPHRASE"]);
+    expect(uses).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "OPS_BACKUP_PUBLIC_KEY"]);
     const run = workflow.slice(workflow.indexOf("- name: Run the release operation"), workflow.indexOf("- name: Show the report"));
     for (const secret of uses) expect(run).toContain(secret);
     // Inputs reach the shell as environment variables, never interpolated into script text.
@@ -483,31 +596,28 @@ describe("the manifest and the workflow", () => {
 describe("contract: the real wrangler, against a throwaway local D1", () => {
   it("reads, exports and migrates the way the script parses it", async () => {
     const release = makeRelease();
-    fs.appendFileSync(path.join(release.dir, ".git", "info", "exclude"), ".wrangler/\n");
-    // A local database in the state production is in: 0001-0019 applied.
-    const seed = temp("lh-seed-");
-    fs.mkdirSync(path.join(seed, "migrations"));
-    for (const name of BASE_MIGRATIONS()) fs.copyFileSync(path.join("migrations", name), path.join(seed, "migrations", name));
-    fs.copyFileSync(path.join(release.dir, "wrangler.jsonc"), path.join(seed, "wrangler.jsonc"));
+    // A local database in the state production is in: 0001-0019 applied, in a directory built the way the script builds it.
     const wranglerBin = path.resolve("node_modules/wrangler/bin/wrangler.js");
-    const env = { ...process.env, CI: "true", NO_COLOR: "1", WRANGLER_SEND_METRICS: "false" };
-    const seeded = spawnSync(process.execPath, [wranglerBin, "d1", "migrations", "apply", "DB", "--local"], { cwd: seed, encoding: "utf8", env });
+    const seed = ops.prepareWorkdir({ manifest, releaseDir: release.dir });
+    fs.rmSync(path.join(seed, "migrations", "0020_item_media.sql"));
+    const quiet = { ...process.env, HOME: path.join(seed, ".home"), CI: "true", NO_COLOR: "1", WRANGLER_SEND_METRICS: "false" };
+    const seeded = spawnSync(process.execPath, [wranglerBin, "d1", "migrations", "apply", "DB", "--local"], { cwd: seed, encoding: "utf8", env: quiet });
     expect(seeded.status, seeded.stderr).toBe(0);
-    fs.cpSync(path.join(seed, ".wrangler"), path.join(release.dir, ".wrangler"), { recursive: true });
 
     const world = makeWorld();
-    const local = (args) => spawnSync(process.execPath, [wranglerBin, ...args.map((arg) => (arg === "--remote" ? "--local" : arg))], { cwd: release.dir, encoding: "utf8", env });
-    const exec = (args) => (args[0] === "d1" && ["execute", "export", "migrations"].includes(args[1]) ? local(args) : world.exec(args));
+    // The real wrangler, in the real sandbox directory, with only --remote turned into --local.
+    const sandbox = ops.wranglerExec({ wranglerBin, redact: (text) => text, workdir: () => { const dir = ops.prepareWorkdir({ manifest, releaseDir: release.dir }); fs.cpSync(path.join(seed, ".wrangler"), path.join(dir, ".wrangler"), { recursive: true }); return dir; } });
+    const exec = (args) => (args[0] === "d1" && ["execute", "export", "migrations"].includes(args[1]) ? sandbox(args.map((arg) => (arg === "--remote" ? "--local" : arg))) : world.exec(args));
     const cloud = ops.createCloud({ exec, rest: world.rest, manifest, accountId: ACCOUNT, mayChange: true });
     const backupDir = path.join(temp("lh-backup-"), "backup");
-    const report = await ops.runRelease({ manifest, releaseDir: release.dir, expectedSha: release.sha, mode: "prepare", confirm: `PREPARE v1.2 ${release.sha}`, cloud, git: release.git, backupDir, passphrase: PASSPHRASE });
+    const report = await ops.runRelease({ manifest, releaseDir: release.dir, expectedSha: release.sha, mode: "prepare", confirm: `PREPARE v1.2 ${release.sha}`, cloud, git: release.git, backupDir, backupKey: KEYS.publicKey });
     expect(report.stopped, JSON.stringify(report.stopped)).toBeUndefined();
     expect(report.result).toBe("READY_TO_MERGE");
     expect(report.after.counts).toEqual(report.baseline.counts);
     expect(report.after.counts.items).toBe(397);
     expect(report.after.schemaAdded).toEqual(manifest.expect.schemaAdded);
     const sealed = fs.readFileSync(path.join(backupDir, fs.readdirSync(backupDir)[0]));
-    const text = ops.decryptBackup(sealed, PASSPHRASE).toString();
+    const text = ops.openBackup(sealed, KEYS.privateKey).toString();
     expect(text).toMatch(/CREATE TABLE\s+["`]?items/i);
     expect(text).toContain("d1_migrations");
   }, 300_000);

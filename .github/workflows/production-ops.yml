@@ -4,7 +4,7 @@
 # Manual dispatch only: it never runs on a push, and merging main never migrates production.
 # Rules: docs/specs/accepted/2026-10-02-cloud-operations-amendment.md. Runbook: docs/DEPLOYMENT.md, "Cloud Operations".
 # Secrets live in the `production` environment (Settings > Environments), never in the repository:
-#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, OPS_BACKUP_PASSPHRASE.
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, OPS_BACKUP_PUBLIC_KEY (a public key; the private key stays offline with Earl).
 name: Production operations
 
 on:
@@ -73,7 +73,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          OPS_BACKUP_PASSPHRASE: ${{ secrets.OPS_BACKUP_PASSPHRASE }}
+          OPS_BACKUP_PUBLIC_KEY: ${{ secrets.OPS_BACKUP_PUBLIC_KEY }}
           RELEASE: ${{ inputs.release }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           MODE: ${{ inputs.mode }}
