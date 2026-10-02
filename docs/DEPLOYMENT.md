@@ -154,3 +154,40 @@ Then compare it with what you expect (`SELECT COUNT(*)` on `items`, `inventory_m
 - The public Lending Hub is empty until staff publish items from *Ready to list*. This is fail-closed by design.
 - Quantities change only through Stock in, Stock out and Count. The ledger is append-only.
 - `ITM-0001` intentionally stays at 7 (movement-derived) against the legacy 8.
+
+## Cloud Operations (production preparation from GitHub, not from a PC)
+
+From V1.2 on, preparing production for a release (an R2 bucket, a D1 migration) is done by the workflow **Production operations** (`.github/workflows/production-ops.yml`), driven by a manifest in `ops/releases/<release>.json`. Authority and the full list of safety rules: `docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`. The older manual runbooks above (Parts 5B and 6) stay as the emergency fallback and as history.
+
+**One-time setup (Earl, in GitHub).** Settings → Environments → **production** (the first run creates it if it does not exist), then:
+
+- Add three environment secrets: `CLOUDFLARE_API_TOKEN` (a token for the Logistics Hub account with **D1: Edit** and **Workers R2 Storage: Edit** only), `CLOUDFLARE_ACCOUNT_ID`, and `OPS_BACKUP_PASSPHRASE` (24 or more random characters; keep a copy somewhere safe, it is the only way to open a backup).
+- Recommended: add yourself as a **required reviewer** on the environment, and limit **deployment branches** to `main`. The workflow also refuses to run from any other branch.
+
+Until the three secrets exist, every run stops at once with `NO_CREDENTIALS`, contacts nothing, and says so in its report.
+
+**Running a release.** Actions → **Production operations** → Run workflow (branch `main`):
+
+1. `release` = `v1.2`, `expected_sha` = the full 40-character commit the release will ship (the head of `road-to-v2/v1.2-item-profiles-media`, or `main` once it carries V1.2), `mode` = **preflight**. This only reads. It checks that the tree is that exact commit and is on the release branch or `main`; that `wrangler.jsonc` names only the Logistics Hub's own Worker, D1 database and buckets; that the migration file is the one the manifest pins; that production has applied exactly the migrations before the pending one; that the bucket to create does not exist and the bucket that must exist does and is private. Read the report (the run's summary, and the `ops-report-…` artifact).
+2. If the preflight passed, run it again with `mode` = **prepare** and `confirm` = `PREPARE v1.2 <the full sha>`. It repeats the preflight, then: makes a D1 export and encrypts it (AES-256-GCM, key from `OPS_BACKUP_PASSPHRASE`), verifies it decrypts, and deletes the plaintext; records a Time Travel bookmark; takes a baseline of the data; creates the private bucket and checks it is private; applies exactly the pending migration; and reconciles read-only (exactly the intended schema change, item, movement, on-hand, loan and phone-record figures equal the baseline, new tables empty, the evidence bucket and the bucket list as expected). The result is **READY_TO_MERGE** or a stop.
+3. Only then integrate the release to `main` by the existing protocol. Merging never migrates production by itself.
+
+Run prepare when nobody is recording stock or lending (the data check compares the moment before and the moment after the change).
+
+**What a report holds.** Every step with its evidence (names, counts, hashes), the operations performed, the bookmark, and the result, with no production rows. The backup is a separate artifact, `ops-backup-<release>`, ciphertext only. Both are kept 90 days. To open a backup (it holds production data, so keep the result private and delete it afterwards): `OPS_BACKUP_PASSPHRASE=… node scripts/ops/production-release.mjs decrypt --in <file>.sql.enc --file backup.sql`.
+
+**When it stops.** It stops on anything unexpected and the report names the step and whether production was changed.
+
+| Stops at | Means | Production changed? | What to do |
+|---|---|---|---|
+| `NO_CREDENTIALS`, `NOT_CONFIRMED`, `WRONG_SHA`, `BAD_SHA`, `SHA_NOT_ON_RELEASE`, `WRONG_RESOURCE`, `MIGRATION_FILE` | The inputs, secrets or release tree are not what the manifest expects | No | Fix the input or the release; run again |
+| `UNEXPECTED_MIGRATIONS`, `ALREADY_PRESENT`, `MISSING_BUCKET`, `BUCKET_EXISTS`, `BUCKET_NOT_PRIVATE` (preflight), `D1_UNREACHABLE`, `UNEXPECTED_RESPONSE` | Production is not in the state the manifest expects | No | Find out why before anything else. `BUCKET_EXISTS` means something already ran: decide by hand what that bucket is (an empty one can be deleted, then run again) |
+| `BACKUP_FAILED`, `BACKUP_INVALID`, `BOOKMARK_FAILED`, `STATE_MOVED`, `WEAK_PASSPHRASE` | No safe backup or rollback point, or production moved during the preflight | No | Fix and run again |
+| `CREATE_FAILED`, `BUCKET_MISSING_AFTER_CREATE`, `BUCKET_NOT_PRIVATE` (after creating) | The bucket step went wrong | A bucket may exist; no migration ran | Look at the bucket in the dashboard; delete it if empty and run again |
+| `APPLY_FAILED` | The migration failed and may have partly run | **Possibly** | Check the schema; restore the bookmark in the report if needed |
+| `RECONCILE_MISMATCH` | After the change, production does not match the manifest | **Yes** | Read the listed differences; restore the bookmark (below) unless they are acceptable |
+
+**Rollback.** The report's bookmark: `npx wrangler d1 time-travel restore DB --bookmark=<bookmark>` (it also discards anything recorded since), or load the decrypted backup into an empty database. An empty new bucket can simply be deleted.
+
+**Adding a release.** A new release needs its own `ops/releases/<release>.json` (resources, exact pending migrations with their SHA-256, the schema they add, the figures that must not change), reviewed like code. Nothing outside a manifest can run, and the command allowlist in `scripts/ops/production-release.mjs` refuses anything else.
+
