@@ -1,6 +1,6 @@
 # Proposed Part 6 — Administration + Hardening
 
-**Status:** PROPOSED — a complete draft for Earl's review. It is **not accepted**, and no Part 6 implementation is authorized.
+**Status:** IN PROGRESS on Earl's instruction of 2026-10-02 ("figure them out and continue finishing the entire part 06 plan"); D2–D7 settled in section 5, D1 open. Nothing is merged to `main` or applied to production; see section 4.
 
 **Read first:** the controlling prompt (`D:\Download\LOGISTICS_HUB_PART_6_CODEX_MASTER_PROMPT.md`, UTF-8, SHA-256 `f7c4f1ac5e11dcea2087f68bb03dfcb4a34a292cdf0f2f981794df311892d5ac`) was **not available to the session that finished this draft** (Claude Cloud; the file exists only on Earl's PC). The slices, criteria and decisions below come from repository evidence and the roadmap alone. The prompt has not been compared with them. If it differs, the prompt wins. Before acceptance, someone with the file must reconcile it with sections 3–5 and record the result here.
 
@@ -36,31 +36,36 @@ Verified means reproduced in this session; Read means from source reading only.
 | S3 | Sessions last an absolute 8 hours with no idle timeout (`SESSION_DURATION_MS`). Password rules are length only (12 to 256, `src/accounts.ts` 51). PBKDF2 stays at 100,000 iterations, the Workers cap, so it cannot be raised. | Read | Low |
 | S4 | The Self-Service kill switch is the `SELF_SERVICE` variable in `wrangler.jsonc`: closing or opening it takes a code change and a merge to `main`. There is no in-app setting. | Read | Needs decision |
 | S5 | Backups are D1 Time Travel plus Worker rollback (`docs/DEPLOYMENT.md` lines 72–73). No restore rehearsal appears in the repository record, and R2 evidence photos have no documented backup. | Read | Needs decision |
-| S6 | Administration's "Security activity" (latest 40 account events, `securityActivity`) likely duplicates Activity's Accounts & exports tab (Part 5). Not compared event by event. | Read | Anti-bloat; verify first |
+| S6 | Administration's "Security activity" (latest 40 account events, `securityActivity`) was suspected of duplicating Activity's Accounts & exports tab. Checked: Activity names those events generically and omits what changed, while Administration shows role and username changes, so it is not a duplicate and stays (D7). | Verified (source) | Closed |
 | S7 | `GET /api/self-service/decisions` is public and unthrottled; it takes up to 50 record ids the phone itself generated, so enumeration is not practical. | Read | Low; optional |
 
 Already sound and not to be reworked: signed, HttpOnly, SameSite=Strict cookies with server-side revocation and the role read from D1 on each request; same-origin checks on every write; constant-time comparisons; a throwaway hash so unknown usernames cost the same as known ones; the last active owner cannot be disabled or demoted; sessions end on role, username, password or active changes; recovery keys are single-use and stored as a hash; the account and session code reviewed here uses parameterized SQL only. This audit read `src/worker.ts`, `src/session.ts`, `src/accounts.ts` and `src/admin.ts` in full; the other modules were not audited line by line.
 
 ## 4. Proposed slices
 
-One active `slice/part-06-<scope>` at a time, each from fresh `main`, merged when green, then deleted. Order matters: nothing destructive (6.4) before a restore is proven (6.2).
+Earl, 2026-10-02: "figure them out and continue finishing the entire part 06 plan". That is treated as the go-ahead to build this plan with D2–D7 settled as recorded in section 5 (Earl may override any of them). D1 stays open.
+
+Because 6.3 and 6.4 need migrations that only Earl may apply to production, the Part ships on the one active slice branch (`slice/part-06-plan`) as one gated commit per slice, in this order: 6.1, 6.2, 6.5a, 6.3, 6.4, 6.5b. The migration-free commits come first, so they could be merged on their own. Nothing merges to `main` (which deploys to production) until Earl applies 0018 and 0019, or says to merge the first three alone. Nothing destructive (6.4) is built before a restore path is proven (6.2).
 
 1. **6.1 Account and session hardening** (no migration). Per-username login throttle that slows attempts but never locks the account (decision D2); opportunistic sweep of expired and revoked sessions and old throttle rows; idle timeout only if D2 says yes. Tests: throttle by username across addresses, an owner is never locked out, sessions swept without touching live ones.
 2. **6.2 Backup and restore rehearsal** (documentation and runbook; code only if D3 asks). Rehearse a Time Travel restore on a throwaway D1 built from production's schema and record the exact commands and timings; decide and document the R2 evidence story. Acceptance: a successor can restore from the runbook alone.
 3. **6.3 System settings** (migration; needs Earl's approval, a Time Travel bookmark and read-only post-checks per `docs/DEPLOYMENT.md`). A small audited settings record so an Admin or Owner can open and close Self-Service from Administration; it replaces the `wrangler.jsonc` variable instead of sitting beside it. The migration seeds the value **paused**, so production does not reopen when it deploys. Acceptance: closed and open states behave as today for phones, Administration's test panel still works, every change is in Activity, no change without a signed-in Admin.
 4. **6.4 Data retention** (after 6.2 and D4). A dry-run report first, then a purge of what Earl's periods allow (names, student IDs, photos, old sessions), each purge audited, with R2 deletions confirmed against D1 keys. Never touches stock movements or the audit trail. Production runs only on Earl's explicit authority.
-5. **6.5 Accessibility, responsive and production hardening.** Fix R1–R4 (tracing R1 and R4 first); decide the axe dev dependency (D6); rerun this baseline plus 1440 px and a realistic-data pass; run `npm run admin -- verify` against production; resolve S6; close the Part 6 docs and `docs/PRODUCT_REFERENCE.md`.
+5. **6.5 Accessibility, responsive and production hardening.** 6.5a: fix R1–R4 and add a dependency-free accessibility regression spec (D6). 6.5b: rerun this baseline plus 1440 px and a realistic-data pass; run `npm run admin -- verify` against production if reachable (read-only); close the Part 6 docs and `docs/PRODUCT_REFERENCE.md`.
 
 **Gates for every slice:** `npm run typecheck`, `npm test`, `npm run build`, `npm run test:browser`, `npm run test:browser:worker`, `npm run verify:privacy`, `npm run verify:migration`, `npm run verify:catalog`, `wrangler deploy --dry-run`, plus the touched pages at 390, 768 and 1366 px. Any migration also needs a throwaway-D1 test, a Time Travel bookmark, list-then-apply exactly once, and read-only post-checks.
 
 **Stop conditions:** a production or provider write without exact target and Earl's authority; a migration without his approval; anything that rewrites history or reapplies 0015–0017; staff or borrower data entering Git; a gate that cannot run (say so, never claim it).
 
-## 5. Decisions for Earl
+## 5. Decisions
 
-- **D1 (blocks acceptance):** reconcile this draft with the controlling prompt; amend sections 3–4 where it differs.
-- **D2:** per-username login throttling (slows a targeted attack but can also slow the real user), and whether to add an idle timeout.
-- **D3:** R2 evidence photos: keep as is, or add a copy. Time Travel alone covers D1 only.
-- **D4:** retention periods for names, student IDs and photos on takes, borrows and loans, and for session rows.
-- **D5:** confirm that an Admin (not only an Owner) may open and close Self-Service from Administration.
-- **D6:** approve or decline the axe dev dependency deferred from Part 5.
-- **D7:** replace Administration's Security activity list with a link to Activity once S6 is verified?
+**D1 (open, cannot be settled from the cloud):** reconcile this plan with the controlling prompt. The build below follows this plan; where the prompt differs, the prompt wins and the difference is a change request.
+
+**D2–D7 were settled by Claude on Earl's instruction (2026-10-02), conservatively; Earl may override any of them.**
+
+- **D2, login limits:** add a per-username limit of 20 attempts per 15 minutes beside the per-address one (5 per minute); a successful sign-in clears it, and it never locks an account for longer than its window. No idle timeout: the 8-hour absolute session stays (an idle timeout would cost a D1 write per request for little gain in a staffed office). Reason for 20: a legitimate user never reaches it, while online guessing of a 12+ character password stays hopeless.
+- **D3, backups:** no automated R2 copy (it needs a cron, a second bucket and new cost for photos that retention will erase anyway). Instead: Time Travel for D1 as before, plus a portable SQL dump (`wrangler d1 export`) kept under `data/private/`, rehearsed locally in 6.2. The R2 gap is stated in the runbook.
+- **D4, retention:** an Owner-only action in Administration with a dry run first. It erases the borrower or person name, student ID and photo (R2 object first, then the database) from loans closed more than 24 months ago and from settled phone records (applied, checked, dismissed or never held) older than 12 months. It never touches a loan still out, a record awaiting review, stock movements or the audit trail, and it keeps the record itself (so a late resend from a phone still dedupes). Free text people typed (reasons, notes) is kept, and Earl's earlier decision A stands. Nothing runs by itself.
+- **D5:** Administrators and Owners may open and close Self-Service.
+- **D6:** no axe dependency (the project prefers the platform). A small committed Playwright spec checks labels, names, one `h1`, overflow, and dialog focus on the key routes instead.
+- **D7:** S6 is closed by checking, not by removal: Activity names account events generically ("Account updated for X by Y") and does not show what changed, while Administration's list shows role and username changes. The two are not duplicates, so Administration's list stays.

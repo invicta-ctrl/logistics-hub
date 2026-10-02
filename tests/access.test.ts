@@ -243,6 +243,39 @@ describe("cross-site and throttling", () => {
     expect(statuses.slice(5)).toEqual([429, 429]);
   });
 
+  const wrong = (username: string, network: string) => call("/api/staff/login", { method: "POST", ip: network, body: JSON.stringify({ username, password: "wrong password" }) });
+
+  it("limits guessing at one account from many networks, for that account only", async () => {
+    for (let attempt = 0; attempt < 20; attempt += 1) expect((await wrong("Owner", `net-${attempt}`)).status).toBe(401);
+    const blocked = await wrong("owner", "net-20");
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get("retry-after")).toBe("900");
+    // Even the right password waits out the window; other accounts and unknown names are not affected.
+    expect((await call("/api/staff/login", { method: "POST", ip: "net-fresh", body: JSON.stringify({ username: "owner", password: PASSWORD }) })).status).toBe(429);
+    expect((await signIn("admin")).status).toBe(200);
+    expect((await wrong("nobody", "net-other")).status).toBe(401);
+  });
+
+  it("starts the account's count over after a successful sign-in", async () => {
+    for (let attempt = 0; attempt < 10; attempt += 1) await wrong("owner", `net-a${attempt}`);
+    expect((await signIn("owner")).status).toBe(200);
+    for (let attempt = 0; attempt < 20; attempt += 1) expect((await wrong("owner", `net-b${attempt}`)).status).toBe(401);
+    expect((await wrong("owner", "net-b20")).status).toBe(429);
+  });
+
+  it("sweeps session rows a month past expiry and spent counters at sign-in, and nothing else", async () => {
+    const day = 24 * 60 * 60_000;
+    const now = Date.now();
+    const session = sqlite.prepare("INSERT INTO staff_sessions(id, expires_at, account_id) VALUES(?, ?, 'ACC-staff')");
+    session.run("old", now - 31 * day);
+    session.run("recently-expired", now - 2 * day);
+    session.run("live", now + day);
+    sqlite.prepare("INSERT INTO auth_throttle(key, count, reset_at) VALUES('spent', 1, ?), ('running', 1, ?)").run(now - 2 * 60 * 60_000, now + 60_000);
+    await signIn("owner");
+    expect(sqlite.prepare("SELECT id FROM staff_sessions WHERE id IN ('old', 'recently-expired', 'live') ORDER BY id").all()).toEqual([{ id: "live" }, { id: "recently-expired" }]);
+    expect(sqlite.prepare("SELECT key FROM auth_throttle WHERE key IN ('spent', 'running')").all()).toEqual([{ key: "running" }]);
+  });
+
   it("records account changes in the audit log with safe metadata only", async () => {
     const { cookie } = await signIn("owner");
     await as(cookie, "/api/staff/admin/accounts", "POST", { username: "audited", displayName: "Audited", role: "STAFF", password: "a very secret pass 1" });

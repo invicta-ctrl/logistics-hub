@@ -302,4 +302,13 @@ export async function throttled(db: D1Database, key: string, limit: number, wind
   return (count ?? 0) > limit;
 }
 
-export const clearThrottle = (db: D1Database, key: string) => db.prepare("DELETE FROM auth_throttle WHERE key = ?").bind(key).run();
+export const clearThrottle = (db: D1Database, ...keys: string[]) => db.batch(keys.map((key) => db.prepare("DELETE FROM auth_throttle WHERE key = ?").bind(key)));
+
+/** Session rows a month past expiry and spent throttle counters help no one; swept as a side effect of sign-ins and phone syncs. */
+export function sweepStale(db: D1Database) {
+  const now = Date.now();
+  return db.batch([
+    db.prepare("DELETE FROM staff_sessions WHERE expires_at < ?").bind(now - 30 * 24 * 60 * 60_000),
+    db.prepare("DELETE FROM auth_throttle WHERE reset_at < ?").bind(now - 60 * 60_000)
+  ]);
+}

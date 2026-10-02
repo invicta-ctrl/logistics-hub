@@ -1,5 +1,5 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
-import { type Account, changeOwnPassword, clearThrottle, createAccount, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, throttled, updateAccount, updateSelf } from "./accounts";
+import { type Account, changeOwnPassword, clearThrottle, createAccount, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
 import { openUnitAction } from "./open-units";
 import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
@@ -123,6 +123,9 @@ async function login(request: Request, env: Env, url: URL): Promise<Response> {
   const username = typeof body?.username === "string" ? body.username.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
   if (!username || !password || username.length > 64 || password.length > 256) return json({ error: "Enter your username and password." }, 400);
+  // Beside the per-network limit: guessing one account from many networks. It only ever waits out its window.
+  const userKey = `login-user:${username.toLowerCase()}`;
+  if (await throttled(env.DB, userKey, 20, 15 * 60_000)) return json({ error: "Too many attempts for this account. Please wait a few minutes before trying again." }, 429, { "retry-after": "900" });
   const account = await env.DB.prepare("SELECT id, role, password_hash AS passwordHash, must_change_password AS mustChangePassword FROM staff_accounts WHERE username = ? AND active = 1")
     .bind(username).first<{ id: string; role: string; passwordHash: string; mustChangePassword: number }>();
   // Verify against a throwaway hash for unknown users so timing does not reveal which usernames exist.
@@ -135,7 +138,8 @@ async function login(request: Request, env: Env, url: URL): Promise<Response> {
     env.DB.prepare("INSERT INTO staff_sessions (id, expires_at, account_id) VALUES (?, ?, ?)").bind(id, expiresAt, account.id),
     env.DB.prepare("UPDATE staff_accounts SET last_login_at = ? WHERE id = ?").bind(new Date().toISOString(), account.id)
   ]);
-  await clearThrottle(env.DB, clientKey(request, "login"));
+  await clearThrottle(env.DB, clientKey(request, "login"), userKey);
+  await sweepStale(env.DB);
   return json({ ok: true, mustChangePassword: account.mustChangePassword === 1 }, 200, { "set-cookie": cookie(token, SESSION_DURATION_MS / 1000, url.protocol === "https:") });
 }
 
@@ -238,7 +242,7 @@ async function selfServiceSync(request: Request, env: Env, url: URL): Promise<Re
   const weight = batch.events.length;
   if (await throttled(env.DB, `self-service:${network}`, 300, 10 * 60_000, weight) || await throttled(env.DB, `self-service-device:${batch.deviceId}`, 100, 10 * 60_000, weight)) return busy();
   // Phones choose their own device ids, so old throttle rows are swept now and then.
-  if (Math.random() < 0.02) await env.DB.prepare("DELETE FROM auth_throttle WHERE reset_at < ?").bind(Date.now() - 60 * 60_000).run();
+  if (Math.random() < 0.02) await sweepStale(env.DB);
   return json(await syncEvents(env.DB, env.EVIDENCE, batch, (id) => form.get(`photo:${id}`)));
 }
 
