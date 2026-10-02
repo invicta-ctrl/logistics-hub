@@ -71,8 +71,9 @@ export async function openViewer(photoId: string, name: string, source: () => HT
   const image = dialog.querySelector("img")!;
   // The large image is ready before it grows, so the movement never ends in a blank frame.
   await Promise.race([image.decode().catch(() => undefined), new Promise((resolve) => window.setTimeout(resolve, 400))]);
+  let entryGone = false;
   const requestClose = () => { if (dialog.open) morph(image, source(), () => dialog.close()); };
-  const onBack = () => { if (dialog.open) dialog.close(); };
+  const onBack = () => { entryGone = true; if (dialog.open) dialog.close(); };
   dialog.addEventListener("cancel", (event) => { event.preventDefault(); requestClose(); });
   dialog.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
@@ -82,7 +83,7 @@ export async function openViewer(photoId: string, name: string, source: () => HT
     window.removeEventListener("popstate", onBack);
     dialog.remove();
     // Closed with Escape or a tap: take the viewer's history entry back. Closed with Back it is already gone.
-    if (window.history.state?.viewer) window.history.back();
+    if (!entryGone && window.history.state?.viewer) window.history.back();
     if (opener?.isConnected) opener.focus({ preventScroll: true });
   });
   window.history.pushState({ viewer: true }, "");
@@ -163,7 +164,7 @@ export function photoPanel(host: HTMLElement, options: { itemId: string; name: s
       confirming = false;
       error = "";
       draw();
-      await options.refresh();
+      await options.refresh().catch(() => undefined);
       return;
     }
     error = failure(problem);
@@ -193,7 +194,7 @@ export function photoPanel(host: HTMLElement, options: { itemId: string; name: s
         state = "";
         draw();
         toast("Photo saved.");
-        options.changed(photo);
+        void Promise.resolve(options.changed(photo)).catch(() => undefined);
         focus("[data-view]");
       } catch (problem) {
         await failed(problem);
@@ -208,7 +209,7 @@ export function photoPanel(host: HTMLElement, options: { itemId: string; name: s
         state = "";
         draw();
         toast("Photo removed.");
-        options.changed(null);
+        void Promise.resolve(options.changed(null)).catch(() => undefined);
         focus("[data-pick]");
       } catch (problem) {
         await failed(problem);
