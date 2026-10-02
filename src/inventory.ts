@@ -89,7 +89,7 @@ export async function publicCatalog(db: D1Database) {
   return { items, categories: distinct(items.map((item) => item.category)) };
 }
 
-type StaffRow = ItemRow & { lastCountedAt: string | null; migrationDelta: number | null; reorderStatus: string | null; onLoan: number; openUnits: number; openCondition: string | null };
+type StaffRow = ItemRow & { lastCountedAt: string | null; migrationDelta: number | null; reorderStatus: string | null; onLoan: number; openUnits: number; openCondition: string | null; photoId: string | null };
 
 export async function staffInventory(db: D1Database) {
   // lastCountedAt counts only physical counts recorded in the Hub, not migrated rows.
@@ -98,14 +98,15 @@ export async function staffInventory(db: D1Database) {
       (SELECT r.status FROM reorders r WHERE r.item_id = i.id AND r.status IN (${OPEN_REORDERS})) AS reorderStatus,
       (SELECT COALESCE(SUM(l.quantity), 0) FROM loans l WHERE l.item_id = i.id AND l.status = 'OUT') AS onLoan,
       (SELECT COUNT(*) FROM open_units o WHERE o.item_id = i.id AND o.closed_at IS NULL) AS openUnits,
-      (SELECT o.condition FROM open_units o WHERE o.item_id = i.id AND o.closed_at IS NULL ORDER BY CASE o.condition WHEN 'LOW' THEN 0 WHEN 'HALF' THEN 1 WHEN 'PLENTY' THEN 2 ELSE 3 END LIMIT 1) AS openCondition
-    FROM items i LEFT JOIN inventory_balances b ON b.id = i.id ORDER BY i.name COLLATE NOCASE`).all<StaffRow>();
+      (SELECT o.condition FROM open_units o WHERE o.item_id = i.id AND o.closed_at IS NULL ORDER BY CASE o.condition WHEN 'LOW' THEN 0 WHEN 'HALF' THEN 1 WHEN 'PLENTY' THEN 2 ELSE 3 END LIMIT 1) AS openCondition,
+      p.media_id AS photoId
+    FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id ORDER BY i.name COLLATE NOCASE`).all<StaffRow>();
   const items = results.map((row) => ({
     id: row.id, name: row.name, aliases: row.aliases, category: row.category, itemType: row.itemType, unit: row.unit, status: row.status,
     needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand,
     reorderThreshold: row.reorderThreshold, storageLocation: row.storageLocation, listed: isListedForLending(row),
     stockArea: row.stockArea, expiresOn: row.expiresOn, lastCountedAt: row.lastCountedAt, reorderStatus: row.reorderStatus, onLoan: row.onLoan,
-    consumptionMode: row.consumptionMode, openUnits: row.openUnits, openCondition: row.openCondition,
+    consumptionMode: row.consumptionMode, openUnits: row.openUnits, openCondition: row.openCondition, photoId: row.photoId,
     // The legacy quantity is doubtful (migration discrepancy or a VERIFY record) until someone counts it.
     countNeeded: row.status !== "INACTIVE" && !row.lastCountedAt && ((row.migrationDelta ?? 0) !== 0 || row.status === "VERIFY")
   }));
@@ -124,8 +125,8 @@ export async function itemDetail(db: D1Database, id: string) {
   const [item, movements, events, loans, units, uses] = await db.batch([
     db.prepare(`SELECT ${ITEM_COLUMNS}, b.legacy_reported_available_qty AS legacyReportedAvailable, b.migrated_on_hand AS migratedOnHand,
       b.migration_delta AS migrationDelta, i.legacy_source_sheet AS legacySourceSheet, i.legacy_source_row AS legacySourceRow,
-      i.verification_note AS verificationNote, i.imported_from AS importedFrom
-      FROM items i LEFT JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?`).bind(id),
+      i.verification_note AS verificationNote, i.imported_from AS importedFrom, p.media_id AS photoId, p.width AS photoWidth, p.height AS photoHeight
+      FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id WHERE i.id = ?`).bind(id),
     db.prepare(`SELECT * FROM (SELECT m.id, m.created_at AS createdAt, m.movement_type AS movementType, m.signed_quantity AS signedQuantity, m.status,
       m.notes, m.reason, m.related_entity_type AS related, ${actorName("a", "m.actor_user_id")} AS actor, ROW_NUMBER() OVER (ORDER BY ${HISTORY_ORDER}) AS seq,
       COALESCE(l.borrower_name, s.person_name) AS borrower, l.purpose,
@@ -142,10 +143,11 @@ export async function itemDetail(db: D1Database, id: string) {
         + (SELECT COUNT(*) FROM self_service_events WHERE item_id = ?1 AND event_type = 'USE' AND applied = 1) AS usesRecorded,
       (SELECT COUNT(*) FROM inventory_movements WHERE item_id = ?1 AND related_entity_type = 'OPEN_UNIT' AND status = 'POSTED') AS unitsEmptied`).bind(id)
   ]);
-  const row = item.results[0] as (ItemRow & Record<string, unknown>) | undefined;
-  if (!row) throw new InputError(404, "Item not found.");
+  const found = item.results[0] as (ItemRow & { photoId: string | null; photoWidth: number | null; photoHeight: number | null } & Record<string, unknown>) | undefined;
+  if (!found) throw new InputError(404, "Item not found.");
+  const { photoId, photoWidth, photoHeight, ...row } = found;
   return {
-    item: { ...row, needsReview: row.needsReview === 1, listed: isListedForLending(row), listingGaps: listingGaps(row) },
+    item: { ...row, needsReview: row.needsReview === 1, listed: isListedForLending(row), listingGaps: listingGaps(row), photo: photoId ? { id: photoId, width: photoWidth, height: photoHeight } : null },
     movements: movements.results,
     loans: loans.results,
     openUnits: units!.results,

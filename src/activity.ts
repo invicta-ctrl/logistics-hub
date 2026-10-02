@@ -323,6 +323,9 @@ function toEvent(row: Row): ActivityEvent {
       const others = fields.filter((field) => !named.has(field));
       return `${actor} ${[done[0]![0], ...done.slice(1).map(([, it]) => it)].join(" and ")}${others.length ? `, and edited ${others.join(", ")}` : ""}.`;
     },
+    ITEM_PHOTO_ADDED: () => `${actor} added a photo to ${item}.`,
+    ITEM_PHOTO_REPLACED: () => `${actor} replaced the photo of ${item}.`,
+    ITEM_PHOTO_REMOVED: () => `${actor} removed the photo of ${item}.`,
     REORDER_OPENED: () => `${actor} put ${item} on the restock list.`,
     REORDER_UPDATED: () => `${actor} updated the restock entry for ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`,
     REORDER_RESTOCKED: () => `${actor} received a restock of ${amount}${item}.`,
