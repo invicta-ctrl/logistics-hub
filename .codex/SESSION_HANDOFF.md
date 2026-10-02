@@ -8,7 +8,9 @@ LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live`; it applies 0016 + 0017 
 
 ## Part 5 follow-up: Activity sentences for status and type changes (Claude Cloud, 2026-10-02) — slice/part-05-activity-sentences
 - **Why:** checked against Earl's Part 5 brief (`LOGISTICS_HUB_PART_5_CLAUDE_CODE_PROMPT.md`, "Activity entries": classification changes, deactivation/reactivation as clear sentences). An item edit read "Staff One edited Scissors: type, status."; it now reads "Staff One deactivated Scissors.", "… reactivated …", "… changed Scissors from Unclassified to Loanable …" or "… set Rice to be opened and used gradually …", then ", and edited <other fields>". Only the fixed values of status, type and usage are named; any other field is still named, never quoted (an unknown value reads "another type").
-- **Gates:** typecheck, build, `npm test` 145 (+1 skipped), `test:browser` 12/12, `test:browser:worker` 25/25, privacy, migration, catalog, dry-run.
+- **Review fix (Codex P2):** migration 0014 recorded its 112 reclassifications as `itemType` from "Saleable"; types are now named from an explicit list (today's types plus Saleable, `Object.hasOwn`), so those read "System changed <item> from Saleable to Consumable." (8e80023; the test fails on the previous code).
+- **Gates on 8e80023:** typecheck, build, `npm test` 145 (+1 skipped), `test:browser` 12/12, `test:browser:worker` 25/25, privacy, migration, catalog, dry-run.
+- **Release:** PR #7; `main` fast-forwarded 59f2f86..8e80023 on 2026-10-02. Production deploy: Workers Builds production build started 04:39 UTC (result recorded in the next commit).
 
 ## Part 5 follow-up: open-unit review view (Claude Cloud, 2026-10-02) — slice/part-05-open-unit-candidates
 - **Authority:** Earl, "continue with the rest of part 5". The one product item of the accepted plan not yet built was the optional A12 review view (section 4.3); everything else left is an owner item (signed-in check, "Where to find us" facts, branch deletion) or explicitly deferred (dropping `items.self_service`, no axe dependency).
