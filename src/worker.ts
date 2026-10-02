@@ -297,12 +297,14 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   if (path.startsWith("/api/")) return json({ error: "Not found." }, 404);
   // Every staff page below /staff requires a live session before any HTML is served;
   // a signed-in visit to the login page goes straight to the workspace.
+  // Items lived at /staff/inventory until V1.1; keep saved links and bookmarks working.
+  if (path === "/staff/inventory") return Response.redirect(new URL(`/staff/items${url.search}`, url), 301);
   if (path.startsWith("/staff/")) {
     const account = await accountFor(request, env);
     if (!account) return Response.redirect(new URL("/staff", url), 302);
-    if (path.startsWith("/staff/admin") && !isAdmin(account)) return Response.redirect(new URL("/staff/inventory", url), 302);
+    if (path.startsWith("/staff/admin") && !isAdmin(account)) return Response.redirect(new URL("/staff/items", url), 302);
   }
-  if (path === "/staff" && request.method === "GET" && await accountFor(request, env)) return Response.redirect(new URL("/staff/inventory", url), 302);
+  if (path === "/staff" && request.method === "GET" && await accountFor(request, env)) return Response.redirect(new URL("/staff/items", url), 302);
   return assetCaching(await env.ASSETS.fetch(request), path);
 }
 

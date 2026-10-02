@@ -19,7 +19,7 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
   "/lending": () => lending,
   "/self-service": () => import("./self-service-app").then((module) => module.selfService),
   "/staff": () => import("./staff").then((module) => module.staffLogin),
-  "/staff/inventory": () => import("./staff").then((module) => module.workspace),
+  "/staff/items": () => import("./staff").then((module) => module.workspace),
   "/staff/stock": () => import("./stock-workspace").then((module) => module.stockWorkspace),
   "/staff/loans": () => import("./loans-workspace").then((module) => module.loansWorkspace),
   "/staff/self-service": () => import("./self-service-review").then((module) => module.selfServiceReview),
@@ -39,7 +39,7 @@ async function render(): Promise<void> {
   loaded = true;
   rendered = window.location.pathname + window.location.search;
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
-  if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/inventory", true);
+  if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/items", true);
   let view: View;
   try {
     view = await (ROUTES[path] ?? (() => notFound))();
@@ -75,6 +75,15 @@ document.addEventListener("click", (event) => {
   event.preventDefault();
   if (link.pathname !== window.location.pathname || link.search !== window.location.search) navigate(link.pathname + link.search);
 });
+
+// Pointing at, touching or tabbing to a link starts loading its page's code, so the switch itself rarely waits on the network.
+const warm = (event: Event) => {
+  const link = (event.target as Element).closest?.<HTMLAnchorElement>("a[data-route]");
+  const load = link && link.origin === window.location.origin ? ROUTES[link.pathname.replace(/\/+$/, "") || "/"] : undefined;
+  if (load) void Promise.resolve().then(load).catch(() => { /* the real navigation reports failures */ });
+};
+document.addEventListener("pointerover", warm);
+document.addEventListener("focusin", warm);
 
 // "/" jumps to the page's search field, as in most catalog and admin tools.
 document.addEventListener("keydown", (event) => {

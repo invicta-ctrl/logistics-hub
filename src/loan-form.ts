@@ -33,7 +33,7 @@ export function loanRow(loan: Loan, withItem = false): Html {
   return html`<li class="loan-row ${isOverdue(loan) ? "is-overdue" : ""}" data-key="${loan.id}">
     <div class="loan-row__main">
       <p class="loan-row__who"><strong>${loan.borrowerName}</strong>${loan.studentId ? html` <span class="mono muted">${loan.studentId}</span>` : ""} ${purposeTag(loan.purpose)}</p>
-      <p class="loan-row__what">${withItem ? html`<a class="row-link" href="/staff/inventory?item=${loan.itemId}" data-route>${loan.itemName}</a> · ` : ""}${loan.quantity} ${units(loan.quantity, loan.unit)}
+      <p class="loan-row__what">${withItem ? html`<a class="row-link" href="/staff/items?item=${loan.itemId}" data-route>${loan.itemName}</a> · ` : ""}${loan.quantity} ${units(loan.quantity, loan.unit)}
         · ${out ? html`out ${days === 0 ? "since today" : days === 1 ? "since yesterday" : `for ${days} days`}` : html`${formatDate(officeDay(loan.createdAt))} → ${formatDate(officeDay(loan.closedAt!))}`} ${out ? dueTag(loan) : outcomeTag(loan.status)}</p>
       ${loan.reason ? html`<p class="loan-row__note">${loan.reason}</p>` : ""}
       ${loan.returnNote ? html`<p class="loan-row__note">${loan.returnNote}</p>` : ""}
