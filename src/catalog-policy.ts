@@ -37,6 +37,7 @@ export const REORDER_STATUSES = ["NEEDS_RESTOCK", "PLANNED", "RESTOCKED", "DISMI
 export const OPEN_REORDER_STATUSES = new Set<string>(["NEEDS_RESTOCK", "PLANNED"]);
 
 export const LABELS: Record<string, string> = {
+  Inventory: "General stock",
   Loanable: "Loanable",
   Consumable: "Consumable",
   NEEDS_REVIEW: "Unclassified",
@@ -148,7 +149,7 @@ export function selfServiceAction(item: SelfServiceCandidate): SelfServiceAction
 /* ---------- Activity (Part 5) ---------- */
 
 /** Where an Activity entry comes from, in the words staff see. ACCOUNT entries exist only for ADMIN and OWNER. */
-export const ACTIVITY_SOURCES = { MOVEMENT: "Stock", LOAN: "Loans", PHONE: "Self-service", CATALOG: "Catalog", ACCOUNT: "Accounts & exports" } as const;
+export const ACTIVITY_SOURCES = { MOVEMENT: "Stock", LOAN: "Loans", PHONE: "Self-Service", CATALOG: "Catalog", ACCOUNT: "Accounts & exports" } as const;
 export type ActivitySource = keyof typeof ACTIVITY_SOURCES;
 /** Every Activity entry type and its title, grouped by the source it usually belongs to (a phone take is a stock-out movement). */
 export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
