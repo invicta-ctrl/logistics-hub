@@ -54,7 +54,9 @@ The self-service catalog DTO carries only: `id`, `name`, `aliases`, `category`, 
 ## Staff workspace
 Every `/staff/*` page and `/api/staff/*` call needs a live session. Writes must come from the same origin.
 
-### Inventory (`/staff/inventory`)
+**Shell (V1.1).** Sections in working order: Items, Stock, Loans, Self-Service, Activity, Administration (ADMIN and OWNER). The avatar opens the account menu: My account, Public Lending Hub, Sign out. On phones (≤ 760 px) Items, Stock, Loans and Self-Service sit in a bottom bar with More, which opens the same menu as a sheet listing Activity and Administration first. Design tokens, motion rules and the screenshot evidence: `docs/visual-research/v1.1.md`.
+
+### Items (`/staff/items`; `/staff/inventory` redirects here with its query)
 
 The table shows ID, item (with type and other names), category, location, on-hand quantity and status tags.
 
@@ -87,7 +89,7 @@ The table shows ID, item (with type and other names), category, location, on-han
 - **Loan** (Loanable items only): lend this item, see what is out now, and return it (see Loans below). The tab shows how many loans are out.
 - **Review & edit / Edit details:**
   - **Catalog:** name, other names, category and unit (typed freely; an existing spelling is reused regardless of letter case), type (**Loanable** or **Consumable**; *Unclassified* appears only while a migrated record still is), location, notes;
-  - **Inventory settings:** status (Active, Verify, Inactive), reorder level, stock area (Inventory or Pantry) and, for pantry items, an optional earliest expiry;
+  - **Stock settings:** status (Active, Verify, Inactive), reorder level, stock area (General stock or Pantry; stored as `Inventory` or `Pantry`) and, for pantry items, an optional earliest expiry;
   - **How is this item normally used?** (Consumables only): **Whole unit** (the default for every item) or **Open and use gradually** (counted by its outer unit, used a little at a time). Switching back to Whole unit, to Loanable, or to Inactive is refused while a unit is open;
   - **Borrow or consume:** staff choose whether an item is lent out and returned (Loanable) or used up (Consumable); that one choice drives the Lending Hub, phone Borrow/Take and the Loan tab. Picking it for an unlisted item sets "Shown to" to Students & USC staff, and new items start listed;
   - **Public Lending Hub:** who it is shown to (there is no loan period or maximum per loan);
@@ -98,9 +100,9 @@ The table shows ID, item (with type and other names), category, location, on-han
 
 **New item:** the Worker generates the ID (`ITM-####`). The opening quantity becomes the first movement. A duplicate name is warned about but not blocked.
 
-### Stock & Pantry (`/staff/stock`)
+### Stock (`/staff/stock`)
 
-Daily quantity work over the same items and ledger (Inventory stays the catalog workspace).
+Daily quantity work over the same items and ledger (Items stays the catalog workspace); Pantry is a tab here.
 - **Header:** today's movement count and who recorded the last one; one "Update stock" action.
 - **Needs attention:** one list with filter chips (Out of stock, Low stock, Needs count, Expiring, and **Open units need review** only when a stored state has more units open than on hand). Each row says why, and offers the next action (Stock in or Count, Add to restock). Items without a reorder level are never called low; a hint says how many have none.
 - **Restock list:** a lightweight replenishment list, not procurement: restock quantity, Needs restock → Planned, **Receive** (records a Stock in that closes the entry) or Dismiss; suggestions from reorder levels; closed entries from the last two weeks.
@@ -120,7 +122,7 @@ Internal lending, recorded by staff (the public Lending Hub still only shows ava
 - **Borrowers:** for the last 30 days, 12 months or all time: loans (split individual and USC), items lent, distinct borrowers, damaged or lost; the **top borrowers ranked separately for Individual use and USC use** (loans, items, out now, damaged or lost); and the most borrowed items. A borrower is their student ID when known, otherwise their name.
 - **Returned:** the 100 most recent closed loans with their outcome and notes. Search covers name, student ID, item and reason.
 
-### Self-service (`/staff/self-service`)
+### Self-Service (`/staff/self-service`)
 
 Records made on phones reconcile on their own; this page shows only what needs a person. The nav tab shows how many need attention.
 - **Needs attention:**
@@ -139,13 +141,13 @@ One newest-first list of who did what, to which item, when, from where, and whet
 ### Administration and My account
 - **Administration (`/staff/admin`, ADMIN and OWNER only):** the accounts table, create, manage (profile, role, reset, sign out everywhere, enable or disable), **Self-Service on phones** (close for maintenance or reopen at once; ADMIN and OWNER), **Old personal details** (OWNER only: what is due, then removal of borrower and person names, student IDs and photos from loans closed over two years ago and settled phone records over a year old; the record, its stock effect and typed free text stay; nothing waiting for staff or tied to a loan still out is touched), and security activity (account, recovery, setting and retention events with what changed).
 - **Test Self-Service (Administration, only while Self-Service is closed):** Self-Service in a phone-sized panel, marked **Test mode**, that works while it is closed to everyone else. Only this panel passes: its requests carry `x-self-service-test`, and the Worker also checks for a signed-in ADMIN or OWNER; `/self-service` itself, in any tab, still shows the maintenance page. Every record made there is a test (`test: true`), held in Self-service → Records to check with the reason **TEST**; it changes no stock and opens no loan unless someone applies it (Dismiss clears it). A test record that reaches the server later from any page is still only held. Pages may be framed by this site only (`frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`).
-- **My account (`/staff/account`):** password, profile, sign out other devices, and (for an OWNER) the recovery key.
+- **My account (`/staff/account`, from the avatar menu):** password, profile, sign out other devices, and (for an OWNER) the recovery key.
 - The Owner Console (`npm run admin`, or `LOGISTICS_ADMIN.cmd`) uses the same Admin API. `docs/DEPLOYMENT.md` is the only runbook.
 
 ## Roles
 | Role | Can |
 | --- | --- |
-| STAFF | Everything in Inventory, Catalog, Stock & Pantry, Loans, Self-service and Activity (operational entries only, and their exports), and their own account |
+| STAFF | Everything in Items, Stock, Loans, Self-Service and Activity (operational entries only, and their exports), and their own account |
 | ADMIN | STAFF, plus managing STAFF accounts, opening and closing Self-Service, and account, recovery, setting and export entries in Activity |
 | OWNER | Everything, including roles, other owners, the recovery key and removing old personal details |
 
