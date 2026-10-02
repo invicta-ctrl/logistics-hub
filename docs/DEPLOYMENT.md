@@ -119,6 +119,19 @@ Then, read-only: `SELECT key, value FROM system_settings` returns one row, `self
 
 **Applied 2026-10-02** (Earl, from a clean temporary clone of `slice/part-06-plan` at `8c7b0b1`, because the shared worktree had uncommitted local edits and was left alone). Before it: a dump (`data/private/backup-20261002.sql`, private) and a Time Travel bookmark taken at about 09:09 UTC (kept by Earl, not recorded here); `migrations list` showed exactly `0018` and `0019`. `migrations apply DB --remote` applied both; read-only post-checks: `system_settings` is one row, `self_service | paused`; `d1_migrations` has 19 rows; 549 items, 689 movements and 97,000 on hand, equal to the pre-change snapshot. The new trigger's SQL was not read back. Then `main` was fast-forwarded to the branch.
 
+V1.2 (Item profiles and media) **needs a new R2 bucket and migration `0020` before its code reaches `main`**. The Worker binds `CATALOG_MEDIA` to the bucket `logistics-hub-catalog-media`, and a deploy that binds a bucket that does not exist fails; the Items list reads `item_media` on every load, so without `0020` it fails too. Both are safe for the code already live: the bucket is empty and the table is new and ignored by it. Only Earl runs them, from the V1.2 branch:
+
+```bash
+npx wrangler r2 bucket create logistics-hub-catalog-media   # private: never add public access or a custom domain to it
+npx wrangler r2 bucket list                                 # shows it beside logistics-hub-evidence (loan photos), which stays separate
+npx wrangler d1 export DB --remote --output data/private/backup-YYYYMMDD.sql   # a dump first (see Backups and restore)
+npx wrangler d1 time-travel info DB                # record the bookmark (rollback point)
+npx wrangler d1 migrations list DB --remote        # must list exactly 0020_item_media.sql
+npx wrangler d1 migrations apply DB --remote       # applies it once
+```
+
+Then, read-only: `SELECT COUNT(*) FROM item_media` is 0; `sqlite_master` lists `item_media`; `SELECT COUNT(*) FROM d1_migrations` is one more than before; the item, movement and on-hand counts are unchanged. Only then merge the V1.2 branch to `main`. Rollback before the merge: the migration only adds an empty table, so `DROP TABLE item_media` (while it is empty) or the Time Travel bookmark undoes it; an empty bucket can simply stay. After the merge, photos live in the bucket under `items/<id>/display` and `items/<id>/thumb`, and `item_media` is the only thing that refers to them. Redeploying the previous `main` leaves them untouched, because that code ignores them; restoring D1 to an earlier bookmark would leave unreferenced files in the bucket, which are harmless and invisible. After the deploy: open an item in Items, add a photo, check the list shows its thumbnail and the photo opens large, then remove it and read the three entries in Activity.
+
 ## Backups and restore
 
 What protects what (Part 6.2, decision D3):
@@ -149,6 +162,8 @@ Then compare it with what you expect (`SELECT COUNT(*)` on `items`, `inventory_m
 **Rehearsed on 2026-10-02 (Claude Cloud, local only):** a local D1 migrated through 0017 with an owner account was exported with `wrangler d1 export DB --local` and restored into an empty local database with `wrangler d1 execute --file`. Result: all 49 schema objects (tables, indexes, 8 triggers, 1 view) identical; 16 tables with 922 rows, equal table by table (397 items, 393 movements, 17 `d1_migrations`); `PRAGMA foreign_key_check` clean. **Not rehearsed:** any remote restore or Time Travel restore. That needs a throwaway remote database or Earl's own run; until then both remote paths are documented but unproven here.
 
 ## Operating notes
+
+- **Item photos** (V1.2): any signed-in staff member can add, change or remove an item's photo (the same people who can edit an item); each change is an Activity entry. Photos are served only to signed-in staff, never on the public Lending Hub or in Self-Service, and sit in their own bucket, apart from loan photos. The browser sends two small JPEGs (long sides 1280 and 320 px); the original never leaves the device, and the Worker rebuilds each JPEG without EXIF, location, colour-profile or comment data. If a delete in R2 fails after a replace or removal, an unused file stays in the bucket; nothing in D1 points at it.
 
 - **Self-Service is open or closed by a setting** (Part 6.3, migration `0018`): Administration → **Self-Service on phones** (Administrator or Owner) closes it for maintenance or reopens it at once, with no deploy, and each change is an Activity entry. Closed, the Worker answers the phone catalog and sync with 503 and records nothing; phones keep what they saved and send it when it reopens (about 30 s after the next check). `0018` seeds it **closed**, as it has been since 2026-10-02 (PR #8), so deploying the code that reads it cannot reopen it; the old `SELF_SERVICE` variable in `wrangler.jsonc` no longer exists. Local end-to-end tests open it in their own throwaway database. While closed, administrators test it in Administration → Test Self-Service; their records wait in Self-service as tests (Dismiss them when done).
 - The public Lending Hub is empty until staff publish items from *Ready to list*. This is fail-closed by design.
