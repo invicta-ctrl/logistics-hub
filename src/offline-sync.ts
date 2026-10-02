@@ -39,7 +39,7 @@ export function onSyncMessage(listener: (message: SyncMessage) => void): () => v
  * Brings the catalog snapshot up to date. The ETag is the catalog revision, so an unchanged
  * catalog costs one tiny 304 and nothing is rewritten.
  */
-export async function refreshCatalog(): Promise<"updated" | "unchanged" | "offline"> {
+export async function refreshCatalog(): Promise<"updated" | "unchanged" | "offline" | "paused"> {
   const current = await store.catalog();
   let response: Response;
   try {
@@ -52,7 +52,11 @@ export async function refreshCatalog(): Promise<"updated" | "unchanged" | "offli
     await store.putCatalog({ ...current, checkedAt: now });
     return "unchanged";
   }
-  if (!response.ok) return "offline";
+  if (!response.ok) {
+    // The office has closed Self-Service (worker.ts); any other failure is treated as no connection.
+    const closed = response.status === 503 && (await response.json().catch(() => null) as { maintenance?: boolean } | null)?.maintenance === true;
+    return closed ? "paused" : "offline";
+  }
   const body = await response.json() as { revision: number; items: CatalogItem[] };
   await store.putCatalog({ revision: body.revision, items: body.items, fetchedAt: now, checkedAt: now });
   announce({ type: "catalog" });

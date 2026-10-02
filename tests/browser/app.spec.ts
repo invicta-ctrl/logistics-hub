@@ -160,6 +160,36 @@ test("self-service fits phones, tablets and desktops, with every screen and shee
   await expect(page.getByRole("dialog", { name: "Scissors" })).toContainText("The records show none left.");
 });
 
+test("self-service closed for maintenance: every address sends people to DOL staff, keeps waiting records, and reopens", async ({ page }) => {
+  let closed = false;
+  await page.route("**/api/self-service/catalog", (route) => closed
+    ? route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Self-Service is under maintenance.", maintenance: true }) })
+    : route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
+  await page.route("**/api/self-service/sync", (route) => route.abort());
+  // A use recorded before the office closed Self-Service waits on the phone.
+  await page.goto("/self-service?do=use&item=ITM-0300");
+  await page.getByRole("dialog", { name: "A4 Bond Paper" }).getByLabel("Your name").fill("Ana Reyes");
+  await page.getByRole("button", { name: "Record use" }).click();
+  await page.getByRole("dialog", { name: "Use recorded" }).getByRole("button", { name: "Done" }).click();
+  closed = true;
+  for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1366, height: 768 }]) {
+    await page.setViewportSize(viewport);
+    for (const route of ["/self-service", "/self-service?do=take&item=ITM-0043", "/self-service?do=activity"]) {
+      await page.goto(route);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("Self-Service is under maintenance");
+      await expect(page.getByRole("heading", { name: "Ask DOL staff in person" })).toBeVisible();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(page.locator(".ss-tile")).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${route} at ${viewport.width}`).toBeTruthy();
+    }
+  }
+  await expect(page.locator("#main-content")).toContainText("1 record is still saved on this phone");
+  await expect(page.getByRole("link", { name: "See what's available to borrow" })).toHaveAttribute("href", "/lending");
+  closed = false;
+  await page.goto("/self-service");
+  await expect(page.getByRole("heading", { name: "What do you need?" })).toBeVisible();
+});
+
 test("self-service starts dark over the campus photo, switches to light, and remembers the choice on this phone", async ({ page }) => {
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
   await page.goto("/self-service");

@@ -110,6 +110,23 @@ describe("self-service catalog", () => {
     const etag = response.headers.get("etag")!;
     expect((await call("/api/self-service/catalog", { headers: { "if-none-match": etag } })).status).toBe(304);
   });
+
+  it("closes for maintenance: phones are told so and nothing new is recorded until it reopens", async () => {
+    const water = await consumable("Bottled Water", 20);
+    const a = phone();
+    const take = a.take(water, 2);
+    env.SELF_SERVICE = "paused";
+    for (const response of [await call("/api/self-service/catalog"), await a.sync([take])]) {
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({ maintenance: true });
+    }
+    expect(stored(take.id)).toBeUndefined();
+    expect(onHand(water)).toBe(20);
+    expect((await call("/api/self-service/sync", { method: "POST", headers: { origin: "https://evil.example" }, body: "x" })).status).toBe(403);
+    env.SELF_SERVICE = "open";
+    expect(await results(await a.sync([take]))).toEqual([{ id: take.id, outcome: "accepted" }]);
+    expect(onHand(water)).toBe(18);
+  });
 });
 
 describe("Take", () => {

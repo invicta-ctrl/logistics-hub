@@ -14,7 +14,8 @@ const cli = fileURLToPath(new URL("../node_modules/@playwright/test/cli.js", imp
 fs.rmSync(stateDir, { recursive: true, force: true });
 fs.mkdirSync(stateDir, { recursive: true });
 try {
-  fs.writeFileSync(`${stateDir}/.env`, `SESSION_SECRET=${randomBytes(32).toString("base64url")}\n`, { mode: 0o600 });
+  // Self-Service is tested open, whatever wrangler.jsonc currently says for production.
+  fs.writeFileSync(`${stateDir}/.env`, `SESSION_SECRET=${randomBytes(32).toString("base64url")}\nSELF_SERVICE=open\n`, { mode: 0o600 });
   const migrate = spawnSync(process.execPath, [wrangler, "d1", "migrations", "apply", "DB", "--local", "--persist-to", stateDir], { stdio: "inherit" });
   if (migrate.status !== 0) throw new Error("local e2e migration failed");
   const username = `e2e-${randomBytes(4).toString("hex")}`;

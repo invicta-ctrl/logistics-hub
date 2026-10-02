@@ -12,7 +12,12 @@ export type Env = {
   ASSETS: Fetcher;
   EVIDENCE: R2Bucket;
   SESSION_SECRET?: string;
+  /** "paused" closes Self-Service (wrangler.jsonc): phones show the maintenance screen and nothing new is recorded. */
+  SELF_SERVICE?: string;
 };
+
+/** Phones keep anything waiting and show the maintenance screen on this answer (offline-sync.ts). */
+const selfServicePaused = () => json({ error: "Self-Service is under maintenance. Please ask DOL staff in person.", maintenance: true }, 503);
 
 const SESSION_NAME = "lh_staff_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
@@ -210,6 +215,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
 async function selfServiceSync(request: Request, env: Env, url: URL): Promise<Response> {
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405, { allow: "POST" });
   if (!sameOrigin(request, url)) return json({ error: "Invalid request origin." }, 403);
+  if (env.SELF_SERVICE === "paused") return selfServicePaused();
   const size = Number(request.headers.get("content-length"));
   if (!size) return json({ error: "Missing content length." }, 411);
   if (size > MAX_SYNC_BYTES) return json({ error: "Too much at once." }, 413);
@@ -257,7 +263,8 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   }
   if (path === "/api/recovery/owner") return recovery(request, env, url);
   if (path === "/api/self-service/catalog") {
-    return request.method === "GET" ? revisioned(request, env.DB, () => selfServiceCatalog(env.DB)) : json({ error: "Method not allowed." }, 405, { allow: "GET" });
+    if (request.method !== "GET") return json({ error: "Method not allowed." }, 405, { allow: "GET" });
+    return env.SELF_SERVICE === "paused" ? selfServicePaused() : revisioned(request, env.DB, () => selfServiceCatalog(env.DB));
   }
   if (path === "/api/self-service/sync") return selfServiceSync(request, env, url);
   if (path.startsWith("/api/staff/")) return staffApi(request, env, url);

@@ -39,6 +39,8 @@ let syncing = false;
 let offline = !navigator.onLine;
 /** A form in a sheet has input that closing would lose. */
 let dirty = false;
+/** The office has closed Self-Service (the Worker says so); undefined until this phone has heard either way. */
+let paused: boolean | undefined;
 
 /* Formatting in the office's time zone, whatever the phone's own setting. */
 const DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" });
@@ -150,12 +152,13 @@ function region(name: string): HTMLElement | null {
 /** Refreshes what the data changed, without disturbing a field the person is typing in. */
 function refreshRegions(): void {
   const pillRegion = region("pill");
-  if (pillRegion) mount(pillRegion, pill());
+  if (pillRegion) mount(pillRegion, paused ? html`` : pill());
   const updateRegion = region("update");
   if (updateRegion) {
     updateRegion.hidden = !hasUpdate();
     mount(updateRegion, hasUpdate() ? html`<p>${icon("refresh")}A new version is ready.</p><button type="button" class="button button--primary button--sm" data-apply-update>Update</button>` : html``);
   }
+  if (paused) return;
   const { screen } = params();
   const tiles = region("tiles");
   if (tiles) mount(tiles, homeTiles());
@@ -547,6 +550,24 @@ function renderInstall(): void {
     </div>`);
 }
 
+/* ---------- Closed ---------- */
+
+/** Every address shows this while Self-Service is closed; anything waiting stays on the phone until it reopens. */
+function renderPaused(): void {
+  const screen = region("screen");
+  if (!screen) return;
+  const waiting = pendingCount();
+  mount(screen, html`<div class="ss-home">
+      <section class="ss-hero" aria-labelledby="ss-paused">
+        <h1 id="ss-paused">Self-Service is under maintenance</h1>
+        <p class="ss-hero__hello">You can't borrow, take or return items with your phone for now.</p>
+      </section>
+      <section class="ss-ready ss-ready--todo">${icon("pin")}<div><h2>Ask DOL staff in person</h2><p>Any logistics request must be made in person. Go to the Department of Logistics and ask DOL staff for permission. They will record it for you.</p></div></section>
+      ${waiting ? html`<p class="ss-warning">${icon("clock")}<span>${waiting} ${waiting === 1 ? "record is" : "records are"} still saved on this phone. ${waiting === 1 ? "It" : "They"} will be sent when Self-Service reopens, so don't clear this site's data or delete the app.</span></p>` : ""}
+      <a class="button button--secondary button--block" href="/lending" data-route>See what's available to borrow</a>
+    </div>`);
+}
+
 /* ---------- Behaviour ---------- */
 
 /** The screen currently drawn under any sheet, so closing a sheet never redraws (or scrolls) it. */
@@ -555,8 +576,9 @@ let renderedScreen: Screen | null = null;
 function renderScreen(): void {
   const { screen } = params();
   renderedScreen = screen;
-  // The campus photograph belongs to home (see self-service.css).
-  document.body.dataset.ssScreen = screen;
+  // The campus photograph belongs to home (see self-service.css), and to the closed notice.
+  document.body.dataset.ssScreen = paused ? "home" : screen;
+  if (paused) { renderPaused(); document.title = "Under maintenance · Self-Service"; return; }
   if (screen === "home") renderHome();
   else if (screen === "activity") renderActivity();
   else if (screen === "install") renderInstall();
@@ -738,6 +760,7 @@ export async function selfService(): Promise<void> {
   /** Opens the sheet the URL asks for, or closes it when the URL no longer does. */
   const syncSheet = () => {
     const { screen, item: itemId, loan: loanId } = params();
+    if (paused) { if (dialog.open) { steering = true; control.close(true); } return; }
     if (receiptFor) return;
     if (!itemId && !loanId) { if (dialog.open) control.close(true); return; }
     if (dialog.open && shown === `${screen}:${itemId}:${loanId}`) return;
@@ -875,6 +898,14 @@ export async function selfService(): Promise<void> {
     if (document.visibilityState !== "visible") return;
     const result = await refreshCatalog();
     offline = result === "offline";
+    // Offline, the phone keeps what it last heard; opening or closing redraws whatever is on screen.
+    const closed = result === "offline" ? paused : result === "paused";
+    if (closed !== paused) {
+      const redraw = Boolean(closed) !== Boolean(paused) && renderedScreen !== null;
+      paused = closed;
+      void store.setMeta("paused", closed);
+      if (redraw) show();
+    }
     if (result !== "updated") refreshRegions();
     pollTimer = window.setTimeout(() => void poll(), CATALOG_POLL_MS);
   }
@@ -923,9 +954,13 @@ export async function selfService(): Promise<void> {
   });
 
   await load();
+  paused = await store.getMeta<boolean>("paused");
+  // Launch: fetch the latest catalog, then send anything waiting from earlier. A phone that has never
+  // heard from the office waits a moment for it, so a closed Self-Service does not flash open first.
+  const launched = poll();
+  if (paused === undefined && !offline) await Promise.race([launched, new Promise((done) => window.setTimeout(done, 3_000))]);
   show();
   void refreshReadiness();
-  // Launch: fetch the latest catalog, then send anything waiting from earlier.
-  await poll();
+  await launched;
   await runSync();
 }
