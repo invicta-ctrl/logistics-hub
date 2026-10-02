@@ -332,7 +332,7 @@ describe("Borrow and Return", () => {
     expect(photo.status).toBe(200);
     expect(photo.headers.get("cache-control")).toBe("private, no-store");
     const overview = await (await staff("/api/staff/loans")).json() as { open: Array<{ id: string; createdBy: string }> };
-    expect(overview.open).toEqual([expect.objectContaining({ id: `LN-SS-${borrow.id}`, createdBy: "Self-service" })]);
+    expect(overview.open).toEqual([expect.objectContaining({ id: `LN-SS-${borrow.id}`, createdBy: "Self-Service" })]);
     expect(onHand(scissors)).toBe(4);
   });
 

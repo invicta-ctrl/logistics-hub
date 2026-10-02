@@ -92,7 +92,7 @@ describe("role enforcement", () => {
   it("serves the administration page only to ADMIN and OWNER", async () => {
     const staffPage = await as((await signIn("staff")).cookie, "/staff/admin");
     expect(staffPage.status).toBe(302);
-    expect(staffPage.headers.get("location")).toBe(`${origin}/staff/inventory`);
+    expect(staffPage.headers.get("location")).toBe(`${origin}/staff/items`);
     expect((await as((await signIn("admin")).cookie, "/staff/admin")).status).toBe(200);
   });
 });
