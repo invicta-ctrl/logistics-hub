@@ -1,13 +1,19 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
 STATUS: PART_05_PRODUCTION_ACCEPTED + SELF_SERVICE_CLOSED (2026-10-02): Earl confirmed the final signed-in Part 5B production acceptance check complete. Part 5 is closed. Phone Self-Service remains intentionally closed for maintenance on production (PR #8); people are sent to DOL staff in person until Earl instructs reopening. Administrators can test it in Administration → Test Self-Service (PR #10, `main` 78892e5, live 05:55 UTC).
-ACTIVE_WRITER: none (Claude Cloud yields after this checkpoint); claim before edits
+ACTIVE_WRITER: claude (Claude Cloud, slice/part-05-self-service-review-status)
 WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub (authoritative writable/local-preview worktree; synced from `origin/main` on 2026-10-02; known untracked `NUL` preserved)
-BRANCH: main (no active slice). Merged and due for deletion: slice/part-05-self-service-admin-test (the cloud session cannot delete remote branches); the other Part 5 branches are deleted.
+BRANCH: slice/part-05-self-service-review-status (active; from `main` e7a57df). Merged and due for deletion: slice/part-05-self-service-admin-test (the cloud session cannot delete remote branches); the other Part 5 branches are deleted.
 LIVE_PREVIEW: http://127.0.0.1:8791 (`npm run dev:live`; it applies 0016 + 0017 to the local preview database)
 
 
 
+
+## Phones learn staff decisions (Claude Cloud, 2026-10-02) — slice/part-05-self-service-review-status
+- **Why:** Earl accepted his two test Uses in Self-service (production: both `applied = 1`, resolved; read-only check), but the test panel still showed "2 need review" and "Staff will check". A phone never heard staff decisions: a held record stayed "Staff will check" and the bar's count cleared only after 24 hours (since Part 4.5). Stock did not change because a Use never changes stock (by design).
+- **What:** `GET /api/self-service/decisions?ids=…` (1–50 of the phone's own random record ids; read-only, not closed by maintenance) answers `accepted` (applied or checked) or `dismissed` for resolved reviews, nothing for undecided ones. The phone asks on each catalog check while it has records waiting (`checkDecisions()` in `offline-sync.ts`; `applyDecisions()` in `offline-queue.ts`): accepted becomes Synced ("Accepted by Logistics staff."), dismissed Not recorded ("Logistics staff did not accept it."), so the bar count clears; My activity now shows a synced record's note.
+- **Tests:** unit (decisions by id, undecided and unknown ids left out, malformed or more than 50 ids 400; `applyDecisions` settles accepted/dismissed and a dismissed borrow leaves the loans); mocked browser (the admin panel's held take turns Synced with the note after staff accept). Gates: typecheck, build, `npm test` 148 (+1 skipped), `test:browser` 14/14, `test:browser:worker` 25/25, privacy, migration, catalog, dry-run.
+- **Exact next action:** PR and merge to `main`; Earl reopens Administration → Test Self-Service and sees his two Uses as Synced.
 ## Test a closed Self-Service from Administration (Claude Cloud, 2026-10-02) — slice/part-05-self-service-admin-test
 - **Authority:** Earl, "i need to be able to test self service in the admin tab whenever it is closed. and only in that tab"; asked, he chose records **held for review** and the panel **inside Administration**.
 - **What:** Administration shows **Test Self-Service** (only while closed; `selfServiceClosed` in `/api/staff/session`): `/self-service` in a phone-sized iframe. Framed, the app is in test mode (`window.self !== window.top`): a **Test mode** strip, requests carry `x-self-service-test: 1`, new records carry `test: true`, and it never stores the open/closed flag for this browser's own Self-Service. The Worker passes a closed Self-Service only for that header plus a signed-in ADMIN/OWNER (not one who must change their password); anyone else, and `/self-service` in any tab, still gets the maintenance answer. Every `test: true` record is held with review reason `TEST` (no stock, no loan) whoever sends it; staff Apply or Dismiss it in Self-service. Framing is allowed for this site only (`frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`; `scripts/admin.mjs` verify updated).

@@ -3,7 +3,7 @@ import "./self-service.css";
 import { SELF_SERVICE_LIMITS, STUDENT_ID_PATTERN, type SelfServiceAction } from "./catalog-policy";
 import { type CatalogItem, type LocalEvent, type Snapshot, estimate, openLoans, pendingByItem, summary } from "./offline-queue";
 import * as store from "./offline-store";
-import { type Draft, clearHistory, nextAttemptAt, onSyncMessage, record, refreshCatalog, startTesting, syncNow } from "./offline-sync";
+import { type Draft, checkDecisions, clearHistory, nextAttemptAt, onSyncMessage, record, refreshCatalog, startTesting, syncNow } from "./offline-sync";
 import { type Readiness, applyUpdate, canPromptInstall, hasUpdate, isStandalone, onPwaChange, platform, promptInstall, readiness, requestBackgroundSync, requestPersistence, whenIdle } from "./pwa";
 import { CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, units } from "./ui";
 
@@ -521,7 +521,7 @@ function renderActivity(): void {
         const [tone, text] = STATE[event.state];
         return html`<li class="ss-event"><div><p class="ss-event__what">${event.itemName}${event.quantity > 1 ? html` <span class="muted">×${event.quantity}</span>` : ""}</p>
             <p class="ss-event__when">${verb(event)} ${when(event.occurredAt)}</p>
-            ${event.message && event.state !== "synced" ? html`<p class="ss-event__note">${event.message}</p>` : ""}</div>
+            ${event.message ? html`<p class="ss-event__note">${event.message}</p>` : ""}</div>
           <span class="tag tag--${tone === "wait" ? "pending" : tone === "review" ? "gold" : tone}">${text}</span></li>`;
       })}</ul>` : emptyNote("Nothing yet. What you take, borrow, use and return with this phone shows up here.")}
       <div class="ss-housekeeping">
@@ -911,6 +911,8 @@ export async function selfService(): Promise<void> {
       if (redraw) show();
     }
     if (result !== "updated") refreshRegions();
+    // Records waiting for staff learn their decision (the "changed" message redraws them).
+    if (result === "updated" || result === "unchanged") await checkDecisions();
     pollTimer = window.setTimeout(() => void poll(), CATALOG_POLL_MS);
   }
   const wake = () => {

@@ -160,6 +160,13 @@ describe("self-service catalog", () => {
     expect((await resolve(take.id, { action: "apply" })).status).toBe(200);
     expect((await resolve(late.id, { action: "dismiss" })).status).toBe(200);
     expect(onHand(water)).toBe(18);
+    // The phone learns those decisions by its own record ids, and only the decision; undecided records are left out.
+    const decisions = await call(`/api/self-service/decisions?ids=${[take.id, late.id, borrow.id, crypto.randomUUID()].join(",")}`);
+    expect((await decisions.json() as { results: Array<{ id: string }> }).results.sort((a, b) => Number(a.id === late.id) - Number(b.id === late.id)))
+      .toEqual([{ id: take.id, outcome: "accepted" }, { id: late.id, outcome: "dismissed" }]);
+    for (const ids of ["", "not-an-id", Array.from({ length: 51 }, () => crypto.randomUUID()).join(",")]) {
+      expect((await call(`/api/self-service/decisions?ids=${ids}`)).status).toBe(400);
+    }
   });
 });
 

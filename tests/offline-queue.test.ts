@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type LocalEvent, type Snapshot, applyResults, backoff, estimate, forgettable, nextBatch, openLoans, RETENTION_MS, retryAll, toWire } from "../src/offline-queue";
+import { type LocalEvent, type Snapshot, applyDecisions, applyResults, backoff, estimate, forgettable, nextBatch, openLoans, RETENTION_MS, retryAll, toWire } from "../src/offline-queue";
 
 const NOW = Date.parse("2026-09-30T02:00:00Z");
 let seq = 0;
@@ -46,6 +46,16 @@ describe("the phone's queue", () => {
     const giveBack = local("RETURN", { loanEventId: borrow.id, outcome: "RETURNED" });
     const after = applyResults([borrow, giveBack], [{ id: borrow.id, outcome: "rejected", message: "A photo is required." }], 9, NOW);
     expect(after.map((event) => event.state)).toEqual(["rejected", "rejected"]);
+  });
+
+  it("settles records staff decided: accepted ones are recorded, a dismissed borrow is no longer on loan", () => {
+    const take = local("TAKE", { state: "review", message: "Saved for staff to confirm." });
+    const borrow = local("BORROW", { state: "review" });
+    const waiting = local("USE", { state: "review" });
+    const settled = applyDecisions([take, borrow, waiting, local("TAKE", { state: "synced" })], [{ id: take.id, outcome: "accepted" }, { id: borrow.id, outcome: "dismissed" }], NOW);
+    expect(settled.map((event) => [event.id, event.state])).toEqual([[take.id, "synced"], [borrow.id, "rejected"]]);
+    expect(settled[0]!.message).toBe("Accepted by Logistics staff.");
+    expect(openLoans([...settled, waiting])).toEqual([]);
   });
 
   it("estimates availability from the snapshot and this phone's records the snapshot does not include yet", () => {

@@ -431,6 +431,21 @@ export async function syncEvents(db: D1Database, bucket: R2Bucket, batch: Batch,
   return { revision: await catalogRevision(db), results };
 }
 
+/* ---------- Staff decisions, told to the phone ---------- */
+
+/**
+ * What staff decided about records a phone is still waiting on (`ids`: up to 50 of its own event
+ * ids, which are random and known only to it). Only the decision is told: accepted (applied or
+ * checked) or dismissed. Records not yet decided are left out.
+ */
+export async function reviewDecisions(db: D1Database, raw: string | null) {
+  const ids = (raw ?? "").split(",");
+  if (ids.length > 50 || !ids.every((id) => UUID.test(id))) throw bad("Send 1 to 50 record ids.");
+  const { results } = await db.prepare(`SELECT id, applied FROM self_service_events WHERE id IN (${ids.map(() => "?").join(",")}) AND review IS NOT NULL AND resolved_at IS NOT NULL`)
+    .bind(...ids).all<{ id: string; applied: number }>();
+  return { results: results.map((row) => ({ id: row.id, outcome: row.applied ? "accepted" as const : "dismissed" as const })) };
+}
+
 /* ---------- Staff review ---------- */
 
 const EVENT_COLUMNS = `SELECT e.id, e.event_type AS type, e.item_id AS itemId, i.name AS itemName, i.unit, e.quantity, e.person_name AS personName,

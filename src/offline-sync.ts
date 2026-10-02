@@ -1,4 +1,4 @@
-import { type CatalogItem, type LocalEvent, type ServerResult, type WireEvent, applyResults, forgettable, nextBatch, retryAll, toWire } from "./offline-queue";
+import { type CatalogItem, type Decision, type LocalEvent, type ServerResult, type WireEvent, applyDecisions, applyResults, forgettable, nextBatch, retryAll, toWire } from "./offline-queue";
 import * as store from "./offline-store";
 
 /*
@@ -86,6 +86,19 @@ export async function record(draft: Draft, photo?: Blob): Promise<LocalEvent> {
   }), photo && bytes ? { type: photo.type || "image/jpeg", bytes } : undefined);
   announce({ type: "changed" });
   return saved;
+}
+
+/** Asks what staff decided about records waiting for them, and settles the ones they have decided. */
+export async function checkDecisions(): Promise<void> {
+  const waiting = (await store.events()).filter((event) => event.state === "review").slice(0, 50);
+  if (!waiting.length) return;
+  const response = await fetch(`/api/self-service/decisions?ids=${waiting.map((event) => event.id).join(",")}`, { headers: testHeaders(), signal: deadline(15_000) }).catch(() => null);
+  if (!response?.ok) return;
+  const { results } = await response.json() as { results: Decision[] };
+  const settled = applyDecisions(waiting, results, Date.now());
+  if (!settled.length) return;
+  await store.putEvents(settled);
+  announce({ type: "changed" });
 }
 
 let running: Promise<SyncReport> | null = null;

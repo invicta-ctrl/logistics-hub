@@ -5,7 +5,7 @@ import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemIn
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { openReorder, stockOverview, updateReorder } from "./stock";
-import { heldPhoto, networkOf, readBatch, resolveReview, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
+import { heldPhoto, networkOf, readBatch, resolveReview, reviewDecisions, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
 
 export type Env = {
   DB: D1Database;
@@ -276,6 +276,9 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
     return await selfServiceClosed(request, env) ? selfServicePaused() : revisioned(request, env.DB, () => selfServiceCatalog(env.DB));
   }
   if (path === "/api/self-service/sync") return selfServiceSync(request, env, url);
+  if (path === "/api/self-service/decisions") {
+    return request.method === "GET" ? json(await reviewDecisions(env.DB, url.searchParams.get("ids"))) : json({ error: "Method not allowed." }, 405, { allow: "GET" });
+  }
   if (path.startsWith("/api/staff/")) return staffApi(request, env, url);
   if (path.startsWith("/api/")) return json({ error: "Not found." }, 404);
   // Every staff page below /staff requires a live session before any HTML is served;

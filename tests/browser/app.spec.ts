@@ -218,6 +218,13 @@ test("administration tests a closed Self-Service in its own panel: records are t
   await expect.poll(() => sent.length).toBe(1);
   expect(sent[0]!.test).toBe("1");
   expect(sent[0]!.body).toContain('"test":true');
+  await expect(panel.getByRole("link", { name: /1 needs review/ })).toBeVisible();
+  // Once staff accept it, the panel learns so on its next check and no longer waits.
+  const takeId = /"v":1,"id":"([^"]+)"/.exec(sent[0]!.body)![1];
+  await page.route("**/api/self-service/decisions?*", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ results: [{ id: takeId, outcome: "accepted" }] }) }));
+  await page.reload();
+  await panel.getByRole("link", { name: /Synced/ }).click();
+  await expect(panel.locator(".ss-event", { hasText: "Bottled Water" })).toContainText("Accepted by Logistics staff.");
   // Outside the panel, Self-Service is still closed, even in this browser.
   await page.goto("/self-service");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Self-Service is under maintenance");

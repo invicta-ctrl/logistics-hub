@@ -94,6 +94,16 @@ export function applyResults(events: LocalEvent[], results: ServerResult[], revi
     : event);
 }
 
+export type Decision = { id: string; outcome: "accepted" | "dismissed" };
+
+/** Settles records staff have decided: accepted ones are recorded, dismissed ones are not. Returns only the changed records. */
+export function applyDecisions(events: LocalEvent[], decisions: Decision[], now: number): LocalEvent[] {
+  const decided = new Map(decisions.map((decision) => [decision.id, decision.outcome]));
+  return events.filter((event) => event.state === "review" && decided.has(event.id)).map((event) => decided.get(event.id) === "accepted"
+    ? { ...event, state: "synced", message: "Accepted by Logistics staff.", settledAt: now }
+    : { ...event, state: "rejected", message: "Logistics staff did not accept it.", appliedRevision: undefined, settledAt: now });
+}
+
 /** Marks a whole request for another try (offline, rate-limited or a server error). */
 export function retryAll(events: LocalEvent[], ids: Set<string>, now: number, message?: string): LocalEvent[] {
   return events.map((event) => ids.has(event.id) && event.state === "pending"
