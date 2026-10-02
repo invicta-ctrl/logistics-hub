@@ -1,4 +1,4 @@
-import { ACTIVITY_SOURCES, ACTIVITY_TITLES, LABELS, REVIEW_REASONS, STOCK_AREAS, type ActivitySource, units } from "./catalog-policy";
+import { ACTIVITY_SOURCES, ACTIVITY_TITLES, ITEM_TYPES, LABELS, REVIEW_REASONS, STOCK_AREAS, type ActivitySource, units } from "./catalog-policy";
 import { InputError, actorName } from "./inventory";
 import { OPEN_REVIEW, balanceCtes } from "./self-service";
 
@@ -29,6 +29,8 @@ const FIELDS: Record<string, string> = {
   lendingAudience: "lending audience", needsReview: "review flag", notes: "notes", stockArea: "stock area", expiresOn: "expiry date", consumptionMode: "how it is used",
   desiredQuantity: "quantity to restock", note: "note"
 };
+/** Item types an audit entry may name: today's, and Saleable, retired by migration 0014 (its 112 reclassifications read "from Saleable"). */
+const TYPE_NAMES: Record<string, string> = { ...Object.fromEntries(ITEM_TYPES.map((type) => [type, LABELS[type] ?? type])), Saleable: "Saleable" };
 const MAX_LIMIT = 100;
 const SENTINEL = "0000-01-01T00:00:00.000Z";
 const MANILA_OFFSET_MS = 8 * 60 * 60_000;
@@ -307,7 +309,7 @@ function toEvent(row: Row): ActivityEvent {
     ITEM_UPDATED: () => {
       // Status, type and usage are fixed lists, so their values can be named; every other field is named, never quoted.
       const change = (field: string) => details[field] && typeof details[field] === "object" ? details[field] as { from?: unknown; to?: unknown } : null;
-      const name = (value: unknown) => typeof value === "string" && LABELS[value] ? LABELS[value] : "another type";
+      const name = (value: unknown) => typeof value === "string" && Object.hasOwn(TYPE_NAMES, value) ? TYPE_NAMES[value]! : "another type";
       const done: Array<[string, string]> = [];
       if (change("status")?.to === "INACTIVE") done.push([`deactivated ${item}`, "deactivated it"]);
       else if (change("status")?.from === "INACTIVE") done.push([`reactivated ${item}`, "reactivated it"]);

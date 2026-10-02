@@ -400,9 +400,12 @@ describe("activity read model", () => {
     audit("AUD-R", "2026-09-30T02:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-R", JSON.stringify({ status: { from: "INACTIVE", to: "VERIFY" } }));
     audit("AUD-T", "2026-09-30T03:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-T", JSON.stringify({ itemType: { from: "NEEDS_REVIEW", to: "Loanable" }, status: { from: "VERIFY", to: "ACTIVE" } }));
     audit("AUD-O", "2026-09-30T04:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-R", JSON.stringify({ consumptionMode: { from: "WHOLE_UNIT", to: "OPEN_UNIT" } }));
-    audit("AUD-B", "2026-09-30T05:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-T", JSON.stringify({ itemType: { from: "Loanable", to: "<b>x</b>" } }));
+    audit("AUD-B", "2026-09-30T05:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-T", JSON.stringify({ itemType: { from: "constructor", to: "<b>x</b>" } }));
+    // Exactly what migration 0014 wrote for each of the 112 retired "Saleable" records.
+    audit("AUD-0014-ITM-R", "2026-09-30T06:00:00.000Z", "ITEM_UPDATED", "ITEM", "ITM-R", '{"itemType":{"from":"Saleable","to":"Consumable"}}', null);
     expect((await feed("type=ITEM_UPDATED")).events.map((event) => event.summary)).toEqual([
-      "Staff One changed Folding Table from Loanable to another type.",
+      "System changed Rice 5kg from Saleable to Consumable.",
+      "Staff One changed Folding Table from another type to another type.",
       "Staff One set Rice 5kg to be opened and used gradually.",
       "Staff One changed Folding Table from Unclassified to Loanable, and edited status.",
       "Staff One reactivated Rice 5kg.",
