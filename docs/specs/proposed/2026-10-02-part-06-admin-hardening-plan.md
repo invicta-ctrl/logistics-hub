@@ -72,7 +72,7 @@ Because 6.3 and 6.4 need migrations that only Earl may apply to production, the 
 
 ## 6. Outcome (2026-10-02, Claude Cloud)
 
-Built on `slice/part-06-plan`, one gated commit per slice (`git log c0c6e99..` lists them). 6.1, 6.2 and 6.5a are on `main` (fast-forward to `238b081`, re-gated on that exact commit: build, 151 unit, 28 mocked and 25 real-Worker browser tests, privacy, dry-run still carrying `SELF_SERVICE: paused`); 6.3 and 6.4 are on the branch only. Nothing is applied to production.
+Built on `slice/part-06-plan`, one gated commit per slice (`git log c0c6e99..` lists them). 6.1, 6.2 and 6.5a are on `main` (fast-forward to `238b081`, re-gated on that exact commit: build, 151 unit, 28 mocked and 25 real-Worker browser tests, privacy, dry-run still carrying `SELF_SERVICE: paused`); 6.3 and 6.4 are on the branch only. Nothing is applied to production. **After the merge (signed-out, read-only, https://logistics.hausc.org):** the live main bundle `index-D6z-upk2.js` has the same content hash as the local build of the merged code; `/`, `/lending` and the public catalog answer 200; `/staff/inventory` and `/staff/admin` redirect (302); `/api/staff/session` and `/api/staff/activity` answer 401; the phone catalog still answers 503 with the maintenance message; CSP, `X-Frame-Options: SAMEORIGIN`, HSTS and `noindex` are present. Not checked: signed-in behaviour and the new login limit (a sign-in attempt is a production write), and `npm run admin -- verify` (its login probe writes a throttle row).
 
 | Slice | What exists | Findings it closes |
 |---|---|---|
