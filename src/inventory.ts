@@ -34,8 +34,8 @@ export const COUNT_TOLERANCE_DAYS = 5 / (24 * 60);
 export const countAwareStatus = (item: string, at: string) => `CASE WHEN EXISTS (SELECT 1 FROM inventory_movements c
   WHERE c.item_id = ${item} AND c.movement_type = 'COUNT_ADJUSTMENT' AND c.status = 'POSTED' AND c.imported_from IS NULL
     AND julianday(c.created_at) > julianday(${at}) + ${COUNT_TOLERANCE_DAYS}) THEN 'SUPERSEDED' ELSE 'POSTED' END`;
-/** Who recorded something: a staff member's name, or "Self-service" for a phone (actor id SELF_SERVICE). */
-export const actorName = (account: string, actorId: string) => `COALESCE(${account}.display_name, CASE ${actorId} WHEN 'SELF_SERVICE' THEN 'Self-service' END)`;
+/** Who recorded something: a staff member's name, or "Self-Service" for a phone (actor id SELF_SERVICE). */
+export const actorName = (account: string, actorId: string) => `COALESCE(${account}.display_name, CASE ${actorId} WHEN 'SELF_SERVICE' THEN 'Self-Service' END)`;
 /** One loan as staff see it; the photo is served separately and never inlined. */
 export const LOAN_COLUMNS = `SELECT l.id, l.item_id AS itemId, i.name AS itemName, i.unit, l.quantity, l.purpose, l.borrower_name AS borrowerName,
   l.student_id AS studentId, l.photo_key <> '' AS hasPhoto, l.reason, l.return_by AS returnBy, l.status, l.return_note AS returnNote, l.created_at AS createdAt,

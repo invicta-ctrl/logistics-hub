@@ -316,7 +316,7 @@ test("public routes fit every required viewport class", async ({ page }) => {
 
 test("activity: a live refresh also refreshes the older pages on screen, so an entry that stopped matching leaves", async ({ page }) => {
   const entry = (id: string, minute: number) => ({ id: `phone:${id}`, correlationId: id, at: `2026-10-01T02:${String(minute).padStart(2, "0")}:00.000Z`, source: "PHONE", type: "PHONE_RETURN",
-    summary: `A phone return of 1 piece of Item ${id} was held for staff.`, actor: "Self-service", actorId: "SELF_SERVICE", itemId: `ITM-${id}`, itemName: `Item ${id}`, unit: "piece",
+    summary: `A phone return of 1 piece of Item ${id} was held for staff.`, actor: "Self-Service", actorId: "SELF_SERVICE", itemId: `ITM-${id}`, itemName: `Item ${id}`, unit: "piece",
     change: 0, stockChanged: false, before: null, after: null, reason: null, note: null, attention: true });
   let version = 1;
   await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", mustChangePassword: false, recovery: null, selfServiceReviews: 0 }) }));

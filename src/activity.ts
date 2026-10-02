@@ -157,7 +157,7 @@ function arms(admin: boolean): Arm[] {
       from: "self_service_events e JOIN items i ON i.id = e.item_id",
       where: "(e.review IS NOT NULL OR e.event_type IN ('RETURN', 'USE') OR e.applied = 0)",
       cols: {
-        ...base, ...item, sid: "'phone:' || e.id", k: utc("e.occurred_at"), src: "'PHONE'", type: "'PHONE_' || e.event_type", actorId: "'SELF_SERVICE'", actor: "'Self-service'",
+        ...base, ...item, sid: "'phone:' || e.id", k: utc("e.occurred_at"), src: "'PHONE'", type: "'PHONE_' || e.event_type", actorId: "'SELF_SERVICE'", actor: "'Self-Service'",
         qty: "e.quantity", status: "CASE e.applied WHEN 1 THEN 'APPLIED' ELSE 'HELD' END", outcome: "e.return_outcome", corr: "COALESCE(e.loan_id, e.id)", purpose: "e.purpose",
         reason: "e.reason", note: "e.note",
         review: "e.review", open: `CASE WHEN ${OPEN_REVIEW} THEN 1 ELSE 0 END`
