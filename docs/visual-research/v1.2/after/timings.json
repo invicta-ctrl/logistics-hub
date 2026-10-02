@@ -1,0 +1,22 @@
+{
+  "coldLoadToFirstRowMs": 278,
+  "sectionSwitchMs": 74,
+  "itemPhotos": {
+    "withoutPhotos": {
+      "rowsMs": 342,
+      "requestsAtLoad": 0,
+      "kbAtLoad": 0,
+      "requestsAfterScroll": 0,
+      "kbAfterScroll": 0,
+      "layoutShift": 0.0388
+    },
+    "with300Photos": {
+      "rowsMs": 357,
+      "requestsAtLoad": 20,
+      "kbAtLoad": 58,
+      "requestsAfterScroll": 204,
+      "kbAfterScroll": 592,
+      "layoutShift": 0.0388
+    }
+  }
+}
