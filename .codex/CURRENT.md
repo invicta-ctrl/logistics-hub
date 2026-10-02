@@ -1,8 +1,8 @@
 # Current Work Pointer — Logistics Hub
 PROGRAM: Logistics Hub
-MILESTONE: PART-05 COMPLETE (2026-10-02): Part 5B Open-Unit Tracking RELEASED: production D1 migrations 0016 + 0017 applied by Earl with `wrangler d1 migrations apply DB --remote` (Claude's read-only post-checks match the pre-change snapshot), then `main` fast-forwarded d24de85..c00d43d (PR #5, merged) by Claude Cloud; Workers Builds deploys it. Part 5 core was released 2026-10-01.
+MILESTONE: PART-05 COMPLETE (2026-10-02; the optional "Used gradually?" review view followed as PR #6, `main` e4e0ba7): Part 5B Open-Unit Tracking RELEASED: production D1 migrations 0016 + 0017 applied by Earl with `wrangler d1 migrations apply DB --remote` (Claude's read-only post-checks match the pre-change snapshot), then `main` fast-forwarded d24de85..c00d43d (PR #5, merged) by Claude Cloud; Workers Builds deploys it. Part 5 core was released 2026-10-01.
 STATUS: PART_04_10_COMPLETE (2026-09-30): public pages load fresh from the network (only /self-service opens from the phone's cache), merged to main and deployed by Workers Builds (after Part 4.9's home banner, 4.8's Self-Service photo, 4.7's light/dark switch and 4.6's visual cleanup). Part 4 (with 4.5–4.10) is closed by Earl's confirmation on 2026-10-01 (owner confirmation, not an agent test run); it no longer gates Part 5.
-BRANCH: main (no active slice). The merged branches slice/part-05b-open-units, slice/part-05-activity-fixes and handoff/part-05-activity-cloud are due for deletion by someone with push rights (the cloud session cannot delete them).
+BRANCH: main (no active slice). Merged and due for deletion: slice/part-05-open-unit-candidates, slice/part-05b-open-units, slice/part-05-activity-fixes, handoff/part-05-activity-cloud (the cloud session cannot delete remote branches).
 CLOUD_HANDOFF: .codex/PART_05_CLOUD_HANDOFF.md
 ACTIVE_WRITER: none (Claude Cloud yields after the Part 5B checkpoint); claim before editing
 SHARED_WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
