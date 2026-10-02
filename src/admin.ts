@@ -36,6 +36,7 @@ const EVENT_TEXT: Record<string, (event: Event) => string> = {
   OWNER_BOOTSTRAPPED: () => "was set up as the first owner (Owner Console)",
   RECOVERY_KEY_ROTATED: () => "issued a new owner recovery key",
   RECOVERY_KEY_REVOKED: () => "revoked the owner recovery key",
+  SETTING_CHANGED: (event) => (event.details as { to?: string }).to === "open" ? "reopened Self-Service" : "closed Self-Service for maintenance",
   OWNER_RECOVERY_USED: (event) => `Owner recovery key used for ${String((event.details as { username?: string }).username)}; password reset and sessions ended`
 };
 
@@ -54,6 +55,13 @@ export async function administration(): Promise<void> {
     <section aria-labelledby="accounts-title">
       <h2 id="accounts-title" class="visually-hidden">Accounts</h2>
       <div id="accounts"><div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 4 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span></div>`)}</div></div>
+    </section>
+    <section class="ss-switch" aria-labelledby="ss-switch-title">
+      <h2 id="ss-switch-title" class="section-title">Self-Service on phones</h2>
+      <p><span class="tag ${session.selfServiceClosed ? "tag--warn" : "tag--ok"}">${session.selfServiceClosed ? "Closed for maintenance" : "Open"}</span></p>
+      <p>${session.selfServiceClosed ? "Phones show the maintenance screen and record nothing, and people are sent to DOL staff in person. Records already waiting on a phone are kept and sent once it reopens." : "People can take, borrow, use and return with their own phones."}</p>
+      <div class="form-alert" id="ss-alert" role="alert" hidden></div>
+      <button type="button" class="button ${session.selfServiceClosed ? "button--primary" : "button--secondary"}" id="ss-toggle">${session.selfServiceClosed ? "Reopen Self-Service" : "Close for maintenance"}</button>
     </section>
     ${session.selfServiceClosed ? html`<section class="ss-trial" aria-labelledby="ss-trial-title">
       <h2 id="ss-trial-title" class="section-title">Test Self-Service</h2>
@@ -199,6 +207,16 @@ export async function administration(): Promise<void> {
     });
   }
 
+  document.querySelector("#ss-toggle")!.addEventListener("click", async () => {
+    const closing = !session.selfServiceClosed;
+    if (!window.confirm(closing ? "Close Self-Service for maintenance? Phones will show the maintenance screen and record nothing until you reopen it." : "Reopen Self-Service? Phones can take, borrow, use and return again.")) return;
+    try {
+      await api("/api/staff/admin/self-service", { method: "PATCH", body: JSON.stringify({ state: closing ? "paused" : "open" }) });
+      // The page depends on the setting (the test panel), and a same-address navigation does not re-render: run the view again.
+      await administration();
+      toast(closing ? "Self-Service is closed for maintenance." : "Self-Service is open.");
+    } catch (error) { setMessage(document.querySelector("#ss-alert")!, failure(error)); }
+  });
   document.querySelector("#new-account")!.addEventListener("click", openCreate);
   document.querySelector("#accounts")!.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-manage]");

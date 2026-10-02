@@ -4,6 +4,7 @@ import { openUnitAction } from "./open-units";
 import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
+import { selfServiceState, setSelfService } from "./settings";
 import { openReorder, stockOverview, updateReorder } from "./stock";
 import { heldPhoto, networkOf, readBatch, resolveReview, reviewDecisions, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
 
@@ -12,16 +13,17 @@ export type Env = {
   ASSETS: Fetcher;
   EVIDENCE: R2Bucket;
   SESSION_SECRET?: string;
-  /** "paused" closes Self-Service (wrangler.jsonc): phones show the maintenance screen and nothing new is recorded. */
-  SELF_SERVICE?: string;
 };
 
 /** Phones keep anything waiting and show the maintenance screen on this answer (offline-sync.ts). */
 const selfServicePaused = () => json({ error: "Self-Service is under maintenance. Please ask DOL staff in person.", maintenance: true }, 503);
 
-/** Closed to this request: everyone, except an administrator testing it from Administration (admin.ts), whose records are held as tests. */
+/**
+ * Closed to this request (the setting in Administration: phones show the maintenance screen and nothing new is recorded):
+ * everyone, except an administrator testing it from Administration (admin.ts), whose records are held as tests.
+ */
 async function selfServiceClosed(request: Request, env: Env): Promise<boolean> {
-  if (env.SELF_SERVICE !== "paused") return false;
+  if (await selfServiceState(env.DB) === "open") return false;
   if (request.headers.get("x-self-service-test") !== "1") return true;
   const account = await accountFor(request, env);
   return !account || !isAdmin(account) || account.mustChangePassword;
@@ -163,7 +165,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (path === "/api/staff/session" && method === "GET") {
     const { accountId, sessionId, ...profile } = account;
     const reviews = await env.DB.prepare("SELECT COUNT(*) AS total FROM self_service_events WHERE review IS NOT NULL AND resolved_at IS NULL").first<number>("total");
-    return json({ authenticated: true, id: accountId, ...profile, recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews ?? 0, selfServiceClosed: env.SELF_SERVICE === "paused" });
+    return json({ authenticated: true, id: accountId, ...profile, recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews ?? 0, selfServiceClosed: await selfServiceState(env.DB) === "paused" });
   }
   if (path === "/api/staff/me" && method === "PATCH") return json(await updateSelf(env.DB, account, await body()));
   if (path === "/api/staff/me/password" && method === "POST") return json(await changeOwnPassword(env.DB, account, await body()));
@@ -176,6 +178,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (path === "/api/staff/admin/accounts" && method === "GET") return json(await listAccounts(env.DB));
     if (path === "/api/staff/admin/accounts" && method === "POST") return json(await createAccount(env.DB, account, await body()), 201);
     if (path === "/api/staff/admin/activity" && method === "GET") return json(await securityActivity(env.DB));
+    if (path === "/api/staff/admin/self-service" && method === "PATCH") return json(await setSelfService(env.DB, account, await body()));
     const target = ACCOUNT_PATH.exec(path);
     if (target && !target[2] && method === "PATCH") return json(await updateAccount(env.DB, account, target[1]!, await body()));
     if (target?.[2] === "/password" && method === "POST") return json(await resetPassword(env.DB, account, target[1]!, await body()));

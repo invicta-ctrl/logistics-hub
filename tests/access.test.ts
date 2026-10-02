@@ -41,7 +41,7 @@ const alive = async (cookie: string) => (await as(cookie, "/api/staff/session"))
 describe("role enforcement", () => {
   it("keeps STAFF out of administration entirely", async () => {
     const { cookie } = await signIn("staff");
-    for (const [path, method] of [["/api/staff/admin/accounts", "GET"], ["/api/staff/admin/accounts", "POST"], ["/api/staff/admin/activity", "GET"], ["/api/staff/admin/accounts/ACC-admin", "PATCH"], ["/api/staff/admin/accounts/ACC-admin/password", "POST"]]) {
+    for (const [path, method] of [["/api/staff/admin/accounts", "GET"], ["/api/staff/admin/accounts", "POST"], ["/api/staff/admin/activity", "GET"], ["/api/staff/admin/self-service", "PATCH"], ["/api/staff/admin/accounts/ACC-admin", "PATCH"], ["/api/staff/admin/accounts/ACC-admin/password", "POST"]]) {
       expect((await as(cookie, path, method, {})).status, `${method} ${path}`).toBe(403);
     }
     expect((await as(cookie, "/api/staff/me/recovery-key", "POST")).status).toBe(403);

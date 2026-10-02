@@ -179,7 +179,7 @@ export async function revokeAccountSessions(db: D1Database, actor: Account, id: 
 export async function securityActivity(db: D1Database) {
   const { results } = await db.prepare(`SELECT l.created_at AS at, l.action, l.entity_type AS entityType, l.details_json AS details, a.display_name AS actor
     FROM audit_log l LEFT JOIN staff_accounts a ON a.id = l.actor_user_id
-    WHERE l.entity_type IN ('ACCOUNT', 'RECOVERY') ORDER BY l.created_at DESC LIMIT 40`).all<{ details: string }>();
+    WHERE l.entity_type IN ('ACCOUNT', 'RECOVERY', 'SETTING') ORDER BY l.created_at DESC LIMIT 40`).all<{ details: string }>();
   return { events: results.map((row) => ({ ...row, details: JSON.parse(row.details || "{}") })) };
 }
 

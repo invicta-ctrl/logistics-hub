@@ -63,3 +63,11 @@ describe("0017 open units on a database that is already in use", () => {
     db.close();
   });
 });
+
+describe("0018 system settings", () => {
+  it("seeds Self-Service closed, so the deploy that reads it cannot reopen a paused production", () => {
+    const { sqlite } = migratedD1();
+    expect(sqlite.prepare("SELECT key, value FROM system_settings").all()).toEqual([{ key: "self_service", value: "paused" }]);
+    expect(() => sqlite.exec("UPDATE system_settings SET value = 'maybe' WHERE key = 'self_service'")).toThrow(/CHECK/);
+  });
+});

@@ -163,7 +163,7 @@ export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
   ACCOUNT: {
     ACCOUNT_CREATED: "Account created", ACCOUNT_UPDATED: "Account updated", PASSWORD_RESET: "Password reset", PASSWORD_CHANGED: "Password changed", SESSIONS_REVOKED: "Sessions ended",
     RECOVERY_KEY_ROTATED: "Recovery key replaced", RECOVERY_KEY_REVOKED: "Recovery key revoked", OWNER_RECOVERY_USED: "Owner recovery used", OWNER_BOOTSTRAPPED: "First owner set up",
-    ACTIVITY_EXPORTED: "Activity exported"
+    ACTIVITY_EXPORTED: "Activity exported", SETTING_CHANGED: "Setting changed"
   }
 };
 export const ACTIVITY_TITLES: Record<string, string> = Object.assign({}, ...Object.values(ACTIVITY_TYPES));

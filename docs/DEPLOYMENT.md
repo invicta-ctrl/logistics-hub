@@ -106,6 +106,17 @@ Then, read-only: `SELECT COUNT(*) FROM items WHERE consumption_mode <> 'WHOLE_UN
 
 **Applied 2026-10-02** (Earl, from his worktree: `0016` from `main`, then `0017` from `slice/part-05b-open-units`, each with `wrangler d1 migrations apply DB --remote`; `d1_migrations` now lists 17). Before it, a throwaway D1 built from production's exact schema took both migrations as one request each and showed the triggers working on real D1 (it was deleted afterwards). Pre-change point for Time Travel: 2026-10-02T02:11:43Z. Read-only post-checks matched the pre-change snapshot: 549 items with the same types, none reclassified (all `WHOLE_UNIT`), 689 movements, 97,000 units on hand, the 22 phone records identical (same ids, states and text lengths, including the return still waiting for staff), 0 open units, revision 203 → 204, no foreign-key problems, every index and trigger present and no leftover table. Then `main` was fast-forwarded to the PR #5 head. After the deploy: in Inventory, set a ream-type Consumable to **Open and use gradually**, open a unit, record a use, mark it empty (on hand −1), and check the item's History and Activity; on a phone, the item shows **Use**.
 
+Part 6 (Administration + Hardening) **needs migration `0018` before its code reaches `main`**: the Worker reads `system_settings` on every phone catalog and sync call and on every staff session request, so without the table those fail. `0018` is safe for the code already live: it only adds the table with one row, `self_service = paused`, which that code ignores (it still reads the `SELF_SERVICE` variable, also paused). Only Earl applies it to production. Order, from the Part 6 branch:
+
+```bash
+npx wrangler d1 export DB --remote --output data/private/backup-YYYYMMDD.sql   # a dump first (see Backups and restore)
+npx wrangler d1 time-travel info DB                # record the bookmark (rollback point)
+npx wrangler d1 migrations list DB --remote        # must list exactly 0018_system_settings.sql
+npx wrangler d1 migrations apply DB --remote       # applies it once
+```
+
+Then, read-only: `SELECT key, value FROM system_settings` returns one row, `self_service | paused`; `SELECT COUNT(*) FROM d1_migrations` is one more than before; the item, movement and phone-record counts are unchanged. Only then merge the Part 6 pull request to `main`. After the deploy, sign in as an Owner or Administrator, open Administration, and confirm **Self-Service on phones** reads *Closed for maintenance*; the phone catalog still answers 503. Reopening is a decision for Earl, made on that page.
+
 ## Backups and restore
 
 What protects what (Part 6.2, decision D3):
@@ -137,7 +148,7 @@ Then compare it with what you expect (`SELECT COUNT(*)` on `items`, `inventory_m
 
 ## Operating notes
 
-- **Self-Service is closed for maintenance** (`"vars": { "SELF_SERVICE": "paused" }` in `wrangler.jsonc`). To reopen it, set `"open"` (or remove the line) and merge to `main`; Workers Builds deploys it, and phones show the normal screens on their next check (about 30 s, or when reopened). Records phones saved before the closure are sent then. Local end-to-end tests always run it open. While closed, administrators test it in Administration → Test Self-Service; their records wait in Self-service as tests (Dismiss them when done).
+- **Self-Service is open or closed by a setting** (Part 6.3, migration `0018`): Administration → **Self-Service on phones** (Administrator or Owner) closes it for maintenance or reopens it at once, with no deploy, and each change is an Activity entry. Closed, the Worker answers the phone catalog and sync with 503 and records nothing; phones keep what they saved and send it when it reopens (about 30 s after the next check). `0018` seeds it **closed**, as it has been since 2026-10-02 (PR #8), so deploying the code that reads it cannot reopen it; the old `SELF_SERVICE` variable in `wrangler.jsonc` no longer exists. Local end-to-end tests open it in their own throwaway database. While closed, administrators test it in Administration → Test Self-Service; their records wait in Self-service as tests (Dismiss them when done).
 - The public Lending Hub is empty until staff publish items from *Ready to list*. This is fail-closed by design.
 - Quantities change only through Stock in, Stock out and Count. The ledger is append-only.
 - `ITM-0001` intentionally stays at 7 (movement-derived) against the legacy 8.

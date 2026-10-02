@@ -582,8 +582,8 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .col-actions { width: 8rem; text-align: right; }
 .section-title { margin-bottom: var(--space-4); font-size: var(--text-lg); }
 .activity { margin-top: var(--space-10); max-width: 48rem; }
-.ss-trial { margin-top: var(--space-10); }
-.ss-trial p { max-width: 65ch; margin-bottom: var(--space-4); color: var(--text-2); }
+.ss-trial, .ss-switch { margin-top: var(--space-10); }
+.ss-trial p, .ss-switch p { max-width: 65ch; margin-bottom: var(--space-4); color: var(--text-2); }
 .ss-trial__frame { display: block; width: min(100%, 24.5rem); height: min(80vh, 52rem); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-sm); }
 .panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); align-items: start; }
 .panel { display: grid; gap: var(--space-4); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }

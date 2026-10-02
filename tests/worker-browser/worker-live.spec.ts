@@ -142,6 +142,26 @@ test.describe("owner administration", () => {
     await expect(staff).toHaveURL(/\/staff\/inventory$/);
   });
 
+  test("owner closes and reopens Self-Service from Administration, and phones see it at once", async ({ page, request }) => {
+    await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
+    await page.getByRole("link", { name: "Administration" }).click();
+    const section = page.getByRole("region", { name: "Self-Service on phones" });
+    await expect(section.getByText("Open", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Test Self-Service" })).toHaveCount(0);
+    expect((await request.get("/api/self-service/catalog")).status()).toBe(200);
+    page.once("dialog", (dialog) => dialog.accept());
+    await section.getByRole("button", { name: "Close for maintenance" }).click();
+    await expect(section.getByText("Closed for maintenance")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Test Self-Service" })).toBeVisible();
+    expect((await request.get("/api/self-service/catalog")).status()).toBe(503);
+    page.once("dialog", (dialog) => dialog.accept());
+    await section.getByRole("button", { name: "Reopen Self-Service" }).click();
+    await expect(section.getByText("Open", { exact: true })).toBeVisible();
+    expect((await request.get("/api/self-service/catalog")).status()).toBe(200);
+    await expect(page.locator("#activity")).toContainText("closed Self-Service for maintenance");
+    await expect(page.locator("#activity")).toContainText("reopened Self-Service");
+  });
+
   test("owner issues a recovery key that resets the owner password exactly once", async ({ page, baseURL }) => {
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("link", { name: "My account" }).first().click();

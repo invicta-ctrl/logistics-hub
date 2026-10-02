@@ -14,6 +14,9 @@ let cookie: string;
 
 type Result = { id: string; outcome: string; message?: string; duplicate?: boolean };
 
+/** Migration 0018 seeds Self-Service closed, as on production; most tests need it open. */
+const selfService = (state: "open" | "paused") => sqlite.prepare("UPDATE system_settings SET value = ? WHERE key = 'self_service'").run(state);
+
 const call = (path: string, init: RequestInit = {}) => worker.fetch(new Request(`${origin}${path}`, init), env);
 const staff = (path: string, method = "GET", body?: unknown) =>
   call(path, { method, headers: { origin, cookie, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -24,6 +27,7 @@ beforeEach(async () => {
   const r2 = memoryR2();
   photos = r2.objects;
   env = { DB: database.d1, EVIDENCE: r2.bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
+  selfService("open");
   sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash) VALUES('ACC-1', 'staff.one', 'Staff One', ?)").run(await hashPassword("correct horse battery"));
   const login = await call("/api/staff/login", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ username: "staff.one", password: "correct horse battery" }) });
   cookie = login.headers.get("set-cookie")!.split(";")[0]!;
@@ -115,7 +119,7 @@ describe("self-service catalog", () => {
     const water = await consumable("Bottled Water", 20);
     const a = phone();
     const take = a.take(water, 2);
-    env.SELF_SERVICE = "paused";
+    selfService("paused");
     for (const response of [await call("/api/self-service/catalog"), await a.sync([take])]) {
       expect(response.status).toBe(503);
       expect(await response.json()).toMatchObject({ maintenance: true });
@@ -123,7 +127,7 @@ describe("self-service catalog", () => {
     expect(stored(take.id)).toBeUndefined();
     expect(onHand(water)).toBe(20);
     expect((await call("/api/self-service/sync", { method: "POST", headers: { origin: "https://evil.example" }, body: "x" })).status).toBe(403);
-    env.SELF_SERVICE = "open";
+    selfService("open");
     expect(await results(await a.sync([take]))).toEqual([{ id: take.id, outcome: "accepted" }]);
     expect(onHand(water)).toBe(18);
   });
@@ -134,7 +138,7 @@ describe("self-service catalog", () => {
     sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash, role) VALUES('ACC-2', 'admin.one', 'Admin One', ?, 'ADMIN')").run(await hashPassword("correct horse battery"));
     const login = await call("/api/staff/login", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ username: "admin.one", password: "correct horse battery" }) });
     const admin = { "x-self-service-test": "1", cookie: login.headers.get("set-cookie")!.split(";")[0]! };
-    env.SELF_SERVICE = "paused";
+    selfService("paused");
     expect((await (await staff("/api/staff/session")).json() as { selfServiceClosed: boolean }).selfServiceClosed).toBe(true);
     // The header alone, or a staff member without administration, still meets a closed Self-Service.
     for (const headers of [{ "x-self-service-test": "1" }, { "x-self-service-test": "1", cookie }, { cookie: admin.cookie }] as Array<Record<string, string>>) {
@@ -152,7 +156,7 @@ describe("self-service catalog", () => {
     // Refusals are tested too: an invalid record is still refused.
     expect((await results(await a.sync([{ ...a.take(water, 99), test: true }], { headers: admin })))[0]!.outcome).toBe("rejected");
     // A test record that reaches an open Self-Service later (from any page) is still only held.
-    env.SELF_SERVICE = "open";
+    selfService("open");
     const late = { ...a.take(water, 1), test: true };
     expect((await results(await a.sync([late])))[0]!.outcome).toBe("review");
     expect(onHand(water)).toBe(20);
@@ -167,6 +171,36 @@ describe("self-service catalog", () => {
     for (const ids of ["", "not-an-id", Array.from({ length: 51 }, () => crypto.randomUUID()).join(",")]) {
       expect((await call(`/api/self-service/decisions?ids=${ids}`)).status).toBe(400);
     }
+  });
+
+  it("is closed and reopened by an administrator from Administration, and audited once per real change", async () => {
+    sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash, role) VALUES('ACC-2', 'admin.one', 'Admin One', ?, 'ADMIN')").run(await hashPassword("correct horse battery"));
+    const login = await call("/api/staff/login", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ username: "admin.one", password: "correct horse battery" }) });
+    const admin = login.headers.get("set-cookie")!.split(";")[0]!;
+    const change = (who: string, body: unknown, headers: Record<string, string> = {}) =>
+      call("/api/staff/admin/self-service", { method: "PATCH", headers: { origin, cookie: who, "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+    expect((await change(cookie, { state: "paused" })).status).toBe(403);
+    expect((await change(admin, { state: "paused" }, { origin: "https://evil.example" })).status).toBe(403);
+    expect((await change(admin, { state: "maybe" })).status).toBe(400);
+    expect((await call("/api/self-service/catalog")).status).toBe(200);
+    expect(await (await change(admin, { state: "paused" })).json()).toEqual({ state: "paused" });
+    expect((await call("/api/self-service/catalog")).status).toBe(503);
+    expect((await (await staff("/api/staff/session")).json() as { selfServiceClosed: boolean }).selfServiceClosed).toBe(true);
+    // The same value again changes nothing and writes no second entry.
+    await change(admin, { state: "paused" });
+    expect(await (await change(admin, { state: "open" })).json()).toEqual({ state: "open" });
+    expect((await call("/api/self-service/catalog")).status).toBe(200);
+    const entries = sqlite.prepare("SELECT actor_user_id AS actor, entity_type AS entity, details_json AS details FROM audit_log WHERE action = 'SETTING_CHANGED' ORDER BY created_at, rowid").all() as Array<{ actor: string; entity: string; details: string }>;
+    expect(entries.map((entry) => [entry.actor, entry.entity, JSON.parse(entry.details)])).toEqual([
+      ["ACC-2", "SETTING", { setting: "self_service", from: "open", to: "paused" }],
+      ["ACC-2", "SETTING", { setting: "self_service", from: "paused", to: "open" }]
+    ]);
+    const asAdmin = (path: string) => call(path, { headers: { cookie: admin } });
+    expect((await (await asAdmin("/api/staff/admin/activity")).json() as { events: Array<{ action: string }> }).events.filter((event) => event.action === "SETTING_CHANGED")).toHaveLength(2);
+    expect((await (await asAdmin("/api/staff/activity?type=SETTING_CHANGED")).json() as { events: Array<{ summary: string }> }).events.map((event) => event.summary))
+      .toEqual(["Admin One reopened Self-Service.", "Admin One closed Self-Service for maintenance."]);
+    // Staff do not see account or setting events in Activity.
+    expect((await (await staff("/api/staff/activity?type=SETTING_CHANGED")).json() as { events: unknown[] }).events).toEqual([]);
   });
 });
 
