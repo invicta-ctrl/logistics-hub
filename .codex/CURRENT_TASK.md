@@ -3,7 +3,7 @@ INTENT: finish Part 5 (A12) and hand it to release
 OBJECTIVE: open-unit Consumables (schema, invariants, staff workflow, reconciliation, Activity/export, item-driven phone Use, polish) with every local gate green; a PR to `main`, released only after its migrations are applied to production with Earl's authorization.
 SCOPE: `migrations/0017_open_units.sql`, `src/open-units.ts` (Worker actions), `src/open-unit-panel.ts` (shared staff controls), `src/inventory.ts` (mode, invariant messages, count reconciliation, item detail), `src/self-service.ts` (USE events), `src/activity.ts` (open-unit entries), `src/catalog-policy.ts` (modes, conditions, `selfServiceAction()`), `src/staff.ts`, `src/stock-workspace.ts`, `src/stock.ts`, `src/movement-form.ts`, `src/self-service-app.ts`, `src/offline-queue.ts`, `src/self-service-review.ts`, `src/styles.css`, tests (`tests/open-units.test.ts` and additions in the activity, self-service, migration, offline-queue, browser and Worker + D1 suites), docs.
 EXCLUDED: applying any migration to production, merging to `main` before that, deploy, new dependencies. Never reapply 0015.
-STATUS: CODE COMPLETE on slice/part-05b-open-units (Claude Cloud, 2026-10-01). Details and gate results: `.codex/SESSION_HANDOFF.md` (top section). Release blocked on production migrations 0016 + 0017 (Earl's authorization).
+STATUS: RELEASED 2026-10-02: production migrations 0016 + 0017 applied (Earl) and checked, then `main` fast-forwarded to c00d43d (PR #5 merged). Details: `.codex/SESSION_HANDOFF.md` (top section). Owner's signed-in production check pending.
 
 ---
 

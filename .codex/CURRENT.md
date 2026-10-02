@@ -1,8 +1,8 @@
 # Current Work Pointer — Logistics Hub
 PROGRAM: Logistics Hub
-MILESTONE: PART-05B_OPEN_UNITS code complete on slice/part-05b-open-units (Claude Cloud, 2026-10-01; PR to main open), NOT released: it needs production migrations 0016 + 0017 applied first, with Earl's explicit authorization (docs/DEPLOYMENT.md, Part 5B). Part 5 core was RELEASED 2026-10-01 (`main` 1a498a1 + follow-up d24de85, deployed; Earl checked Activity and a full export signed in).
+MILESTONE: PART-05 COMPLETE (2026-10-02): Part 5B Open-Unit Tracking RELEASED: production D1 migrations 0016 + 0017 applied by Earl with `wrangler d1 migrations apply DB --remote` (Claude's read-only post-checks match the pre-change snapshot), then `main` fast-forwarded d24de85..c00d43d (PR #5, merged) by Claude Cloud; Workers Builds deploys it. Part 5 core was released 2026-10-01.
 STATUS: PART_04_10_COMPLETE (2026-09-30): public pages load fresh from the network (only /self-service opens from the phone's cache), merged to main and deployed by Workers Builds (after Part 4.9's home banner, 4.8's Self-Service photo, 4.7's light/dark switch and 4.6's visual cleanup). Part 4 (with 4.5–4.10) is closed by Earl's confirmation on 2026-10-01 (owner confirmation, not an agent test run); it no longer gates Part 5.
-BRANCH: slice/part-05b-open-units (the one active slice; from main d24de85). handoff/part-05-activity-cloud and slice/part-05-activity-fixes are merged and due for deletion (see SESSION_HANDOFF).
+BRANCH: main (no active slice). The merged branches slice/part-05b-open-units, slice/part-05-activity-fixes and handoff/part-05-activity-cloud are due for deletion by someone with push rights (the cloud session cannot delete them).
 CLOUD_HANDOFF: .codex/PART_05_CLOUD_HANDOFF.md
 ACTIVE_WRITER: none (Claude Cloud yields after the Part 5B checkpoint); claim before editing
 SHARED_WORKTREE: D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub
@@ -20,4 +20,4 @@ PART_04_BRIEF: .codex/PART_04_BRIEF.md
 PART_04_5_BRIEF: .codex/PART_04_5_BRIEF.md
 PART_04_6_BRIEF: .codex/PART_04_6_BRIEF.md
 ACCEPTED_PART_05: docs/specs/accepted/2026-09-30-part-05-activity-accountability-plan.md (ACCEPTED 2026-10-01; Acceptance record at the top; Part 5 core, visual-cleanup record, Open-Unit Tracking A12)
-NEXT_EXACT_ACTION: (1) Earl authorizes the production migrations for Part 5B, or runs them himself, from the PR head: Time Travel bookmark, `wrangler d1 migrations list DB --remote` shows exactly 0016 and 0017, apply once, read-only post-checks (docs/DEPLOYMENT.md, Part 5B). (2) Only then merge the Part 5B PR to main (Workers Builds deploys it) and run the post-deploy checks. (3) Delete the merged slice branches. Never reapply 0015. Owner prompt source: docs/specs/accepted/2026-10-01-part-05-owner-master-prompt.md.
+NEXT_EXACT_ACTION: (1) Earl checks Part 5B signed in on production: set a ream-type Consumable to "Open and use gradually", open a unit, record a use, mark it empty (on hand −1), check History and Activity; on a phone the item shows Use. (2) Delete the merged branches. (3) Part 6 (Admin + Hardening) only after a new accepted plan. Never reapply 0015, 0016 or 0017.
