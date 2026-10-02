@@ -1,7 +1,7 @@
 import { ACTIVITY_SOURCES, ACTIVITY_TITLES, ACTIVITY_TYPES, STOCK_AREAS, type ActivitySource } from "./catalog-policy";
 import { signed } from "./movement-form";
 import { type Session, loadSession, shell } from "./staff";
-import { type Html, ApiError, api, emptyState, expired, failure, formatDate, formatDateTime, html, icon, live, mount, officeDay, onLeave, preservingFocus, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { type Html, ApiError, api, emptyState, expired, failure, formatDate, formatDateTime, html, icon, label, live, mount, officeDay, onLeave, preservingFocus, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 /*
  * Activity (/staff/activity): one newest-first list of who did what, read from GET /api/staff/activity.
@@ -77,7 +77,7 @@ export async function activityWorkspace(): Promise<void> {
   const query = (extra: Record<string, string> = {}) => new URLSearchParams(Object.entries({ ...filters, ...extra }).filter(([, value]) => value) as Array<[string, string]>).toString();
   const filtered = () => KEYS.some((key) => filters[key]);
   const itemLabel = (id: string) => picker?.items.find((item) => item.id === id)?.name ?? entries.find((entry) => entry.itemId === id)?.itemName ?? id;
-  const actorLabel = (id: string) => id === session.id ? `you (${session.displayName})` : id === "SELF_SERVICE" ? "Self-service (phones)" : id === "SYSTEM" ? "System" : actors.get(id) ?? "the chosen person";
+  const actorLabel = (id: string) => id === session.id ? `you (${session.displayName})` : id === "SELF_SERVICE" ? "Self-Service (phones)" : id === "SYSTEM" ? "System" : actors.get(id) ?? "the chosen person";
 
   function chipText(key: Key, value: string): string {
     if (key === "type") return `Type: ${ACTIVITY_TITLES[value] ?? value}`;
@@ -85,7 +85,7 @@ export async function activityWorkspace(): Promise<void> {
     if (key === "item") return `Item: ${itemLabel(value)}`;
     if (key === "from") return `From ${formatDate(value)}`;
     if (key === "to") return `To ${formatDate(value)}`;
-    if (key === "stockArea") return `Stock area: ${value}`;
+    if (key === "stockArea") return `Stock area: ${label(value)}`;
     if (key === "location") return `Location: ${value}`;
     if (key === "changed") return CHANGED[value] ?? value;
     return "Needs attention only";
@@ -114,9 +114,9 @@ export async function activityWorkspace(): Promise<void> {
     return html`<li class="activity-row ${tone}" data-key="${entry.id}">
         <p class="activity-row__change ${entry.stockChanged ? "" : "activity-row__change--none"}">${change}</p>
         <div class="activity-row__main">
-          ${entry.itemId ? html`<a class="row-link activity-row__summary" href="/staff/inventory?item=${entry.itemId}" data-route>${entry.summary}</a>` : html`<p>${entry.summary}</p>`}
+          ${entry.itemId ? html`<a class="row-link activity-row__summary" href="/staff/items?item=${entry.itemId}" data-route>${entry.summary}</a>` : html`<p>${entry.summary}</p>`}
           <p class="cell-sub">${entry.at ? html`<time datetime="${entry.at}">${formatDateTime(entry.at)}</time>` : "Time unknown"} · <span class="tag">${ACTIVITY_SOURCES[entry.source] ?? entry.source}</span>${entry.attention ? html` <span class="tag tag--warn">Needs attention</span>` : ""}${balance}${entry.itemId ? html` · <span class="mono">${entry.itemId}</span>` : ""}${entry.correlationId.startsWith("LN-")
-            ? html` · Loan <span class="mono">${entry.correlationId}</span>` : ""}${entry.source === "PHONE" && entry.attention ? html` · <a href="/staff/self-service" data-route>Review in Self-service</a>` : ""}</p>
+            ? html` · Loan <span class="mono">${entry.correlationId}</span>` : ""}${entry.source === "PHONE" && entry.attention ? html` · <a href="/staff/self-service" data-route>Review in Self-Service</a>` : ""}</p>
           ${reason || entry.note ? html`<p class="activity-row__note">${reason ? html`<span class="muted">Reason:</span> ${reason}` : ""}${reason && entry.note ? " · " : ""}${entry.note ? html`<span class="muted">Note:</span> ${entry.note}` : ""}</p>` : ""}
         </div>
       </li>`;
@@ -277,14 +277,14 @@ export async function activityWorkspace(): Promise<void> {
     const today = officeDay();
     return html`<form class="form" id="activity-filter-form" novalidate>
       <div class="field"><label for="f-type">Type</label><select id="f-type" name="type">${option("", "All types")}${groups}</select></div>
-      <div class="field"><label for="f-actor">Who</label><select id="f-actor" name="actor">${option("", "Anyone", filters.actor)}${option(session.id, `Me (${session.displayName})`, filters.actor)}${option("SELF_SERVICE", "Self-service (phones)", filters.actor)}${option("SYSTEM", "System", filters.actor)}${people.map(([id, name]) => option(id, name, filters.actor))}${filters.actor && !known.includes(filters.actor) ? option(filters.actor, "The chosen person", filters.actor) : ""}</select><p class="field__hint">Other staff appear here once their entries are on the list.</p></div>
+      <div class="field"><label for="f-actor">Who</label><select id="f-actor" name="actor">${option("", "Anyone", filters.actor)}${option(session.id, `Me (${session.displayName})`, filters.actor)}${option("SELF_SERVICE", "Self-Service (phones)", filters.actor)}${option("SYSTEM", "System", filters.actor)}${people.map(([id, name]) => option(id, name, filters.actor))}${filters.actor && !known.includes(filters.actor) ? option(filters.actor, "The chosen person", filters.actor) : ""}</select><p class="field__hint">Other staff appear here once their entries are on the list.</p></div>
       <div class="field"><label for="f-item">Item</label><input id="f-item" name="item" list="activity-items" autocomplete="off" spellcheck="false" placeholder="Name or ID" value="${filters.item ? `${itemLabel(filters.item)} · ${filters.item}` : ""}" aria-describedby="f-item-hint" /><datalist id="activity-items"></datalist><p class="field__hint" id="f-item-hint">Pick from the list, or type an item ID.</p></div>
       <div class="field-grid">
         <div class="field"><label for="f-from">From</label><input id="f-from" name="from" type="date" value="${filters.from ?? ""}" max="${filters.to || today}" /></div>
         <div class="field"><label for="f-to">To</label><input id="f-to" name="to" type="date" value="${filters.to ?? ""}" min="${filters.from ?? ""}" max="${today}" /></div>
       </div>
       <div class="field-grid">
-        <div class="field"><label for="f-stockArea">Stock area</label><select id="f-stockArea" name="stockArea">${option("", "All areas")}${STOCK_AREAS.map((area) => option(area, area, filters.stockArea))}</select></div>
+        <div class="field"><label for="f-stockArea">Stock area</label><select id="f-stockArea" name="stockArea">${option("", "All areas")}${STOCK_AREAS.map((area) => option(area, label(area), filters.stockArea))}</select></div>
         <div class="field"><label for="f-changed">Stock change</label><select id="f-changed" name="changed">${option("", "Any")}${Object.entries(CHANGED).map(([value, text]) => option(value, text, filters.changed))}</select></div>
       </div>
       <div class="field"><label for="f-location">Location</label><input id="f-location" name="location" list="activity-locations" maxlength="80" autocomplete="off" placeholder="Any location" value="${filters.location ?? ""}" /><datalist id="activity-locations"></datalist></div>
