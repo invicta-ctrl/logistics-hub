@@ -8,7 +8,7 @@ async function signIn(page: Page) {
   await page.getByRole("textbox", { name: "Username" }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Inventory" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Items" })).toBeVisible();
 }
 
 test("public Lending Hub fails closed on freshly migrated data", async ({ page, request }) => {
@@ -19,7 +19,7 @@ test("public Lending Hub fails closed on freshly migrated data", async ({ page, 
 });
 
 test("staff pages and every staff write reject anonymous and cross-site callers", async ({ page, request, baseURL }) => {
-  await page.goto("/staff/inventory");
+  await page.goto("/staff/items");
   await expect(page).toHaveURL(/\/staff$/);
   const write = { data: { kind: "IN", quantity: 50, key: "anonymous-attempt" }, headers: { origin: baseURL! } };
   expect((await request.post("/api/staff/items/ITM-0072/movements", write)).status()).toBe(401);
@@ -33,7 +33,7 @@ test("staff pages and every staff write reject anonymous and cross-site callers"
 
 test("preserves the ITM-0001 reconciliation evidence", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("searchbox", { name: "Search inventory" }).fill("ITM-0001");
+  await page.getByRole("searchbox", { name: "Search items" }).fill("ITM-0001");
   await page.getByRole("button", { name: "Detergent Bar" }).click();
   await expect(page.getByLabel("Quantity on hand")).toHaveValue("7");
   await expect(page.locator("#stock-form")).toContainText("blocks on hand");
@@ -50,7 +50,7 @@ test("staff publish and stock changes reach an open public page live", async ({ 
   await expect(visitor.getByRole("heading", { name: "No items are open for borrowing yet" })).toBeVisible();
 
   await signIn(page);
-  await page.getByRole("searchbox", { name: "Search inventory" }).fill("Bluetooth Microphone");
+  await page.getByRole("searchbox", { name: "Search items" }).fill("Bluetooth Microphone");
   await page.getByRole("button", { name: "Bluetooth Microphone" }).click();
   await page.getByRole("tab", { name: "Review & edit" }).click();
   await page.getByLabel("Shown to").selectOption("STUDENTS_AND_USC_STAFF");
@@ -89,10 +89,11 @@ test("staff publish and stock changes reach an open public page live", async ({ 
 
 test("sign out revokes the session", async ({ page }) => {
   await signIn(page);
+  await page.getByRole("button", { name: /^Account:/ }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByRole("heading", { name: "Staff sign in" })).toBeVisible();
   expect((await page.request.get("/api/staff/session")).status()).toBe(401);
-  await page.goto("/staff/inventory");
+  await page.goto("/staff/items");
   await expect(page).toHaveURL(/\/staff$/);
 });
 
@@ -129,17 +130,17 @@ test.describe("owner administration", () => {
     const staff = await (await browser.newContext()).newPage();
     await signInAs(staff, "msantos", temporary);
     await expect(staff.getByText("Choose your own password to continue.")).toBeVisible();
-    await expect(staff.getByRole("link", { name: "Inventory" })).toHaveCount(0);
+    await expect(staff.getByRole("link", { name: "Items" })).toHaveCount(0);
     expect((await staff.request.get("/api/staff/inventory")).status()).toBe(403);
     await staff.getByLabel("Current password").fill(temporary);
     await staff.getByLabel("New password", { exact: true }).fill("maria chose this one");
     await staff.getByLabel("Repeat new password").fill("maria chose this one");
     await staff.getByRole("button", { name: "Change password" }).click();
-    await expect(staff.getByRole("heading", { name: "Inventory" })).toBeVisible();
+    await expect(staff.getByRole("heading", { name: "Items" })).toBeVisible();
     await expect(staff.getByRole("link", { name: "Administration" })).toHaveCount(0);
     expect((await staff.request.get("/api/staff/admin/accounts")).status()).toBe(403);
     await staff.goto("/staff/admin");
-    await expect(staff).toHaveURL(/\/staff\/inventory$/);
+    await expect(staff).toHaveURL(/\/staff\/items$/);
   });
 
   test("owner closes and reopens Self-Service from Administration, and phones see it at once", async ({ page, request }) => {
@@ -166,7 +167,8 @@ test.describe("owner administration", () => {
 
   test("owner issues a recovery key that resets the owner password exactly once", async ({ page, baseURL }) => {
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
-    await page.getByRole("link", { name: "My account" }).first().click();
+    await page.getByRole("button", { name: /^Account:/ }).click();
+    await page.getByRole("link", { name: "My account" }).click();
     await page.getByRole("button", { name: /recovery key/ }).first().click();
     const key = (await page.locator(".secret code").textContent())!;
     expect(key).toMatch(/^LHR1\./);
@@ -178,7 +180,7 @@ test.describe("owner administration", () => {
     await page.reload();
     await expect(page).toHaveURL(/\/staff$/);
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, "recovered owner pass");
-    await expect(page.getByRole("heading", { name: "Inventory" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Items" })).toBeVisible();
   });
 });
 
@@ -206,9 +208,9 @@ test("migrated review: fill the gaps, mark reviewed, and move to the next record
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: /^All items/ }).click();
-  await page.getByRole("searchbox", { name: "Search inventory" }).fill("e2e alias");
+  await page.getByRole("searchbox", { name: "Search items" }).fill("e2e alias");
   await expect(page.locator("tbody tr")).toHaveCount(1);
-  await page.getByRole("searchbox", { name: "Search inventory" }).fill("");
+  await page.getByRole("searchbox", { name: "Search items" }).fill("");
   await page.getByLabel("Location", { exact: true }).selectOption("E2E shelf A");
   await expect(page.locator("tbody tr")).toHaveCount(1);
   await page.locator("tbody .row-link").first().click();
@@ -245,12 +247,61 @@ test("create, warn on a duplicate name, then deactivate without deleting", async
   await expect(page.getByRole("button", { name: "E2E Extension Cord" })).toBeVisible();
 });
 
+/** The account button and every shown section link lie inside the viewport (the root clips sideways overflow). */
+const onScreen = () => [...document.querySelectorAll(".account, .app-nav__link")].every((element) => {
+  const box = element.getBoundingClientRect();
+  return box.width === 0 || (box.left >= 0 && box.right <= window.innerWidth && box.bottom <= window.innerHeight);
+});
+
+test("phones get the daily sections in a bottom bar and the rest under More", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await signIn(page);
+  const sections = page.getByRole("navigation", { name: "Sections" });
+  for (const name of ["Items", "Stock", "Loans", "Self-Service"]) await expect(sections.getByRole("link", { name })).toBeVisible();
+  await expect(sections.getByRole("link", { name: "Activity" })).toBeHidden();
+  const bar = (await sections.boundingBox())!;
+  expect(bar.y + bar.height).toBeCloseTo(800, 0);
+  expect(bar.height).toBeGreaterThanOrEqual(44);
+  const more = sections.getByRole("button", { name: "More" });
+  await more.click();
+  await expect(more).toHaveAttribute("aria-expanded", "true");
+  const menu = page.locator("#staff-menu");
+  await expect(menu.getByRole("link", { name: "My account" })).toBeVisible();
+  await expect(menu.getByRole("link", { name: "Administration" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  await more.click();
+  await menu.getByRole("link", { name: "Activity" }).click();
+  await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
+  await expect(page.locator("#staff-menu")).toBeHidden();
+  // Choosing the page already shown still closes the menu.
+  await more.click();
+  await menu.getByRole("link", { name: "Activity" }).click();
+  await expect(menu).toBeHidden();
+  // The last control on the page scrolls clear of the bottom bar when it takes focus (WCAG 2.4.11).
+  await expect(page.locator(".activity-row").first()).toBeVisible();
+  const last = await page.locator("#main-content").locator("button:visible, a:visible").last().elementHandle();
+  await last!.focus();
+  const box = (await last!.boundingBox())!;
+  expect(box.y + box.height).toBeLessThanOrEqual(800 - bar.height);
+  // On desktop every section is in the top bar and More is gone.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(sections.getByRole("link", { name: "Activity" })).toBeVisible();
+  await expect(more).toBeHidden();
+});
+
 test("staff workspace fits a 320 px phone", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await signIn(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   // The item-name button in each row is at least 24 px tall (WCAG 2.2 target size minimum).
   expect((await page.locator("tbody .row-link").first().boundingBox())!.height).toBeGreaterThanOrEqual(24);
+  // At 200% text the account button, every section and the page's primary action stay reachable on screen.
+  await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+  expect(await page.evaluate(onScreen)).toBeTruthy();
+  expect(await page.evaluate(() => document.querySelector("#new-item")!.getBoundingClientRect().right <= window.innerWidth)).toBeTruthy();
+  await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
   await page.locator("tbody .row-link").first().click();
   await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
@@ -258,8 +309,8 @@ test("staff workspace fits a 320 px phone", async ({ page }) => {
 
 test("stock workspace: record a delivery, restock and receive, then read it in activity", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("link", { name: "Stock & Pantry" }).click();
-  await expect(page.getByRole("heading", { name: "Stock & Pantry" })).toBeVisible();
+  await page.getByRole("link", { name: "Stock" }).click();
+  await expect(page.getByRole("heading", { name: "Stock", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Needs attention/ })).toBeVisible();
 
   const panel = page.locator("#record-panel");
@@ -324,7 +375,7 @@ test("stock workspace on a 320 px phone records through a bottom sheet", async (
   await page.setViewportSize({ width: 320, height: 700 });
   await signIn(page);
   await page.goto("/staff/stock");
-  await expect(page.getByRole("heading", { name: "Stock & Pantry" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Stock", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   await page.getByRole("button", { name: "Update stock" }).click();
   const sheet = page.getByRole("dialog", { name: "Update stock" });
@@ -337,7 +388,7 @@ test("stock workspace on a 320 px phone records through a bottom sheet", async (
 test("lend for individual and USC use with a photo, return one damaged, and read the dashboard", async ({ page }) => {
   const photo = "public/brand/ydd-2026-banner.jpg";
   await signIn(page);
-  await page.goto("/staff/inventory?item=ITM-0262");
+  await page.goto("/staff/items?item=ITM-0262");
   await expect(page.getByLabel("Quantity on hand")).toHaveValue("10");
   await page.getByRole("tab", { name: "Loan" }).click();
   const form = page.locator("#loan-form");
@@ -460,8 +511,8 @@ test("activity: one list of who did what, filters kept in the URL, older pages, 
   for (const width of [320, 375, 390, 768, 1024, 1366, 1440]) {
     await page.setViewportSize({ width, height: 800 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `activity at ${width}`).toBeTruthy();
-    // The root clips sideways overflow, so also check that the bar's account and sign out stay on screen.
-    expect(await page.evaluate(() => document.querySelector(".app-bar__end")!.getBoundingClientRect().right <= window.innerWidth), `app bar at ${width}`).toBeTruthy();
+    // The root clips sideways overflow, so also check that the account button and every section stay on screen.
+    expect(await page.evaluate(onScreen), `app bar at ${width}`).toBeTruthy();
   }
   await page.setViewportSize({ width: 390, height: 800 });
   await page.getByRole("button", { name: /^Filters/ }).click();
@@ -502,7 +553,7 @@ test("activity export: the filtered list as a safe CSV file, audited for the own
   // The owner's bar has the most sections (Administration too); it still fits from phone to desktop.
   for (const width of [320, 390, 768, 1024, 1180, 1281, 1366]) {
     await owner.setViewportSize({ width, height: 800 });
-    expect(await owner.evaluate(() => document.querySelector(".app-bar__end")!.getBoundingClientRect().right <= window.innerWidth), `owner app bar at ${width}`).toBeTruthy();
+    expect(await owner.evaluate(onScreen), `owner app bar at ${width}`).toBeTruthy();
   }
 });
 
@@ -586,14 +637,14 @@ test("open units: opt in, open, use, mark low, open another, mark empty, close b
 
   // One-hand phone width: nothing scrolls sideways in the open sheet.
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`/staff/inventory?item=${id}`);
+  await page.goto(`/staff/items?item=${id}`);
   await expect(sheet.locator("#open-units")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });
 
 test("open units: the review view suggests whole-unit Consumables by their unit word and changes nothing", async ({ page }) => {
   await signIn(page);
-  await page.goto("/staff/inventory?view=gradual");
+  await page.goto("/staff/items?view=gradual");
   await expect(page.getByRole("button", { name: /^Used gradually\?/ })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("Nothing changes here", { exact: false })).toBeVisible();
   const units = await page.locator("tbody .qty-unit").allTextContents();

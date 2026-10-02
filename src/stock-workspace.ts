@@ -59,17 +59,17 @@ function whyTags(item: StockItem): Html {
   })}${item.reorderStatus ? html`<span class="tag tag--gold">${label(item.reorderStatus)}</span>` : ""}</span>`;
 }
 
-const itemCell = (item: { id: string; name: string; storageLocation?: string | null }) => html`<td class="col-item"><a class="row-link" href="/staff/inventory?item=${item.id}" data-route>${item.name}</a><span class="cell-sub"><span class="mono">${item.id}</span>${item.storageLocation !== undefined ? html` · ${item.storageLocation ?? "No location"}` : ""}</span></td>`;
+const itemCell = (item: { id: string; name: string; storageLocation?: string | null }) => html`<td class="col-item"><a class="row-link" href="/staff/items?item=${item.id}" data-route>${item.name}</a><span class="cell-sub"><span class="mono">${item.id}</span>${item.storageLocation !== undefined ? html` · ${item.storageLocation ?? "No location"}` : ""}</span></td>`;
 const qtyCell = (onHand: number, unit: string, item?: StockItem) => html`<td class="col-qty"><span class="qty">${onHand}</span> <span class="qty-unit">${units(onHand, unit)}</span>${item?.openUnits ? html`<span class="cell-sub">${sealedLine(onHand, item.openUnits, item.openCondition)}</span>` : ""}</td>`;
 const levelCell = (item: StockItem) => html`<td class="col-level">${item.reorderThreshold > 0 ? item.reorderThreshold : html`<span class="muted">Not set</span>`}</td>`;
 
 export async function stockWorkspace(): Promise<void> {
   const session = await loadSession("stock");
   if (!session) return;
-  document.title = "Stock & Pantry · Staff workspace";
+  document.title = "Stock · Staff workspace";
   shell(session, "stock", html`
     <header class="page-header">
-      <div class="page-header__title"><h1>Stock &amp; Pantry</h1><p id="stock-today">Loading today's activity…</p></div>
+      <div class="page-header__title"><h1>Stock</h1><p id="stock-today">Loading today's activity…</p></div>
       <div class="page-header__actions">
         <p class="live-status" id="live-status">Connecting…</p>
         <button class="button button--primary record-open" type="button" data-record>${icon("plus")}Update stock</button>
@@ -120,7 +120,7 @@ export async function stockWorkspace(): Promise<void> {
   const lent = createSheet(recordSheet, { onClose: () => home.append(panelNode) });
   const showRecord = () => {
     if (compact.matches) {
-      mount(recordSheet, sheetContent("Stock & Pantry", "Update stock", html``));
+      mount(recordSheet, sheetContent("Stock", "Update stock", html``));
       recordSheet.querySelector(".sheet__body")!.append(panelNode);
       lent.open();
     }
@@ -204,7 +204,7 @@ export async function stockWorkspace(): Promise<void> {
         ${[["all", "Everything", needing.length], ...Object.entries(FOCUS).filter(([key]) => key !== "open" || counts.open || focus === "open").map(([key, text]) => [key, text, counts[key]])].map(([key, text, count]) =>
           html`<button type="button" class="chip" data-focus="${key}" aria-pressed="${key === focus}">${text}<span class="chip__count">${count}</span></button>`)}
       </div>
-      ${unset ? html`<p class="hint-line">${icon("info")}<span>${plural(unset, "active item")} ${unset === 1 ? "has" : "have"} no reorder level, so ${unset === 1 ? "it is" : "they are"} never called low. Set levels in <a class="text-link" href="/staff/inventory" data-route>Inventory</a>.</span></p>` : ""}
+      ${unset ? html`<p class="hint-line">${icon("info")}<span>${plural(unset, "active item")} ${unset === 1 ? "has" : "have"} no reorder level, so ${unset === 1 ? "it is" : "they are"} never called low. Set levels in an item's Edit details in <a class="text-link" href="/staff/items" data-route>Items</a>.</span></p>` : ""}
       ${shown.length ? html`<div class="data-table-wrap"><table class="data-table data-table--static">
         <caption class="visually-hidden">Items that need attention</caption>
         <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Why</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -247,7 +247,7 @@ export async function stockWorkspace(): Promise<void> {
   function pantryMarkup(data: Stock): Html {
     const pantry = data.items.filter((item) => item.stockArea === "Pantry" && item.status !== "INACTIVE")
       .sort((a, b) => Number(expiring(b)) - Number(expiring(a)) || a.name.localeCompare(b.name));
-    if (!pantry.length) return emptyState("No pantry items", "Set an item's stock area to Pantry in Inventory → Edit details to track it here.");
+    if (!pantry.length) return emptyState("No pantry items", "Set an item's stock area to Pantry in Items → Edit details to track it here.");
     return html`<div class="data-table-wrap"><table class="data-table data-table--static">
       <caption class="visually-hidden">Pantry items</caption>
       <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Expiry</th><th scope="col">Status</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -267,7 +267,7 @@ export async function stockWorkspace(): Promise<void> {
       ${entries.length ? html`<ol class="activity-list">${entries.map((entry) => html`<li class="activity-row ${entry.change > 0 ? "is-in" : entry.change < 0 ? "is-out" : ""}">
           <p class="activity-row__change">${signed(entry.change)}</p>
           <div class="activity-row__main">
-            <p><a class="row-link" href="/staff/inventory?item=${entry.itemId}" data-route>${entry.itemName}</a> <span class="muted">· ${movementTitle(entry.related === "OPEN_UNIT" ? "UNIT_EMPTIED" : entry.movementType, entry.change, entry.reason)}</span></p>
+            <p><a class="row-link" href="/staff/items?item=${entry.itemId}" data-route>${entry.itemName}</a> <span class="muted">· ${movementTitle(entry.related === "OPEN_UNIT" ? "UNIT_EMPTIED" : entry.movementType, entry.change, entry.reason)}</span></p>
             <p class="cell-sub">${entry.afterQuantity - entry.change} → ${entry.afterQuantity} ${units(entry.afterQuantity, entry.unit)} · ${entry.actor ?? "Unknown"} · <time datetime="${entry.createdAt}">${todayOnly ? formatTime(entry.createdAt) : formatDateTime(entry.createdAt)}</time>${entry.notes ? ` · ${entry.notes}` : ""}</p>
           </div></li>`)}</ol>`
         : emptyState(todayOnly ? "No stock changes today" : "No stock activity yet", todayOnly ? "Movements recorded today appear here as they happen." : "Stock in, stock out and counts appear here.")}`;

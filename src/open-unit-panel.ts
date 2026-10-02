@@ -3,7 +3,7 @@ import { type Html, api, failure, formatDateTime, html, label, mount, plural, to
 
 /*
  * The open-unit controls (Part 5B) for one open-unit Consumable, shared by the item sheet and the
- * Stock & Pantry record panel. Open, Record use and the condition chips change no stock; Mark empty
+ * Stock record panel. Open, Record use and the condition chips change no stock; Mark empty
  * takes exactly one unit off, after an inline confirmation. The Worker decides every rule.
  */
 
