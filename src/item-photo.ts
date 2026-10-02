@@ -11,14 +11,14 @@ const QUALITIES = [0.82, 0.6, 0.4];
 export const photoUrl = (id: string, size: Size) => `/api/staff/media/${id}/${size}`;
 
 /**
- * The square at the start of an item row. It is decorative (the name sits beside it) and pointer-only: the same
- * photo opens from the item's profile, so keyboard users lose nothing and 500 rows add no tab stops. Its size is
- * fixed in CSS, so rows never shift as images arrive, and only rows near the screen are fetched.
+ * The square at the start of an item row: the image itself, and nothing at all for an item without a photo (its
+ * placeholder is a background on the cell, `col-item--bare`, so a mostly unphotographed list adds no elements). It is
+ * decorative (the name sits beside it) and pointer-only: the same photo opens from the item's profile, so keyboard
+ * users lose nothing and 500 rows add no tab stops. Its size is fixed in CSS, so rows never shift as images arrive,
+ * and only rows near the screen are fetched.
  */
-export function rowThumb(photoId: string | null): Html {
-  return photoId
-    ? html`<span class="thumb" data-photo="${photoId}"><img src="${photoUrl(photoId, "thumb")}" alt="" width="40" height="40" loading="lazy" decoding="async" /></span>`
-    : html`<span class="thumb thumb--empty" aria-hidden="true"></span>`;
+export function rowThumb(photoId: string | null): Html | "" {
+  return photoId ? html`<img class="thumb" data-photo="${photoId}" src="${photoUrl(photoId, "thumb")}" alt="" width="40" height="40" loading="lazy" decoding="async" />` : "";
 }
 
 /**
