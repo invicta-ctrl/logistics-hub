@@ -1,12 +1,12 @@
-# Current Bounded Task — PART-06.0 BASELINE AUDIT + PROPOSED PLAN
-INTENT: documentation planning and rendered local baseline only.
-OBJECTIVE: turn Earl's Part 6 master prompt into a bounded, proposed Admin + Hardening plan that another local or cloud writer can resume without chat history.
+# Current Bounded Task — PART-06 (Admin + Hardening) built; awaiting Earl
+INTENT: Part 6 slices 6.1–6.5 built and verified; wait for the production migrations and Earl's merge decision.
+OBJECTIVE: deliver the proposed Admin + Hardening plan (per-username login limit and session sweep, backup runbook, accessibility fixes, Self-Service setting, Owner-only retention) as one branch that another local or cloud writer can resume without chat history.
 BRANCH: `slice/part-06-plan`, started at `c0c6e9963a9f846adf362a4ddeae683fc1eff375`; derive the current documentation checkpoint with `git rev-parse HEAD` rather than copying a self-referential SHA here.
 AUTHORITY: Earl's `D:\Download\LOGISTICS_HUB_PART_6_CODEX_MASTER_PROMPT.md` (UTF-8 SHA-256 `f7c4f1ac5e11dcea2087f68bb03dfcb4a34a292cdf0f2f981794df311892d5ac`), the accepted reboot specification, the MausBot amendment, and the current repository state.
-SCOPE: read-only source audit; rendered local-preview baseline at required routes and widths; proposed plan/checklist/current/handoff documentation; a coherent committed and pushed documentation checkpoint.
-EXCLUDED: Part 6 implementation, source/UI/dependency/schema/config changes, production/provider mutation, test-form submissions, recovery-key generation, plan acceptance, merge to `main`, and reapplying migrations 0015, 0016, or 0017.
-STATUS: DRAFT COMPLETE (2026-10-02, Claude Cloud). The rendered baseline (65 checks, 5 widths), keyboard/motion/large-text checks, the bounded source audit and the proposed plan (findings R1–R4, S1–S7; slices 6.1–6.5; decisions D1–D7) are in `docs/specs/proposed/2026-10-02-part-06-admin-hardening-plan.md`. Not reconciled with the controlling prompt; not accepted. The local preview at `http://127.0.0.1:8791` was not touched; Self-Service remains paused. The known untracked `NUL` stays untouched.
-NEXT ACTION: reconcile the plan with `D:\Download\LOGISTICS_HUB_PART_6_CODEX_MASTER_PROMPT.md` (D1), then Earl decides D2–D7 and accepts or amends the plan. No implementation before acceptance.
+SCOPE: `src/` (accounts, worker, settings, retention, admin, loans, main, styles, activity labels), migrations `0018` and `0019`, tests (unit, mocked browser, real-Worker browser), `docs/DEPLOYMENT.md`, `docs/PRODUCT_REFERENCE.md`, `docs/OFFLINE_SELF_SERVICE.md`, the plan and `.codex/*`.
+EXCLUDED: any production or provider operation (no migration applied, no deploy, no read of production data, `npm run admin -- verify` deliberately not run), merge to `main`, reopening Self-Service, reapplying 0015–0017, a new dependency.
+STATUS: BUILT AND VERIFIED LOCALLY (2026-10-02, Claude Cloud). Gates on the final tree: typecheck and build; `npm test` 158 passed + 1 skipped; `test:browser` 29/29; `test:browser:worker` 26/26; privacy 0; migration ok (known 1 mismatch); catalog; `wrangler deploy --dry-run`. Final rendered check: 87 page checks at 320–1440 px, 0 problems. Details: plan section 6 and `.codex/SESSION_HANDOFF.md`.
+NEXT ACTION: Earl applies 0018 and 0019 (docs/DEPLOYMENT.md, Part 6) and decides D1; then a session opens the PR, merges and runs the post-deploy checks.
 
 ---
 

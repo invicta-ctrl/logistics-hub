@@ -1,6 +1,6 @@
 # Proposed Part 6 — Administration + Hardening
 
-**Status:** IN PROGRESS on Earl's instruction of 2026-10-02 ("figure them out and continue finishing the entire part 06 plan"); D2–D7 settled in section 5, D1 open. Nothing is merged to `main` or applied to production; see section 4.
+**Status:** BUILT AND VERIFIED LOCALLY on Earl's instruction of 2026-10-02 ("figure them out and continue finishing the entire part 06 plan"); D2–D7 settled in section 5, D1 open; outcome in section 6. Nothing is merged to `main` or applied to production; it waits for Earl to apply migrations `0018` and `0019`.
 
 **Read first:** the controlling prompt (`D:\Download\LOGISTICS_HUB_PART_6_CODEX_MASTER_PROMPT.md`, UTF-8, SHA-256 `f7c4f1ac5e11dcea2087f68bb03dfcb4a34a292cdf0f2f981794df311892d5ac`) was **not available to the session that finished this draft** (Claude Cloud; the file exists only on Earl's PC). The slices, criteria and decisions below come from repository evidence and the roadmap alone. The prompt has not been compared with them. If it differs, the prompt wins. Before acceptance, someone with the file must reconcile it with sections 3–5 and record the result here.
 
@@ -69,3 +69,24 @@ Because 6.3 and 6.4 need migrations that only Earl may apply to production, the 
 - **D5:** Administrators and Owners may open and close Self-Service.
 - **D6:** no axe dependency (the project prefers the platform). A small committed Playwright spec checks labels, names, one `h1`, overflow, and dialog focus on the key routes instead.
 - **D7:** S6 is closed by checking, not by removal: Activity names account events generically ("Account updated for X by Y") and does not show what changed, while Administration's list shows role and username changes. The two are not duplicates, so Administration's list stays.
+
+## 6. Outcome (2026-10-02, Claude Cloud)
+
+Built on `slice/part-06-plan`, one gated commit per slice (`git log c0c6e99..` lists them). Nothing is merged, applied to production or deployed.
+
+| Slice | What exists | Findings it closes |
+|---|---|---|
+| 6.1 | Per-account-name login limit (20 per 15 min, cleared by a sign-in); `sweepStale` removes session rows a month past expiry and spent throttle counters at sign-in | S2, S3 (idle timeout declined in D2; PBKDF2 stays at the Workers cap), part of S1 |
+| 6.2 | `docs/DEPLOYMENT.md`, Backups and restore: what protects what, the SQL dump, restoring into an empty database; a local dump-and-restore rehearsal | S5 (R2 gap accepted in D3; remote and Time Travel restores not rehearsed) |
+| 6.5a | Focus moves only on in-app navigation and never inside a frame; wrapping header, nav, footer and hero button; 24 px row buttons; `tests/browser/accessibility.spec.ts` (14 tests) | R1, R2, R3, R4 |
+| 6.3 | Migration `0018` (`system_settings`, seeded closed), `src/settings.ts`, Administration → Self-Service on phones, an audited `SETTING_CHANGED` entry; the `SELF_SERVICE` variable is removed | S4 |
+| 6.4 | Migration `0019` (resolved-record trigger allows only identity erasure), `src/retention.ts`, Owner-only Administration → Old personal details with a dry run; erased loans leave borrower statistics and suggestions | S1 |
+
+S6 was closed by checking (D7); S7 (unthrottled phone decisions endpoint) is left as it is: record ids are random UUIDs and the endpoint reads only.
+
+**Evidence.** Gates on the final tree: typecheck and build; `npm test` 158 passed, 1 skipped (the perf harness); `npm run test:browser` 29/29; `npm run test:browser:worker` 26/26; `verify:privacy` 0 matches; `verify:migration` ok (the known single legacy balance mismatch); `verify:catalog`; `wrangler deploy --dry-run`. New tests were run against the old code, or with each guard removed, and failed there: the login limits and sweep, the accessibility spec, the retention eligibility rules (loan still out, record waiting for staff, statistics exclusion) and the trigger (migration not applied). Final rendered check on a seeded throwaway Worker and D1 (migrations through 0019; movements across 30 items, 30 loans in every state including nine overdue, 12 phone records of which four are held): 87 page checks at 320, 390, 768, 1024, 1366 and 1440 px, none with sideways scroll, an unlabelled field, an unnamed control, a console error, or anything but exactly one `h1`. Direct re-measurement: focus stays on the page after loading `/staff/admin` and the first Tab reaches "Skip to content" with no scroll; the home page and Lending Hub fit 320 px at 200% text; all 397 inventory row buttons are at least 24 px; a Staff call to the new admin routes answers 403, as does an Administrator's call to the Owner-only retention route (the Owner's answers 200); the seeded phone catalog answers 503.
+
+**Not done, and why.** D1 (the controlling prompt is unreadable from the cloud). Applying `0018` and `0019`, merging and deploying: production changes that only Earl authorizes. `npm run admin -- verify` against production: it would test the live Part 5 code, and its login probe makes production store a throttle row; it is a post-deploy step. A remote or Time Travel restore rehearsal (needs a throwaway remote database). A retention run on real data: nothing is due until autumn 2027. Screen readers and real devices. Observed, not changed: with a long display name and the Self-service badge showing, the staff bar's account name wraps to three lines.
+
+**For Earl.** Reconcile D1 or confirm the build stands; take a dump and a Time Travel bookmark and apply `0018` and `0019` (`docs/DEPLOYMENT.md`, Part 6); then have a session open the pull request, merge it and run the post-deploy checks listed there.
+
