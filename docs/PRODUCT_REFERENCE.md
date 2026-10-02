@@ -58,7 +58,7 @@ Every `/staff/*` page and `/api/staff/*` call needs a live session. Writes must 
 
 ### Items (`/staff/items`; `/staff/inventory` redirects here with its query)
 
-The table shows ID, item (with type and other names), category, location, on-hand quantity and status tags.
+The table shows ID, item (a 40 px photo, or a quiet placeholder, then the name with type and other names), category, location, on-hand quantity and status tags. Thumbnails are the small 320 px variant, loaded lazily for rows near the screen, with a fixed size so rows never shift; they are decorative beside the name, and clicking one opens the photo large (the same photo opens from the profile, so keyboard users lose nothing).
 
 **Views:**
 - All items;
@@ -79,7 +79,7 @@ The table shows ID, item (with type and other names), category, location, on-han
 
 **Review progress** sits in the compact page header: "N of 397 records reviewed". "Needs review" is a neutral marker, not a warning colour.
 
-**Item sheet** (a side sheet on desktop, a bottom sheet on phones), in up to four tabs:
+**Item sheet** (a side sheet on desktop, a bottom sheet on phones). Above its tabs sits the item's **profile** (V1.2): the photo beside availability ("10 pieces on hand · 2 on loan"), status tags, type and category, and place. Any signed-in staff member can **Add photo** (the camera or the library), see a preview, and **Save photo**; **Change** and **Remove** (after a confirmation) follow. A change made by someone else first is refused and their photo is shown. Opening a photo grows it from its thumbnail with a view transition (instant under reduced motion or without the API); Escape, Back or Close returns to the profile. Its four tabs:
 - **Overview:**
   - **the quantity editor** first: the on-hand figure itself is the input. Staff change it (type a new total, type +5 or −2, use − / +, or arrow keys) and must pick a **reason** before it saves: for an increase, new stock received, returned, donation, physical count or other; for a decrease, consumed or used, given out, damaged, missing, transferred, physical count or other ("Other" needs a note). "Confirm a physical count" logs a count that matches. The Worker records the difference as a Stock in, Stock out or Count;
   - the reorder level, low or out-of-stock state, and how many more are out on loan;
@@ -196,7 +196,8 @@ Each Part must work end to end without depending on a later Part.
 - **Front end:** semantic HTML, CSS and TypeScript modules built by Vite. There is no SPA framework; routing is a small client router over `data-route` links. Public pages ship in the main bundle; Self-Service and each staff area load on first use (a phone scanning the QR never downloads the staff workspace).
 - **PWA:** `public/manifest.webmanifest` (start URL `/self-service`, shortcuts for Get an item, Return, My activity) and a service worker (`src/sw.ts`, built to `/sw.js` by `vite.config.ts`) that precaches each build's app shell and never touches `/api/*`. Phone data lives in IndexedDB (`src/offline-store.ts`); sync is `src/offline-sync.ts`.
 - **Worker:** one Cloudflare Worker, `logistics-hub` (`src/worker.ts`), serves the API and the static assets (`run_worker_first`). The public address is `https://logistics.hausc.org`; the `logistics-hub.<account>.workers.dev` address also works. It sets strict security headers and a `'self'`-only CSP.
-- **Data:** D1 `logistics-hub` (binding `DB`) with migrations `0001`–`0015`. R2 bucket `logistics-hub-evidence` (binding `EVIDENCE`) holds loan photos, streamed only through the Worker to signed-in staff.
+- **Data:** D1 `logistics-hub` (binding `DB`) with migrations `0001`–`0020`. R2 bucket `logistics-hub-evidence` (binding `EVIDENCE`) holds loan photos, streamed only through the Worker to signed-in staff. R2 bucket `logistics-hub-catalog-media` (binding `CATALOG_MEDIA`, V1.2) holds item profile photos only: `item_media` (one row per item) is the single reference to `items/<media id>/display` and `…/thumb`, and a replacement gets a new id.
+- **Item photo APIs (V1.2):** `PUT /api/staff/items/:id/photo` (multipart `display`, `thumb`, `expected`: the photo id the client saw, or empty), `DELETE /api/staff/items/:id/photo?expected=<id>` and `GET /api/staff/media/:id/(display|thumb)`. The Worker accepts only plain 8-bit JPEGs within 1600/480 px and 1 MB/150 KB, refuses one that still needs rotating, drops all EXIF, comments and trailing bytes, writes R2 first, switches the D1 reference only if the photo is still the one the client saw, and removes the old files afterwards.
 - **Staff APIs:** `/api/staff/inventory`, `/api/staff/stock` and `/api/staff/loans` (all revisioned), `/api/staff/items/:id`, `…/movements` (with optional `expectedOnHand`) and `…/loans` (multipart, with the photo), `/api/staff/loans/:id/return` and `…/photo`, `/api/staff/reorders` (POST) and `/api/staff/reorders/:id` (PATCH), `/api/staff/self-service` (revisioned) and `…/:eventId/resolve` (apply, match or dismiss) and `…/:eventId/photo`, plus account and admin routes.
 - **Self-service APIs (public):** `GET /api/self-service/catalog` (revisioned) and `POST /api/self-service/sync` (same-origin, size-capped, rate-limited per network and per phone; at most 5 events and 4 photos per request).
 - **Caching:** content-hashed `/assets/*` are `immutable` for a year; `/sw.js` is `no-cache`; every API answer is `no-store`.
