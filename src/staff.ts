@@ -1,6 +1,7 @@
 import { CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
+import { type Photo, type PhotoPanel, openViewer, photoPanel, rowThumb } from "./item-photo";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { ApiError, MARK, type Html, type IconName, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
@@ -8,14 +9,14 @@ type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
   lendingAudience: string; onHand: number; reorderThreshold: number; storageLocation: string | null; listed: boolean;
   stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean; lastCountedAt: string | null; onLoan: number;
-  consumptionMode: string; openUnits: number; openCondition: string | null;
+  consumptionMode: string; openUnits: number; openCondition: string | null; photoId: string | null;
 };
 type Inventory = { revision: number; items: Item[]; categories: string[]; locations: string[]; units: string[] };
 type Movement = { id: string; createdAt: string; movementType: string; signedQuantity: number; status: string; notes: string | null; reason: string | null; related: string | null; actor: string | null; afterQuantity: number; borrower: string | null; purpose: string | null };
 type Change = { from: unknown; to: unknown };
 type CatalogEvent = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
 type DetailItem = Item & {
-  notes: string | null; updatedAt: string | null; listingGaps: string[];
+  notes: string | null; updatedAt: string | null; listingGaps: string[]; photo: Photo | null;
   legacyReportedAvailable: number | null; migratedOnHand: number; migrationDelta: number | null;
   legacySourceSheet: string | null; legacySourceRow: string | null; verificationNote: string | null; importedFrom: string | null;
 };
@@ -262,6 +263,9 @@ function eventTitle(event: CatalogEvent): string {
   if (event.action === "UNIT_CONDITION") return `Open unit marked ${label(String(condition)).toLowerCase()}`;
   if (event.action === "UNIT_CORRECTED") return event.details.resolvedDiscrepancy ? "Open unit closed as not opened · discrepancy cleared" : "Open unit closed as not opened";
   if (event.action === "UNIT_RECONCILED") return `Count closed ${plural(Number(event.details.closed), "open unit")}`;
+  if (event.action === "ITEM_PHOTO_ADDED") return "Photo added";
+  if (event.action === "ITEM_PHOTO_REPLACED") return "Photo replaced";
+  if (event.action === "ITEM_PHOTO_REMOVED") return "Photo removed";
   if (event.action === "REORDER_OPENED") return "Added to the restock list";
   if (event.action === "REORDER_RESTOCKED") return `Restocked (+${String(event.details.quantity)})`;
   if (event.action === "LOAN_CLOSED") return event.details.outcome === "LOST" ? "Loan closed · lost" : "Loan closed · returned damaged";
@@ -356,7 +360,7 @@ export async function workspace(): Promise<void> {
   const direction = (id: string) => { const was = changed.get(id); if (was === undefined) return ""; const now = previous.get(id) ?? was; return now > was ? "is-changed is-up" : "is-changed is-down"; };
   const row = (item: Item) => html`<tr data-key="${item.id}" class="${[direction(item.id), item.id === openId ? "is-open" : "", active(item) ? "" : "is-inactive"].join(" ")}">
     <td class="col-id">${item.id}</td>
-    <td class="col-item"><button type="button" class="row-link">${item.name}</button><span class="cell-sub"><span class="cell-id">${item.id} · </span>${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}</span></td>
+    <td class="col-item"><div class="item-cell">${rowThumb(item.photoId)}<div class="item-cell__text"><button type="button" class="row-link">${item.name}</button><span class="cell-sub"><span class="cell-id">${item.id} · </span>${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}</span></div></div></td>
     <td class="col-category">${categoryName(item.category)}</td>
     <td class="col-location">${item.storageLocation ?? html`<span class="muted">Not set</span>`}</td>
     <td class="col-qty"><span class="qty" data-qty="${item.id}">${item.onHand}</span> <span class="qty-unit">${units(item.onHand, item.unit)}</span>${item.openUnits ? html`<span class="cell-sub">${sealedLine(item.onHand, item.openUnits, item.openCondition)}</span>` : ""}</td>
@@ -477,6 +481,12 @@ export async function workspace(): Promise<void> {
   });
   results.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
+    const thumb = target.closest<HTMLElement>("[data-photo]");
+    if (thumb) {
+      const id = thumb.closest<HTMLElement>("tr[data-key]")!.dataset.key!;
+      void openViewer(thumb.dataset.photo!, inventory?.items.find((entry) => entry.id === id)?.name ?? id, () => results.querySelector<HTMLElement>(`tr[data-key="${CSS.escape(id)}"] [data-photo] img`));
+      return;
+    }
     const sort = target.closest<HTMLButtonElement>("[data-sort]");
     if (sort) {
       const key = sort.dataset.sort as SortKey;
@@ -554,6 +564,7 @@ export async function workspace(): Promise<void> {
       if (!loaded || !detail) return;
       detail = { ...detail, item: { ...detail.item, onHand: loaded.item.onHand }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
         openUnits: loaded.openUnits, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied };
+      mount(sheet.querySelector("#profile-info")!, profileInfo(detail));
       mount(sheet.querySelector("#quantity-context")!, quantityContext(detail));
       mount(sheet.querySelector("#history")!, historyMarkup(detail));
       openPanel?.render();
@@ -565,6 +576,15 @@ export async function workspace(): Promise<void> {
       stockForm?.refresh();
       loanForm?.refresh();
     } catch { /* the next live refresh retries */ }
+  }
+
+  /** Who and what the item is at a glance, beside its photo: availability, status, type, category and place. */
+  function profileInfo({ item, loans }: Detail): Html {
+    const out = loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
+    return html`<p class="profile__stock"><strong>${item.onHand}</strong> ${units(item.onHand, item.unit)} on hand${out ? html` <span class="muted">· ${out} on loan</span>` : ""}</p>
+      ${tags(item)}
+      <p class="profile__meta">${label(item.itemType)} · ${categoryName(item.category)}</p>
+      <p class="profile__meta profile__meta--place">${icon("pin")}<span>${item.storageLocation ?? html`<span class="muted">No location set</span>`}</span></p>`;
   }
 
   function quantityContext({ item, loans, openUnits }: Detail): Html {
@@ -591,9 +611,6 @@ export async function workspace(): Promise<void> {
           ${checklist(reviewChecklist(item))}
         </section>` : ""}
       <dl class="facts">
-        <div><dt>Type</dt><dd>${label(item.itemType)}</dd></div>
-        <div><dt>Category</dt><dd>${categoryName(item.category)}</dd></div>
-        <div><dt>Location</dt><dd>${item.storageLocation ?? html`<span class="muted">Not set</span>`}</dd></div>
         <div><dt>Unit</dt><dd>${item.unit}</dd></div>
         <div><dt>Status</dt><dd>${label(item.status)}${item.needsReview ? "" : html` · Reviewed`}</dd></div>
         <div><dt>Other names</dt><dd>${item.aliases ?? html`<span class="muted">None</span>`}</dd></div>
@@ -609,6 +626,7 @@ export async function workspace(): Promise<void> {
 
   let stockForm: ReturnType<typeof bindQuantityEditor> | null = null;
   let openPanel: ReturnType<typeof bindOpenUnits> | null = null;
+  let photo: PhotoPanel | null = null;
   let loanForm: ReturnType<typeof bindLoanForm> | null = null;
   let known: Borrower[] = [];
   let knownLoaded = false;
@@ -663,7 +681,7 @@ export async function workspace(): Promise<void> {
     const tabs: Array<[Tab, string]> = [["overview", "Overview"], ...(lendable ? [["loan", out ? `Loan · ${out} out` : "Loan"] as [Tab, string]] : []), ["details", item.needsReview ? "Review & edit" : "Edit details"], ["history", "History"]];
     if (tab === "loan" && !lendable) tab = "overview";
     sheetShell(html`<span class="mono">${item.id}</span> · ${categoryName(item.category)}`, item.name, html`
-      <div class="sheet__tags">${tags(item)}</div>
+      <section class="profile" aria-label="Item profile"><div class="profile__photo" id="photo-panel"></div><div class="profile__info" id="profile-info">${profileInfo(loaded)}</div></section>
       <div class="tabs" role="tablist" aria-label="Item sections">
         ${tabs.map(([key, text]) => html`<button type="button" role="tab" id="tab-${key}" aria-controls="panel-${key}" aria-selected="${key === tab}" tabindex="${key === tab ? 0 : -1}">${text}</button>`)}
       </div>
@@ -724,6 +742,13 @@ export async function workspace(): Promise<void> {
       onLent: async (lent) => { await refreshStock(lent.id); await poll.refresh(); }
     }) : null;
     bindDetailsForm(item);
+    photo = photoPanel(sheet.querySelector<HTMLElement>("#photo-panel")!, {
+      itemId: item.id, name: item.name, photo: item.photo,
+      view: (shown) => void openViewer(shown.id, item.name, () => sheet.querySelector<HTMLElement>("#photo-panel [data-view] img")),
+      changed: async (next) => { if (detail) detail = { ...detail, item: { ...detail.item, photo: next } }; await refreshStock(item.id); await poll.refresh(); },
+      // Someone else changed the photo first: show theirs, and the list with it.
+      refresh: async () => { const loaded = await fetchDetail(item.id); if (loaded && detail) { detail = { ...detail, item: { ...detail.item, photo: loaded.item.photo } }; photo?.render(loaded.item.photo); } await poll.refresh(); }
+    });
   }
 
   function detailsFormMarkup(item: Partial<DetailItem>, creating = false): Html {
