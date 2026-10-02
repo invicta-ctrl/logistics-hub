@@ -762,6 +762,8 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await expect(row.locator(".thumb img")).toHaveAttribute("src", `/api/staff/media/${photo.id}/thumb`);
   await expect(row.locator(".thumb img")).toHaveAttribute("loading", "lazy");
   await expect(row.locator(".thumb")).toHaveCSS("width", "40px");
+  // Decorative beside the name (the same photo opens from the profile), so screen readers hear the name once.
+  expect(await row.locator(".thumb img").getAttribute("alt")).toBe("");
   await row.locator(".thumb").click();
   await expect(viewer).toBeVisible();
   await page.keyboard.press("Escape");
@@ -809,4 +811,44 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await expect(page.locator(".activity-row").first()).toContainText("E2E Staff removed the photo of Scissors.");
   await expect(page.locator(".activity-row").nth(2)).toContainText("E2E Staff added a photo to Scissors.");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+});
+
+test("item photos: a photo someone else added meanwhile is never overwritten, and the profile shows theirs", async ({ page, baseURL }) => {
+  await signIn(page);
+  await page.goto("/staff/items?item=ITM-0263");
+  const sheet = page.getByRole("dialog", { name: "Scotch Tape" });
+  const panel = sheet.locator("#photo-panel");
+  await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
+  await panel.locator("input[type=file]").setInputFiles({ name: "mine.jpg", mimeType: "image/jpeg", buffer: phonePhoto(1) });
+  await expect(panel.getByRole("img", { name: /Preview of the new photo/ })).toBeVisible();
+  // Meanwhile a colleague adds one through the same endpoint.
+  const small = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 48;
+    canvas.getContext("2d")!.fillRect(0, 0, 64, 48);
+    return canvas.toDataURL("image/jpeg").split(",")[1]!;
+  });
+  const theirs = await page.request.put("/api/staff/items/ITM-0263/photo", { headers: { origin: baseURL! }, multipart: {
+    display: { name: "display.jpg", mimeType: "image/jpeg", buffer: Buffer.from(small, "base64") },
+    thumb: { name: "thumb.jpg", mimeType: "image/jpeg", buffer: Buffer.from(small, "base64") }, expected: "" } });
+  expect(theirs.status()).toBe(200);
+  const theirId = (await theirs.json() as { photo: { id: string } }).photo.id;
+  await panel.getByRole("button", { name: "Save photo" }).click();
+  await expect(page.getByText(/Someone else changed this photo/)).toBeVisible();
+  // Their photo is shown, mine is gone, and nothing of mine was stored.
+  await expect(panel.getByRole("button", { name: "View photo of Scotch Tape" })).toBeVisible();
+  await expect(panel.getByRole("img", { name: /Preview of the new photo/ })).toHaveCount(0);
+  const item = await (await page.request.get("/api/staff/items/ITM-0263")).json() as { item: { photo: { id: string } } };
+  expect(item.item.photo.id).toBe(theirId);
+  await expect(panel.getByRole("button", { name: "Change photo" })).toBeVisible();
+
+  // A 320 px phone, with the photo: every control is named, and nothing scrolls sideways.
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.reload();
+  await expect(panel.getByRole("button", { name: "View photo of Scotch Tape" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+  expect(await sheet.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+  const unnamed = await sheet.locator("button, input, [role=tab]").evaluateAll((controls) => controls.filter((control) => !(control.getAttribute("aria-label") || control.textContent?.trim() || (control as HTMLInputElement).labels?.length)).length);
+  expect(unnamed).toBe(0);
 });
