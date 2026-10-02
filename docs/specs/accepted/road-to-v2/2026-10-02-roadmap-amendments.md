@@ -52,8 +52,8 @@ Items 3 and 8–13 of the proposal remain proposals:
 - independent end-to-end tests;
 - the evidence size limits.
 
-**Awaiting Earl's confirmation.** While writing the shared `CLAUDE.md`, Claude also added two finish-step lines that Earl has not decided:
+**Confirmed by Earl (2026-10-02):** two finish-step lines in the shared `CLAUDE.md`:
 - "CI must be green on the final commit" (finish step 3);
 - "Start from `npm run evidence`" (finish step 4).
 
-Earl either confirms them, or they are removed on V1.1 and the removal propagates forward.
+Both are now part of every slice's finish protocol.
