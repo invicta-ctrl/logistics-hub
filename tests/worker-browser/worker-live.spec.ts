@@ -237,7 +237,7 @@ test("create, warn on a duplicate name, then deactivate without deleting", async
   await page.getByRole("button", { name: "Create item" }).click();
   await expect(page.getByText(/Item ITM-\d+ created\./)).toBeVisible();
   await expect(page.getByLabel("Quantity on hand")).toHaveValue("3");
-  await expect(page.locator(".sheet__kicker")).toContainText("Office Equipment and Supplies");
+  await expect(page.locator(".profile__meta").first()).toContainText("Office Equipment and Supplies");
 
   await page.getByRole("tab", { name: "Edit details" }).click();
   await sheet.getByLabel("Status", { exact: true }).selectOption("INACTIVE");
@@ -704,13 +704,13 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await expect(page.getByText("Photo saved.")).toBeVisible();
   await expect(panel.getByRole("button", { name: "View photo of Scissors" })).toBeVisible();
 
-  // Stored upright (960x356 landscape turned to portrait), small, clean and cached for good; the original is never uploaded.
+  // Stored upright (960x356 landscape turned to portrait), small, clean and cached for a day; the original is never uploaded.
   const photo = (await detail())!;
   expect(photo.height).toBeGreaterThan(photo.width);
   expect(photo).toMatchObject({ width: 356, height: 960 });
   const display = await measure(`/api/staff/media/${photo.id}/display`);
   const thumb = await measure(`/api/staff/media/${photo.id}/thumb`);
-  expect(display).toMatchObject({ width: 356, height: 960, type: "image/jpeg", cache: "private, max-age=31536000, immutable" });
+  expect(display).toMatchObject({ width: 356, height: 960, type: "image/jpeg", cache: "private, max-age=86400" });
   expect(thumb).toMatchObject({ height: 320, type: "image/jpeg" });
   expect(thumb.bytes).toBeLessThan(display.bytes);
   expect(display.bytes).toBeLessThan(200_000);
@@ -851,4 +851,30 @@ test("item photos: a photo someone else added meanwhile is never overwritten, an
   expect(await sheet.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
   const unnamed = await sheet.locator("button, input, [role=tab]").evaluateAll((controls) => controls.filter((control) => !(control.getAttribute("aria-label") || control.textContent?.trim() || (control as HTMLInputElement).labels?.length)).length);
   expect(unnamed).toBe(0);
+});
+
+test("item photos: an open profile follows a photo someone else changed, so its viewer never opens a removed file", async ({ page, baseURL }) => {
+  test.setTimeout(60_000); // waits on a real 10-second refresh
+  await signIn(page);
+  await page.goto("/staff/items?item=ITM-0263");
+  const sheet = page.getByRole("dialog", { name: "Scotch Tape" });
+  const shown = sheet.locator("#photo-panel [data-view] img");
+  await expect(shown).toBeVisible();
+  const current = (await (await page.request.get("/api/staff/items/ITM-0263")).json() as { item: { photo: { id: string } } }).item.photo.id;
+  const small = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = 48;
+    canvas.getContext("2d")!.fillRect(0, 0, 64, 48);
+    return canvas.toDataURL("image/jpeg").split(",")[1]!;
+  });
+  const bytes = Buffer.from(small, "base64");
+  const replaced = await page.request.put("/api/staff/items/ITM-0263/photo", { headers: { origin: baseURL! }, multipart: {
+    display: { name: "display.jpg", mimeType: "image/jpeg", buffer: bytes }, thumb: { name: "thumb.jpg", mimeType: "image/jpeg", buffer: bytes }, expected: current } });
+  const next = (await replaced.json() as { photo: { id: string } }).photo.id;
+  await expect(shown).toHaveAttribute("src", `/api/staff/media/${next}/thumb`, { timeout: 30_000 });
+  await sheet.locator("#photo-panel [data-view]").click();
+  const viewer = page.getByRole("dialog", { name: "Photo of Scotch Tape" });
+  await expect(viewer).toBeVisible();
+  expect(await viewer.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(64);
 });
