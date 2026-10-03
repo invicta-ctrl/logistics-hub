@@ -122,9 +122,9 @@ test.describe("Locations page", () => {
     await expect(sheet.getByRole("button", { name: "View picture of Cabinet 1" })).toBeVisible();
     // Not itself, nor anything inside it, and nothing that would push its contents past five levels.
     const parents = await sheet.getByLabel("Inside").locator("option").allTextContents();
-    expect(parents.map((text) => text.trim())).not.toContain("Cabinet 1");
-    expect(parents.map((text) => text.trim())).not.toContain("Shelf 2");
-    expect(parents.map((text) => text.trim())).toContain("Storage Area");
+    const offered = parents.map((text) => text.trim());
+    expect(offered.filter((text) => text.includes("Cabinet 1") || text.includes("Shelf 2"))).toEqual([]);
+    expect(offered).toContain("Office › Storage Area");
     await page.keyboard.press("Escape");
     await expect(sheet).toHaveCount(0);
     await expect(page).not.toHaveURL(/place=/);
