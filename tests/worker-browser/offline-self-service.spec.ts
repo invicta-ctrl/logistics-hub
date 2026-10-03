@@ -144,7 +144,7 @@ test.describe.serial("offline self-service", () => {
     expect(body.items.find((entry) => entry.id === WATER)).toMatchObject({ action: "TAKE" });
     expect(body.items.find((entry) => entry.id === COTTON)).toMatchObject({ action: "BORROW" });
     expect(body.items.every((entry) => entry.action === "TAKE" || entry.action === "BORROW")).toBe(true);
-    expect(Object.keys(body.items[0]!).sort()).toEqual(["action", "aliases", "audience", "available", "category", "id", "location", "name", "unit"]);
+    expect(Object.keys(body.items[0]!).sort()).toEqual(["action", "aliases", "audience", "available", "category", "id", "location", "name", "photo", "unit"]);
   });
 
   test("public pages load fresh from the network, while Self-Service opens from the phone's cache", async ({ browser }) => {

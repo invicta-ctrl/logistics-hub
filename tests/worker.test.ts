@@ -14,7 +14,7 @@ beforeEach(async () => {
   sqlite = database.sqlite;
   const r2 = memoryR2();
   photos = r2.objects;
-  env = { DB: database.d1, EVIDENCE: r2.bucket, CATALOG_MEDIA: memoryR2().bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
+  env = { DB: database.d1, EVIDENCE: r2.bucket, CATALOG_MEDIA: memoryR2().bucket, STAFF_IDS: memoryR2().bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
   sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash) VALUES('ACC-1', 'staff.one', 'Staff One', ?)").run(await hashPassword("correct horse battery"));
 });
 
@@ -50,8 +50,8 @@ describe("public Lending Hub", () => {
     const snack = await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: "Paper Plates", itemType: "Consumable", openingQuantity: 9 })).json() as { id: string };
     const items = await publicItems();
     expect(items).toEqual([
-      { id: created.id, name: "Folding Table", category: "FURNITURE", unit: "piece", itemType: "Loanable", available: 4, audience: "STUDENTS_AND_USC_STAFF" },
-      { id: snack.id, name: "Paper Plates", category: "FURNITURE", unit: "piece", itemType: "Consumable", available: 9, audience: "STUDENTS_AND_USC_STAFF" }
+      { id: created.id, name: "Folding Table", category: "FURNITURE", unit: "piece", itemType: "Loanable", available: 4, audience: "STUDENTS_AND_USC_STAFF", photo: null },
+      { id: snack.id, name: "Paper Plates", category: "FURNITURE", unit: "piece", itemType: "Consumable", available: 9, audience: "STUDENTS_AND_USC_STAFF", photo: null }
     ]);
   });
 

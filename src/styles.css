@@ -365,6 +365,14 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .catalogue__row { position: relative; display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); min-height: 3.75rem; padding: var(--space-4) var(--space-3); border-bottom: 1px solid var(--line); transition: background-color var(--dur-2); }
 .catalogue__row:hover { background: var(--surface); }
 .catalogue__main { min-width: 0; }
+/* A public item thumbnail sits in the row's left margin; a list with any photo reserves that margin for every row. */
+.item-thumb { position: absolute; top: 50%; inset-inline-start: var(--space-3); width: 3rem; height: 3rem; margin-top: -1.5rem; border-radius: var(--radius); background: var(--subtle); object-fit: cover; }
+.catalogue--photos .catalogue__row { padding-inline-start: calc(var(--space-3) + 3rem + var(--space-4)); }
+/* On the narrowest phones a smaller thumbnail leaves the name room to stay on two lines. */
+@media (max-width: 22.5rem) {
+  .item-thumb { inset-inline-start: var(--space-2); width: 2.5rem; height: 2.5rem; margin-top: -1.25rem; }
+  .catalogue--photos .catalogue__row { padding-inline-start: calc(var(--space-2) + 2.5rem + var(--space-3)); }
+}
 .catalogue__name { font-size: var(--text-md); font-weight: 500; overflow-wrap: anywhere; transition: color var(--dur-2); }
 .catalogue__meta { margin-top: .125rem; color: var(--text-3); font-size: var(--text-sm); }
 .catalogue__row.is-changed { animation: highlight 2.4s var(--ease); }
