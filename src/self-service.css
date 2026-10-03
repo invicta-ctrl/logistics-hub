@@ -88,7 +88,7 @@
 /* The switch shows the current theme (the sun turns away as the moon turns in) and matches the sync pill beside it. */
 .ss-theme { position: relative; display: grid; width: 2.125rem; height: 2.125rem; flex: none; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface); color: var(--text); -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2); }
 .ss-theme::before { position: absolute; inset: -.3125rem; content: ""; }
-.ss-theme .icon { grid-area: 1 / 1; width: 1.125rem; height: 1.125rem; transition: transform var(--dur-3) var(--ease), opacity var(--dur-2); }
+.ss-theme .icon { grid-area: 1 / 1; transition: transform var(--dur-3) var(--ease), opacity var(--dur-2); }
 .ss-theme[aria-pressed="true"] .icon:first-child, .ss-theme[aria-pressed="false"] .icon:last-child { opacity: 0; transform: rotate(-90deg) scale(.5); }
 .ss-theme:focus-visible { outline: none; box-shadow: var(--focus); }
 /* The theme change supplies its own circular reveal, so the default cross-fade is switched off. */
@@ -109,7 +109,7 @@
 .ss-update { display: flex; max-width: 36rem; margin-inline: auto; align-items: center; justify-content: space-between; gap: .75rem; padding: .5rem 1rem .625rem; border-top: 1px solid var(--line); font-size: var(--text-sm); }
 .ss-update p { display: flex; align-items: center; gap: .5rem; color: var(--text-2); }
 .ss-test { display: flex; max-width: 36rem; margin-inline: auto; gap: .5rem; padding: .5rem 1rem .625rem; border-top: 1px solid var(--line); background: linear-gradient(var(--warn-tint), var(--warn-tint)), var(--canvas); font-size: var(--text-sm); }
-.ss-test .icon { flex: none; margin-top: .125rem; color: var(--warn); }
+.ss-test .icon { color: var(--warn); }
 
 /* ---------- Layout ---------- */
 .ss { width: 100%; max-width: 36rem; margin-inline: auto; padding: 1.25rem max(1rem, env(safe-area-inset-left)) calc(3rem + env(safe-area-inset-bottom)); }
@@ -125,7 +125,7 @@
 .ss-tile { position: relative; display: flex; min-height: 8.75rem; flex-direction: column; gap: .125rem; padding: 1rem; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2); }
 .ss-tile:focus-visible { outline: none; box-shadow: var(--focus); }
 .ss-tile__icon { display: grid; width: 2.75rem; height: 2.75rem; margin-bottom: auto; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--accent); }
-.ss-tile__icon .icon { width: 1.375rem; height: 1.375rem; }
+.ss-tile__icon .icon { --icon-size: var(--icon-lg); }
 .ss-tile__name { margin-top: .75rem; overflow-wrap: break-word; font-size: 1.25rem; font-weight: 600; line-height: 1.15; }
 /* Two lines always, so the names of neighbouring tiles sit level. */
 .ss-tile__detail { min-height: 2lh; color: var(--text-2); font-size: var(--text-sm); line-height: 1.35; }
@@ -142,7 +142,7 @@
 
 .ss-status { display: grid; gap: .75rem; }
 .ss-ready { display: flex; align-items: flex-start; gap: .75rem; padding: .95rem 1rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
-.ss-ready > .icon { width: 1.375rem; height: 1.375rem; margin-top: .05rem; }
+.ss-ready > .icon { --icon-size: var(--icon-lg); }
 .ss-ready h2 { font-size: var(--text-base); font-weight: 600; }
 .ss-ready p { margin-top: .125rem; color: var(--text-2); font-size: var(--text-sm); }
 .ss-ready--ok { background: var(--ok-tint); }
@@ -169,7 +169,7 @@
 .ss-head h1 { font-family: var(--serif); font-size: 2rem; font-weight: 500; letter-spacing: -.025em; }
 .ss-back { display: grid; width: 2.75rem; height: 2.75rem; flex: none; place-items: center; border: 1px solid transparent; border-radius: 50%; background: transparent; color: var(--text); -webkit-tap-highlight-color: transparent; transition: background-color var(--dur-1), border-color var(--dur-1); }
 .ss-back:active { background: var(--subtle); }
-.ss-back .icon { width: 1.375rem; height: 1.375rem; }
+.ss-back .icon { --icon-size: var(--icon-lg); }
 .ss-lead { margin-top: -.5rem; color: var(--text-2); font-size: var(--text-base); }
 .ss-search input { min-height: 3rem; border-radius: var(--radius-lg); font-size: var(--text-md); }
 .ss-section { margin-top: .75rem; color: var(--accent-line); font-size: .6875rem; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; }
@@ -200,7 +200,7 @@
 .ss-count--low strong { color: var(--warn); }
 .ss-count--out { color: var(--text-3); font-style: italic; }
 .ss-stamp { display: flex; align-items: flex-start; gap: .375rem; color: var(--text-3); font-size: var(--text-sm); }
-.ss-stamp .icon { width: .875rem; height: .875rem; margin-top: .1rem; flex: none; }
+.ss-stamp .icon { --icon-size: var(--icon-xs); }
 .ss-empty { padding: 1.5rem 1rem; border: 1px dashed var(--line-strong); border-radius: var(--radius-lg); color: var(--text-2); font-size: var(--text-base); text-align: center; }
 .ss-fine { color: var(--text-3); font-size: var(--text-sm); line-height: 1.55; }
 
@@ -225,7 +225,8 @@
 .ss-stepper:has(input:focus-visible) { box-shadow: var(--focus); }
 .ss-form .ss-stepper input { min-height: 0; border-color: var(--line-strong); border-radius: 0; font-size: var(--text-2xl); font-weight: 600; }
 .ss-form .ss-stepper input:focus-visible { box-shadow: none; }
-.ss-stepper .stepper__button { width: 4.25rem; border-color: var(--line-strong); background: var(--field); color: var(--accent); font-size: 1.5rem; }
+.ss-stepper .stepper__button { width: 4.25rem; border-color: var(--line-strong); background: var(--field); color: var(--accent); }
+.ss-stepper .stepper__button .icon { --icon-size: var(--icon-lg); }
 .ss-stepper .stepper__button:first-child { border-radius: var(--radius-lg) 0 0 var(--radius-lg); }
 .ss-stepper .stepper__button:last-child { border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
 .ss-stepper .stepper__button:active { background: var(--hover); }
@@ -240,7 +241,7 @@
 .ss-choices label:has(input:checked) { border-color: var(--accent-line); color: var(--accent); }
 .ss-choices label:has(input:focus-visible) { box-shadow: var(--focus); }
 .ss-hint { display: flex; align-items: flex-start; gap: .5rem; color: var(--text-2); font-size: var(--text-sm); }
-.ss-hint .icon { width: 1rem; height: 1rem; margin-top: .1rem; flex: none; color: var(--accent); }
+.ss-hint .icon { --icon-size: var(--icon-sm); color: var(--accent); }
 .is-self-service .callout { border-color: var(--line-strong); background: var(--field); color: var(--text); }
 .is-self-service .callout .icon { color: var(--accent); }
 .is-self-service .photo-field__pick { min-height: 7.5rem; border-color: var(--line-strong); border-radius: var(--radius-lg); background: var(--field); color: var(--text-2); }
@@ -267,7 +268,7 @@
 .ss-receipt__tip strong { color: var(--accent); }
 .ss-receipt__actions { display: grid; width: 100%; gap: .5rem; margin-top: 1.25rem; }
 .ss-state { display: inline-flex; align-items: center; gap: .5rem; font-size: var(--text-sm); font-weight: 500; }
-.ss-state .icon { width: 1rem; height: 1rem; }
+.ss-state .icon { --icon-size: var(--icon-sm); }
 .ss-state--ok { color: var(--ok); }
 .ss-state--wait { color: var(--text-2); }
 .ss-state--review { color: var(--warn); }
@@ -279,7 +280,7 @@
 .ss-sync__status { display: flex; align-items: center; gap: .5rem; font-size: var(--text-base); font-weight: 500; }
 .ss-sync__status .icon { color: var(--ok); }
 .ss-warning { display: flex; gap: .5rem; padding: .8rem 1rem; border-radius: var(--radius-lg); background: var(--warn-tint); color: var(--text); font-size: var(--text-sm); }
-.ss-warning .icon { flex: none; color: var(--warn); }
+.ss-warning .icon { color: var(--warn); }
 .ss-timeline { display: grid; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .ss-event { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: .8rem 1rem; }
 .ss-event + .ss-event { border-top: 1px solid var(--line); }
@@ -299,7 +300,7 @@
 .ss-steps li { position: relative; padding: .95rem 1rem .95rem 3.35rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); counter-increment: step; font-size: var(--text-base); }
 .ss-steps li::before { position: absolute; top: .85rem; left: 1rem; display: grid; width: 1.6rem; height: 1.6rem; place-items: center; border-radius: 50%; background: var(--accent); color: var(--on-accent); content: counter(step); font-size: var(--text-sm); font-weight: 700; }
 .ss-steps strong { color: var(--accent); }
-.ss-steps .icon { display: inline; width: 1.05em; height: 1.05em; margin-inline: .15em; vertical-align: -.15em; color: var(--accent); }
+.ss-steps .icon { --icon-size: 1.05em; margin-inline: .15em; color: var(--accent); }
 
 .is-self-service .toast { border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); }
 
