@@ -1,1 +1,3 @@
 *.cmd text eol=crlf
+# Migrations are pinned by hash (tests/migration-history.test.ts, ops/releases); keep their bytes identical on every checkout.
+migrations/*.sql text eol=lf
