@@ -101,7 +101,7 @@ test("with reduced motion nothing flies, leans or spins: the card opens flat and
   await expect(tile).toBeFocused();
 });
 
-test("a portrait card gets a portrait tile, its two sides side by side in the viewer, and a tile leans under the mouse only", async ({ page }) => {
+test("a portrait card gets a portrait tile and viewer, and a tile leans under the mouse only", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mock(page, { width: 540, height: 856 });
   await page.goto(`/staff/admin/directory?person=${ID}&tab=id`);
@@ -116,6 +116,5 @@ test("a portrait card gets a portrait tile, its two sides side by side in the vi
   await tile.click();
   await expect.poll(() => page.locator("[data-flight]").evaluate((element) => element.getAnimations().length), { timeout: 4000 }).toBe(0);
   const card = (await page.locator("[data-flight]").boundingBox())!;
-  // Opened, the profile shows the front and back side by side.
-  expect(card.width / card.height).toBeCloseTo(2 * (540 / 856) * 1.02, 1);
+  expect(card.height / card.width).toBeCloseTo(856 / 540, 1);
 });

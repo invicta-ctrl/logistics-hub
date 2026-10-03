@@ -199,10 +199,12 @@ test.describe("owner administration", () => {
     await page.getByRole("button", { name: "Done" }).click();
     expect((await thumb).status()).toBe(200);
     expect((await thumb).headers()["cache-control"]).toBe("private, no-store");
-    // Rivera's card opens on the profile, both sides of the ID together; Details holds the rest, and Full profile goes there.
+    // Rivera's card opens on the ID, which turns over to its back; Details holds the rest, and Full profile goes there.
     await page.getByRole("link", { name: /Rivera/ }).click();
     const opened = page.getByRole("dialog", { name: "USC ID of Rivera" });
     await expect(opened.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-pressed", "true");
+    await expect(opened.getByRole("img", { name: "Front of Rivera's USC ID" })).toBeVisible();
+    await page.keyboard.press("f");
     await expect(opened.getByRole("img", { name: "Back of Rivera's USC ID" })).toBeVisible();
     await page.keyboard.press("d");
     await expect(opened.getByRole("heading", { name: "Rivera" })).toBeVisible();
