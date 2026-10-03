@@ -5,7 +5,7 @@ import { type CatalogItem, type LocalEvent, type Snapshot, estimate, openLoans, 
 import * as store from "./offline-store";
 import { type Draft, checkDecisions, clearHistory, nextAttemptAt, onSyncMessage, record, refreshCatalog, startTesting, syncNow } from "./offline-sync";
 import { type Readiness, applyUpdate, canPromptInstall, hasUpdate, isStandalone, onPwaChange, platform, promptInstall, readiness, requestBackgroundSync, requestPersistence, whenIdle } from "./pwa";
-import { CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, units } from "./ui";
+import { CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, thumbImg, units } from "./ui";
 
 /*
  * Self-Service (/self-service): what a student or staff member sees after scanning the QR code
@@ -256,8 +256,9 @@ function renderResults(query: string): void {
   const found = query.trim() ? matching(snapshot.items, query).slice(0, 8) : [];
   results.hidden = !found.length && !query.trim();
   const available = estimate(snapshot, events);
+  results.classList.toggle("ss-list--photos", hasPhotos());
   mount(results, found.length
-    ? html`${found.map((item) => html`<li><a class="ss-row" href="/self-service?do=${SCREEN_FOR[item.action]}&item=${item.id}" data-open-item="${item.id}" data-screen="${SCREEN_FOR[item.action]}">
+    ? html`${found.map((item) => html`<li><a class="ss-row" href="/self-service?do=${SCREEN_FOR[item.action]}&item=${item.id}" data-open-item="${item.id}" data-screen="${SCREEN_FOR[item.action]}">${thumbImg(item.photo)}
         <span class="ss-row__main"><span class="ss-row__name">${item.name}</span><span class="ss-row__sub">${ACTION_WORD[item.action]} · ${categoryName(item.category)}</span></span>
         ${countBadge(item, available.get(item.id) ?? 0)}</a></li>`)}`
     : html`<li class="ss-results__none">Nothing matches “${query}”.</li>`);
@@ -319,6 +320,8 @@ function back(title: string): Html {
 
 let listQuery = "";
 
+const hasPhotos = () => Boolean(snapshot?.items.some((item) => item.photo));
+
 function listRows(): Html {
   if (!snapshot) return offline ? emptyNote("The catalog hasn't been downloaded to this phone yet. Connect to the internet once, then try again.") : skeleton();
   const available = estimate(snapshot, events);
@@ -332,11 +335,13 @@ function listRows(): Html {
     .map((id) => found.find((item) => item.id === id)).filter((item): item is CatalogItem => Boolean(item));
   const byCategory = new Map<string, CatalogItem[]>();
   for (const item of found) byCategory.set(item.category, [...byCategory.get(item.category) ?? [], item]);
-  const row = (item: CatalogItem) => html`<li><a class="ss-row ${(available.get(item.id) ?? 0) <= 0 ? "ss-row--out" : ""}" href="/self-service?do=${SCREEN_FOR[item.action]}&item=${item.id}" data-open-item="${item.id}" data-screen="${SCREEN_FOR[item.action]}">
+  // Once any item has a photo, every row keeps the same left margin, so names line up whether or not a row has its picture.
+  const photoClass = hasPhotos() ? "ss-list--photos" : "";
+  const row = (item: CatalogItem) => html`<li><a class="ss-row ${(available.get(item.id) ?? 0) <= 0 ? "ss-row--out" : ""}" href="/self-service?do=${SCREEN_FOR[item.action]}&item=${item.id}" data-open-item="${item.id}" data-screen="${SCREEN_FOR[item.action]}">${thumbImg(item.photo)}
       <span class="ss-row__main"><span class="ss-row__name">${item.name}</span>${sub(item, waiting.get(item.id))}</span>
       ${countBadge(item, available.get(item.id) ?? 0)}</a></li>`;
-  return html`${recent.length && !listQuery ? html`<h2 class="ss-section">Recent on this phone</h2><ul class="ss-list">${recent.map(row)}</ul>` : ""}
-    ${[...byCategory].map(([category, items]) => html`<h2 class="ss-section">${categoryName(category)}</h2><ul class="ss-list">${items.map(row)}</ul>`)}
+  return html`${recent.length && !listQuery ? html`<h2 class="ss-section">Recent on this phone</h2><ul class="ss-list ${photoClass}">${recent.map(row)}</ul>` : ""}
+    ${[...byCategory].map(([category, items]) => html`<h2 class="ss-section">${categoryName(category)}</h2><ul class="ss-list ${photoClass}">${items.map(row)}</ul>`)}
     ${stamp()}`;
 }
 
@@ -387,9 +392,12 @@ function sheetFrame(kicker: string, title: string, body: Html): Html {
     <div class="sheet__body">${body}</div>`;
 }
 
+/** The item's picture at the top of its sheet, so the person can confirm it is what they came for (the 320 px thumbnail; no larger size is public). */
+const sheetPhoto = (item: CatalogItem): Html | "" => item.photo ? html`<img class="ss-photo" src="/api/public/media/${item.photo}/thumb" alt="" width="160" height="160" decoding="async" />` : "";
+
 function takeSheet(item: CatalogItem): Html {
   return sheetFrame(`Take · ${categoryName(item.category)}`, item.name, html`
-    ${estimateLine(item)}
+    ${sheetPhoto(item)}${estimateLine(item)}
     <form class="form ss-form" data-form="TAKE" novalidate>
       ${quantityField(SELF_SERVICE_LIMITS.quantity)}
       ${nameField("Your name")}
@@ -401,7 +409,7 @@ function takeSheet(item: CatalogItem): Html {
 /** An open-unit item: the person only says who used it. No amount, and stock does not change. */
 function useSheet(item: CatalogItem): Html {
   return sheetFrame(`Use · ${categoryName(item.category)}`, item.name, html`
-    ${estimateLine(item)}
+    ${sheetPhoto(item)}${estimateLine(item)}
     <p class="ss-hint">${icon("info")}Nothing to count: this records that you used some. Logistics staff mark an open ${item.unit} empty when it runs out.</p>
     <form class="form ss-form" data-form="USE" novalidate>
       ${nameField("Your name")}
@@ -418,7 +426,7 @@ function borrowSheet(item: CatalogItem): Html {
   const tomorrow = new Date(today.getTime() + 86_400_000);
   const day = (date: Date) => DAY.format(date);
   return sheetFrame(`Borrow · ${categoryName(item.category)}`, item.name, html`
-    ${estimateLine(item)}
+    ${sheetPhoto(item)}${estimateLine(item)}
     <form class="form ss-form" data-form="BORROW" novalidate>
       ${uscOnly ? html`<input type="hidden" name="purpose" value="USC" /><p class="callout">${icon("info")}<span>Lent for USC use only. Say what it's for.</span></p>`
         : html`<fieldset class="ss-question"><legend class="ss-legend">What is it for?</legend><div class="segmented segmented--2">

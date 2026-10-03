@@ -7,8 +7,9 @@
 //
 // Besides /staff/<name> pages, --pages understands two scenes: item-profile (an item's open profile; works on any
 // ref, so before and after compare) and item-photos (item photos: list, profile, viewer, upload preview, missing
-// photo, and list weight/loading with 300 photos; runs only where the item photo panel exists). Its pictures are
-// drawn here in the browser, so no image file enters the repository.
+// photo, and list weight/loading with 300 photos; runs only where the item photo panel exists) and public-photos (the
+// public Lending Hub and the phone Self-Service with item photos: lists, the item sheet and the narrowest phone; runs only
+// where the public thumbnail route exists). Its pictures are drawn here in the browser, so no image file enters the repository.
 //
 // Screenshots are JPEG so they are small enough to commit; inspect them before you do.
 import { spawn, spawnSync } from "node:child_process";
@@ -42,6 +43,8 @@ async function serve(dir, port) {
   fs.writeFileSync(path.join(state, ".env"), `SESSION_SECRET=${randomBytes(32).toString("base64url")}\n`, { mode: 0o600 });
   run(process.execPath, [wrangler, "d1", "migrations", "apply", "DB", "--local", "--persist-to", state], dir);
   runD1("UPDATE system_settings SET value = 'open' WHERE key = 'self_service'", { persistTo: state });
+  // public-photos needs items the public lists show: a spread of loanables and supplies, reviewed and active.
+  if (pages.includes("public-photos")) runD1("UPDATE items SET status = 'ACTIVE', needs_review = 0, item_type = CASE WHEN rowid % 4 = 0 THEN 'Consumable' ELSE 'Loanable' END, lending_audience = CASE WHEN rowid % 5 = 0 THEN 'USC_STAFF_ONLY' ELSE 'STUDENTS_AND_USC_STAFF' END WHERE id IN (SELECT id FROM items ORDER BY name COLLATE NOCASE LIMIT 24)", { persistTo: state });
   for (const [role, username, name] of ACCOUNTS) runD1(createAccountSql(username, name, password, role), { persistTo: state });
   const child = spawn(process.execPath, [wrangler, "dev", "--local", "--port", String(port), "--inspector-port", String(port + 1), "--persist-to", state, "--env-file", path.join(state, ".env")], { cwd: dir, stdio: "ignore", detached: process.platform !== "win32" });
   const url = `http://127.0.0.1:${port}`;
@@ -208,6 +211,51 @@ async function photoScenes(browser, url, dir) {
   return timings;
 }
 
+/** The public Lending Hub and phone Self-Service with item photos: every third item has none, so alignment and the gaps are visible. */
+async function publicPhotoScenes(browser, url, dir) {
+  const shot = (page, name) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80 });
+  const first = await signIn(browser, url, "owner.demo", SIZES.desktop);
+  const catalog = await (await first.page.request.get(`${url}/api/public/catalog`)).json();
+  if (!catalog.items.length || !("photo" in catalog.items[0])) {
+    console.log("public-photos: this ref has no public item photos, skipped");
+    await first.context.close();
+    return {};
+  }
+  const art = await first.page.evaluate(drawPhotos);
+  const ids = catalog.items.slice(0, 18).map((item) => item.id);
+  await seedPhotos(first.page, url, ids.filter((_, index) => index % 3 !== 2), art);
+  await first.context.close();
+  const sheetItem = ids[0];
+  const sizes = { ...SIZES, narrow: [320, 640, 2] };
+  const timings = {};
+  for (const [size, [width, height, scale]] of Object.entries(sizes)) {
+    // Signed out, as the public sees it.
+    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    let thumbs = 0, bytes = 0;
+    page.on("response", async (response) => { if (response.url().includes("/api/public/media/")) { thumbs++; bytes += Number(response.headers()["content-length"] ?? 0); } });
+    await page.addInitScript(() => {
+      window.__shift = 0;
+      new PerformanceObserver((list) => { for (const entry of list.getEntries()) if (!entry.hadRecentInput) window.__shift += entry.value; }).observe({ type: "layout-shift", buffered: true });
+    });
+    await page.goto(`${url}/lending`);
+    await page.waitForSelector(".catalogue__row .item-thumb");
+    await page.waitForLoadState("networkidle");
+    await shot(page, `public-lending-${size}`);
+    timings[size] = { lendingThumbs: thumbs, lendingKb: Math.round(bytes / 1024), lendingLayoutShift: Number((await page.evaluate(() => window.__shift)).toFixed(4)) };
+    await page.goto(`${url}/self-service?do=get`);
+    await page.waitForSelector(".ss-row .item-thumb");
+    await page.waitForLoadState("networkidle");
+    await shot(page, `public-selfservice-list-${size}`);
+    await page.goto(`${url}/self-service?do=${(await (await page.request.get(`${url}/api/self-service/catalog`)).json()).items.find((item) => item.id === sheetItem)?.action === "BORROW" ? "borrow" : "take"}&item=${sheetItem}`);
+    await page.waitForSelector("dialog[open] .ss-photo");
+    await page.waitForLoadState("networkidle");
+    await shot(page, `public-selfservice-sheet-${size}`);
+    await context.close();
+  }
+  return timings;
+}
+
 async function capture(url, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
@@ -219,7 +267,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos") continue;
+          if (name === "item-photos" || name === "public-photos") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -252,6 +300,7 @@ async function capture(url, dir) {
     }
     const timings = { coldLoadToFirstRowMs: median(cold), sectionSwitchMs: median(swap) };
     if (pages.includes("item-photos")) Object.assign(timings, { itemPhotos: await photoScenes(browser, url, dir) });
+    if (pages.includes("public-photos")) Object.assign(timings, { publicPhotos: await publicPhotoScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);
     await context.close();
     return timings;
