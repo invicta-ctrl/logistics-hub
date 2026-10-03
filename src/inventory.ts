@@ -1,3 +1,4 @@
+import { LOCATION_ID } from "./location-tree";
 import { CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_AUDIENCES, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
 
 export class InputError extends Error {
@@ -8,13 +9,13 @@ export type Actor = { accountId: string };
 
 type ItemRow = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: number;
-  lendingAudience: string; onHand: number; reorderThreshold: number; storageLocation: string | null; notes: string | null; updatedAt: string | null;
+  lendingAudience: string; onHand: number; reorderThreshold: number; locationId: string | null; notes: string | null; updatedAt: string | null;
   stockArea: string | null; expiresOn: string | null; consumptionMode: string;
 };
 
 const ITEM_COLUMNS = `i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.unit, i.status, i.needs_review AS needsReview,
  i.lending_audience AS lendingAudience, COALESCE(b.on_hand, 0) AS onHand, i.reorder_threshold AS reorderThreshold,
- i.storage_location AS storageLocation, i.notes, i.updated_at AS updatedAt,
+ i.location_id AS locationId, i.notes, i.updated_at AS updatedAt,
  i.stock_area AS stockArea, i.expires_on AS expiresOn, i.consumption_mode AS consumptionMode`;
 export const BUMP_REVISION = "UPDATE catalog_revision SET value = value + 1 WHERE id = 1";
 /**
@@ -52,6 +53,7 @@ export async function guarded<T>(work: Promise<T>): Promise<T> {
     if (message.includes("open_units_exceed_on_hand")) throw new InputError(409, "That would leave fewer units on hand than are open. Mark an open unit empty or correct the open units first.");
     if (message.includes("open_units_block_change")) throw new InputError(409, "This item has open units. Mark them empty or correct them before changing how it is used, its type, or making it inactive.");
     if (message.includes("open_unit_closed")) throw new InputError(409, "That unit is no longer open. Refresh to see the latest.");
+    if (message.includes("location_inactive")) throw new InputError(409, "That place is inactive, so items cannot be kept there. Choose another place.");
     throw error;
   }
 }
@@ -91,7 +93,7 @@ export async function publicCatalog(db: D1Database) {
   return { items, categories: distinct(items.map((item) => item.category)) };
 }
 
-type StaffRow = ItemRow & { lastCountedAt: string | null; migrationDelta: number | null; reorderStatus: string | null; onLoan: number; openUnits: number; openCondition: string | null; photoId: string | null };
+type StaffRow = ItemRow & { lastCountedAt: string | null; migrationDelta: number | null; reorderStatus: string | null; onLoan: number; openUnits: number; openCondition: string | null; photoId: string | null; openReports: number; legacyLocation: string | null };
 
 export async function staffInventory(db: D1Database) {
   // lastCountedAt counts only physical counts recorded in the Hub, not migrated rows.
@@ -100,23 +102,24 @@ export async function staffInventory(db: D1Database) {
       (SELECT r.status FROM reorders r WHERE r.item_id = i.id AND r.status IN (${OPEN_REORDERS})) AS reorderStatus,
       (SELECT COALESCE(SUM(l.quantity), 0) FROM loans l WHERE l.item_id = i.id AND l.status = 'OUT') AS onLoan,
       (SELECT COUNT(*) FROM open_units o WHERE o.item_id = i.id AND o.closed_at IS NULL) AS openUnits,
+      (SELECT COUNT(*) FROM location_reports r WHERE r.item_id = i.id AND r.resolved_at IS NULL) AS openReports,
+      CASE WHEN i.location_id IS NULL AND trim(i.storage_location) <> '' THEN trim(i.storage_location) END AS legacyLocation,
       (SELECT o.condition FROM open_units o WHERE o.item_id = i.id AND o.closed_at IS NULL ORDER BY CASE o.condition WHEN 'LOW' THEN 0 WHEN 'HALF' THEN 1 WHEN 'PLENTY' THEN 2 ELSE 3 END LIMIT 1) AS openCondition,
       p.media_id AS photoId
     FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id ORDER BY i.name COLLATE NOCASE`).all<StaffRow>();
   const items = results.map((row) => ({
     id: row.id, name: row.name, aliases: row.aliases, category: row.category, itemType: row.itemType, unit: row.unit, status: row.status,
     needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand,
-    reorderThreshold: row.reorderThreshold, storageLocation: row.storageLocation, listed: isListedForLending(row),
+    reorderThreshold: row.reorderThreshold, locationId: row.locationId, legacyLocation: row.legacyLocation, openReports: row.openReports, listed: isListedForLending(row),
     stockArea: row.stockArea, expiresOn: row.expiresOn, lastCountedAt: row.lastCountedAt, reorderStatus: row.reorderStatus, onLoan: row.onLoan,
     consumptionMode: row.consumptionMode, openUnits: row.openUnits, openCondition: row.openCondition, photoId: row.photoId,
     // The legacy quantity is doubtful (migration discrepancy or a VERIFY record) until someone counts it.
     countNeeded: row.status !== "INACTIVE" && !row.lastCountedAt && ((row.migrationDelta ?? 0) !== 0 || row.status === "VERIFY")
   }));
-  // Existing values feed the pickers, so staff reuse a spelling instead of inventing a near-duplicate.
+  // Existing values feed the pickers, so staff reuse a spelling instead of inventing a near-duplicate. Places come with the answer (worker.ts).
   return {
     items,
     categories: distinct(results.map((row) => row.category)),
-    locations: distinct(results.map((row) => row.storageLocation)),
     units: distinct(results.map((row) => row.unit))
   };
 }
@@ -124,11 +127,12 @@ export async function staffInventory(db: D1Database) {
 type AuditRow = { at: string; action: string; details: string | null; actor: string | null };
 
 export async function itemDetail(db: D1Database, id: string) {
-  const [item, movements, events, loans, units, uses] = await db.batch([
+  const [item, movements, events, loans, units, uses, reports] = await db.batch([
     db.prepare(`SELECT ${ITEM_COLUMNS}, b.legacy_reported_available_qty AS legacyReportedAvailable, b.migrated_on_hand AS migratedOnHand,
       b.migration_delta AS migrationDelta, i.legacy_source_sheet AS legacySourceSheet, i.legacy_source_row AS legacySourceRow,
-      i.verification_note AS verificationNote, i.imported_from AS importedFrom, p.media_id AS photoId, p.width AS photoWidth, p.height AS photoHeight
-      FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id WHERE i.id = ?`).bind(id),
+      i.verification_note AS verificationNote, i.imported_from AS importedFrom, p.media_id AS photoId, p.width AS photoWidth, p.height AS photoHeight,
+      lp.path AS location, CASE WHEN i.location_id IS NULL AND trim(i.storage_location) <> '' THEN trim(i.storage_location) END AS legacyLocation
+      FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN location_paths lp ON lp.id = i.location_id WHERE i.id = ?`).bind(id),
     db.prepare(`SELECT * FROM (SELECT m.id, m.created_at AS createdAt, m.movement_type AS movementType, m.signed_quantity AS signedQuantity, m.status,
       m.notes, m.reason, m.related_entity_type AS related, ${actorName("a", "m.actor_user_id")} AS actor, ROW_NUMBER() OVER (ORDER BY ${HISTORY_ORDER}) AS seq,
       COALESCE(l.borrower_name, s.person_name) AS borrower, l.purpose,
@@ -143,7 +147,12 @@ export async function itemDetail(db: D1Database, id: string) {
     // Two separate measures, never mixed: uses recorded (staff and phones, no stock change) and units used up (each one -1).
     db.prepare(`SELECT (SELECT COUNT(*) FROM audit_log WHERE entity_type = 'ITEM' AND entity_id = ?1 AND action = 'UNIT_USED')
         + (SELECT COUNT(*) FROM self_service_events WHERE item_id = ?1 AND event_type = 'USE' AND applied = 1) AS usesRecorded,
-      (SELECT COUNT(*) FROM inventory_movements WHERE item_id = ?1 AND related_entity_type = 'OPEN_UNIT' AND status = 'POSTED') AS unitsEmptied`).bind(id)
+      (SELECT COUNT(*) FROM inventory_movements WHERE item_id = ?1 AND related_entity_type = 'OPEN_UNIT' AND status = 'POSTED') AS unitsEmptied`).bind(id),
+    // Open reports first, then the most recent closed ones: attention signals that never change stock or the item's place.
+    db.prepare(`SELECT r.id, r.kind, r.source, r.note, r.created_at AS createdAt, r.resolved_at AS resolvedAt, r.resolution_note AS resolutionNote, lp.path AS location,
+        CASE r.source WHEN 'SELF_SERVICE' THEN 'Self-Service' ELSE a.display_name END AS reportedBy, x.display_name AS resolvedBy
+      FROM location_reports r LEFT JOIN staff_accounts a ON a.id = r.reported_by LEFT JOIN staff_accounts x ON x.id = r.resolved_by LEFT JOIN location_paths lp ON lp.id = r.location_id
+      WHERE r.item_id = ? ORDER BY r.resolved_at IS NOT NULL, r.created_at DESC, r.id LIMIT 20`).bind(id)
   ]);
   const found = item.results[0] as (ItemRow & { photoId: string | null; photoWidth: number | null; photoHeight: number | null } & Record<string, unknown>) | undefined;
   if (!found) throw new InputError(404, "Item not found.");
@@ -153,6 +162,7 @@ export async function itemDetail(db: D1Database, id: string) {
     movements: movements.results,
     loans: loans.results,
     openUnits: units!.results,
+    reports: reports!.results,
     ...(uses!.results[0] as { usesRecorded: number; unitsEmptied: number }),
     // Parsed here so the browser renders sentences, never raw JSON.
     events: (events.results as AuditRow[]).map((event) => ({ at: event.at, action: event.action, actor: event.actor, details: event.details ? JSON.parse(event.details) as Record<string, unknown> : {} }))
@@ -160,13 +170,13 @@ export async function itemDetail(db: D1Database, id: string) {
 }
 
 type ItemInput = {
-  name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; storageLocation: string | null;
+  name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; locationId: string | null;
   reorderThreshold: number; lendingAudience: string; needsReview: boolean; notes: string | null;
   // Optional: an older form that omits them keeps the stored value.
   stockArea?: string; expiresOn?: string | null; consumptionMode?: string;
 };
 
-function text(body: Record<string, unknown>, key: string, label: string, max: number, required: boolean, multiline = false): string | null {
+export function text(body: Record<string, unknown>, key: string, label: string, max: number, required: boolean, multiline = false): string | null {
   const raw = typeof body[key] === "string" ? (body[key] as string).trim() : "";
   // Single-line values collapse inner whitespace, so "Shelf  A" and "Shelf A" are one value.
   const value = multiline ? raw : raw.replace(/\s+/g, " ");
@@ -212,7 +222,7 @@ export function parseItemInput(body: unknown): ItemInput {
     itemType: choice(record, "itemType", "item type", ITEM_TYPES),
     unit: text(record, "unit", "Unit", 30, true)!,
     status: choice(record, "status", "status", ITEM_STATUSES),
-    storageLocation: text(record, "storageLocation", "Storage location", 120, false),
+    locationId: locationChoice(record.locationId),
     reorderThreshold: whole(record, "reorderThreshold", "Reorder level", 0, 100_000),
     lendingAudience: choice(record, "lendingAudience", "lending audience", LENDING_AUDIENCES),
     needsReview: record.needsReview === true,
@@ -238,18 +248,41 @@ export function isoDate(value: unknown, label: string): string | null {
   return value;
 }
 
-/** Reuses another item's stored spelling of a category, unit or location that differs only in letter case. */
+/** An item is kept in one place by id, or in none. */
+function locationChoice(value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || !LOCATION_ID.test(value)) throw new InputError(400, "Choose a place from the list.");
+  return value;
+}
+
+/** An item can be kept only in a place that exists and is in use; a clear message beats the database's refusal. */
+export async function usablePlace(db: D1Database, id: string | null): Promise<void> {
+  if (id === null) return;
+  const found = await db.prepare("SELECT active FROM locations WHERE id = ?").bind(id).first<number>("active");
+  if (found === null) throw new InputError(400, "That place no longer exists. Choose another.");
+  if (found !== 1) throw new InputError(409, "That place is inactive, so items cannot be kept there. Choose another place.");
+}
+
+/** The full path of each place, by id: the words an item's history keeps when it moves, whatever the place is later called. */
+export async function pathsOf(db: D1Database, ids: Array<string | null>): Promise<Map<string, string>> {
+  const wanted = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (!wanted.length) return new Map();
+  const { results } = await db.prepare(`SELECT id, path FROM location_paths WHERE id IN (${wanted.map(() => "?").join(",")})`).bind(...wanted).all<{ id: string; path: string }>();
+  return new Map(results.map((row) => [row.id, row.path]));
+}
+
+/** Reuses another item's stored spelling of a category or unit that differs only in letter case. */
 async function canonical(db: D1Database, input: ItemInput, itemId = ""): Promise<ItemInput> {
   const lookup = (column: string, value: string | null) => value
     ? db.prepare(`SELECT ${column} AS value FROM items WHERE ${column} = ? COLLATE NOCASE AND id <> ? ORDER BY ${column} = ? DESC LIMIT 1`).bind(value, itemId, value).first<string>("value")
     : Promise.resolve(null);
-  const [category, unit, location] = await Promise.all([lookup("category", input.category), lookup("unit", input.unit), lookup("storage_location", input.storageLocation)]);
-  return { ...input, category: category ?? input.category, unit: unit ?? input.unit, storageLocation: location ?? input.storageLocation };
+  const [category, unit] = await Promise.all([lookup("category", input.category), lookup("unit", input.unit)]);
+  return { ...input, category: category ?? input.category, unit: unit ?? input.unit };
 }
 
 const EDITABLE: Array<[keyof ItemInput, string]> = [
   ["name", "name"], ["aliases", "aliases"], ["category", "category"], ["itemType", "item_type"], ["unit", "unit"], ["status", "status"],
-  ["storageLocation", "storage_location"], ["reorderThreshold", "reorder_threshold"], ["lendingAudience", "lending_audience"],
+  ["locationId", "location_id"], ["reorderThreshold", "reorder_threshold"], ["lendingAudience", "lending_audience"],
   ["needsReview", "needs_review"], ["notes", "notes"],
   ["stockArea", "stock_area"], ["expiresOn", "expires_on"], ["consumptionMode", "consumption_mode"]
 ];
@@ -259,7 +292,7 @@ const stored = (value: ItemInput[keyof ItemInput]) => typeof value === "boolean"
  * The one audit writer. Details must never contain passwords, hashes, keys or tokens.
  * With `afterChange`, the row is written only when the previous statement in the batch changed a row.
  */
-export function audit(db: D1Database, actorId: string | null, action: string, entityType: "ITEM" | "ACCOUNT" | "RECOVERY" | "EXPORT" | "SETTING" | "RETENTION" | "STAFF", entityId: string, details: unknown, afterChange = false): D1PreparedStatement {
+export function audit(db: D1Database, actorId: string | null, action: string, entityType: "ITEM" | "ACCOUNT" | "RECOVERY" | "EXPORT" | "SETTING" | "RETENTION" | "STAFF" | "LOCATION", entityId: string, details: unknown, afterChange = false): D1PreparedStatement {
   return db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json) SELECT ?, ?, ?, ?, ?, ?, ?${afterChange ? " WHERE changes() > 0" : ""}`)
     .bind(crypto.randomUUID(), new Date().toISOString(), actorId, action, entityType, entityId, JSON.stringify(details));
 }
@@ -278,11 +311,17 @@ export async function updateItem(db: D1Database, actor: Actor, id: string, parse
   const input = await canonical(db, parsed, id);
   const changed = EDITABLE.filter(([key]) => input[key] !== undefined && current[key] !== stored(input[key]));
   if (!changed.length) return { changed: 0, updatedAt: current.updatedAt };
+  if (changed.some(([key]) => key === "locationId")) await usablePlace(db, input.locationId);
+  // History keeps the place in words as it was then ("Office › Cabinet 1"), not an id that may later be renamed.
+  const places = await pathsOf(db, [current.locationId as string | null, input.locationId]);
+  const detail = ([key]: [keyof ItemInput, string]) => key === "locationId"
+    ? ["storageLocation", { from: places.get(current.locationId as string) ?? null, to: places.get(input.locationId!) ?? null }]
+    : [key, { from: current[key], to: stored(input[key]) }];
   const now = new Date().toISOString();
   const [update] = await guarded(db.batch([
     db.prepare(`UPDATE items SET ${changed.map(([, column]) => `${column} = ?`).join(", ")}, updated_at = ? WHERE id = ? AND updated_at IS ?`)
       .bind(...changed.map(([key]) => stored(input[key])), now, id, expectedUpdatedAt),
-    audit(db, actor.accountId, "ITEM_UPDATED", "ITEM", id, Object.fromEntries(changed.map(([key]) => [key, { from: current[key], to: stored(input[key]) }])), true),
+    audit(db, actor.accountId, "ITEM_UPDATED", "ITEM", id, Object.fromEntries(changed.map(detail)), true),
     db.prepare(`${BUMP_REVISION} AND changes() > 0`)
   ]));
   if (!update!.meta.changes) throw new InputError(409, STALE);
@@ -291,18 +330,20 @@ export async function updateItem(db: D1Database, actor: Actor, id: string, parse
 
 export async function createItem(db: D1Database, actor: Actor, parsed: ItemInput, openingQuantity: number) {
   const input = await canonical(db, parsed);
+  await usablePlace(db, input.locationId);
+  const places = await pathsOf(db, [input.locationId]);
   const now = new Date().toISOString();
   // Two staff creating at once can race for the next ID; the primary key rejects the loser, which retries.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const next = await db.prepare("SELECT COALESCE(MAX(CAST(SUBSTR(id, 5) AS INTEGER)), 0) + 1 AS next FROM items WHERE id LIKE 'ITM-%'").first<number>("next");
     const id = `ITM-${String(next).padStart(4, "0")}`;
     const statements = [
-      db.prepare(`INSERT INTO items(id, name, aliases, category, item_type, unit, status, storage_location, reorder_threshold, lending_audience,
+      db.prepare(`INSERT INTO items(id, name, aliases, category, item_type, unit, status, location_id, reorder_threshold, lending_audience,
         needs_review, notes, stock_area, expires_on, consumption_mode, imported_from, imported_at, updated_at)
         VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
-        .bind(id, input.name, input.aliases, input.category, input.itemType, input.unit, input.status, input.storageLocation, input.reorderThreshold, input.lendingAudience,
+        .bind(id, input.name, input.aliases, input.category, input.itemType, input.unit, input.status, input.locationId, input.reorderThreshold, input.lendingAudience,
           Number(input.needsReview), input.notes, input.stockArea ?? "Inventory", input.expiresOn ?? null, input.consumptionMode ?? "WHOLE_UNIT", now, now),
-      audit(db, actor.accountId, "ITEM_CREATED", "ITEM", id, { ...input, openingQuantity }),
+      audit(db, actor.accountId, "ITEM_CREATED", "ITEM", id, { ...input, locationId: undefined, storageLocation: places.get(input.locationId!) ?? null, openingQuantity }),
       db.prepare(BUMP_REVISION)
     ];
     if (openingQuantity > 0) {
@@ -313,6 +354,7 @@ export async function createItem(db: D1Database, actor: Actor, parsed: ItemInput
       await db.batch(statements);
       return { id };
     } catch (error) {
+      if (error instanceof Error && error.message.includes("location_inactive")) throw new InputError(409, "That place is inactive, so items cannot be kept there. Choose another place.");
       if (!(error instanceof Error && /UNIQUE|PRIMARY KEY/i.test(error.message)) || attempt === 2) throw error;
     }
   }
