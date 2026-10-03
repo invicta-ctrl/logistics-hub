@@ -167,17 +167,20 @@ test.describe("owner administration", () => {
   });
 
   test("owner imports a sample ID pair; the scans stay private, audited and out of every cache", async ({ page, browser }) => {
+    // The live Worker sends the real Content-Security-Policy, which drops inline style attributes: nothing may rely on one.
+    const violations: string[] = [];
+    page.on("console", (message) => { if (/Content Security Policy/i.test(message.text())) violations.push(message.text()); });
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("link", { name: "Administration" }).click();
     await page.getByRole("link", { name: "Staff Directory" }).click();
     await expect(page.getByRole("heading", { name: "Staff Directory" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "The directory is empty" })).toBeVisible();
-    // A fictional card drawn on a canvas: no real ID is ever used in tests.
+    // A fictional card drawn on a canvas: no real ID is ever used in tests. Portrait, so its shape must reach the page.
     const sample = (side: string) => page.evaluate((text) => {
-      const canvas = Object.assign(document.createElement("canvas"), { width: 856, height: 540 });
+      const canvas = Object.assign(document.createElement("canvas"), { width: 540, height: 856 });
       const c = canvas.getContext("2d")!;
-      c.fillStyle = "#f7f3ea"; c.fillRect(0, 0, 856, 540);
-      c.fillStyle = "#7a1419"; c.fillRect(0, 0, 856, 90);
+      c.fillStyle = "#f7f3ea"; c.fillRect(0, 0, 540, 856);
+      c.fillStyle = "#7a1419"; c.fillRect(0, 0, 540, 90);
       c.fillStyle = "#1c1917"; c.font = "48px sans-serif"; c.fillText(`SAMPLE ${text}`, 40, 300);
       return canvas.toDataURL("image/png").split(",")[1]!;
     }, side);
@@ -198,6 +201,8 @@ test.describe("owner administration", () => {
     await page.getByRole("tab", { name: "USC ID" }).click();
     const response = await scan;
     expect(response.headers()["cache-control"]).toBe("private, no-store");
+    const tile = (await page.getByRole("button", { name: "Open the front of the USC ID large" }).boundingBox())!;
+    expect(tile.height / tile.width).toBeCloseTo(856 / 540, 1);
     await page.getByRole("button", { name: "Open the front of the USC ID large" }).click();
     const viewer = page.getByRole("dialog", { name: "USC ID of Rivera" });
     await expect(viewer.getByRole("img", { name: "Front of Rivera's USC ID" })).toBeVisible();
@@ -209,6 +214,7 @@ test.describe("owner administration", () => {
     await page.waitForFunction(() => !window.history.state?.viewer && new URLSearchParams(window.location.search).get("tab") === "id");
     await page.reload();
     await expect(page.locator(".access-log")).toContainText("E2E Owner");
+    expect(violations).toEqual([]);
     // Nothing of the directory is kept by the service worker, and the bucket has no public address.
     const cached = await page.evaluate(async () => (await Promise.all((await caches.keys()).map(async (name) => (await (await caches.open(name)).keys()).map((request) => request.url)))).flat());
     expect(cached.filter((url) => url.includes("/api/"))).toEqual([]);
