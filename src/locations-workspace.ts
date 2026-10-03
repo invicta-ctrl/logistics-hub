@@ -28,7 +28,7 @@ export async function locationsWorkspace(): Promise<void> {
     </header>
     <div id="look-alikes"></div>
     <div class="table-toolbar">
-      <label class="search-field">${icon("search")}<span class="visually-hidden">Search places</span><input id="place-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search places and directions" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
+      <label class="search-field">${icon("search")}<span class="visually-hidden">Search places</span><input id="place-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search places" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
       <label class="checkbox"><input type="checkbox" id="show-inactive" /><span>Show inactive</span></label>
       <p class="table-toolbar__count" id="place-count" aria-live="polite"></p>
     </div>
@@ -144,8 +144,8 @@ export async function locationsWorkspace(): Promise<void> {
   function parentChoices(self: string | null, current: string | null): Html {
     const own = self ? withinPlace(places, self) : new Set<string>();
     const room = self ? levelsBelow(places, self) : 1;
-    return html`<option value="">Top level</option>${inOrder(places).filter(({ place, depth }) => !own.has(place.id) && (place.active || place.id === current) && depth + room <= MAX_DEPTH).map(({ place, depth }) =>
-      html`<option value="${place.id}" ${place.id === current ? html`selected` : ""}>${"  ".repeat(depth - 1)}${place.name}${place.active ? "" : " (inactive)"}</option>`)}`;
+    return html`<option value="">Top level</option>${inOrder(places).filter(({ place, depth }) => !own.has(place.id) && (place.active || place.id === current) && depth + room <= MAX_DEPTH).map(({ place }) =>
+      html`<option value="${place.id}" ${place.id === current ? html`selected` : ""}>${paths.get(place.id)}${place.active ? "" : " (inactive)"}</option>`)}`;
   }
 
   function openPlace(id: string | null): void {
@@ -183,7 +183,7 @@ export async function locationsWorkspace(): Promise<void> {
       </form>
       ${row && row.itemCount ? html`<section class="card" aria-labelledby="move-title"><div class="card__head"><h3 id="move-title">Move items</h3></div>
         <p class="card__text">Move all ${plural(row.itemCount, "item")} kept here to another place, for example to combine two spellings of one cabinet. Each item’s history records the move.</p>
-        <div class="field"><label for="move-to">Move to</label><select id="move-to"><option value="">Choose a place</option>${inOrder(places).filter(({ place }) => place.active && place.id !== row.id).map(({ place, depth }) => html`<option value="${place.id}">${"  ".repeat(depth - 1)}${place.name}</option>`)}</select></div>
+        <div class="field"><label for="move-to">Move to</label><select id="move-to"><option value="">Choose a place</option>${inOrder(places).filter(({ place }) => place.active && place.id !== row.id).map(({ place }) => html`<option value="${place.id}">${paths.get(place.id)}</option>`)}</select></div>
         <div class="form-alert" id="move-alert" role="alert" hidden></div>
         <div class="where__buttons"><button type="button" class="button button--secondary" id="move-go">Move ${plural(row.itemCount, "item")}</button></div></section>` : ""}`;
   }

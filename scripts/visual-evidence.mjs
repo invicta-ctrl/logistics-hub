@@ -56,7 +56,7 @@ async function serve(dir, port) {
   for (const [role, username, name] of ACCOUNTS) runD1(createAccountSql(username, name, password, role), { persistTo: state });
   if (pages.includes("staff-directory")) runD1(directoryRecordsSql(), { persistTo: state });
   // locations: items the phone is offered, two look-alike places the migration would have kept apart, and typed locations with no place yet.
-  if (pages.includes("locations")) runD1(locationRecordsSql(), { persistTo: state });
+  if (pages.includes("locations") && fs.existsSync(path.join(dir, "migrations", "0024_locations.sql"))) runD1(locationRecordsSql(), { persistTo: state });
   const child = spawn(process.execPath, [wrangler, "dev", "--local", "--port", String(port), "--inspector-port", String(port + 1), "--persist-to", state, "--env-file", path.join(state, ".env")], { cwd: dir, stdio: "ignore", detached: process.platform !== "win32" });
   const url = `http://127.0.0.1:${port}`;
   for (let tries = 0; ; tries++) {
@@ -335,11 +335,11 @@ async function locationScenes(browser, url, dir) {
     await page.getByRole("button", { name: "Send report" }).click();
     await page.waitForSelector(".where__done");
     await shot(page, `where-sent-${size}`);
-    await page.getByRole("button", { name: "Close" }).first().click();
-    await page.goto(`${url}/staff/items?item=${inCase.id}`);
+    await page.locator("dialog.where").getByRole("button", { name: "Close" }).click();
+    await page.goto(`${url}/staff/items?item=${inRack.id}`);
     await page.waitForSelector("dialog[open] .tabs");
     await page.getByRole("button", { name: "Where is it?" }).click();
-    await page.waitForSelector("dialog.where .where__missing, dialog.where .where__figure");
+    await page.waitForSelector("dialog.where .where__missing");
     await settle();
     await shot(page, `where-missing-picture-${size}`);
     await page.goto(`${url}/staff/items?item=${withReport.id}`);
@@ -362,8 +362,8 @@ async function locationScenes(browser, url, dir) {
     await shot(page, `selfservice-where-${size}`);
     await page.getByRole("button", { name: "Location looks wrong" }).click();
     await shot(page, `selfservice-report-${size}`);
-    await page.getByRole("button", { name: "Cancel" }).click();
-    await page.getByRole("button", { name: "Close" }).first().click();
+    await page.locator("dialog.where").getByRole("button", { name: "Cancel" }).click();
+    await page.locator("dialog.where").getByRole("button", { name: "Close" }).click();
     await page.goto(`${url}/self-service?do=take&item=${inRack.id}`);
     await page.waitForSelector("dialog[open] .ss-where");
     await page.getByRole("button", { name: "Where is it?" }).click();
