@@ -337,3 +337,53 @@ test("activity: a live refresh also refreshes the older pages on screen, so an e
   await expect(page.locator(".activity-row", { hasText: "Item D" })).toHaveCount(0);
   await expect(page.locator("#activity-count")).toHaveText("3 entries");
 });
+
+/* Public item photos (docs/specs/accepted/2026-10-03-public-item-photos-amendment.md): thumbnails in both lists and the Self-Service sheet. */
+const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+const thumbsServed = async (page: import("@playwright/test").Page) => {
+  await page.route("**/api/public/media/*/thumb", (route) => route.fulfill({ contentType: "image/png", headers: { "cache-control": "public, max-age=3600" }, body: PIXEL }));
+};
+const nameLeft = (page: import("@playwright/test").Page, selector: string) => page.locator(selector).evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().left)));
+
+test("the Lending Hub shows an item's photo, keeps names aligned with and without one, and fits a 320 px phone", async ({ page }) => {
+  await thumbsServed(page);
+  const photos = { ...catalog, items: catalog.items.map((item, index) => ({ ...item, photo: index === 1 ? null : `00000000-0000-4000-8000-00000000000${index}` })) };
+  await page.route("**/api/public/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r2"' }, body: JSON.stringify(photos) }));
+  for (const width of [320, 390, 1280]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/lending");
+    await expect(page.locator(".catalogue--photos .item-thumb")).toHaveCount(2);
+    await expect(page.locator(".item-thumb").first()).toBeVisible();
+    expect(new Set(await nameLeft(page, ".catalogue__name")).size, `names line up at ${width}`).toBe(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `no sideways scroll at ${width}`).toBeTruthy();
+  }
+  // With no photo anywhere the list is exactly what it was: no margin reserved, no thumbnail.
+  await page.route("**/api/public/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(catalog) }));
+  await page.goto("/lending");
+  await expect(page.locator(".catalogue__row").first()).toBeVisible();
+  await expect(page.locator(".item-thumb")).toHaveCount(0);
+  await expect(page.locator(".catalogue--photos")).toHaveCount(0);
+});
+
+test("self-service shows an item's photo in the list and the sheet, and the home screen's campus picture stays off the other screens", async ({ page }) => {
+  await thumbsServed(page);
+  const withPhotos = { ...selfServiceCatalog, items: selfServiceCatalog.items.map((item, index) => ({ ...item, photo: index === 1 ? null : `00000000-0000-4000-8000-00000000000${index}` })) };
+  await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r4"' }, body: JSON.stringify(withPhotos) }));
+  for (const width of [320, 390, 820]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/self-service?do=get");
+    await expect(page.locator(".ss-list--photos .item-thumb")).toHaveCount(2);
+    expect(new Set(await nameLeft(page, ".ss-row__name")).size, `names line up at ${width}`).toBe(1);
+    // The decorative campus picture belongs to the home screen only (a class this feature once collided with).
+    expect(await page.locator(".ss-photo").evaluate((node) => getComputedStyle(node).display), `campus picture hidden at ${width}`).toBe("none");
+    await page.goto("/self-service?do=take&item=ITM-0043");
+    await expect(page.getByRole("dialog", { name: "Bottled Water" })).toBeVisible();
+    await expect(page.locator(".ss-item-photo")).toBeVisible();
+    expect(await page.locator(".ss-photo").evaluate((node) => getComputedStyle(node).display)).toBe("none");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `no sideways scroll at ${width}`).toBeTruthy();
+    // An item without a photo has none in its sheet either.
+    await page.goto("/self-service?do=borrow&item=ITM-0262");
+    await expect(page.getByRole("dialog", { name: "Scissors" })).toBeVisible();
+    await expect(page.locator(".ss-item-photo")).toHaveCount(0);
+  }
+});
