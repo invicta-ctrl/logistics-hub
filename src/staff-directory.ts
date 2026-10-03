@@ -1,7 +1,7 @@
 // The private USC Staff Directory (V1.3): people by department, their official USC ID scans, the explicit link to a
 // sign-in, and what the existing records say they used and borrowed. Every route here is behind Administration
 // (ADMIN or OWNER); changing ID scans is for the OWNER. Nothing here has a public, Self-Service or catalog address.
-import { type Account, accountAccess, canManage, newAccount, suggestUsername, throttled } from "./accounts";
+import { type Account, accessOf, accountAccess, canManage, newAccount, suggestUsername, throttled } from "./accounts";
 import { activityPage, parseActivityQuery } from "./activity";
 import { STUDENT_ID_PATTERN } from "./catalog-policy";
 import { type DepartmentCode, departmentCode, sourceKey } from "./directory-policy";
@@ -32,16 +32,17 @@ const isOwner = (actor: Account) => actor.role === "OWNER";
 
 type PersonRow = {
   id: string; fullName: string; department: string; position: string | null; officer: number; studentId: string | null; active: number;
-  sourceKey: string | null; createdAt: string; updatedAt: string; accountId: string | null; username: string | null; accountName: string | null; accountRole: string | null; accountActive: number | null; lastLoginAt: string | null; mediaId: string | null;
+  sourceKey: string | null; createdAt: string; updatedAt: string; accountId: string | null; username: string | null; accountName: string | null; accountRole: string | null; accountActive: number | null; lastLoginAt: string | null; accountGroup: string | null; mediaId: string | null;
 };
 const PERSON_COLUMNS = `SELECT p.id, p.full_name AS fullName, p.department, p.position, p.officer, p.student_id AS studentId, p.active, p.source_key AS sourceKey,
-  p.created_at AS createdAt, p.updated_at AS updatedAt, a.id AS accountId, a.username, a.display_name AS accountName, a.role AS accountRole, a.active AS accountActive, a.last_login_at AS lastLoginAt, c.media_id AS mediaId
-  FROM staff_directory p LEFT JOIN staff_accounts a ON a.id = p.account_id LEFT JOIN staff_id_cards c ON c.person_id = p.id`;
+  p.created_at AS createdAt, p.updated_at AS updatedAt, a.id AS accountId, a.username, a.display_name AS accountName, a.role AS accountRole, a.active AS accountActive, a.last_login_at AS lastLoginAt, g.value AS accountGroup, c.media_id AS mediaId
+  FROM staff_directory p LEFT JOIN staff_accounts a ON a.id = p.account_id LEFT JOIN system_settings g ON g.key = 'account_access:' || a.id
+  LEFT JOIN staff_id_cards c ON c.person_id = p.id`;
 
 const person = (row: PersonRow) => ({
   id: row.id, name: row.fullName, department: row.department, position: row.position, officer: row.officer === 1, studentId: row.studentId, active: row.active === 1,
   sourceKey: row.sourceKey, createdAt: row.createdAt, updatedAt: row.updatedAt, hasId: Boolean(row.mediaId),
-  account: row.accountId ? { id: row.accountId, username: row.username!, displayName: row.accountName!, role: row.accountRole!, active: row.accountActive === 1, lastLoginAt: row.lastLoginAt } : null
+  account: row.accountId ? { id: row.accountId, username: row.username!, displayName: row.accountName!, role: row.accountRole!, access: accessOf(row.accountRole as Account["role"], row.accountGroup), active: row.accountActive === 1, lastLoginAt: row.lastLoginAt } : null
 });
 
 export async function directory(db: D1Database) {
@@ -213,9 +214,9 @@ type AccountRow = { id: string; username: string; displayName: string; role: Acc
 const mayLink = (actor: Account, account: Pick<AccountRow, "id" | "role">) => account.id === actor.accountId || canManage(actor, account);
 
 export async function linkableAccounts(db: D1Database, actor: Account) {
-  const { results } = await db.prepare(`SELECT a.id, a.username, a.display_name AS displayName, a.role, a.active, p.id AS personId, p.full_name AS personName
-    FROM staff_accounts a LEFT JOIN staff_directory p ON p.account_id = a.id ORDER BY a.display_name COLLATE NOCASE`).all<AccountRow>();
-  return { accounts: results.filter((row) => mayLink(actor, row)).map((row) => ({ ...row, active: row.active === 1 })) };
+  const { results } = await db.prepare(`SELECT a.id, a.username, a.display_name AS displayName, a.role, a.active, p.id AS personId, p.full_name AS personName, g.value AS "group"
+    FROM staff_accounts a LEFT JOIN staff_directory p ON p.account_id = a.id LEFT JOIN system_settings g ON g.key = 'account_access:' || a.id ORDER BY a.display_name COLLATE NOCASE`).all<AccountRow & { group: string | null }>();
+  return { accounts: results.filter((row) => mayLink(actor, row)).map(({ group, ...row }) => ({ ...row, access: accessOf(row.role, group), active: row.active === 1 })) };
 }
 
 export async function linkAccount(db: D1Database, actor: Account, id: string, input: unknown) {
@@ -255,14 +256,16 @@ export async function createLinkedAccount(db: D1Database, actor: Account, id: st
   const current = await personRow(db, id);
   if (current.accountId) throw new InputError(409, "This person already has a sign-in. Unlink it first to make a new one.");
   const data = body(input);
-  const next = await newAccount(db, actor, { displayName: data.displayName ?? current.fullName, username: data.username, role: data.role ?? "STAFF", generate: true });
+  const next = await newAccount(db, actor, { displayName: data.displayName ?? current.fullName, username: data.username, ...(data.access !== undefined ? { access: data.access } : { role: data.role ?? "STAFF" }), generate: true });
   const now = new Date().toISOString();
   let results: D1Result[];
   try {
     results = await db.batch([
       db.prepare(`INSERT INTO staff_accounts(id, username, display_name, password_hash, role, must_change_password, updated_at)
         SELECT ?, ?, ?, ?, ?, 1, ? WHERE EXISTS (SELECT 1 FROM staff_directory WHERE id = ? AND account_id IS NULL)`).bind(next.id, next.username, next.displayName, next.passwordHash, next.role, now, id),
-      audit(db, actor.accountId, "ACCOUNT_CREATED", "ACCOUNT", next.id, { username: next.username, role: next.role, person: current.fullName }, true),
+      audit(db, actor.accountId, "ACCOUNT_CREATED", "ACCOUNT", next.id, { username: next.username, role: next.role, access: accessOf(next.role, next.group), person: current.fullName }, true),
+      ...(next.group ? [db.prepare(`INSERT INTO system_settings(key, value, updated_at, updated_by) SELECT ?1, ?2, ?3, ?4 WHERE EXISTS (SELECT 1 FROM staff_accounts WHERE id = ?5)`)
+        .bind(`account_access:${next.id}`, next.group, now, actor.accountId, next.id)] : []),
       db.prepare("UPDATE staff_directory SET account_id = ?, updated_at = ?, updated_by = ? WHERE id = ? AND account_id IS NULL AND EXISTS (SELECT 1 FROM staff_accounts WHERE id = ?)").bind(next.id, now, actor.accountId, id, next.id),
       audit(db, actor.accountId, "STAFF_ACCOUNT_LINKED", "STAFF", id, { name: current.fullName, department: current.department, username: next.username, created: true }, true)
     ]);
