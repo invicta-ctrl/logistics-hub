@@ -5,7 +5,9 @@ import { type CatalogItem, type LocalEvent, type Snapshot, estimate, openLoans, 
 import * as store from "./offline-store";
 import { type Draft, checkDecisions, clearHistory, nextAttemptAt, onSyncMessage, record, refreshCatalog, startTesting, syncNow } from "./offline-sync";
 import { type Readiness, applyUpdate, canPromptInstall, hasUpdate, isStandalone, onPwaChange, platform, promptInstall, readiness, requestBackgroundSync, requestPersistence, whenIdle } from "./pwa";
-import { CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, thumbImg, units } from "./ui";
+import { ancestry, placesOf, type ReportKind } from "./location-tree";
+import { type Step, openWhereIsIt } from "./where-is-it";
+import { ApiError, CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, thumbImg, units } from "./ui";
 
 /*
  * Self-Service (/self-service): what a student or staff member sees after scanning the QR code
@@ -366,6 +368,22 @@ function when(iso: string): string {
   return DAY.format(date) === DAY.format(new Date()) ? formatTime(iso) : DAY_TIME.format(date);
 }
 
+/**
+ * "I can’t find it" / "Location looks wrong": one small request, online only (a report is useless once the person has left).
+ * It tells staff and changes nothing else. The same id on a retry is recorded once.
+ */
+async function sendReport(itemId: string, kind: ReportKind, id: string): Promise<boolean> {
+  let response: Response;
+  try {
+    response = await fetch("/api/self-service/location-report", { method: "POST", headers: { "content-type": "application/json", ...testing ? { "x-self-service-test": "1" } : {} }, body: JSON.stringify({ id, itemId, kind }), signal: AbortSignal.timeout(15_000) });
+  } catch {
+    throw new ApiError(0, "The report could not be sent. Check your connection and try again.");
+  }
+  const body = await response.json().catch(() => ({})) as { error?: string; recorded?: boolean; test?: boolean };
+  if (!response.ok) throw new ApiError(response.status, body.error ?? "The report could not be sent. Please try again.");
+  return body.recorded === true || body.test === true;
+}
+
 /* ---------- Sheets: Take, Borrow, Use, Return ---------- */
 
 function estimateLine(item: CatalogItem): Html {
@@ -395,9 +413,12 @@ function sheetFrame(kicker: string, title: string, body: Html): Html {
 /** The item's picture at the top of its sheet, so the person can confirm it is what they came for (the 320 px thumbnail; no larger size is public). */
 const sheetPhoto = (item: CatalogItem): Html | "" => item.photo ? html`<img class="ss-item-photo" src="/api/public/media/${item.photo}/thumb" alt="" width="160" height="160" decoding="async" />` : "";
 
+/** Where the item is kept, when staff share it, and the way into the full route. Without a shared place the person is pointed to the desk. */
+const whereLine = (item: CatalogItem): Html => html`<p class="ss-where">${icon("pin")}<span>${item.location ?? "Ask DOL staff where this is kept."}</span><button type="button" class="text-link" data-where="${item.id}">Where is it?</button></p>`;
+
 function takeSheet(item: CatalogItem): Html {
   return sheetFrame(`Take · ${categoryName(item.category)}`, item.name, html`
-    ${sheetPhoto(item)}${estimateLine(item)}
+    ${sheetPhoto(item)}${whereLine(item)}${estimateLine(item)}
     <form class="form ss-form" data-form="TAKE" novalidate>
       ${quantityField(SELF_SERVICE_LIMITS.quantity)}
       ${nameField("Your name")}
@@ -409,7 +430,7 @@ function takeSheet(item: CatalogItem): Html {
 /** An open-unit item: the person only says who used it. No amount, and stock does not change. */
 function useSheet(item: CatalogItem): Html {
   return sheetFrame(`Use · ${categoryName(item.category)}`, item.name, html`
-    ${sheetPhoto(item)}${estimateLine(item)}
+    ${sheetPhoto(item)}${whereLine(item)}${estimateLine(item)}
     <p class="ss-hint">${icon("info")}Nothing to count: this records that you used some. Logistics staff mark an open ${item.unit} empty when it runs out.</p>
     <form class="form ss-form" data-form="USE" novalidate>
       ${nameField("Your name")}
@@ -426,7 +447,7 @@ function borrowSheet(item: CatalogItem): Html {
   const tomorrow = new Date(today.getTime() + 86_400_000);
   const day = (date: Date) => DAY.format(date);
   return sheetFrame(`Borrow · ${categoryName(item.category)}`, item.name, html`
-    ${sheetPhoto(item)}${estimateLine(item)}
+    ${sheetPhoto(item)}${whereLine(item)}${estimateLine(item)}
     <form class="form ss-form" data-form="BORROW" novalidate>
       ${uscOnly ? html`<input type="hidden" name="purpose" value="USC" /><p class="callout">${icon("info")}<span>Lent for USC use only. Say what it's for.</span></p>`
         : html`<fieldset class="ss-question"><legend class="ss-legend">What is it for?</legend><div class="segmented segmented--2">
@@ -829,6 +850,8 @@ export async function selfService(): Promise<void> {
     if (open) { event.preventDefault(); go({ screen: (open.dataset.screen as Screen) ?? params().screen, item: open.dataset.openItem!, loan: null }); return; }
     const openLoan = target.closest<HTMLAnchorElement>("[data-open-loan]");
     if (openLoan) { event.preventDefault(); go({ screen: "return", item: null, loan: openLoan.dataset.openLoan! }); return; }
+    const where = target.closest<HTMLElement>("[data-where]");
+    if (where) { showWhere(itemById(where.dataset.where!)); return; }
     if (target.closest("[data-back]")) { event.preventDefault(); goBack(); return; }
     const themeToggle = target.closest<HTMLElement>("[data-theme-toggle]");
     if (themeToggle) { switchTheme(themeToggle); return; }
@@ -844,6 +867,20 @@ export async function selfService(): Promise<void> {
       profile = { name: "", studentId: "" };
       void store.setMeta("profile", profile).then(renderScreen);
     }
+  }
+
+  /** The route to an item from the places staff share; the phone's last snapshot is all it needs, so it works offline (the picture needs a connection). */
+  function showWhere(item: CatalogItem | undefined): void {
+    if (!item) return;
+    const shared = new Map((snapshot?.places ?? []).map((place) => [place.id, place]));
+    const known = placesOf((snapshot?.places ?? []).map((place) => ({ id: place.id, name: place.name, parentId: place.parentId, active: true })));
+    const steps: Step[] = ancestry(known, item.locationId ?? null).reverse().map(({ id }) => ({ id, name: shared.get(id)!.name, directions: shared.get(id)!.directions, photo: shared.get(id)!.photo }));
+    openWhereIsIt({
+      item: item.name, steps, note: false, sheetClass: "ss-sheet", pictureUrl: (id, size) => `/api/public/location-media/${id}/${size}`,
+      noRoute: "DOL staff keep this one at the office. Please ask them where to find it.",
+      report: offline ? null : (kind, _note, id) => sendReport(item.id, kind, id),
+      reportBlocked: "Reports need a connection. You can report again when you are back online."
+    });
   }
 
   function goBack(): void {

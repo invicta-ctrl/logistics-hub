@@ -55,18 +55,19 @@ function morph(from: HTMLElement | null, to: HTMLElement | null, update: () => v
 }
 
 /**
- * Opens a photo large, over everything. A modal dialog gives Escape, a focus trap and an inert page for free; Back
+ * Opens a picture large, over everything. A modal dialog gives Escape, a focus trap and an inert page for free; Back
  * closes it too (it holds a history entry of its own), and focus returns to where it was opened. `source` is the
- * thumbnail it grows from, looked up again on closing because a live list may have redrawn it meanwhile.
+ * thumbnail it grows from, looked up again on closing because a live list may have redrawn it meanwhile. `url` is the
+ * large image, `description` its alternative text ("Photo of Stapler") and `caption` the line under it.
  */
-export async function openViewer(photoId: string, name: string, source: () => HTMLElement | null): Promise<void> {
+export async function openViewer(url: string, description: string, source: () => HTMLElement | null, caption = description): Promise<void> {
   if (document.querySelector("dialog.viewer")) return;
   const opener = document.activeElement as HTMLElement | null;
   const dialog = document.createElement("dialog");
   dialog.className = "viewer";
-  dialog.setAttribute("aria-label", `Photo of ${name}`);
+  dialog.setAttribute("aria-label", description);
   mount(dialog, html`<button class="viewer__close icon-button" type="button" data-close aria-label="Close photo">${icon("close")}</button>
-    <figure class="viewer__figure" data-backdrop><img class="viewer__image" src="${photoUrl(photoId, "display")}" alt="Photo of ${name}" /><figcaption>${name}</figcaption></figure>`);
+    <figure class="viewer__figure" data-backdrop><img class="viewer__image" src="${url}" alt="${description}" /><figcaption>${caption}</figcaption></figure>`);
   document.body.append(dialog);
   const image = dialog.querySelector("img")!;
   // The large image is ready before it grows, so the movement never ends in a blank frame.
@@ -98,13 +99,20 @@ export async function openViewer(photoId: string, name: string, source: () => HT
 
 export type PhotoPanel = { render: (photo: Photo | null) => void };
 
+/** What a photo panel says and where it saves: an item's photo or a place's picture. */
+export type PhotoSubject = {
+  /** The route that saves (PUT) and removes (DELETE) the picture, e.g. /api/staff/items/ITM-0001/photo. */
+  endpoint: string; thumbUrl: (id: string) => string; noun: "photo" | "picture";
+  hintAdd: string; hintHas: string; removeNote: string;
+};
+
 /**
- * The photo of an item profile: add, change (with a preview before anything is saved) and remove. `host` holds a
- * `[data-tile]` for the picture and a `[data-actions]` beside it for the buttons. `refresh` re-reads the item after
- * another person changed the photo first; `changed` runs after every save.
+ * A photo or picture panel: add, change (with a preview before anything is saved) and remove. `host` holds a
+ * `[data-tile]` for the picture and a `[data-actions]` beside it for the buttons. `refresh` re-reads the record after
+ * another person changed the picture first; `changed` runs after every save.
  */
-export function photoPanel(host: HTMLElement, options: { itemId: string; name: string; photo: Photo | null; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo) => void }): PhotoPanel {
-  const { itemId, name } = options;
+export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: string; name: string; photo: Photo | null; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo) => void }): PhotoPanel {
+  const { id: itemId, name, noun, endpoint } = options;
   let photo = options.photo;
   let staged: { display: Blob; thumb: Blob; preview: string } | null = null;
   let state: "" | "preparing" | "saving" | "removing" = "";
@@ -117,7 +125,7 @@ export function photoPanel(host: HTMLElement, options: { itemId: string; name: s
   input.type = "file";
   input.accept = "image/*";
   input.tabIndex = -1;
-  input.setAttribute("aria-label", `Choose a photo of ${name}`);
+  input.setAttribute("aria-label", `Choose a ${noun} of ${name}`);
   host.append(input);
   const busy = () => state !== "";
   const show = (picture: Html, buttons: Html) => { mount(tile, picture); mount(actions, buttons); };
@@ -126,19 +134,19 @@ export function photoPanel(host: HTMLElement, options: { itemId: string; name: s
     const alert = error ? html`<p class="form-alert" role="alert">${icon("alert")}<span>${error}</span></p>` : "";
     if (state === "preparing") return show(html`<div class="photo-tile photo-tile--busy" role="status">Preparing the photo…</div>`, html``);
     if (staged) {
-      return show(html`<div class="photo-tile photo-tile--preview"><img src="${staged.preview}" alt="Preview of the new photo of ${name}" /></div>`, html`<div class="photo-actions"><button type="button" class="button button--primary button--sm" data-save ${busy() ? "disabled" : ""}>${state === "saving" ? "Saving…" : "Save photo"}</button>
+      return show(html`<div class="photo-tile photo-tile--preview"><img src="${staged.preview}" alt="Preview of the new ${noun} of ${name}" /></div>`, html`<div class="photo-actions"><button type="button" class="button button--primary button--sm" data-save ${busy() ? "disabled" : ""}>${state === "saving" ? "Saving…" : `Save ${noun}`}</button>
           <button type="button" class="button button--secondary button--sm" data-pick ${busy() ? "disabled" : ""}>Choose another</button>
           <button type="button" class="button button--ghost button--sm" data-cancel ${busy() ? "disabled" : ""}>Cancel</button></div>${alert}`);
     }
     if (!photo) {
-      return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick aria-describedby="photo-hint-${itemId}">${icon("camera")}<span>Add photo</span></button>`,
-        html`<p class="field__hint" id="photo-hint-${itemId}">Everyone sees this photo on the Lending Hub and Self-Service. Show the item itself, not people or documents.</p>${alert}`);
+      return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick aria-describedby="photo-hint-${itemId}">${icon("camera")}<span>Add ${noun}</span></button>`,
+        html`<p class="field__hint" id="photo-hint-${itemId}">${options.hintAdd}</p>${alert}`);
     }
-    show(html`<button type="button" class="photo-tile" data-view aria-label="View photo of ${name}"><img src="${photoUrl(photo.id, "thumb")}" alt="" width="160" height="160" /></button>`,
+    show(html`<button type="button" class="photo-tile" data-view aria-label="View ${noun} of ${name}"><img src="${options.thumbUrl(photo.id)}" alt="" width="160" height="160" /></button>`,
       html`${confirming
-        ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this photo? The item keeps its stock and history.</p>
-            <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : "Remove photo"}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>`
-        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> photo</span></button><button type="button" class="button button--ghost button--sm" data-remove>Remove</button></div><p class="field__hint">Everyone sees this photo on the Lending Hub and Self-Service. The large version stays staff-only.</p>`}${alert}`);
+        ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>
+            <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : `Remove ${noun}`}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>`
+        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-remove>Remove</button></div><p class="field__hint">${options.hintHas}</p>`}${alert}`);
   };
   const focus = (selector: string) => host.querySelector<HTMLElement>(selector)?.focus();
 
@@ -188,12 +196,12 @@ export function photoPanel(host: HTMLElement, options: { itemId: string; name: s
       form.set("thumb", staged.thumb, "thumb.jpg");
       form.set("expected", photo?.id ?? "");
       try {
-        const saved = await api<{ photo: Photo }>(`/api/staff/items/${encodeURIComponent(itemId)}/photo`, { method: "PUT", body: form });
+        const saved = await api<{ photo: Photo }>(endpoint, { method: "PUT", body: form });
         photo = saved.photo;
         staged = null;
         state = "";
         draw();
-        toast("Photo saved.");
+        toast(`${noun === "photo" ? "Photo" : "Picture"} saved.`);
         void Promise.resolve(options.changed(photo)).catch(() => undefined);
         focus("[data-view]");
       } catch (problem) {
@@ -203,12 +211,12 @@ export function photoPanel(host: HTMLElement, options: { itemId: string; name: s
       state = "removing";
       draw();
       try {
-        await api(`/api/staff/items/${encodeURIComponent(itemId)}/photo?expected=${photo.id}`, { method: "DELETE" });
+        await api(`${endpoint}?expected=${photo.id}`, { method: "DELETE" });
         photo = null;
         confirming = false;
         state = "";
         draw();
-        toast("Photo removed.");
+        toast(`${noun === "photo" ? "Photo" : "Picture"} removed.`);
         void Promise.resolve(options.changed(null)).catch(() => undefined);
         focus("[data-pick]");
       } catch (problem) {

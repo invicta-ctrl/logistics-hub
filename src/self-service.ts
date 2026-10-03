@@ -1,5 +1,7 @@
 import { LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, STUDENT_ID_PATTERN, selfServiceAction } from "./catalog-policy";
 import { throttled } from "./accounts";
+import { ancestry, pathOf, placesOf } from "./location-tree";
+import { sharedPlaces } from "./locations";
 import { type Actor, BUMP_REVISION, COUNT_TOLERANCE_DAYS, HISTORY_ORDER, InputError, catalogRevision, countAwareStatus, guarded } from "./inventory";
 import { LOAN_ID, type LoanDetails, SELF_SERVICE_ACTOR, cleanText, closeStatements, dropUnusedPhoto, lendStatements, loanDetails, officeDay, readPhoto } from "./loans";
 
@@ -54,20 +56,26 @@ type ItemRow = { id: string; itemType: string; status: string; needsReview: numb
 /** The phone's catalog snapshot: only what self-service needs, never notes, history or borrowers. A photo is only its id (the thumbnail is public). */
 export async function selfServiceCatalog(db: D1Database) {
   const { results } = await db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.unit, i.item_type AS itemType, i.status, i.needs_review AS needsReview,
-      i.lending_audience AS lendingAudience, i.consumption_mode AS consumptionMode, i.storage_location AS location, COALESCE(b.on_hand, 0) AS onHand,
+      i.lending_audience AS lendingAudience, i.consumption_mode AS consumptionMode, i.location_id AS locationId, COALESCE(b.on_hand, 0) AS onHand,
       p.media_id AS photo
     FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id
     WHERE i.status = 'ACTIVE' AND i.needs_review = 0 ORDER BY i.name COLLATE NOCASE`)
-    .all<ItemRow & { name: string; aliases: string | null; category: string; unit: string; location: string | null; onHand: number; photo: string | null }>();
+    .all<ItemRow & { name: string; aliases: string | null; category: string; unit: string; locationId: string | null; onHand: number; photo: string | null }>();
+  // Where an item is kept is shown only for places staff share with Self-Service (and only the shared places travel to the phone).
+  const shared = await sharedPlaces(db);
+  const known = placesOf([...shared.values()].map((place) => ({ ...place, active: true })));
+  const used = new Set<string>();
   const items = results.flatMap((row) => {
     const action = selfServiceAction(row);
     if (!action) return [];
+    const place = row.locationId && shared.has(row.locationId) ? row.locationId : null;
+    for (const step of ancestry(known, place)) used.add(step.id);
     return [{
       id: row.id, name: row.name, aliases: row.aliases, category: row.category, unit: row.unit, action,
-      available: Math.max(0, row.onHand), location: row.location, audience: action === "BORROW" ? row.lendingAudience : null, photo: row.photo
+      available: Math.max(0, row.onHand), location: pathOf(known, place), locationId: place, audience: action === "BORROW" ? row.lendingAudience : null, photo: row.photo
     }];
   });
-  return { items };
+  return { items, places: [...used].map((id) => shared.get(id)!) };
 }
 
 /* ---------- Reading a request ---------- */

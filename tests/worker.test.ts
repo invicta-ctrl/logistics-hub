@@ -36,7 +36,7 @@ async function publicItems() {
   return (await (await call("/api/public/catalog")).json() as { items: Array<Record<string, unknown>> }).items;
 }
 
-const loanable = { name: "Folding Table", category: "FURNITURE", itemType: "Loanable", unit: "piece", status: "ACTIVE", storageLocation: "Office shelf A", reorderThreshold: 0, lendingAudience: "STUDENTS_AND_USC_STAFF", needsReview: false, notes: null };
+const loanable = { name: "Folding Table", category: "FURNITURE", itemType: "Loanable", unit: "piece", status: "ACTIVE", locationId: null, reorderThreshold: 0, lendingAudience: "STUDENTS_AND_USC_STAFF", needsReview: false, notes: null };
 
 describe("public Lending Hub", () => {
   it("fails closed: migrated records awaiting review are never published", async () => {
@@ -153,7 +153,7 @@ describe("movement-derived inventory", () => {
     const cookie = await signIn();
     const current = (await (await staff(cookie, "/api/staff/items/ITM-0001")).json() as { item: typeof loanable }).item;
     expect((await staff(cookie, "/api/staff/items/ITM-0001", "PATCH", { ...current, lendingAudience: "USC_STAFF_ONLY" })).status).toBe(400);
-    expect(await (await staff(cookie, "/api/staff/items/ITM-0001", "PATCH", { ...current, storageLocation: "Cabinet 2" })).json()).toMatchObject({ changed: 1 });
+    expect(await (await staff(cookie, "/api/staff/items/ITM-0001", "PATCH", { ...current, aliases: "soap" })).json()).toMatchObject({ changed: 1 });
     expect(sqlite.prepare("SELECT action, entity_id, actor_user_id FROM audit_log WHERE actor_user_id IS NOT NULL").all()).toEqual([{ action: "ITEM_UPDATED", entity_id: "ITM-0001", actor_user_id: "ACC-1" }]);
   });
 });
@@ -165,22 +165,21 @@ describe("catalog management", () => {
   it("refuses a stale edit instead of silently overwriting another change", async () => {
     const cookie = await signIn();
     const loaded = (await detail(cookie, "ITM-0003")).item;
-    expect((await staff(cookie, "/api/staff/items/ITM-0003", "PATCH", { ...loaded, storageLocation: "Cabinet 1" })).status).toBe(200);
+    expect((await staff(cookie, "/api/staff/items/ITM-0003", "PATCH", { ...loaded, aliases: "table" })).status).toBe(200);
     const stale = await staff(cookie, "/api/staff/items/ITM-0003", "PATCH", { ...loaded, notes: "Written from an old form" });
     expect(stale.status).toBe(409);
     expect((await staff(cookie, "/api/staff/items/ITM-0003", "PATCH", { ...loaded, updatedAt: undefined })).status).toBe(400);
-    expect((await detail(cookie, "ITM-0003")).item).toMatchObject({ storageLocation: "Cabinet 1", notes: null });
+    expect((await detail(cookie, "ITM-0003")).item).toMatchObject({ aliases: "table", notes: null });
     expect(sqlite.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE actor_user_id IS NOT NULL").get()).toEqual({ total: 1 });
   });
 
-  it("normalizes aliases and reuses existing category and location spellings", async () => {
+  it("normalizes aliases and reuses existing category spellings", async () => {
     const cookie = await signIn();
     const first = (await detail(cookie, "ITM-0004")).item;
-    await staff(cookie, "/api/staff/items/ITM-0004", "PATCH", { ...first, storageLocation: "Supply  Room  B" });
-    const created = await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: "Wireless Mic", aliases: "mic, Microphone ; MIC, wireless mic", category: "school   supplies", storageLocation: "supply room b" })).json() as { id: string };
-    expect((await detail(cookie, created.id)).item).toMatchObject({ aliases: "mic, Microphone", category: "SCHOOL SUPPLIES", storageLocation: "Supply Room B" });
-    const inventory = await (await staff(cookie, "/api/staff/inventory")).json() as { locations: string[]; categories: string[] };
-    expect(inventory.locations).toEqual(["Supply Room B"]);
+    await staff(cookie, "/api/staff/items/ITM-0004", "PATCH", { ...first, category: "School  Supplies" });
+    const created = await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: "Wireless Mic", aliases: "mic, Microphone ; MIC, wireless mic", category: "school   supplies" })).json() as { id: string };
+    expect((await detail(cookie, created.id)).item).toMatchObject({ aliases: "mic, Microphone", category: "SCHOOL SUPPLIES" });
+    const inventory = await (await staff(cookie, "/api/staff/inventory")).json() as { categories: string[] };
     expect(inventory.categories.filter((value) => value.toLowerCase() === "school supplies")).toEqual(["SCHOOL SUPPLIES"]);
   });
 
