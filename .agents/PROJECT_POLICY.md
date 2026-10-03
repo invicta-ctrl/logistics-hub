@@ -77,6 +77,8 @@ Prefer linear history. Avoid merge bubbles when a safe fast-forward or rebase is
 
 Never delete an unmerged branch until unique commits are checked and its work is explicitly obsolete.
 
+Temporary exception, accepted 2026-10-02 (`docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`): one branch, `ops/cloud-production-runner`, may exist beside the frozen V1.2 branch to build the Cloud Operations lane. It is merged to `main` and deleted before V1.2 is integrated; the budget above is unchanged afterwards.
+
 ## Shared-agent execution
 
 Authoritative local worktree:
@@ -122,3 +124,5 @@ A green slice is merged to `main` immediately. A partially working slice stays o
 
 Local preview/development is allowed.
 Remote provider/Production mutation requires exact target, preflight, rollback/backup, explicit owner authority, and post-change verification.
+
+Release-scoped production preparation is done by the Cloud Operations lane (GitHub `production` environment, `.github/workflows/production-ops.yml`, `ops/releases/<release>.json`), which enforces exactly this list and only what a reviewed manifest authorizes. It never runs on a push to `main`.
