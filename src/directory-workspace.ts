@@ -46,6 +46,13 @@ export async function staffDirectory(): Promise<void> {
   let loading: Promise<void> | null = null;
   onLeave(forgetScans);
 
+  // Bound once: the list re-renders into the same root on every filter, search or return from a profile.
+  root.addEventListener("click", (event) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-add]")) openEditor(null);
+    if (target.closest("[data-import]")) openImport();
+  });
+
   const load = () => loading ??= api<{ people: Person[] }>("/api/staff/admin/directory").then((result) => { people = result.people; }).finally(() => { loading = null; });
 
   /* ---------- The directory ---------- */
@@ -110,11 +117,6 @@ export async function staffDirectory(): Promise<void> {
     root.querySelector(".chips")!.addEventListener("click", (event) => {
       const chip = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-show]");
       if (chip) navigate(`${DIRECTORY}?${new URLSearchParams({ ...(department ? { dept: department } : {}), ...(chip.dataset.show === "all" ? {} : { show: chip.dataset.show! }), ...(search.value.trim() ? { q: search.value.trim() } : {}) })}`.replace(/\?$/, ""), true);
-    });
-    root.addEventListener("click", (event) => {
-      const target = event.target as HTMLElement;
-      if (target.closest("[data-add]")) openEditor(null);
-      if (target.closest("[data-import]")) openImport();
     });
     if (!people) {
       try { await load(); } catch (error) { mount(root.querySelector("[data-results]")!, emptyState("The directory could not be loaded", failure(error), "", "error", 2)); return; }
@@ -422,8 +424,15 @@ export async function staffDirectory(): Promise<void> {
   /* ---------- Loans ---------- */
 
   async function loansPanel(host: HTMLElement, person: Person): Promise<void> {
+    let loans: Loan[] = [];
+    // One listener for the panel; a return re-draws the lists inside it.
+    host.addEventListener("click", (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-return]");
+      const loan = button && loans.find((entry) => entry.id === button.dataset.return);
+      if (loan) openReturn(loan, () => draw());
+    });
+    const draw = async () => {
     mount(host, html`<div class="skeleton skeleton--block"></div>`);
-    let loans: Loan[];
     try { ({ loans } = await api<{ loans: Loan[] }>(`/api/staff/admin/directory/${person.id}/loans`)); } catch (error) { mount(host, emptyState("Loans could not be loaded", failure(error), "", "error", 3)); return; }
     const out = loans.filter((loan) => loan.status === "OUT");
     const closed = loans.filter((loan) => loan.status !== "OUT");
@@ -432,11 +441,8 @@ export async function staffDirectory(): Promise<void> {
         ${out.length ? html`<ul class="loan-list">${out.map((loan) => loanRow(loan, true))}</ul>` : html`<p class="muted">Nothing is out with ${person.name} now.</p>`}</section>
       <section aria-labelledby="past-title"><h2 class="section-label" id="past-title">Returned and closed (${closed.length})</h2>
         ${closed.length ? html`<ul class="loan-list loan-list--closed">${closed.map((loan) => loanRow(loan, true))}</ul>` : html`<p class="muted">No earlier loans.</p>`}</section></div>`);
-    host.addEventListener("click", (event) => {
-      const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-return]");
-      const loan = button && loans.find((entry) => entry.id === button.dataset.return);
-      if (loan) openReturn(loan, () => loansPanel(host, person));
-    });
+    };
+    await draw();
   }
 
   /* ---------- Activity ---------- */
@@ -470,10 +476,13 @@ export async function staffDirectory(): Promise<void> {
 
   /* ---------- Routing within the page ---------- */
 
+  let shownPerson: string | null = null;
   async function render(): Promise<void> {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("person");
-    if (!id) forgetScans();
+    // A person's scans stay in memory only while their own profile is open.
+    if (id !== shownPerson) forgetScans();
+    shownPerson = id;
     if (id) await profile(id, currentTab());
     else await list();
   }
