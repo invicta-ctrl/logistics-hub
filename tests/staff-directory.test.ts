@@ -44,12 +44,17 @@ beforeEach(async () => {
   await seed("ACC-staff", "staff", "STAFF");
 });
 
-function call(role: keyof typeof cookies | null, path: string, method = "GET", body?: unknown) {
+/** As a browser sends it: a form upload is encoded first so it carries its Content-Length, which the Worker requires. */
+async function call(role: keyof typeof cookies | null, path: string, method = "GET", body?: unknown) {
   const headers: Record<string, string> = { origin };
   if (role) headers.cookie = cookies[role]!;
   let payload: BodyInit | undefined;
-  if (body instanceof FormData) payload = body;
-  else if (body !== undefined) { headers["content-type"] = "application/json"; payload = JSON.stringify(body); }
+  if (body instanceof FormData) {
+    const encoded = new Response(body);
+    payload = await encoded.arrayBuffer();
+    headers["content-type"] = encoded.headers.get("content-type")!;
+    headers["content-length"] = String(payload.byteLength);
+  } else if (body !== undefined) { headers["content-type"] = "application/json"; payload = JSON.stringify(body); }
   return worker.fetch(new Request(`${origin}${path}`, { method, headers, body: payload }), env);
 }
 const json = async (response: Response) => await response.json() as Record<string, any>;
@@ -133,6 +138,18 @@ describe("importing official ID scans", () => {
     expect((await call("OWNER", "/api/staff/admin/directory/import", "POST", png)).status).toBe(400);
     expect((await call("OWNER", "/api/staff/admin/directory/import", "POST", pairForm("Lim", "XYZ"))).status).toBe(400);
     expect((await call("OWNER", "/api/staff/admin/directory/import", "POST", pairForm("Lim", "OfP", { back: jpeg(2400, 1500) }))).status).toBe(400);
+    expect(ids.objects.size).toBe(0);
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM staff_directory").get()).toEqual({ n: 0 });
+  });
+
+  it("refuses an upload without a length, and leaves no half-stored card when R2 fails on the second side", async () => {
+    const unsized = await worker.fetch(new Request(`${origin}/api/staff/admin/directory/import`, { method: "POST", headers: { origin, cookie: cookies.OWNER! }, body: pairForm("Tan", "DHR") }), env);
+    expect(unsized.status).toBe(411);
+    const put = env.STAFF_IDS.put.bind(env.STAFF_IDS);
+    let puts = 0;
+    env.STAFF_IDS.put = (async (...args: Parameters<R2Bucket["put"]>) => { if (++puts === 2) throw new Error("R2 unavailable"); return put(...args); }) as R2Bucket["put"];
+    expect((await call("OWNER", "/api/staff/admin/directory/import", "POST", pairForm("Tan", "DHR"))).status).toBe(500);
+    env.STAFF_IDS.put = put;
     expect(ids.objects.size).toBe(0);
     expect(sqlite.prepare("SELECT COUNT(*) AS n FROM staff_directory").get()).toEqual({ n: 0 });
   });
@@ -225,6 +242,10 @@ describe("profiles and account links", () => {
     expect((await json(await call("ADMIN", "/api/staff/session"))).directory).toBeNull();
     expect((await call("OWNER", `/api/staff/admin/directory/${ben}/account`, "PUT", { accountId: "ACC-owner" })).status).toBe(200);
     expect((await call("ADMIN", `/api/staff/admin/directory/${ben}/account`, "DELETE")).status).toBe(403);
+    // Ben is now the owner's verified identity: an administrator may not rename or deactivate him either.
+    const linked = (await json(await call("OWNER", `/api/staff/admin/directory/${ben}`))).person;
+    expect((await call("ADMIN", `/api/staff/admin/directory/${ben}`, "PATCH", { name: "Someone Else", updatedAt: linked.updatedAt })).status).toBe(403);
+    expect((await call("OWNER", `/api/staff/admin/directory/${ben}`, "PATCH", { position: "Treasurer", updatedAt: linked.updatedAt })).status).toBe(200);
     expect((await call("ADMIN", `/api/staff/admin/directory/${ana}/account`, "DELETE")).status).toBe(200);
     expect((await json(await call("STAFF", "/api/staff/session"))).directory).toBeNull();
     const actions = sqlite.prepare("SELECT action, details_json AS details FROM audit_log WHERE entity_type = 'STAFF' AND action LIKE '%LINKED' ORDER BY rowid").all();
