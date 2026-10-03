@@ -25,6 +25,7 @@ Authority: Earl current instruction -> accepted spec/amendment -> verified repos
 - D1 structured truth; R2 evidence; inventory quantity is movement-derived.
 - HTML5/CSS/TypeScript-first. No SPA framework without accepted amendment.
 - Production/provider writes require explicit target/authority and rollback controls.
+- Production preparation for a release (an R2 bucket, a D1 migration) runs only through the Cloud Operations lane: the GitHub `production` environment, `.github/workflows/production-ops.yml` and `ops/releases/<release>.json` (`docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`). Never from a PC, never on a push.
 
 ## Anti-bloat
 
