@@ -1,16 +1,16 @@
 {
-  "coldLoadToFirstRowMs": 232,
-  "sectionSwitchMs": 65,
+  "coldLoadToFirstRowMs": 237,
+  "sectionSwitchMs": 67,
   "staffDirectory": {
-    "importAllPairsMs": 840,
-    "viewerOpenMs_desktop": 62,
-    "viewerLandedMs_desktop": 1174,
+    "importAllPairsMs": 860,
+    "viewerOpenMs_desktop": 75,
+    "viewerLandedMs_desktop": 1194,
     "turnSettledMs_desktop": 802,
-    "viewerOpenMs_tablet": 75,
-    "viewerLandedMs_tablet": 1341,
-    "turnSettledMs_tablet": 835,
-    "viewerOpenMs_phone": 68,
-    "viewerLandedMs_phone": 1207,
+    "viewerOpenMs_tablet": 98,
+    "viewerLandedMs_tablet": 1373,
+    "turnSettledMs_tablet": 834,
+    "viewerOpenMs_phone": 88,
+    "viewerLandedMs_phone": 1275,
     "turnSettledMs_phone": 784
   }
 }

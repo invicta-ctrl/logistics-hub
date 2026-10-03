@@ -37,7 +37,7 @@ async function mock(page: Page) {
   return scans;
 }
 
-test("the wall shows each uploaded ID front; a card opens on its profile (both sides) and turns to the details", async ({ page }) => {
+test("the wall shows each uploaded ID front; a card opens on the ID, turns over at a tap, and switches to the details", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const scans = await mock(page);
   await page.goto("/staff/admin/directory");
@@ -54,10 +54,20 @@ test("the wall shows each uploaded ID front; a card opens on its profile (both s
   await page.getByRole("link", { name: /Ana Marie Santos/ }).click();
   const viewer = page.getByRole("dialog", { name: "USC ID of Ana Marie Santos" });
   await expect(viewer.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-pressed", "true");
+  // One card: its front up, its back underneath (loaded, out of reach until turned over).
   await expect(viewer.getByRole("img", { name: "Front of Ana Marie Santos's USC ID" })).toBeVisible();
-  await expect(viewer.getByRole("img", { name: "Back of Ana Marie Santos's USC ID" })).toBeVisible();
-  expect(scans.filter((kind) => kind === "front" || kind === "back").sort()).toEqual(["back", "front"]);
+  await expect(viewer.getByRole("img", { name: "Back of Ana Marie Santos's USC ID" })).toBeHidden();
+  await expect.poll(() => scans.filter((kind) => kind === "front" || kind === "back").sort()).toEqual(["back", "front"]);
   await expect(viewer.getByRole("group", { name: "Zoom" })).toBeVisible();
+  await page.keyboard.press("f");
+  await expect(viewer.getByRole("img", { name: "Back of Ana Marie Santos's USC ID" })).toBeVisible();
+  await expect(viewer.getByRole("img", { name: "Front of Ana Marie Santos's USC ID" })).toBeHidden();
+  // A tap on the card turns it back over; so does the Turn over button.
+  const box = (await page.locator("[data-flight]").boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(viewer.getByRole("img", { name: "Front of Ana Marie Santos's USC ID" })).toBeVisible();
+  await viewer.getByRole("button", { name: "Turn over to the back" }).click();
+  await expect(viewer.getByRole("img", { name: "Back of Ana Marie Santos's USC ID" })).toBeVisible();
   // The details are on the face underneath: out of reach of Tab and assistive technology until turned to.
   await expect(viewer.getByRole("heading", { name: "Ana Marie Santos" })).toBeHidden();
 
@@ -70,8 +80,10 @@ test("the wall shows each uploaded ID front; a card opens on its profile (both s
   await expect(viewer.locator("img[data-face-pic]")).toHaveAttribute("src", `/api/staff/admin/directory/${id(1)}/id/face`);
   // Zoom is for the ID only.
   await expect(viewer.getByRole("group", { name: "Zoom" })).toBeHidden();
+  // Back to the profile: the ID, on the side it was left.
   await page.keyboard.press("p");
   await expect(viewer.getByRole("heading", { name: "Ana Marie Santos" })).toBeHidden();
+  await expect(viewer.getByRole("img", { name: "Back of Ana Marie Santos's USC ID" })).toBeVisible();
 
   await page.keyboard.press("Escape");
   await expect(viewer).toHaveCount(0);
