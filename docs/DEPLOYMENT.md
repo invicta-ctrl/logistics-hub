@@ -227,6 +227,15 @@ V1.4 **needs migrations `0022`, `0023` and `0024` before its code reaches `main`
 
 Rollback before the merge: the migrations only add objects (the Time Travel bookmark in the report restores the previous state, or drop the new tables and triggers while empty); the live code ignores all of them. After the merge, a place is made inactive rather than deleted, which keeps every item's history.
 
+## V1.4.1 Smart Locations follow-up: production preparation
+
+A phone's "I can’t find it" report now names who sent it and appears under Self-Service → Needs attention (and in that page's badge). That needs **migration `0025_location_report_reporter.sql`** (one nullable column, `location_reports.reporter_name`, and the report-is-final guard recreated to cover it) **before the code reaches `main`**: the new code reads the column. The code already live ignores it, so applying the migration first is safe. The manifest is `ops/releases/v1.4.1.json` (no new bucket, no new table; the lane expects `table:location_reports` and `trigger:location_reports_resolve_only` to change and nothing to be added). Reports already recorded keep an empty name and read "No name given". Steps, all through the lane:
+
+1. Put `ops/releases/v1.4.1.json` and `scripts/ops/production-release.mjs` on `main` (the lane accepts a `v1.4.1` name from this version).
+2. Preflight, then prepare (Cloud Operations, below): `release` = `v1.4.1`, `expected_sha` = the head of `road-to-v2/v1.4-smart-locations`, `mode` = `preflight`; then `prepare` with `confirm` = `PREPARE v1.4.1 <that sha>`. Expected: exactly `0025` pending, nothing to create; after `prepare`, the two listed objects changed, nothing added, item, movement, on-hand, loan and phone-record figures unchanged. Result **READY_TO_MERGE**. Rollback: the Time Travel bookmark in the report (the migration only adds a column).
+3. Merge to `main` straight after; Workers Builds deploys it.
+4. Check signed in: Self-Service → Needs attention lists any open phone report with who sent it; send one from a phone and see it appear there and in the badge; resolve it with a note.
+
 ## Cloud Operations (production preparation from GitHub, not from a PC)
 
 From V1.2 on, preparing production for a release (an R2 bucket, a D1 migration) is done by the workflow **Production operations** (`.github/workflows/production-ops.yml`), driven by a manifest in `ops/releases/<release>.json`. Authority and the full list of safety rules: `docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`. The older manual runbooks above (Parts 5B and 6) stay as the emergency fallback and as history.

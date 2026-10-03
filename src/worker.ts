@@ -191,7 +191,8 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
 
   if (path === "/api/staff/session" && method === "GET") {
     const { accountId, sessionId, group, ...profile } = account;
-    const reviews = await env.DB.prepare("SELECT COUNT(*) AS total FROM self_service_events WHERE review IS NOT NULL AND resolved_at IS NULL").first<number>("total");
+    const reviews = await env.DB.prepare(`SELECT (SELECT COUNT(*) FROM self_service_events WHERE review IS NOT NULL AND resolved_at IS NULL)
+      + (SELECT COUNT(*) FROM location_reports WHERE source = 'SELF_SERVICE' AND resolved_at IS NULL) AS total`).first<number>("total");
     return json({ authenticated: true, id: accountId, ...profile, access: accessOf(account.role, group), hub: hubAccess(account), recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews ?? 0, selfServiceClosed: await selfServiceState(env.DB) === "paused", directory: await linkedPerson(env.DB, accountId) });
   }
   if (path === "/api/staff/me" && method === "PATCH") return json(await updateSelf(env.DB, account, await body()));
@@ -351,7 +352,7 @@ async function selfServiceSync(request: Request, env: Env, url: URL): Promise<Re
 
 /**
  * A phone's "I can’t find it" / "Location looks wrong": public and anonymous, so same-origin, tiny, rate-limited per network,
- * only for an item Self-Service offers, and no free text. It records an attention signal (location-reports.ts) and changes
+ * only for an item Self-Service offers, and no free text but the reporter's name. It records an attention signal (location-reports.ts) and changes
  * nothing else. In the Administration test panel nothing is recorded.
  */
 async function selfServiceLocationReport(request: Request, env: Env, url: URL): Promise<Response> {

@@ -15,7 +15,7 @@ const object = (input: unknown): Record<string, unknown> => input && typeof inpu
 
 /**
  * Records a report for an item. `reporter` is the signed-in staff member, or null for a phone (Self-Service), which may only
- * report an item it offers and has no free text. The client's `id` makes a retry harmless; a phone's network can leave only
+ * report an item it offers; its only text is the name of the person (like a take or borrow), no note. The client's `id` makes a retry harmless; a phone's network can leave only
  * one open report of a kind per item, so a repeated tap or a stuck retry adds no noise for staff.
  */
 export async function reportLocation(db: D1Database, reporter: Actor | null, itemId: string, input: unknown, clientTag: string | null = null) {
@@ -25,6 +25,8 @@ export async function reportLocation(db: D1Database, reporter: Actor | null, ite
   const kind = record.kind;
   if (typeof kind !== "string" || !(REPORT_KINDS as readonly string[]).includes(kind)) throw new InputError(400, "Choose what to report.");
   const note = reporter ? text(record, "note", "Note", 300, false) : null;
+  // A phone says who is reporting, so staff can ask them; a signed-in member is already named by the account.
+  const reporterName = reporter ? null : text(record, "name", "Your name", 120, true);
   const item = await db.prepare(`SELECT i.id, i.item_type AS itemType, i.status, i.needs_review AS needsReview, i.lending_audience AS lendingAudience, i.consumption_mode AS consumptionMode
     FROM items i WHERE i.id = ?`).bind(itemId).first<{ id: string; itemType: string; status: string; needsReview: number; lendingAudience: string; consumptionMode: string }>();
   if (!item) throw new InputError(404, "Item not found.");
@@ -33,12 +35,12 @@ export async function reportLocation(db: D1Database, reporter: Actor | null, ite
   const actorId = reporter?.accountId ?? SELF_SERVICE_ACTOR;
   const now = new Date().toISOString();
   const [insert] = await db.batch([
-    db.prepare(`INSERT INTO location_reports(id, item_id, location_id, kind, source, note, reported_by, client_tag, created_at)
-      SELECT ?1, i.id, i.location_id, ?2, ?3, ?4, ?5, ?6, ?7 FROM items i WHERE i.id = ?8
+    db.prepare(`INSERT INTO location_reports(id, item_id, location_id, kind, source, note, reported_by, client_tag, created_at, reporter_name)
+      SELECT ?1, i.id, i.location_id, ?2, ?3, ?4, ?5, ?6, ?7, ?9 FROM items i WHERE i.id = ?8
         AND NOT EXISTS (SELECT 1 FROM location_reports WHERE id = ?1)
         AND (?3 = 'STAFF' OR NOT EXISTS (SELECT 1 FROM location_reports WHERE item_id = i.id AND kind = ?2 AND source = 'SELF_SERVICE' AND client_tag IS ?6 AND resolved_at IS NULL))`)
-      .bind(id, kind, source, note, reporter?.accountId ?? null, clientTag, now, itemId),
-    audit(db, actorId, "LOCATION_REPORTED", "ITEM", itemId, { reportId: id, kind, source }, true),
+      .bind(id, kind, source, note, reporter?.accountId ?? null, clientTag, now, itemId, reporterName),
+    audit(db, actorId, "LOCATION_REPORTED", "ITEM", itemId, { reportId: id, kind, source, ...reporterName ? { reporter: reporterName } : {} }, true),
     db.prepare(`${BUMP_REVISION} AND changes() > 0`)
   ]);
   return { id, recorded: insert!.meta.changes > 0 };

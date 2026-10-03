@@ -372,15 +372,17 @@ function when(iso: string): string {
  * "I can’t find it" / "Location looks wrong": one small request, online only (a report is useless once the person has left).
  * It tells staff and changes nothing else. The same id on a retry is recorded once.
  */
-async function sendReport(itemId: string, kind: ReportKind, id: string): Promise<boolean> {
+async function sendReport(itemId: string, kind: ReportKind, name: string, id: string): Promise<boolean> {
   let response: Response;
   try {
-    response = await fetch("/api/self-service/location-report", { method: "POST", headers: { "content-type": "application/json", ...testing ? { "x-self-service-test": "1" } : {} }, body: JSON.stringify({ id, itemId, kind }), signal: AbortSignal.timeout(15_000) });
+    response = await fetch("/api/self-service/location-report", { method: "POST", headers: { "content-type": "application/json", ...testing ? { "x-self-service-test": "1" } : {} }, body: JSON.stringify({ id, itemId, kind, name }), signal: AbortSignal.timeout(15_000) });
   } catch {
     throw new ApiError(0, "The report could not be sent. Check your connection and try again.");
   }
   const body = await response.json().catch(() => ({})) as { error?: string; recorded?: boolean; test?: boolean };
   if (!response.ok) throw new ApiError(response.status, body.error ?? "The report could not be sent. Please try again.");
+  // The next form on this phone starts with the same name.
+  if (profile.name !== name) { profile = { ...profile, name }; void store.setMeta("profile", profile); }
   return body.recorded === true || body.test === true;
 }
 
@@ -878,7 +880,8 @@ export async function selfService(): Promise<void> {
     openWhereIsIt({
       item: item.name, steps, note: false, sheetClass: "ss-sheet", pictureUrl: (id, size) => `/api/public/location-media/${id}/${size}`,
       noRoute: "DOL staff keep this one at the office. Please ask them where to find it.",
-      report: offline ? null : (kind, _note, id) => sendReport(item.id, kind, id),
+      askName: { value: profile.name },
+      report: offline ? null : (kind, _note, name, id) => sendReport(item.id, kind, name, id),
       reportBlocked: "Reports need a connection. You can report again when you are back online."
     });
   }
