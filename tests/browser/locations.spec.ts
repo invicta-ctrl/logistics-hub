@@ -227,7 +227,7 @@ test.describe("Where is it? in Self-Service", () => {
     await page.route("**/api/self-service/sync", (route) => route.abort());
   });
 
-  test("shows the shared route with its directions and picture, and a report sends only the item and what is wrong", async ({ page }) => {
+  test("shows the shared route with its directions and picture, and a report sends only the item, what is wrong and the person's name", async ({ page }) => {
     let sent: Record<string, unknown> | null = null;
     await page.route("**/api/self-service/location-report", async (route) => { sent = route.request().postDataJSON() as Record<string, unknown>; await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: sent.id, recorded: true }) }); });
     for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 820, height: 1180 }]) {
@@ -248,10 +248,22 @@ test.describe("Where is it? in Self-Service", () => {
     const where = page.getByRole("dialog", { name: "Bottled Water" }).last();
     await where.getByRole("button", { name: "Location looks wrong" }).click();
     await expect(where.getByLabel("Note")).toHaveCount(0);
+    // Staff need someone to ask: a name is required, and nothing is sent without one.
+    await where.getByRole("button", { name: "Send report" }).click();
+    await expect(where.getByRole("alert")).toContainText("Enter your name");
+    expect(sent).toBeNull();
+    await expect(where.getByLabel("Your name")).toBeFocused();
+    await where.getByLabel("Your name").fill("Maya Cruz");
     await where.getByRole("button", { name: "Send report" }).click();
     await expect(where.getByRole("status")).toContainText("Reported. Thank you.");
-    expect(sent).toMatchObject({ itemId: "ITM-0043", kind: "LOCATION_WRONG" });
-    expect(Object.keys(sent!).sort()).toEqual(["id", "itemId", "kind"]);
+    expect(sent).toMatchObject({ itemId: "ITM-0043", kind: "LOCATION_WRONG", name: "Maya Cruz" });
+    expect(Object.keys(sent!).sort()).toEqual(["id", "itemId", "kind", "name"]);
+    // The phone remembers the name for the next form.
+    await page.goto("/self-service?do=take&item=ITM-0043");
+    await page.getByRole("dialog", { name: "Bottled Water" }).getByRole("button", { name: "Where is it?" }).click();
+    const again = page.getByRole("dialog", { name: "Bottled Water" }).last();
+    await again.getByRole("button", { name: "I can’t find it" }).click();
+    await expect(again.getByLabel("Your name")).toHaveValue("Maya Cruz");
   });
 
   test("an item staff keep private sends the person to the desk, and offline says reports need a connection", async ({ page, context }) => {
@@ -269,5 +281,49 @@ test.describe("Where is it? in Self-Service", () => {
     const offline = page.getByRole("dialog", { name: "Scissors" }).last();
     await expect(offline).toContainText("Reports need a connection");
     await expect(offline.getByRole("button", { name: /find it|looks wrong/ })).toHaveCount(0);
+  });
+});
+
+test.describe("Self-Service review: reports from phones", () => {
+  const reports = [
+    { id: "00000000-0000-4000-8000-0000000000a1", itemId: "ITM-0043", itemName: "Bottled Water", kind: "CANT_FIND", reporterName: "Maya Cruz", createdAt: "2026-10-03T07:39:00.000Z", location: "Office › Storage Area › Cabinet 1" },
+    { id: "00000000-0000-4000-8000-0000000000a2", itemId: "ITM-0044", itemName: "Stapler", kind: "LOCATION_WRONG", reporterName: null, createdAt: "2026-10-03T06:10:00.000Z", location: null }
+  ];
+  let resolved: Array<{ id: string; note: string }>;
+
+  test.beforeEach(async ({ page }) => {
+    resolved = [];
+    await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...session, selfServiceReviews: reports.length - resolved.length }) }));
+    await page.route("**/api/staff/self-service", (route) => route.fulfill({ contentType: "application/json", headers: { etag: `"r${resolved.length}"` }, body: JSON.stringify({ revision: resolved.length, open: [], stockIssues: [], recent: [], candidates: [], enabledItems: 12,
+      locationReports: reports.filter((report) => !resolved.some((entry) => entry.id === report.id)) }) }));
+    await page.route("**/api/staff/location-reports/*/resolve", async (route) => {
+      resolved.push({ id: route.request().url().split("/").at(-2)!, note: (route.request().postDataJSON() as { note: string }).note });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ resolvedAt: "2026-10-03T08:00:00.000Z" }) });
+    });
+  });
+
+  test("lists each report with who sent it, counts it as needing attention, and resolves it with a note", async ({ page }) => {
+    for (const viewport of [{ width: 390, height: 844 }, { width: 1366, height: 900 }]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/staff/self-service");
+      await expect(page.locator("#ss-summary")).toContainText("2 need attention");
+      await expect(page.getByRole("button", { name: /Needs attention\s*2/ })).toBeVisible();
+      const cards = page.locator(".review-card--report");
+      await expect(cards).toHaveCount(2);
+      await expect(cards.nth(0)).toContainText("I can’t find it");
+      await expect(cards.nth(0)).toContainText("Bottled Water");
+      await expect(cards.nth(0)).toContainText("Maya Cruz");
+      await expect(cards.nth(0)).toContainText("Office › Storage Area › Cabinet 1");
+      await expect(cards.nth(0)).toContainText("Nothing was changed");
+      await expect(cards.nth(1)).toContainText("No name given");
+      await expect(cards.nth(0).getByRole("link", { name: "Open item" })).toHaveAttribute("href", "/staff/items?item=ITM-0043");
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), `${viewport.width}px`).toBe(0);
+    }
+    await page.locator(".review-card--report").first().getByLabel("Note").fill("Found it on shelf B");
+    await page.locator(".review-card--report").first().getByRole("button", { name: "Resolve" }).click();
+    await expect(page.getByText("Report resolved.")).toBeVisible();
+    expect(resolved).toEqual([{ id: "00000000-0000-4000-8000-0000000000a1", note: "Found it on shelf B" }]);
+    await expect(page.locator(".review-card--report")).toHaveCount(1);
+    await expect(page.locator("#ss-summary")).toContainText("1 needs attention");
   });
 });
