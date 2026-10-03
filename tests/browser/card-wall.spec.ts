@@ -23,10 +23,11 @@ async function mock(page: Page) {
   await page.route("**/api/staff/admin/directory**", (route) => {
     const url = new URL(route.request().url());
     const json = (body: unknown) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
-    const side = url.pathname.match(/\/id\/(front|back)$/)?.[1];
+    const side = url.pathname.match(/\/id\/(front|back|thumb|face)$/)?.[1];
     if (side) { scans.push(side); return route.fulfill({ contentType: "image/png", body: pixel }); }
     if (url.pathname === "/api/staff/admin/directory") return json({ people });
     if (url.pathname.endsWith("/accounts")) return json({ accounts: [] });
+    if (url.pathname.endsWith("/derived")) return json({ missing: [] });
     if (url.pathname.endsWith("/access")) return json({ account: null, suggestedUsername: "ana.santos" });
     if (url.pathname.endsWith("/loans")) return json({ loans: url.pathname.includes(id(1)) ? [loan] : [] });
     if (url.pathname.endsWith("/usage")) return json({ usage: [], truncated: false });
@@ -36,40 +37,61 @@ async function mock(page: Page) {
   return scans;
 }
 
-test("the wall shows a card per person by department; a card opens on the details, then turns to the ID", async ({ page }) => {
+test("the wall shows each uploaded ID front; a card opens on its profile (both sides) and turns to the details", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const scans = await mock(page);
   await page.goto("/staff/admin/directory");
   const logistics = page.getByRole("region", { name: "Department of Logistics" });
   await expect(logistics.getByRole("link")).toHaveCount(2);
+  // A person with an ID on file shows its front (the thumbnail); without one, the drawn card. The wall opens no full scan.
+  await expect(page.locator(`a[data-person="${id(1)}"] img[data-thumb]`)).toHaveAttribute("src", `/api/staff/admin/directory/${id(1)}/id/thumb`);
+  await expect(page.locator(`a[data-person="${id(2)}"] img[data-thumb]`)).toHaveCount(0);
+  await expect.poll(() => scans.filter((kind) => kind === "front" || kind === "back")).toEqual([]);
   await page.getByRole("button", { name: /^Inactive/ }).click();
   await expect(page.getByRole("link", { name: /Gio Tan/ })).toContainText("Inactive");
   await page.getByRole("button", { name: /^Everyone/ }).click();
 
   await page.getByRole("link", { name: /Ana Marie Santos/ }).click();
   const viewer = page.getByRole("dialog", { name: "USC ID of Ana Marie Santos" });
-  await expect(viewer.getByRole("heading", { name: "Ana Marie Santos" })).toBeVisible();
+  await expect(viewer.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-pressed", "true");
+  await expect(viewer.getByRole("img", { name: "Front of Ana Marie Santos's USC ID" })).toBeVisible();
+  await expect(viewer.getByRole("img", { name: "Back of Ana Marie Santos's USC ID" })).toBeVisible();
+  expect(scans.filter((kind) => kind === "front" || kind === "back").sort()).toEqual(["back", "front"]);
+  await expect(viewer.getByRole("group", { name: "Zoom" })).toBeVisible();
+  // The details are on the face underneath: out of reach of Tab and assistive technology until turned to.
+  await expect(viewer.getByRole("heading", { name: "Ana Marie Santos" })).toBeHidden();
+
+  await page.keyboard.press("d");
   await expect(viewer.getByRole("button", { name: "Details" })).toHaveAttribute("aria-pressed", "true");
+  await expect(viewer.getByRole("heading", { name: "Ana Marie Santos" })).toBeVisible();
   await expect(viewer).toContainText("20-1111-222");
   await expect(viewer.getByRole("region", { name: "On loan now" })).toContainText("2 × Extension cord");
-  // Opening a card is not opening an ID: nothing is fetched until a side is turned to.
-  expect(scans).toEqual([]);
-  // Zoom is for the scans only.
+  // Their photo, cut from the ID, is the profile picture.
+  await expect(viewer.locator("img[data-face-pic]")).toHaveAttribute("src", `/api/staff/admin/directory/${id(1)}/id/face`);
+  // Zoom is for the ID only.
   await expect(viewer.getByRole("group", { name: "Zoom" })).toBeHidden();
-
-  await page.keyboard.press("f");
-  await expect(viewer.getByRole("img", { name: "Front of Ana Marie Santos's USC ID" })).toBeVisible();
-  await expect(viewer.getByRole("button", { name: "Front" })).toHaveAttribute("aria-pressed", "true");
-  await expect(viewer.getByRole("group", { name: "Zoom" })).toBeVisible();
-  expect(scans).toEqual(["front"]);
-  // The details are on the face underneath now: out of reach of Tab and assistive technology.
+  await page.keyboard.press("p");
   await expect(viewer.getByRole("heading", { name: "Ana Marie Santos" })).toBeHidden();
-  await page.keyboard.press("d");
-  await expect(viewer.getByRole("heading", { name: "Ana Marie Santos" })).toBeVisible();
 
   await page.keyboard.press("Escape");
   await expect(viewer).toHaveCount(0);
   await expect(page.getByRole("link", { name: /Ana Marie Santos/ })).toBeFocused();
+});
+
+test("a person whose thumbnail is not made yet shows the drawn card; the owner makes the missing pictures in one step", async ({ page }) => {
+  await mock(page);
+  const made: string[] = [];
+  await page.route("**/api/staff/admin/directory/derived", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ missing: made.length ? [] : [{ id: id(1), mediaId: card.mediaId }] }) }));
+  await page.route(`**/api/staff/admin/directory/${id(1)}/id/derived`, (route) => { made.push(route.request().method()); return route.fulfill({ contentType: "application/json", body: JSON.stringify({ mediaId: card.mediaId }) }); });
+  await page.route(`**/api/staff/admin/directory/${id(1)}/id/thumb`, (route) => made.length ? route.fulfill({ contentType: "image/png", body: pixel }) : route.fulfill({ status: 404, contentType: "application/json", body: "{}" }));
+  await page.goto("/staff/admin/directory");
+  const tile = page.locator(`a[data-person="${id(1)}"]`);
+  await expect(tile.locator("img[data-thumb]")).toHaveCount(0);
+  await expect(tile).toContainText("Ana Marie Santos");
+  await page.getByRole("button", { name: "Make them now" }).click();
+  await expect(page.getByRole("button", { name: "Make them now" })).toHaveCount(0);
+  expect(made).toEqual(["PUT"]);
+  await expect(tile.locator("img[data-thumb]")).toHaveCount(1);
 });
 
 test("a card's section link closes it and opens that section; Back returns to the wall", async ({ page }) => {
@@ -78,7 +100,7 @@ test("a card's section link closes it and opens that section; Back returns to th
   await page.getByRole("link", { name: /Bea Cruz Reyes/ }).click();
   const viewer = page.getByRole("dialog", { name: "USC ID of Bea Cruz Reyes" });
   // No USC ID on file: the card has no sides to turn to.
-  await expect(viewer.getByRole("group", { name: "Side of the card" })).toBeHidden();
+  await expect(viewer.getByRole("group", { name: "View" })).toBeHidden();
   await viewer.getByRole("link", { name: "Usage" }).click();
   await expect(viewer).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`person=${id(2)}&tab=usage`));
@@ -97,7 +119,7 @@ test("a modifier press follows the card's link to the profile, and the profile's
   await page.goto(`/staff/admin/directory?person=${id(1)}`);
   await page.getByRole("button", { name: "Open Ana Marie Santos's card" }).click();
   const viewer = page.getByRole("dialog", { name: "USC ID of Ana Marie Santos" });
-  await expect(viewer.getByRole("button", { name: "Front" })).toHaveAttribute("aria-pressed", "true");
+  await expect(viewer.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-pressed", "true");
   await expect(viewer.getByRole("img", { name: "Front of Ana Marie Santos's USC ID" })).toBeVisible();
 });
 

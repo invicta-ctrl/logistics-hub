@@ -462,18 +462,25 @@ async function directoryScenes(browser, url, dir) {
     await page.goto(`${url}/staff/admin/directory?q=director`);
     await page.waitForSelector(".dir-card, .person-row");
     await shot(page, `directory-search-${size}`);
-    // A card on the wall, pressed: it opens on the person's details, then turns to the front of their ID (the wall is new in
-    // this branch; a base before it lists people in rows).
+    // A card on the wall (its uploaded front), pressed: it opens on the profile, both sides of the ID, and turns to the
+    // details (the wall is new in this branch; a base before it lists people in rows).
     await page.goto(`${url}/staff/admin/directory?dept=DEM`);
     await page.waitForSelector(".dir-card, .person-row");
     if (await page.locator(".dir-card").count()) {
+    await page.waitForFunction(() => [...document.querySelectorAll("img[data-thumb]")].every((image) => image.complete));
+    await shot(page, `directory-wall-ids-${size}`);
     await page.locator(`.dir-card[data-person="${ids.Belmonte}"]`).click();
-    await page.waitForSelector("dialog.id-viewer .person-card--details [data-out] :is(ul, span)");
-    await shot(page, `directory-card-details-${size}`);
-    await page.keyboard.press("f");
-    await page.waitForSelector("dialog.id-viewer .id-card__scan:not(.is-loading) img[data-face=front]");
-    await page.waitForTimeout(150);
-    await shot(page, `directory-card-front-${size}`);
+    await page.waitForSelector("dialog.id-viewer[open]");
+    // A base whose card opens on the details and turns to Front and Back has nothing new to show here.
+    if (await page.locator('dialog.id-viewer [data-view="profile"]').count()) {
+      await page.waitForSelector("dialog.id-viewer .id-card__pair:not(.is-loading) img[data-face=front]");
+      await page.waitForTimeout(150);
+      await shot(page, `directory-card-profile-${size}`);
+      await page.keyboard.press("d");
+      await page.waitForSelector("dialog.id-viewer .person-card--details [data-out] :is(ul, span)");
+      await page.waitForTimeout(150);
+      await shot(page, `directory-card-details-${size}`);
+    }
     await page.keyboard.press("Escape");
     await page.waitForSelector("dialog.id-viewer", { state: "detached" });
     }
@@ -495,7 +502,9 @@ async function directoryScenes(browser, url, dir) {
     const flying = () => document.getAnimations().some((animation) => animation.effect?.target?.matches?.("[data-flight]"));
     let start = Date.now();
     await page.locator("[data-open=front]").click();
-    await page.waitForSelector("dialog.id-viewer[open] .id-card__face--front img[src]");
+    await page.waitForSelector("dialog.id-viewer[open] img[data-face=front][src]");
+    // This branch's card turns between Profile and Details; a base before it, between Front and Back.
+    const views = await page.locator('dialog.id-viewer [data-view="details"]').count() ? { turn: "d", back: "p", turned: "details" } : { turn: "b", back: "f", turned: "back" };
     timings[`viewerOpenMs_${size}`] = Date.now() - start;
     // The card's flight out of its tile, frozen at fixed moments (every running animation paused together, so frames are exact).
     await page.waitForFunction(flying);
@@ -515,15 +524,15 @@ async function directoryScenes(browser, url, dir) {
     await shot(page, `directory-viewer-tilt-${size}`);
     await page.mouse.move(card.x + card.width / 2, card.y - 24);
     start = Date.now();
-    await page.keyboard.press("b");
+    await page.keyboard.press(views.turn);
     // A screenshot takes 100-200 ms itself, so this lands mid-turn.
     await page.waitForTimeout(40);
     await shot(page, `directory-viewer-turning-${size}`);
     // Settled: on its back and level within about a degree.
     await page.waitForFunction(() => { const pose = new DOMMatrixReadOnly(getComputedStyle(document.querySelector("[data-card]")).transform); return Math.abs(pose.m11 + 1) < 0.0002 && Math.abs(pose.m13) < 0.02 && Math.abs(pose.m23) < 0.02; }, null, { timeout: 10000 });
     timings[`turnSettledMs_${size}`] = Date.now() - start;
-    await shot(page, `directory-viewer-back-${size}`);
-    await page.keyboard.press("f");
+    await shot(page, `directory-viewer-${views.turned}-${size}`);
+    await page.keyboard.press(views.back);
     await page.keyboard.press("+");
     await page.keyboard.press("+");
     await page.waitForTimeout(300);
