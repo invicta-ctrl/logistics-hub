@@ -14,3 +14,5 @@ Staff row shape:
 ```
 
 Run `node scripts/build-private-staff-seed.mjs`.
+
+The V1.3 Staff Directory does not read `staff_users`: people are added in Administration → Staff Directory, and official ID scans are imported there by the owner from the Google Drive folder (`docs/DEPLOYMENT.md`, "V1.3 Staff Directory"). Downloaded scans are never placed here or anywhere in the repository.
