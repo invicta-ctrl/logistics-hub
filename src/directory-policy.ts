@@ -27,6 +27,10 @@ export const departmentCode = (value: string): DepartmentCode | null => BY_UPPER
 export const normalizeIdentity = (raw: string): string =>
   raw.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
-/** How a person is recognised in an imported archive: normalised identity and department, never the surname alone. */
-export const sourceKey = (identity: string, department: DepartmentCode): string => `${normalizeIdentity(identity)}|${department}`;
-export const SOURCE_KEY = /^[a-z0-9]+(?: [a-z0-9]+)*\|[A-Za-z]{2,4}$/;
+/**
+ * How a person is recognised in an imported archive: normalised identity and department, never the surname alone. Spaces
+ * do not count, so DelaCruz, Dela_Cruz and "Dela Cruz" are one person (a file named without the space once made a
+ * second entry for someone already in the directory).
+ */
+export const sourceKey = (identity: string, department: DepartmentCode): string => `${normalizeIdentity(identity).replace(/ /g, "")}|${department}`;
+export const SOURCE_KEY = /^[a-z0-9]+\|[A-Za-z]{2,4}$/;
