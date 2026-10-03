@@ -14,23 +14,24 @@ type Who = { id: string; name: string; department: string };
 /* ---------- Scans, for this visit only ---------- */
 
 /**
- * A scan is fetched once per visit and kept in memory as a data: URL (the CSP allows data: images, not blob:), so the tile and
- * the viewer share it and flipping is instant. It is never written to a cache or to disk (the Worker answers no-store), and the
- * whole map is dropped when the profile is left.
+ * A scan is kept in memory as a data: URL (the CSP allows data: images, not blob:), so the tile and the viewer share it and
+ * flipping is instant. It is never written to a cache or to disk (the Worker answers no-store), the map is dropped when another
+ * person's profile opens or the page is left, and an entry is fetched again after five minutes: the Worker records one opening
+ * per viewer and card every ten, so a card opened again later is always recorded again.
  */
-const scans = new Map<string, Promise<string>>();
+const KEEP_MS = 5 * 60_000;
+const scans = new Map<string, { at: number; url: Promise<string> }>();
 export function scan(personId: string, mediaId: string, side: Side): Promise<string> {
   const key = `${personId}/${mediaId}/${side}`;
-  let entry = scans.get(key);
-  if (!entry) {
-    entry = fetch(`/api/staff/admin/directory/${personId}/id/${side}`, { credentials: "same-origin", cache: "no-store" }).then(async (response) => {
-      if (!response.ok) throw new ApiError(response.status, response.status === 429 ? "Too many ID scans opened in a short time. Please wait a few minutes." : "This scan could not be opened.");
-      return dataUrl(await response.blob());
-    });
-    entry.catch(() => scans.delete(key));
-    scans.set(key, entry);
-  }
-  return entry;
+  const kept = scans.get(key);
+  if (kept && Date.now() - kept.at < KEEP_MS) return kept.url;
+  const url = fetch(`/api/staff/admin/directory/${personId}/id/${side}`, { credentials: "same-origin", cache: "no-store" }).then(async (response) => {
+    if (!response.ok) throw new ApiError(response.status, response.status === 429 ? "Too many ID scans opened in a short time. Please wait a few minutes." : "This scan could not be opened.");
+    return dataUrl(await response.blob());
+  });
+  url.catch(() => scans.delete(key));
+  scans.set(key, { at: Date.now(), url });
+  return url;
 }
 export const forgetScans = (): void => scans.clear();
 
