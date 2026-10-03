@@ -69,7 +69,7 @@ test.describe.serial("smart locations", () => {
     await expect(page.getByText("Picture saved.")).toBeVisible();
     await expect(cabinet.getByRole("button", { name: "View picture of Cabinet 1" })).toBeVisible();
     await closeSheet(page);
-    await addPlace(page, "Shelf 2", "Cabinet 1", { directions: "Second shelf from the top." });
+    await addPlace(page, "Shelf 2", "Storage Area › Cabinet 1", { directions: "Second shelf from the top." });
     await closeSheet(page);
 
     // A staff-only place, a refused loop and a refused near-duplicate name, each said in words.
@@ -103,7 +103,7 @@ test.describe.serial("smart locations", () => {
     await form.getByLabel("Category").fill("Office supplies");
     await form.getByLabel("Borrow or consume").selectOption("Consumable");
     await form.getByLabel("Unit").fill("piece");
-    await form.getByRole("combobox", { name: /^Place/ }).selectOption({ label: "Shelf 2" });
+    await form.getByRole("combobox", { name: /^Place/ }).selectOption({ label: "Storage Area › Cabinet 1 › Shelf 2" });
     await expect(form.locator("#place-preview")).toContainText("Storage Area › Cabinet 1 › Shelf 2");
     await form.getByLabel("Opening quantity").fill("6");
     await form.getByLabel("Shown to").selectOption("NOT_AVAILABLE_FOR_LENDING");
