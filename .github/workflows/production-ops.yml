@@ -1,0 +1,106 @@
+# Production operations: release-scoped preparation of production (an R2 bucket, a D1 migration) from the manifest in
+# ops/releases/<release>.json, run from GitHub instead of anyone's PC.
+#
+# Manual dispatch only: it never runs on a push, and merging main never migrates production.
+# Rules: docs/specs/accepted/2026-10-02-cloud-operations-amendment.md. Runbook: docs/DEPLOYMENT.md, "Cloud Operations".
+# Secrets live in the `production` environment (Settings > Environments), never in the repository:
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, OPS_BACKUP_PUBLIC_KEY (a public key; the private key stays offline with Earl).
+name: Production operations
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Release to prepare, for example v1.2 (needs ops/releases/<release>.json on main)
+        required: true
+        type: string
+      expected_sha:
+        description: The exact 40-character commit the release will ship
+        required: true
+        type: string
+      mode:
+        description: preflight only reads; prepare backs up, then changes production as the manifest allows
+        required: true
+        type: choice
+        options:
+          - preflight
+          - prepare
+        default: preflight
+      confirm:
+        description: "For prepare only: type exactly  PREPARE <release> <the full sha>"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-ops
+  cancel-in-progress: false
+
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Only main's tooling may touch production
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Production operations run only from main (this run is on ${GITHUB_REF})."
+          exit 1
+      - name: Check out the operations tooling
+        uses: actions/checkout@v4
+        with:
+          path: ops
+          persist-credentials: false
+      - name: Check out the release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.expected_sha }}
+          path: release
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ops/package-lock.json
+      - name: Install the tooling (wrangler)
+        run: npm ci
+        working-directory: ops
+      - name: Run the release operation
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OPS_BACKUP_PUBLIC_KEY: ${{ secrets.OPS_BACKUP_PUBLIC_KEY }}
+          RELEASE: ${{ inputs.release }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          MODE: ${{ inputs.mode }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: >
+          node ops/scripts/ops/production-release.mjs
+          --ops-dir ops --release-dir release --out ops-out
+          --release "$RELEASE" --expected-sha "$EXPECTED_SHA" --mode "$MODE" --confirm "$CONFIRM"
+      - name: Show the report
+        if: always()
+        run: |
+          if [ -f ops-out/report.md ]; then cat ops-out/report.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Keep the report (no production data in it)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-report-${{ inputs.release }}-${{ inputs.mode }}
+          path: |
+            ops-out/report.json
+            ops-out/report.md
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Keep the encrypted backup (ciphertext only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ops-backup-${{ inputs.release }}
+          path: ops-out/backup/*.sql.enc
+          if-no-files-found: ignore
+          retention-days: 90
