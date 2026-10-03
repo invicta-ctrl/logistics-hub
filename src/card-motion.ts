@@ -54,8 +54,8 @@ export type CardMotion = {
   rest(): void;
   /** Flat and unlit at once (zoomed in, or about to fly back). */
   still(): void;
-  /** Shows `side`, turning over on a spring unless `animate` is false. */
-  turn(side: "front" | "back", animate: boolean): void;
+  /** Turns the card to `degrees` about its vertical axis (a multiple of 180: a face up), on a spring unless `animate` is false. */
+  turn(degrees: number, animate: boolean): void;
   /** A single glare passing over the card, as when a real card catches the light. */
   sweep(): void;
   /** Stops the frame loop for good (the viewer closed). */
@@ -128,9 +128,8 @@ export function cardMotion(card: HTMLElement): CardMotion {
       press.jump(1);
       paint();
     },
-    turn(side, animate) {
-      const to = side === "back" ? 180 : 0;
-      if (animate && !reducedMotion()) { turn.to(to); run(); } else { turn.jump(to); paint(); }
+    turn(degrees, animate) {
+      if (animate && !reducedMotion()) { turn.to(degrees); run(); } else { turn.jump(degrees); paint(); }
     },
     sweep() {
       if (reducedMotion()) return;
@@ -173,26 +172,30 @@ export const LANDED_MS = (springPath(LAUNCH).findIndex((p) => p >= 0.95) * 1000)
 export const onScreen = (box: Box | null): box is Box => Boolean(box && box.width > 0 && box.top + box.height > 0 && box.left + box.width > 0 && box.top < window.innerHeight && box.left < window.innerWidth);
 
 /**
- * Flies `element` from the box `from` (the tile) into the place it is laid out, turning once around its vertical axis and
- * lifting toward the viewer on the way, then settles with a small overshoot. Without a tile on screen it grows from the middle.
+ * Flies `element` from the box `from` (the tile) into the place it is laid out, turning `spin` degrees around its vertical
+ * axis (once by default; one and a half turns land it on its other face) and lifting toward the viewer on the way, then
+ * settles with a small overshoot. Without a tile on screen it grows from the middle.
  */
-export function flyIn(element: HTMLElement, from: Box | null): Animation {
+export function flyIn(element: HTMLElement, from: Box | null, spin = -360): Animation {
   const at = offset(onScreen(from) ? from : centred(element, 0.55), element.getBoundingClientRect());
   const path = springPath(LAUNCH);
   return element.animate(path.map((p) => {
     const arc = Math.sin(Math.PI * Math.min(1, p));
-    return { transform: `translate3d(${(at.x * (1 - p)).toFixed(1)}px, ${(at.y * (1 - p)).toFixed(1)}px, ${(180 * arc).toFixed(1)}px) rotateX(${(-8 * arc).toFixed(2)}deg) rotateY(${(-360 * (1 - p)).toFixed(2)}deg) scale(${(at.scale + (1 - at.scale) * p).toFixed(4)})` };
+    return { transform: `translate3d(${(at.x * (1 - p)).toFixed(1)}px, ${(at.y * (1 - p)).toFixed(1)}px, ${(180 * arc).toFixed(1)}px) rotateX(${(-8 * arc).toFixed(2)}deg) rotateY(${(spin * (1 - p)).toFixed(2)}deg) scale(${(at.scale + (1 - at.scale) * p).toFixed(4)})` };
   }), { duration: ((path.length - 1) * 1000) / 60, easing: "linear" });
 }
 
-/** Flies `element` back into the box `to` (the tile it belongs to); without one on screen it shrinks away in the middle. */
-export function flyOut(element: HTMLElement, to: Box | null): Animation {
+/**
+ * Flies `element` back into the box `to` (the tile it belongs to), turning `spin` degrees on the way (half a turn lands it on
+ * its other face, the one the tile shows); without a tile on screen it shrinks away in the middle.
+ */
+export function flyOut(element: HTMLElement, to: Box | null, spin = 0): Animation {
   const target = onScreen(to);
   const at = offset(target ? to : centred(element, 0.85), element.getBoundingClientRect());
   const path = springPath(RETURN, 0.003);
   return element.animate(path.map((p) => {
     const arc = Math.sin(Math.PI * Math.min(1, p));
-    return { transform: `translate3d(${(at.x * p).toFixed(1)}px, ${(at.y * p).toFixed(1)}px, ${(90 * arc).toFixed(1)}px) rotateX(${(6 * arc).toFixed(2)}deg) scale(${(1 + (at.scale - 1) * p).toFixed(4)})`, opacity: target ? 1 : 1 - p };
+    return { transform: `translate3d(${(at.x * p).toFixed(1)}px, ${(at.y * p).toFixed(1)}px, ${(90 * arc).toFixed(1)}px) rotateX(${(6 * arc).toFixed(2)}deg) rotateY(${(spin * p).toFixed(2)}deg) scale(${(1 + (at.scale - 1) * p).toFixed(4)})`, opacity: target ? 1 : 1 - p };
   }), { duration: ((path.length - 1) * 1000) / 60, easing: "linear", fill: "forwards" });
 }
 
