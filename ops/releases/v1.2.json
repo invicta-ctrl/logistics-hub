@@ -1,0 +1,23 @@
+{
+  "release": "v1.2",
+  "title": "Item Profiles, Media and Visual Identity",
+  "branch": "road-to-v2/v1.2-item-profiles-media",
+  "record": "docs/road-to-v2/releases/v1.2.md",
+  "target": {
+    "worker": "logistics-hub",
+    "d1": { "binding": "DB", "name": "logistics-hub", "id": "3ffd8edf-a176-4f63-8b7c-5215d11c98d8" },
+    "r2": {
+      "existing": [{ "binding": "EVIDENCE", "name": "logistics-hub-evidence" }],
+      "create": [{ "binding": "CATALOG_MEDIA", "name": "logistics-hub-catalog-media" }]
+    },
+    "forbidden": ["hau-usc-logistics-production", "hau-usc-logistics-staging"]
+  },
+  "migrations": {
+    "pending": [{ "name": "0020_item_media.sql", "sha256": "6d8a0b040c61b52297d70edacc2fd4b4b4e3965f4f19b6fa6f4a6600b69809a3" }]
+  },
+  "expect": {
+    "schemaAdded": ["index:sqlite_autoindex_item_media_1", "index:sqlite_autoindex_item_media_2", "table:item_media"],
+    "tableRowsAfter": { "item_media": 0 },
+    "unchanged": ["items", "movements", "onHand", "loans", "phoneEvents"]
+  }
+}
