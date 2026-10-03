@@ -553,6 +553,14 @@ describe("the manifest and the workflow", () => {
     if (fs.existsSync("migrations/0020_item_media.sql")) expect(sha256(fs.readFileSync("migrations/0020_item_media.sql"))).toBe(manifest.migrations.pending[0].sha256);
     expect(() => ops.loadManifest("ops/releases/v1.2.json", "v1.3")).toThrow(/does not belong|NO_MANIFEST|no release manifest/);
     expect(() => ops.loadManifest("ops/releases/v1.2.json", "latest")).toThrow(/look like v1.2/);
+    expect(() => ops.loadManifest("ops/releases/v1.2.json", "v1.2.1.1")).toThrow(/look like v1.2/);
+  });
+
+  it("a follow-up release may be named v1.4.1, and the shipped manifests pin the migration files they name", () => {
+    expect(ops.loadManifest("ops/releases/v1.4.1.json", "v1.4.1")).toMatchObject({ release: "v1.4.1", expect: { schemaAdded: [], schemaChanged: ["table:location_reports", "trigger:location_reports_resolve_only"] } });
+    for (const release of ["v1.4", "v1.4.1"]) {
+      for (const pending of ops.loadManifest(`ops/releases/${release}.json`, release).migrations.pending) expect(sha256(fs.readFileSync(`migrations/${pending.name}`))).toBe(pending.sha256);
+    }
   });
 
   it("a manifest that names an unknown count to keep unchanged is refused", () => {

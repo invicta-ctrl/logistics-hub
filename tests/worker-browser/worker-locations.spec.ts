@@ -214,13 +214,23 @@ test.describe.serial("smart locations", () => {
     await expect.poll(() => picture.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
     expect(await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 
-    // A phone's report has no free text, says nothing is changed, and reaches staff as an attention signal.
+    // A phone's report has no note, names who sent it, says nothing is changed, and reaches staff as an attention signal.
     await where.getByRole("button", { name: "I can’t find it" }).click();
     await expect(where.getByLabel("Note")).toHaveCount(0);
+    await where.getByLabel("Your name").fill("E2E Sam");
     await where.getByRole("button", { name: "Send report" }).click();
     await expect(where.getByRole("status")).toContainText("Reported. Thank you.");
-    const detail = await (await page.request.get(`/api/staff/items/${stapler.id}`)).json() as { reports: Array<{ kind: string; source: string; resolvedAt: string | null }> };
-    expect(detail.reports.filter((report) => !report.resolvedAt)).toMatchObject([{ kind: "CANT_FIND", source: "SELF_SERVICE" }]);
+    const detail = await (await page.request.get(`/api/staff/items/${stapler.id}`)).json() as { reports: Array<{ kind: string; source: string; reportedBy: string | null; resolvedAt: string | null }> };
+    expect(detail.reports.filter((report) => !report.resolvedAt)).toMatchObject([{ kind: "CANT_FIND", source: "SELF_SERVICE", reportedBy: "E2E Sam" }]);
+    // Staff find it where they already look for what phones need from them: Self-Service, Needs attention.
+    await page.goto("/staff/self-service");
+    const card = page.locator(".review-card--report", { hasText: "E2E Stapler" });
+    await expect(card).toContainText("I can’t find it");
+    await expect(card).toContainText("E2E Sam");
+    await card.getByLabel("Note").fill("Back on its shelf.");
+    await card.getByRole("button", { name: "Resolve" }).click();
+    await expect(page.getByText("Report resolved.")).toBeVisible();
+    await expect(page.locator(".review-card--report", { hasText: "E2E Stapler" })).toHaveCount(0);
     expect((await inventory()).items.find((entry) => entry.id === stapler.id)).toMatchObject({ onHand: stapler.onHand, locationId: stapler.locationId });
 
     // Withdrawing the top place hides the route again, and its picture address stops answering.
