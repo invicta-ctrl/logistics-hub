@@ -1,5 +1,6 @@
 import { SENTINEL, utc } from "./activity";
 import { OPEN_REORDER_STATUSES } from "./catalog-policy";
+import { locationList } from "./locations";
 import { type Actor, BUMP_REVISION, HISTORY_ORDER, InputError, actorName, audit, staffInventory } from "./inventory";
 
 const OPEN = [...OPEN_REORDER_STATUSES].map((status) => `'${status}'`).join(",");
@@ -8,8 +9,8 @@ const ITEM_ID = /^ITM-[A-Za-z0-9-]{1,24}$/;
 
 /** Everything the Stock workspace needs, polled as one revisioned payload. */
 export async function stockOverview(db: D1Database) {
-  const [inventory, reorders, activity] = await Promise.all([staffInventory(db), listReorders(db), recentActivity(db)]);
-  return { ...inventory, reorders, activity };
+  const [inventory, locations, reorders, activity] = await Promise.all([staffInventory(db), locationList(db), listReorders(db), recentActivity(db)]);
+  return { ...inventory, locations, reorders, activity };
 }
 
 /** Open entries, plus the last two weeks of closed ones so staff can see what was just done. */

@@ -1,4 +1,5 @@
 import { stockState } from "./catalog-policy";
+import { type Place, pathOf, placesOf } from "./location-tree";
 import { type Preset, bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { loadSession, shell } from "./staff";
@@ -9,12 +10,12 @@ import {
 
 type StockItem = {
   id: string; name: string; aliases: string | null; category: string; unit: string; status: string; onHand: number; reorderThreshold: number;
-  storageLocation: string | null; stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean;
+  locationId: string | null; stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean;
   itemType: string; consumptionMode: string; openUnits: number; openCondition: string | null;
 };
 type Reorder = { id: string; itemId: string; itemName: string; unit: string; status: string; desiredQuantity: number | null; note: string | null; updatedAt: string; closedAt: string | null; updatedBy: string | null };
 type Activity = { id: string; createdAt: string; itemId: string; itemName: string; unit: string; movementType: string; related: string | null; change: number; afterQuantity: number; reason: string | null; notes: string | null; actor: string | null };
-type Stock = { revision: number; items: StockItem[]; reorders: Reorder[]; activity: Activity[] };
+type Stock = { revision: number; items: StockItem[]; locations: Place[]; reorders: Reorder[]; activity: Activity[] };
 type View = "attention" | "restock" | "pantry" | "activity";
 type Focus = "all" | "out" | "low" | "count" | "expiring" | "open";
 
@@ -59,7 +60,10 @@ function whyTags(item: StockItem): Html {
   })}${item.reorderStatus ? html`<span class="tag tag--gold">${label(item.reorderStatus)}</span>` : ""}</span>`;
 }
 
-const itemCell = (item: { id: string; name: string; storageLocation?: string | null }) => html`<td class="col-item"><a class="row-link" href="/staff/items?item=${item.id}" data-route>${item.name}</a><span class="cell-sub"><span class="mono">${item.id}</span>${item.storageLocation !== undefined ? html` · ${item.storageLocation ?? "No location"}` : ""}</span></td>`;
+/** Where each item is kept, by its place's full path, from the latest answer. */
+let placeNames = new Map<string, string>();
+const placeOf = (item: { locationId: string | null }) => (item.locationId ? placeNames.get(item.locationId) : undefined) ?? "No place";
+const itemCell = (item: { id: string; name: string; locationId?: string | null }) => html`<td class="col-item"><a class="row-link" href="/staff/items?item=${item.id}" data-route>${item.name}</a><span class="cell-sub"><span class="mono">${item.id}</span>${item.locationId !== undefined ? html` · ${placeOf({ locationId: item.locationId })}` : ""}</span></td>`;
 const qtyCell = (onHand: number, unit: string, item?: StockItem) => html`<td class="col-qty"><span class="qty">${onHand}</span> <span class="qty-unit">${units(onHand, unit)}</span>${item?.openUnits ? html`<span class="cell-sub">${sealedLine(onHand, item.openUnits, item.openCondition)}</span>` : ""}</td>`;
 const levelCell = (item: StockItem) => html`<td class="col-level">${item.reorderThreshold > 0 ? item.reorderThreshold : html`<span class="muted">Not set</span>`}</td>`;
 
@@ -163,7 +167,7 @@ export async function stockWorkspace(): Promise<void> {
     const card = document.querySelector("#record-card")!;
     if (!item) { mount(card, html`<p class="muted">Choose an item to see what is on the shelf.</p>`); movement.refresh(); return; }
     mount(card, html`<p class="record-card__name">${item.name} <span class="mono muted">${item.id}</span></p>
-      <p class="record-card__meta"><strong>${item.onHand}</strong> ${units(item.onHand, item.unit)} on hand${item.openUnits ? ` (${sealedLine(item.onHand, item.openUnits, item.openCondition)})` : ""} · ${item.storageLocation ?? "No location"} · reorder level ${item.reorderThreshold > 0 ? item.reorderThreshold : "not set"}</p>
+      <p class="record-card__meta"><strong>${item.onHand}</strong> ${units(item.onHand, item.unit)} on hand${item.openUnits ? ` (${sealedLine(item.onHand, item.openUnits, item.openCondition)})` : ""} · ${placeOf(item)} · reorder level ${item.reorderThreshold > 0 ? item.reorderThreshold : "not set"}</p>
       ${reasons(item).length || item.reorderStatus ? whyTags(item) : ""}`);
     movement.refresh();
   }
@@ -228,7 +232,7 @@ export async function stockWorkspace(): Promise<void> {
         <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-desired">Restock qty</th><th scope="col">Status</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
         <tbody>${open.map((reorder) => {
           const item = byId.get(reorder.itemId);
-          return html`<tr data-key="${reorder.id}">${itemCell({ id: reorder.itemId, name: reorder.itemName, storageLocation: item?.storageLocation ?? null })}${qtyCell(item?.onHand ?? 0, reorder.unit)}
+          return html`<tr data-key="${reorder.id}">${itemCell({ id: reorder.itemId, name: reorder.itemName, locationId: item?.locationId ?? null })}${qtyCell(item?.onHand ?? 0, reorder.unit)}
             <td class="col-desired"><label class="visually-hidden" for="desired-${reorder.id}">Restock quantity for ${reorder.itemName}</label><input class="input-compact" id="desired-${reorder.id}" type="number" inputmode="numeric" min="0" max="100000" step="1" value="${reorder.desiredQuantity ?? ""}" placeholder="—" data-desired="${reorder.id}" /></td>
             <td><span class="tag ${reorder.status === "PLANNED" ? "tag--gold" : "tag--warn"}">${label(reorder.status)}</span><span class="cell-sub">${reorder.note ?? ""}${reorder.note && reorder.updatedBy ? " · " : ""}${reorder.updatedBy ?? ""}</span></td>
             <td class="col-actions"><span class="row-actions">
@@ -293,6 +297,8 @@ export async function stockWorkspace(): Promise<void> {
     status: () => document.querySelector("#live-status"),
     onData: (data) => {
       stock = data;
+      const known = placesOf(data.locations);
+      placeNames = new Map(data.locations.map((place) => [place.id, pathOf(known, place.id)!]));
       // The item picker lists every active item; rebuild it only when names change.
       const signature = data.items.map((item) => `${item.id}${item.name}${item.status}`).join("|");
       if (signature !== optionsSignature) {

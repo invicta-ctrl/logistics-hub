@@ -39,7 +39,7 @@ beforeEach(async () => {
 
 /** An item that has been on the shelf since yesterday, so simulated offline events happen after it existed. */
 async function item(fields: Record<string, unknown>, quantity: number): Promise<string> {
-  const base = { category: "SUPPLIES", unit: "piece", status: "ACTIVE", storageLocation: "Shelf B", reorderThreshold: 0, needsReview: false, notes: "private staff note" };
+  const base = { category: "SUPPLIES", unit: "piece", status: "ACTIVE", reorderThreshold: 0, needsReview: false, notes: "private staff note" };
   const response = await staff("/api/staff/items", "POST", { ...base, ...fields, openingQuantity: 0 });
   expect(response.status).toBe(201);
   const { id } = await response.json() as { id: string };
@@ -109,10 +109,11 @@ describe("self-service catalog", () => {
     await loanable("Unlisted Projector", 1, { lendingAudience: "NOT_AVAILABLE_FOR_LENDING" });
     const response = await call("/api/self-service/catalog");
     expect(response.headers.get("cache-control")).toBe("no-store");
-    const body = await response.json() as { items: Array<Record<string, unknown>>; revision: number };
+    const body = await response.json() as { items: Array<Record<string, unknown>>; places: unknown[]; revision: number };
+    expect(body.places).toEqual([]);
     expect(body.items).toEqual([
-      { id: water, name: "Bottled Water", aliases: null, category: "SUPPLIES", unit: "piece", action: "TAKE", available: 20, location: "Shelf B", audience: null, photo: null },
-      { id: scissors, name: "Scissors", aliases: "Gunting", category: "SUPPLIES", unit: "piece", action: "BORROW", available: 5, location: "Shelf B", audience: "STUDENTS_AND_USC_STAFF", photo: null }
+      { id: water, name: "Bottled Water", aliases: null, category: "SUPPLIES", unit: "piece", action: "TAKE", available: 20, location: null, locationId: null, audience: null, photo: null },
+      { id: scissors, name: "Scissors", aliases: "Gunting", category: "SUPPLIES", unit: "piece", action: "BORROW", available: 5, location: null, locationId: null, audience: "STUDENTS_AND_USC_STAFF", photo: null }
     ]);
     expect(JSON.stringify(body)).not.toContain("private staff note");
     const etag = response.headers.get("etag")!;

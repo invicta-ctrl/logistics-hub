@@ -240,6 +240,9 @@
 .ss-choices input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .ss-choices label:has(input:checked) { border-color: var(--accent-line); color: var(--accent); }
 .ss-choices label:has(input:focus-visible) { box-shadow: var(--focus); }
+.ss-where { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; margin: 0 0 .75rem; color: var(--text-2); font-size: var(--text-base); }
+.ss-where .icon { --icon-size: var(--icon-md); color: var(--accent); }
+.ss-where .text-link { margin-left: auto; min-height: 2.75rem; padding-inline: .25rem; font-weight: 600; }
 .ss-hint { display: flex; align-items: flex-start; gap: .5rem; color: var(--text-2); font-size: var(--text-sm); }
 .ss-hint .icon { --icon-size: var(--icon-sm); color: var(--accent); }
 .is-self-service .callout { border-color: var(--line-strong); background: var(--field); color: var(--text); }
