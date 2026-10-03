@@ -3,10 +3,11 @@ import { type Actor, BUMP_REVISION, InputError, audit } from "./inventory";
 
 export const MEDIA_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** The browser makes both variants (src/item-photo.ts); these are the Worker's ceilings, not the sizes it expects. */
-const VARIANTS = { display: { edge: 1600, bytes: 1_000_000 }, thumb: { edge: 480, bytes: 150_000 } } as const;
-type Variant = keyof typeof VARIANTS;
+export const VARIANTS = { display: { edge: 1600, bytes: 1_000_000 }, thumb: { edge: 480, bytes: 150_000 } } as const;
+export type Variant = keyof typeof VARIANTS;
 
-const key = (mediaId: string, variant: Variant) => `items/${mediaId}/${variant}`;
+/** Item photos and location pictures share the catalog bucket, each under its own prefix. */
+export const key = (mediaId: string, variant: Variant, folder: "items" | "locations" = "items") => `${folder}/${mediaId}/${variant}`;
 const u16 = (bytes: Uint8Array, at: number) => (bytes[at]! << 8) | bytes[at + 1]!;
 
 /** The EXIF orientation of an APP1 payload, or 1 when it has none or cannot be read. */
@@ -114,7 +115,7 @@ export function checkJpeg(bytes: Uint8Array, label: string, edge: number): { byt
   return { bytes: out, width, height };
 }
 
-async function readVariant(form: FormData, variant: Variant) {
+export async function readVariant(form: FormData, variant: Variant) {
   const value = form.get(variant);
   if (!(value instanceof File) || value.size === 0) throw new InputError(400, `The ${variant} photo is missing.`);
   if (value.size > VARIANTS[variant].bytes) throw new InputError(400, `The ${variant} photo is too large.`);
@@ -122,17 +123,17 @@ async function readVariant(form: FormData, variant: Variant) {
 }
 
 /** A client names the photo it was looking at ("" for none), so a change made meanwhile is never overwritten. */
-function expectedPhoto(value: unknown): string | null {
+export function expectedPhoto(value: unknown): string | null {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value !== "string" || !MEDIA_ID.test(value)) throw new InputError(400, "Reload the item and try again.");
   return value;
 }
 
-const CHANGED = "Someone else changed this photo. Reload the item to see the latest, then try again.";
+export const CHANGED = "Someone else changed this photo. Reload to see the latest, then try again.";
 
 /** Removes a photo's objects. D1 no longer points at them, so a failure here only leaves an unused file behind. */
-async function dropObjects(bucket: R2Bucket, mediaId: string): Promise<void> {
-  await Promise.all((Object.keys(VARIANTS) as Variant[]).map((variant) => bucket.delete(key(mediaId, variant)).catch(() => {
+export async function dropObjects(bucket: R2Bucket, mediaId: string, folder: "items" | "locations" = "items"): Promise<void> {
+  await Promise.all((Object.keys(VARIANTS) as Variant[]).map((variant) => bucket.delete(key(mediaId, variant, folder)).catch(() => {
     console.error("media_cleanup_failed", { mediaId, variant });
   })));
 }
