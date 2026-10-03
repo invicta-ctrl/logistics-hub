@@ -58,7 +58,7 @@ export function loanFields(prefix: string): Html {
     <div class="field" data-reason hidden><label for="${prefix}-reason">Specific reason</label><textarea id="${prefix}-reason" name="reason" rows="2" maxlength="300" placeholder="What it is for, e.g. stage setup for the general assembly"></textarea></div>
     <div class="field-grid">
       <div class="field"><label for="${prefix}-quantity">Quantity</label>
-        <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One less">−</button><input id="${prefix}-quantity" name="quantity" type="number" inputmode="numeric" min="1" step="1" value="1" aria-describedby="${prefix}-available" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">+</button></div>
+        <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One less">${icon("minus")}</button><input id="${prefix}-quantity" name="quantity" type="number" inputmode="numeric" min="1" step="1" value="1" aria-describedby="${prefix}-available" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div>
         <p class="field__hint" id="${prefix}-available" data-available></p></div>
       <div class="field"><label for="${prefix}-returnBy">Return by <span class="field__optional">optional</span></label><input id="${prefix}-returnBy" name="returnBy" type="date" /></div>
     </div>
