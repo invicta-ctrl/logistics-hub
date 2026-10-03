@@ -62,6 +62,9 @@ export function bindOpenUnits(container: HTMLElement, state: () => OpenUnitState
     const current = state();
     if (!current) { mount(container, html``); return; }
     mount(container, markup(current, confirm));
+    // The sheet redraws the panel while an action is still finishing (onChanged): its controls keep waiting until then,
+    // or a quick tap lands on an enabled button that the busy action then ignores.
+    if (busy) container.querySelectorAll("button").forEach((control) => { control.disabled = true; });
   };
   const focusAfter = (selector: string) => container.querySelector<HTMLElement>(selector)?.focus();
 
