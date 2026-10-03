@@ -4,8 +4,10 @@
 import { describe, expect, it } from "vitest";
 import { recoverOwner, revokeRecoveryKey, rotateRecoveryKey, updateAccount, type Account } from "../src/accounts";
 import { verifyPassword } from "../src/session";
+import { eraseOldDetails, retentionPreview } from "../src/retention";
+import { createLoan } from "../src/loans";
 import { InputError } from "../src/inventory";
-import { migratedD1 } from "./d1-sqlite";
+import { memoryR2, migratedD1 } from "./d1-sqlite";
 
 type Sqlite = ReturnType<typeof migratedD1>["sqlite"];
 const owner = (id: string): Account => ({ accountId: id, sessionId: `S-${id}-self`, username: id, displayName: id, role: "OWNER", mustChangePassword: false });
@@ -113,4 +115,159 @@ describe("R2: a recovery key works once", () => {
       else expect(count(sqlite, "SELECT COUNT(*) AS n FROM staff_sessions WHERE account_id = 'O1' AND revoked_at IS NULL")).toBe(1);
     });
   }
+});
+
+describe("R3 and R4: retention erases each record once and never deletes evidence another record keeps", () => {
+  const DAY = 86_400_000;
+  const ago = (days: number) => new Date(Date.now() - days * DAY).toISOString();
+  let sequence = 0;
+  function loan(sqlite: Sqlite, objects: Map<string, unknown>, id: string, { closedDaysAgo = 800 as number | null, key = `loans/${id}` } = {}) {
+    sqlite.prepare("INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, status) VALUES(?, ?, 'OPENING_BALANCE', 'IN', 'ITM-0001', 1, 'piece', 1, 'POSTED')").run(`MOV-${id}`, ago(900));
+    sqlite.prepare(`INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, photo_key, status, movement_id, created_at, created_by, closed_at, closed_by)
+      VALUES(?, 'ITM-0001', 1, 'INDIVIDUAL', 'Juan', '20-0001-001', ?, ?, ?, ?, 'X', ?, ?)`)
+      .run(id, key, closedDaysAgo === null ? "OUT" : "RETURNED", `MOV-${id}`, ago(900), closedDaysAgo === null ? null : ago(closedDaysAgo), closedDaysAgo === null ? null : "X");
+    objects.set(key, { bytes: new Uint8Array([1]) });
+  }
+  function phone(sqlite: Sqlite, objects: Map<string, unknown>, id: string, { receivedDaysAgo = 400, key = `held/${id}` as string | null, loanId = null as string | null } = {}) {
+    const at = ago(receivedDaysAgo);
+    sqlite.prepare(`INSERT INTO self_service_events(id, device_id, seq, event_type, item_id, quantity, person_name, student_id, photo_key, device_time, sent_at, occurred_at, received_at, applied, loan_id)
+      VALUES(?, 'dev', ?, 'BORROW', 'ITM-0001', 1, 'Juan', '20-0001-001', ?, ?, ?, ?, ?, 1, ?)`).run(id, ++sequence, key, at, at, at, at, loanId);
+    if (key) objects.set(key, { bytes: new Uint8Array([1]) });
+  }
+  const audited = (sqlite: Sqlite) => (sqlite.prepare("SELECT details_json AS d FROM audit_log WHERE action = 'RETENTION_ERASED'").all() as Array<{ d: string }>)
+    .map((row) => JSON.parse(row.d) as { loans: number; phoneRecords: number; photos: number })
+    .reduce((sum, row) => ({ loans: sum.loans + row.loans, phoneRecords: sum.phoneRecords + row.phoneRecords, photos: sum.photos + row.photos }), { loans: 0, phoneRecords: 0, photos: 0 });
+  const actor = { accountId: "ACC-owner", sessionId: "S", username: "owner", displayName: "Owner", role: "OWNER" as const, mustChangePassword: false };
+  async function runUntilDone(d1: D1Database, bucket: R2Bucket) { for (let guard = 0; guard < 20; guard++) if (!(await eraseOldDetails(d1, bucket, actor)).more) return; throw new Error("did not finish"); }
+
+  // [the loan's state, closed days ago, is the phone record due, is the loan due]. A phone record tied to a loan still out is
+  // never due (the accepted rule); the shared photo goes only when neither record keeps it.
+  const shared: Array<[string, number | null, boolean, boolean]> = [
+    ["still out", null, false, false],
+    ["closed 100 days ago", 100, true, false],
+    ["closed 800 days ago (also due)", 800, true, true]
+  ];
+  for (const [name, closed, phoneDue, loanDue] of shared) {
+    const kept = !loanDue;
+    it(`a phone borrow sharing its photo with a loan ${name}: the photo is ${kept ? "kept for the loan" : "deleted once, with both records erased"}`, async () => {
+      const { d1, sqlite } = migratedD1();
+      const { bucket, objects } = memoryR2();
+      const key = "loans/LN-SS-E1-abcd1234";
+      loan(sqlite, objects, "LN-SS-E1", { closedDaysAgo: closed, key });
+      phone(sqlite, objects, "E1", { key, loanId: "LN-SS-E1" });
+      const preview = await retentionPreview(d1);
+      expect(preview).toEqual({ loans: loanDue ? 1 : 0, phoneRecords: phoneDue ? 1 : 0, photos: kept ? 0 : 1 });
+      await runUntilDone(d1, bucket);
+      expect(objects.has(key)).toBe(kept);
+      expect((sqlite.prepare("SELECT photo_key AS k FROM loans WHERE id = 'LN-SS-E1'").get() as { k: string }).k).toBe(loanDue ? "" : key);
+      expect(sqlite.prepare("SELECT photo_key AS k, person_name AS n FROM self_service_events WHERE id = 'E1'").get()).toEqual(phoneDue ? { k: null, n: "[removed]" } : { k: key, n: "Juan" });
+      expect(audited(sqlite)).toEqual({ loans: loanDue ? 1 : 0, phoneRecords: phoneDue ? 1 : 0, photos: preview.photos });
+    });
+  }
+
+  it("a photo already missing from R2 is no obstacle", async () => {
+    const { d1, sqlite } = migratedD1();
+    const { bucket, objects } = memoryR2();
+    loan(sqlite, objects, "LN-1");
+    objects.delete("loans/LN-1");
+    await runUntilDone(d1, bucket);
+    expect((sqlite.prepare("SELECT photo_key AS k FROM loans WHERE id = 'LN-1'").get() as { k: string }).k).toBe("");
+  });
+
+  it("two erasures at once over 100 loans: every record erased once, every photo deleted, counted exactly once", async () => {
+    const { d1, sqlite } = migratedD1();
+    const { bucket, objects } = memoryR2();
+    for (let index = 0; index < 100; index++) loan(sqlite, objects, `LN-${String(index).padStart(3, "0")}`);
+    await Promise.all([runUntilDone(d1, bucket), runUntilDone(d1, bucket)]);
+    expect(count(sqlite, "SELECT COUNT(*) AS n FROM loans WHERE photo_key <> '' OR borrower_name <> '[removed]'")).toBe(0);
+    expect(objects.size).toBe(0);
+    expect(audited(sqlite)).toEqual({ loans: 100, phoneRecords: 0, photos: 100 });
+  });
+
+  it("an object that cannot be deleted stops the run before any record changes; a retry finishes it", async () => {
+    const { d1, sqlite } = migratedD1();
+    const { bucket, objects } = memoryR2();
+    for (const id of ["LN-1", "LN-2", "LN-3"]) loan(sqlite, objects, id);
+    const real = bucket.delete.bind(bucket);
+    let failOnce = true;
+    (bucket as unknown as { delete: R2Bucket["delete"] }).delete = (async (key: string) => { if (key === "loans/LN-2" && failOnce) { failOnce = false; throw new Error("R2 unavailable"); } return real(key); }) as R2Bucket["delete"];
+    await expect(eraseOldDetails(d1, bucket, actor)).rejects.toThrow(/R2 unavailable/);
+    expect(count(sqlite, "SELECT COUNT(*) AS n FROM loans WHERE borrower_name = '[removed]'")).toBe(0);
+    await runUntilDone(d1, bucket);
+    expect(objects.size).toBe(0);
+    expect(audited(sqlite)).toEqual({ loans: 3, phoneRecords: 0, photos: 3 });
+  });
+
+  it("a database failure after the photos went leaves the records due; a retry clears them and counts them once", async () => {
+    const { d1, sqlite } = migratedD1();
+    const { bucket, objects } = memoryR2();
+    for (const id of ["LN-1", "LN-2"]) loan(sqlite, objects, id);
+    const real = d1.batch.bind(d1);
+    let calls = 0;
+    (d1 as unknown as { batch: D1Database["batch"] }).batch = (async (statements: D1PreparedStatement[]) => { calls += 1; if (calls === 2) throw new Error("D1 unavailable"); return real(statements); }) as D1Database["batch"];
+    await expect(eraseOldDetails(d1, bucket, actor)).rejects.toThrow(/D1 unavailable/);
+    expect(objects.size).toBe(0);
+    expect(count(sqlite, "SELECT COUNT(*) AS n FROM loans WHERE photo_key <> ''")).toBe(2);
+    await runUntilDone(d1, bucket);
+    expect(count(sqlite, "SELECT COUNT(*) AS n FROM loans WHERE photo_key <> '' OR borrower_name <> '[removed]'")).toBe(0);
+    expect(audited(sqlite)).toEqual({ loans: 2, phoneRecords: 0, photos: 2 });
+  });
+});
+
+describe("R5: a loan's photo survives an answer that never arrived", () => {
+  function setup() {
+    const { d1, sqlite } = migratedD1();
+    const { bucket, objects } = memoryR2();
+    sqlite.exec("UPDATE items SET item_type = 'Loanable', status = 'ACTIVE' WHERE id = 'ITM-0001'");
+    const form = () => {
+      const data = new FormData();
+      for (const [name, value] of Object.entries({ key: "request-key-1234", purpose: "INDIVIDUAL", borrowerName: "Juan Cruz", studentId: "20-1234-567", quantity: "1" })) data.set(name, value);
+      data.set("photo", new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4])], "p.jpg", { type: "image/jpeg" }));
+      return data;
+    };
+    const fail = (mode: "after-commit" | "before-commit", alsoUnreadable = false) => {
+      const real = d1.batch.bind(d1);
+      const realPrepare = d1.prepare.bind(d1);
+      (d1 as unknown as { batch: D1Database["batch"] }).batch = (async (statements: D1PreparedStatement[]) => {
+        (d1 as unknown as { batch: D1Database["batch"] }).batch = real;
+        if (mode === "after-commit") await real(statements);
+        // While D1 is unreachable, the follow-up check cannot be answered either.
+        if (alsoUnreadable) (d1 as unknown as { prepare: unknown }).prepare = () => { throw new Error("network lost"); };
+        throw new Error("network lost");
+      }) as D1Database["batch"];
+      return () => { (d1 as unknown as { prepare: unknown }).prepare = realPrepare; };
+    };
+    const movements = () => count(sqlite, "SELECT COUNT(*) AS n FROM inventory_movements WHERE movement_type = 'LOAN_OUT'");
+    return { d1, sqlite, bucket, objects, form, fail, movements };
+  }
+
+  it("saved, answer lost: the loan stands with its photo, and a retry returns the same loan with no second movement", async () => {
+    const { d1, sqlite, bucket, objects, form, fail, movements } = setup();
+    fail("after-commit");
+    const first = await createLoan(d1, bucket, { accountId: "O1" }, "ITM-0001", form());
+    const stored = sqlite.prepare("SELECT id, photo_key AS k FROM loans").get() as { id: string; k: string };
+    expect(first.id).toBe(stored.id);
+    expect(objects.has(stored.k)).toBe(true);
+    expect((await createLoan(d1, bucket, { accountId: "O1" }, "ITM-0001", form())).id).toBe(stored.id);
+    expect(movements()).toBe(1);
+  });
+
+  it("rolled back: the unused photo is removed and the error stands", async () => {
+    const { d1, bucket, objects, form, fail, movements } = setup();
+    fail("before-commit");
+    await expect(createLoan(d1, bucket, { accountId: "O1" }, "ITM-0001", form())).rejects.toThrow(/network lost/);
+    expect(objects.size).toBe(0);
+    expect(movements()).toBe(0);
+  });
+
+  it("outcome unknown: the photo is kept and the error stands; once D1 answers, a retry returns the saved loan", async () => {
+    const { d1, sqlite, bucket, objects, form, fail, movements } = setup();
+    const restore = fail("after-commit", true);
+    await expect(createLoan(d1, bucket, { accountId: "O1" }, "ITM-0001", form())).rejects.toThrow(/network lost/);
+    restore();
+    const stored = sqlite.prepare("SELECT id, photo_key AS k FROM loans").get() as { id: string; k: string };
+    expect(objects.has(stored.k)).toBe(true);
+    expect((await createLoan(d1, bucket, { accountId: "O1" }, "ITM-0001", form())).id).toBe(stored.id);
+    expect(movements()).toBe(1);
+  });
 });
