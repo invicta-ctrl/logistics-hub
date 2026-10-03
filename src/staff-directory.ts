@@ -18,7 +18,14 @@ const SCAN = { edge: 2000, bytes: 1_500_000 } as const;
 export const MAX_SCAN_BODY = 2 * SCAN.bytes + 64 * 1024;
 /** One opening of a card writes one Activity entry, however many times its two images are fetched meanwhile. */
 const VIEW_WINDOW_MS = 10 * 60_000;
-const scanKey = (mediaId: string, side: ScanSide) => `ids/${mediaId}/${side}`;
+/**
+ * Beside the two scans, two small images made from them in the owner's browser: the front for the directory wall (thumb)
+ * and the photo cut from the back for the profile picture (face). Same bucket, same card id, gone with the scans.
+ */
+const DERIVED = ["thumb", "face"] as const;
+type Derived = typeof DERIVED[number];
+const DERIVED_LIMIT = { edge: 900, bytes: 400_000 } as const;
+const scanKey = (mediaId: string, side: ScanSide | Derived) => `ids/${mediaId}/${side}`;
 const isOwner = (actor: Account) => actor.role === "OWNER";
 
 /* ---------- Reading ---------- */
@@ -300,18 +307,32 @@ async function readScans(form: FormData) {
   return { front: await read("front"), back: await read("back") };
 }
 
+/** The optional thumbnail and profile picture sent with the scans (an older page sends neither; the owner can make them later). */
+async function readDerived(form: FormData, required = false) {
+  const derived: Partial<Record<Derived, Uint8Array>> = {};
+  for (const kind of DERIVED) {
+    const value = form.get(kind);
+    // Only the thumbnail is required: a back that is not a USC ID has no photo to cut out.
+    if (!(value instanceof File) || value.size === 0) { if (required && kind === "thumb") throw new InputError(400, "The thumbnail is missing."); continue; }
+    if (value.size > DERIVED_LIMIT.bytes) throw new InputError(400, `The ${kind === "thumb" ? "thumbnail" : "profile picture"} is too large.`);
+    derived[kind] = checkJpeg(new Uint8Array(await value.arrayBuffer()), kind === "thumb" ? "thumbnail" : "profile picture", DERIVED_LIMIT.edge).bytes;
+  }
+  return derived;
+}
+
 /** A source file's name as the archive had it, for reconciling the import later; never shown outside Administration. */
 const sourceName = (value: unknown) => typeof value === "string" ? cleanText(value, "Source file", 300, false) : null;
 
 async function dropScans(bucket: R2Bucket, mediaId: string): Promise<void> {
-  await Promise.all(SIDES.map((side) => bucket.delete(scanKey(mediaId, side)).catch(() => console.error("staff_id_cleanup_failed", { mediaId, side }))));
+  await Promise.all([...SIDES, ...DERIVED].map((side) => bucket.delete(scanKey(mediaId, side)).catch(() => console.error("staff_id_cleanup_failed", { mediaId, side }))));
 }
 
-/** Both sides under a new id; if either fails, neither stays behind. */
-async function storeScans(bucket: R2Bucket, scans: Awaited<ReturnType<typeof readScans>>): Promise<string> {
+/** Both sides (and the thumbnail and profile picture, when sent) under a new id; if any fails, none stays behind. */
+async function storeScans(bucket: R2Bucket, scans: Awaited<ReturnType<typeof readScans>>, derived: Awaited<ReturnType<typeof readDerived>> = {}): Promise<string> {
   const mediaId = crypto.randomUUID();
   try {
     for (const side of SIDES) await bucket.put(scanKey(mediaId, side), scans[side].bytes, { httpMetadata: { contentType: "image/jpeg" } });
+    for (const kind of DERIVED) if (derived[kind]) await bucket.put(scanKey(mediaId, kind), derived[kind]!, { httpMetadata: { contentType: "image/jpeg" } });
   } catch (error) {
     await dropScans(bucket, mediaId);
     throw error;
@@ -344,7 +365,7 @@ export async function importPair(db: D1Database, bucket: R2Bucket, actor: Accoun
   const scans = await readScans(form);
   const id = existing?.id ?? `PER-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
-  const mediaId = await storeScans(bucket, scans);
+  const mediaId = await storeScans(bucket, scans, await readDerived(form));
   try {
     const [, card] = await unique(db.batch([
       db.prepare(`INSERT INTO staff_directory(id, full_name, department, officer, active, source_key, created_at, created_by, updated_at, updated_by)
@@ -375,7 +396,7 @@ export async function putIdCard(db: D1Database, bucket: R2Bucket, actor: Account
   if (expected !== null && (typeof expected !== "string" || !MEDIA_ID.test(expected))) throw new InputError(400, "Reload the profile and try again.");
   if (expected !== current.mediaId) throw new InputError(409, "Someone else changed these ID scans. Reload the profile to see the latest.");
   const scans = await readScans(form);
-  const mediaId = await storeScans(bucket, scans);
+  const mediaId = await storeScans(bucket, scans, await readDerived(form));
   const now = new Date().toISOString();
   try {
     const [write] = await db.batch([
@@ -414,11 +435,13 @@ export async function removeIdCard(db: D1Database, bucket: R2Bucket, actor: Acco
  * another site. Each opening is written to Activity once per viewer and card within ten minutes, and a viewer may open
  * only so many in a short time, so the directory cannot be quietly scraped.
  */
-export async function idScan(db: D1Database, bucket: R2Bucket, actor: Account, id: string, side: string): Promise<Response> {
+export async function idScan(db: D1Database, bucket: R2Bucket, actor: Account, id: string, side: string, deriving = false): Promise<Response> {
   if (!PERSON_ID.test(id) || !(SIDES as readonly string[]).includes(side)) throw new InputError(404, "Not found.");
   const mediaId = await db.prepare("SELECT media_id AS mediaId FROM staff_id_cards WHERE person_id = ?").bind(id).first<string>("mediaId");
   if (!mediaId) throw new InputError(404, "Not found.");
-  if (await throttled(db, `staff-id-view:${actor.accountId}`, 120, 10 * 60_000)) throw new InputError(429, "Too many ID scans opened in a short time. Please wait a few minutes.");
+  // The owner making thumbnails for the whole directory opens every card once: still recorded, under a larger allowance of its own.
+  const [key, limit] = deriving && isOwner(actor) ? [`staff-id-derive:${actor.accountId}`, 400] : [`staff-id-view:${actor.accountId}`, 120];
+  if (await throttled(db, key, limit, 10 * 60_000)) throw new InputError(429, "Too many ID scans opened in a short time. Please wait a few minutes.");
   const now = Date.now();
   await db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
     SELECT ?1, ?2, ?3, 'STAFF_ID_VIEWED', 'STAFF', p.id, json_object('name', p.full_name, 'department', p.department) FROM staff_directory p
@@ -427,4 +450,43 @@ export async function idScan(db: D1Database, bucket: R2Bucket, actor: Account, i
   const object = await bucket.get(scanKey(mediaId, side as ScanSide));
   if (!object) throw new InputError(404, "Not found.");
   return new Response(object.body, { headers: { "content-type": "image/jpeg", "cache-control": "private, no-store", "cross-origin-resource-policy": "same-origin" } });
+}
+
+/**
+ * A card's thumbnail (the front, for the directory wall) or profile picture (cut from the back), to an administrator or owner,
+ * never cached. Not recorded one by one: the wall shows every card at once, and opening a card's scans is what Activity records.
+ */
+export async function idDerived(db: D1Database, bucket: R2Bucket, actor: Account, id: string, kind: string): Promise<Response> {
+  if (!PERSON_ID.test(id) || !(DERIVED as readonly string[]).includes(kind)) throw new InputError(404, "Not found.");
+  const mediaId = await db.prepare("SELECT media_id AS mediaId FROM staff_id_cards WHERE person_id = ?").bind(id).first<string>("mediaId");
+  if (!mediaId) throw new InputError(404, "Not found.");
+  if (await throttled(db, `staff-id-thumb:${actor.accountId}`, 2000, 10 * 60_000)) throw new InputError(429, "Too many pictures opened in a short time. Please wait a few minutes.");
+  const object = await bucket.get(scanKey(mediaId, kind as Derived));
+  if (!object) throw new InputError(404, "Not found.");
+  return new Response(object.body, { headers: { "content-type": "image/jpeg", "cache-control": "private, no-store", "cross-origin-resource-policy": "same-origin" } });
+}
+
+/** The people whose card has no thumbnail yet (cards imported before thumbnails were made), for the owner to make them. */
+export async function missingDerived(db: D1Database, bucket: R2Bucket, actor: Account) {
+  if (!isOwner(actor)) throw new InputError(403, "Making ID thumbnails is for the owner.");
+  const { results } = await db.prepare("SELECT person_id AS personId, media_id AS mediaId FROM staff_id_cards").all<{ personId: string; mediaId: string }>();
+  const present = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const page = await bucket.list({ prefix: "ids/", cursor, limit: 1000 });
+    page.objects.forEach((object) => present.add(object.key));
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return { missing: results.filter((card) => !present.has(scanKey(card.mediaId, "thumb"))).map((card) => ({ id: card.personId, mediaId: card.mediaId })) };
+}
+
+/** Stores a card's thumbnail and profile picture (owner), made in the browser from the card the owner opened, if it is still current. */
+export async function putDerived(db: D1Database, bucket: R2Bucket, actor: Account, id: string, form: FormData) {
+  if (!isOwner(actor)) throw new InputError(403, "Making ID thumbnails is for the owner.");
+  const current = await personRow(db, id);
+  if (!current.mediaId || form.get("expected") !== current.mediaId) throw new InputError(409, "These ID scans changed meanwhile. Reload and try again.");
+  const derived = await readDerived(form, true);
+  for (const kind of DERIVED) if (derived[kind]) await bucket.put(scanKey(current.mediaId, kind), derived[kind]!, { httpMetadata: { contentType: "image/jpeg" } });
+  await audit(db, actor.accountId, "STAFF_ID_DERIVED", "STAFF", id, { name: current.fullName, department: current.department }).run();
+  return { mediaId: current.mediaId };
 }

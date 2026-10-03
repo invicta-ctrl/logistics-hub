@@ -366,7 +366,8 @@ function directorySentences(actor: string, details: Record<string, unknown>): Re
     STAFF_ID_ADDED: () => `${actor} added USC ID scans for ${who}.`,
     STAFF_ID_REPLACED: () => `${actor} replaced the USC ID scans of ${who}.`,
     STAFF_ID_REMOVED: () => `${actor} removed the USC ID scans of ${who}.`,
-    STAFF_ID_VIEWED: () => `${actor} viewed the USC ID of ${who}.`
+    STAFF_ID_VIEWED: () => `${actor} viewed the USC ID of ${who}.`,
+    STAFF_ID_DERIVED: () => `${actor} made the directory thumbnail and profile picture of ${who} from their USC ID.`
   };
 }
 

@@ -194,16 +194,19 @@ test.describe("owner administration", () => {
     await expect(page.getByText("Lone (DoL) has a front but no back.")).toBeVisible();
     await page.getByRole("button", { name: "Import 1 pair" }).click();
     await expect(page.getByText("Finished: 1 pair imported.")).toBeVisible();
+    // The import made the wall's thumbnail of the front in the browser: the wall shows it, privately and never cached.
+    const thumb = page.waitForResponse((response) => /\/id\/thumb$/.test(response.url()));
     await page.getByRole("button", { name: "Done" }).click();
-    // Rivera's card on the wall opens on their details without fetching a scan; its Profile link goes to the profile.
-    let scanned = false;
-    page.on("request", (request) => { if (/\/id\/(front|back)$/.test(request.url())) scanned = true; });
+    expect((await thumb).status()).toBe(200);
+    expect((await thumb).headers()["cache-control"]).toBe("private, no-store");
+    // Rivera's card opens on the profile, both sides of the ID together; Details holds the rest, and Full profile goes there.
     await page.getByRole("link", { name: /Rivera/ }).click();
     const opened = page.getByRole("dialog", { name: "USC ID of Rivera" });
+    await expect(opened.getByRole("button", { name: "Profile" })).toHaveAttribute("aria-pressed", "true");
+    await expect(opened.getByRole("img", { name: "Back of Rivera's USC ID" })).toBeVisible();
+    await page.keyboard.press("d");
     await expect(opened.getByRole("heading", { name: "Rivera" })).toBeVisible();
-    await expect(opened.getByRole("button", { name: "Details" })).toHaveAttribute("aria-pressed", "true");
-    expect(scanned).toBe(false);
-    await opened.getByRole("link", { name: "Profile" }).click();
+    await opened.getByRole("link", { name: "Full profile" }).click();
     await expect(opened).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "Rivera", level: 1 })).toBeVisible();
     const scan = page.waitForResponse((response) => /\/id\/front$/.test(response.url()));
@@ -215,8 +218,8 @@ test.describe("owner administration", () => {
     await page.getByRole("button", { name: "Open the front of the USC ID large" }).click();
     const viewer = page.getByRole("dialog", { name: "USC ID of Rivera" });
     await expect(viewer.getByRole("img", { name: "Front of Rivera's USC ID" })).toBeVisible();
-    await page.keyboard.press("b");
-    await expect(viewer.getByRole("button", { name: "Back" })).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("d");
+    await expect(viewer.getByRole("button", { name: "Details" })).toHaveAttribute("aria-pressed", "true");
     await page.keyboard.press("Escape");
     await expect(viewer).toHaveCount(0);
     // Closing gives back the viewer's own history entry; reload only once that navigation has finished.
