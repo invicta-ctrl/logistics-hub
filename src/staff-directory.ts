@@ -180,6 +180,8 @@ export async function createPerson(db: D1Database, actor: Account, input: unknow
 export async function updatePerson(db: D1Database, actor: Account, id: string, input: unknown) {
   const data = body(input);
   const current = await personRow(db, id);
+  // The profile of someone linked to an administrator or owner sign-in is their verified identity: the same rule as linking it.
+  if (current.accountId && !mayLink(actor, { id: current.accountId, role: current.accountRole as Account["role"] })) throw new InputError(403, "Only an owner can edit the profile of a person linked to an administrator or owner sign-in.");
   const fields = profileFields(data);
   const before: Record<Field, string | number | null> = { name: current.fullName, department: current.department, position: current.position, officer: current.officer, studentId: current.studentId, active: current.active };
   const changed = (Object.keys(fields) as Field[]).filter((field) => fields[field] !== before[field]);
@@ -261,9 +263,15 @@ async function dropScans(bucket: R2Bucket, mediaId: string): Promise<void> {
   await Promise.all(SIDES.map((side) => bucket.delete(scanKey(mediaId, side)).catch(() => console.error("staff_id_cleanup_failed", { mediaId, side }))));
 }
 
+/** Both sides under a new id; if either fails, neither stays behind. */
 async function storeScans(bucket: R2Bucket, scans: Awaited<ReturnType<typeof readScans>>): Promise<string> {
   const mediaId = crypto.randomUUID();
-  for (const side of SIDES) await bucket.put(scanKey(mediaId, side), scans[side].bytes, { httpMetadata: { contentType: "image/jpeg" } });
+  try {
+    for (const side of SIDES) await bucket.put(scanKey(mediaId, side), scans[side].bytes, { httpMetadata: { contentType: "image/jpeg" } });
+  } catch (error) {
+    await dropScans(bucket, mediaId);
+    throw error;
+  }
   return mediaId;
 }
 
@@ -366,7 +374,7 @@ export async function idScan(db: D1Database, bucket: R2Bucket, actor: Account, i
   if (!PERSON_ID.test(id) || !(SIDES as readonly string[]).includes(side)) throw new InputError(404, "Not found.");
   const mediaId = await db.prepare("SELECT media_id AS mediaId FROM staff_id_cards WHERE person_id = ?").bind(id).first<string>("mediaId");
   if (!mediaId) throw new InputError(404, "Not found.");
-  if (await throttled(db, `staff-id-view:${actor.accountId}`, 240, 10 * 60_000)) throw new InputError(429, "Too many ID scans opened in a short time. Please wait a few minutes.");
+  if (await throttled(db, `staff-id-view:${actor.accountId}`, 120, 10 * 60_000)) throw new InputError(429, "Too many ID scans opened in a short time. Please wait a few minutes.");
   const now = Date.now();
   await db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
     SELECT ?1, ?2, ?3, 'STAFF_ID_VIEWED', 'STAFF', p.id, json_object('name', p.full_name, 'department', p.department) FROM staff_directory p

@@ -261,7 +261,9 @@ async function staffDirectory(request: Request, env: Env, account: Account, url:
   const body = () => request.json().catch(() => null);
   const scans = async () => {
     // Two card scans: refuse a larger body before reading it into memory.
-    if (Number(request.headers.get("content-length")) > MAX_SCAN_BODY) throw new InputError(413, "Those scans are too large.");
+    const size = Number(request.headers.get("content-length"));
+    if (!size) throw new InputError(411, "Missing content length.");
+    if (size > MAX_SCAN_BODY) throw new InputError(413, "Those scans are too large.");
     const form = await request.formData().catch(() => null);
     if (!form) throw new InputError(400, "Invalid upload.");
     return form;
