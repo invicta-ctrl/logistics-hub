@@ -35,7 +35,7 @@ const WRANGLER = `{
 
 const cleanups: string[] = [];
 const temp = (prefix: string) => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix)); cleanups.push(dir); return dir; };
-afterEach(() => { while (cleanups.length) fs.rmSync(cleanups.pop()!, { recursive: true, force: true }); });
+afterEach(() => { while (cleanups.length) fs.rmSync(cleanups.pop()!, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); });
 
 /** A release checkout in a throwaway git repo: base commit on origin/main, the release commit on the release branch. */
 function makeRelease({ wrangler = WRANGLER, pending = fixture0020, onBranch = true, dirty = false, withPending = true, files = {} } = {}) {
@@ -47,6 +47,9 @@ function makeRelease({ wrangler = WRANGLER, pending = fixture0020, onBranch = tr
   git(["init", "-q", "-b", "main"]);
   git(["config", "user.email", "ops@example.test"]);
   git(["config", "user.name", "Ops Test"]);
+  // No background gc/maintenance after a commit: it would still be writing into .git when afterEach deletes the repo.
+  git(["config", "gc.auto", "0"]);
+  git(["config", "maintenance.auto", "false"]);
   fs.writeFileSync(path.join(dir, "README.md"), "base\n");
   git(["add", "-A"]);
   git(["commit", "-q", "-m", "base"]);
