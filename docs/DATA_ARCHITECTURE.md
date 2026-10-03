@@ -65,7 +65,7 @@ Rules:
 
 ## Read paths: measure before adding state
 
-Prefer, in order: a bounded query, the right index, a verified query plan (`EXPLAIN QUERY PLAN` at realistic and grown scale), pagination (keyset over offset for growing feeds), a view. Only when those are measured and insufficient, add a cached or materialized read model, and then it is explicitly non-authoritative: rebuildable from D1 truth at any time, never written by a user action as if it were the record, and named for what it is. `docs/ACTIVITY_PERF.md` is the worked example of the evidence an index needs.
+`docs/PERFORMANCE_RELIABILITY_DOCTRINE.md` owns the rules for queries, indexes, pagination, caching and the resource budget. For the data model the short version is: a bounded query, the right index and a verified query plan come before any new state; a cached or materialized read model is added only when those are measured and insufficient, and then it is explicitly non-authoritative, rebuildable from D1 truth and never written by a user action as if it were the record. `docs/ACTIVITY_PERF.md` is the worked example of the evidence an index needs.
 
 ## Patterns kept from the legacy HAU-USC system, and what stays out
 
