@@ -132,13 +132,13 @@ export function photoPanel(host: HTMLElement, options: { itemId: string; name: s
     }
     if (!photo) {
       return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick aria-describedby="photo-hint-${itemId}">${icon("camera")}<span>Add photo</span></button>`,
-        html`<p class="field__hint" id="photo-hint-${itemId}">Show the item itself, not people or documents.</p>${alert}`);
+        html`<p class="field__hint" id="photo-hint-${itemId}">Everyone sees this photo on the Lending Hub and Self-Service. Show the item itself, not people or documents.</p>${alert}`);
     }
     show(html`<button type="button" class="photo-tile" data-view aria-label="View photo of ${name}"><img src="${photoUrl(photo.id, "thumb")}" alt="" width="160" height="160" /></button>`,
       html`${confirming
         ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this photo? The item keeps its stock and history.</p>
             <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : "Remove photo"}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>`
-        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> photo</span></button><button type="button" class="button button--ghost button--sm" data-remove>Remove</button></div>`}${alert}`);
+        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> photo</span></button><button type="button" class="button button--ghost button--sm" data-remove>Remove</button></div><p class="field__hint">Everyone sees this photo on the Lending Hub and Self-Service. The large version stays staff-only.</p>`}${alert}`);
   };
   const focus = (selector: string) => host.querySelector<HTMLElement>(selector)?.focus();
 
