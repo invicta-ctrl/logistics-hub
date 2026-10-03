@@ -322,6 +322,28 @@ describe("Use (open-unit Consumables)", () => {
 });
 
 describe("Borrow and Return", () => {
+  it("a borrow saved but whose answer was lost keeps its photo, and the phone's resend is recognised (R5)", async () => {
+    const scissors = await loanable("Scissors", 5);
+    const a = phone();
+    const borrow = a.borrow(scissors, 5);
+    // The batch that lends (movement, loan, audit, phone record, revision) commits, then the connection drops before the Worker hears back.
+    const batch = env.DB.batch.bind(env.DB);
+    env.DB.batch = (async (statements: D1PreparedStatement[]) => {
+      if (statements.length < 3) return batch(statements);
+      env.DB.batch = batch;
+      await batch(statements);
+      throw new Error("network lost");
+    }) as D1Database["batch"];
+    await a.sync([borrow]);
+    expect(loan(borrow.id)).toMatchObject({ status: "OUT" });
+    const key = loan(borrow.id)!.photo_key as string;
+    expect(photos.has(key)).toBe(true);
+    // The phone resends; nothing new is lent and the photo stays.
+    expect(await results(await a.sync([borrow]))).toEqual([{ id: borrow.id, outcome: "accepted", duplicate: true }]);
+    expect(onHand(scissors)).toBe(4);
+    expect(photos.has(key)).toBe(true);
+  });
+
   it("lends offline with the Part 4 rules and a photo in R2 that only staff can open", async () => {
     const scissors = await loanable("Scissors", 5);
     const a = phone();
