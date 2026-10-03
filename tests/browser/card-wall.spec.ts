@@ -27,6 +27,7 @@ async function mock(page: Page) {
     if (side) { scans.push(side); return route.fulfill({ contentType: "image/png", body: pixel }); }
     if (url.pathname === "/api/staff/admin/directory") return json({ people });
     if (url.pathname.endsWith("/accounts")) return json({ accounts: [] });
+    if (url.pathname.endsWith("/access")) return json({ account: null, suggestedUsername: "ana.santos" });
     if (url.pathname.endsWith("/loans")) return json({ loans: url.pathname.includes(id(1)) ? [loan] : [] });
     if (url.pathname.endsWith("/usage")) return json({ usage: [], truncated: false });
     const who = people.find((entry) => url.pathname.includes(entry.id))!;
@@ -98,4 +99,40 @@ test("a modifier press follows the card's link to the profile, and the profile's
   const viewer = page.getByRole("dialog", { name: "USC ID of Ana Marie Santos" });
   await expect(viewer.getByRole("button", { name: "Front" })).toHaveAttribute("aria-pressed", "true");
   await expect(viewer.getByRole("img", { name: "Front of Ana Marie Santos's USC ID" })).toBeVisible();
+});
+
+test("a profile without a sign-in makes one in a step and shows its password once; a linked one shows how it is used", async ({ page }) => {
+  await mock(page);
+  let made: unknown = null;
+  await page.route(`**/api/staff/admin/directory/${id(2)}/account/new`, async (route) => {
+    made = route.request().postDataJSON();
+    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ accountId: "ACC-new", username: "bea.reyes", generatedPassword: "Kp7qR-x2mWd-9HtzB-c4NvY" }) });
+  });
+  await page.route(`**/api/staff/admin/directory/${id(2)}/access`, (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ account: null, suggestedUsername: "bea.reyes" }) }));
+  await page.goto(`/staff/admin/directory?person=${id(2)}`);
+  const access = page.getByRole("region", { name: "Sign-in and access" });
+  await expect(access.getByLabel("Username")).toHaveValue("bea.reyes");
+  await expect(access.getByLabel("Role").locator("option")).toHaveText(["Staff", "Administrator", "Owner"]);
+  await access.getByRole("button", { name: "Create sign-in" }).click();
+  await expect(access.locator(".secret code")).toHaveText("Kp7qR-x2mWd-9HtzB-c4NvY");
+  expect(made).toEqual({ username: "bea.reyes", role: "STAFF" });
+  // The other way in stays out of sight once a sign-in was made.
+  await expect(access.getByText("Or link a sign-in they already have")).toBeHidden();
+
+  const hour = (n: number) => new Date(Date.parse("2026-10-03T10:00:00Z") - n * 3_600_000).toISOString();
+  await page.route(`**/api/staff/admin/directory/${id(1)}/access`, (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ self: false, manageable: true,
+    account: { id: "ACC-1", username: "ana.santos", displayName: "Ana Santos", role: "STAFF", active: true, mustChangePassword: false, createdAt: hour(400), lastLoginAt: hour(1), openSessions: 2, failedAttempts: 4 },
+    signIns: [{ at: hour(1), until: hour(-7), state: "OPEN" }, { at: hour(30), until: hour(26), state: "ENDED" }],
+    events: [{ at: hour(400), action: "ACCOUNT_CREATED", actor: "Owner Sample", details: { username: "ana.santos", role: "STAFF" } }] }) }));
+  let reset = false;
+  await page.route("**/api/staff/admin/accounts/ACC-1/password", (route) => { reset = true; return route.fulfill({ contentType: "application/json", body: JSON.stringify({ generatedPassword: "Zz9aa-Bb8cc-Dd7ee-Ff6gg" }) }); });
+  await page.goto(`/staff/admin/directory?person=${id(1)}`);
+  await expect(access.getByText("On 2 devices")).toBeVisible();
+  await expect(access.getByText("4 failed sign-ins in the last 15 minutes")).toBeVisible();
+  await expect(access.locator(".access-log").first()).toContainText("signed in now");
+  await expect(access.locator(".access-log").last()).toContainText("Owner Sample created ana.santos (Staff)");
+  page.once("dialog", (dialog) => dialog.accept());
+  await access.getByRole("button", { name: "Reset password" }).click();
+  await expect(access.locator(".secret code")).toHaveText("Zz9aa-Bb8cc-Dd7ee-Ff6gg");
+  expect(reset).toBe(true);
 });
