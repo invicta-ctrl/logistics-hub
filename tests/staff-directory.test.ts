@@ -176,6 +176,59 @@ describe("importing official ID scans", () => {
   });
 });
 
+describe("the wall's thumbnail and the profile picture", () => {
+  const withPictures = (form: FormData, face = true) => {
+    form.set("thumb", new File([jpeg(556, 720) as BlobPart], "thumb.jpg", { type: "image/jpeg" }));
+    if (face) form.set("face", new File([jpeg(360, 360) as BlobPart], "face.jpg", { type: "image/jpeg" }));
+    return form;
+  };
+  const keys = () => [...ids.objects.keys()].map((key) => key.split("/")[2]).sort();
+
+  it("keeps them beside the scans, serves them privately without a view entry, and removes them with the card", async () => {
+    const { id } = await json(await call("OWNER", "/api/staff/admin/directory/import", "POST", withPictures(pairForm("Garcia", "DoL"))));
+    expect(keys()).toEqual(["back", "face", "front", "thumb"]);
+    for (const kind of ["thumb", "face"]) {
+      const response = await call("ADMIN", `/api/staff/admin/directory/${id}/id/${kind}`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      expect(response.headers.get("content-type")).toBe("image/jpeg");
+      expect((await call("STAFF", `/api/staff/admin/directory/${id}/id/${kind}`)).status).toBe(403);
+    }
+    // The wall shows every card at once; only opening the scans is recorded.
+    expect(sqlite.prepare("SELECT count(*) AS n FROM audit_log WHERE action = 'STAFF_ID_VIEWED'").get()).toEqual({ n: 0 });
+    const { card } = await json(await call("OWNER", `/api/staff/admin/directory/${id}`));
+    expect((await call("OWNER", `/api/staff/admin/directory/${id}/id?expected=${card.mediaId}`, "DELETE")).status).toBe(200);
+    expect(ids.objects.size).toBe(0);
+  });
+
+  it("lists the cards still without a thumbnail, and lets only the owner add them to the current card", async () => {
+    const { id } = await json(await call("OWNER", "/api/staff/admin/directory/import", "POST", pairForm("Garcia", "DoL")));
+    expect(keys()).toEqual(["back", "front"]);
+    expect((await call("ADMIN", "/api/staff/admin/directory/derived")).status).toBe(403);
+    const { card } = await json(await call("OWNER", `/api/staff/admin/directory/${id}`));
+    expect(await json(await call("OWNER", "/api/staff/admin/directory/derived"))).toEqual({ missing: [{ id, mediaId: card.mediaId }] });
+    expect((await call("OWNER", `/api/staff/admin/directory/${id}/id/thumb`)).status).toBe(404);
+    const derived = (expected: string, form = withPictures(new FormData(), false)) => { form.set("expected", expected); return form; };
+    expect((await call("ADMIN", `/api/staff/admin/directory/${id}/id/derived`, "PUT", derived(card.mediaId))).status).toBe(403);
+    expect((await call("OWNER", `/api/staff/admin/directory/${id}/id/derived`, "PUT", derived("00000000-0000-4000-8000-000000000000"))).status).toBe(409);
+    const missingThumb = new FormData();
+    missingThumb.set("expected", card.mediaId);
+    expect((await call("OWNER", `/api/staff/admin/directory/${id}/id/derived`, "PUT", missingThumb)).status).toBe(400);
+    // A back that is not a USC ID gives no profile picture: the thumbnail alone is enough.
+    expect((await call("OWNER", `/api/staff/admin/directory/${id}/id/derived`, "PUT", derived(card.mediaId))).status).toBe(200);
+    expect(keys()).toEqual(["back", "front", "thumb"]);
+    expect(await json(await call("OWNER", "/api/staff/admin/directory/derived"))).toEqual({ missing: [] });
+    expect((await json(await call("OWNER", `/api/staff/admin/directory/${id}`))).history.map((entry: { action: string }) => entry.action)).toContain("STAFF_ID_DERIVED");
+  });
+
+  it("lets the owner open every card once to make them, beyond the usual allowance, and still records each opening", async () => {
+    const { id } = await json(await call("OWNER", "/api/staff/admin/directory/import", "POST", pairForm("Garcia", "DoL")));
+    for (let n = 0; n < 125; n++) expect((await call("OWNER", `/api/staff/admin/directory/${id}/id/front?derive=1`)).status).toBe(200);
+    expect((await call("ADMIN", `/api/staff/admin/directory/${id}/id/front?derive=1`)).status).toBe(200);
+    expect(sqlite.prepare("SELECT count(*) AS n FROM audit_log WHERE action = 'STAFF_ID_VIEWED' AND actor_user_id = 'ACC-owner'").get()).toEqual({ n: 1 });
+  });
+});
+
 describe("viewing, replacing and removing scans", () => {
   async function imported(identity = "Ramos", department = "DBR") {
     const { id } = await json(await call("OWNER", "/api/staff/admin/directory/import", "POST", pairForm(identity, department)));
