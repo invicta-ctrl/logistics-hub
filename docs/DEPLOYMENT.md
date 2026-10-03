@@ -75,7 +75,7 @@ Options 1–10 talk to the site over HTTPS as a signed-in user, exactly like the
 
 Remote D1 rejects explicit `BEGIN TRANSACTION`/`COMMIT` and queries over 100 KB; `tests/migration.test.ts` enforces both. Migration `0011` rebuilds `staff_accounts` to add roles, which ends all existing sessions once. Migration `0012` (Part 2) only adds an index.
 
-Workers Builds deploys every push to `main` automatically, but it does not apply D1 migrations. Before pushing a `main` that adds a migration, apply it to production (Console **13**, or `npx wrangler d1 migrations apply DB --remote` from that commit). Migrations must stay safe for the code already live, so it keeps working until the push lands. Migration `0013` (Part 3) is additive: a movement reason column, an optional expiry column and the `reorders` table. Migration `0014` (Part 4) reclassifies the 112 "Saleable" items as Consumable (audited per item), replaces the never-used, empty `loans` / `loan_items` / `evidence` placeholders with the new `loans` table, and bumps the revision; the Part 3 code references none of those tables and accepts Consumable, so it is safe to apply first.
+Workers Builds deploys every push to `main` automatically (until "Deploys from CI" below is switched on), but it does not apply D1 migrations. Before pushing a `main` that adds a migration, apply it to production (Console **13**, or `npx wrangler d1 migrations apply DB --remote` from that commit). Migrations must stay safe for the code already live, so it keeps working until the push lands. Migration `0013` (Part 3) is additive: a movement reason column, an optional expiry column and the `reorders` table. Migration `0014` (Part 4) reclassifies the 112 "Saleable" items as Consumable (audited per item), replaces the never-used, empty `loans` / `loan_items` / `evidence` placeholders with the new `loans` table, and bumps the revision; the Part 3 code references none of those tables and accepts Consumable, so it is safe to apply first.
 
 A deploy that adds a binding needs the resource first: Part 4 adds the R2 bucket above, and a push without it fails the Workers Builds deploy (the live version keeps serving). Order for Part 4: create the bucket, apply `0014`, then push `main`.
 
@@ -131,6 +131,30 @@ npx wrangler d1 migrations apply DB --remote       # applies it once
 ```
 
 Then, read-only: `SELECT COUNT(*) FROM item_media` is 0; `sqlite_master` lists `item_media`; `SELECT COUNT(*) FROM d1_migrations` is one more than before; the item, movement and on-hand counts are unchanged. Only then merge the V1.2 branch to `main`. Rollback before the merge: the migration only adds an empty table, so `DROP TABLE item_media` (while it is empty) or the Time Travel bookmark undoes it; an empty bucket can simply stay. After the merge, photos live in the bucket under `items/<id>/display` and `items/<id>/thumb`, and `item_media` is the only thing that refers to them. Redeploying the previous `main` leaves them untouched, because that code ignores them; restoring D1 to an earlier bookmark would leave unreferenced files in the bucket, which are harmless and invisible. After the deploy: open an item in Items, add a photo, check the list shows its thumbnail and the photo opens large, then remove it and read the three entries in Activity.
+
+## Deploys from CI (R9; switched off until Earl enables it)
+
+Today Workers Builds deploys every push to `main`, even one whose CI fails (finding R9 of `docs/specs/accepted/2026-10-03-review-hardening-amendment.md`). `.github/workflows/deploy.yml` replaces that with a deploy of only a commit on `main` whose CI passed. It is **pending owner configuration**: nothing in the repository can switch Workers Builds off, so R9 is not fixed until the steps below are done.
+
+What the workflow does once on:
+- **After CI on `main`:** it runs only when CI concluded `success` for a push to `main` in this repository. A failed, cancelled or skipped run never reaches the job. It checks out that exact commit and deploys only if it is still `main`'s head (an older green run never replaces a newer commit).
+- **Before any deploy:** `scripts/ops/deploy-gate.mjs` asks production the one read-only question `SELECT name FROM d1_migrations` and refuses while the commit carries a migration production has not applied. Migrations still go only through Cloud Operations (below), never with a deploy.
+- **Rollback:** Actions → Deploy → Run workflow on `main`. Set `action` = `rollback`, `target` = the Worker version id (`npx wrangler deployments list`, or the deploy's log), a `reason`, and `confirm` = `ROLLBACK <version id>`.
+- **Manual or emergency deploy:** set `action` = `deploy`, `target` = the full commit on `main`, a `reason`, and `confirm` = `DEPLOY <commit>`. That commit's CI must have passed unless `override_ci` is ticked. An override is recorded on the Worker version and in the run. The migration gate always applies.
+- Each deploy carries `ci|manual|override <commit>: <reason>` as its Worker version message, so `wrangler deployments list` shows what is live and why.
+
+Owner steps to switch it on, in order:
+1. **Token.** The `production` environment's `CLOUDFLARE_API_TOKEN` must also allow *Workers Scripts: Edit* (it already reads D1 for Cloud Operations). Widen it, or replace it with one that has both.
+2. **Dry run.** Add the repository variable `DEPLOY_FROM_CI` = `dry-run` (Settings → Secrets and variables → Actions → Variables). Each green CI run on `main` then runs the whole path, but `wrangler deploy --dry-run` uploads nothing, so it is safe while Workers Builds still deploys.
+   - **Expect:** a run after a green CI. No Deploy job after a failed or cancelled CI (two quick pushes cancel the first CI run).
+   - **Expect:** the gate refuses while `0022` and `0023` are not applied in production, then passes once the next release's Cloud Operations run applies them.
+3. **Switch over.** Turn off Workers Builds' automatic production deploys for `main` (Cloudflare dashboard → Workers & Pages → `logistics-hub` → Settings → Builds), then set `DEPLOY_FROM_CI` = `true`. Push the next commit and check:
+   - one Deploy run;
+   - `npx wrangler deployments list` shows `ci <commit>`;
+   - `npm run admin -- verify https://logistics.hausc.org` passes.
+4. **Optional.** Protect `main` (Settings → Branches) so that only commits that pass CI merge, and add a required reviewer on the `production` environment to approve each deploy.
+
+Undo: set `DEPLOY_FROM_CI` back to unset (or `dry-run`) and re-enable Workers Builds.
 
 ## Backups and restore
 

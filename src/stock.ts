@@ -1,3 +1,4 @@
+import { SENTINEL, utc } from "./activity";
 import { OPEN_REORDER_STATUSES } from "./catalog-policy";
 import { type Actor, BUMP_REVISION, HISTORY_ORDER, InputError, actorName, audit, staffInventory } from "./inventory";
 
@@ -23,17 +24,33 @@ async function listReorders(db: D1Database) {
 
 /**
  * Staff stock activity, newest first, with the quantity before and after each movement.
- * The running total covers every movement (migrated ones too) so before/after are exact;
- * only the Hub's own movements are listed.
+ * The running total covers every movement of an item (migrated ones too) so before/after are exact;
+ * only the Hub's own movements are listed. The 100 rows are picked first, walking the 0016 time index;
+ * then only the items they touch have their ledger summed.
+ *
+ * The order is the ledger's (`HISTORY_ORDER`): the stored time, then insertion. The index key is that
+ * time normalized, so it orders the same way except for text that is not a date, which the index files
+ * under one oldest key. The picked set is therefore every row at or after the 100th-newest key, plus every
+ * row under the oldest key, re-sorted exactly; ties at the edge and odd timestamps cannot change the page.
  */
-async function recentActivity(db: D1Database) {
-  const { results } = await db.prepare(`SELECT id, createdAt, itemId, itemName, unit, movementType, related, change, afterQuantity, reason, notes, actor FROM (
-      SELECT m.id, m.created_at AS createdAt, m.item_id AS itemId, i.name AS itemName, i.unit, m.movement_type AS movementType, m.related_entity_type AS related,
-        m.signed_quantity AS change, m.reason, m.notes, ${actorName("a", "m.actor_user_id")} AS actor, m.imported_from AS importedFrom,
-        CASE WHEN m.imported_from IS NULL THEN julianday(m.created_at) ELSE 0 END AS happened, m.rowid AS seq,
-        SUM(CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END) OVER (PARTITION BY m.item_id ORDER BY ${HISTORY_ORDER}) AS afterQuantity
-      FROM inventory_movements m JOIN items i ON i.id = m.item_id LEFT JOIN staff_accounts a ON a.id = m.actor_user_id
-    ) WHERE importedFrom IS NULL ORDER BY happened DESC, seq DESC LIMIT 100`).all();
+export async function recentActivity(db: D1Database) {
+  const at = utc("m.created_at");
+  const { results } = await db.prepare(`WITH recent AS MATERIALIZED (
+      SELECT m.rowid AS seq, m.item_id AS itemId, julianday(m.created_at) AS happened FROM inventory_movements m
+      WHERE m.imported_from IS NULL AND m.rowid IN (
+        SELECT m.rowid FROM inventory_movements m WHERE m.imported_from IS NULL
+          AND ${at} >= COALESCE((SELECT ${at} FROM inventory_movements m WHERE m.imported_from IS NULL ORDER BY ${at} DESC LIMIT 1 OFFSET 99), '')
+        UNION ALL SELECT m.rowid FROM inventory_movements m WHERE ${at} = '${SENTINEL}')
+      ORDER BY happened DESC, seq DESC LIMIT 100
+    ), ledger AS (
+      SELECT m.rowid AS seq, SUM(CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END) OVER (PARTITION BY m.item_id ORDER BY ${HISTORY_ORDER}) AS afterQuantity
+      FROM inventory_movements m WHERE m.item_id IN (SELECT itemId FROM recent)
+    )
+    SELECT m.id, m.created_at AS createdAt, m.item_id AS itemId, i.name AS itemName, i.unit, m.movement_type AS movementType, m.related_entity_type AS related,
+      m.signed_quantity AS change, l.afterQuantity, m.reason, m.notes, ${actorName("a", "m.actor_user_id")} AS actor
+    FROM recent r JOIN inventory_movements m ON m.rowid = r.seq JOIN ledger l ON l.seq = r.seq JOIN items i ON i.id = m.item_id
+      LEFT JOIN staff_accounts a ON a.id = m.actor_user_id
+    ORDER BY r.happened DESC, r.seq DESC`).all();
   return results;
 }
 
