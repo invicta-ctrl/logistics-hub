@@ -1,0 +1,203 @@
+# Production deploys from GitHub, only of a commit on main whose CI passed (R9; accepted amendment
+# docs/specs/accepted/2026-10-03-review-hardening-amendment.md, H8). Runbook: docs/DEPLOYMENT.md, "Deploys from CI".
+#
+# The automatic path is OFF until Earl switches it on with the repository variable DEPLOY_FROM_CI:
+#   unset     nothing runs after CI (today: Workers Builds still deploys main by itself).
+#   dry-run   the whole path runs after a green CI on main, including the read-only migration gate, but
+#             `wrangler deploy --dry-run` uploads nothing. Safe to set while Workers Builds still deploys.
+#   true      it deploys. Set it only after Workers Builds stops deploying main, or both would deploy.
+# The manual rollback and the manual (emergency) deploy are the owner's to run either way.
+# Migrations never ride a deploy: the gate refuses while production lacks one, and only production-ops.yml applies them.
+# Secrets live in the `production` environment, never in the repository: CLOUDFLARE_API_TOKEN (Workers Scripts: Edit and
+# D1: Read on the account) and CLOUDFLARE_ACCOUNT_ID.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: deploy a commit on main, or roll back to an earlier Worker version
+        required: true
+        type: choice
+        options:
+          - deploy
+          - rollback
+        default: deploy
+      target:
+        description: "deploy: the full 40-character commit on main. rollback: the Worker version id (wrangler deployments list)"
+        required: true
+        type: string
+      reason:
+        description: Why, recorded in the run and on the Worker version
+        required: true
+        type: string
+      override_ci:
+        description: "deploy only, emergencies: allow a commit whose CI has not passed (the migration gate still applies)"
+        required: false
+        type: boolean
+        default: false
+      confirm:
+        description: "Type exactly  DEPLOY <target>  or  ROLLBACK <target>"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_run' && (vars.DEPLOY_FROM_CI == 'true' || vars.DEPLOY_FROM_CI == 'dry-run')
+        && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+        && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository)
+      || (github.event_name == 'workflow_dispatch' && inputs.action == 'deploy')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - name: Decide which commit
+        id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          TARGET: ${{ inputs.target }}
+          REASON: ${{ inputs.reason }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = workflow_dispatch ]; then
+            [ "$REF" = refs/heads/main ] || { echo "::error::Run this workflow from main."; exit 1; }
+            [[ "$TARGET" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::target must be a full 40-character commit."; exit 1; }
+            [ "$CONFIRM" = "DEPLOY $TARGET" ] || { echo "::error::confirm must be exactly: DEPLOY $TARGET"; exit 1; }
+            [ -n "${REASON// /}" ] || { echo "::error::Give a reason."; exit 1; }
+            echo "sha=$TARGET" >> "$GITHUB_OUTPUT"
+          else
+            [[ "$RUN_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::The CI run named no commit."; exit 1; }
+            echo "sha=$RUN_SHA" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Check out main's deploy tooling
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: ops
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out the commit to deploy
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pick.outputs.sha }}
+          path: release
+          persist-credentials: false
+      - name: Only a commit on main, and never an older one over a newer
+        id: order
+        working-directory: ops
+        env:
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ steps.pick.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$SHA" HEAD || { echo "::error::$SHA is not on main."; exit 1; }
+          if [ "$EVENT" = workflow_run ] && [ "$(git rev-parse HEAD)" != "$SHA" ]; then
+            echo "main has moved on to $(git rev-parse HEAD); that commit's own CI run deploys it. Nothing deployed." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: A manual deploy needs that commit's CI to have passed, unless overridden
+        if: github.event_name == 'workflow_dispatch' && !inputs.override_ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.pick.outputs.sha }}
+        run: |
+          set -euo pipefail
+          passed=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&status=success&per_page=1" --jq '.total_count')
+          [ "$passed" -gt 0 ] || { echo "::error::CI has not passed on $SHA. Fix it, or rerun with override_ci and a reason."; exit 1; }
+      - uses: actions/setup-node@v4
+        if: steps.order.outputs.skip != 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            ops/package-lock.json
+            release/package-lock.json
+      - name: Install the tooling and the release
+        if: steps.order.outputs.skip != 'true'
+        run: |
+          npm ci --prefix ops
+          npm ci --prefix release
+      - name: Refuse while production lacks a migration this commit carries
+        if: steps.order.outputs.skip != 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node ops/scripts/ops/deploy-gate.mjs --release-dir release --wrangler release/node_modules/wrangler/bin/wrangler.js
+      - name: Build
+        if: steps.order.outputs.skip != 'true'
+        working-directory: release
+        run: npm run build
+      - name: Deploy
+        if: steps.order.outputs.skip != 'true'
+        working-directory: release
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SHA: ${{ steps.pick.outputs.sha }}
+          HOW: ${{ github.event_name == 'workflow_dispatch' && (inputs.override_ci && 'override' || 'manual') || 'ci' }}
+          DRY: ${{ github.event_name == 'workflow_run' && vars.DEPLOY_FROM_CI == 'dry-run' }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          if [ "$DRY" = true ]; then
+            npx wrangler deploy --dry-run
+            echo "Dry run for $SHA: every check passed; nothing was uploaded." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          message="$HOW ${SHA:0:12}${REASON:+: $REASON}"
+          npx wrangler deploy --message "${message:0:100}"
+          echo "Deployed $SHA ($HOW) at $(date -u +%FT%TZ). ${REASON:+Reason: $REASON}" >> "$GITHUB_STEP_SUMMARY"
+
+  rollback:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'rollback'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Check the request
+        env:
+          REF: ${{ github.ref }}
+          TARGET: ${{ inputs.target }}
+          REASON: ${{ inputs.reason }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          [ "$REF" = refs/heads/main ] || { echo "::error::Run this workflow from main."; exit 1; }
+          [[ "$TARGET" =~ ^[0-9a-f-]{36}$ ]] || { echo "::error::target must be a Worker version id."; exit 1; }
+          [ "$CONFIRM" = "ROLLBACK $TARGET" ] || { echo "::error::confirm must be exactly: ROLLBACK $TARGET"; exit 1; }
+          [ -n "${REASON// /}" ] || { echo "::error::Give a reason."; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Roll back
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TARGET: ${{ inputs.target }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          set -euo pipefail
+          npx wrangler rollback "$TARGET" --message "${REASON:0:100}" --yes
+          echo "Rolled back to $TARGET at $(date -u +%FT%TZ). Reason: $REASON" >> "$GITHUB_STEP_SUMMARY"
