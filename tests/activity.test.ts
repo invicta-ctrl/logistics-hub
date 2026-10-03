@@ -34,7 +34,7 @@ beforeEach(async () => {
   sqlite = database.sqlite;
   env = { DB: database.d1, EVIDENCE: {} as R2Bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
   // The migrations carry the imported catalog history; these tests want a ledger of only what they write.
-  sqlite.exec("DROP TRIGGER inventory_movements_no_delete; DELETE FROM inventory_movements; DELETE FROM audit_log");
+  sqlite.exec("DROP TRIGGER inventory_movements_no_delete; DROP TRIGGER audit_log_no_delete; DELETE FROM inventory_movements; DELETE FROM audit_log");
   const hash = await hashPassword("correct horse battery");
   sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash, role) VALUES('ACC-1', 'staff.one', 'Staff One', ?, 'STAFF')").run(hash);
   sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash, role) VALUES('ACC-2', 'admin.one', 'Admin One', ?, 'ADMIN')").run(hash);
