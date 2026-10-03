@@ -1,7 +1,7 @@
 import { LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, STUDENT_ID_PATTERN, selfServiceAction } from "./catalog-policy";
 import { throttled } from "./accounts";
 import { type Actor, BUMP_REVISION, COUNT_TOLERANCE_DAYS, HISTORY_ORDER, InputError, catalogRevision, countAwareStatus, guarded } from "./inventory";
-import { LOAN_ID, type LoanDetails, SELF_SERVICE_ACTOR, cleanText, closeStatements, lendStatements, loanDetails, officeDay, readPhoto } from "./loans";
+import { LOAN_ID, type LoanDetails, SELF_SERVICE_ACTOR, cleanText, closeStatements, dropUnusedPhoto, lendStatements, loanDetails, officeDay, readPhoto } from "./loans";
 
 /*
  * Phone self-service (Part 4.5; Use in Part 5B). A phone records Take, Borrow, Use and Return as immutable events,
@@ -266,7 +266,7 @@ async function context(db: D1Database, itemId: string, at: string, receivedAt: s
 async function failed(db: D1Database, bucket: R2Bucket, event: SelfServiceEvent, batch: Batch, error: unknown, photoKey: string | null = null): Promise<SyncResult> {
   console.error("self_service_event_failed", { type: event.type, message: error instanceof Error ? error.message : "unknown" });
   const kept = await hold(db, event, batch, "ERROR", { photoKey }).catch(() => null);
-  if (photoKey && (!kept || kept.duplicate)) await bucket.delete(photoKey);
+  if (photoKey && (!kept || kept.duplicate)) await dropUnusedPhoto(db, bucket, photoKey);
   return kept ?? { id: event.id, outcome: "retry" };
 }
 
@@ -334,7 +334,7 @@ async function applyOut(db: D1Database, bucket: R2Bucket, event: SelfServiceEven
     return failed(db, bucket, event, batch, error, photoKey);
   }
   // A copy of this event was already stored (with its own photo), or it was refused: this upload is not needed.
-  if (photoKey && (result.duplicate || result.outcome === "rejected")) await bucket.delete(photoKey);
+  if (photoKey && (result.duplicate || result.outcome === "rejected")) await dropUnusedPhoto(db, bucket, photoKey);
   return result;
 }
 
@@ -386,7 +386,7 @@ async function applyReturn(db: D1Database, bucket: R2Bucket, event: SelfServiceE
   } catch (error) {
     return failed(db, bucket, event, batch, error, stored.key);
   }
-  if (result.duplicate || result.outcome === "rejected") await bucket.delete(stored.key);
+  if (result.duplicate || result.outcome === "rejected") await dropUnusedPhoto(db, bucket, stored.key);
   return result;
 }
 
