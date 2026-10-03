@@ -175,10 +175,19 @@
 .ss-section { margin-top: .75rem; color: var(--accent-line); font-size: .6875rem; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; }
 .ss-list { display: grid; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .ss-list li + li { border-top: 1px solid var(--line); }
-.ss-row { display: flex; min-height: 3.875rem; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem 1rem; color: var(--text); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: background-color var(--dur-1); }
+.ss-row { position: relative; display: flex; min-height: 3.875rem; align-items: center; justify-content: space-between; gap: 1rem; padding: .7rem 1rem; color: var(--text); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: background-color var(--dur-1); }
 .ss-row:active { background: var(--hover); }
 .ss-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--accent); }
-.ss-row__main { display: grid; min-width: 0; }
+.ss-row__main { display: grid; flex: 1; min-width: 0; }
+/* A public item thumbnail sits in the row's left margin; a list with any photo reserves that margin for every row. */
+.item-thumb { position: absolute; top: 50%; inset-inline-start: .75rem; width: 3rem; height: 3rem; margin-top: -1.5rem; border-radius: var(--radius); background: var(--subtle); object-fit: cover; }
+.ss-list--photos .ss-row { padding-inline-start: 4.75rem; }
+/* On the narrowest phones a smaller thumbnail leaves the name room to stay on two lines. */
+@media (max-width: 22.5rem) {
+  .item-thumb { inset-inline-start: .625rem; width: 2.5rem; height: 2.5rem; margin-top: -1.25rem; }
+  .ss-list--photos .ss-row { padding-inline-start: 3.75rem; }
+}
+.ss-item-photo { display: block; width: 10rem; height: 10rem; margin: 0 auto 1rem; border-radius: var(--radius-lg); background: var(--subtle); object-fit: contain; }
 .ss-row__name { overflow-wrap: anywhere; font-weight: 500; line-height: 1.3; }
 .ss-row__sub { overflow: hidden; color: var(--text-3); font-size: var(--text-sm); text-overflow: ellipsis; white-space: nowrap; }
 .ss-row__go { display: inline-flex; flex: none; align-items: center; gap: .125rem; color: var(--accent); font-size: var(--text-sm); font-weight: 600; }
