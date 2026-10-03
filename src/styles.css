@@ -1074,7 +1074,6 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .where__photo img { display: block; width: 100%; height: auto; max-height: 22rem; object-fit: contain; }
 .where__photo:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .where__figure figcaption { color: var(--text-2); font-size: var(--text-sm); }
-.where__zoom { color: var(--text-3); }
 .where__missing { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4); border: 1.5px dashed var(--line-strong); border-radius: var(--radius-lg); color: var(--text-2); font-size: var(--text-sm); }
 .where__missing .icon { --icon-size: var(--icon-lg); color: var(--text-3); }
 .where__missing p + p { margin-top: .125rem; color: var(--text-3); }

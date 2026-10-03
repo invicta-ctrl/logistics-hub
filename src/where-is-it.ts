@@ -48,12 +48,13 @@ function route(steps: Step[], noRoute: string): Html {
 }
 
 function picture(options: WhereIsIt, step: Step | undefined): Html {
-  if (!step?.photo) return html`<div class="where__missing">${icon("camera")}<div><p><strong>No picture yet</strong></p><p>${options.steps.length ? "Nobody has added a picture of this place." : "There is no place to show a picture of."}</p>${options.pictureHelp?.(options.steps[options.steps.length - 1]) ?? ""}</div></div>`;
+  if (!options.steps.length) return html``;
+  if (!step?.photo) return html`<div class="where__missing">${icon("camera")}<div><p><strong>No picture yet</strong></p><p>Nobody has added a picture of this place.</p>${options.pictureHelp?.(options.steps[options.steps.length - 1]) ?? ""}</div></div>`;
   const { photo } = step;
   const leaf = options.steps[options.steps.length - 1]!;
   return html`<figure class="where__figure"><button type="button" class="where__photo" data-zoom aria-label="Enlarge the picture of ${step.name}">
       <img src="${options.pictureUrl(photo.id, "thumb")}" alt="Picture of ${step.name}" width="${photo.width}" height="${photo.height}" decoding="async" /></button>
-    <figcaption>${step.id === leaf.id ? step.name : html`${step.name}, the place around it`}<span class="where__zoom"> · tap to enlarge</span></figcaption></figure>`;
+    <figcaption>${step.id === leaf.id ? step.name : html`${step.name}, the place around it`}</figcaption></figure>`;
 }
 
 /**
