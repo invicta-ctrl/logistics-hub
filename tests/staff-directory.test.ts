@@ -375,6 +375,65 @@ describe("making a sign-in from a profile, and watching how it is used", () => {
   });
 });
 
+describe("roles by department (Earl, 2026-10-03)", () => {
+  const login = async (username: string) => {
+    const response = await worker.fetch(new Request(`${origin}/api/staff/login`, { method: "POST", headers: { origin, "content-type": "application/json", "cf-connecting-ip": `ip-${username}` }, body: JSON.stringify({ username, password: PASSWORD }) }), env);
+    return response.headers.get("set-cookie")!.split(";")[0]!;
+  };
+  const as = (cookie: string, path: string, method = "GET", body?: unknown) => worker.fetch(new Request(`${origin}${path}`, { method, headers: { origin, cookie, ...(body ? { "content-type": "application/json" } : {}) }, body: body ? JSON.stringify(body) : undefined }), env);
+  const seedWith = async (id: string, username: string, group: string | null) => {
+    sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash, role) VALUES(?, ?, ?, ?, 'STAFF')").run(id, username, username, await hashPassword(PASSWORD));
+    if (group) sqlite.prepare("INSERT INTO system_settings(key, value, updated_at) VALUES(?, ?, '2026-10-03T00:00:00.000Z')").run(`account_access:${id}`, group);
+    return login(username);
+  };
+
+  it("lets only DoL Staff (and staff from before, as DoL) into the Logistics Hub; other departments and officers reach their account only", async () => {
+    for (const [group, hub] of [["DoL", true], [null, true], ["DEM", false], ["OFFICER", false]] as const) {
+      const cookie = await seedWith(`ACC-${group ?? "legacy"}`, `user.${(group ?? "legacy").toLowerCase()}`, group);
+      const session = await json(await as(cookie, "/api/staff/session"));
+      expect(session).toMatchObject({ access: group ?? "DoL", hub });
+      const inventory = await as(cookie, "/api/staff/inventory");
+      expect(inventory.status, String(group)).toBe(hub ? 200 : 403);
+      if (!hub) {
+        expect((await json(inventory)).code).toBe("NO_HUB_ACCESS");
+        for (const path of ["/api/staff/loans", "/api/staff/activity", "/api/staff/admin/directory"]) expect((await as(cookie, path)).status).toBe(403);
+        expect((await as(cookie, "/api/staff/me", "PATCH", { displayName: "New Name" })).status).toBe(200);
+      }
+    }
+  });
+
+  it("gives roles within each administrator's authority, records the department, and changes it with every session ended", async () => {
+    const make = (role: keyof typeof cookies, access: string, username: string) => call(role, "/api/staff/admin/accounts", "POST", { displayName: username, username, access, generate: true });
+    expect((await make("ADMIN", "OWNER", "would.own")).status).toBe(403);
+    expect((await make("ADMIN", "ADMIN", "would.admin")).status).toBe(403);
+    expect((await make("ADMIN", "Logistics", "bad.choice")).status).toBe(400);
+    const dem = await json(await make("ADMIN", "DEM", "dem.staff"));
+    expect(sqlite.prepare("SELECT value FROM system_settings WHERE key = ?").get(`account_access:${dem.id}`)).toEqual({ value: "DEM" });
+    const listed = (await json(await call("OWNER", "/api/staff/admin/accounts"))).accounts;
+    expect(Object.fromEntries(listed.map((row: { username: string; access: string }) => [row.username, row.access]))).toMatchObject({ "dem.staff": "DEM", staff: "DoL", admin: "ADMIN", owner: "OWNER" });
+    // An owner moves them to DoL Staff, then makes them the owner: the department is forgotten, the role is OWNER.
+    expect(await json(await call("OWNER", `/api/staff/admin/accounts/${dem.id}`, "PATCH", { access: "DoL" }))).toMatchObject({ changed: 1, sessionsRevoked: true });
+    expect(sqlite.prepare("SELECT value FROM system_settings WHERE key = ?").get(`account_access:${dem.id}`)).toEqual({ value: "DoL" });
+    expect((await call("OWNER", `/api/staff/admin/accounts/${dem.id}`, "PATCH", { access: "OWNER" })).status).toBe(200);
+    expect(sqlite.prepare("SELECT role FROM staff_accounts WHERE id = ?").get(dem.id)).toEqual({ role: "OWNER" });
+    expect(sqlite.prepare("SELECT count(*) AS n FROM system_settings WHERE key = ?").get(`account_access:${dem.id}`)).toEqual({ n: 0 });
+    const changes = sqlite.prepare("SELECT details_json AS details FROM audit_log WHERE action = 'ACCOUNT_UPDATED' AND entity_id = ? ORDER BY rowid").all(dem.id).map((row) => JSON.parse(String(row.details)).access);
+    expect(changes).toEqual([{ from: "DEM", to: "DoL" }, { from: "DoL", to: "OWNER" }]);
+    // The older form, a role alone, keeps a staff member's department.
+    const officer = await json(await make("OWNER", "OFFICER", "an.officer"));
+    expect(await json(await call("OWNER", `/api/staff/admin/accounts/${officer.id}`, "PATCH", { role: "STAFF", displayName: "An Officer" }))).toMatchObject({ changed: 1 });
+    expect(sqlite.prepare("SELECT value FROM system_settings WHERE key = ?").get(`account_access:${officer.id}`)).toEqual({ value: "OFFICER" });
+  });
+
+  it("makes a sign-in from a profile with the department chosen, and shows it on the profile", async () => {
+    const ana = await addPerson({ name: "Ana Santos", department: "DEM" });
+    const made = await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/account/new`, "POST", { username: "ana.santos", access: "DEM" }));
+    expect(sqlite.prepare("SELECT value FROM system_settings WHERE key = ?").get(`account_access:${made.accountId}`)).toEqual({ value: "DEM" });
+    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${ana}`))).person.account).toMatchObject({ username: "ana.santos", access: "DEM" });
+    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/access`))).account).toMatchObject({ access: "DEM" });
+  });
+});
+
 describe("usage, loans and activity come from the existing records", () => {
   const item = () => sqlite.prepare("SELECT id, unit FROM items ORDER BY id LIMIT 1").get() as { id: string; unit: string };
   let movement = 0;
