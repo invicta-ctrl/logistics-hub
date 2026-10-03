@@ -149,7 +149,7 @@ export function selfServiceAction(item: SelfServiceCandidate): SelfServiceAction
 /* ---------- Activity (Part 5) ---------- */
 
 /** Where an Activity entry comes from, in the words staff see. ACCOUNT entries exist only for ADMIN and OWNER. */
-export const ACTIVITY_SOURCES = { MOVEMENT: "Stock", LOAN: "Loans", PHONE: "Self-Service", CATALOG: "Catalog", ACCOUNT: "Accounts & exports" } as const;
+export const ACTIVITY_SOURCES = { MOVEMENT: "Stock", LOAN: "Loans", PHONE: "Self-Service", CATALOG: "Catalog", ACCOUNT: "Accounts & exports", DIRECTORY: "Staff Directory" } as const;
 export type ActivitySource = keyof typeof ACTIVITY_SOURCES;
 /** Every Activity entry type and its title, grouped by the source it usually belongs to (a phone take is a stock-out movement). */
 export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
@@ -165,6 +165,10 @@ export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
     ACCOUNT_CREATED: "Account created", ACCOUNT_UPDATED: "Account updated", PASSWORD_RESET: "Password reset", PASSWORD_CHANGED: "Password changed", SESSIONS_REVOKED: "Sessions ended",
     RECOVERY_KEY_ROTATED: "Recovery key replaced", RECOVERY_KEY_REVOKED: "Recovery key revoked", OWNER_RECOVERY_USED: "Owner recovery used", OWNER_BOOTSTRAPPED: "First owner set up",
     ACTIVITY_EXPORTED: "Activity exported", SETTING_CHANGED: "Setting changed", RETENTION_ERASED: "Old personal details removed"
+  },
+  DIRECTORY: {
+    STAFF_PERSON_ADDED: "Person added", STAFF_PROFILE_UPDATED: "Profile edited", STAFF_ACCOUNT_LINKED: "Account linked", STAFF_ACCOUNT_UNLINKED: "Account unlinked",
+    STAFF_ID_IMPORTED: "ID scans imported", STAFF_ID_ADDED: "ID scans added", STAFF_ID_REPLACED: "ID scans replaced", STAFF_ID_REMOVED: "ID scans removed", STAFF_ID_VIEWED: "USC ID viewed"
   }
 };
 export const ACTIVITY_TITLES: Record<string, string> = Object.assign({}, ...Object.values(ACTIVITY_TYPES));

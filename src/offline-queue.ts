@@ -10,6 +10,8 @@ import { SELF_SERVICE_LIMITS, type SelfServiceAction } from "./catalog-policy";
 export type CatalogItem = {
   id: string; name: string; aliases: string | null; category: string; unit: string;
   action: SelfServiceAction; available: number; location: string | null; audience: string | null;
+  /** The item's photo id, if it has one (absent in a snapshot saved before photos were public). */
+  photo?: string | null;
 };
 export type Snapshot = { revision: number; items: CatalogItem[]; fetchedAt: number; checkedAt: number };
 

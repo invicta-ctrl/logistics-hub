@@ -108,7 +108,7 @@ beforeEach(async () => {
   const database = migratedD1();
   sqlite = database.sqlite;
   media = memoryR2();
-  env = { DB: database.d1, EVIDENCE: memoryR2().bucket, CATALOG_MEDIA: media.bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
+  env = { DB: database.d1, EVIDENCE: memoryR2().bucket, CATALOG_MEDIA: media.bucket, STAFF_IDS: memoryR2().bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
   sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash) VALUES('ACC-1', 'staff.one', 'Staff One', ?)").run(await hashPassword("correct horse battery"));
   const login = await call("/api/staff/login", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ username: "staff.one", password: "correct horse battery" }) });
   cookie = login.headers.get("set-cookie")!.split(";")[0]!;
@@ -339,16 +339,129 @@ describe("serving a photo", () => {
   });
 });
 
-describe("privacy and history", () => {
-  it("keeps photos out of the public and Self-Service catalogs", async () => {
+/** Makes an item show on the Lending Hub (and so in Self-Service); a loanable needs a public audience, active status and a review. */
+const list = (item: string, patch = "item_type = 'Loanable', lending_audience = 'STUDENTS_AND_USC_STAFF'") =>
+  sqlite.prepare(`UPDATE items SET status = 'ACTIVE', needs_review = 0, ${patch} WHERE id = ?`).run(item);
+const openSelfService = () => sqlite.exec("UPDATE system_settings SET value = 'open' WHERE key = 'self_service'");
+const closeSelfService = () => sqlite.exec("UPDATE system_settings SET value = 'paused' WHERE key = 'self_service'");
+const publicItems = async () => ((await (await call("/api/public/catalog")).json()) as { items: Array<Record<string, unknown> & { id: string; photo: string | null }> }).items;
+const phoneItems = async () => ((await (await call("/api/self-service/catalog")).json()) as { items: Array<{ id: string; photo: string | null }> }).items;
+const thumb = (id: string, init: RequestInit = {}, size = "thumb") => call(`/api/public/media/${id}/${size}`, init);
+
+describe("public thumbnails (the Lending Hub and Self-Service show an item's photo)", () => {
+  it("lists the photo id in both catalogs and serves the small picture to anyone, with no sign-in", async () => {
+    const id = await add();
+    list(ITEM);
+    openSelfService();
+    expect((await publicItems()).find((item) => item.id === ITEM)!.photo).toBe(id);
+    expect((await phoneItems()).find((item) => item.id === ITEM)!.photo).toBe(id);
+    const response = await thumb(id);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/jpeg");
+    expect(response.headers.get("cache-control")).toBe("public, max-age=3600");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(media.objects.get(`items/${id}/thumb`)!.bytes);
+    // The browser's copy is revalidated cheaply, and a stale validator never gets a 304 for a different photo.
+    const tag = response.headers.get("etag")!;
+    const again = await thumb(id, { headers: { "if-none-match": tag } });
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe("");
+    expect((await thumb(id, { headers: { "if-none-match": '"someone-else"' } })).status).toBe(200);
+  });
+
+  it("items without a photo have none, and an unlisted item's photo is not in any catalog", async () => {
     await add();
-    sqlite.exec("UPDATE system_settings SET value = 'open' WHERE key = 'self_service'");
-    sqlite.prepare("UPDATE items SET status = 'ACTIVE', needs_review = 0, item_type = 'Loanable', lending_audience = 'STUDENTS_AND_USC_STAFF' WHERE id = ?").run(ITEM);
+    expect((await publicItems()).every((item) => item.photo === null)).toBe(true);
+    list(ITEM);
+    const others = (await publicItems()).filter((item) => item.id !== ITEM);
+    expect(others.every((item) => item.photo === null)).toBe(true);
+    sqlite.prepare("UPDATE items SET needs_review = 1 WHERE id = ?").run(ITEM);
+    expect((await publicItems()).some((item) => item.id === ITEM)).toBe(false);
+  });
+
+  it("has no address for the large picture, and only GET reads the thumbnail", async () => {
+    const id = await add();
+    list(ITEM);
+    for (const size of ["display", "original", "constructor", "thumb/", "..%2Fdisplay"]) {
+      const response = await thumb(id, {}, size);
+      expect(response.status, size).not.toBe(200);
+      expect(response.headers.get("content-type") ?? "", size).not.toBe("image/jpeg");
+    }
+    for (const method of ["POST", "PUT", "DELETE", "PATCH"]) expect((await thumb(id, { method, headers: { origin } })).status, method).toBe(405);
+    expect((await call(`/api/staff/media/${id}/display`)).status).toBe(401);
+  });
+
+  it("answers 404 for anything that is not the current photo of an item a public list shows", async () => {
+    const id = await add();
+    expect((await thumb(id)).status).toBe(404); // not listed anywhere yet
+    list(ITEM);
+    expect((await thumb(id)).status).toBe(200);
+    for (const patch of ["status = 'INACTIVE'", "status = 'VERIFY'", "needs_review = 1", "lending_audience = 'NOT_AVAILABLE_FOR_LENDING'", "item_type = 'NEEDS_REVIEW'"]) {
+      list(ITEM);
+      sqlite.prepare(`UPDATE items SET ${patch} WHERE id = ?`).run(ITEM);
+      expect((await thumb(id)).status, patch).toBe(404);
+    }
+    list(ITEM);
+    for (const bad of ["not-an-id", "00000000-0000-0000-0000-000000000000", crypto.randomUUID(), id.toUpperCase(), `${id}x`]) expect((await thumb(bad)).status, bad).toBe(404);
+    expect((await thumb(id)).status).toBe(200);
+  });
+
+  it("stops serving a removed or replaced photo at once, and both catalogs change with it", async () => {
+    list(ITEM);
+    openSelfService();
+    const first = await add();
+    expect((await thumb(first)).status).toBe(200);
+    const second = (await (await put(first)).json() as { photo: { id: string } }).photo.id;
+    expect((await thumb(first)).status).toBe(404);
+    expect((await thumb(second)).status).toBe(200);
+    expect((await publicItems()).find((item) => item.id === ITEM)!.photo).toBe(second);
+    await remove(second);
+    expect((await thumb(second)).status).toBe(404);
+    expect((await publicItems()).find((item) => item.id === ITEM)!.photo).toBeNull();
+    expect((await phoneItems()).find((item) => item.id === ITEM)!.photo).toBeNull();
+  });
+
+  it("changes the catalog's revision, so open lists and phones refresh when a photo is added", async () => {
+    list(ITEM);
+    const etag = (await call("/api/public/catalog")).headers.get("etag");
+    await add();
+    const after = await call("/api/public/catalog", { headers: { "if-none-match": etag ?? "" } });
+    expect(after.status).toBe(200);
+    expect(after.headers.get("etag")).not.toBe(etag);
+  });
+
+  it("serves a supplies-only item's photo only while Self-Service is open", async () => {
+    // A consumable that is not offered for lending is on no Lending Hub list, only in Self-Service.
+    const id = await add();
+    list(ITEM, "item_type = 'Consumable', lending_audience = 'NOT_AVAILABLE_FOR_LENDING'");
+    expect((await publicItems()).some((item) => item.id === ITEM)).toBe(false);
+    closeSelfService();
+    expect((await thumb(id)).status).toBe(404);
+    openSelfService();
+    expect((await phoneItems()).find((item) => item.id === ITEM)!.photo).toBe(id);
+    expect((await thumb(id)).status).toBe(200);
+    closeSelfService();
+    expect((await thumb(id)).status).toBe(404);
+  });
+
+  it("leaves the staff routes as they were: sign-in still required, and the large picture still served to staff", async () => {
+    const id = await add();
+    expect((await call(`/api/staff/media/${id}/thumb`)).status).toBe(401);
+    expect((await staff(`/api/staff/media/${id}/display`)).status).toBe(200);
+    expect((await staff(`/api/staff/media/${id}/thumb`)).headers.get("cache-control")).toBe("private, max-age=86400");
+  });
+});
+
+describe("privacy and history", () => {
+  it("never puts the large picture, a staff detail or the 1280 px size into the public or Self-Service catalogs", async () => {
+    const id = await add();
+    list(ITEM);
+    openSelfService();
     for (const path of ["/api/public/catalog", "/api/self-service/catalog"]) {
       const text = await (await call(path)).text();
-      expect(text, path).toContain(ITEM);
-      expect(text, path).not.toMatch(/photo|media|items\/[0-9a-f]{8}-/i);
+      expect(text, path).toContain(id);
+      expect(text, path).not.toMatch(/display|original|width|height|createdBy|ACC-1|\/api\/staff\/media/i);
     }
+    expect(Object.keys((await publicItems()).find((item) => item.id === ITEM)!).sort()).toEqual(["audience", "available", "category", "id", "itemType", "name", "photo", "unit"]);
   });
 
   // Activity breaks time ties on a random audit id, so three changes made in the same millisecond (easy in an in-memory
