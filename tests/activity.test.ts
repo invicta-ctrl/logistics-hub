@@ -44,9 +44,17 @@ beforeEach(async () => {
   item("ITM-R", "Rice 5kg", "Consumable", { stock_area: "Pantry", storage_location: "Pantry B" });
 });
 
+/** A root place by name, made on first use (the Locations API is covered in tests/locations.test.ts). */
+function place(name: string): string {
+  const found = sqlite.prepare("SELECT id FROM locations WHERE name = ?").get(name) as { id: string } | undefined;
+  if (found) return found.id;
+  const id = `LOC-${String(1 + (sqlite.prepare("SELECT COUNT(*) AS n FROM locations").get() as { n: number }).n).padStart(4, "0")}`;
+  sqlite.prepare("INSERT INTO locations(id, name, created_at, updated_at) VALUES(?, ?, '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')").run(id, name);
+  return id;
+}
 function item(id: string, name: string, itemType: string, extra: Record<string, string> = {}) {
-  sqlite.prepare("INSERT INTO items(id, name, category, item_type, unit, stock_area, storage_location, aliases) VALUES(?, ?, 'SUPPLIES', ?, 'piece', ?, ?, ?)")
-    .run(id, name, itemType, extra.stock_area ?? "Inventory", extra.storage_location ?? null, extra.aliases ?? null);
+  sqlite.prepare("INSERT INTO items(id, name, category, item_type, unit, stock_area, location_id, aliases) VALUES(?, ?, 'SUPPLIES', ?, 'piece', ?, ?, ?)")
+    .run(id, name, itemType, extra.stock_area ?? "Inventory", extra.storage_location ? place(extra.storage_location) : null, extra.aliases ?? null);
 }
 let counter = 0;
 function movement(itemId: string, type: string, signed: number, at: string, fields: { status?: string; actor?: string | null; notes?: string; reason?: string; id?: string; imported?: string; related?: string; relatedId?: string } = {}) {
@@ -175,7 +183,7 @@ describe("activity read model", () => {
   it("rejects malformed input and keeps unknown parameters harmless", async () => {
     for (const query of ["from=2026-02-30", "from=2026-13-01", "from=yesterday", "from=2026-10-02&to=2026-10-01", "limit=0", "limit=101", "limit=abc", "limit=5&limit=6", "cursor=garbage",
       "cursor=2026-13-99T00:00:00.000Z|mov:X", "cursor=2026-09-30T00:00:00.000Z|bogus:X", "source=ELSE", "type=NOPE", "item=x", "item=ITM-1&item=ITM-2", "actor=someone", "changed=maybe", "attention=0",
-      "stockArea=Garage", `q=${"a".repeat(81)}`, "q=a%00b", "location=" + "b".repeat(81)]) {
+      "stockArea=Garage", `q=${"a".repeat(81)}`, "q=a%00b", "location=" + "b".repeat(301)]) {
       const response = await call(`/api/staff/activity?${query}`, staffCookie);
       expect(response.status, query).toBe(400);
       expect(Object.keys(await response.json() as object)).toEqual(["error"]);
