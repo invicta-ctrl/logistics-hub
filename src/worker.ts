@@ -7,7 +7,7 @@ import { createSession, hashPassword, readCookie, verifyPassword, verifySession 
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { eraseOldDetails, retentionPreview } from "./retention";
 import { selfServiceState, setSelfService } from "./settings";
-import { MAX_SCAN_BODY, createPerson, directory, idScan, importPair, linkAccount, linkableAccounts, linkedPerson, personActivity, personDetail, personLoans, personUsage, putIdCard, removeIdCard, unlinkAccount, updatePerson } from "./staff-directory";
+import { MAX_SCAN_BODY, createLinkedAccount, createPerson, directory, idScan, importPair, linkAccount, linkableAccounts, linkedPerson, personAccess, personActivity, personDetail, personLoans, personUsage, putIdCard, removeIdCard, unlinkAccount, updatePerson } from "./staff-directory";
 import { openReorder, stockOverview, updateReorder } from "./stock";
 import { heldPhoto, networkOf, readBatch, resolveReview, reviewDecisions, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
 
@@ -49,7 +49,7 @@ const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|phot
 const MAX_SYNC_BYTES = 12 * 1024 * 1024;
 /** An item photo upload is a 1 MB and a 150 KB JPEG plus form framing. */
 const MAX_PHOTO_BODY = 1_300_000;
-const PERSON_PATH = /^\/api\/staff\/admin\/directory\/(PER-[0-9a-f-]{36})(\/account|\/usage|\/loans|\/activity|\/id|\/id\/front|\/id\/back)?$/;
+const PERSON_PATH = /^\/api\/staff\/admin\/directory\/(PER-[0-9a-f-]{36})(\/account|\/account\/new|\/access|\/usage|\/loans|\/activity|\/id|\/id\/front|\/id\/back)?$/;
 const ACCOUNT_PATH = /^\/api\/staff\/admin\/accounts\/(ACC-[A-Za-z0-9-]{1,60})(\/password|\/sessions\/revoke)?$/;
 // Paths still usable while an account must replace a password someone else set.
 const PASSWORD_CHANGE_ALLOWED = new Set(["/api/staff/session", "/api/staff/me/password"]);
@@ -278,6 +278,8 @@ async function staffDirectory(request: Request, env: Env, account: Account, url:
   if (match && !part && method === "PATCH") return json(await updatePerson(env.DB, account, id!, await body()));
   if (part === "/account" && method === "PUT") return json(await linkAccount(env.DB, account, id!, await body()));
   if (part === "/account" && method === "DELETE") return json(await unlinkAccount(env.DB, account, id!));
+  if (part === "/account/new" && method === "POST") return json(await createLinkedAccount(env.DB, account, id!, await body()), 201);
+  if (part === "/access" && method === "GET") return json(await personAccess(env.DB, account, id!));
   if (part === "/usage" && method === "GET") return json(await personUsage(env.DB, id!, url.searchParams));
   if (part === "/loans" && method === "GET") return json(await personLoans(env.DB, id!));
   if (part === "/activity" && method === "GET") return json(await personActivity(env.DB, id!, url.searchParams.get("cursor")));
