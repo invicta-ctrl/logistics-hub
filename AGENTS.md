@@ -22,7 +22,7 @@ Authority: Earl current instruction -> accepted spec/amendment -> verified repos
 - Never put a knowingly broken/incomplete slice on `main`.
 - Preserve unknown work; no destructive reset/clean/history rewrite.
 - Public repo: no staff/borrower PII, credentials, provider IDs, private exports, or private evidence.
-- D1 structured truth; R2 evidence; inventory quantity is movement-derived. Rules for extending the data model: `docs/DATA_ARCHITECTURE.md`.
+- D1 structured truth; R2 evidence; inventory quantity is movement-derived. Rules for extending the data model: `docs/DATA_ARCHITECTURE.md`; for performance, bounded work and reliability: `docs/PERFORMANCE_RELIABILITY_DOCTRINE.md`.
 - HTML5/CSS/TypeScript-first. No SPA framework without accepted amendment.
 - Production/provider writes require explicit target/authority and rollback controls.
 - Production preparation for a release (an R2 bucket, a D1 migration) runs only through the Cloud Operations lane: the GitHub `production` environment, `.github/workflows/production-ops.yml` and `ops/releases/<release>.json` (`docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`). Never from a PC, never on a push.

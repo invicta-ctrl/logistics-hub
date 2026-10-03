@@ -93,3 +93,22 @@ describe("0019 retention erasure", () => {
   });
 });
 
+describe("0022 append-only audit log", () => {
+  it("keeps every entry as written: new entries are added, none can be changed or removed", () => {
+    const { sqlite: db } = migratedD1();
+    const before = db.prepare("SELECT COUNT(*) AS n FROM audit_log").get();
+    db.exec(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json) VALUES('AUD-T', '2026-10-03T00:00:00Z', NULL, 'SETTING_CHANGED', 'SETTING', 'self_service', '{}')`);
+    expect(() => db.exec("UPDATE audit_log SET details_json = '{\"x\":1}' WHERE id = 'AUD-T'")).toThrow(/append-only/);
+    expect(() => db.exec("DELETE FROM audit_log WHERE id = 'AUD-T'")).toThrow(/append-only/);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM audit_log").get()).toEqual({ n: (before as { n: number }).n + 1 });
+  });
+});
+
+describe("append-only tables", () => {
+  it("are never written with OR REPLACE, which SQLite lets past their delete triggers", async () => {
+    const fs = await import("node:fs");
+    const writers = [...fs.readdirSync("src").map((file) => `src/${file}`), ...fs.readdirSync("scripts").filter((file) => file.endsWith(".mjs")).map((file) => `scripts/${file}`)];
+    const offenders = writers.filter((file) => /OR\s+REPLACE\s+INTO\s+(audit_log|inventory_movements)\b/i.test(fs.readFileSync(file, "utf8")));
+    expect(offenders).toEqual([]);
+  });
+});
