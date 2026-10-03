@@ -365,9 +365,15 @@ export function setMessage(element: HTMLElement, message: string | Html, tone: "
 
 type LiveOptions<T> = { interval: number; onData: (data: T) => void; onError?: (error: ApiError) => void; status?: () => HTMLElement | null };
 
+/** A poll that has not answered in this long counts as offline; the next one tries again. */
+const LIVE_TIMEOUT = 15_000;
+
 /**
  * Keeps a view current by polling an ETag'd endpoint. Unchanged data costs one
  * tiny 304; polling pauses while the tab is hidden and resumes on return.
+ * One request is out at a time, so an older answer can never land after a newer
+ * one; a refresh asked for meanwhile runs as soon as the current one ends, and
+ * its promise resolves only after data fetched after the call has been applied.
  */
 export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => Promise<void>; stop: () => void } {
   let etag = "";
@@ -375,6 +381,11 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
   let settle = 0;
   let stopped = false;
   let loaded = false;
+  let sequence = 0;
+  let accepted = 0;
+  let running: Promise<void> | null = null;
+  let again = false;
+  let inFlight: AbortController | null = null;
   // The status names when this view last received changed data, not when it last asked.
   let changedAt = "";
   const setStatus = (state: "live" | "offline" | "updated") => {
@@ -390,34 +401,62 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
       settle = window.setTimeout(() => { element.dataset.state = "live"; }, 4000);
     }
   };
-  const tick = async () => {
-    window.clearTimeout(timer);
-    if (stopped) return;
+  // One request. Answers false when polling must not continue (signed out, or stopped).
+  const request = async (): Promise<boolean> => {
+    const id = ++sequence;
+    const abort = new AbortController();
+    inFlight = abort;
+    const limit = window.setTimeout(() => abort.abort(), LIVE_TIMEOUT);
     try {
-      const response = await fetch(url, { credentials: "same-origin", headers: etag ? { "if-none-match": etag } : {} });
+      const response = await fetch(url, { credentials: "same-origin", headers: etag ? { "if-none-match": etag } : {}, signal: abort.signal });
       if (response.status === 200) {
+        const data = await response.json() as T;
+        if (stopped || id <= accepted) return !stopped;
+        accepted = id;
         etag = response.headers.get("etag") ?? "";
         changedAt = formatTime(new Date().toISOString());
-        const data = await response.json() as T;
-        if (!stopped) options.onData(data);
+        options.onData(data);
         if (loaded) setStatus("updated");
         loaded = true;
       } else if (response.status !== 304) {
         const body = await response.json().catch(() => ({})) as { error?: string };
         throw new ApiError(response.status, body.error ?? "Could not refresh.");
       }
+      if (stopped) return false;
       setStatus("live");
+      return true;
     } catch (error) {
+      if (stopped) return false;
       const failure = error instanceof ApiError ? error : new ApiError(0, "Offline");
       setStatus("offline");
       options.onError?.(failure);
-      if (failure.status === 401) return;
+      return failure.status !== 401;
+    } finally {
+      window.clearTimeout(limit);
+      if (inFlight === abort) inFlight = null;
     }
+  };
+  const tick = (): Promise<void> => {
     window.clearTimeout(timer);
-    if (!stopped && document.visibilityState === "visible") timer = window.setTimeout(tick, options.interval);
+    if (stopped) return Promise.resolve();
+    if (running) { again = true; return running; }
+    running = (async () => {
+      let polling = true;
+      do { again = false; polling = await request(); } while (again && polling && !stopped);
+      running = null;
+      window.clearTimeout(timer);
+      if (polling && !stopped && document.visibilityState === "visible") timer = window.setTimeout(tick, options.interval);
+    })();
+    return running;
   };
   const resume = () => { if (document.visibilityState === "visible") void tick(); };
-  const stop = () => { stopped = true; window.clearTimeout(timer); window.clearTimeout(settle); document.removeEventListener("visibilitychange", resume); };
+  const stop = () => {
+    stopped = true;
+    inFlight?.abort();
+    window.clearTimeout(timer);
+    window.clearTimeout(settle);
+    document.removeEventListener("visibilitychange", resume);
+  };
   document.addEventListener("visibilitychange", resume);
   onLeave(stop);
   void tick();
