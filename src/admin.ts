@@ -1,4 +1,5 @@
-import { type Role, ROLE_LABELS, type Session, loadSession, shell } from "./staff";
+import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
+import { type Role, ROLE_LABELS, type Session, adminTabs, loadSession, shell } from "./staff";
 import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, plural, setMessage, sheet as createSheet, sheetContent, toast } from "./ui";
 
 type Row = { id: string; username: string; displayName: string; role: Role; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number };
@@ -53,6 +54,7 @@ export async function administration(): Promise<void> {
       <div><h1>Administration</h1><p>${session.role === "OWNER" ? "Owners manage every account, role and recovery setting." : "Administrators manage staff accounts. Owner and administrator accounts are managed by an owner."}</p></div>
       <div class="page-header__actions"><button class="button button--primary" type="button" id="new-account">${icon("plus")}New account</button></div>
     </header>
+    ${adminTabs("accounts")}
     <section aria-labelledby="accounts-title">
       <h2 id="accounts-title" class="visually-hidden">Accounts</h2>
       <div id="accounts"><div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 4 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span></div>`)}</div></div>
@@ -269,7 +271,8 @@ export async function myAccount(): Promise<void> {
   document.title = "My account · Staff workspace";
   const recovery = session.recovery;
   shell(session, "account", html`
-    <header class="page-header"><div><h1>My account</h1><p>${session.displayName} · <span class="mono">${session.username}</span> · ${ROLE_LABELS[session.role]}</p></div></header>
+    <header class="page-header"><div><h1>My account</h1><p>${session.displayName} · <span class="mono">${session.username}</span> · ${ROLE_LABELS[session.role]}</p>
+      ${session.directory ? html`<p>Staff Directory: ${session.directory.name}${session.directory.position ? `, ${session.directory.position}` : ""} · ${DEPARTMENTS[session.directory.department as DepartmentCode] ?? session.directory.department}</p>` : ""}</div></header>
     ${session.mustChangePassword ? html`<div class="callout callout--action" role="alert">${icon("alert")}<p><strong>Choose your own password to continue.</strong> Your current password was set by an administrator; the rest of the workspace opens once you replace it.</p></div>` : ""}
     <div class="panels">
       <form class="panel form" id="password-form" novalidate>
