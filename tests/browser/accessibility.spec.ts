@@ -87,6 +87,7 @@ test.describe("Staff Directory", () => {
       const json = (body: unknown) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
       if (url.pathname === "/api/staff/admin/directory") return json({ people });
       if (url.pathname.endsWith("/accounts")) return json({ accounts: [] });
+      if (url.pathname.endsWith("/access")) return json({ account: null, suggestedUsername: "ana.santos" });
       if (url.pathname.endsWith("/usage")) return json({ usage: [{ id: "MOV-1", at: "2026-09-30T02:00:00.000Z", itemId: "ITM-0001", itemName: "Sample Item", category: "SCHOOL SUPPLIES", stockArea: "Inventory", unit: "piece", quantity: 2, kind: "TAKE", purpose: "INDIVIDUAL", phone: 1, matchedBy: "STUDENT_ID" }], truncated: false });
       if (url.pathname.endsWith("/loans")) return json({ loans: [] });
       if (url.pathname.endsWith("/activity")) return json({ linked: false, events: [], nextCursor: null });

@@ -16,7 +16,7 @@ async function mock(page: Page, size = { width: 856, height: 540 }) {
   await page.route("**/api/staff/admin/directory**", (route) => {
     const url = new URL(route.request().url());
     if (/\/id\/(front|back)$/.test(url.pathname)) return route.fulfill({ contentType: "image/png", body: pixel });
-    const body = url.pathname === "/api/staff/admin/directory" ? { people: [person] } : url.pathname.endsWith("/accounts") ? { accounts: [] } : { person, card, history: [] };
+    const body = url.pathname === "/api/staff/admin/directory" ? { people: [person] } : url.pathname.endsWith("/accounts") ? { accounts: [] } : url.pathname.endsWith("/access") ? { account: null, suggestedUsername: "ana.santos" } : { person, card, history: [] };
     return route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
   });
 }
