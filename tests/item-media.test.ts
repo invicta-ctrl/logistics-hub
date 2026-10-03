@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { cleanJpeg } from "../src/item-media";
 import { hashPassword } from "../src/session";
@@ -351,9 +351,16 @@ describe("privacy and history", () => {
     }
   });
 
+  // Activity breaks time ties on a random audit id, so three changes made in the same millisecond (easy in an in-memory
+  // database) came back in any order about half the time. Each change is given its own millisecond, deterministically.
+  afterEach(() => { vi.useRealTimers(); });
   it("reads each change as a sentence in Activity", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date());
     const id = await add();
+    vi.advanceTimersByTime(10);
     const replaced = (await (await put(id)).json() as { photo: { id: string } }).photo.id;
+    vi.advanceTimersByTime(10);
     await remove(replaced);
     const feed = await (await staff("/api/staff/activity?source=CATALOG")).json() as { events: Array<{ type: string; summary: string }> };
     const name = (sqlite.prepare("SELECT name FROM items WHERE id = ?").get(ITEM) as { name: string }).name;
