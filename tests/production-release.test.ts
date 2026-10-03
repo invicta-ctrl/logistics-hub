@@ -264,7 +264,9 @@ describe("it refuses before touching Cloudflare", () => {
   it("accepts the repository's real wrangler.jsonc, whose comment warns against the old resources", async () => {
     const real = fs.readFileSync("wrangler.jsonc", "utf8");
     expect(real).toContain("hau-usc-logistics-production");
-    const withBinding = real.includes("CATALOG_MEDIA") ? real : real.replace('{ "binding": "EVIDENCE", "bucket_name": "logistics-hub-evidence" }', '{ "binding": "EVIDENCE", "bucket_name": "logistics-hub-evidence" },\n    { "binding": "CATALOG_MEDIA", "bucket_name": "logistics-hub-catalog-media" }');
+    // This suite pins the V1.2 manifest; the V1.3 staff-ID bucket that came after it is checked against its own manifest (tests/staff-directory.test.ts).
+    const v12 = real.replace(/,\s*\/\/ Official USC ID scans[^\n]*\n\s*\{ "binding": "STAFF_IDS"[^}]*\}/, "");
+    const withBinding = v12.includes("CATALOG_MEDIA") ? v12 : v12.replace('{ "binding": "EVIDENCE", "bucket_name": "logistics-hub-evidence" }', '{ "binding": "EVIDENCE", "bucket_name": "logistics-hub-evidence" },\n    { "binding": "CATALOG_MEDIA", "bucket_name": "logistics-hub-catalog-media" }');
     expect(withBinding).toContain("CATALOG_MEDIA");
     const result = await run({ release: makeRelease({ wrangler: withBinding }) });
     expect(result.report.result, JSON.stringify(result.report.stopped)).toBe("READY_TO_MERGE");
