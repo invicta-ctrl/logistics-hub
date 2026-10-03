@@ -1,0 +1,13 @@
+{
+  "coldLoadToFirstRowMs": 282,
+  "sectionSwitchMs": 72,
+  "staffDirectory": {
+    "importAllPairsMs": 864,
+    "viewerOpenMs_desktop": 57,
+    "flipMs_desktop": 105,
+    "viewerOpenMs_tablet": 72,
+    "flipMs_tablet": 106,
+    "viewerOpenMs_phone": 71,
+    "flipMs_phone": 106
+  }
+}
