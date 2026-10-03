@@ -106,7 +106,7 @@ test("a profile without a sign-in makes one in a step and shows its password onc
   let made: unknown = null;
   await page.route(`**/api/staff/admin/directory/${id(2)}/account/new`, async (route) => {
     made = route.request().postDataJSON();
-    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ accountId: "ACC-new", username: "bea.reyes", generatedPassword: "Kp7qR-x2mWd-9HtzB-c4NvY" }) });
+    await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ accountId: "ACC-new", username: "bea.reyes", generatedPassword: "sample one-time pass 1" }) });
   });
   await page.route(`**/api/staff/admin/directory/${id(2)}/access`, (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ account: null, suggestedUsername: "bea.reyes" }) }));
   await page.goto(`/staff/admin/directory?person=${id(2)}`);
@@ -114,7 +114,7 @@ test("a profile without a sign-in makes one in a step and shows its password onc
   await expect(access.getByLabel("Username")).toHaveValue("bea.reyes");
   await expect(access.getByLabel("Role").locator("option")).toHaveText(["Staff", "Administrator", "Owner"]);
   await access.getByRole("button", { name: "Create sign-in" }).click();
-  await expect(access.locator(".secret code")).toHaveText("Kp7qR-x2mWd-9HtzB-c4NvY");
+  await expect(access.locator(".secret code")).toHaveText("sample one-time pass 1");
   expect(made).toEqual({ username: "bea.reyes", role: "STAFF" });
   // The other way in stays out of sight once a sign-in was made.
   await expect(access.getByText("Or link a sign-in they already have")).toBeHidden();
@@ -125,7 +125,7 @@ test("a profile without a sign-in makes one in a step and shows its password onc
     signIns: [{ at: hour(1), until: hour(-7), state: "OPEN" }, { at: hour(30), until: hour(26), state: "ENDED" }],
     events: [{ at: hour(400), action: "ACCOUNT_CREATED", actor: "Owner Sample", details: { username: "ana.santos", role: "STAFF" } }] }) }));
   let reset = false;
-  await page.route("**/api/staff/admin/accounts/ACC-1/password", (route) => { reset = true; return route.fulfill({ contentType: "application/json", body: JSON.stringify({ generatedPassword: "Zz9aa-Bb8cc-Dd7ee-Ff6gg" }) }); });
+  await page.route("**/api/staff/admin/accounts/ACC-1/password", (route) => { reset = true; return route.fulfill({ contentType: "application/json", body: JSON.stringify({ generatedPassword: "sample one-time pass 2" }) }); });
   await page.goto(`/staff/admin/directory?person=${id(1)}`);
   await expect(access.getByText("On 2 devices")).toBeVisible();
   await expect(access.getByText("4 failed sign-ins in the last 15 minutes")).toBeVisible();
@@ -133,6 +133,6 @@ test("a profile without a sign-in makes one in a step and shows its password onc
   await expect(access.locator(".access-log").last()).toContainText("Owner Sample created ana.santos (Staff)");
   page.once("dialog", (dialog) => dialog.accept());
   await access.getByRole("button", { name: "Reset password" }).click();
-  await expect(access.locator(".secret code")).toHaveText("Zz9aa-Bb8cc-Dd7ee-Ff6gg");
+  await expect(access.locator(".secret code")).toHaveText("sample one-time pass 2");
   expect(reset).toBe(true);
 });
