@@ -1,0 +1,26 @@
+{
+  "release": "v1.4.1",
+  "title": "Smart Locations follow-up: phone reports name who sent them",
+  "branch": "road-to-v2/v1.4-smart-locations",
+  "record": "docs/road-to-v2/releases/v1.4.md",
+  "target": {
+    "worker": "logistics-hub",
+    "d1": { "binding": "DB", "name": "logistics-hub", "id": "3ffd8edf-a176-4f63-8b7c-5215d11c98d8" },
+    "r2": {
+      "existing": [{ "binding": "EVIDENCE", "name": "logistics-hub-evidence" }, { "binding": "CATALOG_MEDIA", "name": "logistics-hub-catalog-media" }, { "binding": "STAFF_IDS", "name": "logistics-hub-staff-ids" }],
+      "create": []
+    },
+    "forbidden": ["hau-usc-logistics-production", "hau-usc-logistics-staging"]
+  },
+  "migrations": {
+    "pending": [
+      { "name": "0025_location_report_reporter.sql", "sha256": "84051c031971180643bd9ce112c40396de38f3d265366e70ad4051c37cef8c5f" }
+    ]
+  },
+  "expect": {
+    "schemaAdded": [],
+    "schemaChanged": ["table:location_reports", "trigger:location_reports_resolve_only"],
+    "tableRowsAfter": {},
+    "unchanged": ["items", "movements", "onHand", "loans", "phoneEvents"]
+  }
+}

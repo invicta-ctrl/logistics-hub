@@ -150,7 +150,7 @@ export async function itemDetail(db: D1Database, id: string) {
       (SELECT COUNT(*) FROM inventory_movements WHERE item_id = ?1 AND related_entity_type = 'OPEN_UNIT' AND status = 'POSTED') AS unitsEmptied`).bind(id),
     // Open reports first, then the most recent closed ones: attention signals that never change stock or the item's place.
     db.prepare(`SELECT r.id, r.kind, r.source, r.note, r.created_at AS createdAt, r.resolved_at AS resolvedAt, r.resolution_note AS resolutionNote, lp.path AS location,
-        CASE r.source WHEN 'SELF_SERVICE' THEN 'Self-Service' ELSE a.display_name END AS reportedBy, x.display_name AS resolvedBy
+        CASE r.source WHEN 'SELF_SERVICE' THEN r.reporter_name ELSE a.display_name END AS reportedBy, x.display_name AS resolvedBy
       FROM location_reports r LEFT JOIN staff_accounts a ON a.id = r.reported_by LEFT JOIN staff_accounts x ON x.id = r.resolved_by LEFT JOIN location_paths lp ON lp.id = r.location_id
       WHERE r.item_id = ? ORDER BY r.resolved_at IS NOT NULL, r.created_at DESC, r.id LIMIT 20`).bind(id)
   ]);
