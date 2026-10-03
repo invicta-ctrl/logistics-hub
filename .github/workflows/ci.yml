@@ -1,5 +1,6 @@
 # The local gates every slice already runs, repeated on GitHub so a red change is visible before it
-# reaches main (Workers Builds deploys every push to main; this check does not block it by itself).
+# reaches main. While Workers Builds deploys every push to main, this check does not block a deploy by itself;
+# deploy.yml, once Earl switches it on, deploys only a commit whose run of this workflow passed.
 name: CI
 
 on:
