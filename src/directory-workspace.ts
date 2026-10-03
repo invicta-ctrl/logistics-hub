@@ -1,5 +1,6 @@
 import { DEPARTMENTS, DEPARTMENT_CODES, type DepartmentCode } from "./directory-policy";
 import { type Loan, loanRow, openReturn } from "./loan-form";
+import { tiltTile } from "./card-motion";
 import { type Card, cardForm, cardSource, forgetScans, importArchive, openIdViewer, scan } from "./staff-ids";
 import { ROLE_LABELS, type Role, type Session, adminTabs, initials, loadSession, shell } from "./staff";
 import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
@@ -324,10 +325,7 @@ export async function staffDirectory(): Promise<void> {
       });
       return;
     }
-    const tile = (side: "front" | "back") => {
-      const dims = card[side];
-      return html`<figure class="id-tile"><button type="button" class="id-tile__button" data-open="${side}" style="--ratio: ${dims.width / dims.height}" aria-label="Open the ${side} of the USC ID large"><img alt="" data-scan="${side}" /></button><figcaption>${side === "front" ? "Front" : "Back"}</figcaption></figure>`;
-    };
+    const tile = (side: "front" | "back") => html`<figure class="id-tile"><button type="button" class="id-tile__button" data-open="${side}" aria-label="Open the ${side} of the USC ID large"><img alt="" data-scan="${side}" /></button><figcaption>${side === "front" ? "Front" : "Back"}</figcaption></figure>`;
     mount(host, html`<div class="person-sections person-sections--split">
       <section class="panel" aria-labelledby="card-title"><h2 class="panel__title" id="card-title">Official USC ID</h2>
         <div class="id-pair">${tile("front")}${tile("back")}</div>
@@ -339,14 +337,18 @@ export async function staffDirectory(): Promise<void> {
         <p class="field__hint">Every opening of this card by an administrator or owner is recorded, once per person every ten minutes.</p>
         ${views.length ? html`<ul class="access-log">${views.map((entry) => html`<li><strong>${entry.actor ?? "Someone"}</strong> <time datetime="${entry.at}">${formatDateTime(entry.at)}</time></li>`)}</ul>` : html`<p class="muted">Opened for the first time now.</p>`}
       </section></div>`);
+    const tileOf = (side: "front" | "back") => host.querySelector<HTMLElement>(`[data-open="${side}"]`);
     for (const side of ["front", "back"] as const) {
+      // Set through the CSSOM: the Content-Security-Policy (style-src 'self') drops inline style attributes.
+      tileOf(side)!.style.setProperty("--ratio", String(card[side].width / card[side].height));
+      tiltTile(tileOf(side)!);
       const image = host.querySelector<HTMLImageElement>(`[data-scan="${side}"]`)!;
       void scan(person.id, card.mediaId, side).then((url) => { image.src = url; }, (error: unknown) => { image.closest("figure")!.append(Object.assign(document.createElement("p"), { className: "form-alert", textContent: failure(error) })); });
     }
     host.addEventListener("click", (event) => {
       const target = event.target as HTMLElement;
       const open = target.closest<HTMLElement>("[data-open]");
-      if (open) void openIdViewer(person, card, open.dataset.open as "front" | "back");
+      if (open) void openIdViewer(person, card, open.dataset.open as "front" | "back", tileOf);
       if (target.closest("[data-replace]")) {
         host.querySelector<HTMLElement>("[data-owner-actions]")!.hidden = true;
         cardForm(host.querySelector<HTMLElement>("[data-card-form]")!, person, card.mediaId, reload, () => { void reload(); });
