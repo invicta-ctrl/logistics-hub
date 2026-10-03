@@ -82,12 +82,12 @@ describe("R2: a recovery key works once", () => {
     const { d1, sqlite } = migratedD1();
     seedAccounts(sqlite, [["O1", "OWNER"]]);
     const { recoveryKey } = await rotateRecoveryKey(d1, owner("O1"));
-    const results = await Promise.allSettled([recoverOwner(d1, { recoveryKey, newPassword: "first-password-123" }), recoverOwner(d1, { recoveryKey, newPassword: "second-password-456" })]);
+    const results = await Promise.allSettled([recoverOwner(d1, { recoveryKey, newPassword: "first pass 12345" }), recoverOwner(d1, { recoveryKey, newPassword: "second pass 45678" })]);
     expect(results.map((result) => result.status).sort()).toEqual(["fulfilled", "rejected"]);
     expect((results.find((result) => result.status === "rejected") as PromiseRejectedResult).reason).toMatchObject({ status: 401 });
     expect(used(sqlite)).toBe(1);
-    const winner = results[0]!.status === "fulfilled" ? "first-password-123" : "second-password-456";
-    const loser = winner === "first-password-123" ? "second-password-456" : "first-password-123";
+    const winner = results[0]!.status === "fulfilled" ? "first pass 12345" : "second pass 45678";
+    const loser = winner === "first pass 12345" ? "second pass 45678" : "first pass 12345";
     expect(await verifyPassword(winner, passwordOf(sqlite, "O1"))).toBe(true);
     expect(await verifyPassword(loser, passwordOf(sqlite, "O1"))).toBe(false);
     expect(count(sqlite, "SELECT COUNT(*) AS n FROM owner_recovery_keys WHERE revoked_at IS NULL")).toBe(0);
@@ -105,7 +105,7 @@ describe("R2: a recovery key works once", () => {
       const { recoveryKey } = await rotateRecoveryKey(d1, owner("O1"));
       const before = passwordOf(sqlite, "O1");
       beforeNextBatch(d1, () => rival(d1, sqlite));
-      await expect(recoverOwner(d1, { recoveryKey, newPassword: "late-password-789" })).rejects.toMatchObject({ status: 401 });
+      await expect(recoverOwner(d1, { recoveryKey, newPassword: "late pass 789012" })).rejects.toMatchObject({ status: 401 });
       expect(passwordOf(sqlite, "O1")).toBe(before);
       expect(used(sqlite)).toBe(0);
       // The rival's own effects stand; this recovery added nothing (the seeded session of O1 is untouched unless the rival ended it).
