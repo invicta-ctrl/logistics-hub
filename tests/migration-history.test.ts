@@ -41,10 +41,16 @@ const sha256 = (file: string) => createHash("sha256").update(fs.readFileSync(`mi
 describe("migration history", () => {
   const files = fs.readdirSync("migrations").sort();
 
-  it("holds only numbered SQL migrations, numbered 0001 upwards with no gap or repeat", () => {
+  it("holds only numbered SQL migrations, numbered 0001 upwards with no repeat, and no gap a release does not own", () => {
     // A repeat is what two branches each adding "the next" migration produce; renumber the later one before it merges.
     expect(files.every((file) => /^\d{4}_[a-z0-9_]+\.sql$/.test(file)), files.join(", ")).toBe(true);
-    expect(files.map((file) => Number(file.slice(0, 4)))).toEqual(files.map((_, index) => index + 1));
+    const numbers = files.map((file) => Number(file.slice(0, 4)));
+    expect(new Set(numbers).size, "repeated number").toBe(numbers.length);
+    // The one allowed gap: a number a release manifest pins whose file is still on its release branch (main had 0022
+    // while V1.3's 0021, already applied to production, waited to integrate).
+    const owned = new Set(releasePins().map(([, file]) => Number(file.slice(0, 4))));
+    const missing = Array.from({ length: Math.max(...numbers) }, (_, index) => index + 1).filter((number) => !numbers.includes(number));
+    expect(missing.filter((number) => !owned.has(number)), "numbers missing with no release that owns them").toEqual([]);
   });
 
   it("never edits a migration production has applied", () => {
