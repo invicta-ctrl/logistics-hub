@@ -601,6 +601,13 @@ describe("the manifest and the workflow", () => {
     for (const file of fs.readdirSync(".github/workflows")) {
       const text = fs.readFileSync(path.join(".github/workflows", file), "utf8");
       if (file === "production-ops.yml") continue;
+      if (file === "deploy.yml") {
+        // H8 (R9): deploys and rolls back the Worker from the production environment, and only that. It never runs on a
+        // push, never migrates, and asks D1 only through the read-only deploy gate.
+        expect(text).not.toMatch(/production-release|migrations apply|d1 (execute|export)|r2 bucket|^\s+push:/m);
+        expect(text.match(/^\s*npx wrangler .*$/gm)?.map((line) => line.trim())).toEqual(["npx wrangler deploy --dry-run", "npx wrangler deploy --message \"${message:0:100}\"", "npx wrangler rollback \"$TARGET\" --message \"${REASON:0:100}\" --yes"]);
+        continue;
+      }
       expect(text, file).not.toMatch(/production-release|migrations apply|CLOUDFLARE_API_TOKEN|environment:\s*production/);
     }
     const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
