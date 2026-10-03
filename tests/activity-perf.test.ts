@@ -51,7 +51,8 @@ describe.skipIf(!process.env.ACTIVITY_PERF)("activity performance (AC-A7)", () =
     for (const scale of TIERS) {
       const { sqlite, d1 } = migratedD1();
       sqlite.exec("PRAGMA foreign_keys = OFF");
-      sqlite.exec("DROP TRIGGER IF EXISTS inventory_movements_no_delete");
+      // A disposable fixture: lift the append-only guards (0009, 0022) only in this in-memory copy, to start from empty tables.
+      sqlite.exec("DROP TRIGGER IF EXISTS inventory_movements_no_delete; DROP TRIGGER IF EXISTS audit_log_no_delete");
       for (const table of ["inventory_movements", "audit_log", "self_service_events", "loans"]) sqlite.exec(`DELETE FROM ${table}`);
       for (const [id, role] of [["ACC-1", "STAFF"], ["ACC-2", "ADMIN"], ["ACC-3", "STAFF"], ["ACC-4", "STAFF"]] as const) {
         sqlite.prepare("INSERT OR REPLACE INTO staff_accounts(id, username, display_name, password_hash, role) VALUES(?, ?, ?, 'x', ?)").run(id, `u.${id}`, `Person ${id}`, role);
