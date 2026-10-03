@@ -1,0 +1,26 @@
+{
+  "release": "v1.3",
+  "title": "USC Staff Directory",
+  "branch": "road-to-v2/v1.3-staff-directory",
+  "record": "docs/road-to-v2/releases/v1.3.md",
+  "target": {
+    "worker": "logistics-hub",
+    "d1": { "binding": "DB", "name": "logistics-hub", "id": "3ffd8edf-a176-4f63-8b7c-5215d11c98d8" },
+    "r2": {
+      "existing": [{ "binding": "EVIDENCE", "name": "logistics-hub-evidence" }, { "binding": "CATALOG_MEDIA", "name": "logistics-hub-catalog-media" }],
+      "create": [{ "binding": "STAFF_IDS", "name": "logistics-hub-staff-ids" }]
+    },
+    "forbidden": ["hau-usc-logistics-production", "hau-usc-logistics-staging"]
+  },
+  "migrations": {
+    "pending": [{ "name": "0021_staff_directory.sql", "sha256": "2e93af63d9a0dd752d0e5c73abe7cf18e8ca6e3e13576a4b43315448a9d78125" }]
+  },
+  "expect": {
+    "schemaAdded": [
+      "index:sqlite_autoindex_staff_directory_1", "index:sqlite_autoindex_staff_directory_2", "index:sqlite_autoindex_staff_directory_3", "index:sqlite_autoindex_staff_directory_4",
+      "index:sqlite_autoindex_staff_id_cards_1", "index:sqlite_autoindex_staff_id_cards_2", "table:staff_directory", "table:staff_id_cards"
+    ],
+    "tableRowsAfter": { "staff_directory": 0, "staff_id_cards": 0 },
+    "unchanged": ["items", "movements", "onHand", "loans", "phoneEvents"]
+  }
+}
