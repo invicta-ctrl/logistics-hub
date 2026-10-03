@@ -1,9 +1,9 @@
-import { type AccountEvent, assignable, bindCopy, eventText, oneTime, roleTag } from "./account-ui";
+import { ACCESS_HINT, type AccountEvent, accessChoices, accessTag, bindCopy, eventText, oneTime } from "./account-ui";
 import { DEPARTMENTS, DEPARTMENT_CODES, type DepartmentCode } from "./directory-policy";
 import { type Loan, loanRow, openReturn } from "./loan-form";
 import { tiltTile } from "./card-motion";
 import { type Card, type View, cardForm, cardSource, forgetScans, importArchive, makeMissingImages, openCard, scan } from "./staff-ids";
-import { ROLE_LABELS, type Role, type Session, adminTabs, initials, loadSession, shell } from "./staff";
+import { type Access, type Role, type Session, accessLabel, adminTabs, initials, loadSession, shell } from "./staff";
 import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 /*
@@ -17,18 +17,18 @@ import { type Html, api, categoryName, emptyState, failure, formatDate, formatDa
 
 type Person = {
   id: string; name: string; department: string; position: string | null; officer: boolean; studentId: string | null; active: boolean; sourceKey: string | null;
-  createdAt: string; updatedAt: string; hasId: boolean; account: { id: string; username: string; displayName: string; role: Role; active: boolean; lastLoginAt: string | null } | null;
+  createdAt: string; updatedAt: string; hasId: boolean; account: { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; lastLoginAt: string | null } | null;
 };
 type SignIn = { at: string; until: string; state: "OPEN" | "ENDED" | "EXPIRED" };
-type Access = { account: null; suggestedUsername: string } | {
-  account: { id: string; username: string; displayName: string; role: Role; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number; failedAttempts?: number };
+type AccessInfo = { account: null; suggestedUsername: string } | {
+  account: { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number; failedAttempts?: number };
   signIns: SignIn[] | null; events: AccountEvent[] | null; self: boolean; manageable: boolean;
 };
 type Entry = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
 type Detail = { person: Person; card: Card | null; history: Entry[] };
 type Usage = { id: string; at: string; itemId: string; itemName: string; category: string; stockArea: string; unit: string; quantity: number; kind: "LOAN" | "TAKE"; purpose: string | null; phone: number; matchedBy: "STUDENT_ID" | "NAME" };
 type ActivityEvent = { id: string; at: string | null; title: string; summary: string };
-type Linkable = { id: string; username: string; displayName: string; role: Role; active: boolean; personId: string | null; personName: string | null };
+type Linkable = { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; personId: string | null; personName: string | null };
 type Tab = "profile" | "id" | "usage" | "loans" | "activity";
 
 const TABS: Array<[Tab, string]> = [["profile", "Profile"], ["id", "USC ID"], ["usage", "Usage"], ["loans", "Loans"], ["activity", "Activity"]];
@@ -216,7 +216,7 @@ export async function staffDirectory(): Promise<void> {
         ${person.officer ? html`<span class="person-card__badge">Officer</span>` : ""}</div>
       <dl class="person-card__facts">
         ${fact("Student no.", person.studentId ? html`<span class="mono">${person.studentId}</span>` : html`<span class="muted">Not set</span>`)}
-        ${fact("Sign-in", person.account ? html`<span class="mono">${person.account.username}</span> · ${ROLE_LABELS[person.account.role]}<br />${!person.account.active ? html`<span class="person-card__mark person-card__mark--bad">Disabled</span>` : person.account.lastLoginAt ? html`<span class="muted">Last in ${formatDateTime(person.account.lastLoginAt)}</span>` : html`<span class="muted">Never signed in</span>`}` : html`<span class="muted">Not linked</span>`)}
+        ${fact("Sign-in", person.account ? html`<span class="mono">${person.account.username}</span> · ${accessLabel(person.account.access)}<br />${!person.account.active ? html`<span class="person-card__mark person-card__mark--bad">Disabled</span>` : person.account.lastLoginAt ? html`<span class="muted">Last in ${formatDateTime(person.account.lastLoginAt)}</span>` : html`<span class="muted">Never signed in</span>`}` : html`<span class="muted">Not linked</span>`)}
         ${fact("USC ID", person.hasId ? "On file: see Profile" : html`<span class="muted">Not on file</span>`)}
         ${fact("Status", person.active ? "Active" : html`<span class="person-card__mark person-card__mark--bad">Inactive</span>`)}
       </dl>
@@ -403,14 +403,14 @@ export async function staffDirectory(): Promise<void> {
    */
   async function accessSection(host: HTMLElement, person: Person, reload: () => Promise<void>): Promise<void> {
     mount(host, html`<p class="muted">Loading…</p>`);
-    let access: Access;
-    try { access = await api<Access>(`/api/staff/admin/directory/${person.id}/access`); } catch (error) { mount(host, html`<p class="form-alert" role="alert">${icon("alert")}<span>${failure(error)}</span></p>`); return; }
+    let access: AccessInfo;
+    try { access = await api<AccessInfo>(`/api/staff/admin/directory/${person.id}/access`); } catch (error) { mount(host, html`<p class="form-alert" role="alert">${icon("alert")}<span>${failure(error)}</span></p>`); return; }
     bindCopy(host);
     if (!access.account) { createSection(host, person, access.suggestedUsername, reload); return; }
     const { account, signIns, events, manageable, self } = access;
     const mayUnlink = owner || account.role === "STAFF" || self;
     const ended = (entry: SignIn) => entry.state === "OPEN" ? html`signed in now, until ${formatTime(entry.until)}` : entry.state === "EXPIRED" ? html`expired ${formatDateTime(entry.until)}` : html`ended ${formatDateTime(entry.until)} (signed out, or ended by a password reset or sign-out everywhere)`;
-    mount(host, html`<p class="link-card">${icon("user")}<span><strong>${account.displayName}</strong> <span class="mono">${account.username}</span></span>${roleTag(account.role)}</p>
+    mount(host, html`<p class="link-card">${icon("user")}<span><strong>${account.displayName}</strong> <span class="mono">${account.username}</span></span>${accessTag(account.access)}</p>
       <p class="tags">${account.active ? html`<span class="tag tag--ok">Can sign in</span>` : html`<span class="tag tag--bad">Disabled</span>`}${account.mustChangePassword ? html`<span class="tag tag--warn">Must set a password</span>` : ""}</p>
       <dl class="access-facts">
         <div><dt>Last sign-in</dt><dd>${account.lastLoginAt ? html`<time datetime="${account.lastLoginAt}">${formatDateTime(account.lastLoginAt)}</time>` : html`<span class="muted">Never</span>`}</dd></div>
@@ -461,15 +461,17 @@ export async function staffDirectory(): Promise<void> {
 
   /** No sign-in yet: one made for them in a step, or one they already have, linked by hand. */
   function createSection(host: HTMLElement, person: Person, suggested: string, reload: () => Promise<void>): void {
-    const roles = assignable(session!);
+    // The role follows their department by default: their department's staff, or Officer for an officer outside Logistics.
+    const choices = accessChoices(session!);
+    const byDepartment: Access = person.department === "DoL" ? "DoL" : person.officer ? "OFFICER" : choices.includes(person.department as Access) ? person.department as Access : "OFFICER";
     mount(host, html`<form class="form" data-create novalidate>
         <p class="field__hint">${person.name} has no sign-in yet. Make one here: it is linked to this profile at once.</p>
         <div class="field-grid">
           <div class="field"><label for="new-username">Username</label><input id="new-username" name="username" value="${suggested}" required maxlength="64" autocapitalize="none" spellcheck="false" autocomplete="off" aria-describedby="new-username-hint" />
             <p class="field__hint" id="new-username-hint">What they type to sign in.</p></div>
-          <div class="field"><label for="new-role">Role</label><select id="new-role" name="role">${roles.map((role) => html`<option value="${role}">${ROLE_LABELS[role]}</option>`)}</select></div>
+          <div class="field"><label for="new-role">Role</label><select id="new-role" name="access" aria-describedby="new-role-hint">${choices.map((access) => html`<option value="${access}" ${access === byDepartment ? html`selected` : ""}>${accessLabel(access)}</option>`)}</select></div>
         </div>
-        <p class="field__hint">A password is made for them and shown once. They choose their own at first sign-in.</p>
+        <p class="field__hint" id="new-role-hint">${ACCESS_HINT} A password is made for them and shown once; they choose their own at first sign-in.</p>
         <div class="form-alert" role="alert" hidden data-alert></div>
         <div class="form-actions form-actions--start"><button class="button button--primary button--sm" type="submit">${icon("plus")}Create sign-in</button></div>
       </form>
@@ -482,7 +484,7 @@ export async function staffDirectory(): Promise<void> {
       const button = form.querySelector<HTMLButtonElement>("[type=submit]")!;
       button.disabled = true;
       try {
-        const made = await api<{ username: string; generatedPassword: string }>(`/api/staff/admin/directory/${person.id}/account/new`, { method: "POST", body: JSON.stringify({ username: values.get("username"), role: values.get("role") }) });
+        const made = await api<{ username: string; generatedPassword: string }>(`/api/staff/admin/directory/${person.id}/account/new`, { method: "POST", body: JSON.stringify({ username: values.get("username"), access: values.get("access") }) });
         form.hidden = true;
         host.querySelector<HTMLElement>(".link-existing")!.hidden = true;
         mount(host.querySelector("[data-made]")!, html`${oneTime(`Sign-in for ${person.name}: ${made.username}`, made.generatedPassword, "Shown once and never stored. Give the username and this password to them privately; they choose their own password at first sign-in.")}
@@ -503,7 +505,7 @@ export async function staffDirectory(): Promise<void> {
     const free = accounts.filter((account) => !account.personId && account.active);
     mount(host, html`<form class="link-form" novalidate>
       <p class="field__hint">Link only after confirming the sign-in belongs to ${person.name}; nothing is linked automatically.</p>
-      ${free.length ? html`<div class="field"><label for="link-account">Sign-in</label><select id="link-account" name="accountId"><option value="">Choose a sign-in…</option>${free.map((account) => html`<option value="${account.id}">${account.displayName} (${account.username}) · ${ROLE_LABELS[account.role]}</option>`)}</select></div>
+      ${free.length ? html`<div class="field"><label for="link-account">Sign-in</label><select id="link-account" name="accountId"><option value="">Choose a sign-in…</option>${free.map((account) => html`<option value="${account.id}">${account.displayName} (${account.username}) · ${accessLabel(account.access)}</option>`)}</select></div>
         <div class="form-alert" role="alert" hidden data-alert></div>
         <div class="form-actions form-actions--start"><button class="button button--secondary button--sm" type="submit">Link sign-in</button></div>`
         : html`<p class="muted">Every sign-in you may link is already linked to someone.</p>`}</form>`);
