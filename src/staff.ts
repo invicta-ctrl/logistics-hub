@@ -52,7 +52,11 @@ const FIELD_LABELS: Record<string, string> = {
 const LENDING_FIELDS = ["lendingAudience", "defaultLoanDays", "maximumLoanQty"];
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
-export type Session = { id: string; username: string; displayName: string; role: Role; mustChangePassword: boolean; recovery: { configured: boolean; createdAt: string | null } | null; selfServiceReviews: number; selfServiceClosed: boolean };
+export type Session = {
+  id: string; username: string; displayName: string; role: Role; mustChangePassword: boolean; recovery: { configured: boolean; createdAt: string | null } | null; selfServiceReviews: number; selfServiceClosed: boolean;
+  /** The Staff Directory entry linked to this sign-in, if an administrator linked one. */
+  directory: { name: string; department: string; position: string | null } | null;
+};
 type Section = "items" | "stock" | "loans" | "self-service" | "activity" | "admin" | "account";
 
 export const ROLE_LABELS: Record<Role, string> = { STAFF: "Staff", ADMIN: "Administrator", OWNER: "Owner" };
@@ -66,6 +70,12 @@ const SECTIONS: ReadonlyArray<{ id: Section; href: string; text: string; icon: I
   { id: "activity", href: "/staff/activity", text: "Activity", icon: "clock", more: true },
   { id: "admin", href: "/staff/admin", text: "Administration", icon: "shield", more: true }
 ];
+
+/** The two pages of Administration, one link each; both belong to the Administration section of the shell. */
+export function adminTabs(current: "accounts" | "directory"): Html {
+  const link = (id: typeof current, href: string, text: string) => html`<a class="subnav__link" href="${href}" data-route ${id === current ? html`aria-current="page"` : ""}>${text}</a>`;
+  return html`<nav class="subnav" aria-label="Administration">${link("accounts", "/staff/admin", "Accounts & settings")}${link("directory", "/staff/admin/directory", "Staff Directory")}</nav>`;
+}
 
 /** Loads the signed-in account, or routes to sign-in / the forced password change. */
 export async function loadSession(section: Section): Promise<Session | null> {
@@ -228,7 +238,7 @@ function tags(item: Item): Html {
   return html`<span class="tags">${list}</span>`;
 }
 
-function initials(name: string): string {
+export function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join("");
 }
 
