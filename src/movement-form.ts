@@ -37,9 +37,9 @@ const MAX = 100_000;
 export function quantityEditor(prefix: string): Html {
   return html`<div class="qty-editor">
       <div class="qty-editor__row">
-        <button type="button" class="qty-editor__step" data-step="-1" aria-label="One less">−</button>
+        <button type="button" class="qty-editor__step" data-step="-1" aria-label="One less">${icon("minus")}</button>
         <input class="qty-editor__input" id="${prefix}-total" name="total" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Quantity on hand" aria-describedby="${prefix}-change" disabled />
-        <button type="button" class="qty-editor__step" data-step="1" aria-label="One more">+</button>
+        <button type="button" class="qty-editor__step" data-step="1" aria-label="One more">${icon("plus")}</button>
         <span class="qty-editor__unit" data-unit></span>
       </div>
       <p class="qty-editor__change" id="${prefix}-change" aria-live="polite" data-change></p>
