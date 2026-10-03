@@ -43,7 +43,9 @@ export function loadManifest(file, release) {
     && Array.isArray(manifest.target?.forbidden) && manifest.target.forbidden.length > 0
     && Array.isArray(manifest.migrations?.pending) && manifest.migrations.pending.every((entry) => /^\d{4}_[a-z0-9_]+\.sql$/.test(entry.name ?? "") && /^[0-9a-f]{64}$/.test(entry.sha256 ?? ""))
     && Array.isArray(manifest.expect?.schemaAdded) && Array.isArray(manifest.expect?.unchanged) && manifest.expect.unchanged.every((key) => COUNT_KEYS.includes(key))
-    && manifest.expect?.tableRowsAfter && typeof manifest.expect.tableRowsAfter === "object" && Object.keys(manifest.expect.tableRowsAfter).every((table) => /^[a-z_]+$/.test(table));
+    && manifest.expect?.tableRowsAfter && typeof manifest.expect.tableRowsAfter === "object" && Object.keys(manifest.expect.tableRowsAfter).every((table) => /^[a-z_]+$/.test(table))
+    && (manifest.expect.schemaChanged === undefined || (Array.isArray(manifest.expect.schemaChanged) && manifest.expect.schemaChanged.every((key) => /^(table|view|index|trigger):[a-z_0-9]+$/.test(key))))
+    && (manifest.expect.derived === undefined || (Array.isArray(manifest.expect.derived) && manifest.expect.derived.every((entry) => text(entry.label) && Object.hasOwn(QUERIES.derived, entry.before) && Object.hasOwn(QUERIES.derived, entry.after))));
   if (!valid) throw new Stop("PRECHECK", "BAD_MANIFEST", `The manifest ${file} is incomplete or does not belong to ${release}.`);
   return manifest;
 }
@@ -173,13 +175,20 @@ export const QUERIES = Object.freeze({
   migrations: "SELECT name FROM d1_migrations ORDER BY id",
   schema: "SELECT type, name, sql FROM sqlite_master ORDER BY type, name",
   counts: "SELECT (SELECT COUNT(*) FROM items) AS items, (SELECT COUNT(*) FROM inventory_movements) AS movements, (SELECT COALESCE(SUM(on_hand), 0) FROM inventory_balances) AS onHand, (SELECT COUNT(*) FROM loans) AS loans, (SELECT COUNT(*) FROM self_service_events) AS phoneEvents",
-  rows: (table) => { if (!/^[a-z_]+$/.test(table)) throw new Error("bad table"); return `SELECT COUNT(*) AS n FROM ${table}`; }
+  rows: (table) => { if (!/^[a-z_]+$/.test(table)) throw new Error("bad table"); return `SELECT COUNT(*) AS n FROM ${table}`; },
+  // Figures a manifest compares before and after (expect.derived), for a migration whose result follows from the data it finds.
+  derived: Object.freeze({
+    typedPlaces: "SELECT COUNT(*) AS n FROM (SELECT trim(storage_location) FROM items WHERE storage_location IS NOT NULL AND trim(storage_location) <> '' GROUP BY trim(storage_location))",
+    typedItems: "SELECT COUNT(*) AS n FROM items WHERE storage_location IS NOT NULL AND trim(storage_location) <> ''",
+    placeRows: "SELECT COUNT(*) AS n FROM locations",
+    placedItems: "SELECT COUNT(*) AS n FROM items WHERE location_id IS NOT NULL"
+  })
 });
 
 /** The command allowlist. `args` is a wrangler argument vector; anything not listed here is refused before it runs. */
 export function allowed(args, manifest, mayChange) {
   const create = new Set(manifest.target.r2.create.map((bucket) => bucket.name));
-  const fixed = new Set([QUERIES.migrations, QUERIES.schema, QUERIES.counts, ...Object.keys(manifest.expect.tableRowsAfter).map((table) => QUERIES.rows(table))]);
+  const fixed = new Set([QUERIES.migrations, QUERIES.schema, QUERIES.counts, ...Object.keys(manifest.expect.tableRowsAfter).map((table) => QUERIES.rows(table)), ...(manifest.expect.derived ?? []).flatMap((entry) => [QUERIES.derived[entry.before], QUERIES.derived[entry.after]])]);
   const [a, b, c, d] = args;
   const d1 = manifest.target.d1.binding;
   for (const name of manifest.target.forbidden) if (args.some((arg) => String(arg).includes(name))) return false;
@@ -315,8 +324,11 @@ export async function runRelease({ manifest, releaseDir, expectedSha, mode, conf
     for (const bucket of create) {
       if (namesBefore.includes(bucket.name)) throw new Stop("PRECHECK", "BUCKET_EXISTS", `The bucket ${bucket.name} already exists; this release creates it, so something already ran. Nothing was changed. Decide by hand what that bucket is before going on.`);
     }
+    // What the migration will find, counted before it runs (read-only), so a preflight already says what to expect.
+    const derivedBefore = async (stepName) => Object.fromEntries(await Promise.all((manifest.expect.derived ?? []).map(async (entry) => [entry.label, (await cloud.rows(QUERIES.derived[entry.before], stepName))[0]?.n])));
+    const expectedDerived = await derivedBefore("PRECHECK");
     const listed = (names) => ({ total: names.length, manifestBuckets: names.filter((name) => [...existing, ...create].some((bucket) => bucket.name === name)) });
-    report.before = { migrations: before.migrations.length, pendingMigrations: pending, counts: before.counts, buckets: listed(namesBefore) };
+    report.before = { migrations: before.migrations.length, pendingMigrations: pending, counts: before.counts, ...(manifest.expect.derived ? { derived: expectedDerived } : {}), buckets: listed(namesBefore) };
     step("PRECHECK", "ok", { check: "production state", appliedMigrations: before.migrations.length, pending, absentBuckets: create.map((bucket) => bucket.name), existingBuckets: existing.map((bucket) => bucket.name) });
     if (mode === "preflight") { report.result = "PREFLIGHT_OK"; return report; }
 
@@ -344,8 +356,9 @@ export async function runRelease({ manifest, releaseDir, expectedSha, mode, conf
 
     const baseline = await snapshot(cloud, "BASELINE");
     if (!same(baseline.migrations, before.migrations) || !same(baseline.schema, before.schema)) throw new Stop("BASELINE", "STATE_MOVED", "Production's schema or migrations changed during the preflight. Nothing was changed; run again.");
-    report.baseline = { counts: baseline.counts };
-    step("BASELINE", "ok", { counts: baseline.counts });
+    const derivedBaseline = await derivedBefore("BASELINE");
+    report.baseline = { counts: baseline.counts, ...(manifest.expect.derived ? { derived: derivedBaseline } : {}) };
+    step("BASELINE", "ok", { counts: baseline.counts, ...(manifest.expect.derived ? { derived: derivedBaseline } : {}) });
 
     for (const bucket of create) {
       report.operations.push({ at: now().toISOString(), operation: `r2 bucket create ${bucket.name}` });
@@ -369,11 +382,18 @@ export async function runRelease({ manifest, releaseDir, expectedSha, mode, conf
     const problems = [];
     if (!same(after.migrations, [...before.migrations, ...pending])) problems.push(`applied migrations are [${after.migrations.slice(-3).join(", ")}], expected the old list plus ${pending.join(", ")}`);
     const schema = diff(baseline.schema, after.schema);
-    if (!same(schema.added, [...manifest.expect.schemaAdded].sort()) || schema.removed.length || schema.changed.length) problems.push(`schema difference is +[${schema.added}] -[${schema.removed}] ~[${schema.changed}], expected only +[${manifest.expect.schemaAdded}]`);
+    // A column added to an existing table changes that table's definition; a manifest names each such table (expect.schemaChanged).
+    const changedWanted = [...(manifest.expect.schemaChanged ?? [])].sort();
+    if (!same(schema.added, [...manifest.expect.schemaAdded].sort()) || schema.removed.length || !same(schema.changed, changedWanted)) problems.push(`schema difference is +[${schema.added}] -[${schema.removed}] ~[${schema.changed}], expected only +[${manifest.expect.schemaAdded}]${changedWanted.length ? ` and ~[${changedWanted}]` : ""}`);
     for (const key of manifest.expect.unchanged) if (after.counts[key] !== baseline.counts[key]) problems.push(`${key} changed from ${baseline.counts[key]} to ${after.counts[key]}`);
     for (const [table, expected] of Object.entries(manifest.expect.tableRowsAfter)) {
       const [row] = await cloud.rows(QUERIES.rows(table), "RECONCILE");
       if (row?.n !== expected) problems.push(`${table} has ${row?.n} rows, expected ${expected}`);
+    }
+    const derivedAfter = {};
+    for (const entry of manifest.expect.derived ?? []) {
+      derivedAfter[entry.label] = (await cloud.rows(QUERIES.derived[entry.after], "RECONCILE"))[0]?.n;
+      if (derivedAfter[entry.label] !== derivedBaseline[entry.label]) problems.push(`${entry.label}: ${derivedAfter[entry.label]} after the change, ${derivedBaseline[entry.label]} found before it`);
     }
     const listAfter = await cloud.buckets("RECONCILE");
     const namesAfter = listAfter.map((bucket) => bucket.name);
@@ -384,7 +404,7 @@ export async function runRelease({ manifest, releaseDir, expectedSha, mode, conf
       else if (current.created !== createdBefore[bucket.name]) problems.push(`${bucket.name} was created at a different time than before (it was replaced)`);
     }
     for (const bucket of create) if (!(await cloud.isPrivate(bucket.name, "RECONCILE"))) problems.push(`${bucket.name} is not private`);
-    report.after = { migrations: after.migrations.length, counts: after.counts, schemaAdded: schema.added, buckets: listed(namesAfter) };
+    report.after = { migrations: after.migrations.length, counts: after.counts, ...(manifest.expect.derived ? { derived: derivedAfter } : {}), schemaAdded: schema.added, buckets: listed(namesAfter) };
     if (problems.length) {
       step("RECONCILE", "mismatch", { problems });
       throw new Stop("RECONCILE", "RECONCILE_MISMATCH", `After the change production does not match the manifest: ${problems.join("; ")}. The migration is applied; use the rollback bookmark if it is not acceptable.`);
