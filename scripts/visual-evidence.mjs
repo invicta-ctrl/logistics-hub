@@ -9,7 +9,10 @@
 // ref, so before and after compare) and item-photos (item photos: list, profile, viewer, upload preview, missing
 // photo, and list weight/loading with 300 photos; runs only where the item photo panel exists) and public-photos (the
 // public Lending Hub and the phone Self-Service with item photos: lists, the item sheet and the narrowest phone; runs only
-// where the public thumbnail route exists). Its pictures are drawn here in the browser, so no image file enters the repository.
+// where the public thumbnail route exists) and staff-directory (V1.3: the directory with a large department and partial
+// profiles, a profile's five sections, the USC ID viewer front, back and zoomed, and the owner's import with its preflight;
+// runs only where the directory exists). Its pictures, including the obviously fake sample ID cards, are drawn here in the
+// browser and written only to a throwaway folder, so no image file enters the repository and no real ID is ever used.
 //
 // Screenshots are JPEG so they are small enough to commit; inspect them before you do.
 import { spawn, spawnSync } from "node:child_process";
@@ -46,6 +49,7 @@ async function serve(dir, port) {
   // public-photos needs items the public lists show: a spread of loanables and supplies, reviewed and active.
   if (pages.includes("public-photos")) runD1("UPDATE items SET status = 'ACTIVE', needs_review = 0, item_type = CASE WHEN rowid % 4 = 0 THEN 'Consumable' ELSE 'Loanable' END, lending_audience = CASE WHEN rowid % 5 = 0 THEN 'USC_STAFF_ONLY' ELSE 'STUDENTS_AND_USC_STAFF' END WHERE id IN (SELECT id FROM items ORDER BY name COLLATE NOCASE LIMIT 24)", { persistTo: state });
   for (const [role, username, name] of ACCOUNTS) runD1(createAccountSql(username, name, password, role), { persistTo: state });
+  if (pages.includes("staff-directory")) runD1(directoryRecordsSql(), { persistTo: state });
   const child = spawn(process.execPath, [wrangler, "dev", "--local", "--port", String(port), "--inspector-port", String(port + 1), "--persist-to", state, "--env-file", path.join(state, ".env")], { cwd: dir, stdio: "ignore", detached: process.platform !== "win32" });
   const url = `http://127.0.0.1:${port}`;
   for (let tries = 0; ; tries++) {
@@ -284,6 +288,223 @@ async function publicPhotoScenes(browser, url, dir) {
   return timings;
 }
 
+/* ---------- Staff Directory (V1.3), fictional people only ---------- */
+
+/** Fictional people: a large Department of Logistics, officers, partial profiles (a surname only, no position), one inactive. */
+const SAMPLE_PEOPLE = [
+  ["Ana Marie Santos", "DoL", "Director for Logistics", true, "20-1111-222"], ["Sam Cruz", "DoL", "Inventory committee head", false, null], ["Ben Lim", "DoL", "Materials committee", false, null], ["Carla Reyes", "DoL", "Inventory committee", false, null],
+  ["Dino Garcia", "DoL", "Food committee", false, null], ["Ella Tan", "DoL", "Materials committee", false, null], ["Felix Ramos", "DoL", null, false, null], ["Gina Cruz", "DoL", "Inventory committee", false, null],
+  ["Hugo Navarro", "DoL", "Materials committee", false, null], ["Iris Bautista", "DoL", null, false, null], ["Jun Mercado", "DoL", "Food committee", false, null], ["Kara Villanueva", "DoL", "Materials committee", false, null],
+  ["Leo Aquino", "DoL", "Inventory committee", false, null], ["Mia Soriano", "DoL", "Materials committee", false, null], ["Nico Pascual", "DoL", null, false, null],
+  ["Olivia Domingo", "OfP", "President", true, null], ["Paolo Rivera", "OVP", "Vice President", true, null], ["Quinn Morales", "SEC", "Secretary-General", true, null],
+  ["Rosa Velasco", "DoF", "Director for Finance", true, null], ["Sam Ilagan", "DCES", "Director for Community Extension Services", true, null], ["Tess Manalo", "DPC", "Director for Public Communications", true, null],
+  ["Ugo Salazar", "DHR", "Director for Human Resources", true, null], ["Vera Ocampo", "DBR", "Director for Business Relations", true, null], ["Wes Fajardo", "DBR", null, false, null]
+];
+/** Sample scans for the import, as the Drive archive lays them out, with one of each problem the preflight reports. */
+const SAMPLE_SCANS = [
+  ["[DEM] Official ID", "Alcantara", "DEM", ["front", "back"]], ["[DEM] Official ID", "Belmonte", "DEM", ["front", "back"]], ["[DEM] Official ID", "Concepcion", "DEM", ["front", "back"]],
+  ["OFFICERS", "Delos Reyes", "DEM", ["front", "back"]], ["[DoL] Official ID", "Santos", "DoL", ["front", "back"]], ["[DoL] Official ID", "Estrada", "DoL", ["front"]],
+  ["[DoL] Official ID", "Fernandez", "DoL", ["back"]], ["[DHR] Official ID", "Guevarra", "DHX", ["front", "back"]], ["[DHR] Official ID", "Hidalgo", "DHR", ["front", "back"]]
+];
+const sq = (value) => value === null ? "NULL" : `'${String(value).replaceAll("'", "''")}'`;
+
+/** Loans and phone takes for two fictional people, written as the app writes them, so Usage and Loans have something to read. */
+function directoryRecordsSql() {
+  const rows = [];
+  const at = (days) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const items = ["(SELECT id FROM items ORDER BY id LIMIT 1 OFFSET 3)", "(SELECT id FROM items ORDER BY id LIMIT 1 OFFSET 40)", "(SELECT id FROM items ORDER BY id LIMIT 1 OFFSET 120)", "(SELECT id FROM items ORDER BY id LIMIT 1 OFFSET 200)"];
+  const loan = (n, name, studentId, item, days, open) => {
+    rows.push(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, related_entity_type, related_entity_id, actor_user_id, status)
+      SELECT 'MOV-EV${n}', ${sq(at(days))}, 'LOAN_OUT', 'OUT', id, 2, unit, -2, 'LOAN', 'LN-EV${n}', (SELECT id FROM staff_accounts WHERE username = 'staff.demo'), 'POSTED' FROM items WHERE id = ${item};`);
+    rows.push(`INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, reason, photo_key, movement_id, created_at, created_by, status, closed_at, closed_by)
+      SELECT 'LN-EV${n}', id, 2, ${studentId ? "'INDIVIDUAL'" : "'USC'"}, ${sq(name)}, ${sq(studentId)}, ${studentId ? "NULL" : "'Stage setup for the general assembly'"}, 'loans/none', 'MOV-EV${n}', ${sq(at(days))},
+        (SELECT id FROM staff_accounts WHERE username = 'staff.demo'), ${open ? "'OUT', NULL, NULL" : `'RETURNED', ${sq(at(days - 2))}, (SELECT id FROM staff_accounts WHERE username = 'staff.demo')`} FROM items WHERE id = ${item};`);
+  };
+  const take = (n, name, studentId, item, quantity, days) => {
+    const event = `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    rows.push(`INSERT INTO self_service_events(id, device_id, seq, event_type, item_id, quantity, person_name, student_id, purpose, device_time, sent_at, occurred_at, received_at, movement_id, applied)
+      VALUES('${event}', 'evidence', ${n}, 'TAKE', ${item}, ${quantity}, ${sq(name)}, ${sq(studentId)}, 'INDIVIDUAL', ${sq(at(days))}, ${sq(at(days))}, ${sq(at(days))}, ${sq(at(days))}, 'MOV-EV${n}', 1);`);
+    rows.push(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, related_entity_type, related_entity_id, actor_user_id, reason, status)
+      SELECT 'MOV-EV${n}', ${sq(at(days))}, 'STOCK_OUT', 'OUT', id, ${quantity}, unit, -${quantity}, 'SELF_SERVICE', '${event}', 'SELF_SERVICE', 'CONSUMED', 'POSTED' FROM items WHERE id = ${item};`);
+  };
+  loan(1, "Ana Marie Santos", "20-1111-222", items[0], 3, true);
+  loan(2, "Ana Marie Santos", null, items[1], 40, false);
+  loan(3, "Ana Marie Santos", "20-1111-222", items[2], 90, false);
+  loan(4, "Ben Lim", null, items[1], 12, true);
+  for (let n = 5; n < 13; n++) take(n, "Ana Marie Santos", "20-1111-222", items[n % 4], 1 + (n % 3), n * 9);
+  return rows.join("\n");
+}
+
+/** Obviously fake ID cards: "SAMPLE" everywhere, a plain silhouette (no face), invented numbers. PNG, as the archive's scans are. */
+function drawIdCards(people) {
+  const card = (name, department, side) => {
+    const [width, height] = [1600, 1010];
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const c = canvas.getContext("2d");
+    c.fillStyle = "#f7f3ea";
+    c.fillRect(0, 0, width, height);
+    c.fillStyle = "#7a1419";
+    c.fillRect(0, 0, width, 170);
+    c.fillStyle = "#e8b93c";
+    c.fillRect(0, 170, width, 14);
+    c.fillStyle = "#fff";
+    c.font = "600 54px sans-serif";
+    c.fillText("SAMPLE STUDENT COUNCIL", 60, 82);
+    c.font = "32px sans-serif";
+    c.fillText("Not a real card · for screenshots only", 60, 134);
+    if (side === "front") {
+      c.fillStyle = "#d9d2c5";
+      c.fillRect(70, 250, 380, 470);
+      c.fillStyle = "#b8ad9b";
+      c.beginPath(); c.arc(260, 420, 105, 0, 7); c.fill();
+      c.beginPath(); c.ellipse(260, 690, 170, 140, 0, Math.PI, 0); c.fill();
+      c.fillStyle = "#1c1917";
+      c.font = "600 76px sans-serif";
+      c.fillText(name.toUpperCase(), 510, 340);
+      c.font = "40px sans-serif";
+      c.fillStyle = "#57514a";
+      c.fillText(department, 510, 410);
+      c.fillText("ID NO.  SAMPLE-0000-000", 510, 480);
+      c.fillText("Valid  AY 2026–2027 (sample)", 510, 540);
+    } else {
+      c.fillStyle = "#2b2622";
+      c.fillRect(0, 240, width, 150);
+      c.fillStyle = "#fff";
+      c.fillRect(80, 450, 820, 120);
+      c.fillStyle = "#57514a";
+      c.font = "34px sans-serif";
+      c.fillText("Signature (sample)", 90, 610);
+      c.fillText("If found, this sample card belongs to no one.", 80, 700);
+      c.fillText("It was drawn for Logistics Hub screenshots.", 80, 750);
+      for (let x = 1000; x < 1520; x += 14) { c.fillStyle = "#1c1917"; c.fillRect(x, 460, (x * 7) % 3 + 4, 220); }
+    }
+    c.save();
+    c.translate(width / 2, height / 2 + 80);
+    c.rotate(-0.32);
+    c.fillStyle = "rgb(122 20 25 / 13%)";
+    c.font = "700 220px sans-serif";
+    c.textAlign = "center";
+    c.fillText("SAMPLE", 0, 60);
+    c.restore();
+    return canvas.toDataURL("image/png").split(",")[1];
+  };
+  return people.map(([name, department]) => ({ front: card(name, department, "front"), back: card(name, department, "back") }));
+}
+
+async function directoryScenes(browser, url, dir) {
+  const shot = (page, name) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80 });
+  const first = await signIn(browser, url, "owner.demo", SIZES.desktop);
+  if ((await first.page.request.get(`${url}/api/staff/admin/directory`)).status() !== 200) {
+    console.log("staff-directory: this ref has no Staff Directory, skipped");
+    await first.context.close();
+    return {};
+  }
+  const state = await first.context.storageState();
+  const post = (path, data) => first.page.request.fetch(`${url}${path}`, { method: "POST", headers: { origin: url }, data });
+  const ids = {};
+  for (const [name, department, position, officer, studentId] of SAMPLE_PEOPLE) {
+    const response = await post("/api/staff/admin/directory", { name, department, position, officer, studentId });
+    ids[name] = (await response.json()).id;
+  }
+  const accounts = (await (await first.page.request.get(`${url}/api/staff/admin/directory/accounts`)).json()).accounts;
+  await first.page.request.fetch(`${url}/api/staff/admin/directory/${ids["Sam Cruz"]}/account`, { method: "PUT", headers: { origin: url }, data: { accountId: accounts.find((account) => account.username === "staff.demo").id } });
+  const wes = await (await first.page.request.get(`${url}/api/staff/admin/directory/${ids["Wes Fajardo"]}`)).json();
+  await first.page.request.fetch(`${url}/api/staff/admin/directory/${ids["Wes Fajardo"]}`, { method: "PATCH", headers: { origin: url }, data: { active: false, updatedAt: wes.person.updatedAt } });
+
+  // The sample archive, written to a throwaway folder only.
+  const archive = path.join(root, ".wrangler", "evidence-ids", "Official IDs");
+  fs.rmSync(path.dirname(archive), { recursive: true, force: true });
+  const art = await first.page.evaluate(drawIdCards, SAMPLE_SCANS.map(([folder, name, code]) => [name, code === "DEM" ? "Department of Events Management" : code === "DoL" ? "Department of Logistics" : "Department of Human Resources"]));
+  for (const [index, [folder, name, code, sides]] of SAMPLE_SCANS.entries()) {
+    fs.mkdirSync(path.join(archive, folder), { recursive: true });
+    for (const side of sides) fs.writeFileSync(path.join(archive, folder, `${name.replace(" ", "_")}_${side === "front" ? "Front" : "Back"}_${code}.png`), Buffer.from(art[index][side], "base64"));
+  }
+  fs.writeFileSync(path.join(archive, "desktop.ini"), "");
+  await first.context.close();
+  const timings = {};
+
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    const { context, page } = await resume(browser, state, viewport);
+    if (size === "desktop") {
+      // The owner's import: the preflight report, then the result.
+      await page.goto(`${url}/staff/admin/directory`);
+      await page.waitForSelector(".person-row");
+      await page.getByRole("button", { name: "Import ID scans" }).click();
+      await page.locator("#import-folder").setInputFiles(archive);
+      await page.waitForSelector("[data-run]");
+      await page.locator("dialog[open] .sheet__body").evaluate((body) => body.scrollTo(0, 0));
+      await shot(page, "directory-import-preflight-desktop");
+      await page.locator("[data-run]").scrollIntoViewIfNeeded();
+      await shot(page, "directory-import-ready-desktop");
+      const start = Date.now();
+      await page.locator("[data-run]").click();
+      await page.waitForSelector(".import [data-close]");
+      timings.importAllPairsMs = Date.now() - start;
+      await shot(page, "directory-import-done-desktop");
+      await page.getByRole("button", { name: "Done" }).click();
+      const people = (await (await page.request.get(`${url}/api/staff/admin/directory`)).json()).people;
+      ids.Belmonte = people.find((person) => person.name === "Belmonte").id;
+      const belmonte = people.find((person) => person.name === "Belmonte");
+      await page.request.fetch(`${url}/api/staff/admin/directory/${belmonte.id}`, { method: "PATCH", headers: { origin: url }, data: { name: "Bea Belmonte", position: "Director for Events Management", officer: true, updatedAt: belmonte.updatedAt } });
+      ids.Hidalgo = people.find((person) => person.name === "Hidalgo").id;
+    }
+    await page.goto(`${url}/staff/admin/directory`);
+    await page.waitForSelector(".person-row");
+    await shot(page, `directory-list-${size}`);
+    await page.goto(`${url}/staff/admin/directory?dept=DoL`);
+    await page.waitForSelector(".person-row");
+    await shot(page, `directory-department-${size}`);
+    await page.goto(`${url}/staff/admin/directory?q=director`);
+    await page.waitForSelector(".person-row");
+    await shot(page, `directory-search-${size}`);
+    await page.goto(`${url}/staff/admin/directory?person=${ids.Belmonte}`);
+    await page.waitForSelector(".summary-list");
+    await shot(page, `directory-profile-${size}`);
+    await page.goto(`${url}/staff/admin/directory?person=${ids.Belmonte}&tab=id`);
+    await page.waitForSelector(".id-tile img[src]");
+    await shot(page, `directory-id-${size}`);
+    let start = Date.now();
+    await page.locator("[data-open=front]").click();
+    await page.waitForSelector("dialog.id-viewer[open] .id-card__face--front[src]");
+    timings[`viewerOpenMs_${size}`] = Date.now() - start;
+    await page.waitForTimeout(300);
+    await shot(page, `directory-viewer-front-${size}`);
+    start = Date.now();
+    await page.keyboard.press("b");
+    await page.waitForTimeout(100);
+    timings[`flipMs_${size}`] = Date.now() - start;
+    await shot(page, `directory-viewer-back-${size}`);
+    await page.keyboard.press("f");
+    await page.keyboard.press("+");
+    await page.keyboard.press("+");
+    await page.waitForTimeout(300);
+    await shot(page, `directory-viewer-zoomed-${size}`);
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector("dialog.id-viewer"));
+    await page.goto(`${url}/staff/admin/directory?person=${ids["Ana Marie Santos"]}&tab=usage`);
+    await page.waitForSelector("[data-usage] .stat-strip, [data-usage] .empty");
+    await shot(page, `directory-usage-${size}`);
+    await page.goto(`${url}/staff/admin/directory?person=${ids["Ana Marie Santos"]}&tab=loans`);
+    await page.waitForSelector(".loan-list, #panel-loans .muted");
+    await shot(page, `directory-loans-${size}`);
+    await page.goto(`${url}/staff/admin/directory?person=${ids["Sam Cruz"]}&tab=activity`);
+    await page.waitForSelector("[data-events] .history__item, [data-events] .history__empty:not(:empty)");
+    await page.waitForLoadState("networkidle");
+    await shot(page, `directory-activity-${size}`);
+    await page.goto(`${url}/staff/admin/directory?person=${ids.Hidalgo}`);
+    await page.waitForSelector(".summary-list");
+    await shot(page, `directory-partial-profile-${size}`);
+    await page.goto(`${url}/staff/admin/directory?person=${ids["Felix Ramos"]}&tab=id`);
+    await page.waitForSelector("#panel-id .empty");
+    await shot(page, `directory-missing-id-${size}`);
+    await context.close();
+  }
+  fs.rmSync(path.dirname(archive), { recursive: true, force: true });
+  return timings;
+}
+
 async function capture(url, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
@@ -295,7 +516,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "public-photos") continue;
+          if (name === "item-photos" || name === "public-photos" || name === "staff-directory") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -329,6 +550,7 @@ async function capture(url, dir) {
     const timings = { coldLoadToFirstRowMs: median(cold), sectionSwitchMs: median(swap) };
     if (pages.includes("item-photos")) Object.assign(timings, { itemPhotos: await photoScenes(browser, url, dir) });
     if (pages.includes("public-photos")) Object.assign(timings, { publicPhotos: await publicPhotoScenes(browser, url, dir) });
+    if (pages.includes("staff-directory")) Object.assign(timings, { staffDirectory: await directoryScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);
     await context.close();
     return timings;
