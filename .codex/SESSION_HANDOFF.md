@@ -10,6 +10,7 @@
 - **Integrated (Earl's go-ahead, 2026-10-03):**
   - `main` merged in (`92db8fd`, through `c0776b5`, incl. `0022`), gates and CI 37113645911 green, `main` fast-forwarded to `92db8fd` at 09:40:55Z.
   - The two DEM entries and profiles were written to production D1 at 09:41Z and read back; the rollback ids are in the record.
+  - On Earl's "the USC ID is the thing I press", the directory became a wall of ID-style cards drawn from the record (`src/directory-workspace.ts`, viewer `openCard` in `src/staff-ids.ts`); tests `tests/browser/card-wall.spec.ts`; evidence and fixes 16–19 in `docs/visual-research/v1.3.md`.
   - On Earl's "add everyone", the other 94 people of the directory sheet (Official tab) were added at 10:24:38Z with names, offices, positions, officer status and student ID numbers where given; no contact data, no scans, no links. Read back against the sheet; counts and rollback in the record.
   - Left for Earl: the in-app scan upload and the signed-in check.
 - **3D USC ID card (Earl, 2026-10-03, "like Pokemon cards"; `3fbc2de`):**

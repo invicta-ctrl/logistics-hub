@@ -1,7 +1,7 @@
 // The private USC Staff Directory (V1.3): people by department, their official USC ID scans, the explicit link to a
 // sign-in, and what the existing records say they used and borrowed. Every route here is behind Administration
 // (ADMIN or OWNER); changing ID scans is for the OWNER. Nothing here has a public, Self-Service or catalog address.
-import { type Account, canManage, throttled } from "./accounts";
+import { type Account, accountAccess, canManage, newAccount, suggestUsername, throttled } from "./accounts";
 import { activityPage, parseActivityQuery } from "./activity";
 import { STUDENT_ID_PATTERN } from "./catalog-policy";
 import { type DepartmentCode, departmentCode, sourceKey } from "./directory-policy";
@@ -25,16 +25,16 @@ const isOwner = (actor: Account) => actor.role === "OWNER";
 
 type PersonRow = {
   id: string; fullName: string; department: string; position: string | null; officer: number; studentId: string | null; active: number;
-  sourceKey: string | null; createdAt: string; updatedAt: string; accountId: string | null; username: string | null; accountName: string | null; accountRole: string | null; mediaId: string | null;
+  sourceKey: string | null; createdAt: string; updatedAt: string; accountId: string | null; username: string | null; accountName: string | null; accountRole: string | null; accountActive: number | null; lastLoginAt: string | null; mediaId: string | null;
 };
 const PERSON_COLUMNS = `SELECT p.id, p.full_name AS fullName, p.department, p.position, p.officer, p.student_id AS studentId, p.active, p.source_key AS sourceKey,
-  p.created_at AS createdAt, p.updated_at AS updatedAt, a.id AS accountId, a.username, a.display_name AS accountName, a.role AS accountRole, c.media_id AS mediaId
+  p.created_at AS createdAt, p.updated_at AS updatedAt, a.id AS accountId, a.username, a.display_name AS accountName, a.role AS accountRole, a.active AS accountActive, a.last_login_at AS lastLoginAt, c.media_id AS mediaId
   FROM staff_directory p LEFT JOIN staff_accounts a ON a.id = p.account_id LEFT JOIN staff_id_cards c ON c.person_id = p.id`;
 
 const person = (row: PersonRow) => ({
   id: row.id, name: row.fullName, department: row.department, position: row.position, officer: row.officer === 1, studentId: row.studentId, active: row.active === 1,
   sourceKey: row.sourceKey, createdAt: row.createdAt, updatedAt: row.updatedAt, hasId: Boolean(row.mediaId),
-  account: row.accountId ? { id: row.accountId, username: row.username!, displayName: row.accountName!, role: row.accountRole! } : null
+  account: row.accountId ? { id: row.accountId, username: row.username!, displayName: row.accountName!, role: row.accountRole!, active: row.accountActive === 1, lastLoginAt: row.lastLoginAt } : null
 });
 
 export async function directory(db: D1Database) {
@@ -237,6 +237,50 @@ export async function unlinkAccount(db: D1Database, actor: Account, id: string) 
     audit(db, actor.accountId, "STAFF_ACCOUNT_UNLINKED", "STAFF", id, { name: current.fullName, department: current.department, username: current.username }, true)
   ]);
   return { linked: null };
+}
+
+/**
+ * A sign-in made for this person and linked to them in one step: their name, a suggested username, the role the actor may give,
+ * and a generated password returned once (they must replace it at first sign-in). Written only if the person still has no
+ * sign-in when it lands, so two administrators cannot both make one. Both the new account and the link are audited.
+ */
+export async function createLinkedAccount(db: D1Database, actor: Account, id: string, input: unknown) {
+  const current = await personRow(db, id);
+  if (current.accountId) throw new InputError(409, "This person already has a sign-in. Unlink it first to make a new one.");
+  const data = body(input);
+  const next = await newAccount(db, actor, { displayName: data.displayName ?? current.fullName, username: data.username, role: data.role ?? "STAFF", generate: true });
+  const now = new Date().toISOString();
+  let results: D1Result[];
+  try {
+    results = await db.batch([
+      db.prepare(`INSERT INTO staff_accounts(id, username, display_name, password_hash, role, must_change_password, updated_at)
+        SELECT ?, ?, ?, ?, ?, 1, ? WHERE EXISTS (SELECT 1 FROM staff_directory WHERE id = ? AND account_id IS NULL)`).bind(next.id, next.username, next.displayName, next.passwordHash, next.role, now, id),
+      audit(db, actor.accountId, "ACCOUNT_CREATED", "ACCOUNT", next.id, { username: next.username, role: next.role, person: current.fullName }, true),
+      db.prepare("UPDATE staff_directory SET account_id = ?, updated_at = ?, updated_by = ? WHERE id = ? AND account_id IS NULL AND EXISTS (SELECT 1 FROM staff_accounts WHERE id = ?)").bind(next.id, now, actor.accountId, id, next.id),
+      audit(db, actor.accountId, "STAFF_ACCOUNT_LINKED", "STAFF", id, { name: current.fullName, department: current.department, username: next.username, created: true }, true)
+    ]);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("staff_accounts.username")) throw new InputError(409, `The username "${next.username}" was just taken. Choose another.`);
+    throw error;
+  }
+  if (!results[0]!.meta.changes) throw new InputError(409, "Someone linked a sign-in to this person meanwhile. Refresh the profile.");
+  return { accountId: next.id, username: next.username, generatedPassword: next.generated };
+}
+
+/**
+ * The person's sign-in and how it is used. Without one: a suggested username and the roles the actor may give, for making one.
+ * With one: its state and, for an account the actor manages (or their own), its sign-ins, failed attempts and changes. Others'
+ * administrator and owner accounts show only what Administration → Accounts already lists (state, last sign-in, sessions open).
+ */
+export async function personAccess(db: D1Database, actor: Account, id: string) {
+  const current = await personRow(db, id);
+  if (!current.accountId) return { account: null, suggestedUsername: await suggestUsername(db, current.fullName) };
+  const access = await accountAccess(db, current.accountId);
+  const self = current.accountId === actor.accountId;
+  const manageable = !self && canManage(actor, access.account);
+  if (self || manageable) return { ...access, self, manageable };
+  const { failedAttempts: _hidden, ...summary } = access.account;
+  return { account: summary, signIns: null, events: null, self, manageable };
 }
 
 /** The directory entry linked to a sign-in, if any: the signed-in person's own verified identity. */
