@@ -1,3 +1,4 @@
+import { LANDED_MS, cardMotion, flyIn, flyOut, liftShadow } from "./card-motion";
 import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
 import { ISSUE_KINDS, type IssueKind, type Pair, type Preflight, preflight } from "./staff-import";
 import { ApiError, type Html, api, dataUrl, failure, formatDateTime, html, icon, jpegOf, mount, plural, reducedMotion, setMessage, toast } from "./ui";
@@ -40,18 +41,21 @@ export const forgetScans = (): void => scans.clear();
 const MAX_ZOOM = 4;
 
 /**
- * The card large, over everything: Front and Back flip in place (a short 3D turn; instant under reduced motion), and the
- * scan zooms up to 4× with the wheel, a pinch, a double-click or + and −, and pans by dragging or with the arrow keys. A modal
- * dialog gives Escape, a focus trap and an inert page; Back closes it (it holds a history entry); focus returns to its opener.
+ * The card large, over everything, as a card in 3D (src/card-motion.ts): it flies out of its tile turning once, leans toward
+ * the pointer or a finger under a glare and a holographic sheen, presses in when held, turns over on a spring for Front and
+ * Back, and flies back into the tile of the side it shows when closed. It rests flat and unlit, lies still while zoomed, and
+ * does none of this under reduced motion. The scan zooms up to 4× with the wheel, a pinch, a double-click or + and −, and
+ * pans by dragging or with the arrow keys. A modal dialog gives Escape, a focus trap and an inert page; Back closes it (it
+ * holds a history entry); focus returns to its opener. `tileFor` finds the profile's tile of a side, to fly from and to.
  */
-export async function openIdViewer(person: Who, card: Card, side: Side): Promise<void> {
+export async function openIdViewer(person: Who, card: Card, side: Side, tileFor: (side: Side) => HTMLElement | null = () => null): Promise<void> {
   if (document.querySelector("dialog.id-viewer")) return;
   const opener = document.activeElement as HTMLElement | null;
   const department = DEPARTMENTS[person.department as DepartmentCode] ?? person.department;
   const dialog = document.createElement("dialog");
   dialog.className = "id-viewer";
   dialog.setAttribute("aria-label", `USC ID of ${person.name}`);
-  const face = (which: Side) => html`<img class="id-card__face id-card__face--${which}" data-face="${which}" alt="${which === "front" ? "Front" : "Back"} of ${person.name}'s USC ID" draggable="false" />`;
+  const face = (which: Side) => html`<div class="id-card__face id-card__face--${which}"><img data-face="${which}" alt="${which === "front" ? "Front" : "Back"} of ${person.name}'s USC ID" draggable="false" /><span class="id-card__shine" aria-hidden="true"></span><span class="id-card__glare" aria-hidden="true"></span></div>`;
   mount(dialog, html`<header class="id-viewer__bar">
       <p class="id-viewer__title"><strong>${person.name}</strong><span>${department} · USC ID</span></p>
       <div class="id-viewer__sides" role="group" aria-label="Side of the card">
@@ -65,19 +69,25 @@ export async function openIdViewer(person: Who, card: Card, side: Side): Promise
       </div>
       <button class="icon-button id-viewer__close" type="button" data-close aria-label="Close ID">${icon("close")}</button>
     </header>
-    <div class="id-viewer__stage" data-stage><div class="id-viewer__pan" data-pan><div class="id-card" data-card>${face("front")}${face("back")}</div></div></div>
-    <p class="id-viewer__hint">F and B turn the card · + and − zoom · drag or arrow keys move · Esc closes. Opening a USC ID is recorded in Activity.</p>`);
+    <div class="id-viewer__stage" data-stage><div class="id-viewer__pan" data-pan><div class="id-card__flight" data-flight><div class="id-card" data-card>${face("front")}${face("back")}</div></div></div></div>
+    <p class="id-viewer__hint">${reducedMotion() ? "" : "Move over the card or drag it to tilt it · "}F and B turn it · + and − zoom, then drag or use the arrow keys to move · Esc closes. Opening a USC ID is recorded in Activity.</p>`);
   document.body.append(dialog);
   const stage = dialog.querySelector<HTMLElement>("[data-stage]")!;
   const pan = dialog.querySelector<HTMLElement>("[data-pan]")!;
+  const flight = dialog.querySelector<HTMLElement>("[data-flight]")!;
   const cardBox = dialog.querySelector<HTMLElement>("[data-card]")!;
   const level = dialog.querySelector("output")!;
   const faces = { front: dialog.querySelector<HTMLImageElement>('[data-face="front"]')!, back: dialog.querySelector<HTMLImageElement>('[data-face="back"]')! };
+  const motion = cardMotion(cardBox);
   let current: Side = side;
   let view = { scale: 1, x: 0, y: 0 };
+  // While the card flies in or out it takes no other input.
+  let flying = false;
+  let closing = false;
 
   const clamp = () => {
-    const box = cardBox.getBoundingClientRect();
+    // The flight box is never tilted, so it measures the card as laid out (and zoomed).
+    const box = flight.getBoundingClientRect();
     const [width, height] = [box.width / view.scale, box.height / view.scale];
     const limit = (size: number, viewport: number) => Math.max(0, (size * view.scale - viewport) / 2 + size * 0.05);
     view.x = Math.max(-limit(width, stage.clientWidth), Math.min(limit(width, stage.clientWidth), view.x));
@@ -85,7 +95,7 @@ export async function openIdViewer(person: Who, card: Card, side: Side): Promise
   };
   const apply = (animate = false) => {
     if (view.scale <= 1) view = { scale: 1, x: 0, y: 0 };
-    else clamp();
+    else { clamp(); motion.still(); }
     pan.classList.toggle("is-animating", animate && !reducedMotion());
     pan.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
     level.textContent = `${Math.round(view.scale * 100)}%`;
@@ -102,11 +112,12 @@ export async function openIdViewer(person: Who, card: Card, side: Side): Promise
     return [event.clientX - box.left - box.width / 2, event.clientY - box.top - box.height / 2] as const;
   };
 
-  const showSide = (next: Side) => {
+  const showSide = (next: Side, animate = true) => {
     current = next;
     const dims = card[next];
-    cardBox.style.setProperty("--ratio", String(dims.width / dims.height));
+    flight.style.setProperty("--ratio", String(dims.width / dims.height));
     cardBox.dataset.side = next;
+    motion.turn(next, animate);
     faces.front.setAttribute("aria-hidden", String(next !== "front"));
     faces.back.setAttribute("aria-hidden", String(next !== "back"));
     const buttons = [...dialog.querySelectorAll<HTMLButtonElement>("[data-side]")];
@@ -122,20 +133,45 @@ export async function openIdViewer(person: Who, card: Card, side: Side): Promise
     // The side asked for first, so it is on screen as soon as possible; the other is ready before the first turn.
     void scan(person.id, card.mediaId, which).then((url) => { faces[which].src = url; }, (error: unknown) => { if (which === side) toast(failure(error), "error"); });
   }
-  showSide(side);
+  showSide(side, false);
   await Promise.race([scan(person.id, card.mediaId, side).then(() => faces[side].decode()).catch(() => undefined), new Promise((resolve) => window.setTimeout(resolve, 600))]);
 
+  const bar = dialog.querySelector<HTMLElement>(".id-viewer__bar")!;
+  const hint = dialog.querySelector<HTMLElement>(".id-viewer__hint")!;
+  const shade = (from: number, to: number, duration: number) => dialog.animate([{ backgroundColor: `rgb(12 10 9 / ${from}%)` }, { backgroundColor: `rgb(12 10 9 / ${to}%)` }], { duration, easing: "ease-out", fill: "forwards" });
+  const chrome = (show: boolean) => [bar, hint].map((element) => element.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
+    { duration: show ? 240 : 90, delay: show ? 300 : 0, easing: "ease-out", direction: show ? "normal" : "reverse", fill: show ? "backwards" : "forwards" }));
+  const faceBoxes = dialog.querySelectorAll<HTMLElement>(".id-card__face");
+
   let entryGone = false;
-  const onBack = () => { entryGone = true; if (dialog.open) dialog.close(); };
+  /** Flies the card back into the tile of the side it shows (or shrinks it away), then closes. */
+  const closeViewer = () => {
+    if (closing || !dialog.open) return;
+    closing = true;
+    const tile = tileFor(current);
+    if (reducedMotion() || flying) { dialog.close(); return; }
+    view = { scale: 1, x: 0, y: 0 };
+    apply();
+    motion.still();
+    tile?.classList.add("is-away");
+    const out = flyOut(flight, tile?.isConnected ? tile.getBoundingClientRect() : null);
+    const done = [out, shade(99, 0, 300), ...chrome(false), ...liftShadow(faceBoxes, true, Number(out.effect?.getTiming().duration) || 300)];
+    void Promise.all(done.map((animation) => animation.finished)).catch(() => undefined).then(() => dialog.close());
+  };
+  const onBack = () => { entryGone = true; closeViewer(); };
   dialog.addEventListener("close", () => {
+    motion.stop();
+    for (const which of ["front", "back"] as const) tileFor(which)?.classList.remove("is-away");
     window.removeEventListener("popstate", onBack);
     dialog.remove();
     if (!entryGone && window.history.state?.viewer) window.history.back();
     if (opener?.isConnected) opener.focus({ preventScroll: true });
   });
+  // Escape flies the card back too, rather than dropping it.
+  dialog.addEventListener("cancel", (event) => { event.preventDefault(); closeViewer(); });
   dialog.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
-    if (target.closest("[data-close]")) dialog.close();
+    if (target.closest("[data-close]")) closeViewer();
     const sideButton = target.closest<HTMLButtonElement>("[data-side]");
     if (sideButton) showSide(sideButton.dataset.side as Side);
     const zoom = target.closest<HTMLButtonElement>("[data-zoom]")?.dataset.zoom;
@@ -163,37 +199,76 @@ export async function openIdViewer(person: Who, card: Card, side: Side): Promise
     zoomTo(view.scale * Math.exp(-event.deltaY * (event.deltaMode === 1 ? 0.05 : 0.0015)), cx, cy, false);
   }, { passive: false });
   stage.addEventListener("dblclick", (event) => { const [cx, cy] = fromCentre(event); zoomTo(view.scale > 1 ? 1 : 2.5, cx, cy); });
-  // One finger or the mouse drags a zoomed card; two fingers pinch.
+  // One finger or the mouse drags a zoomed card; two fingers pinch. At 100% the card leans toward the mouse (or a finger held on it).
   const pointers = new Map<number, { x: number; y: number }>();
   let pinch: { distance: number; scale: number } | null = null;
   const distance = () => { const [a, b] = [...pointers.values()]; return Math.hypot(a!.x - b!.x, a!.y - b!.y); };
+  const tilts = () => view.scale === 1 && !pinch && !flying && !closing;
+  /** Where the pointer is across the card (0–1 each), or null when it is off the card. */
+  const across = (event: PointerEvent) => {
+    const box = flight.getBoundingClientRect();
+    const [x, y] = [(event.clientX - box.left) / box.width, (event.clientY - box.top) / box.height];
+    return x >= 0 && x <= 1 && y >= 0 && y <= 1 ? [x, y] as const : null;
+  };
   stage.addEventListener("pointerdown", (event) => {
     stage.setPointerCapture(event.pointerId);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pointers.size === 2) pinch = { distance: distance(), scale: view.scale };
+    if (pointers.size === 2) { pinch = { distance: distance(), scale: view.scale }; motion.rest(); return; }
+    const point = across(event);
+    if (point && tilts()) { motion.press(true); motion.point(...point); }
   });
   stage.addEventListener("pointermove", (event) => {
     const last = pointers.get(event.pointerId);
-    if (!last) return;
-    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (last) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pinch && pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       const [cx, cy] = fromCentre({ clientX: (a!.x + b!.x) / 2, clientY: (a!.y + b!.y) / 2 });
       zoomTo(pinch.scale * distance() / pinch.distance, cx, cy, false);
-    } else if (view.scale > 1) {
+    } else if (last && view.scale > 1) {
       view.x += event.clientX - last.x;
       view.y += event.clientY - last.y;
       apply();
+    } else if (tilts() && (event.pointerType === "mouse" || last)) {
+      // A finger dragged off the card keeps it leaning toward the nearest edge; the mouse leaving it lets go.
+      const point = across(event);
+      if (point) motion.point(...point);
+      else if (event.pointerType !== "mouse") { const box = flight.getBoundingClientRect(); motion.point((event.clientX - box.left) / box.width, (event.clientY - box.top) / box.height); }
+      else motion.rest();
     }
   });
-  const release = (event: PointerEvent) => { pointers.delete(event.pointerId); if (pointers.size < 2) pinch = null; };
+  const release = (event: PointerEvent) => {
+    pointers.delete(event.pointerId);
+    if (pointers.size < 2) pinch = null;
+    motion.press(false);
+    if (event.pointerType !== "mouse" || !across(event)) motion.rest();
+  };
   stage.addEventListener("pointerup", release);
   stage.addEventListener("pointercancel", release);
+  stage.addEventListener("pointerleave", (event) => { if (event.pointerType === "mouse") motion.rest(); });
 
   window.history.pushState({ viewer: true }, "");
   window.addEventListener("popstate", onBack);
   dialog.showModal();
   dialog.querySelector<HTMLButtonElement>(`[data-side="${side}"]`)!.focus();
+  if (reducedMotion()) return;
+  // The card leaves its tile: the tile empties, the page darkens, and the card flies in turning once, then catches the light.
+  const tile = tileFor(side);
+  flying = true;
+  tile?.classList.add("is-away");
+  const landing = flyIn(flight, tile?.isConnected ? tile.getBoundingClientRect() : null);
+  // Darker than the static viewer's 97%, because its backdrop stays clear while the card flies (src/styles.css).
+  shade(0, 99, 320);
+  chrome(true);
+  liftShadow(faceBoxes, false, 420);
+  // Landed once it is 95% of the way (the spring's last settling shows no movement): take input, and let the light sweep over it.
+  let landed = false;
+  const land = () => { if (landed) return; landed = true; flying = false; if (!closing && dialog.open) motion.sweep(); };
+  const early = window.setTimeout(land, LANDED_MS);
+  void landing.finished.catch(() => undefined).then(() => {
+    window.clearTimeout(early);
+    land();
+    if (!closing) tile?.classList.remove("is-away");
+  });
 }
 
 /* ---------- Preparing a scan ---------- */
