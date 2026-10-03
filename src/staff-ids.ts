@@ -45,19 +45,14 @@ export const CARD_RATIO = 1545 / 2000;
 /** The details are read from a taller card (ID-1 upright), which holds them on a phone without scrolling. */
 const DETAILS_RATIO = 53.98 / 85.6;
 
-/** What the card shows: the person's USC ID, front and back together (Earl, 2026-10-03), or their details. */
+/** What the card shows: the person's USC ID, one card with its front and back that turns over (Earl, 2026-10-03), or their details. */
 export type View = "profile" | "details";
-/** What a face can hold: a view, or the wall's own picture of the card (the tile), which the card shows while it flies. */
-type Content = View | "cover";
+/** What a face can hold: a side of the ID, the details, or the wall's own picture of the card (the tile) while it flies. */
+type Content = Side | "details" | "cover";
 const VIEWS: View[] = ["profile", "details"];
-/** Front and back of a card together: side by side when they stand upright, one above the other when they lie flat. */
-const pairShape = (card: Card) => {
-  const upright = card.front.height >= card.front.width;
-  const gap = 0.04;
-  return upright
-    ? { stacked: false, ratio: (card.front.width / card.front.height + card.back.width / card.back.height) * (1 + gap / 2) }
-    : { stacked: true, ratio: 1 / ((card.front.height / card.front.width + card.back.height / card.back.width) * (1 + gap / 2)) };
-};
+const viewOf = (content: Content): View => content === "details" ? "details" : "profile";
+/** A tile says which face it shows: "cover", a view, or a side; the profile is the ID's front. */
+const tileFace = (shows: string | undefined, fallback: Content): Content => shows === "profile" ? "front" : (shows as Content | undefined) ?? fallback;
 
 export type Opening = {
   /** What it opens on. */
@@ -97,6 +92,7 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
       <div class="id-viewer__sides" role="group" aria-label="View" ${opening.hasId ? "" : html`hidden`}>
         <button type="button" data-view="profile">Profile</button><button type="button" data-view="details">Details</button>
       </div>
+      <button type="button" class="button button--sm id-viewer__flip" data-flip>Turn over</button>
       <div class="id-viewer__zoom" role="group" aria-label="Zoom">
         <button type="button" class="icon-button" data-zoom="out" aria-label="Zoom out"><span aria-hidden="true">−</span></button>
         <output class="id-viewer__level" aria-live="polite">100%</output>
@@ -106,7 +102,7 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
       <button class="icon-button id-viewer__close" type="button" data-close aria-label="Close card">${icon("close")}</button>
     </header>
     <div class="id-viewer__stage" data-stage><div class="id-viewer__pan" data-pan><div class="id-card__flight" data-flight><div class="id-card" data-card>${face("front")}${face("back")}</div></div></div></div>
-    <p class="id-viewer__hint">${reducedMotion() ? "" : "Move over the card or drag it to tilt it · "}${opening.hasId ? "P and D turn it between the profile and the details · + and − zoom the profile · " : ""}Esc closes.${opening.hasId ? " Opening a USC ID is recorded in Activity." : ""}</p>`);
+    <p class="id-viewer__hint">${reducedMotion() ? "" : "Move over the card or drag it to tilt it · "}${opening.hasId ? "Tap the card or press F to turn it over · P and D switch between the profile and the details · + and − zoom · " : ""}Esc closes.${opening.hasId ? " Opening a USC ID is recorded in Activity." : ""}</p>`);
   document.body.append(dialog);
   const stage = dialog.querySelector<HTMLElement>("[data-stage]")!;
   const pan = dialog.querySelector<HTMLElement>("[data-pan]")!;
@@ -114,6 +110,7 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   const cardBox = dialog.querySelector<HTMLElement>("[data-card]")!;
   const level = dialog.querySelector("output")!;
   const zoomGroup = dialog.querySelector<HTMLElement>(".id-viewer__zoom")!;
+  const flipButton = dialog.querySelector<HTMLButtonElement>("[data-flip]")!;
   const faces = [...dialog.querySelectorAll<HTMLElement>(".id-card__face")] as [HTMLElement, HTMLElement];
   const motion = cardMotion(cardBox);
 
@@ -121,28 +118,28 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   let card: Card | null = typeof opening.card === "function" ? null : opening.card;
   let cardLoad: Promise<Card | null> | null = typeof opening.card === "function" ? null : Promise.resolve(card);
   const loadCard = () => cardLoad ??= (opening.card as () => Promise<Card | null>)().then((loaded) => (card = loaded), (error: unknown) => { cardLoad = null; throw error; });
-  // The profile: both sides of the USC ID together, loaded once, the first time it is shown.
-  const pair = document.createElement("div");
-  pair.className = "id-card__pair is-loading";
-  const images = { front: document.createElement("img"), back: document.createElement("img") };
-  for (const side of ["front", "back"] as const) {
-    Object.assign(images[side], { alt: `${side === "front" ? "Front" : "Back"} of ${person.name}'s USC ID`, draggable: false });
-    images[side].dataset.face = side;
-    pair.append(images[side]);
-  }
+  // The profile is the ID itself: each side its own picture, loaded once, the first time the profile is shown.
+  const scanFace = (side: Side) => {
+    const holder = document.createElement("div");
+    holder.className = "id-card__scan is-loading";
+    const image = Object.assign(document.createElement("img"), { alt: `${side === "front" ? "Front" : "Back"} of ${person.name}'s USC ID`, draggable: false });
+    image.dataset.face = side;
+    holder.append(image);
+    return { holder, image, ready: null as Promise<void> | null };
+  };
+  const sides = { front: scanFace("front"), back: scanFace("back") };
   const cover = opening.cover();
-  const element = (content: Content) => content === "details" ? opening.details : content === "cover" ? cover : pair;
-  let profileReady: Promise<void> | null = null;
-  /** Fetches both scans once (the Worker records the opening) and resolves when they can be drawn. */
-  const loadProfile = () => profileReady ??= loadCard().then(async (loaded) => {
+  const element = (content: Content) => content === "details" ? opening.details : content === "cover" ? cover : sides[content].holder;
+  /** Fetches a side's scan once (the Worker records the opening) and resolves when it can be drawn. */
+  const loadSide = (side: Side) => sides[side].ready ??= loadCard().then((loaded) => {
     if (!loaded) throw new Error("No USC ID is on file.");
-    pair.classList.toggle("is-stacked", pairShape(loaded).stacked);
-    const urls = await Promise.all((["front", "back"] as const).map((side) => scan(person.id, loaded.mediaId, side)));
-    (["front", "back"] as const).forEach((side, index) => { images[side].src = urls[index]!; });
-    await Promise.all(Object.values(images).map((image) => image.decode().catch(() => undefined)));
-    pair.classList.remove("is-loading");
-  }).catch((error: unknown) => { profileReady = null; throw error; });
-  const ratio = (content: Content) => content === "profile" && card ? pairShape(card).ratio : content === "details" ? DETAILS_RATIO : CARD_RATIO;
+    return scan(person.id, loaded.mediaId, side);
+  }).then(async (url) => {
+    sides[side].image.src = url;
+    await sides[side].image.decode().catch(() => undefined);
+    sides[side].holder.classList.remove("is-loading");
+  }, (error: unknown) => { sides[side].ready = null; throw error; });
+  const ratio = (content: Content) => (content === "front" || content === "back") && card ? card[content].width / card[content].height : content === "details" ? DETAILS_RATIO : CARD_RATIO;
 
   // The card's turn, in degrees: always a multiple of 180, so one face is up.
   let angle = 0;
@@ -161,12 +158,15 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
     }
   };
 
-  let current: View = opening.start;
+  // What the face that is up shows, and the side of the ID the profile last showed.
+  let shown: Content = opening.start === "details" ? "details" : "front";
+  let side: Side = "front";
+  const current = () => viewOf(shown);
   let view = { scale: 1, x: 0, y: 0 };
   // While the card flies in or out it takes no other input.
   let flying = false;
   let closing = false;
-  const zoomable = () => current === "profile";
+  const zoomable = () => current() === "profile";
 
   const clamp = () => {
     // The flight box is never tilted, so it measures the card as laid out (and zoomed).
@@ -199,27 +199,33 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   const marks = () => {
     const buttons = [...dialog.querySelectorAll<HTMLButtonElement>("[data-view]")];
     const focused = buttons.includes(document.activeElement as HTMLButtonElement);
-    buttons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === current)));
+    buttons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === current())));
     // Turning the card by key keeps the focus on the view now shown, so the ring never points at another one.
-    if (focused) buttons.find((button) => button.dataset.view === current)!.focus();
+    if (focused) buttons.find((button) => button.dataset.view === current())!.focus();
+    // A control that hides while it has the focus hands it to the view now shown, so keys keep reaching the card.
+    const lost = !zoomable() && (flipButton.contains(document.activeElement) || zoomGroup.contains(document.activeElement));
     zoomGroup.hidden = !zoomable();
-    cardBox.dataset.view = current;
+    flipButton.hidden = !zoomable();
+    if (lost) buttons.find((button) => button.dataset.view === current())?.focus();
+    flipButton.setAttribute("aria-label", `Turn over to the ${shown === "back" ? "front" : "back"}`);
+    cardBox.dataset.view = current();
+    cardBox.dataset.side = shown;
   };
 
   let asked = 0;
-  /** Turns the card to `next`: to the details one way, back to the profile the other. */
-  const show = async (next: View, animate = true) => {
-    if (next === current || closing) return;
+  /** Turns the card over to `next`: forward (the way a card is turned) or back. */
+  const turnTo = async (next: Content, forward: boolean, animate = true) => {
+    if (next === shown || closing) return;
     const ask = ++asked;
-    if (next === "profile") {
+    if (next === "front" || next === "back") {
       try {
-        // The profile appears once it can be drawn, or after a short wait with its loading state.
-        await Promise.race([loadProfile(), new Promise((resolve) => window.setTimeout(resolve, 600))]);
+        // A side appears once it can be drawn, or after a short wait with its loading state.
+        await Promise.race([loadSide(next), new Promise((resolve) => window.setTimeout(resolve, 600))]);
       } catch (error) { toast(failure(error), "error"); return; }
       if (ask !== asked || closing) return;
+      side = next;
     }
-    const forward = VIEWS.indexOf(next) > VIEWS.indexOf(current);
-    current = next;
+    shown = next;
     place(next, under());
     angle += forward ? 180 : -180;
     if (ratio(next) !== Number(flight.style.getPropertyValue("--ratio"))) {
@@ -233,18 +239,24 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
     apply(true);
     marks();
   };
+  /** The profile (the side of the ID it last showed) or the details. */
+  const show = (next: View) => next === current() ? undefined : turnTo(next === "details" ? "details" : side, next === "details");
+  /** Turns the ID over: front to back, back to front. */
+  const flip = () => { if (current() === "profile") void turnTo(shown === "back" ? "front" : "back", true); };
 
   // Laid out on the face that is up, with what the tile shows underneath, so the card can leave the tile showing it.
-  const tile = opening.tileFor(current);
-  const leaves: Content = (tile?.dataset.shows as Content | undefined) ?? current;
-  place(current, faces[0]);
-  const other: Content = leaves !== current ? leaves : current === "details" ? "cover" : "details";
+  const tile = opening.tileFor(current());
+  const leaves = tileFace(tile?.dataset.shows, shown);
+  place(shown, faces[0]);
+  // Underneath: what the tile shows, or else the ID's back (so it shows as the card turns in flight), or the drawn card.
+  const other: Content = leaves !== shown ? leaves : shown === "details" ? "cover" : "back";
   place(other, faces[1]);
-  if (current === "profile") {
+  if (shown !== "details") {
     try { await loadCard(); } catch (error) { toast(failure(error), "error"); dialog.remove(); return; }
-    await Promise.race([loadProfile().catch((error: unknown) => toast(failure(error), "error")), new Promise((resolve) => window.setTimeout(resolve, 600))]);
+    void loadSide("back").catch(() => undefined);
+    await Promise.race([loadSide("front").catch((error: unknown) => toast(failure(error), "error")), new Promise((resolve) => window.setTimeout(resolve, 600))]);
   }
-  flight.style.setProperty("--ratio", String(ratio(current)));
+  flight.style.setProperty("--ratio", String(ratio(shown)));
   motion.turn(0, false);
   settleFaces();
   marks();
@@ -261,14 +273,14 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   const closeViewer = () => {
     if (closing || !dialog.open) return;
     closing = true;
-    const back = opening.tileFor(current);
+    const back = opening.tileFor(current());
     if (reducedMotion() || flying) { dialog.close(); return; }
     view = { scale: 1, x: 0, y: 0 };
     apply();
     motion.still();
-    const lands: Content = (back?.dataset.shows as Content | undefined) ?? current;
+    const lands = tileFace(back?.dataset.shows, shown);
     let spin = 0;
-    if (lands !== current) {
+    if (lands !== shown) {
       place(lands, under());
       flight.style.setProperty("--ratio", String(ratio(lands)));
       spin = 180;
@@ -305,6 +317,7 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
       return;
     }
     if (target.closest("[data-close]")) closeViewer();
+    if (target.closest("[data-flip]")) flip();
     const viewButton = target.closest<HTMLButtonElement>("[data-view]");
     if (viewButton) void show(viewButton.dataset.view as View);
     const zoom = target.closest<HTMLButtonElement>("[data-zoom]")?.dataset.zoom;
@@ -317,16 +330,14 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
     const step = 60;
     const moves: Record<string, [number, number]> = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
     const key = event.key.toLowerCase();
-    const offered = opening.hasId ? VIEWS : (["details"] as View[]);
     if (opening.hasId && (key === "p" || key === "d")) void show(key === "p" ? "profile" : "details");
+    else if (key === "f" && current() === "profile") flip();
     else if (event.key === "+" || event.key === "=") zoomTo(view.scale * 1.5);
     else if (event.key === "-") zoomTo(view.scale / 1.5);
     else if (event.key === "0") zoomTo(1);
     else if (moves[event.key] && view.scale > 1) { view.x += moves[event.key]![0]; view.y += moves[event.key]![1]; apply(true); }
-    else if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && view.scale === 1 && offered.length > 1) {
-      const index = offered.indexOf(current) + (event.key === "ArrowRight" ? 1 : -1);
-      void show(offered[(index + offered.length) % offered.length]!);
-    }
+    // Left and right turn the ID over, as a hand would.
+    else if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && view.scale === 1 && current() === "profile") flip();
     else return;
     event.preventDefault();
   });
@@ -337,7 +348,6 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
     const [cx, cy] = fromCentre(event);
     zoomTo(view.scale * Math.exp(-event.deltaY * (event.deltaMode === 1 ? 0.05 : 0.0015)), cx, cy, false);
   }, { passive: false });
-  stage.addEventListener("dblclick", (event) => { if (!zoomable()) return; const [cx, cy] = fromCentre(event); zoomTo(view.scale > 1 ? 1 : 2.5, cx, cy); });
   // One finger or the mouse drags a zoomed side; two fingers pinch. At 100% the card leans toward the mouse (or a finger held on it).
   const pointers = new Map<number, { x: number; y: number }>();
   let pinch: { distance: number; scale: number } | null = null;
@@ -349,12 +359,15 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
     const [x, y] = [(event.clientX - box.left) / box.width, (event.clientY - box.top) / box.height];
     return x >= 0 && x <= 1 && y >= 0 && y <= 1 ? [x, y] as const : null;
   };
+  // A tap on the ID (a press that hardly moves and is let go soon) turns it over.
+  let tap: { id: number; x: number; y: number; at: number } | null = null;
   stage.addEventListener("pointerdown", (event) => {
     // A link or button on the details is pressed like any other: captured, its click would land on the stage instead.
     if ((event.target as HTMLElement).closest("a[href], button")) return;
     stage.setPointerCapture(event.pointerId);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pointers.size === 2 && zoomable()) { pinch = { distance: distance(), scale: view.scale }; motion.rest(); return; }
+    tap = pointers.size === 1 && across(event) && view.scale === 1 ? { id: event.pointerId, x: event.clientX, y: event.clientY, at: Date.now() } : null;
+    if (pointers.size === 2 && zoomable()) { tap = null; pinch = { distance: distance(), scale: view.scale }; motion.rest(); return; }
     const point = across(event);
     if (point && tilts()) { motion.press(true); motion.point(...point); }
   });
@@ -378,6 +391,9 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
     }
   });
   const release = (event: PointerEvent) => {
+    const tapped = event.type === "pointerup" && tap?.id === event.pointerId && pointers.size === 1 && Math.hypot(event.clientX - tap.x, event.clientY - tap.y) < 10 && Date.now() - tap.at < 450;
+    tap = null;
+    if (tapped && current() === "profile") flip();
     pointers.delete(event.pointerId);
     if (pointers.size < 2) pinch = null;
     motion.press(false);
@@ -396,7 +412,7 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   // lands on another face than the tile's), then catches the light.
   flying = true;
   tile?.classList.add("is-away");
-  const landing = flyIn(flight, tile?.isConnected ? tile.getBoundingClientRect() : null, leaves !== current ? -540 : -360);
+  const landing = flyIn(flight, tile?.isConnected ? tile.getBoundingClientRect() : null, leaves !== shown ? -540 : -360);
   // Darker than the static viewer's 97%, because its backdrop stays clear while the card flies (src/styles.css).
   shade(0, 99, 320);
   chrome(true);
