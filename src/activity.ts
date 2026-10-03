@@ -345,7 +345,7 @@ function toEvent(row: Row): ActivityEvent {
     LOCATION_PHOTO_REMOVED: () => `${actor} removed the picture of the place ${item}.`,
     LOCATION_ITEMS_MOVED: () => `${actor} moved the items kept in ${item} to ${typeof details.toPath === "string" ? details.toPath.slice(0, 200) : "another place"}.`,
     LOCATIONS_RECONCILED: () => `${typeof details.locationsCreated === "number" ? details.locationsCreated : "Some"} places were made from the storage locations typed on ${typeof details.itemsLinked === "number" ? details.itemsLinked : "the"} items; nothing typed was changed.`,
-    LOCATION_REPORTED: () => `${details.source === "SELF_SERVICE" ? "A phone" : actor} reported ${details.kind === "CANT_FIND" ? `that ${item} could not be found` : `that the place of ${item} looks wrong`}; stock and its place did not change.`,
+    LOCATION_REPORTED: () => `${details.source === "SELF_SERVICE" ? typeof details.reporter === "string" ? `${details.reporter.slice(0, 120)} (from a phone)` : "A phone" : actor} reported ${details.kind === "CANT_FIND" ? `that ${item} could not be found` : `that the place of ${item} looks wrong`}; stock and its place did not change.`,
     LOCATION_REPORT_RESOLVED: () => `${actor} resolved a location report for ${item}.`,
     ITEM_PHOTO_ADDED: () => `${actor} added a photo to ${item}.`,
     ITEM_PHOTO_REPLACED: () => `${actor} replaced the photo of ${item}.`,
