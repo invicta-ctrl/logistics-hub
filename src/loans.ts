@@ -104,6 +104,24 @@ async function byKey(db: D1Database, key: string) {
 }
 
 /**
+ * Whether any record points at this evidence key: true, false, or null when D1 cannot answer. An upload is deleted only on a
+ * definite false. An error can arrive after a batch committed (the answer lost on the way back), so "the write failed" never
+ * proves the photo is unused; when D1 cannot say, the photo is kept under its record-derived key for reconciliation.
+ */
+export async function photoReferenced(db: D1Database, key: string): Promise<boolean | null> {
+  try {
+    return Boolean(await db.prepare("SELECT 1 FROM loans WHERE photo_key = ?1 UNION ALL SELECT 1 FROM self_service_events WHERE photo_key = ?1 LIMIT 1").bind(key).first());
+  } catch {
+    return null;
+  }
+}
+
+/** Deletes an upload no record turned out to use; keeps it whenever that is not certain. */
+export async function dropUnusedPhoto(db: D1Database, bucket: R2Bucket, key: string): Promise<void> {
+  if (await photoReferenced(db, key) === false) await bucket.delete(key);
+}
+
+/**
  * Hands out a Loanable item (staff). The photo goes to R2 first; one D1 batch then writes the
  * guarded LOAN_OUT movement, the loan, its audit entry and the revision. If nothing was written
  * the photo is removed again.
@@ -131,8 +149,10 @@ export async function createLoan(db: D1Database, bucket: R2Bucket, actor: Actor,
   try {
     await db.batch(lendStatements(db, { id, itemId, details, photoKey, movementId: `MOV-${crypto.randomUUID()}`, key, actorId: actor.accountId, at: new Date().toISOString() }));
   } catch (error) {
-    await bucket.delete(photoKey);
-    throw error;
+    // Rolled back: the upload is unused. Committed with the answer lost: carry on and return the loan. Unknown: keep the photo.
+    const saved = await photoReferenced(db, photoKey);
+    if (saved === false) await bucket.delete(photoKey);
+    if (!saved) throw error;
   }
   const written = await db.prepare("SELECT b.on_hand AS onHand FROM loans l JOIN inventory_balances b ON b.id = l.item_id WHERE l.id = ?").bind(id).first<number>("onHand");
   if (written !== null) return { id, onHand: written };
