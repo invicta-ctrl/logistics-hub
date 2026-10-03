@@ -2,27 +2,38 @@ import type { DepartmentCode } from "./directory-policy";
 import { CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
-import { type Photo, type PhotoPanel, openViewer, photoPanel, rowThumb } from "./item-photo";
+import { type Photo, type PhotoPanel, openViewer, photoPanel, photoUrl, rowThumb } from "./item-photo";
+import { MAX_DEPTH, PATH_SEPARATOR, REPORT_LABELS, type ReportKind, VISIBILITY_LABELS, ancestry, inOrder, pathOf, placesOf, withinPlace } from "./location-tree";
+import { type Step, openWhereIsIt } from "./where-is-it";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { ApiError, MARK, type Html, type IconName, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
-  lendingAudience: string; onHand: number; reorderThreshold: number; storageLocation: string | null; listed: boolean;
+  lendingAudience: string; onHand: number; reorderThreshold: number; locationId: string | null; legacyLocation: string | null; openReports: number; listed: boolean;
   stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean; lastCountedAt: string | null; onLoan: number;
   consumptionMode: string; openUnits: number; openCondition: string | null; photoId: string | null;
 };
-type Inventory = { revision: number; items: Item[]; categories: string[]; locations: string[]; units: string[] };
+/** A place as the Worker lists it (src/locations.ts); paths, depth and order come from location-tree.ts. */
+export type PlaceRow = {
+  id: string; name: string; parentId: string | null; directions: string | null; visibility: string; active: boolean; updatedAt: string;
+  photo: Photo | null; itemCount: number; openReports: number;
+};
+type Inventory = { revision: number; items: Item[]; categories: string[]; locations: PlaceRow[]; units: string[] };
+type Report = {
+  id: string; kind: ReportKind; source: "STAFF" | "SELF_SERVICE"; note: string | null; createdAt: string; resolvedAt: string | null; resolutionNote: string | null;
+  location: string | null; reportedBy: string | null; resolvedBy: string | null;
+};
 type Movement = { id: string; createdAt: string; movementType: string; signedQuantity: number; status: string; notes: string | null; reason: string | null; related: string | null; actor: string | null; afterQuantity: number; borrower: string | null; purpose: string | null };
 type Change = { from: unknown; to: unknown };
 type CatalogEvent = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
 type DetailItem = Item & {
-  notes: string | null; updatedAt: string | null; listingGaps: string[]; photo: Photo | null;
+  location: string | null; notes: string | null; updatedAt: string | null; listingGaps: string[]; photo: Photo | null;
   legacyReportedAvailable: number | null; migratedOnHand: number; migrationDelta: number | null;
   legacySourceSheet: string | null; legacySourceRow: string | null; verificationNote: string | null; importedFrom: string | null;
 };
-type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; usesRecorded: number; unitsEmptied: number };
-type SortKey = "id" | "name" | "category" | "storageLocation" | "onHand";
+type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number };
+type SortKey = "id" | "name" | "category" | "location" | "onHand";
 type Tab = "overview" | "loan" | "details" | "history";
 
 const active = (item: Item) => item.status !== "INACTIVE";
@@ -39,14 +50,17 @@ const VIEWS = {
   low: { label: "Low stock", test: (item: Item) => isLow(item) && active(item) },
   out: { label: "Out of stock", test: (item: Item) => item.onHand <= 0 && active(item) },
   inactive: { label: "Inactive", test: (item: Item) => !active(item) },
-  gradual: { label: "Used gradually?", test: openUnitCandidate }
-};
+  gradual: { label: "Used gradually?", test: openUnitCandidate },
+  // Shown only while something is waiting: a report from the shelf or a phone, or a typed location that has no place yet.
+  reports: { label: "Location reports", test: (item: Item) => item.openReports > 0, quiet: true },
+  unplaced: { label: "Needs a place", test: (item: Item) => !item.locationId && Boolean(item.legacyLocation), quiet: true }
+} satisfies Record<string, { label: string; test: (item: Item) => boolean; quiet?: true }>;
 type View = keyof typeof VIEWS;
 const NO_LOCATION = "__none";
 /** How staff see the type: their choice between lending an item out and using it up. */
 const TYPE_CHOICES: Record<string, string> = { Loanable: "Borrow (Loanable)", Consumable: "Consume (Consumable)" };
 const FIELD_LABELS: Record<string, string> = {
-  name: "Name", aliases: "Other names", category: "Category", itemType: "Type", unit: "Unit", status: "Status", storageLocation: "Location",
+  name: "Name", aliases: "Other names", category: "Category", itemType: "Type", unit: "Unit", status: "Status", storageLocation: "Place",
   reorderThreshold: "Reorder level", lendingAudience: "Who may borrow", defaultLoanDays: "Loan period (days)", maximumLoanQty: "Maximum per loan",
   needsReview: "Review", notes: "Internal notes", stockArea: "Stock area", expiresOn: "Earliest expiry", consumptionMode: "Normally used"
 };
@@ -241,6 +255,7 @@ function tags(item: Item): Html {
   if (item.needsReview) list.push(html`<span class="tag tag--pending">Needs review</span>`);
   if (item.status !== "ACTIVE") list.push(html`<span class="tag ${item.status === "VERIFY" ? "tag--warn" : ""}">${label(item.status)}</span>`);
   if (item.openUnits > item.onHand) list.push(html`<span class="tag tag--warn">Open units need review</span>`);
+  if (item.openReports) list.push(html`<span class="tag tag--warn">Location reported</span>`);
   if (item.onHand <= 0) list.push(html`<span class="tag tag--bad">Out of stock</span>`);
   else if (isLow(item)) list.push(html`<span class="tag tag--warn">Low stock</span>`);
   return html`<span class="tags">${list}</span>`;
@@ -251,12 +266,12 @@ export function initials(name: string): string {
 }
 
 /** The metadata a reviewer confirms for a migrated record. */
-function reviewChecklist(item: Pick<Item, "category" | "itemType" | "unit" | "storageLocation">): Array<[string, boolean]> {
+function reviewChecklist(item: Pick<Item, "category" | "itemType" | "unit" | "locationId">): Array<[string, boolean]> {
   return [
     ["Category chosen", Boolean(item.category)],
     ["Type classified", item.itemType !== "NEEDS_REVIEW"],
     ["Unit set", Boolean(item.unit)],
-    ["Storage location recorded", Boolean(item.storageLocation)]
+    ["Place recorded", Boolean(item.locationId)]
   ];
 }
 
@@ -284,6 +299,8 @@ function eventTitle(event: CatalogEvent): string {
   if (event.action === "ITEM_PHOTO_ADDED") return "Photo added";
   if (event.action === "ITEM_PHOTO_REPLACED") return "Photo replaced";
   if (event.action === "ITEM_PHOTO_REMOVED") return "Photo removed";
+  if (event.action === "LOCATION_REPORTED") return `Reported: ${REPORT_LABELS[event.details.kind as ReportKind] ?? "location"}${event.details.source === "SELF_SERVICE" ? " (from a phone)" : ""}`;
+  if (event.action === "LOCATION_REPORT_RESOLVED") return `Report resolved: ${REPORT_LABELS[event.details.kind as ReportKind] ?? "location"}`;
   if (event.action === "REORDER_OPENED") return "Added to the restock list";
   if (event.action === "REORDER_RESTOCKED") return `Restocked (+${String(event.details.quantity)})`;
   if (event.action === "LOAN_CLOSED") return event.details.outcome === "LOST" ? "Loan closed · lost" : "Loan closed · returned damaged";
@@ -296,7 +313,7 @@ function eventTitle(event: CatalogEvent): string {
   if (change("status")?.to === "INACTIVE") return "Deactivated";
   if (change("status")?.from === "INACTIVE") return "Reactivated";
   if (LENDING_FIELDS.some((field) => change(field))) return "Lending settings changed";
-  if (change("category") || change("storageLocation")) return change("category") ? "Category changed" : "Location changed";
+  if (change("category") || change("storageLocation")) return change("category") ? "Category changed" : "Place changed";
   return "Details updated";
 }
 
@@ -314,16 +331,17 @@ export async function workspace(): Promise<void> {
         </div>
         <div class="page-header__actions">
           <p class="live-status" id="live-status">Connecting…</p>
+          <a class="button button--secondary" href="/staff/locations" data-route>${icon("pin")}Locations</a>
           <button class="button button--primary" type="button" id="new-item">${icon("plus")}New item</button>
         </div>
       </header>
       <div class="views" id="views" role="group" aria-label="Item views"></div>
       <div class="table-toolbar">
-        <label class="search-field">${icon("search")}<span class="visually-hidden">Search items</span><input id="inventory-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search name, other name, ID, category, location" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
+        <label class="search-field">${icon("search")}<span class="visually-hidden">Search items</span><input id="inventory-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search name, other name, ID, category, place" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
         <button class="button button--secondary filters-toggle" type="button" id="filters-toggle" aria-expanded="false" aria-controls="table-filters">${icon("filter")}<span>Filters</span></button>
         <div class="table-filters" id="table-filters">
           <div class="select-field"><label class="visually-hidden" for="filter-category">Category</label><select id="filter-category"></select></div>
-          <div class="select-field"><label class="visually-hidden" for="filter-location">Location</label><select id="filter-location"></select></div>
+          <div class="select-field"><label class="visually-hidden" for="filter-location">Place</label><select id="filter-location"></select></div>
           <div class="select-field select-field--narrow"><label class="visually-hidden" for="filter-type">Type</label><select id="filter-type"></select></div>
         </div>
         <p class="table-toolbar__count" id="inventory-count" aria-live="polite"></p>
@@ -333,10 +351,15 @@ export async function workspace(): Promise<void> {
 
   const params = new URLSearchParams(window.location.search);
   let inventory: Inventory | null = null;
+  /** The places of the latest answer, with each place's full path ("Office › Cabinet 1"), so a row never walks the tree. */
+  let places = placesOf([]);
+  let paths = new Map<string, string>();
+  let rows = new Map<string, PlaceRow>();
+  const placeText = (item: Pick<Item, "locationId">) => (item.locationId ? paths.get(item.locationId) : undefined) ?? null;
   const requestedView = params.get("view") ?? "";
   let view: View = Object.hasOwn(VIEWS, requestedView) ? requestedView as View : "all";
   const [sortParam, dirParam] = (params.get("sort") ?? "name").split("-");
-  let sortKey: SortKey = (["id", "name", "category", "storageLocation", "onHand"] as const).find((key) => key === sortParam) ?? "name";
+  let sortKey: SortKey = (["id", "name", "category", "location", "onHand"] as const).find((key) => key === sortParam) ?? "name";
   let sortDir = dirParam === "desc" ? -1 : 1;
   let filters = { category: params.get("category") ?? "", location: params.get("location") ?? "", type: params.get("type") ?? "" };
   let openId: string | null = null;
@@ -361,10 +384,10 @@ export async function workspace(): Promise<void> {
   }
 
   const compare = (a: Item, b: Item) => {
-    const left = a[sortKey] ?? "";
-    const right = b[sortKey] ?? "";
-    // Empty locations sort last in either direction, so the known ones stay together.
-    if (sortKey === "storageLocation" && (!left || !right) && left !== right) return left ? -1 : 1;
+    const left = sortKey === "location" ? placeText(a) ?? "" : a[sortKey] ?? "";
+    const right = sortKey === "location" ? placeText(b) ?? "" : b[sortKey] ?? "";
+    // Items without a place sort last in either direction, so the known ones stay together.
+    if (sortKey === "location" && (!left || !right) && left !== right) return left ? -1 : 1;
     const order = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
     return (order || a.name.localeCompare(b.name)) * sortDir;
   };
@@ -378,13 +401,20 @@ export async function workspace(): Promise<void> {
   const direction = (id: string) => { const was = changed.get(id); if (was === undefined) return ""; const now = previous.get(id) ?? was; return now > was ? "is-changed is-up" : "is-changed is-down"; };
   const row = (item: Item) => html`<tr data-key="${item.id}" class="${[direction(item.id), item.id === openId ? "is-open" : "", active(item) ? "" : "is-inactive"].join(" ")}">
     <td class="col-id">${item.id}</td>
-    <td class="col-item ${item.photoId ? "" : "col-item--bare"}">${rowThumb(item.photoId)}<button type="button" class="row-link">${item.name}</button><span class="cell-sub"><span class="cell-id">${item.id} · </span>${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}</span></td>
+    <td class="col-item ${item.photoId ? "" : "col-item--bare"}">${rowThumb(item.photoId)}<button type="button" class="row-link">${item.name}</button><span class="cell-sub"><span class="cell-id">${item.id} · </span>${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}${placeText(item) ? html`<span class="cell-place"> · ${placeText(item)}</span>` : ""}</span></td>
     <td class="col-category">${categoryName(item.category)}</td>
-    <td class="col-location">${item.storageLocation ?? html`<span class="muted">Not set</span>`}</td>
+    <td class="col-location">${placeCell(item)}</td>
     <td class="col-qty"><span class="qty" data-qty="${item.id}">${item.onHand}</span> <span class="qty-unit">${units(item.onHand, item.unit)}</span>${item.openUnits ? html`<span class="cell-sub">${sealedLine(item.onHand, item.openUnits, item.openCondition)}</span>` : ""}</td>
     <td class="col-status">${tags(item)}</td></tr>`;
 
-  const matches = (item: Item, query: string) => !query || `${item.name} ${item.id} ${item.aliases ?? ""} ${item.category} ${item.storageLocation ?? ""}`.toLowerCase().includes(query);
+  /** The leaf place with the places around it beneath; an item whose typed location has no place yet shows what was typed. */
+  const placeCell = (item: Item): Html => {
+    const text = placeText(item);
+    if (!text) return item.legacyLocation ? html`<span class="muted">Needs a place</span><span class="cell-sub">Typed: ${item.legacyLocation}</span>` : html`<span class="muted">Not set</span>`;
+    const above = text.split(PATH_SEPARATOR).slice(0, -1).join(PATH_SEPARATOR);
+    return html`<span class="place-leaf">${places.get(item.locationId!)?.name}</span>${above ? html`<span class="cell-sub">${above}</span>` : ""}`;
+  };
+  const matches = (item: Item, query: string) => !query || `${item.name} ${item.id} ${item.aliases ?? ""} ${item.category} ${placeText(item) ?? ""} ${item.legacyLocation ?? ""}`.toLowerCase().includes(query);
 
   const fillSelect = (select: HTMLSelectElement, all: string, options: Array<[string, string]>, value: string) => {
     const markup = html`<option value="">${all}</option>${options.map(([optionValue, text]) => html`<option value="${optionValue}">${text}</option>`)}`;
@@ -398,21 +428,25 @@ export async function workspace(): Promise<void> {
     results.removeAttribute("aria-busy");
     const items = inventory.items;
     writeParams({ view: view === "all" ? null : view, q: search.value.trim(), ...filters, sort: sortKey === "name" && sortDir === 1 ? null : `${sortKey}-${sortDir === 1 ? "asc" : "desc"}` });
-    mount(document.querySelector("#views")!, html`${Object.entries(VIEWS).map(([key, value]) =>
-      html`<button type="button" class="view-tab" data-view="${key}" aria-pressed="${key === view}">${value.label}<span class="view-tab__count">${items.filter(value.test).length}</span></button>`)}`);
+    mount(document.querySelector("#views")!, html`${Object.entries(VIEWS).flatMap(([key, value]) => {
+      const count = items.filter(value.test).length;
+      return "quiet" in value && !count && key !== view ? [] : [html`<button type="button" class="view-tab" data-view="${key}" aria-pressed="${key === view}">${value.label}<span class="view-tab__count">${count}</span></button>`];
+    })}`);
     const reviewed = items.filter((item) => !item.needsReview).length;
     const meter = document.querySelector<HTMLElement>("#review-meter")!;
     meter.hidden = reviewed === items.length;
     mount(meter, html`<p><strong>${reviewed.toLocaleString()}</strong> of ${plural(items.length, "record")} reviewed</p><progress max="${items.length}" value="${reviewed}" aria-label="Records reviewed">${reviewed}</progress>${view === "review" ? "" : html`<button type="button" class="text-link" data-view="review">Review the next records ${icon("arrow")}</button>`}`);
     fillSelect(selects.category, "All categories", inventory.categories.map((value) => [value, categoryName(value)]), filters.category);
-    fillSelect(selects.location, "All locations", [[NO_LOCATION, "No location set"], ...inventory.locations.map((value): [string, string] => [value, value])], filters.location);
+    fillSelect(selects.location, "All places", [[NO_LOCATION, "No place set"], ...inOrder(places).map(({ place }): [string, string] => [place.id, `${paths.get(place.id)}${place.active ? "" : " (inactive)"}`])], filters.location);
     fillSelect(selects.type, "All types", ITEM_TYPES.map((value) => [value, label(value)]), filters.type);
     const active = Object.values(filters).filter(Boolean).length;
     document.querySelector("#filters-toggle span")!.textContent = active ? `Filters (${active})` : "Filters";
     const query = search.value.trim().toLowerCase();
+    // A place stands for everything kept in it and in the places inside it.
+    const inside = filters.location && filters.location !== NO_LOCATION ? withinPlace(places, filters.location) : null;
     const shown = items.filter((item) => VIEWS[view].test(item)
       && (!filters.category || item.category === filters.category)
-      && (!filters.location || (filters.location === NO_LOCATION ? !item.storageLocation : item.storageLocation === filters.location))
+      && (!filters.location || (filters.location === NO_LOCATION ? !item.locationId : inside?.has(item.locationId ?? "")))
       && (!filters.type || item.itemType === filters.type)
       && matches(item, query)).sort(compare);
     shownIds = shown.map((item) => item.id);
@@ -421,7 +455,7 @@ export async function workspace(): Promise<void> {
     preservingFocus(results, () => mount(results, shown.length
       ? html`${hint}<div class="data-table-wrap"><table class="data-table data-table--items">
           <caption class="visually-hidden">Items. Select an item to see, review or edit it.</caption>
-          <thead><tr>${sortHeader("id", "ID", "col-id")}${sortHeader("name", "Item", "col-item")}${sortHeader("category", "Category", "col-category")}${sortHeader("storageLocation", "Location", "col-location")}${sortHeader("onHand", "On hand", "col-qty")}<th scope="col" class="col-status">Status</th></tr></thead>
+          <thead><tr>${sortHeader("id", "ID", "col-id")}${sortHeader("name", "Item", "col-item")}${sortHeader("category", "Category", "col-category")}${sortHeader("location", "Place", "col-location")}${sortHeader("onHand", "On hand", "col-qty")}<th scope="col" class="col-status">Status</th></tr></thead>
           <tbody>${shown.map(row)}</tbody></table></div>`
       : view === "gradual" && !query && !Object.values(filters).some(Boolean) ? emptyState("No likely items left", "No active Consumable counted in reams, rolls, packs, bottles or similar units is still used as a whole unit.")
       : emptyState(view === "review" && !query ? "Every record is reviewed" : "No items match", view === "review" && !query ? "Nothing is waiting for review with these filters." : "Try another search, filter, or view.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
@@ -446,12 +480,15 @@ export async function workspace(): Promise<void> {
         previous.set(item.id, item.onHand);
       }
       if (filters.category && !data.categories.includes(filters.category)) filters = { ...filters, category: "" };
-      if (filters.location && filters.location !== NO_LOCATION && !data.locations.includes(filters.location)) filters = { ...filters, location: "" };
+      places = placesOf(data.locations);
+      rows = new Map(data.locations.map((place) => [place.id, place]));
+      paths = new Map(data.locations.map((place) => [place.id, pathOf(places, place.id)!]));
+      if (filters.location && filters.location !== NO_LOCATION && !places.has(filters.location)) filters = { ...filters, location: "" };
       inventory = data;
       render();
       // Refresh the open sheet when another staff member changes its quantity or open units.
       const shown = data.items.find((item) => item.id === openId);
-      if (openId && detail && shown && (openChanged || (shown.photoId ?? null) !== (detail.item.photo?.id ?? null) || stockSignature(shown.onHand, shown.openUnits, shown.openCondition) !== stockSignature(detail.item.onHand, detail.openUnits.length, worstCondition(detail.openUnits)))) void refreshStock(openId);
+      if (openId && detail && shown && (openChanged || (shown.photoId ?? null) !== (detail.item.photo?.id ?? null) || shown.openReports !== detail.reports.filter((report) => !report.resolvedAt).length || stockSignature(shown.onHand, shown.openUnits, shown.openCondition) !== stockSignature(detail.item.onHand, detail.openUnits.length, worstCondition(detail.openUnits)))) void refreshStock(openId);
       if (pendingItem) { openItem(pendingItem); pendingItem = null; }
     },
     onError: (error) => {
@@ -502,7 +539,8 @@ export async function workspace(): Promise<void> {
     const thumb = target.closest<HTMLElement>("[data-photo]");
     if (thumb) {
       const id = thumb.closest<HTMLElement>("tr[data-key]")!.dataset.key!;
-      void openViewer(thumb.dataset.photo!, inventory?.items.find((entry) => entry.id === id)?.name ?? id, () => results.querySelector<HTMLElement>(`tr[data-key="${CSS.escape(id)}"] img[data-photo]`));
+      const name = inventory?.items.find((entry) => entry.id === id)?.name ?? id;
+      void openViewer(photoUrl(thumb.dataset.photo!, "display"), `Photo of ${name}`, () => results.querySelector<HTMLElement>(`tr[data-key="${CSS.escape(id)}"] img[data-photo]`), name);
       return;
     }
     const sort = target.closest<HTMLButtonElement>("[data-sort]");
@@ -580,9 +618,11 @@ export async function workspace(): Promise<void> {
     try {
       const loaded = await fetchDetail(id);
       if (!loaded || !detail) return;
-      detail = { ...detail, item: { ...detail.item, onHand: loaded.item.onHand, photo: loaded.item.photo }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
-        openUnits: loaded.openUnits, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied };
+      const { onHand, photo: loadedPhoto, openReports, location, legacyLocation } = loaded.item;
+      detail = { ...detail, item: { ...detail.item, onHand, photo: loadedPhoto, openReports, location, legacyLocation }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
+        openUnits: loaded.openUnits, reports: loaded.reports, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied };
       photo?.render(loaded.item.photo);
+      mount(sheet.querySelector("#reports-card")!, reportsCard(detail));
       mount(sheet.querySelector("#profile-info")!, profileInfo(detail));
       mount(sheet.querySelector("#quantity-context")!, quantityContext(detail));
       mount(sheet.querySelector("#history")!, historyMarkup(detail));
@@ -597,13 +637,62 @@ export async function workspace(): Promise<void> {
     } catch { /* the next live refresh retries */ }
   }
 
+  /** The route to the item, outermost place first, for the Where is it? dialog. */
+  function showWhere(): void {
+    if (!detail || !inventory) return;
+    const { item } = detail;
+    const steps: Step[] = ancestry(places, item.locationId).reverse().map(({ id }) => ({ id, name: rows.get(id)!.name, directions: rows.get(id)!.directions, photo: rows.get(id)!.photo }));
+    openWhereIsIt({
+      item: item.name, steps, pictureUrl: (id, size) => `/api/staff/location-media/${id}/${size}`, note: true,
+      returnFocus: () => sheet.querySelector<HTMLElement>("[data-where]"),
+      noRoute: item.legacyLocation ? `No place is recorded yet. It was typed earlier as “${item.legacyLocation}”: choose the matching place in Edit details.` : "No place is recorded for this item yet. Choose one in Edit details.",
+      report: async (kind, note, id) => {
+        const result = await api<{ recorded: boolean }>(`/api/staff/items/${encodeURIComponent(item.id)}/location-report`, { method: "POST", body: JSON.stringify({ id, kind, note }) });
+        void refreshStock(item.id).then(() => poll.refresh());
+        return result.recorded;
+      },
+      pictureHelp: (step) => step ? html`<a class="text-link" href="/staff/locations?place=${step.id}" data-route>Add one in Locations</a>` : html`<span class="muted">Choose a place in Edit details first.</span>`
+    });
+  }
+
+  /** Asks for an optional note under the report being resolved. */
+  function openResolve(button: HTMLButtonElement): void {
+    const row = button.closest<HTMLElement>("[data-report-id]")!;
+    if (row.querySelector(".report__form")) return;
+    button.hidden = true;
+    row.insertAdjacentHTML("beforeend", html`<form class="report__form form" novalidate><div class="field"><label for="resolve-note-${row.dataset.reportId}">Note <span class="field__optional">optional</span></label>
+      <input id="resolve-note-${row.dataset.reportId}" name="note" maxlength="300" autocomplete="off" placeholder="Found it on shelf B" /></div>
+      <div class="report__alert form-alert" role="alert" hidden></div>
+      <div class="where__buttons"><button class="button button--primary button--sm" type="submit">Resolve report</button><button class="button button--ghost button--sm" type="button" data-resolve-cancel>Cancel</button></div></form>`.value);
+    row.querySelector<HTMLInputElement>(".report__form input")!.focus();
+  }
+
+  async function sendResolve(form: HTMLFormElement): Promise<void> {
+    const row = form.closest<HTMLElement>("[data-report-id]")!;
+    const alert = form.querySelector<HTMLElement>(".report__alert")!;
+    const submit = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
+    submit.disabled = true;
+    setMessage(alert, "");
+    try {
+      await api(`/api/staff/location-reports/${row.dataset.reportId}/resolve`, { method: "POST", body: JSON.stringify({ note: form.querySelector<HTMLInputElement>("input[name=note]")!.value }) });
+      toast("Report resolved.");
+      if (openId) await refreshStock(openId);
+      await poll.refresh();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) { toast(error.message, "error"); if (openId) await refreshStock(openId); await poll.refresh(); return; }
+      setMessage(alert, failure(error));
+      submit.disabled = false;
+    }
+  }
+
   /** Who and what the item is at a glance, beside its photo: availability, status, type, category and place. */
   function profileInfo({ item, loans }: Detail): Html {
     const out = loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
     return html`<p class="profile__stock"><strong>${item.onHand}</strong> ${units(item.onHand, item.unit)} on hand${out ? html` <span class="muted">· ${out} on loan</span>` : ""}</p>
       ${tags(item)}
       <p class="profile__meta">${label(item.itemType)} · ${categoryName(item.category)}</p>
-      <p class="profile__meta profile__meta--place">${icon("pin")}<span>${item.storageLocation ?? html`<span class="muted">No location set</span>`}</span></p>`;
+      <p class="profile__meta profile__meta--place">${icon("pin")}<span>${item.location ?? html`<span class="muted">No place set</span>`}${!item.location && item.legacyLocation ? html`<span class="muted"> · typed earlier: ${item.legacyLocation}</span>` : ""}</span></p>
+      <p class="profile__where"><button type="button" class="button button--secondary button--sm" data-where>${icon("pin")}Where is it?</button></p>`;
   }
 
   function quantityContext({ item, loans, openUnits }: Detail): Html {
@@ -612,6 +701,20 @@ export async function workspace(): Promise<void> {
     return html`${tracksOpenUnits(item) || openUnits.length ? html`<span class="quantity__sealed">${sealedLine(item.onHand, openUnits.length, worstCondition(openUnits))}</span>` : ""}${state === "OUT" ? html`<span class="tag tag--bad">Out of stock</span>` : state === "LOW" ? html`<span class="tag tag--warn">Low stock</span>` : item.reorderThreshold > 0 ? html`<span class="tag tag--ok">Above reorder level</span>` : ""}
       <span>${item.reorderThreshold > 0 ? `Reorder level ${item.reorderThreshold}` : "No reorder level set"}</span>
       ${out ? html`<button type="button" class="text-link" data-goto="loan">${out} more on loan</button>` : ""}`;
+  }
+
+  /** Open reports about where the item is, each with its own Resolve; closed ones stay in the item's history. */
+  function reportsCard({ reports }: Detail): Html {
+    const open = reports.filter((report) => !report.resolvedAt);
+    if (!open.length) return html``;
+    return html`<section class="card card--review" aria-labelledby="reports-title">
+      <div class="card__head"><h3 id="reports-title">${open.length === 1 ? "Someone reported where this is" : `${open.length} reports about where this is`}</h3></div>
+      <p class="card__text">A report changes nothing by itself. Look for the item, correct its place in Edit details if it moved, then resolve the report.</p>
+      <ul class="report-list">${open.map((report) => html`<li class="report" data-report-id="${report.id}">
+        <div><p class="report__title">${REPORT_LABELS[report.kind]}</p>
+          <p class="report__meta"><time datetime="${report.createdAt}">${formatDateTime(report.createdAt)}</time> · ${report.reportedBy ?? "Staff"}${report.location ? ` · said to be in ${report.location}` : ""}</p>
+          ${report.note ? html`<p class="report__note">${report.note}</p>` : ""}</div>
+        <button type="button" class="button button--secondary button--sm" data-resolve="${report.id}">Resolve</button></li>`)}</ul></section>`;
   }
 
   function overviewMarkup(detail: Detail): Html {
@@ -634,6 +737,7 @@ export async function workspace(): Promise<void> {
         <div><dt>Status</dt><dd>${label(item.status)}${item.needsReview ? "" : html` · Reviewed`}</dd></div>
         <div><dt>Other names</dt><dd>${item.aliases ?? html`<span class="muted">None</span>`}</dd></div>
       </dl>
+      <div id="reports-card">${reportsCard(detail)}</div>
       <section class="card ${gaps.length ? "" : "card--ok"}" aria-labelledby="lending-title">
         <div class="card__head"><h3 id="lending-title">${gaps.length ? "Not on the Lending Hub" : "Listed on the Lending Hub"}</h3>${gaps.length ? "" : html`<a class="text-link" href="/lending?q=${encodeURIComponent(item.name)}" target="_blank" rel="noopener">View ${icon("external")}<span class="visually-hidden">(opens in a new tab)</span></a>`}</div>
         ${gaps.length
@@ -664,7 +768,7 @@ export async function workspace(): Promise<void> {
       ${closed.length ? html`<section aria-labelledby="loans-closed-title"><h3 class="section-label" id="loans-closed-title">Recently returned</h3><ul class="loan-list loan-list--closed">${closed.map((loan) => loanRow(loan))}</ul></section>` : ""}`;
   }
 
-  function historyMarkup({ movements, events }: Detail): Html {
+  function historyMarkup({ movements, events, reports }: Detail): Html {
     type Entry = { at: string; markup: Html };
     const entries: Entry[] = [
       ...movements.map((movement) => {
@@ -682,10 +786,13 @@ export async function workspace(): Promise<void> {
           ? Object.entries(event.details).filter(([field]) => FIELD_LABELS[field]).map(([field, value]) => html`<li><span>${FIELD_LABELS[field]}</span> ${formatValue(field, (value as Change).from)} → <strong>${formatValue(field, (value as Change).to)}</strong></li>`)
           : [];
         const opening = Number(event.details.openingQuantity ?? 0);
+        // What was typed with a report or its resolution lives on the report; the history shows it where it happened.
+        const report = reports.find((entry) => entry.id === event.details.reportId);
+        const typed = event.action === "LOCATION_REPORTED" ? report?.note : event.action === "LOCATION_REPORT_RESOLVED" ? report?.resolutionNote : null;
         return { at: event.at, markup: html`<li class="history__item is-catalog">
           <div><p class="history__title">${eventTitle(event)}</p>
             <p class="history__meta"><time datetime="${event.at}">${formatDateTime(event.at)}</time> · ${event.actor ?? "System"}</p>
-            ${changes.length ? html`<ul class="history__changes">${changes}</ul>` : event.action === "ITEM_CREATED" && opening > 0 ? html`<p class="history__note">Opening quantity ${opening}</p>` : ""}</div></li>` };
+            ${changes.length ? html`<ul class="history__changes">${changes}</ul>` : event.action === "ITEM_CREATED" && opening > 0 ? html`<p class="history__note">Opening quantity ${opening}</p>` : typed ? html`<p class="history__note">${typed}</p>` : ""}</div></li>` };
       })
     ].sort((a, b) => b.at.localeCompare(a.at));
     return entries.length ? html`${entries.map((entry) => entry.markup)}` : html`<li class="history__empty">No history recorded yet.</li>`;
@@ -743,6 +850,16 @@ export async function workspace(): Promise<void> {
       const giveBack = element.closest<HTMLButtonElement>("[data-return]");
       const loan = giveBack && detail?.loans.find((entry) => entry.id === giveBack.dataset.return);
       if (loan) openReturn(loan, async () => { await refreshStock(loan.itemId); await poll.refresh(); });
+      if (element.closest("[data-where]")) showWhere();
+      const resolve = element.closest<HTMLButtonElement>("[data-resolve]");
+      if (resolve) openResolve(resolve);
+      if (element.closest("[data-resolve-cancel]")) { const row = element.closest<HTMLElement>("[data-report-id]")!; row.querySelector(".report__form")?.remove(); row.querySelector<HTMLButtonElement>("[data-resolve]")!.hidden = false; row.querySelector<HTMLButtonElement>("[data-resolve]")!.focus(); }
+    });
+    sheet.querySelector(".sheet__body")!.addEventListener("submit", (event) => {
+      const form = (event.target as HTMLElement).closest<HTMLFormElement>(".report__form");
+      if (!form) return;
+      event.preventDefault();
+      void sendResolve(form);
     });
     const target = () => detail ? { id: detail.item.id, name: detail.item.name, unit: detail.item.unit, onHand: detail.item.onHand, openUnits: detail.openUnits.length } : null;
     const openHost = sheet.querySelector<HTMLElement>("#open-units");
@@ -762,12 +879,26 @@ export async function workspace(): Promise<void> {
     }) : null;
     bindDetailsForm(item);
     photo = photoPanel(sheet.querySelector<HTMLElement>("#photo-panel")!, {
-      itemId: item.id, name: item.name, photo: item.photo,
-      view: (shown) => void openViewer(shown.id, item.name, () => sheet.querySelector<HTMLElement>("#photo-panel [data-view] img")),
+      id: item.id, name: item.name, photo: item.photo, noun: "photo", endpoint: `/api/staff/items/${encodeURIComponent(item.id)}/photo`, thumbUrl: (id) => photoUrl(id, "thumb"),
+      hintAdd: "Everyone sees this photo on the Lending Hub and Self-Service. Show the item itself, not people or documents.",
+      hintHas: "Everyone sees this photo on the Lending Hub and Self-Service. The large version stays staff-only.", removeNote: "The item keeps its stock and history.",
+      view: (shown) => void openViewer(photoUrl(shown.id, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLElement>("#photo-panel [data-view] img"), item.name),
       changed: async (next) => { if (detail?.item.id === item.id) detail = { ...detail, item: { ...detail.item, photo: next } }; await refreshStock(item.id); await poll.refresh(); },
       // Someone else changed the photo first: show theirs, and the list with it.
       refresh: async () => { const loaded = await fetchDetail(item.id); if (loaded && detail) { detail = { ...detail, item: { ...detail.item, photo: loaded.item.photo } }; photo?.render(loaded.item.photo); } await poll.refresh(); }
     });
+  }
+
+  /** Every place in reading order, indented by depth; an inactive place stays listed only for the item that is kept in it. */
+  function placeOptions(current: string | null): Html {
+    return html`${inOrder(places).filter(({ place }) => place.active || place.id === current).map(({ place }) =>
+      html`<option value="${place.id}" ${place.id === current ? html`selected` : ""}>${paths.get(place.id)}${place.active ? "" : " (inactive)"}</option>`)}`;
+  }
+
+  /** The places a new place may go inside: active ones with room beneath them, and the top level. */
+  function parentOptions(selected: string | null): Html {
+    return html`<option value="">Top level</option>${inOrder(places).filter(({ place, depth }) => place.active && depth < MAX_DEPTH).map(({ place, depth }) =>
+      html`<option value="${place.id}" ${place.id === selected ? html`selected` : ""}>${paths.get(place.id)}</option>`)}`;
   }
 
   function detailsFormMarkup(item: Partial<DetailItem>, creating = false): Html {
@@ -793,9 +924,18 @@ export async function workspace(): Promise<void> {
         <div class="field" data-consumption ${(item.itemType ?? "Loanable") === "Consumable" ? "" : html`hidden`}><label for="f-consumptionMode">How is this item normally used?</label><select id="f-consumptionMode" name="consumptionMode" aria-describedby="f-consumptionMode-hint">${options(CONSUMPTION_MODES, item.consumptionMode ?? "WHOLE_UNIT")}</select><p class="field__hint" id="f-consumptionMode-hint">Open and use gradually suits reams, bottles, rolls and boxes: staff open one unit at a time and mark it empty when it runs out. Stock is still counted in whole units.</p></div>
         <div class="field-grid">
           ${text("unit", "Unit", item.unit, html`required maxlength="30" autocomplete="off" placeholder="piece, box, pack"`, "Singular, as counted.")}
-          ${text("storageLocation", "Storage location", item.storageLocation, html`maxlength="120" list="location-options" autocomplete="off" placeholder="Office cabinet 2"`, "Where staff find it.", true)}
+          <div class="field"><label for="f-locationId">Place <span class="field__optional">optional</span></label>
+            <select id="f-locationId" name="locationId" aria-describedby="f-locationId-hint"><option value="">No place set</option>${placeOptions(item.locationId ?? null)}</select>
+            <p class="field__hint" id="f-locationId-hint">Where staff find it. Directions and the picture belong to the place, so every item kept there shares them.</p></div>
         </div>
-        <datalist id="location-options">${(inventory?.locations ?? []).map((value) => html`<option value="${value}"></option>`)}</datalist>
+        ${!creating && !item.locationId && item.legacyLocation ? html`<div class="callout">${icon("info")}<p>This item’s location was typed earlier as <strong>${item.legacyLocation}</strong>. Choose the matching place, or add it below; the typed text is kept as it was.</p></div>` : ""}
+        <div class="place-extra"><div class="place-preview" id="place-preview" aria-live="polite"></div>
+          <p><button type="button" class="text-link" data-new-place aria-expanded="false" aria-controls="place-new">${icon("plus")} New place</button></p>
+          <div class="place-new" id="place-new" hidden>
+            <div class="field-grid"><div class="field"><label for="np-name">Name of the new place</label><input id="np-name" maxlength="120" autocomplete="off" placeholder="Shelf 3" /></div>
+              <div class="field"><label for="np-parent">Inside</label><select id="np-parent"></select></div></div>
+            <p class="form-alert" id="np-alert" role="alert" hidden></p>
+            <div class="where__buttons"><button type="button" class="button button--secondary button--sm" data-np-add>Add place</button><button type="button" class="button button--ghost button--sm" data-np-cancel>Cancel</button></div></div></div>
         <div class="field"><label for="f-notes">Internal notes <span class="field__optional">optional</span></label><textarea id="f-notes" name="notes" maxlength="1000" rows="3">${item.notes ?? ""}</textarea></div>
       </div>
       <div class="form-section">
@@ -832,7 +972,7 @@ export async function workspace(): Promise<void> {
     const whole = (key: string) => values.get(key) === "" ? 0 : Number(values.get(key));
     return {
       name: String(values.get("name") ?? ""), aliases: String(values.get("aliases") ?? ""), category: String(values.get("category") ?? ""), unit: String(values.get("unit") ?? ""),
-      itemType: String(values.get("itemType")), status: String(values.get("status")), storageLocation: String(values.get("storageLocation") ?? ""),
+      itemType: String(values.get("itemType")), status: String(values.get("status")), locationId: String(values.get("locationId") ?? ""),
       reorderThreshold: whole("reorderThreshold"), lendingAudience: String(values.get("lendingAudience")),
       needsReview: values.get("reviewed") !== "on", notes: String(values.get("notes") ?? ""),
       stockArea: String(values.get("stockArea") ?? "Inventory"), expiresOn: String(values.get("expiresOn") ?? ""), consumptionMode: String(values.get("consumptionMode") ?? "WHOLE_UNIT"),
@@ -879,7 +1019,52 @@ export async function workspace(): Promise<void> {
       const twin = name ? inventory?.items.find((entry) => entry.id !== item.id && entry.name.toLowerCase() === name) : undefined;
       duplicate.hidden = !twin;
       duplicate.textContent = twin ? `${twin.id} already uses this name. Check it is not the same item before saving.` : "";
+      const row = values.locationId ? rows.get(values.locationId) : undefined;
+      mount(form.querySelector("#place-preview")!, row
+        ? html`<p class="place-preview__path">${icon("pin")}<span>${paths.get(row.id)} · ${VISIBILITY_LABELS[row.visibility] ?? row.visibility}${row.photo ? " · has a picture" : ""}</span></p>${row.directions ? html`<p class="place-preview__directions">${row.directions}</p>` : ""}`
+        : html``);
     };
+    const newPlace = form.querySelector<HTMLElement>("#place-new")!;
+    const chooser = form.querySelector<HTMLSelectElement>("#f-locationId")!;
+    const newPlaceToggle = form.querySelector<HTMLButtonElement>("[data-new-place]")!;
+    const closeNewPlace = () => { newPlace.hidden = true; newPlaceToggle.setAttribute("aria-expanded", "false"); };
+    newPlaceToggle.addEventListener("click", () => {
+      const open = newPlace.hidden;
+      newPlace.hidden = !open;
+      newPlaceToggle.setAttribute("aria-expanded", String(open));
+      if (!open) return;
+      // A new place most often sits beside the one just chosen.
+      mount(form.querySelector("#np-parent")!, parentOptions(chooser.value ? places.get(chooser.value)?.parentId ?? null : null));
+      form.querySelector<HTMLInputElement>("#np-name")!.focus();
+    });
+    form.querySelector("[data-np-cancel]")!.addEventListener("click", () => { closeNewPlace(); newPlaceToggle.focus(); });
+    form.querySelector("[data-np-add]")!.addEventListener("click", async (event) => {
+      const button = event.currentTarget as HTMLButtonElement;
+      const nameInput = form.querySelector<HTMLInputElement>("#np-name")!;
+      const parent = form.querySelector<HTMLSelectElement>("#np-parent")!.value;
+      const problem = form.querySelector<HTMLElement>("#np-alert")!;
+      if (!nameInput.value.trim()) { nameInput.setAttribute("aria-invalid", "true"); setMessage(problem, "Give the new place a name."); nameInput.focus(); return; }
+      nameInput.removeAttribute("aria-invalid");
+      button.disabled = true;
+      setMessage(problem, "");
+      try {
+        const { id: made } = await api<{ id: string }>("/api/staff/locations", { method: "POST", body: JSON.stringify({ name: nameInput.value, parentId: parent || null }) });
+        await poll.refresh();
+        mount(chooser, html`<option value="">No place set</option>${placeOptions(made)}`);
+        chooser.value = made;
+        nameInput.value = "";
+        closeNewPlace();
+        dirty = true;
+        preview();
+        toast("Place added.");
+        chooser.focus();
+      } catch (error) {
+        setMessage(problem, failure(error));
+        nameInput.focus();
+      } finally {
+        button.disabled = false;
+      }
+    });
     form.addEventListener("input", (event) => {
       dirty = true;
       // Choosing Borrow or Consume lists the item, unless staff already picked who sees it.

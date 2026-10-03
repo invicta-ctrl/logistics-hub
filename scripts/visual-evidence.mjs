@@ -9,7 +9,9 @@
 // ref, so before and after compare) and item-photos (item photos: list, profile, viewer, upload preview, missing
 // photo, and list weight/loading with 300 photos; runs only where the item photo panel exists) and public-photos (the
 // public Lending Hub and the phone Self-Service with item photos: lists, the item sheet and the narrowest phone; runs only
-// where the public thumbnail route exists), shell (the staff top/bottom bar and its menus at 320-1440 px, short screens,
+// where the public thumbnail route exists), locations (V1.4: the Locations page and its sheets, the place picker, Items by place,
+// the Where is it? dialog with its picture, missing picture and report flow, and the same on a phone in Self-Service, with
+// places drawn here and a typed location left without a place; runs only where /staff/locations exists), shell (the staff top/bottom bar and its menus at 320-1440 px, short screens,
 // 125/150% zoom and large text, with measured checks; works on any ref) and staff-directory (V1.3: the directory with a
 // large department and partial profiles, a profile's five sections, the 3D USC ID card (tile lean, flight out of the tile,
 // tilt with glare and foil, the turn) front, back and zoomed, and the
@@ -53,6 +55,8 @@ async function serve(dir, port) {
   if (pages.includes("public-photos")) runD1("UPDATE items SET status = 'ACTIVE', needs_review = 0, item_type = CASE WHEN rowid % 4 = 0 THEN 'Consumable' ELSE 'Loanable' END, lending_audience = CASE WHEN rowid % 5 = 0 THEN 'USC_STAFF_ONLY' ELSE 'STUDENTS_AND_USC_STAFF' END WHERE id IN (SELECT id FROM items ORDER BY name COLLATE NOCASE LIMIT 24)", { persistTo: state });
   for (const [role, username, name] of ACCOUNTS) runD1(createAccountSql(username, name, password, role), { persistTo: state });
   if (pages.includes("staff-directory")) runD1(directoryRecordsSql(), { persistTo: state });
+  // locations: items the phone is offered, two look-alike places the migration would have kept apart, and typed locations with no place yet.
+  if (pages.includes("locations") && fs.existsSync(path.join(dir, "migrations", "0024_locations.sql"))) runD1(locationRecordsSql(), { persistTo: state });
   const child = spawn(process.execPath, [wrangler, "dev", "--local", "--port", String(port), "--inspector-port", String(port + 1), "--persist-to", state, "--env-file", path.join(state, ".env")], { cwd: dir, stdio: "ignore", detached: process.platform !== "win32" });
   const url = `http://127.0.0.1:${port}`;
   for (let tries = 0; ; tries++) {
@@ -83,6 +87,17 @@ async function signIn(browser, url, username, [width, height, scale]) {
 async function resume(browser, state, [width, height, scale]) {
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, reducedMotion: "reduce", storageState: state });
   return { context, page: await context.newPage() };
+}
+
+/** Reviewed supplies a phone is offered, two look-alike places (as the migration leaves typed spellings) and typed locations that have no place yet. */
+function locationRecordsSql() {
+  return [
+    "UPDATE items SET status = 'ACTIVE', needs_review = 0, item_type = 'Consumable' WHERE id IN (SELECT id FROM items ORDER BY name COLLATE NOCASE LIMIT 16)",
+    "INSERT INTO locations(id, name, created_at, updated_at, imported_from) VALUES('LOC-9001', 'Supply Closet', '2026-10-03T00:00:00.000Z', '2026-10-03T00:00:00.000Z', 'ITEM_STORAGE_LOCATION'), ('LOC-9002', 'supply closet', '2026-10-03T00:00:00.000Z', '2026-10-03T00:00:00.000Z', 'ITEM_STORAGE_LOCATION')",
+    "UPDATE items SET location_id = 'LOC-9001', storage_location = 'Supply Closet' WHERE id IN (SELECT id FROM items ORDER BY name COLLATE NOCASE LIMIT 3)",
+    "UPDATE items SET location_id = 'LOC-9002', storage_location = 'supply closet' WHERE id IN (SELECT id FROM items ORDER BY name COLLATE NOCASE LIMIT 2 OFFSET 3)",
+    "UPDATE items SET storage_location = 'Back room shelf 4' WHERE id IN (SELECT id FROM items ORDER BY name COLLATE NOCASE LIMIT 2 OFFSET 5)"
+  ].join("; ");
 }
 
 /** Eight fictional product shots (box, bottle, roll; landscape and portrait), drawn on canvases: full-size and thumbnail JPEGs. */
@@ -215,6 +230,148 @@ async function photoScenes(browser, url, dir) {
   await seedPhotos(owner.page, url, current.items.filter((item) => !item.photoId && item.id !== tape).map((item) => item.id).filter((_, index) => index % 2 === 0).slice(0, 300 - shown.length), art);
   await owner.context.close();
   timings.with300Photos = await listLoad(browser, url, state, SIZES.desktop);
+  return timings;
+}
+
+/** Places and the Where is it? flow, as staff and then as a phone, at desktop, tablet and phone widths. */
+async function locationScenes(browser, url, dir) {
+  const shot = (page, name) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80 });
+  const first = await signIn(browser, url, "owner.demo", SIZES.desktop);
+  if (!(await first.page.request.get(`${url}/api/staff/locations`)).ok()) {
+    console.log("locations: this ref has no locations, skipped");
+    await first.context.close();
+    return {};
+  }
+  const state = await first.context.storageState();
+  const art = await first.page.evaluate(drawPhotos);
+  const api = async (method, route, body) => {
+    const response = await first.page.request.fetch(`${url}${route}`, { method, headers: { origin: url, "content-type": "application/json" }, data: body === undefined ? undefined : JSON.stringify(body) });
+    if (!response.ok()) throw new Error(`${method} ${route} failed: ${response.status()} ${await response.text()}`);
+    return response.json();
+  };
+  const place = async (name, parentId, directions, visibility) => (await api("POST", "/api/staff/locations", { name, parentId, directions, visibility })).id;
+  const office = await place("Office", null, "Second floor, past the stairs.", "SELF_SERVICE");
+  const storage = await place("Storage Area", office, "Through the door behind the front desk.", "SELF_SERVICE");
+  const cabinet = await place("Cabinet 1", storage, "Grey cabinet on the left wall, next to the printer.", "SELF_SERVICE");
+  const shelf = await place("Shelf 2", cabinet, "Second shelf from the top.", "SELF_SERVICE");
+  const garage = await place("Garage", null, "Behind the building. Ask at the desk for the key.", "STAFF_ONLY");
+  const rack = await place("Rack A", garage, null, "STAFF_ONLY");
+  const plain = await place("Display Case", storage, "By the window.", "SELF_SERVICE");
+  const form = new FormData();
+  const picture = art[0];
+  const put = (id, image) => first.page.request.put(`${url}/api/staff/locations/${id}/photo`, { headers: { origin: url }, multipart: {
+    display: { name: "display.jpg", mimeType: "image/jpeg", buffer: Buffer.from(image.display, "base64") },
+    thumb: { name: "thumb.jpg", mimeType: "image/jpeg", buffer: Buffer.from(image.thumb, "base64") }, expected: "" } });
+  void form;
+  await put(cabinet, picture);
+  await put(storage, art[1]);
+  const items = (await (await first.page.request.get(`${url}/api/staff/inventory`)).json()).items;
+  const named = items.filter((item) => !item.locationId && !item.legacyLocation && item.itemType === "Consumable");
+  const [onShelf, inCase, inRack, withReport] = [named[0], named[1], named[2], named[3]];
+  const patchItem = async (item, locationId) => {
+    const current = (await (await first.page.request.get(`${url}/api/staff/items/${item.id}`)).json()).item;
+    await api("PATCH", `/api/staff/items/${item.id}`, { ...current, locationId, updatedAt: current.updatedAt });
+  };
+  for (const [item, where] of [[onShelf, shelf], [inCase, plain], [inRack, rack], [withReport, shelf]]) await patchItem(item, where);
+  for (const extra of named.slice(4, 9)) await patchItem(extra, [cabinet, shelf, storage, plain][named.indexOf(extra) % 4]);
+  await api("POST", `/api/staff/items/${withReport.id}/location-report`, { id: crypto.randomUUID(), kind: "LOCATION_WRONG", note: "Shelf 2 was empty this morning." });
+  await first.context.close();
+
+  const timings = {};
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    const { context, page } = await resume(browser, state, viewport);
+    const settle = async () => { await page.waitForLoadState("networkidle"); await page.waitForTimeout(250); };
+    await page.goto(`${url}/staff/locations`);
+    await page.waitForSelector(".place-row");
+    await settle();
+    await shot(page, `locations-tree-${size}`);
+    await page.goto(`${url}/staff/locations?place=${cabinet}`);
+    await page.waitForSelector("dialog[open] #place-form");
+    await settle();
+    await shot(page, `locations-edit-${size}`);
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("dialog[open]", { state: "detached" });
+    await page.goto(`${url}/staff/locations?place=${plain}`);
+    await page.waitForSelector("dialog[open] #place-form");
+    await settle();
+    await shot(page, `locations-edit-nopicture-${size}`);
+    await page.goto(`${url}/staff/locations`);
+    await page.waitForSelector(".place-row");
+    await page.getByRole("button", { name: "New place" }).first().click();
+    await page.waitForSelector("dialog[open] #place-form");
+    await shot(page, `locations-create-${size}`);
+    await page.goto(`${url}/staff/items`);
+    await page.waitForSelector("tbody tr");
+    await settle();
+    await shot(page, `items-places-${size}`);
+    await page.goto(`${url}/staff/items?location=${storage}`);
+    await page.waitForSelector("tbody tr");
+    await settle();
+    await shot(page, `items-by-place-${size}`);
+    await page.goto(`${url}/staff/items?view=unplaced`);
+    await page.waitForSelector("tbody tr");
+    await shot(page, `items-needs-place-${size}`);
+    await page.goto(`${url}/staff/items?item=${onShelf.id}`);
+    await page.waitForSelector("dialog[open] .tabs");
+    await settle();
+    await shot(page, `item-profile-place-${size}`);
+    await page.getByRole("tab", { name: /Edit details/ }).click();
+    await page.locator("#f-locationId").scrollIntoViewIfNeeded();
+    await page.getByRole("button", { name: "New place" }).click();
+    await shot(page, `item-place-picker-${size}`);
+    await page.getByRole("tab", { name: "Overview" }).click();
+    await page.getByRole("button", { name: "Where is it?" }).click();
+    await page.waitForSelector("dialog.where .where__figure img");
+    await settle();
+    await shot(page, `where-${size}`);
+    await page.locator("dialog.where [data-zoom]").click();
+    await page.waitForSelector("dialog.viewer[open] img");
+    await page.waitForTimeout(400);
+    await shot(page, `where-zoom-${size}`);
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("dialog.viewer", { state: "detached" });
+    await page.getByRole("button", { name: "I can’t find it" }).click();
+    await shot(page, `where-report-${size}`);
+    await page.getByRole("button", { name: "Send report" }).click();
+    await page.waitForSelector(".where__done");
+    await shot(page, `where-sent-${size}`);
+    await page.locator("dialog.where").getByRole("button", { name: "Close" }).click();
+    await page.goto(`${url}/staff/items?item=${inRack.id}`);
+    await page.waitForSelector("dialog[open] .tabs");
+    await page.getByRole("button", { name: "Where is it?" }).click();
+    await page.waitForSelector("dialog.where .where__missing");
+    await settle();
+    await shot(page, `where-missing-picture-${size}`);
+    await page.goto(`${url}/staff/items?item=${withReport.id}`);
+    await page.waitForSelector("dialog[open] #reports-card");
+    await settle();
+    await shot(page, `item-report-${size}`);
+    await context.close();
+  }
+  // The phone, signed out: Self-Service shows the route only for shared places.
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    const context = await browser.newContext({ viewport: { width: viewport[0], height: viewport[1] }, deviceScaleFactor: viewport[2], reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await page.goto(`${url}/self-service?do=take&item=${inCase.id}`);
+    await page.waitForSelector("dialog[open] .ss-where");
+    await page.waitForLoadState("networkidle");
+    await shot(page, `selfservice-sheet-${size}`);
+    await page.getByRole("button", { name: "Where is it?" }).click();
+    await page.waitForSelector("dialog.where .where__step");
+    await page.waitForTimeout(300);
+    await shot(page, `selfservice-where-${size}`);
+    await page.getByRole("button", { name: "Location looks wrong" }).click();
+    await shot(page, `selfservice-report-${size}`);
+    await page.locator("dialog.where").getByRole("button", { name: "Cancel" }).click();
+    await page.locator("dialog.where").getByRole("button", { name: "Close" }).click();
+    await page.goto(`${url}/self-service?do=take&item=${inRack.id}`);
+    await page.waitForSelector("dialog[open] .ss-where");
+    await page.getByRole("button", { name: "Where is it?" }).click();
+    await page.waitForSelector("dialog.where");
+    await page.waitForTimeout(300);
+    await shot(page, `selfservice-where-private-${size}`);
+    await context.close();
+  }
   return timings;
 }
 
@@ -656,7 +813,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory") continue;
+          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory" || name === "locations") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -690,6 +847,7 @@ async function capture(url, dir) {
     const timings = { coldLoadToFirstRowMs: median(cold), sectionSwitchMs: median(swap) };
     if (pages.includes("item-photos")) Object.assign(timings, { itemPhotos: await photoScenes(browser, url, dir) });
     if (pages.includes("public-photos")) Object.assign(timings, { publicPhotos: await publicPhotoScenes(browser, url, dir) });
+    if (pages.includes("locations")) Object.assign(timings, { locations: await locationScenes(browser, url, dir) });
     if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
     if (pages.includes("staff-directory")) Object.assign(timings, { staffDirectory: await directoryScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);

@@ -3,6 +3,7 @@ import worker, { type Env } from "../src/worker";
 import { cleanJpeg } from "../src/item-media";
 import { hashPassword } from "../src/session";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
+import { jpeg, segment } from "./jpeg";
 
 /* V1.2 item profile photos: the JPEG check, then add / replace / remove through the Worker, with R2 and D1 kept in step. */
 
@@ -16,14 +17,6 @@ const call = (path: string, init: RequestInit = {}) => worker.fetch(new Request(
 const staff = (path: string, method = "GET", body?: unknown) =>
   call(path, { method, headers: { origin, cookie, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
 
-/** A small valid JPEG: tables, a frame of the given size, one scan with a stuffed byte, then whatever `around` adds. */
-const segment = (marker: number, payload: number[]) => [0xff, marker, (payload.length + 2) >> 8, (payload.length + 2) & 255, ...payload];
-function jpeg(options: { width?: number; height?: number; before?: number[]; after?: number[]; marker?: number; components?: number; precision?: number } = {}): Uint8Array {
-  const { width = 8, height = 6, before = [], after = [], marker = 0xc0, components = 3, precision = 8 } = options;
-  const frame = segment(marker, [precision, height >> 8, height & 255, width >> 8, width & 255, components, ...Array.from({ length: components }, (_, index) => [index + 1, 0x11, 0]).flat()]);
-  return Uint8Array.from([0xff, 0xd8, ...before, ...segment(0xdb, [0, ...Array(64).fill(1)]), ...frame, ...segment(0xc4, [0, ...Array(16).fill(0)]),
-    ...segment(0xda, [components, ...Array.from({ length: components }, (_, index) => [index + 1, 0]).flat(), 0, 63, 0]), 0x12, 0xff, 0x00, 0x34, 0xff, 0xd0, 0x56, 0xff, 0xd9, ...after]);
-}
 const ascii = (text: string) => [...text].map((char) => char.charCodeAt(0));
 /** An APP1 EXIF block carrying one orientation entry, in either byte order. */
 function exif(orientation: number, little: boolean): number[] {

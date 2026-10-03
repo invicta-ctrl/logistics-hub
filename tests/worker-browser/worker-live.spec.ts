@@ -304,7 +304,12 @@ test("migrated review: fill the gaps, mark reviewed, and move to the next record
   await page.locator("tbody .row-link").first().click();
   await page.getByRole("button", { name: "Review details" }).click();
   const sheet = page.getByRole("dialog");
-  await sheet.getByLabel("Storage location").fill("E2E shelf  A");
+  // Staff choose a place instead of typing one; a place that does not exist yet is made on the spot.
+  await sheet.getByRole("button", { name: "New place" }).click();
+  await sheet.getByLabel("Name of the new place").fill("E2E shelf  A");
+  await sheet.getByRole("button", { name: "Add place" }).click();
+  await expect(page.getByText("Place added.")).toBeVisible();
+  await expect(sheet.getByRole("combobox", { name: /^Place/ })).toHaveValue(/^LOC-\d{4}$/);
   await sheet.getByLabel("Other names").fill("e2e alias, E2E ALIAS");
   await sheet.getByLabel("Borrow or consume").selectOption("Consume (Consumable)");
   // Choosing it lists the item, so staff do not set the audience separately.
@@ -319,12 +324,12 @@ test("migrated review: fill the gaps, mark reviewed, and move to the next record
   await page.getByRole("searchbox", { name: "Search items" }).fill("e2e alias");
   await expect(page.locator("tbody tr")).toHaveCount(1);
   await page.getByRole("searchbox", { name: "Search items" }).fill("");
-  await page.getByLabel("Location", { exact: true }).selectOption("E2E shelf A");
+  await page.getByLabel("Place", { exact: true }).selectOption({ label: "E2E shelf A" });
   await expect(page.locator("tbody tr")).toHaveCount(1);
   await page.locator("tbody .row-link").first().click();
   await page.getByRole("tab", { name: "History" }).click();
   await expect(page.locator("#history li").first()).toContainText("Review completed");
-  await expect(page.locator("#history li").first()).toContainText("Location Not set → E2E shelf A");
+  await expect(page.locator("#history li").first()).toContainText("Place Not set → E2E shelf A");
   await expect(page.locator("#history")).not.toContainText("{");
 });
 
