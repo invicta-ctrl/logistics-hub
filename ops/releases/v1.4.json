@@ -1,0 +1,40 @@
+{
+  "release": "v1.4",
+  "title": "Smart Locations & Wayfinding",
+  "branch": "road-to-v2/v1.4-smart-locations",
+  "record": "docs/road-to-v2/releases/v1.4.md",
+  "target": {
+    "worker": "logistics-hub",
+    "d1": { "binding": "DB", "name": "logistics-hub", "id": "3ffd8edf-a176-4f63-8b7c-5215d11c98d8" },
+    "r2": {
+      "existing": [{ "binding": "EVIDENCE", "name": "logistics-hub-evidence" }, { "binding": "CATALOG_MEDIA", "name": "logistics-hub-catalog-media" }, { "binding": "STAFF_IDS", "name": "logistics-hub-staff-ids" }],
+      "create": []
+    },
+    "forbidden": ["hau-usc-logistics-production", "hau-usc-logistics-staging"]
+  },
+  "migrations": {
+    "pending": [
+      { "name": "0022_audit_log_append_only.sql", "sha256": "8b677581abe4f89a6aec4171c98883ee010eb890c62887f213915e524b7ea03e" },
+      { "name": "0023_last_active_owner.sql", "sha256": "eabcf2b777d5a6a5c99794f03a48dcd4d26cc9f809bd5c668db43b34adbddd0f" },
+      { "name": "0024_locations.sql", "sha256": "2628b3e2e014f4f33035f243e68548283f45af7bbe54b081bc37c8672cd1f847" }
+    ]
+  },
+  "expect": {
+    "schemaAdded": [
+      "index:idx_items_location", "index:idx_location_reports_item", "index:idx_location_reports_open", "index:idx_locations_parent", "index:idx_locations_sibling_name",
+      "index:sqlite_autoindex_location_reports_1", "index:sqlite_autoindex_locations_1", "index:sqlite_autoindex_locations_2",
+      "table:location_reports", "table:locations",
+      "trigger:audit_log_no_delete", "trigger:audit_log_no_update", "trigger:items_location_active_insert", "trigger:items_location_active_update",
+      "trigger:location_reports_no_delete", "trigger:location_reports_resolve_only", "trigger:locations_children_active", "trigger:locations_no_cycle",
+      "trigger:locations_parent_active_insert", "trigger:locations_parent_active_update", "trigger:staff_accounts_keep_owner", "trigger:staff_accounts_keep_owner_on_delete",
+      "view:location_paths"
+    ],
+    "schemaChanged": ["table:items"],
+    "tableRowsAfter": { "location_reports": 0 },
+    "derived": [
+      { "label": "places made from the distinct typed locations", "before": "typedPlaces", "after": "placeRows" },
+      { "label": "items linked to a place (every item with a typed location)", "before": "typedItems", "after": "placedItems" }
+    ],
+    "unchanged": ["items", "movements", "onHand", "loans", "phoneEvents"]
+  }
+}
