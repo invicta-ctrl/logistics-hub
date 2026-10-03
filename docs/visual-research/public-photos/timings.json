@@ -1,0 +1,85 @@
+{
+  "coldLoadToFirstRowMs": 223,
+  "sectionSwitchMs": 57,
+  "publicPhotos": {
+    "shiftBeforePhotos": {
+      "desktop": {
+        "shift": 0.5463,
+        "moved": [
+          "p.live-status",
+          "div.container",
+          "p.lending-note",
+          "footer.site-footer",
+          "nav.site-nav",
+          "button.chip",
+          "div.sort-toggle",
+          "label.switch"
+        ]
+      },
+      "phone": {
+        "shift": 0.0336,
+        "moved": [
+          "div.container",
+          "nav.site-nav",
+          "li.",
+          "button.chip",
+          "label.switch",
+          "p.avail"
+        ]
+      }
+    },
+    "shiftAfterPhotos": {
+      "desktop": {
+        "shift": 0.5642,
+        "moved": [
+          "nav.site-nav",
+          "div.container",
+          "p.lending-note",
+          "footer.site-footer",
+          "label.switch"
+        ]
+      },
+      "phone": {
+        "shift": 0.0334,
+        "moved": [
+          "div.container",
+          "nav.site-nav",
+          "span.chip__count",
+          "button.chip",
+          "li.",
+          "kbd.",
+          "label.switch",
+          "::after."
+        ]
+      }
+    },
+    "desktop": {
+      "lendingThumbs": 12,
+      "lendingKb": 34,
+      "lendingLayoutShift": 0.5463
+    },
+    "tablet": {
+      "lendingThumbs": 12,
+      "lendingKb": 34,
+      "lendingLayoutShift": 0.6841
+    },
+    "phone": {
+      "lendingThumbs": 11,
+      "lendingKb": 31,
+      "lendingLayoutShift": 0.0336
+    },
+    "topOfSelfService": {
+      "element": "small.",
+      "html": "<small>HAU USC Logistics</small>",
+      "parent": "span.ss-bar__title",
+      "ssPhotos": 1,
+      "itemPhotos": 0,
+      "ghostVisible": "none"
+    },
+    "narrow": {
+      "lendingThumbs": 8,
+      "lendingKb": 22,
+      "lendingLayoutShift": 0.0229
+    }
+  }
+}
