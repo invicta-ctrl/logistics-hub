@@ -161,6 +161,19 @@ describe("importing official ID scans", () => {
     env.DB.batch = original;
     expect(ids.objects.size).toBe(0);
   });
+
+  it("gives scans to the entry that already holds the import's key and has none, keeping the profile people typed", async () => {
+    const { id } = await json(await call("OWNER", "/api/staff/admin/directory/import", "POST", pairForm("Mendoza", "DCES")));
+    const { person, card } = await json(await call("OWNER", `/api/staff/admin/directory/${id}`));
+    expect((await call("ADMIN", `/api/staff/admin/directory/${id}`, "PATCH", { name: "Maria Luz Mendoza", position: "Executive Staff", studentId: "20-5555-111", updatedAt: person.updatedAt })).status).toBe(200);
+    expect((await call("OWNER", `/api/staff/admin/directory/${id}/id?expected=${card.mediaId}`, "DELETE")).status).toBe(200);
+    expect(await json(await call("OWNER", "/api/staff/admin/directory/import", "POST", pairForm("MENDOZA", "dces")))).toEqual({ id, status: "imported" });
+    const detail = await json(await call("OWNER", `/api/staff/admin/directory/${id}`));
+    expect(detail.person).toMatchObject({ name: "Maria Luz Mendoza", department: "DCES", position: "Executive Staff", studentId: "20-5555-111", hasId: true, sourceKey: "mendoza|DCES" });
+    expect(detail.card.mediaId).not.toBe(card.mediaId);
+    expect([...ids.objects.keys()].every((key) => key.startsWith(`ids/${detail.card.mediaId}/`))).toBe(true);
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM staff_directory").get()).toEqual({ n: 1 });
+  });
 });
 
 describe("viewing, replacing and removing scans", () => {

@@ -6,6 +6,7 @@ const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
   testDir: "./tests/worker-browser",
+  outputDir: "test-results/worker",
   workers: 1,
   use: { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH }, baseURL, trace: "retain-on-failure" },
   webServer: {

@@ -200,7 +200,7 @@ function homeTiles(): Html {
   const anything = snapshot ? snapshot.items.length > 0 : true;
   return html`${anything ? tile("get", "Get an item", "Borrow equipment or take supplies", "basket") : ""}
     ${tile("return", "Return", loans ? `${loans} on loan from this phone` : "Bring back what you borrowed", "giveBack", loans ? String(loans) : "")}
-    ${tile("activity", "My activity", "What this phone recorded", "clock", activityBadge)}`;
+    ${tile("activity", "My activity", "What this phone recorded", "history", activityBadge)}`;
 }
 
 function renderHome(): void {
@@ -380,7 +380,7 @@ function estimateLine(item: CatalogItem): Html {
 
 function quantityField(max: number): Html {
   return html`<div class="field"><label for="ss-qty">How many?</label>
-      <div class="stepper ss-stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One less">−</button><input id="ss-qty" name="quantity" type="number" inputmode="numeric" min="1" max="${max}" step="1" value="1" aria-describedby="ss-over" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">+</button></div>
+      <div class="stepper ss-stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One less">${icon("minus")}</button><input id="ss-qty" name="quantity" type="number" inputmode="numeric" min="1" max="${max}" step="1" value="1" aria-describedby="ss-over" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div>
       <p class="field__hint field__hint--warn" id="ss-over" aria-live="polite" data-over hidden></p></div>`;
 }
 
