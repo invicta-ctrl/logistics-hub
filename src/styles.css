@@ -1083,11 +1083,19 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .link-card { display: flex; align-items: center; gap: var(--space-3); }
 .link-card .icon { color: var(--text-3); }
 .link-form { display: grid; max-width: 30rem; gap: var(--space-3); }
+/* The holographic foil of the ID laminate, for the tiles and the viewer (which lives outside the page, in the top layer). */
+.id-pair, .id-viewer { --holo-foil: repeating-linear-gradient(110deg, hsl(2 100% 73%) 0%, hsl(53 100% 69%) 5%, hsl(93 100% 69%) 10%, hsl(176 100% 76%) 15%, hsl(228 100% 74%) 20%, hsl(283 100% 76%) 25%, hsl(2 100% 73%) 30%); }
 .id-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
 .id-tile { display: grid; gap: var(--space-2); margin: 0; }
-.id-tile__button { display: block; width: 100%; aspect-ratio: var(--ratio, 1.586); overflow: hidden; padding: 0; border: 0; border-radius: var(--radius-lg); background: var(--subtle); box-shadow: inset 0 0 0 1px var(--line), var(--shadow-sm); cursor: zoom-in; transition: box-shadow var(--dur-2); }
+.id-tile__button { position: relative; display: block; width: 100%; aspect-ratio: var(--ratio, 1.586); overflow: hidden; padding: 0; border: 0; border-radius: var(--radius-lg); background: var(--subtle); box-shadow: inset 0 0 0 1px var(--line), var(--shadow-sm); cursor: zoom-in; isolation: isolate;
+  transform: perspective(56rem) rotateX(var(--tile-x, 0deg)) rotateY(var(--tile-y, 0deg)) scale(var(--tile-press, 1)); transition: transform 700ms cubic-bezier(.2, .9, .3, 1.3), box-shadow var(--dur-2); }
+.id-tile__button.is-tilting { transition: transform 90ms linear, box-shadow var(--dur-2); }
 .id-tile__button:hover { box-shadow: inset 0 0 0 1px var(--line-strong), var(--shadow-md); }
 .id-tile__button img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.id-tile__button::before, .id-tile__button::after { position: absolute; inset: 0; content: ""; pointer-events: none; transition: opacity 300ms var(--ease); }
+.id-tile__button::before { background-image: var(--holo-foil); background-position: var(--tile-gx, 50%) var(--tile-gy, 50%); background-size: 280% 280%; mix-blend-mode: color-dodge; opacity: calc(var(--tile-glare, 0) * .3); }
+.id-tile__button::after { background-image: radial-gradient(farthest-corner circle at var(--tile-gx, 50%) var(--tile-gy, 50%), rgb(255 255 255 / 45%) 8%, rgb(255 255 255 / 18%) 26%, rgb(0 0 0 / 14%) 90%); mix-blend-mode: overlay; opacity: var(--tile-glare, 0); }
+.id-tile__button.is-away img { opacity: 0; }
 .id-tile__button img:not([src]) { visibility: hidden; }
 .id-tile figcaption { color: var(--text-2); font-size: var(--text-sm); text-align: center; }
 .access-log { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; font-size: var(--text-sm); }
@@ -1145,19 +1153,27 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .id-viewer__stage { position: relative; display: grid; place-items: center; overflow: hidden; padding: var(--space-4); perspective: 1800px; touch-action: none; }
 .id-viewer__stage.is-zoomed { cursor: grab; }
 .id-viewer__stage.is-zoomed:active { cursor: grabbing; }
-.id-viewer__pan { display: grid; width: 100%; height: 100%; place-items: center; transform-origin: center; will-change: transform; }
+.id-viewer__stage:not(.is-zoomed) { overflow: visible; }
+.id-viewer__pan { display: grid; width: 100%; height: 100%; place-items: center; transform-origin: center; transform-style: preserve-3d; will-change: transform; }
 .id-viewer__pan.is-animating { transition: transform 220ms var(--ease); }
-.id-card { position: relative; width: min(100%, calc((100dvh - 11rem) * var(--ratio, 1.586))); aspect-ratio: var(--ratio, 1.586); transform-style: preserve-3d; transition: transform 480ms var(--ease); }
-.id-card[data-side="back"] { transform: rotateY(180deg); }
-.id-card__face { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: var(--radius-lg); object-fit: contain; backface-visibility: hidden; -webkit-backface-visibility: hidden; user-select: none; -webkit-user-drag: none; }
+.id-card__flight { width: min(100%, calc((100dvh - 11rem) * var(--ratio, 1.586))); aspect-ratio: var(--ratio, 1.586); transform-style: preserve-3d; }
+.id-card { position: relative; width: 100%; height: 100%; transform: rotateX(var(--tilt-x, 0deg)) rotateY(calc(var(--turn, 0deg) + var(--tilt-y, 0deg))) scale(var(--press, 1)); transform-style: preserve-3d; }
+.id-card__face { position: absolute; inset: 0; overflow: hidden; border-radius: var(--radius-lg); backface-visibility: hidden; -webkit-backface-visibility: hidden; isolation: isolate; box-shadow: 0 1.25rem 2.75rem -1rem rgb(0 0 0 / 70%); }
 .id-card__face--back { transform: rotateY(180deg); }
+.id-card__face img { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-select: none; -webkit-user-drag: none; }
+/* Light on the laminate: a glare where the light falls and a holographic foil sliding the other way (pokemon-cards-css's layers). */
+.id-card__glare, .id-card__shine { position: absolute; inset: 0; pointer-events: none; }
+.id-card__glare { background-image: radial-gradient(farthest-corner circle at var(--glare-x, 50%) var(--glare-y, 50%), rgb(255 255 255 / 30%) 6%, rgb(255 255 255 / 13%) 22%, rgb(0 0 0 / 16%) 90%); mix-blend-mode: overlay; opacity: var(--glare, 0); }
+.id-card__shine { background-image: var(--holo-foil); background-position: var(--holo-x, 50%) var(--holo-y, 50%); background-size: 280% 280%; mix-blend-mode: color-dodge; opacity: calc(var(--glare, 0) * .32); }
 .id-viewer__hint { padding: var(--space-2) var(--space-4) max(var(--space-3), env(safe-area-inset-bottom)); color: rgb(255 255 255 / 72%); font-size: var(--text-sm); text-align: center; }
 @media (prefers-reduced-motion: reduce) {
-  .id-card, .id-viewer__pan.is-animating { transition: none; }
+  .id-viewer__pan.is-animating { transition: none; }
+  .id-tile__button { transform: none; transition: box-shadow var(--dur-2); }
+  .id-tile__button::before, .id-tile__button::after { display: none; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  .id-viewer[open] { animation: fade-in 160ms ease-out; }
-  .id-viewer[open] .id-card { animation: fade-in 240ms var(--ease); }
+  /* The dialog's own background darkens as the card flies (src/staff-ids.ts), so the backdrop stays clear. */
+  .id-viewer::backdrop { background: transparent; }
 }
 @media (max-width: 960px) {
   .dir-layout { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); }
