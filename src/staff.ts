@@ -299,7 +299,7 @@ function eventTitle(event: CatalogEvent): string {
   if (event.action === "ITEM_PHOTO_ADDED") return "Photo added";
   if (event.action === "ITEM_PHOTO_REPLACED") return "Photo replaced";
   if (event.action === "ITEM_PHOTO_REMOVED") return "Photo removed";
-  if (event.action === "LOCATION_REPORTED") return `Reported: ${REPORT_LABELS[event.details.kind as ReportKind] ?? "location"}${event.details.source === "SELF_SERVICE" ? " (from a phone)" : ""}`;
+  if (event.action === "LOCATION_REPORTED") return `Reported: ${REPORT_LABELS[event.details.kind as ReportKind] ?? "location"}${event.details.source === "SELF_SERVICE" ? ` (from a phone${typeof event.details.reporter === "string" ? `, ${event.details.reporter}` : ""})` : ""}`;
   if (event.action === "LOCATION_REPORT_RESOLVED") return `Report resolved: ${REPORT_LABELS[event.details.kind as ReportKind] ?? "location"}`;
   if (event.action === "REORDER_OPENED") return "Added to the restock list";
   if (event.action === "REORDER_RESTOCKED") return `Restocked (+${String(event.details.quantity)})`;
@@ -646,7 +646,7 @@ export async function workspace(): Promise<void> {
       item: item.name, steps, pictureUrl: (id, size) => `/api/staff/location-media/${id}/${size}`, note: true,
       returnFocus: () => sheet.querySelector<HTMLElement>("[data-where]"),
       noRoute: item.legacyLocation ? `No place is recorded yet. It was typed earlier as “${item.legacyLocation}”: choose the matching place in Edit details.` : "No place is recorded for this item yet. Choose one in Edit details.",
-      report: async (kind, note, id) => {
+      report: async (kind, note, _name, id) => {
         const result = await api<{ recorded: boolean }>(`/api/staff/items/${encodeURIComponent(item.id)}/location-report`, { method: "POST", body: JSON.stringify({ id, kind, note }) });
         void refreshStock(item.id).then(() => poll.refresh());
         return result.recorded;
@@ -712,7 +712,7 @@ export async function workspace(): Promise<void> {
       <p class="card__text">A report changes nothing by itself. Look for the item, correct its place in Edit details if it moved, then resolve the report.</p>
       <ul class="report-list">${open.map((report) => html`<li class="report" data-report-id="${report.id}">
         <div><p class="report__title">${REPORT_LABELS[report.kind]}</p>
-          <p class="report__meta"><time datetime="${report.createdAt}">${formatDateTime(report.createdAt)}</time> · ${report.reportedBy ?? "Staff"}${report.location ? ` · said to be in ${report.location}` : ""}</p>
+          <p class="report__meta"><time datetime="${report.createdAt}">${formatDateTime(report.createdAt)}</time> · ${report.source === "SELF_SERVICE" ? `${report.reportedBy ?? "Someone (no name given)"}, from a phone` : report.reportedBy ?? "Staff"}${report.location ? ` · said to be in ${report.location}` : ""}</p>
           ${report.note ? html`<p class="report__note">${report.note}</p>` : ""}</div>
         <button type="button" class="button button--secondary button--sm" data-resolve="${report.id}">Resolve</button></li>`)}</ul></section>`;
   }
