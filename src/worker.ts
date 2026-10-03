@@ -7,6 +7,7 @@ import { createSession, hashPassword, readCookie, verifyPassword, verifySession 
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { eraseOldDetails, retentionPreview } from "./retention";
 import { selfServiceState, setSelfService } from "./settings";
+import { MAX_SCAN_BODY, createPerson, directory, idScan, importPair, linkAccount, linkableAccounts, linkedPerson, personActivity, personDetail, personLoans, personUsage, putIdCard, removeIdCard, unlinkAccount, updatePerson } from "./staff-directory";
 import { openReorder, stockOverview, updateReorder } from "./stock";
 import { heldPhoto, networkOf, readBatch, resolveReview, reviewDecisions, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
 
@@ -16,6 +17,8 @@ export type Env = {
   EVIDENCE: R2Bucket;
   /** Item profile photos: a separate bucket from loan evidence, so a fault in one route cannot reach the other. */
   CATALOG_MEDIA: R2Bucket;
+  /** Official USC ID scans (V1.3): their own bucket, reached only through the Staff Directory's Administration routes. */
+  STAFF_IDS: R2Bucket;
   SESSION_SECRET?: string;
 };
 
@@ -46,6 +49,7 @@ const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|phot
 const MAX_SYNC_BYTES = 12 * 1024 * 1024;
 /** An item photo upload is a 1 MB and a 150 KB JPEG plus form framing. */
 const MAX_PHOTO_BODY = 1_300_000;
+const PERSON_PATH = /^\/api\/staff\/admin\/directory\/(PER-[0-9a-f-]{36})(\/account|\/usage|\/loans|\/activity|\/id|\/id\/front|\/id\/back)?$/;
 const ACCOUNT_PATH = /^\/api\/staff\/admin\/accounts\/(ACC-[A-Za-z0-9-]{1,60})(\/password|\/sessions\/revoke)?$/;
 // Paths still usable while an account must replace a password someone else set.
 const PASSWORD_CHANGE_ALLOWED = new Set(["/api/staff/session", "/api/staff/me/password"]);
@@ -174,7 +178,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (path === "/api/staff/session" && method === "GET") {
     const { accountId, sessionId, ...profile } = account;
     const reviews = await env.DB.prepare("SELECT COUNT(*) AS total FROM self_service_events WHERE review IS NOT NULL AND resolved_at IS NULL").first<number>("total");
-    return json({ authenticated: true, id: accountId, ...profile, recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews ?? 0, selfServiceClosed: await selfServiceState(env.DB) === "paused" });
+    return json({ authenticated: true, id: accountId, ...profile, recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews ?? 0, selfServiceClosed: await selfServiceState(env.DB) === "paused", directory: await linkedPerson(env.DB, accountId) });
   }
   if (path === "/api/staff/me" && method === "PATCH") return json(await updateSelf(env.DB, account, await body()));
   if (path === "/api/staff/me/password" && method === "POST") return json(await changeOwnPassword(env.DB, account, await body()));
@@ -194,6 +198,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
       if (method === "POST") return json(await eraseOldDetails(env.DB, env.EVIDENCE, account));
       return json({ error: "Method not allowed." }, 405);
     }
+    if (path.startsWith("/api/staff/admin/directory")) return staffDirectory(request, env, account, url);
     const target = ACCOUNT_PATH.exec(path);
     if (target && !target[2] && method === "PATCH") return json(await updateAccount(env.DB, account, target[1]!, await body()));
     if (target?.[2] === "/password" && method === "POST") return json(await resetPassword(env.DB, account, target[1]!, await body()));
@@ -246,6 +251,38 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     return json(await createLoan(env.DB, env.EVIDENCE, account, match[1]!, form), 201);
   }
   const known = match || media || reorder || loan || review || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
+}
+
+/** Administration → Staff Directory. The caller is already an ADMIN or OWNER; the owner-only steps check again inside. */
+async function staffDirectory(request: Request, env: Env, account: Account, url: URL): Promise<Response> {
+  const { pathname: path } = url;
+  const method = request.method;
+  const body = () => request.json().catch(() => null);
+  const scans = async () => {
+    // Two card scans: refuse a larger body before reading it into memory.
+    if (Number(request.headers.get("content-length")) > MAX_SCAN_BODY) throw new InputError(413, "Those scans are too large.");
+    const form = await request.formData().catch(() => null);
+    if (!form) throw new InputError(400, "Invalid upload.");
+    return form;
+  };
+  if (path === "/api/staff/admin/directory" && method === "GET") return json(await directory(env.DB));
+  if (path === "/api/staff/admin/directory" && method === "POST") return json(await createPerson(env.DB, account, await body()), 201);
+  if (path === "/api/staff/admin/directory/accounts" && method === "GET") return json(await linkableAccounts(env.DB, account));
+  if (path === "/api/staff/admin/directory/import" && method === "POST") return json(await importPair(env.DB, env.STAFF_IDS, account, await scans()));
+  const match = PERSON_PATH.exec(path);
+  const [, id, part] = match ?? [];
+  if (match && !part && method === "GET") return json(await personDetail(env.DB, id!));
+  if (match && !part && method === "PATCH") return json(await updatePerson(env.DB, account, id!, await body()));
+  if (part === "/account" && method === "PUT") return json(await linkAccount(env.DB, account, id!, await body()));
+  if (part === "/account" && method === "DELETE") return json(await unlinkAccount(env.DB, account, id!));
+  if (part === "/usage" && method === "GET") return json(await personUsage(env.DB, id!, url.searchParams));
+  if (part === "/loans" && method === "GET") return json(await personLoans(env.DB, id!));
+  if (part === "/activity" && method === "GET") return json(await personActivity(env.DB, id!, url.searchParams.get("cursor")));
+  if (part === "/id" && method === "PUT") return json(await putIdCard(env.DB, env.STAFF_IDS, account, id!, await scans()));
+  if (part === "/id" && method === "DELETE") return json(await removeIdCard(env.DB, env.STAFF_IDS, account, id!, url.searchParams.get("expected")));
+  if ((part === "/id/front" || part === "/id/back") && method === "GET") return idScan(env.DB, env.STAFF_IDS, account, id!, part.slice(4));
+  const known = match || ["/api/staff/admin/directory", "/api/staff/admin/directory/accounts", "/api/staff/admin/directory/import"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 

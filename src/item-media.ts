@@ -52,7 +52,12 @@ function tablesFit(bytes: Uint8Array, marker: number, at: number, end: number): 
  * is anything not 8-bit, grey or YCbCr.
  */
 export function cleanJpeg(bytes: Uint8Array, variant: Variant): { bytes: Uint8Array; width: number; height: number } {
-  const refuse = (why: string): never => { throw new InputError(400, `The ${variant} photo ${why}`); };
+  return checkJpeg(bytes, `${variant} photo`, VARIANTS[variant].edge);
+}
+
+/** cleanJpeg for any browser-made JPEG: `label` names it in a refusal ("front scan"), `edge` is its longest allowed side. */
+export function checkJpeg(bytes: Uint8Array, label: string, edge: number): { bytes: Uint8Array; width: number; height: number } {
+  const refuse = (why: string): never => { throw new InputError(400, `The ${label} ${why}`); };
   if (bytes[0] !== 0xff || bytes[1] !== 0xd8) refuse("must be a JPEG image.");
   const kept: Uint8Array[] = [Uint8Array.of(0xff, 0xd8)];
   let width = 0;
@@ -103,7 +108,6 @@ export function cleanJpeg(bytes: Uint8Array, variant: Variant): { bytes: Uint8Ar
     at = end;
   }
   if (!ended) refuse("is cut short.");
-  const { edge } = VARIANTS[variant];
   if (!width || !height || Math.max(width, height) > edge) refuse(`must be between 1 and ${edge} pixels.`);
   const out = new Uint8Array(kept.reduce((sum, part) => sum + part.length, 0));
   kept.reduce((offset, part) => { out.set(part, offset); return offset + part.length; }, 0);

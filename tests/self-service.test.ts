@@ -30,7 +30,7 @@ beforeEach(async () => {
   sqlite = database.sqlite;
   const r2 = memoryR2();
   photos = r2.objects;
-  env = { DB: database.d1, EVIDENCE: r2.bucket, CATALOG_MEDIA: memoryR2().bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
+  env = { DB: database.d1, EVIDENCE: r2.bucket, CATALOG_MEDIA: memoryR2().bucket, STAFF_IDS: memoryR2().bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
   selfService("open");
   sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash) VALUES('ACC-1', 'staff.one', 'Staff One', ?)").run(await hashPassword("correct horse battery"));
   const login = await call("/api/staff/login", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ username: "staff.one", password: "correct horse battery" }) });
