@@ -1,11 +1,12 @@
 import { LANDED_MS, cardMotion, flyIn, flyOut, liftShadow } from "./card-motion";
 import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
 import { ISSUE_KINDS, type IssueKind, type Pair, type Preflight, preflight } from "./staff-import";
-import { ApiError, type Html, api, dataUrl, failure, formatDateTime, html, icon, jpegOf, mount, plural, reducedMotion, setMessage, toast } from "./ui";
+import { ApiError, type Html, api, dataUrl, failure, formatDateTime, html, icon, jpegOf, mount, navigate, plural, reducedMotion, setMessage, toast } from "./ui";
 
 /*
- * Official USC ID scans in the browser (Administration → Staff Directory): fetching them for one visit, the flip-and-zoom
- * viewer, turning a scan into what the Worker stores, the owner's add/replace panel, and the archive import with its preflight.
+ * Official USC ID scans in the browser (Administration → Staff Directory): fetching them for one visit, a person's card large
+ * (their details and both sides of the ID, turned over in 3D), turning a scan into what the Worker stores, the owner's
+ * add/replace panel, and the archive import with its preflight.
  */
 
 export type Side = "front" | "back";
@@ -36,30 +37,55 @@ export function scan(personId: string, mediaId: string, side: Side): Promise<str
 }
 export const forgetScans = (): void => scans.clear();
 
-/* ---------- Viewer ---------- */
+/* ---------- The card, large ---------- */
 
 const MAX_ZOOM = 4;
+/** The directory's own card is ID-1 (ISO/IEC 7810, 85.60 × 53.98 mm), upright, like the USC ID and a trading card. */
+export const CARD_RATIO = 53.98 / 85.6;
+
+/** What the card shows: the person's details, or a side of their official ID scan. */
+export type View = "details" | Side;
+/** What a face can hold: a view, or the directory card's own front (the tile), which the card shows while it flies. */
+type Content = View | "cover";
+const VIEWS: View[] = ["details", "front", "back"];
+
+export type Opening = {
+  /** What it opens on. */
+  start: View;
+  /** The directory card's front, as a fresh element: what a directory tile shows, so the card leaves and lands on it. */
+  cover: () => HTMLElement;
+  /** The person's details for the reverse. Links in it marked data-leave close the card and go where they point. */
+  details: HTMLElement;
+  /** The scans: null when none are on file; a function loads them the first time a side is asked for, so opening a card fetches no scan. */
+  card: Card | null | (() => Promise<Card | null>);
+  /** Whether a USC ID is on file, so the sides can be offered before the scans are loaded. */
+  hasId: boolean;
+  /** The tile the card flies from and back into for a view, if any; its data-shows says which face it is ("cover", "front" or "back"). */
+  tileFor: (view: View) => HTMLElement | null;
+};
 
 /**
- * The card large, over everything, as a card in 3D (src/card-motion.ts): it flies out of its tile turning once, leans toward
- * the pointer or a finger under a glare and a holographic sheen, presses in when held, turns over on a spring for Front and
- * Back, and flies back into the tile of the side it shows when closed. It rests flat and unlit, lies still while zoomed, and
- * does none of this under reduced motion. The scan zooms up to 4× with the wheel, a pinch, a double-click or + and −, and
- * pans by dragging or with the arrow keys. A modal dialog gives Escape, a focus trap and an inert page; Back closes it (it
- * holds a history entry); focus returns to its opener. `tileFor` finds the profile's tile of a side, to fly from and to.
+ * A person's card, large, over everything, in 3D (src/card-motion.ts). It flies out of its tile turning, lands on what was asked
+ * for, leans toward the pointer or a finger under a glare and a holographic sheen, presses in when held, and turns over on a
+ * spring between the person's details and the two sides of their official ID: each turn brings the next view onto the face
+ * that is underneath, so one card holds all three. Closing flies it back into its tile, turning to the face the tile shows. It
+ * rests flat and unlit, lies still while a scan is zoomed, and does none of this under reduced motion. A scan zooms up to 4×
+ * with the wheel, a pinch, a double-click or + and −, and pans by dragging or with the arrow keys. Scans are fetched only when
+ * a side is turned to, and that opening is recorded by the Worker. A modal dialog gives Escape, a focus trap and an inert
+ * page; Back closes it (it holds a history entry); focus returns to its opener.
  */
-export async function openIdViewer(person: Who, card: Card, side: Side, tileFor: (side: Side) => HTMLElement | null = () => null): Promise<void> {
+export async function openCard(person: Who, opening: Opening): Promise<void> {
   if (document.querySelector("dialog.id-viewer")) return;
   const opener = document.activeElement as HTMLElement | null;
   const department = DEPARTMENTS[person.department as DepartmentCode] ?? person.department;
   const dialog = document.createElement("dialog");
   dialog.className = "id-viewer";
   dialog.setAttribute("aria-label", `USC ID of ${person.name}`);
-  const face = (which: Side) => html`<div class="id-card__face id-card__face--${which}"><img data-face="${which}" alt="${which === "front" ? "Front" : "Back"} of ${person.name}'s USC ID" draggable="false" /><span class="id-card__shine" aria-hidden="true"></span><span class="id-card__glare" aria-hidden="true"></span></div>`;
+  const face = (which: "front" | "back") => html`<div class="id-card__face id-card__face--${which}"><div class="id-card__slot" data-slot></div><span class="id-card__shine" aria-hidden="true"></span><span class="id-card__glare" aria-hidden="true"></span></div>`;
   mount(dialog, html`<header class="id-viewer__bar">
       <p class="id-viewer__title"><strong>${person.name}</strong><span>${department} · USC ID</span></p>
-      <div class="id-viewer__sides" role="group" aria-label="Side of the card">
-        <button type="button" data-side="front">Front</button><button type="button" data-side="back">Back</button>
+      <div class="id-viewer__sides" role="group" aria-label="Side of the card" ${opening.hasId ? "" : html`hidden`}>
+        <button type="button" data-view="details">Details</button><button type="button" data-view="front">Front</button><button type="button" data-view="back">Back</button>
       </div>
       <div class="id-viewer__zoom" role="group" aria-label="Zoom">
         <button type="button" class="icon-button" data-zoom="out" aria-label="Zoom out"><span aria-hidden="true">−</span></button>
@@ -67,23 +93,69 @@ export async function openIdViewer(person: Who, card: Card, side: Side, tileFor:
         <button type="button" class="icon-button" data-zoom="in" aria-label="Zoom in">${icon("plus")}</button>
         <button type="button" class="button button--sm id-viewer__fit" data-zoom="fit">Fit</button>
       </div>
-      <button class="icon-button id-viewer__close" type="button" data-close aria-label="Close ID">${icon("close")}</button>
+      <button class="icon-button id-viewer__close" type="button" data-close aria-label="Close card">${icon("close")}</button>
     </header>
     <div class="id-viewer__stage" data-stage><div class="id-viewer__pan" data-pan><div class="id-card__flight" data-flight><div class="id-card" data-card>${face("front")}${face("back")}</div></div></div></div>
-    <p class="id-viewer__hint">${reducedMotion() ? "" : "Move over the card or drag it to tilt it · "}F and B turn it · + and − zoom, then drag or use the arrow keys to move · Esc closes. Opening a USC ID is recorded in Activity.</p>`);
+    <p class="id-viewer__hint">${reducedMotion() ? "" : "Move over the card or drag it to tilt it · "}${opening.hasId ? "D, F and B turn it to the details, the front and the back of the ID · + and − zoom a side · " : ""}Esc closes.${opening.hasId ? " Opening a side of a USC ID is recorded in Activity." : ""}</p>`);
   document.body.append(dialog);
   const stage = dialog.querySelector<HTMLElement>("[data-stage]")!;
   const pan = dialog.querySelector<HTMLElement>("[data-pan]")!;
   const flight = dialog.querySelector<HTMLElement>("[data-flight]")!;
   const cardBox = dialog.querySelector<HTMLElement>("[data-card]")!;
   const level = dialog.querySelector("output")!;
-  const faces = { front: dialog.querySelector<HTMLImageElement>('[data-face="front"]')!, back: dialog.querySelector<HTMLImageElement>('[data-face="back"]')! };
+  const zoomGroup = dialog.querySelector<HTMLElement>(".id-viewer__zoom")!;
+  const faces = [...dialog.querySelectorAll<HTMLElement>(".id-card__face")] as [HTMLElement, HTMLElement];
   const motion = cardMotion(cardBox);
-  let current: Side = side;
+
+  /* What goes on the faces: one element per content, moved between the two faces as the card turns. */
+  let card: Card | null = typeof opening.card === "function" ? null : opening.card;
+  let cardLoad: Promise<Card | null> | null = typeof opening.card === "function" ? null : Promise.resolve(card);
+  const loadCard = () => cardLoad ??= (opening.card as () => Promise<Card | null>)().then((loaded) => (card = loaded), (error: unknown) => { cardLoad = null; throw error; });
+  const scanFace = (side: Side) => {
+    const holder = document.createElement("div");
+    holder.className = "id-card__scan is-loading";
+    const image = Object.assign(document.createElement("img"), { alt: `${side === "front" ? "Front" : "Back"} of ${person.name}'s USC ID`, draggable: false });
+    image.dataset.face = side;
+    holder.append(image);
+    return { holder, image, ready: null as Promise<void> | null };
+  };
+  const sides = { front: scanFace("front"), back: scanFace("back") };
+  const cover = opening.cover();
+  const element = (content: Content) => content === "details" ? opening.details : content === "cover" ? cover : sides[content].holder;
+  /** Fetches a side's scan once (the Worker records the opening) and resolves when it can be drawn. */
+  const loadSide = (side: Side) => sides[side].ready ??= loadCard().then((loaded) => {
+    if (!loaded) throw new Error("No USC ID is on file.");
+    return scan(person.id, loaded.mediaId, side);
+  }).then(async (url) => {
+    sides[side].image.src = url;
+    await sides[side].image.decode().catch(() => undefined);
+    sides[side].holder.classList.remove("is-loading");
+  }, (error: unknown) => { sides[side].ready = null; throw error; });
+  const ratio = (content: Content) => content === "front" || content === "back" ? (card ? card[content].width / card[content].height : CARD_RATIO) : CARD_RATIO;
+
+  // The card's turn, in degrees: always a multiple of 180, so one face is up.
+  let angle = 0;
+  const up = () => faces[(((angle / 180) % 2) + 2) % 2]!;
+  const under = () => faces[(((angle / 180) % 2) + 2) % 2 === 0 ? 1 : 0]!;
+  const place = (content: Content, target: HTMLElement) => {
+    target.querySelector("[data-slot]")!.replaceChildren(element(content));
+    target.dataset.holds = content;
+  };
+  const settleFaces = () => {
+    // Only the face that is up can be read or reached: the other is hidden from assistive technology and from Tab.
+    for (const which of faces) {
+      const hidden = which !== up();
+      which.setAttribute("aria-hidden", String(hidden));
+      which.inert = hidden;
+    }
+  };
+
+  let current: View = opening.start;
   let view = { scale: 1, x: 0, y: 0 };
   // While the card flies in or out it takes no other input.
   let flying = false;
   let closing = false;
+  const zoomable = () => current !== "details";
 
   const clamp = () => {
     // The flight box is never tilted, so it measures the card as laid out (and zoomed).
@@ -101,8 +173,9 @@ export async function openIdViewer(person: Who, card: Card, side: Side, tileFor:
     level.textContent = `${Math.round(view.scale * 100)}%`;
     stage.classList.toggle("is-zoomed", view.scale > 1);
   };
-  /** Zooms to `scale`, keeping the point under (cx, cy) (stage coordinates from its centre) where it is. */
+  /** Zooms a side to `scale`, keeping the point under (cx, cy) (stage coordinates from its centre) where it is. */
   const zoomTo = (scale: number, cx = 0, cy = 0, animate = true) => {
+    if (!zoomable()) return;
     const next = Math.max(1, Math.min(MAX_ZOOM, scale));
     view = { scale: next, x: cx - (cx - view.x) * (next / view.scale), y: cy - (cy - view.y) * (next / view.scale) };
     apply(animate);
@@ -112,94 +185,150 @@ export async function openIdViewer(person: Who, card: Card, side: Side, tileFor:
     return [event.clientX - box.left - box.width / 2, event.clientY - box.top - box.height / 2] as const;
   };
 
-  const showSide = (next: Side, animate = true) => {
-    current = next;
-    const dims = card[next];
-    flight.style.setProperty("--ratio", String(dims.width / dims.height));
-    cardBox.dataset.side = next;
-    motion.turn(next, animate);
-    faces.front.setAttribute("aria-hidden", String(next !== "front"));
-    faces.back.setAttribute("aria-hidden", String(next !== "back"));
-    const buttons = [...dialog.querySelectorAll<HTMLButtonElement>("[data-side]")];
+  const marks = () => {
+    const buttons = [...dialog.querySelectorAll<HTMLButtonElement>("[data-view]")];
     const focused = buttons.includes(document.activeElement as HTMLButtonElement);
-    buttons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.side === next)));
-    // Turning the card by key keeps the focus on the side now shown, so the ring never points at the other one.
-    if (focused) buttons.find((button) => button.dataset.side === next)!.focus();
-    view = { scale: 1, x: 0, y: 0 };
-    apply(true);
+    buttons.forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.view === current)));
+    // Turning the card by key keeps the focus on the view now shown, so the ring never points at another one.
+    if (focused) buttons.find((button) => button.dataset.view === current)!.focus();
+    zoomGroup.hidden = !zoomable();
+    cardBox.dataset.view = current;
   };
 
-  for (const which of ["front", "back"] as const) {
-    // The side asked for first, so it is on screen as soon as possible; the other is ready before the first turn.
-    void scan(person.id, card.mediaId, which).then((url) => { faces[which].src = url; }, (error: unknown) => { if (which === side) toast(failure(error), "error"); });
+  let asked = 0;
+  /** Turns the card to `next`: forward through Details, Front, Back turns it one way, back the other. */
+  const show = async (next: View, animate = true) => {
+    if (next === current || closing) return;
+    const ask = ++asked;
+    if (next !== "details") {
+      try {
+        // A side appears once it can be drawn, or after a short wait with its loading state.
+        await Promise.race([loadSide(next), new Promise((resolve) => window.setTimeout(resolve, 600))]);
+      } catch (error) { toast(failure(error), "error"); return; }
+      if (ask !== asked || closing) return;
+    }
+    const forward = VIEWS.indexOf(next) > VIEWS.indexOf(current);
+    current = next;
+    place(next, under());
+    angle += forward ? 180 : -180;
+    if (ratio(next) !== Number(flight.style.getPropertyValue("--ratio"))) {
+      flight.classList.add("is-reshaping");
+      window.setTimeout(() => flight.classList.remove("is-reshaping"), 420);
+    }
+    flight.style.setProperty("--ratio", String(ratio(next)));
+    motion.turn(angle, animate);
+    settleFaces();
+    view = { scale: 1, x: 0, y: 0 };
+    apply(true);
+    marks();
+  };
+
+  // Laid out on the face that is up, with what the tile shows underneath, so the card can leave the tile showing it.
+  const tile = opening.tileFor(current);
+  const leaves: Content = (tile?.dataset.shows as Content | undefined) ?? current;
+  place(current, faces[0]);
+  const other: Content = leaves !== current ? leaves : current === "details" ? "cover" : current === "front" ? "back" : "front";
+  if (other === "front" || other === "back") { if (opening.hasId) void loadSide(other).catch(() => undefined); }
+  place(other, faces[1]);
+  if (current !== "details") {
+    try { await loadCard(); } catch (error) { toast(failure(error), "error"); dialog.remove(); return; }
+    await Promise.race([loadSide(current).catch((error: unknown) => toast(failure(error), "error")), new Promise((resolve) => window.setTimeout(resolve, 600))]);
   }
-  showSide(side, false);
-  await Promise.race([scan(person.id, card.mediaId, side).then(() => faces[side].decode()).catch(() => undefined), new Promise((resolve) => window.setTimeout(resolve, 600))]);
+  flight.style.setProperty("--ratio", String(ratio(current)));
+  motion.turn(0, false);
+  settleFaces();
+  marks();
 
   const bar = dialog.querySelector<HTMLElement>(".id-viewer__bar")!;
   const hint = dialog.querySelector<HTMLElement>(".id-viewer__hint")!;
   const shade = (from: number, to: number, duration: number) => dialog.animate([{ backgroundColor: `rgb(12 10 9 / ${from}%)` }, { backgroundColor: `rgb(12 10 9 / ${to}%)` }], { duration, easing: "ease-out", fill: "forwards" });
-  const chrome = (show: boolean) => [bar, hint].map((element) => element.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
+  const chrome = (show: boolean) => [bar, hint].map((part) => part.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
     { duration: show ? 240 : 90, delay: show ? 300 : 0, easing: "ease-out", direction: show ? "normal" : "reverse", fill: show ? "backwards" : "forwards" }));
-  const faceBoxes = dialog.querySelectorAll<HTMLElement>(".id-card__face");
 
   let entryGone = false;
-  /** Flies the card back into the tile of the side it shows (or shrinks it away), then closes. */
+  let leaveTo: string | null = null;
+  /** Flies the card back into the tile of what it shows, turning to the tile's face if it shows another (or shrinks it away), then closes. */
   const closeViewer = () => {
     if (closing || !dialog.open) return;
     closing = true;
-    const tile = tileFor(current);
+    const back = opening.tileFor(current);
     if (reducedMotion() || flying) { dialog.close(); return; }
     view = { scale: 1, x: 0, y: 0 };
     apply();
     motion.still();
-    tile?.classList.add("is-away");
-    const out = flyOut(flight, tile?.isConnected ? tile.getBoundingClientRect() : null);
-    const done = [out, shade(99, 0, 300), ...chrome(false), ...liftShadow(faceBoxes, true, Number(out.effect?.getTiming().duration) || 300)];
+    const lands: Content = (back?.dataset.shows as Content | undefined) ?? current;
+    let spin = 0;
+    if (lands !== current) {
+      place(lands, under());
+      flight.style.setProperty("--ratio", String(ratio(lands)));
+      spin = 180;
+    }
+    back?.classList.add("is-away");
+    const out = flyOut(flight, back?.isConnected ? back.getBoundingClientRect() : null, spin);
+    const done = [out, shade(99, 0, 300), ...chrome(false), ...liftShadow(faces, true, Number(out.effect?.getTiming().duration) || 300)];
     void Promise.all(done.map((animation) => animation.finished)).catch(() => undefined).then(() => dialog.close());
   };
   const onBack = () => { entryGone = true; closeViewer(); };
   dialog.addEventListener("close", () => {
     motion.stop();
-    for (const which of ["front", "back"] as const) tileFor(which)?.classList.remove("is-away");
+    for (const which of VIEWS) opening.tileFor(which)?.classList.remove("is-away");
     window.removeEventListener("popstate", onBack);
     dialog.remove();
-    if (!entryGone && window.history.state?.viewer) window.history.back();
-    if (opener?.isConnected) opener.focus({ preventScroll: true });
+    const to = leaveTo;
+    if (!entryGone && window.history.state?.viewer) {
+      // Give back the card's own history entry first, then go on, so Back from there returns to the directory.
+      if (to) window.addEventListener("popstate", () => navigate(to), { once: true });
+      window.history.back();
+    } else if (to) navigate(to);
+    if (!to && opener?.isConnected) opener.focus({ preventScroll: true });
   });
   // Escape flies the card back too, rather than dropping it.
   dialog.addEventListener("cancel", (event) => { event.preventDefault(); closeViewer(); });
   dialog.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
+    const leave = target.closest<HTMLAnchorElement>("a[data-leave]");
+    if (leave && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      leaveTo = leave.pathname + leave.search;
+      closing = true;
+      dialog.close();
+      return;
+    }
     if (target.closest("[data-close]")) closeViewer();
-    const sideButton = target.closest<HTMLButtonElement>("[data-side]");
-    if (sideButton) showSide(sideButton.dataset.side as Side);
+    const viewButton = target.closest<HTMLButtonElement>("[data-view]");
+    if (viewButton) void show(viewButton.dataset.view as View);
     const zoom = target.closest<HTMLButtonElement>("[data-zoom]")?.dataset.zoom;
     if (zoom === "in") zoomTo(view.scale * 1.5);
     if (zoom === "out") zoomTo(view.scale / 1.5);
     if (zoom === "fit") zoomTo(1);
   });
   dialog.addEventListener("keydown", (event) => {
-    if (event.target instanceof HTMLButtonElement && (event.key === "Enter" || event.key === " ")) return;
+    if (event.target instanceof HTMLElement && event.target.matches("button, a[href]") && (event.key === "Enter" || event.key === " ")) return;
     const step = 60;
     const moves: Record<string, [number, number]> = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
-    if (event.key === "f" || event.key === "F") showSide("front");
-    else if (event.key === "b" || event.key === "B") showSide("back");
+    const key = event.key.toLowerCase();
+    const offered = opening.hasId ? VIEWS : (["details"] as View[]);
+    if (opening.hasId && (key === "d" || key === "f" || key === "b")) void show(key === "d" ? "details" : key === "f" ? "front" : "back");
     else if (event.key === "+" || event.key === "=") zoomTo(view.scale * 1.5);
     else if (event.key === "-") zoomTo(view.scale / 1.5);
     else if (event.key === "0") zoomTo(1);
     else if (moves[event.key] && view.scale > 1) { view.x += moves[event.key]![0]; view.y += moves[event.key]![1]; apply(true); }
-    else if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && view.scale === 1) showSide(current === "front" ? "back" : "front");
+    else if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && view.scale === 1 && offered.length > 1) {
+      const index = offered.indexOf(current) + (event.key === "ArrowRight" ? 1 : -1);
+      void show(offered[(index + offered.length) % offered.length]!);
+    }
     else return;
     event.preventDefault();
   });
   stage.addEventListener("wheel", (event) => {
+    // On the details the wheel scrolls them, if they are longer than the card.
+    if (!zoomable()) return;
     event.preventDefault();
     const [cx, cy] = fromCentre(event);
     zoomTo(view.scale * Math.exp(-event.deltaY * (event.deltaMode === 1 ? 0.05 : 0.0015)), cx, cy, false);
   }, { passive: false });
-  stage.addEventListener("dblclick", (event) => { const [cx, cy] = fromCentre(event); zoomTo(view.scale > 1 ? 1 : 2.5, cx, cy); });
-  // One finger or the mouse drags a zoomed card; two fingers pinch. At 100% the card leans toward the mouse (or a finger held on it).
+  stage.addEventListener("dblclick", (event) => { if (!zoomable()) return; const [cx, cy] = fromCentre(event); zoomTo(view.scale > 1 ? 1 : 2.5, cx, cy); });
+  // One finger or the mouse drags a zoomed side; two fingers pinch. At 100% the card leans toward the mouse (or a finger held on it).
   const pointers = new Map<number, { x: number; y: number }>();
   let pinch: { distance: number; scale: number } | null = null;
   const distance = () => { const [a, b] = [...pointers.values()]; return Math.hypot(a!.x - b!.x, a!.y - b!.y); };
@@ -211,9 +340,11 @@ export async function openIdViewer(person: Who, card: Card, side: Side, tileFor:
     return x >= 0 && x <= 1 && y >= 0 && y <= 1 ? [x, y] as const : null;
   };
   stage.addEventListener("pointerdown", (event) => {
+    // A link or button on the details is pressed like any other: captured, its click would land on the stage instead.
+    if ((event.target as HTMLElement).closest("a[href], button")) return;
     stage.setPointerCapture(event.pointerId);
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (pointers.size === 2) { pinch = { distance: distance(), scale: view.scale }; motion.rest(); return; }
+    if (pointers.size === 2 && zoomable()) { pinch = { distance: distance(), scale: view.scale }; motion.rest(); return; }
     const point = across(event);
     if (point && tilts()) { motion.press(true); motion.point(...point); }
   });
@@ -249,17 +380,17 @@ export async function openIdViewer(person: Who, card: Card, side: Side, tileFor:
   window.history.pushState({ viewer: true }, "");
   window.addEventListener("popstate", onBack);
   dialog.showModal();
-  dialog.querySelector<HTMLButtonElement>(`[data-side="${side}"]`)!.focus();
+  (dialog.querySelector<HTMLButtonElement>(`[data-view="${current}"]:not([hidden] *)`) ?? dialog.querySelector<HTMLElement>("[data-close]")!).focus();
   if (reducedMotion()) return;
-  // The card leaves its tile: the tile empties, the page darkens, and the card flies in turning once, then catches the light.
-  const tile = tileFor(side);
+  // The card leaves its tile: the tile empties, the page darkens, and the card flies in turning (one and a half turns when it
+  // lands on another face than the tile's), then catches the light.
   flying = true;
   tile?.classList.add("is-away");
-  const landing = flyIn(flight, tile?.isConnected ? tile.getBoundingClientRect() : null);
+  const landing = flyIn(flight, tile?.isConnected ? tile.getBoundingClientRect() : null, leaves !== current ? -540 : -360);
   // Darker than the static viewer's 97%, because its backdrop stays clear while the card flies (src/styles.css).
   shade(0, 99, 320);
   chrome(true);
-  liftShadow(faceBoxes, false, 420);
+  liftShadow(faces, false, 420);
   // Landed once it is 95% of the way (the spring's last settling shows no movement): take input, and let the light sweep over it.
   let landed = false;
   const land = () => { if (landed) return; landed = true; flying = false; if (!closing && dialog.open) motion.sweep(); };
