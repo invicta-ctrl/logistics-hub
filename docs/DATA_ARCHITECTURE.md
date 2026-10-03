@@ -21,19 +21,20 @@ Extend these concepts. Do not build a renamed parallel system beside one of them
 | Phone Self-Service | `self_service_events` | The idempotency record and the staff review queue. What an event changed lives in `inventory_movements` / `loans`. A resolved record is final except for retention erasure (0019 trigger). |
 | Open units | `open_units` | Which outer units are open. Never a quantity; database triggers keep open units ≤ on hand (0017). |
 | Restock plan | `reorders` | A plan, never stock. At most one open entry per item (partial unique index). |
-| Sign-in | `staff_accounts`, `staff_sessions`, `owner_recovery_keys`, `auth_throttle` | Login identity only. Who a person is in the USC (department, position, ID) is directory identity and stays separate on purpose (0009); a link between the two is explicit and audited, never inferred from names or photos. |
-| Accountability | `audit_log` | Who changed what, for catalog, accounts, settings and retention. Movements, loans and phone events are their own history; the Activity feed reads all of them (`src/activity.ts`). |
+| Authorized DOL staff | `staff_users` | Who is DOL staff and may be given access (department, committee, active, whether sign-in is allowed). Filled privately from the DOL roster by `scripts/build-private-staff-seed.mjs`; the roster never enters Git. No live code reads it yet. |
+| Sign-in | `staff_accounts`, `staff_sessions`, `owner_recovery_keys`, `auth_throttle` | Login identity only: username, password, role. An account belongs to an authorized staff member through `staff_accounts.staff_user_id`, set explicitly, never inferred from names (0009). |
+| Accountability | `audit_log` | Who changed what, for catalog, accounts, settings and retention. Append-only: triggers refuse UPDATE and DELETE (0022). Movements, loans and phone events are their own history; the Activity feed reads all of them (`src/activity.ts`). |
 | Settings | `system_settings` | One row per setting, each change audited. Add a key with a CHECK on its allowed values. |
 | Item photos | `item_media` | One primary photo per item; the row is the only reference to its R2 objects. |
-| Legacy evidence and placeholders | `reservations`, `legacy_access_accounts`, `staff_users` (0001 directory placeholder, written only by the private roster seed script), `staff_accounts.staff_user_id` | Kept as found. Live code does not read them; nothing new should write them. |
+| Legacy evidence | `reservations`, `legacy_access_accounts` | Migrated as found and kept for reconciliation. Live code does not read them; nothing new should write them. |
 
-A slice that supersedes a placeholder (V1.3's staff directory and `staff_users`, say) states so in its migration and spec, and leaves only one live version of the concept: either it extends the placeholder, or it declares it retired so that nothing reads or writes it again (the private roster seed script included), never two tables that both claim to be the directory.
+Authorized staff (`staff_users`) and the USC Staff Directory (V1.3) are different concepts and stay separate (Earl, 2026-10-03): the roster says who is DOL staff and may hold access; the directory is for looking people up and tracking their usage, and grants nothing. Neither replaces the other.
 
 ## Integrity is enforced by the database
 
 Application checks are for good messages; the database is the backstop every writer meets, including a second Worker racing the first.
 
-- Append-only and finality triggers: `inventory_movements_no_update/_no_delete`, `self_service_events_resolved_final`, `open_units_closed_final`, `open_units_kept`.
+- Append-only and finality triggers: `inventory_movements_no_update/_no_delete`, `audit_log_no_update/_no_delete`, `self_service_events_resolved_final`, `open_units_closed_final`, `open_units_kept`. SQLite's `INSERT OR REPLACE` gets past a delete trigger, so nothing writes the append-only tables with it (a test checks the source); `INSERT OR IGNORE` stays the way to make an audit write idempotent.
 - Cross-table invariants as triggers: `open_units_within_stock`, `movements_within_open_units`, `items_keep_open_units`.
 - Uniqueness as partial indexes: one live owner recovery key, one open reorder per item, one idempotency key per movement.
 - CHECK constraints for every closed vocabulary (roles, statuses, purposes, setting values) and for coupled columns (`(status = 'OUT') = (closed_at IS NULL)`).
@@ -56,7 +57,7 @@ Rules:
 
 ## Migrations
 
-- **Additive and numbered.** One series, `NNNN_snake_case.sql`, numbered 0001 upwards with no gap or repeat. A slice branch that is not yet on `main` renumbers its migrations when `main` gains one first.
+- **Additive and numbered.** One series, `NNNN_snake_case.sql`, numbered 0001 upwards with no repeat. A slice branch that is not yet on `main` renumbers its migrations when `main` gains one first, unless production already applied them. The only gap allowed is a number a release manifest pins whose file is still on its release branch (`main` carried `0022` while V1.3's `0021`, already applied to production, waited to integrate).
 - **Never edit an applied migration.** Production never re-runs it, so an edit only makes fresh databases (tests, local, a restore) differ from production. `tests/migration-history.test.ts` pins every applied migration and every migration a release manifest pins; `.gitattributes` keeps their bytes identical on every checkout.
 - **Old code must survive the new schema.** Production is migrated before the code that needs the change is deployed, so the code already live must keep working on the migrated database: add tables, columns with defaults, indexes and triggers; do not rename or remove what live code reads.
 - **Rebuilding a table** (only to change a CHECK, which SQLite cannot alter): copy every row, recreate every index and trigger, and test the migration on a populated database, as `tests/migration-sql.test.ts` does for 0011 and 0017.
@@ -81,6 +82,6 @@ Borrowed, where they earn their place:
 
 Not restored: React, MUI, Radix, Apps Script, Sheets as operational truth, repository/service layers, dependency injection, generic factories, duplicated pipelines, or infrastructure for a need nobody has measured.
 
-## Known gaps (recorded, not yet changed)
+## Pending production steps
 
-- `audit_log` has no append-only trigger, unlike `inventory_movements`. No code updates or deletes it. Adding one is a new migration and production step, and it must leave room for any retention erasure an accepted spec requires; take it with the next slice that already ships a migration.
+- `0022_audit_log_append_only.sql` is on `main` but not yet applied to production. The lane applies only migrations a release manifest pins, so the next release that runs it (V1.4, unless another comes first) pins `0022` beside its own. Nothing depends on it meanwhile: it only adds two triggers.
