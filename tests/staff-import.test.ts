@@ -13,7 +13,9 @@ describe("identity and department", () => {
     expect(normalizeIdentity("  DELA-CRUZ ")).toBe("dela cruz");
     expect(normalizeIdentity("Peña")).toBe("pena");
     expect(normalizeIdentity("Cruz_J")).not.toBe(normalizeIdentity("Cruz"));
-    expect(sourceKey("Dela Cruz", "DoL")).toBe("dela cruz|DoL");
+    expect(sourceKey("Dela Cruz", "DoL")).toBe("delacruz|DoL");
+    // A compound surname is one person however the file spells the gap.
+    expect(new Set(["DelaCruz", "Dela_Cruz", "Dela Cruz", "dela-cruz"].map((name) => sourceKey(name, "DBR")))).toEqual(new Set(["delacruz|DBR"]));
   });
 
   it("reads department codes however they were capitalised", () => {
@@ -62,7 +64,7 @@ describe("preflight", () => {
       file("A/[DEM] Official ID/Cruz_Front_DEM.png"), file("A/[DEM] Official ID/Cruz_Back_DEM.png"),
       file("A/[DEM] Official ID/Cruz_J_Front_DEM.png"), file("A/[DEM] Official ID/Cruz_J_Back_DEM.png")
     ]);
-    expect(result.pairs.map((pair) => pair.key)).toEqual(["cruz j|DEM"]);
+    expect(result.pairs.map((pair) => pair.key)).toEqual(["cruzj|DEM"]);
     expect(kinds(result)).toEqual(["AMBIGUOUS", "AMBIGUOUS"]);
   });
 
