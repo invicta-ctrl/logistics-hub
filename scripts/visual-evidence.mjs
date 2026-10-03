@@ -630,9 +630,16 @@ async function directoryScenes(browser, url, dir) {
     await page.waitForSelector("dialog.id-viewer[open]");
     // A base whose card opens on the details and turns to Front and Back has nothing new to show here.
     if (await page.locator('dialog.id-viewer [data-view="profile"]').count()) {
-      await page.waitForSelector("dialog.id-viewer .id-card__pair:not(.is-loading) img[data-face=front]");
+      await page.waitForSelector("dialog.id-viewer :is(.id-card__scan, .id-card__pair):not(.is-loading) img[data-face=front]");
       await page.waitForTimeout(150);
       await shot(page, `directory-card-profile-${size}`);
+      // This branch's ID turns over; a base before it showed both sides at once.
+      if (await page.locator("dialog.id-viewer [data-flip]").count()) {
+        await page.keyboard.press("f");
+        await page.waitForSelector("dialog.id-viewer .id-card__face:not([aria-hidden=true]) img[data-face=back]");
+        await page.waitForTimeout(150);
+        await shot(page, `directory-card-turned-${size}`);
+      }
       await page.keyboard.press("d");
       await page.waitForSelector("dialog.id-viewer .person-card--details [data-out] :is(ul, span)");
       await page.waitForTimeout(150);
