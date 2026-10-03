@@ -1,13 +1,42 @@
 // Account administration, self-service and owner recovery. The website and the
 // local owner console both reach these through the same authenticated API, so
 // every rule below is enforced once, on the server.
+import { DEPARTMENT_CODES, type DepartmentCode } from "./directory-policy";
 import { InputError, audit } from "./inventory";
 import { hashPassword, verifyPassword } from "./session";
 
 export const ROLES = ["STAFF", "ADMIN", "OWNER"] as const;
 export type Role = (typeof ROLES)[number];
-export type Account = { accountId: string; sessionId: string; username: string; displayName: string; role: Role; mustChangePassword: boolean };
-type Target = { id: string; username: string; displayName: string; role: Role; active: number };
+export type Account = { accountId: string; sessionId: string; username: string; displayName: string; role: Role; mustChangePassword: boolean; group?: string | null };
+type Target = { id: string; username: string; displayName: string; role: Role; active: number; group: string | null };
+
+/**
+ * Who a sign-in is for (Earl, 2026-10-03): the staff of one USC department, an officer, or the owner. Only the Department of
+ * Logistics' staff use the Logistics Hub; the staff of other departments and officers sign in to their own account only,
+ * for now. A STAFF account keeps its group as a setting (`account_access:<id>`, no schema change); one without a recorded
+ * group is Logistics staff, as every staff account was before.
+ */
+export const ACCESS_GROUPS = [...DEPARTMENT_CODES, "OFFICER"] as const satisfies ReadonlyArray<DepartmentCode | "OFFICER">;
+export type AccessGroup = DepartmentCode | "OFFICER";
+export type Access = AccessGroup | "ADMIN" | "OWNER";
+export const groupKey = (accountId: string) => `account_access:${accountId}`;
+const isGroup = (value: unknown): value is AccessGroup => typeof value === "string" && (ACCESS_GROUPS as readonly string[]).includes(value);
+export const accessOf = (role: Role, group: string | null | undefined): Access => role === "STAFF" ? (isGroup(group) ? group : "DoL") : role;
+/** Whether an account may use the Logistics Hub itself (items, stock, loans, Self-Service review, activity, administration). */
+export const hubAccess = (account: Pick<Account, "role" | "group">): boolean => account.role !== "STAFF" || accessOf(account.role, account.group) === "DoL";
+
+/** The role and group an administrator chose: `access` (a group, ADMIN or OWNER), or the older `role` alone. */
+function accessChoice(data: Record<string, unknown>): { role: Role; group: AccessGroup | null } {
+  if (data.access === undefined) return { role: role(data.role ?? "STAFF"), group: null };
+  if (data.access === "OWNER" || data.access === "ADMIN") return { role: data.access, group: null };
+  if (isGroup(data.access)) return { role: "STAFF", group: data.access };
+  throw new InputError(400, "Choose a valid role.");
+}
+/** Records a STAFF account's group, or forgets it for an administrator or owner. */
+export const setGroup = (db: D1Database, actorId: string, accountId: string, group: AccessGroup | null) => group
+  ? db.prepare(`INSERT INTO system_settings(key, value, updated_at, updated_by) VALUES(?1, ?2, ?3, ?4)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at, updated_by = excluded.updated_by`).bind(groupKey(accountId), group, new Date().toISOString(), actorId)
+  : db.prepare("DELETE FROM system_settings WHERE key = ?").bind(groupKey(accountId));
 
 const USERNAME = /^[a-z0-9][a-z0-9._-]{2,63}$/i;
 const encoder = new TextEncoder();
@@ -71,7 +100,8 @@ const revokeSessions = (db: D1Database, accountId: string, keepSessionId = "") =
   db.prepare("UPDATE staff_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE account_id = ? AND revoked_at IS NULL AND id <> ?").bind(accountId, keepSessionId);
 
 async function target(db: D1Database, id: string): Promise<Target> {
-  const row = await db.prepare("SELECT id, username, display_name AS displayName, role, active FROM staff_accounts WHERE id = ?").bind(id).first<Target>();
+  const row = await db.prepare(`SELECT a.id, a.username, a.display_name AS displayName, a.role, a.active, g.value AS "group"
+    FROM staff_accounts a LEFT JOIN system_settings g ON g.key = 'account_access:' || a.id WHERE a.id = ?`).bind(id).first<Target>();
   if (!row) throw new InputError(404, "Account not found.");
   return row;
 }
@@ -98,24 +128,24 @@ const lastOwnerRefused = (error: unknown) => error instanceof Error && error.mes
 
 export async function listAccounts(db: D1Database) {
   const { results } = await db.prepare(`SELECT a.id, a.username, a.display_name AS displayName, a.role, a.active, a.must_change_password AS mustChangePassword,
-      a.created_at AS createdAt, a.last_login_at AS lastLoginAt,
+      a.created_at AS createdAt, a.last_login_at AS lastLoginAt, (SELECT value FROM system_settings g WHERE g.key = 'account_access:' || a.id) AS "group",
       (SELECT COUNT(*) FROM staff_sessions s WHERE s.account_id = a.id AND s.revoked_at IS NULL AND s.expires_at > ?) AS openSessions
     FROM staff_accounts a ORDER BY CASE a.role WHEN 'OWNER' THEN 0 WHEN 'ADMIN' THEN 1 ELSE 2 END, a.username COLLATE NOCASE`).bind(Date.now()).all<Record<string, unknown>>();
-  return { accounts: results.map((row) => ({ ...row, active: row.active === 1, mustChangePassword: row.mustChangePassword === 1 })) };
+  return { accounts: results.map(({ group, ...row }) => ({ ...row, access: accessOf(row.role as Role, group as string | null), active: row.active === 1, mustChangePassword: row.mustChangePassword === 1 })) };
 }
 
-export type NewAccount = { id: string; username: string; displayName: string; role: Role; passwordHash: string; generated: string | null };
+export type NewAccount = { id: string; username: string; displayName: string; role: Role; group: AccessGroup | null; passwordHash: string; generated: string | null };
 
 /** A new account, checked (a role the actor may give, a free username, a display name, a password) but not yet written. */
 export async function newAccount(db: D1Database, actor: Account, input: unknown): Promise<NewAccount> {
   const data = body(input);
   const name = username(data.username);
-  const assigned = role(data.role ?? "STAFF");
+  const { role: assigned, group } = accessChoice(data);
   if (!canAssign(actor, assigned)) throw new InputError(403, "You cannot create an account with that role.");
   const label = displayName(data.displayName);
   const secret = passwordChoice(data);
   await usernameFree(db, name);
-  return { id: `ACC-${crypto.randomUUID()}`, username: name, displayName: label, role: assigned, passwordHash: await hashPassword(secret.value), generated: secret.generated };
+  return { id: `ACC-${crypto.randomUUID()}`, username: name, displayName: label, role: assigned, group, passwordHash: await hashPassword(secret.value), generated: secret.generated };
 }
 
 export async function createAccount(db: D1Database, actor: Account, input: unknown) {
@@ -124,7 +154,8 @@ export async function createAccount(db: D1Database, actor: Account, input: unkno
     // Someone else chose this password, so the new user must replace it at first sign-in.
     db.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash, role, must_change_password, updated_at) VALUES(?, ?, ?, ?, ?, 1, ?)")
       .bind(next.id, next.username, next.displayName, next.passwordHash, next.role, new Date().toISOString()),
-    audit(db, actor.accountId, "ACCOUNT_CREATED", "ACCOUNT", next.id, { username: next.username, role: next.role })
+    ...(next.group ? [setGroup(db, actor.accountId, next.id, next.group)] : []),
+    audit(db, actor.accountId, "ACCOUNT_CREATED", "ACCOUNT", next.id, { username: next.username, role: next.role, access: accessOf(next.role, next.group) })
   ]);
   return { id: next.id, username: next.username, generatedPassword: next.generated };
 }
@@ -150,6 +181,7 @@ export async function accountAccess(db: D1Database, id: string) {
   const now = Date.now();
   const [account, sessions, events] = await db.batch([
     db.prepare(`SELECT a.id, a.username, a.display_name AS displayName, a.role, a.active, a.must_change_password AS mustChangePassword, a.created_at AS createdAt, a.last_login_at AS lastLoginAt,
+        (SELECT value FROM system_settings g WHERE g.key = 'account_access:' || a.id) AS "group",
         (SELECT COUNT(*) FROM staff_sessions s WHERE s.account_id = a.id AND s.revoked_at IS NULL AND s.expires_at > ?2) AS openSessions,
         COALESCE((SELECT t.count FROM auth_throttle t WHERE t.key = 'login-user:' || lower(a.username) AND t.reset_at > ?2), 0) AS failedAttempts
       FROM staff_accounts a WHERE a.id = ?1`).bind(id, now),
@@ -160,8 +192,8 @@ export async function accountAccess(db: D1Database, id: string) {
   const row = account!.results[0] as Record<string, unknown> | undefined;
   if (!row) throw new InputError(404, "Account not found.");
   return {
-    account: { ...row, createdAt: iso(row.createdAt as string), active: row.active === 1, mustChangePassword: row.mustChangePassword === 1 } as {
-      id: string; username: string; displayName: string; role: Role; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number; failedAttempts: number },
+    account: (({ group, ...rest }) => ({ ...rest, access: accessOf(rest.role as Role, group as string | null), createdAt: iso(rest.createdAt as string), active: rest.active === 1, mustChangePassword: rest.mustChangePassword === 1 }))(row) as {
+      id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number; failedAttempts: number },
     signIns: (sessions!.results as Array<{ startedAt: string; expiresAt: number; endedAt: string | null }>).map((session) => ({
       at: iso(session.startedAt)!, until: session.endedAt ? iso(session.endedAt)! : new Date(session.expiresAt).toISOString(),
       state: session.endedAt ? "ENDED" as const : session.expiresAt <= now ? "EXPIRED" as const : "OPEN" as const })),
@@ -185,29 +217,38 @@ export async function updateAccount(db: D1Database, actor: Account, id: string, 
     changes.push(["username", next]);
     detail.username = { from: current.username, to: next };
   }
-  if (data.role !== undefined && role(data.role) !== current.role) {
-    const next = role(data.role);
-    if (!canAssign(actor, next)) throw new InputError(403, "You cannot assign that role.");
+  const was = accessOf(current.role, current.group);
+  const chosen = data.access !== undefined || data.role !== undefined ? accessChoice(data) : null;
+  // The older `role` alone keeps a STAFF account's group.
+  const next = chosen && data.access === undefined && chosen.role === "STAFF" && current.role === "STAFF" ? { role: "STAFF" as Role, group: current.group as AccessGroup | null } : chosen;
+  const groupChanged = next !== null && accessOf(next.role, next.group) !== was;
+  if (next && next.role !== current.role) {
+    if (!canAssign(actor, next.role)) throw new InputError(403, "You cannot assign that role.");
     if (current.role === "OWNER") await keepAnOwner(db, current);
-    changes.push(["role", next]);
-    detail.role = { from: current.role, to: next };
+    changes.push(["role", next.role]);
+    detail.role = { from: current.role, to: next.role };
+  }
+  if (groupChanged) {
+    if (!canAssign(actor, next!.role)) throw new InputError(403, "You cannot assign that role.");
+    detail.access = { from: was, to: accessOf(next!.role, next!.group) };
   }
   if (data.active !== undefined && Boolean(data.active) !== Boolean(current.active)) {
     if (!data.active) await keepAnOwner(db, current);
     changes.push(["active", data.active ? 1 : 0]);
     detail.active = { from: Boolean(current.active), to: Boolean(data.active) };
   }
-  if (!changes.length) return { changed: 0 };
+  if (!changes.length && !groupChanged) return { changed: 0 };
   // Identity, privilege or access changes end every session of that account.
-  const sensitive = "username" in detail || "role" in detail || detail.active !== undefined;
+  const sensitive = "username" in detail || "role" in detail || "access" in detail || detail.active !== undefined;
   await db.batch([
-    db.prepare(`UPDATE staff_accounts SET ${changes.map(([column]) => `${column} = ?`).join(", ")}, updated_at = ? WHERE id = ?`).bind(...changes.map(([, value]) => value), new Date().toISOString(), id),
+    db.prepare(`UPDATE staff_accounts SET ${[...changes.map(([column]) => `${column} = ?`), "updated_at = ?"].join(", ")} WHERE id = ?`).bind(...changes.map(([, value]) => value), new Date().toISOString(), id),
+    ...(groupChanged ? [setGroup(db, actor.accountId, id, next!.role === "STAFF" ? next!.group ?? "DoL" : null)] : []),
     ...(sensitive ? [revokeSessions(db, id)] : []),
     // A recovery key belongs to the owner role; losing the role ends it for good.
     ...(current.role === "OWNER" && "role" in detail ? [db.prepare("UPDATE owner_recovery_keys SET revoked_at = ? WHERE account_id = ? AND revoked_at IS NULL").bind(new Date().toISOString(), id)] : []),
     audit(db, actor.accountId, "ACCOUNT_UPDATED", "ACCOUNT", id, { username: current.username, ...detail, sessionsRevoked: sensitive })
   ]).catch((error: unknown) => { throw lastOwnerRefused(error) ? new InputError(409, ONLY_OWNER) : error; });
-  return { changed: changes.length, sessionsRevoked: sensitive };
+  return { changed: changes.length + (groupChanged && !("role" in detail) ? 1 : 0), sessionsRevoked: sensitive };
 }
 
 export async function resetPassword(db: D1Database, actor: Account, id: string, input: unknown) {
