@@ -20,8 +20,10 @@ export type WhereIsIt = {
   pictureUrl: (id: string, size: "thumb" | "display") => string;
   /** Staff may add a note to a report; a phone may not. */
   note: boolean;
+  /** A phone says who is reporting (prefilled with the name it already remembers); staff are named by their account. */
+  askName?: { value: string };
   /** Sends one report and says whether it was newly recorded; `id` is the same on a retry so the Worker records it once. Null when reporting is not possible right now. */
-  report: ((kind: ReportKind, note: string, id: string) => Promise<boolean>) | null;
+  report: ((kind: ReportKind, note: string, name: string, id: string) => Promise<boolean>) | null;
   /** Why reporting is not possible, shown in place of the buttons. */
   reportBlocked?: string;
   /** Beside "No picture yet": staff are shown where to add one. */
@@ -72,7 +74,7 @@ export function openWhereIsIt(options: WhereIsIt): void {
   const kinds = options.steps.length ? REPORT_KINDS : (["CANT_FIND"] as const);
   // One id per report, kept across retries, so a lost answer never records it twice.
   let requestId = crypto.randomUUID();
-  let state: { phase: "choose" } | { phase: "confirm"; kind: ReportKind; sending: boolean; error: string; note: string } | { phase: "sent"; kind: ReportKind; recorded: boolean } = { phase: "choose" };
+  let state: { phase: "choose" } | { phase: "confirm"; kind: ReportKind; sending: boolean; error: string; note: string; name: string } | { phase: "sent"; kind: ReportKind; recorded: boolean } = { phase: "choose" };
 
   const reporting = (): Html => {
     if (!options.report) return html`<p class="where__blocked">${icon("cloudOff")}<span>${options.reportBlocked ?? "Reports are not available right now."}</span></p>`;
@@ -81,10 +83,11 @@ export function openWhereIsIt(options: WhereIsIt): void {
         <p>DOL staff will check. Nothing was changed: stock and where the item is kept stay as they were.</p></div></div>`;
     }
     if (state.phase === "confirm") {
-      const { kind, sending, error, note } = state;
+      const { kind, sending, error, note, name } = state;
       return html`<form class="where__confirm form" data-confirm novalidate aria-labelledby="where-confirm-title">
         <h3 id="where-confirm-title">${REPORT_LABELS[kind]}</h3>
         <p>${CONFIRM[kind]} Nothing is changed by this report.</p>
+        ${options.askName ? html`<div class="field"><label for="where-name">Your name</label><input id="where-name" name="name" autocomplete="name" autocapitalize="words" maxlength="120" required value="${name}" ${sending ? "disabled" : ""} enterkeyhint="done" /><p class="field__hint">So DOL staff know who to ask.</p></div>` : ""}
         ${options.note ? html`<div class="field"><label for="where-note">Note <span class="field__optional">optional</span></label><textarea id="where-note" name="note" rows="2" maxlength="300" ${sending ? "disabled" : ""}>${note}</textarea></div>` : ""}
         ${error ? html`<p class="form-alert" role="alert">${icon("alert")}<span>${error}</span></p>` : ""}
         <div class="where__buttons"><button class="button button--primary" type="submit" ${sending ? "disabled" : ""}>${sending ? "Sending…" : "Send report"}</button>
@@ -113,8 +116,8 @@ export function openWhereIsIt(options: WhereIsIt): void {
     }
     const choose = target.closest<HTMLElement>("[data-report]");
     if (choose) {
-      state = { phase: "confirm", kind: choose.dataset.report as ReportKind, sending: false, error: "", note: "" };
-      redrawReport("#where-note, [data-confirm] button[type=submit]");
+      state = { phase: "confirm", kind: choose.dataset.report as ReportKind, sending: false, error: "", note: "", name: options.askName?.value ?? "" };
+      redrawReport(options.askName && !options.askName.value ? "#where-name" : "#where-note, [data-confirm] button[type=submit]");
     } else if (target.closest("[data-cancel]")) {
       const kind = state.phase === "confirm" ? state.kind : kinds[0];
       state = { phase: "choose" };
@@ -126,10 +129,16 @@ export function openWhereIsIt(options: WhereIsIt): void {
     if (state.phase !== "confirm" || state.sending || !options.report) return;
     const { kind } = state;
     const note = dialog.querySelector<HTMLTextAreaElement>("#where-note")?.value.trim() ?? "";
-    state = { phase: "confirm", kind, sending: true, error: "", note };
+    const name = dialog.querySelector<HTMLInputElement>("#where-name")?.value.trim() ?? "";
+    if (options.askName && !name) {
+      state = { phase: "confirm", kind, sending: false, error: "Enter your name so DOL staff know who to ask.", note, name };
+      redrawReport("#where-name");
+      return;
+    }
+    state = { phase: "confirm", kind, sending: true, error: "", note, name };
     redrawReport();
     try {
-      const recorded = await options.report(kind, note, requestId);
+      const recorded = await options.report(kind, note, name, requestId);
       requestId = crypto.randomUUID();
       state = { phase: "sent", kind, recorded };
       redrawReport();
@@ -137,7 +146,7 @@ export function openWhereIsIt(options: WhereIsIt): void {
       dialog.querySelector<HTMLElement>("#where-report .where__done")?.focus();
     } catch (problem) {
       // A busy network or a closed Self-Service is said plainly; the same id is sent again on retry.
-      state = { phase: "confirm", kind, sending: false, error: problem instanceof ApiError && problem.status === 429 ? "Too many reports just now. Please ask DOL staff in person." : failure(problem), note };
+      state = { phase: "confirm", kind, sending: false, error: problem instanceof ApiError && problem.status === 429 ? "Too many reports just now. Please ask DOL staff in person." : failure(problem), note, name };
       redrawReport("[data-confirm] button[type=submit]");
     }
   });
