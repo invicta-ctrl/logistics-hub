@@ -1,3 +1,4 @@
+import type { DepartmentCode } from "./directory-policy";
 import { CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
@@ -52,8 +53,13 @@ const FIELD_LABELS: Record<string, string> = {
 const LENDING_FIELDS = ["lendingAudience", "defaultLoanDays", "maximumLoanQty"];
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
+/** Who a sign-in is for: the staff of a USC department (DoL, DEM, …), an officer, or an administrator or owner (accounts.ts). */
+export type Access = DepartmentCode | "OFFICER" | "ADMIN" | "OWNER";
+/** A session's access; one from a server before access groups is what the role alone meant (STAFF: Logistics staff). */
+export const sessionAccess = (session: Pick<Session, "role"> & { access?: Access }): Access => session.access ?? (session.role === "STAFF" ? "DoL" : session.role);
+export const accessLabel = (access: Access | string): string => access === "OFFICER" ? "Officer" : access === "ADMIN" ? "Administrator" : access === "OWNER" ? "Owner" : `${access} Staff`;
 export type Session = {
-  id: string; username: string; displayName: string; role: Role; mustChangePassword: boolean; recovery: { configured: boolean; createdAt: string | null } | null; selfServiceReviews: number; selfServiceClosed: boolean;
+  id: string; username: string; displayName: string; role: Role; access?: Access; hub?: boolean; mustChangePassword: boolean; recovery: { configured: boolean; createdAt: string | null } | null; selfServiceReviews: number; selfServiceClosed: boolean;
   /** The Staff Directory entry linked to this sign-in, if an administrator linked one. */
   directory: { name: string; department: string; position: string | null } | null;
 };
@@ -82,6 +88,8 @@ export async function loadSession(section: Section): Promise<Session | null> {
   try {
     const session = await api<Session>("/api/staff/session");
     if (session.mustChangePassword && section !== "account") { navigate("/staff/account", true); return null; }
+    // Staff of other departments and officers have their account page only (the Worker refuses the rest anyway).
+    if (session.hub === false && section !== "account") { navigate("/staff/account", true); return null; }
     return session;
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) { navigate("/staff", true); return null; }
@@ -101,7 +109,7 @@ export async function loadSession(section: Section): Promise<Session | null> {
  */
 export function shell(session: Session, section: Section, main: Html): void {
   const current = (id: Section) => section === id ? html`aria-current="page"` : "";
-  const sections = session.mustChangePassword ? [] : SECTIONS.filter((entry) => entry.id !== "admin" || session.role !== "STAFF");
+  const sections = session.mustChangePassword || session.hub === false ? [] : SECTIONS.filter((entry) => entry.id !== "admin" || session.role !== "STAFF");
   const reviews = session.selfServiceReviews;
   const badge = (id: Section) => id === "self-service" && reviews
     ? html`<span class="nav-badge" aria-hidden="true">${reviews}</span><span class="visually-hidden">, ${reviews} ${reviews === 1 ? "record" : "records"} to check</span>` : "";
@@ -115,11 +123,11 @@ export function shell(session: Session, section: Section, main: Html): void {
           ${sections.map((entry) => html`<a class="app-nav__link ${entry.more ? "app-nav__link--more" : ""}" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}<span class="app-nav__text">${entry.text}${badge(entry.id)}</span></a>`)}
           <button class="app-nav__link app-nav__more ${overflow.some((entry) => entry.id === section) || section === "account" ? "is-current" : ""}" type="button" popovertarget="staff-menu">${icon("dots")}<span class="app-nav__text">More</span></button>
         </nav>` : ""}
-        <button class="account" type="button" popovertarget="staff-menu">${avatar}<span class="account__name"><span class="visually-hidden">Account: </span>${session.displayName}<small>${ROLE_LABELS[session.role]}</small></span></button>
+        <button class="account" type="button" popovertarget="staff-menu">${avatar}<span class="account__name"><span class="visually-hidden">Account: </span>${session.displayName}<small>${accessLabel(sessionAccess(session))}</small></span></button>
       </div>
     </header>
     <div class="menu" id="staff-menu" popover>
-      <div class="menu__identity">${avatar}<p><strong>${session.displayName}</strong><span>${ROLE_LABELS[session.role]} · <span class="mono">${session.username}</span></span></p></div>
+      <div class="menu__identity">${avatar}<p><strong>${session.displayName}</strong><span>${accessLabel(sessionAccess(session))} · <span class="mono">${session.username}</span></span></p></div>
       ${overflow.length ? html`<ul class="menu__list menu__list--more" aria-label="More sections">${overflow.map((entry) => html`<li><a class="menu__item" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}${entry.text}</a></li>`)}</ul>` : ""}
       <ul class="menu__list">
         <li><a class="menu__item" href="/staff/account" data-route ${current("account")}>${icon("user")}My account</a></li>

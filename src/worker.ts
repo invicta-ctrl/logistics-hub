@@ -1,5 +1,5 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
-import { type Account, changeOwnPassword, clearThrottle, createAccount, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
+import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
 import { itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
 import { openUnitAction } from "./open-units";
 import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
@@ -53,6 +53,8 @@ const PERSON_PATH = /^\/api\/staff\/admin\/directory\/(PER-[0-9a-f-]{36})(\/acco
 const ACCOUNT_PATH = /^\/api\/staff\/admin\/accounts\/(ACC-[A-Za-z0-9-]{1,60})(\/password|\/sessions\/revoke)?$/;
 // Paths still usable while an account must replace a password someone else set.
 const PASSWORD_CHANGE_ALLOWED = new Set(["/api/staff/session", "/api/staff/me/password"]);
+/** What a sign-in without Logistics Hub access may still do: see and look after its own account. */
+const OWN_ACCOUNT_PATHS = new Set(["/api/staff/session", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke"]);
 let dummyHash: Promise<string> | undefined;
 
 function json(body: unknown, status = 200, headers: HeadersInit = {}): Response {
@@ -124,8 +126,9 @@ async function revisioned(request: Request, db: D1Database, load: () => Promise<
 async function accountFor(request: Request, env: Env): Promise<Account | null> {
   const session = await verifySession(readCookie(request, SESSION_NAME), env.SESSION_SECRET);
   if (!session) return null;
-  const row = await env.DB.prepare(`SELECT a.id AS accountId, s.id AS sessionId, a.display_name AS displayName, a.username, a.role, a.must_change_password AS mustChangePassword
-    FROM staff_sessions s JOIN staff_accounts a ON a.id = s.account_id WHERE s.id = ? AND s.revoked_at IS NULL AND s.expires_at > ? AND a.active = 1`)
+  const row = await env.DB.prepare(`SELECT a.id AS accountId, s.id AS sessionId, a.display_name AS displayName, a.username, a.role, a.must_change_password AS mustChangePassword, g.value AS "group"
+    FROM staff_sessions s JOIN staff_accounts a ON a.id = s.account_id LEFT JOIN system_settings g ON g.key = 'account_access:' || a.id
+    WHERE s.id = ? AND s.revoked_at IS NULL AND s.expires_at > ? AND a.active = 1`)
     .bind(session.id, Date.now()).first<Omit<Account, "mustChangePassword"> & { mustChangePassword: number }>();
   return row ? { ...row, mustChangePassword: row.mustChangePassword === 1 } : null;
 }
@@ -174,11 +177,13 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   const method = request.method;
   const body = () => request.json().catch(() => null);
   if (account.mustChangePassword && !PASSWORD_CHANGE_ALLOWED.has(path)) return json({ error: "Set a new password before continuing.", code: "PASSWORD_CHANGE_REQUIRED" }, 403);
+  // Staff of other departments and officers sign in to their own account only (Earl, 2026-10-03).
+  if (!hubAccess(account) && !OWN_ACCOUNT_PATHS.has(path)) return json({ error: "The Logistics Hub is for the Department of Logistics. Your sign-in opens your account only.", code: "NO_HUB_ACCESS" }, 403);
 
   if (path === "/api/staff/session" && method === "GET") {
-    const { accountId, sessionId, ...profile } = account;
+    const { accountId, sessionId, group, ...profile } = account;
     const reviews = await env.DB.prepare("SELECT COUNT(*) AS total FROM self_service_events WHERE review IS NOT NULL AND resolved_at IS NULL").first<number>("total");
-    return json({ authenticated: true, id: accountId, ...profile, recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews ?? 0, selfServiceClosed: await selfServiceState(env.DB) === "paused", directory: await linkedPerson(env.DB, accountId) });
+    return json({ authenticated: true, id: accountId, ...profile, access: accessOf(account.role, group), hub: hubAccess(account), recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews ?? 0, selfServiceClosed: await selfServiceState(env.DB) === "paused", directory: await linkedPerson(env.DB, accountId) });
   }
   if (path === "/api/staff/me" && method === "PATCH") return json(await updateSelf(env.DB, account, await body()));
   if (path === "/api/staff/me/password" && method === "POST") return json(await changeOwnPassword(env.DB, account, await body()));
