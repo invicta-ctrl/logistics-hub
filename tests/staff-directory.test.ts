@@ -266,6 +266,62 @@ describe("profiles and account links", () => {
   });
 });
 
+describe("making a sign-in from a profile, and watching how it is used", () => {
+  const login = (username: string, password: string, ip = "ip-test") => worker.fetch(new Request(`${origin}/api/staff/login`, { method: "POST", headers: { origin, "content-type": "application/json", "cf-connecting-ip": ip }, body: JSON.stringify({ username, password }) }), env);
+
+  it("creates a sign-in named after the person, links it in the same step, and shows the password once", async () => {
+    const ana = await addPerson({ name: "Ána Marie Santos", department: "DoL" });
+    const before = await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/access`));
+    expect(before).toEqual({ account: null, suggestedUsername: "ana.santos" });
+    // An administrator may make staff sign-ins only.
+    expect((await call("ADMIN", `/api/staff/admin/directory/${ana}/account/new`, "POST", { username: "ana.santos", role: "ADMIN" })).status).toBe(403);
+    expect((await call("STAFF", `/api/staff/admin/directory/${ana}/account/new`, "POST", { username: "ana.santos" })).status).toBe(403);
+    const made = await call("ADMIN", `/api/staff/admin/directory/${ana}/account/new`, "POST", { username: "ana.santos" });
+    expect(made.status).toBe(201);
+    const { accountId, username, generatedPassword } = await json(made);
+    expect(username).toBe("ana.santos");
+    expect(generatedPassword).toMatch(/^[A-Za-z0-9]{5}(-[A-Za-z0-9]{5}){3}$/);
+    const account = sqlite.prepare("SELECT display_name AS name, role, must_change_password AS mustChange, password_hash AS hash FROM staff_accounts WHERE id = ?").get(accountId) as Record<string, unknown>;
+    expect(account).toMatchObject({ name: "Ána Marie Santos", role: "STAFF", mustChange: 1 });
+    expect(String(account.hash)).not.toContain(generatedPassword);
+    const { person } = await json(await call("ADMIN", `/api/staff/admin/directory/${ana}`));
+    expect(person.account).toMatchObject({ id: accountId, username: "ana.santos", role: "STAFF", active: true, lastLoginAt: null });
+    // A second sign-in for the same person is refused, and the next suggestion avoids the taken name.
+    expect((await call("ADMIN", `/api/staff/admin/directory/${ana}/account/new`, "POST", { username: "ana.santos2" })).status).toBe(409);
+    const twin = await addPerson({ name: "Ana Santos", department: "DEM" });
+    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${twin}/access`))).suggestedUsername).toBe("ana.santos2");
+    expect((await call("ADMIN", `/api/staff/admin/directory/${twin}/account/new`, "POST", { username: "ana.santos" })).status).toBe(409);
+    const audits = sqlite.prepare("SELECT action, entity_id AS entity, details_json AS details FROM audit_log WHERE action IN ('ACCOUNT_CREATED', 'STAFF_ACCOUNT_LINKED') ORDER BY rowid").all();
+    expect(audits.map((row) => [row.action, row.entity, JSON.parse(String(row.details)).username])).toEqual([["ACCOUNT_CREATED", accountId, "ana.santos"], ["STAFF_ACCOUNT_LINKED", ana, "ana.santos"]]);
+    expect(JSON.stringify(sqlite.prepare("SELECT * FROM audit_log").all())).not.toContain(generatedPassword);
+    // The password works once, and must then be replaced.
+    expect(await json(await login("ana.santos", generatedPassword))).toEqual({ ok: true, mustChangePassword: true });
+  });
+
+  it("shows sign-ins, failed attempts and changes to whoever manages the account, and only the summary to others", async () => {
+    const ana = await addPerson({ name: "Ana Santos", department: "DoL" });
+    const { generatedPassword } = await json(await call("OWNER", `/api/staff/admin/directory/${ana}/account/new`, "POST", { username: "ana.santos", role: "ADMIN" }));
+    expect((await login("ana.santos", generatedPassword, "ip-1")).status).toBe(200);
+    expect((await login("ana.santos", generatedPassword, "ip-2")).status).toBe(200);
+    const accountId = (sqlite.prepare("SELECT id FROM staff_accounts WHERE username = 'ana.santos'").get() as { id: string }).id;
+    expect((await call("OWNER", `/api/staff/admin/accounts/${accountId}/sessions/revoke`, "POST")).status).toBe(200);
+    expect((await login("ana.santos", generatedPassword, "ip-3")).status).toBe(200);
+    expect((await login("ana.santos", "wrong password!!", "ip-4")).status).toBe(401);
+    expect((await login("ana.santos", "wrong password!!", "ip-5")).status).toBe(401);
+    const owner = await json(await call("OWNER", `/api/staff/admin/directory/${ana}/access`));
+    expect(owner).toMatchObject({ self: false, manageable: true, account: { username: "ana.santos", role: "ADMIN", active: true, openSessions: 1, failedAttempts: 2, mustChangePassword: true } });
+    expect(owner.account.lastLoginAt).toEqual(expect.any(String));
+    expect(owner.signIns.map((entry: { state: string }) => entry.state).sort()).toEqual(["ENDED", "ENDED", "OPEN"]);
+    expect(owner.signIns.every((entry: Record<string, unknown>) => Object.keys(entry).sort().join() === "at,state,until" && String(entry.at).endsWith("Z"))).toBe(true);
+    expect(owner.events.map((event: { action: string }) => event.action)).toEqual(["SESSIONS_REVOKED", "ACCOUNT_CREATED"]);
+    // Another administrator sees what Administration → Accounts already lists, not the history of an account they cannot manage.
+    const admin = await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/access`));
+    expect(admin).toMatchObject({ self: false, manageable: false, signIns: null, events: null, account: { username: "ana.santos", openSessions: 1 } });
+    expect(admin.account).not.toHaveProperty("failedAttempts");
+    expect(JSON.stringify(owner)).not.toMatch(/"id":"[0-9a-f]{8}-/);
+  });
+});
+
 describe("usage, loans and activity come from the existing records", () => {
   const item = () => sqlite.prepare("SELECT id, unit FROM items ORDER BY id LIMIT 1").get() as { id: string; unit: string };
   let movement = 0;

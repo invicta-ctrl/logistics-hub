@@ -1,9 +1,10 @@
+import { type AccountEvent, assignable, bindCopy, eventText, oneTime, roleTag } from "./account-ui";
 import { DEPARTMENTS, DEPARTMENT_CODES, type DepartmentCode } from "./directory-policy";
 import { type Loan, loanRow, openReturn } from "./loan-form";
 import { tiltTile } from "./card-motion";
 import { type Card, type View, cardForm, cardSource, forgetScans, importArchive, openCard, scan } from "./staff-ids";
 import { ROLE_LABELS, type Role, type Session, adminTabs, initials, loadSession, shell } from "./staff";
-import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 /*
  * Administration → Staff Directory (V1.3). One page: the directory as a wall of cards by department, and a person's profile in
@@ -16,7 +17,12 @@ import { type Html, api, categoryName, emptyState, failure, formatDate, formatDa
 
 type Person = {
   id: string; name: string; department: string; position: string | null; officer: boolean; studentId: string | null; active: boolean; sourceKey: string | null;
-  createdAt: string; updatedAt: string; hasId: boolean; account: { id: string; username: string; displayName: string; role: Role } | null;
+  createdAt: string; updatedAt: string; hasId: boolean; account: { id: string; username: string; displayName: string; role: Role; active: boolean; lastLoginAt: string | null } | null;
+};
+type SignIn = { at: string; until: string; state: "OPEN" | "ENDED" | "EXPIRED" };
+type Access = { account: null; suggestedUsername: string } | {
+  account: { id: string; username: string; displayName: string; role: Role; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number; failedAttempts?: number };
+  signIns: SignIn[] | null; events: AccountEvent[] | null; self: boolean; manageable: boolean;
 };
 type Entry = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
 type Detail = { person: Person; card: Card | null; history: Entry[] };
@@ -167,7 +173,7 @@ export async function staffDirectory(): Promise<void> {
         ${person.officer ? html`<span class="person-card__badge">Officer</span>` : ""}</div>
       <dl class="person-card__facts">
         ${fact("Student no.", person.studentId ? html`<span class="mono">${person.studentId}</span>` : html`<span class="muted">Not set</span>`)}
-        ${fact("Sign-in", person.account ? html`<span class="mono">${person.account.username}</span> · ${ROLE_LABELS[person.account.role]}` : html`<span class="muted">Not linked</span>`)}
+        ${fact("Sign-in", person.account ? html`<span class="mono">${person.account.username}</span> · ${ROLE_LABELS[person.account.role]}<br />${!person.account.active ? html`<span class="person-card__mark person-card__mark--bad">Disabled</span>` : person.account.lastLoginAt ? html`<span class="muted">Last in ${formatDateTime(person.account.lastLoginAt)}</span>` : html`<span class="muted">Never signed in</span>`}` : html`<span class="muted">Not linked</span>`)}
         ${fact("USC ID", person.hasId ? "On file: turn the card over" : html`<span class="muted">Not on file</span>`)}
         ${fact("Status", person.active ? "Active" : html`<span class="person-card__mark person-card__mark--bad">Inactive</span>`)}
       </dl>
@@ -340,34 +346,120 @@ export async function staffDirectory(): Promise<void> {
         </dl>
         <div class="form-actions form-actions--start"><button class="button button--secondary button--sm" type="button" data-edit-here>Edit details</button></div>
       </section>
-      <section class="panel" aria-labelledby="link-title"><h2 class="panel__title" id="link-title">Sign-in</h2><div data-link></div></section>
+      <section class="panel" aria-labelledby="link-title"><h2 class="panel__title" id="link-title">Sign-in and access</h2><div data-access></div></section>
       ${!person.active && card && owner ? html`<p class="callout">${icon("info")}<span>${person.name} is inactive and their ID scans are still on file. Remove them in USC ID once they are no longer needed.</span></p>` : ""}
     </div>`);
     host.querySelector("[data-edit-here]")!.addEventListener("click", () => openEditor(person, reload));
-    void linkSection(host.querySelector<HTMLElement>("[data-link]")!, person, reload);
+    void accessSection(host.querySelector<HTMLElement>("[data-access]")!, person, reload);
   }
 
-  async function linkSection(host: HTMLElement, person: Person, reload: () => Promise<void>): Promise<void> {
-    if (person.account) {
-      const account = person.account;
-      const mayUnlink = owner || account.role === "STAFF" || account.id === session!.id;
-      mount(host, html`<p class="link-card">${icon("user")}<span><strong>${account.displayName}</strong> <span class="mono">${account.username}</span> · ${ROLE_LABELS[account.role]}</span></p>
-        <p class="field__hint">Their own records in Logistics Hub appear under Activity. The link was made by hand and is in the directory record.</p>
+  /**
+   * The person's sign-in. Without one: make one in a step (their name, a suggested username, a generated password shown once,
+   * linked at once), or link one they already have. With one: how it is used (state, last sign-in, devices signed in now,
+   * failed attempts, recent sign-ins and changes) and, for an account this administrator manages, reset, sign out and disable.
+   */
+  async function accessSection(host: HTMLElement, person: Person, reload: () => Promise<void>): Promise<void> {
+    mount(host, html`<p class="muted">Loading…</p>`);
+    let access: Access;
+    try { access = await api<Access>(`/api/staff/admin/directory/${person.id}/access`); } catch (error) { mount(host, html`<p class="form-alert" role="alert">${icon("alert")}<span>${failure(error)}</span></p>`); return; }
+    bindCopy(host);
+    if (!access.account) { createSection(host, person, access.suggestedUsername, reload); return; }
+    const { account, signIns, events, manageable, self } = access;
+    const mayUnlink = owner || account.role === "STAFF" || self;
+    const ended = (entry: SignIn) => entry.state === "OPEN" ? html`signed in now, until ${formatTime(entry.until)}` : entry.state === "EXPIRED" ? html`expired ${formatDateTime(entry.until)}` : html`ended ${formatDateTime(entry.until)} (signed out, or ended by a password reset or sign-out everywhere)`;
+    mount(host, html`<p class="link-card">${icon("user")}<span><strong>${account.displayName}</strong> <span class="mono">${account.username}</span></span>${roleTag(account.role)}</p>
+      <p class="tags">${account.active ? html`<span class="tag tag--ok">Can sign in</span>` : html`<span class="tag tag--bad">Disabled</span>`}${account.mustChangePassword ? html`<span class="tag tag--warn">Must set a password</span>` : ""}</p>
+      <dl class="access-facts">
+        <div><dt>Last sign-in</dt><dd>${account.lastLoginAt ? html`<time datetime="${account.lastLoginAt}">${formatDateTime(account.lastLoginAt)}</time>` : html`<span class="muted">Never</span>`}</dd></div>
+        <div><dt>Signed in now</dt><dd>${account.openSessions ? (account.openSessions === 1 ? "On 1 device" : `On ${account.openSessions} devices`) : html`<span class="muted">Nowhere</span>`}</dd></div>
+        ${account.failedAttempts !== undefined ? html`<div><dt>Failed sign-ins, last 15 min</dt><dd>${account.failedAttempts ? html`<span class="tag tag--warn">${account.failedAttempts}</span>` : html`<span class="muted">None</span>`}</dd></div>` : ""}
+      </dl>
+      ${account.failedAttempts && account.failedAttempts >= 3 ? html`<p class="callout">${icon("alert")}<span>${plural(account.failedAttempts, "failed sign-in")} in the last 15 minutes. If that was not ${person.name}, reset the password.</span></p>` : ""}
+      ${account.mustChangePassword && !account.lastLoginAt ? html`<p class="field__hint">Waiting for the first sign-in: give them the username and the temporary password privately. They choose their own password then.</p>` : ""}
+      ${signIns ? html`<h3 class="section-label">Recent sign-ins</h3>${signIns.length ? html`<ol class="access-log">${signIns.map((entry) => html`<li><time datetime="${entry.at}">${formatDateTime(entry.at)}</time> <span class="${entry.state === "OPEN" ? "access-log__open" : "muted"}">${ended(entry)}</span></li>`)}</ol>` : html`<p class="muted">No sign-ins in the last month.</p>`}` : ""}
+      ${events?.length ? html`<h3 class="section-label">Changes to this sign-in</h3><ol class="access-log">${events.map((event) => html`<li>${eventText(event)}<time datetime="${event.at}">${formatDateTime(event.at)}</time></li>`)}</ol>` : ""}
+      <div class="form-alert" role="alert" hidden data-alert></div><div data-secret></div>
+      <div class="form-actions form-actions--start">
+        ${manageable ? html`<button class="button button--secondary button--sm" type="button" data-reset>Reset password</button>
+          <button class="button button--secondary button--sm" type="button" data-signout ${account.openSessions ? "" : html`disabled`}>Sign out everywhere</button>
+          <button class="button ${account.active ? "button--danger" : "button--primary"} button--sm" type="button" data-active>${account.active ? "Disable sign-in" : "Enable sign-in"}</button>` : ""}
+        ${self ? html`<a class="button button--secondary button--sm" href="/staff/account" data-route>My account</a>` : ""}
+        ${mayUnlink ? html`<button class="button button--ghost button--sm" type="button" data-unlink>Unlink</button>` : ""}
+      </div>
+      ${!manageable && !self ? html`<p class="field__hint">Only an owner manages an administrator's or owner's sign-in.</p>` : ""}`);
+    const alert = host.querySelector<HTMLElement>("[data-alert]")!;
+    const act = async (work: () => Promise<unknown>) => { try { await work(); } catch (error) { setMessage(alert, failure(error)); } };
+    const accountPath = `/api/staff/admin/accounts/${encodeURIComponent(account.id)}`;
+    host.querySelector("[data-reset]")?.addEventListener("click", () => act(async () => {
+      if (!window.confirm(`Reset ${account.username}'s password? The current one stops working and they are signed out everywhere.`)) return;
+      const { generatedPassword } = await api<{ generatedPassword: string }>(`${accountPath}/password`, { method: "POST", body: JSON.stringify({ generate: true }) });
+      mount(host.querySelector("[data-secret]")!, oneTime(`New temporary password for ${account.username}`, generatedPassword, "Shown once and never stored. Give it to them privately; they choose their own at next sign-in."));
+      toast(`Password reset for ${account.username}.`);
+    }));
+    host.querySelector("[data-signout]")?.addEventListener("click", () => act(async () => {
+      if (!window.confirm(`Sign ${account.username} out on every device?`)) return;
+      await api(`${accountPath}/sessions/revoke`, { method: "POST" });
+      toast(`${account.username} was signed out everywhere.`);
+      await accessSection(host, person, reload);
+    }));
+    host.querySelector("[data-active]")?.addEventListener("click", () => act(async () => {
+      if (account.active && !window.confirm(`Disable ${account.username}? They are signed out and cannot sign in until it is enabled again.`)) return;
+      await api(accountPath, { method: "PATCH", body: JSON.stringify({ active: !account.active }) });
+      toast(`${account.username} ${account.active ? "disabled" : "enabled"}.`);
+      await reload();
+    }));
+    host.querySelector("[data-unlink]")?.addEventListener("click", () => act(async () => {
+      if (!window.confirm(`Unlink ${person.name} from the sign-in ${account.username}? The sign-in itself stays.`)) return;
+      await api(`/api/staff/admin/directory/${person.id}/account`, { method: "DELETE" });
+      toast("Unlinked.");
+      await reload();
+    }));
+  }
+
+  /** No sign-in yet: one made for them in a step, or one they already have, linked by hand. */
+  function createSection(host: HTMLElement, person: Person, suggested: string, reload: () => Promise<void>): void {
+    const roles = assignable(session!);
+    mount(host, html`<form class="form" data-create novalidate>
+        <p class="field__hint">${person.name} has no sign-in yet. Make one here: it is linked to this profile at once.</p>
+        <div class="field-grid">
+          <div class="field"><label for="new-username">Username</label><input id="new-username" name="username" value="${suggested}" required maxlength="64" autocapitalize="none" spellcheck="false" autocomplete="off" aria-describedby="new-username-hint" />
+            <p class="field__hint" id="new-username-hint">What they type to sign in.</p></div>
+          <div class="field"><label for="new-role">Role</label><select id="new-role" name="role">${roles.map((role) => html`<option value="${role}">${ROLE_LABELS[role]}</option>`)}</select></div>
+        </div>
+        <p class="field__hint">A password is made for them and shown once. They choose their own at first sign-in.</p>
         <div class="form-alert" role="alert" hidden data-alert></div>
-        ${mayUnlink ? html`<div class="form-actions form-actions--start"><button class="button button--ghost button--sm" type="button" data-unlink>Unlink</button></div>` : html`<p class="field__hint">Only an owner can unlink an administrator or owner account.</p>`}`);
-      host.querySelector("[data-unlink]")?.addEventListener("click", async () => {
-        if (!window.confirm(`Unlink ${person.name} from the sign-in ${account.username}?`)) return;
-        try { await api(`/api/staff/admin/directory/${person.id}/account`, { method: "DELETE" }); toast("Unlinked."); await reload(); }
-        catch (error) { setMessage(host.querySelector("[data-alert]")!, failure(error)); }
-      });
-      return;
-    }
-    mount(host, html`<p class="field__hint">Not linked. Link only after confirming the sign-in belongs to this person; nothing is linked automatically.</p><p class="muted">Loading sign-ins…</p>`);
+        <div class="form-actions form-actions--start"><button class="button button--primary button--sm" type="submit">${icon("plus")}Create sign-in</button></div>
+      </form>
+      <div data-made></div>
+      <details class="link-existing"><summary>Or link a sign-in they already have</summary><div data-link></div></details>`);
+    const form = host.querySelector<HTMLFormElement>("[data-create]")!;
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const values = new FormData(form);
+      const button = form.querySelector<HTMLButtonElement>("[type=submit]")!;
+      button.disabled = true;
+      try {
+        const made = await api<{ username: string; generatedPassword: string }>(`/api/staff/admin/directory/${person.id}/account/new`, { method: "POST", body: JSON.stringify({ username: values.get("username"), role: values.get("role") }) });
+        form.hidden = true;
+        host.querySelector<HTMLElement>(".link-existing")!.hidden = true;
+        mount(host.querySelector("[data-made]")!, html`${oneTime(`Sign-in for ${person.name}: ${made.username}`, made.generatedPassword, "Shown once and never stored. Give the username and this password to them privately; they choose their own password at first sign-in.")}
+          <div class="form-actions form-actions--start"><button type="button" class="button button--secondary button--sm" data-done>Done</button></div>`);
+        host.querySelector("[data-done]")!.addEventListener("click", () => void reload());
+        toast(`Sign-in ${made.username} created for ${person.name}.`);
+      } catch (error) { button.disabled = false; setMessage(form.querySelector("[data-alert]")!, failure(error)); }
+    });
+    host.querySelector(".link-existing")!.addEventListener("toggle", (event) => {
+      if ((event.target as HTMLDetailsElement).open) void linkExisting(host.querySelector<HTMLElement>("[data-link]")!, person, reload);
+    }, { once: true });
+  }
+
+  async function linkExisting(host: HTMLElement, person: Person, reload: () => Promise<void>): Promise<void> {
+    mount(host, html`<p class="muted">Loading sign-ins…</p>`);
     let accounts: Linkable[];
     try { ({ accounts } = await api<{ accounts: Linkable[] }>("/api/staff/admin/directory/accounts")); } catch (error) { mount(host, html`<p class="form-alert" role="alert">${icon("alert")}<span>${failure(error)}</span></p>`); return; }
     const free = accounts.filter((account) => !account.personId && account.active);
     mount(host, html`<form class="link-form" novalidate>
-      <p class="field__hint">Not linked. Link only after confirming the sign-in belongs to this person; nothing is linked automatically.</p>
+      <p class="field__hint">Link only after confirming the sign-in belongs to ${person.name}; nothing is linked automatically.</p>
       ${free.length ? html`<div class="field"><label for="link-account">Sign-in</label><select id="link-account" name="accountId"><option value="">Choose a sign-in…</option>${free.map((account) => html`<option value="${account.id}">${account.displayName} (${account.username}) · ${ROLE_LABELS[account.role]}</option>`)}</select></div>
         <div class="form-alert" role="alert" hidden data-alert></div>
         <div class="form-actions form-actions--start"><button class="button button--secondary button--sm" type="submit">Link sign-in</button></div>`
