@@ -166,6 +166,61 @@ test.describe("owner administration", () => {
     await expect(page.locator("#activity")).toContainText("reopened Self-Service");
   });
 
+  test("owner imports a sample ID pair; the scans stay private, audited and out of every cache", async ({ page, browser }) => {
+    await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
+    await page.getByRole("link", { name: "Administration" }).click();
+    await page.getByRole("link", { name: "Staff Directory" }).click();
+    await expect(page.getByRole("heading", { name: "Staff Directory" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "The directory is empty" })).toBeVisible();
+    // A fictional card drawn on a canvas: no real ID is ever used in tests.
+    const sample = (side: string) => page.evaluate((text) => {
+      const canvas = Object.assign(document.createElement("canvas"), { width: 856, height: 540 });
+      const c = canvas.getContext("2d")!;
+      c.fillStyle = "#f7f3ea"; c.fillRect(0, 0, 856, 540);
+      c.fillStyle = "#7a1419"; c.fillRect(0, 0, 856, 90);
+      c.fillStyle = "#1c1917"; c.font = "48px sans-serif"; c.fillText(`SAMPLE ${text}`, 40, 300);
+      return canvas.toDataURL("image/png").split(",")[1]!;
+    }, side);
+    await page.getByRole("button", { name: "Import ID scans" }).click();
+    await page.locator("#import-files").setInputFiles([
+      { name: "Rivera_Front_DoL.png", mimeType: "image/png", buffer: Buffer.from(await sample("FRONT"), "base64") },
+      { name: "Rivera_Back_DoL.png", mimeType: "image/png", buffer: Buffer.from(await sample("BACK"), "base64") },
+      { name: "Lone_Front_DoL.png", mimeType: "image/png", buffer: Buffer.from(await sample("LONE"), "base64") }
+    ]);
+    await expect(page.getByText("Ready to import (1)")).toBeVisible();
+    await expect(page.getByText("Lone (DoL) has a front but no back.")).toBeVisible();
+    await page.getByRole("button", { name: "Import 1 pair" }).click();
+    await expect(page.getByText("Finished: 1 pair imported.")).toBeVisible();
+    await page.getByRole("button", { name: "Done" }).click();
+    await page.getByRole("link", { name: /Rivera/ }).click();
+    await expect(page.getByRole("heading", { name: "Rivera" })).toBeVisible();
+    const scan = page.waitForResponse((response) => /\/id\/front$/.test(response.url()));
+    await page.getByRole("tab", { name: "USC ID" }).click();
+    const response = await scan;
+    expect(response.headers()["cache-control"]).toBe("private, no-store");
+    await page.getByRole("button", { name: "Open the front of the USC ID large" }).click();
+    const viewer = page.getByRole("dialog", { name: "USC ID of Rivera" });
+    await expect(viewer.getByRole("img", { name: "Front of Rivera's USC ID" })).toBeVisible();
+    await page.keyboard.press("b");
+    await expect(viewer.getByRole("button", { name: "Back" })).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Escape");
+    await expect(viewer).toHaveCount(0);
+    // Closing gives back the viewer's own history entry; reload only once that navigation has finished.
+    await page.waitForFunction(() => !window.history.state?.viewer && new URLSearchParams(window.location.search).get("tab") === "id");
+    await page.reload();
+    await expect(page.locator(".access-log")).toContainText("E2E Owner");
+    // Nothing of the directory is kept by the service worker, and the bucket has no public address.
+    const cached = await page.evaluate(async () => (await Promise.all((await caches.keys()).map(async (name) => (await (await caches.open(name)).keys()).map((request) => request.url)))).flat());
+    expect(cached.filter((url) => url.includes("/api/"))).toEqual([]);
+    const staff = await (await browser.newContext()).newPage();
+    expect((await staff.request.get(response.url())).status()).toBe(401);
+    await signInAs(staff, username, password);
+    await expect(staff.getByRole("heading", { name: "Items" })).toBeVisible();
+    expect((await staff.request.get(response.url())).status()).toBe(403);
+    await staff.goto("/staff/admin/directory");
+    await expect(staff).toHaveURL(/\/staff\/items$/);
+  });
+
   test("owner issues a recovery key that resets the owner password exactly once", async ({ page, baseURL }) => {
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("button", { name: /^Account:/ }).click();

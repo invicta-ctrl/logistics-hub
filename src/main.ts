@@ -25,6 +25,7 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
   "/staff/self-service": () => import("./self-service-review").then((module) => module.selfServiceReview),
   "/staff/activity": () => import("./activity-workspace").then((module) => module.activityWorkspace),
   "/staff/admin": () => import("./admin").then((module) => module.administration),
+  "/staff/admin/directory": () => import("./directory-workspace").then((module) => module.staffDirectory),
   "/staff/account": () => import("./admin").then((module) => module.myAccount)
 };
 
