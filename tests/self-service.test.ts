@@ -111,8 +111,8 @@ describe("self-service catalog", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     const body = await response.json() as { items: Array<Record<string, unknown>>; revision: number };
     expect(body.items).toEqual([
-      { id: water, name: "Bottled Water", aliases: null, category: "SUPPLIES", unit: "piece", action: "TAKE", available: 20, location: "Shelf B", audience: null },
-      { id: scissors, name: "Scissors", aliases: "Gunting", category: "SUPPLIES", unit: "piece", action: "BORROW", available: 5, location: "Shelf B", audience: "STUDENTS_AND_USC_STAFF" }
+      { id: water, name: "Bottled Water", aliases: null, category: "SUPPLIES", unit: "piece", action: "TAKE", available: 20, location: "Shelf B", audience: null, photo: null },
+      { id: scissors, name: "Scissors", aliases: "Gunting", category: "SUPPLIES", unit: "piece", action: "BORROW", available: 5, location: "Shelf B", audience: "STUDENTS_AND_USC_STAFF", photo: null }
     ]);
     expect(JSON.stringify(body)).not.toContain("private staff note");
     const etag = response.headers.get("etag")!;

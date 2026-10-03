@@ -1,6 +1,6 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, changeOwnPassword, clearThrottle, createAccount, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
-import { itemPhoto, putItemPhoto, removeItemPhoto } from "./item-media";
+import { itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
 import { openUnitAction } from "./open-units";
 import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
@@ -37,6 +37,8 @@ const SESSION_NAME = "lh_staff_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
 const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo)?$/;
 const MEDIA_PATH = /^\/api\/staff\/media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
+/** The only public image address: a thumbnail, by id. The 1280 px size has no public address. */
+const PUBLIC_THUMB_PATH = /^\/api\/public\/media\/([0-9a-f-]{36})\/thumb$/;
 const LOAN_PATH = /^\/api\/staff\/loans\/(LN-[A-Za-z0-9-]{1,60})\/(return|photo)$/;
 const REORDER_PATH = /^\/api\/staff\/reorders\/(RO-[A-Za-z0-9-]{1,60})$/;
 const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|photo)$/;
@@ -295,6 +297,10 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
   if (path === "/api/public/catalog") {
     return request.method === "GET" ? revisioned(request, env.DB, () => publicCatalog(env.DB)) : json({ error: "Method not allowed." }, 405, { allow: "GET" });
+  }
+  const thumb = PUBLIC_THUMB_PATH.exec(path);
+  if (thumb) {
+    return request.method === "GET" ? publicThumb(env.DB, env.CATALOG_MEDIA, thumb[1]!, request.headers.get("If-None-Match"), async () => await selfServiceState(env.DB) === "open") : json({ error: "Method not allowed." }, 405, { allow: "GET" });
   }
   if (path === "/api/staff/login" || path === "/api/staff/logout") {
     if (request.method !== "POST") return json({ error: "Method not allowed." }, 405, { allow: "POST" });

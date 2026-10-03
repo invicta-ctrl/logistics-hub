@@ -1,3 +1,4 @@
+import { isListedForLending, selfServiceAction } from "./catalog-policy";
 import { type Actor, BUMP_REVISION, InputError, audit } from "./inventory";
 
 export const MEDIA_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -192,4 +193,25 @@ export async function itemPhoto(bucket: R2Bucket, mediaId: string, variant: stri
   const object = await bucket.get(key(mediaId, variant as Variant));
   if (!object) throw new InputError(404, "Not found.");
   return new Response(object.body, { headers: { "content-type": "image/jpeg", "cache-control": "private, max-age=86400" } });
+}
+
+/**
+ * The one public image route: the small thumbnail of an item's current photo, for the Lending Hub and Self-Service lists.
+ * It answers only while the id is the item's current photo AND a public list actually shows the item: the Lending Hub
+ * lists it, or Self-Service offers it and is open (the same policy functions the two catalogs use). So a removed or
+ * replaced photo, an unlisted item, the 1280 px display size and any guessed id all answer 404, and nothing but the id
+ * is read from the request. An hour in a browser's cache bounds how long a removed photo can linger on a phone that
+ * already loaded it.
+ */
+export async function publicThumb(db: D1Database, bucket: R2Bucket, mediaId: string, ifNoneMatch: string | null, selfServiceOpen: () => Promise<boolean>): Promise<Response> {
+  if (!MEDIA_ID.test(mediaId)) throw new InputError(404, "Not found.");
+  const item = await db.prepare(`SELECT i.item_type AS itemType, i.lending_audience AS lendingAudience, i.status AS status, i.needs_review AS needsReview, i.consumption_mode AS consumptionMode
+    FROM item_media m JOIN items i ON i.id = m.item_id WHERE m.media_id = ?`).bind(mediaId).first<{ itemType: string; lendingAudience: string; status: string; needsReview: number; consumptionMode: string }>();
+  const shown = Boolean(item) && (isListedForLending(item!) || (Boolean(selfServiceAction(item!)) && await selfServiceOpen()));
+  if (!shown) throw new InputError(404, "Not found.");
+  const headers = { "cache-control": "public, max-age=3600", etag: `"${mediaId}"` };
+  if (ifNoneMatch?.replace(/^W\//, "") === headers.etag) return new Response(null, { status: 304, headers });
+  const object = await bucket.get(key(mediaId, "thumb"));
+  if (!object) throw new InputError(404, "Not found.");
+  return new Response(object.body, { headers: { ...headers, "content-type": "image/jpeg" } });
 }
