@@ -1,5 +1,16 @@
 {
-  "coldLoadToFirstRowMs": 260,
-  "sectionSwitchMs": 66,
-  "staffDirectory": {}
+  "coldLoadToFirstRowMs": 265,
+  "sectionSwitchMs": 65,
+  "staffDirectory": {
+    "importAllPairsMs": 854,
+    "viewerOpenMs_desktop": 76,
+    "viewerLandedMs_desktop": 1254,
+    "turnSettledMs_desktop": 833,
+    "viewerOpenMs_tablet": 73,
+    "viewerLandedMs_tablet": 1357,
+    "turnSettledMs_tablet": 810,
+    "viewerOpenMs_phone": 87,
+    "viewerLandedMs_phone": 1234,
+    "turnSettledMs_phone": 801
+  }
 }
