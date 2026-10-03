@@ -1,10 +1,15 @@
+import { createHash, generateKeyPairSync } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
 import { jpeg } from "./jpeg";
+// @ts-expect-error: a plain .mjs tool
+import * as ops from "../scripts/ops/production-release.mjs";
 
 /* V1.4 smart locations: the migration's reconciliation, the database's own guards, then the Worker routes end to end. */
 
@@ -574,5 +579,130 @@ describe("who may use places", () => {
     const response = await staff("/api/staff/locations", "POST", { name: "One too many" });
     expect(response.status).toBe(400);
     expect(((await response.json()) as { error: string }).error).toMatch(/already 500 places/);
+  });
+});
+
+describe("V1.4 release manifest (Cloud Operations lane)", () => {
+  const manifest = JSON.parse(fs.readFileSync("ops/releases/v1.4.json", "utf8"));
+  const through0021 = (db: DatabaseSync) => { for (const file of fs.readdirSync("migrations").filter((name) => name <= "0021_staff_directory.sql").sort()) db.exec(fs.readFileSync(`migrations/${file}`, "utf8")); };
+  const keys = (db: DatabaseSync) => new Map((db.prepare("SELECT type, name, sql FROM sqlite_master").all() as Array<{ type: string; name: string; sql: string | null }>).map((row) => [`${row.type}:${row.name}`, row.sql]));
+  const typed = (db: DatabaseSync) => {
+    const set = db.prepare("UPDATE items SET storage_location = ? WHERE id = ?");
+    for (const [id, value] of [["ITM-0001", "Office cabinet 2"], ["ITM-0002", "Office cabinet 2"], ["ITM-0003", "office cabinet 2"], ["ITM-0004", "  Shelf A "], ["ITM-0005", "   "]]) set.run(value, id);
+  };
+
+  it("pins 0022, 0023 and 0024 by hash, in order, and names exactly the buckets wrangler.jsonc binds (none to create)", () => {
+    expect(manifest.migrations.pending.map((entry: { name: string }) => entry.name)).toEqual(["0022_audit_log_append_only.sql", "0023_last_active_owner.sql", "0024_locations.sql"]);
+    for (const { name, sha256 } of manifest.migrations.pending) expect(createHash("sha256").update(fs.readFileSync(`migrations/${name}`)).digest("hex"), name).toBe(sha256);
+    const bound = [...fs.readFileSync("wrangler.jsonc", "utf8").matchAll(/"binding": "([A-Z_]+)", "bucket_name": "([a-z0-9-]+)"/g)].map((match) => ({ binding: match[1], name: match[2] }));
+    expect(manifest.target.r2.existing).toEqual(bound);
+    expect(manifest.target.r2.create).toEqual([]);
+  });
+
+  it("passes the lane's own release-tree check", () => {
+    expect(ops.loadManifest("ops/releases/v1.4.json", "v1.4").release).toBe("v1.4");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lh-v14-"));
+    try {
+      fs.copyFileSync("wrangler.jsonc", path.join(dir, "wrangler.jsonc"));
+      fs.cpSync("migrations", path.join(dir, "migrations"), { recursive: true });
+      const sha = "a".repeat(40);
+      const git = (args: string[]) => args[0] === "rev-parse" ? sha : args[0] === "status" ? "" : "ok";
+      expect(ops.verifyReleaseTree({ manifest, releaseDir: dir, expectedSha: sha, git }).branch).toBe("road-to-v2/v1.4-smart-locations");
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  it("adds exactly the schema it declares to a database in production's state, changes only items, and moves no figure", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    through0021(db);
+    typed(db);
+    const before = keys(db);
+    const counts = db.prepare("SELECT (SELECT COUNT(*) FROM items) AS items, (SELECT COUNT(*) FROM inventory_movements) AS movements, (SELECT COALESCE(SUM(on_hand), 0) FROM inventory_balances) AS onHand, (SELECT COUNT(*) FROM loans) AS loans, (SELECT COUNT(*) FROM self_service_events) AS phoneEvents").get();
+    const found = Object.fromEntries(manifest.expect.derived.map((entry: { label: string; before: string }) => [entry.label, (db.prepare(ops.QUERIES.derived[entry.before]).get() as { n: number }).n]));
+    for (const { name } of manifest.migrations.pending) db.exec(fs.readFileSync(`migrations/${name}`, "utf8"));
+    const after = keys(db);
+    expect([...after.keys()].filter((key) => !before.has(key)).sort()).toEqual([...manifest.expect.schemaAdded].sort());
+    expect([...before.keys()].filter((key) => before.get(key) !== after.get(key)).sort()).toEqual(manifest.expect.schemaChanged);
+    expect(db.prepare("SELECT (SELECT COUNT(*) FROM items) AS items, (SELECT COUNT(*) FROM inventory_movements) AS movements, (SELECT COALESCE(SUM(on_hand), 0) FROM inventory_balances) AS onHand, (SELECT COUNT(*) FROM loans) AS loans, (SELECT COUNT(*) FROM self_service_events) AS phoneEvents").get()).toEqual(counts);
+    expect(db.prepare(ops.QUERIES.rows("location_reports")).get()).toEqual({ n: manifest.expect.tableRowsAfter.location_reports });
+    // The figures the lane compares: three distinct typed values, four items typed (the blank one has none).
+    expect(found).toEqual({ "places made from the distinct typed locations": 3, "items linked to a place (every item with a typed location)": 4 });
+    for (const entry of manifest.expect.derived) expect((db.prepare(ops.QUERIES.derived[entry.after]).get() as { n: number }).n, entry.label).toBe(found[entry.label]);
+  });
+
+  it("lets the lane run only its fixed read-only queries, and refuses anything else", () => {
+    const run = (sql: string) => ops.allowed(["d1", "execute", "DB", "--remote", "--json", "--command", sql], manifest, false);
+    for (const query of Object.values(ops.QUERIES.derived)) expect(run(query as string)).toBe(true);
+    expect(run("SELECT storage_location FROM items")).toBe(false);
+    expect(run("DELETE FROM locations")).toBe(false);
+    expect(() => ops.loadManifest("ops/releases/v1.4.json", "v1.3")).toThrow();
+  });
+
+  describe("a prepared run against a fake Cloudflare with real SQLite", () => {
+    const KEYS = generateKeyPairSync("rsa", { modulusLength: 3072, publicKeyEncoding: { type: "spki", format: "pem" }, privateKeyEncoding: { type: "pkcs8", format: "pem" } });
+    const BOOKMARK = "00000085-0000024c-00004c6d-8e61117bf38d7adb71b934ebbf891683";
+    const ACCOUNT = "0123456789abcdef0123456789abcdef";
+
+    async function run(options: { afterApply?: (db: DatabaseSync) => void; mode?: "preflight" | "prepare" } = {}) {
+      const db = new DatabaseSync(":memory:");
+      db.exec("PRAGMA foreign_keys = ON");
+      through0021(db);
+      typed(db);
+      db.exec("CREATE TABLE d1_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE)");
+      for (const name of fs.readdirSync("migrations").filter((file) => file <= "0021_staff_directory.sql").sort()) db.prepare("INSERT INTO d1_migrations(name) VALUES (?)").run(name);
+      const log: string[] = [];
+      const exec = (args: string[]) => {
+        const [a, b] = args;
+        if (a === "d1" && b === "execute") return { status: 0, stdout: JSON.stringify([{ results: db.prepare(args[6]!).all(), success: true }]), stderr: "" };
+        if (a === "d1" && b === "export") { log.push("export"); fs.writeFileSync(args[5]!, `${(db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL").all() as Array<{ sql: string }>).map((row) => `${row.sql};`).join("\n")}\n-- d1_migrations\n`); return { status: 0, stdout: "", stderr: "" }; }
+        if (a === "d1" && b === "time-travel") { log.push("bookmark"); return { status: 0, stdout: JSON.stringify({ bookmark: BOOKMARK }), stderr: "" }; }
+        if (a === "d1" && b === "migrations") {
+          log.push("apply");
+          for (const { name } of manifest.migrations.pending) { db.exec(fs.readFileSync(`migrations/${name}`, "utf8")); db.prepare("INSERT INTO d1_migrations(name) VALUES (?)").run(name); }
+          options.afterApply?.(db);
+          return { status: 0, stdout: "", stderr: "" };
+        }
+        return { status: 1, stdout: "", stderr: "unexpected command" };
+      };
+      const buckets = manifest.target.r2.existing.map((bucket: { name: string }) => ({ name: bucket.name, creation_date: "2026-09-29T15:17:28.423Z" }));
+      const rest = async (requestPath: string) => requestPath.includes("per_page") ? { status: 200, body: { success: true, result: { buckets } } }
+        : requestPath.endsWith("/managed") ? { status: 200, body: { success: true, result: { enabled: false } } } : { status: 200, body: { success: true, result: { domains: [] } } };
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lh-v14run-"));
+      try {
+        fs.copyFileSync("wrangler.jsonc", path.join(dir, "wrangler.jsonc"));
+        fs.cpSync("migrations", path.join(dir, "migrations"), { recursive: true });
+        const sha = "b".repeat(40);
+        const git = (args: string[]) => args[0] === "rev-parse" ? sha : args[0] === "status" ? "" : "ok";
+        const mode = options.mode ?? "prepare";
+        const cloud = ops.createCloud({ exec, rest, manifest, accountId: ACCOUNT, mayChange: mode === "prepare" });
+        const backupDir = path.join(dir, "backup");
+        const report = await ops.runRelease({ manifest, releaseDir: dir, expectedSha: sha, mode, confirm: mode === "prepare" ? `PREPARE v1.4 ${sha}` : undefined, cloud, git, backupDir, backupKey: KEYS.publicKey });
+        return { report, log, db };
+      } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+    }
+
+    it("backs up, applies exactly 0022-0024, and reconciles the places against what it found", async () => {
+      const { report, log, db } = await run();
+      expect(report.result).toBe("READY_TO_MERGE");
+      expect(log).toEqual(["export", "bookmark", "apply"]);
+      expect(report.baseline.derived).toEqual({ "places made from the distinct typed locations": 3, "items linked to a place (every item with a typed location)": 4 });
+      expect(report.after.derived).toEqual(report.baseline.derived);
+      expect(report.after.migrations).toBe(report.before.migrations + 3);
+      expect(db.prepare("SELECT COUNT(*) AS n FROM locations").get()).toEqual({ n: 3 });
+    });
+
+    it("says in the preflight, before anything is changed, how many places it will find", async () => {
+      const { report, log } = await run({ mode: "preflight" });
+      expect(report.result).toBe("PREFLIGHT_OK");
+      expect(log).toEqual([]);
+      expect(report.before.derived).toEqual({ "places made from the distinct typed locations": 3, "items linked to a place (every item with a typed location)": 4 });
+    });
+
+    it("stops with RECONCILE_MISMATCH when the migration did not link every typed item", async () => {
+      const { report } = await run({ afterApply: (db) => { db.exec("UPDATE items SET location_id = NULL WHERE id = 'ITM-0001'"); } });
+      expect(report.result).toBe("STOPPED");
+      expect(report.stopped.code).toBe("RECONCILE_MISMATCH");
+      expect(report.stopped.message).toContain("items linked to a place");
+    });
   });
 });
