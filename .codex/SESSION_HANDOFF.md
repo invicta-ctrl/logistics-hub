@@ -1,5 +1,10 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Review-driven hardening R1–R9 (Earl's prompt, 2026-10-03; mainline session on `main`) — PROPOSED, awaiting acceptance
+- **Authority:** none accepted yet. Drafted `docs/specs/proposed/2026-10-03-review-hardening-amendment.md` (slices H1–H8, migration `0023`, a Stock budget, a release-gating design). No implementation until Earl accepts all or named slices.
+- **Revalidated on `17127ef`** (review baseline `8777602` is an ancestor): R1, R2, R3, R4, R5 and R8 reproduced with a disposable test on the real migrated schema (not committed); R6, R7 confirmed by reading; R9 confirmed (`main` unprotected, no rulesets; deploy path documented two ways). R8 was introduced by this session's `0022`.
+- **Next:** on acceptance, H1 (last active Owner, `0023`) first, then H2–H4, each with a failing-then-passing regression test, verified and pushed separately.
+
 ## Road to V2 — V1.3 USC Staff Directory (COMPLETE on its branch, INTEGRATION: WAITING ON OWNER ACTIONS; record `docs/road-to-v2/releases/v1.3.md`; Claude Cloud, 2026-10-03)
 - **Gate:** V1.2 `STATUS: COMPLETE` and merged on `main`; `origin/main` merged into `road-to-v2/v1.3-staff-directory` first. Authority: the V1.3 spec plus Earl's Google Drive source amendment (`docs/specs/accepted/road-to-v2/2026-10-03-v1.3-google-drive-source-amendment.md`).
 - **Built:** migration `0021` (additive: `staff_directory`, `staff_id_cards`); private bucket binding `STAFF_IDS` (`logistics-hub-staff-ids`); Worker module `src/staff-directory.ts` (directory, profiles, explicit linking, owner-only scan changes, audited no-store scan stream with a rate limit, usage/loans matched by student ID or exact full name, the linked sign-in's Activity); preflight `src/staff-import.ts`; UI `src/directory-workspace.ts` + `src/staff-ids.ts` (Administration → Staff Directory, five-section profiles, flip/zoom viewer, owner import from the downloaded Drive folder); Activity source "Staff Directory"; `ops/releases/v1.3.json`; runbook section in `docs/DEPLOYMENT.md`; evidence scene `staff-directory`; `docs/visual-research/v1.3.md`.
