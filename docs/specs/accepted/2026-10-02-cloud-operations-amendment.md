@@ -4,6 +4,7 @@ STATUS: ACCEPTED
 ACCEPTED_BY: Earl (instruction of 2026-10-02: "Remove the Logistics Hub's dependency on Earl's local Windows machine for controlled production preparation by creating a repository-native Cloud Operations lane")
 ACCEPTED_DATE: 2026-10-02
 APPLIES_TO: invicta-ctrl/logistics-hub
+LIFECYCLE: CLOSED 2026-10-03 on Earl's instruction. The mechanism is on `main` and prepared V1.2 production (workflow run 37080558177). The temporary branch `ops/cloud-production-runner` holds no commit that is not on `main` (checked 2026-10-03: its head `0ed060d` is an ancestor of `main`); the cloud session could not delete the ref, so Earl deletes it (`git push origin --delete ops/cloud-production-runner`, or Branches in GitHub). Deviation: V1.2 was integrated before that deletion, at Earl's request.
 SCOPE: operational and governance only. It does not change any product behavior, V1.2, or the Road-to-V2 order, and it does not start V1.3.
 
 ## Objective
