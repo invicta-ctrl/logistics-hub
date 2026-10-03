@@ -1,0 +1,330 @@
+{
+  "320": {
+    "bar": {
+      "squashed": [],
+      "clipped": [
+        "app-nav__text:Self-Service"
+      ],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [
+        "app-nav__text:Self-Service"
+      ],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "375": {
+    "bar": {
+      "squashed": [],
+      "clipped": [
+        "app-nav__text:Self-Service"
+      ],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [
+        "app-nav__text:Self-Service"
+      ],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "414": {
+    "bar": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "768": {
+    "bar": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "1024": {
+    "bar": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "1440": {
+    "bar": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "short-phone": {
+    "bar": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "short-laptop": {
+    "bar": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "zoom125-1440": {
+    "bar": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "zoom150-1440": {
+    "bar": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "zoom150-768": {
+    "bar": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "text150-320": {
+    "bar": {
+      "squashed": [],
+      "clipped": [
+        "app-nav__text:Self-Service"
+      ],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [
+        "app-nav__text:Self-Service"
+      ],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "text150-375": {
+    "bar": {
+      "squashed": [],
+      "clipped": [
+        "app-nav__text:Self-Service"
+      ],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [
+        "app-nav__text:Self-Service"
+      ],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "text150-1024": {
+    "bar": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  },
+  "text200-320": {
+    "bar": {
+      "squashed": [],
+      "clipped": [
+        "app-nav__text:Items",
+        "app-nav__text:Stock",
+        "app-nav__text:Loans",
+        "app-nav__text:Self-Service",
+        "app-nav__text:More"
+      ],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    },
+    "menu": {
+      "squashed": [],
+      "clipped": [
+        "app-nav__text:Items",
+        "app-nav__text:Stock",
+        "app-nav__text:Loans",
+        "app-nav__text:Self-Service",
+        "app-nav__text:More"
+      ],
+      "overlaps": [],
+      "crowded": [],
+      "unnamed": [],
+      "under24px": [],
+      "sideways": 0
+    }
+  }
+}
