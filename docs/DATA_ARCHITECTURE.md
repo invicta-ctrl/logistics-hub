@@ -36,7 +36,7 @@ Authorized staff (`staff_users`) and the USC Staff Directory (V1.3) are differen
 Application checks are for good messages; the database is the backstop every writer meets, including a second Worker racing the first.
 
 - Append-only and finality triggers: `inventory_movements_no_update/_no_delete`, `audit_log_no_update/_no_delete`, `self_service_events_resolved_final`, `open_units_closed_final`, `open_units_kept`. SQLite's `INSERT OR REPLACE` gets past a delete trigger, so nothing writes the append-only tables with it (a test checks the source); `INSERT OR IGNORE` stays the way to make an audit write idempotent.
-- Cross-table invariants as triggers: `open_units_within_stock`, `movements_within_open_units`, `items_keep_open_units`.
+- Cross-table invariants as triggers: `open_units_within_stock`, `movements_within_open_units`, `items_keep_open_units`, and `staff_accounts_keep_owner` / `_on_delete` (the last active Owner is never removed, 0023).
 - Uniqueness as partial indexes: one live owner recovery key, one open reorder per item, one idempotency key per movement.
 - CHECK constraints for every closed vocabulary (roles, statuses, purposes, setting values) and for coupled columns (`(status = 'OUT') = (closed_at IS NULL)`).
 - Multi-statement writes go in one `db.batch` (atomic on D1). Writes that must happen once carry an idempotency key, and a retry returns the first result.
@@ -86,4 +86,4 @@ Not restored: React, MUI, Radix, Apps Script, Sheets as operational truth, repos
 
 ## Pending production steps
 
-- `0022_audit_log_append_only.sql` is on `main` but not yet applied to production. The lane applies only migrations a release manifest pins, so the next release that runs it (V1.4, unless another comes first) pins `0022` beside its own. Nothing depends on it meanwhile: it only adds two triggers.
+- `0022_audit_log_append_only.sql` and `0023_last_active_owner.sql` are on `main` but not yet applied to production. The lane applies only migrations a release manifest pins, so the next release that runs it (V1.4, unless another comes first) pins both beside its own. Nothing depends on them meanwhile: they only add triggers, and until `0023` is applied the Worker's own check still refuses the last Owner outside a race.
