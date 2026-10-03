@@ -1,6 +1,8 @@
-# Proposed Amendment — Review-driven hardening (R1–R9)
+# Accepted Amendment — Review-driven hardening (R1–R9)
 
-STATUS: PROPOSED, awaiting Earl's acceptance. Nothing below is implemented until it is accepted; a partial acceptance authorizes only the slices it names.
+STATUS: ACCEPTED
+ACCEPTED_BY: Earl (instruction of 2026-10-03: "I accept all")
+ACCEPTED_DATE: 2026-10-03
 PROPOSED_BY: Claude Cloud (mainline session), 2026-10-03
 APPLIES_TO: invicta-ctrl/logistics-hub, `main` (Earl's direct-main instruction for this session)
 SOURCE: the main-branch architecture and performance review of 2026-10-03, baseline `8777602cd0b6b86d0333307389f5d25395653bf4`, as restated in Earl's hardening prompt (the review file itself was not available to this session)
@@ -106,6 +108,6 @@ Each slice is its own commit on `main` and reverts cleanly (`git revert`). `0023
 
 Reconciling existing damaged evidence or orphaned objects in production; applying `0022`/`0023` to production; any deploy or Cloudflare/GitHub setting change by an agent; changes to retention windows, roles or stock rules; dependency upgrades.
 
-## Decision requested
+## Decision
 
-Accept all of H1–H8, or name the slices to accept. The four high-priority repairs are H1–H4.
+Earl accepted all of H1–H8 on 2026-10-03. Slices run in order H1, H2, H3, H4, H5, H6, H7, H8, each verified and pushed on its own.

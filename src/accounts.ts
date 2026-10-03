@@ -80,12 +80,19 @@ async function usernameFree(db: D1Database, name: string, exceptId = ""): Promis
   if (await db.prepare("SELECT 1 FROM staff_accounts WHERE username = ? AND id <> ?").bind(name, exceptId).first()) throw new InputError(409, `The username "${name}" is already taken.`);
 }
 
-/** The last active OWNER can never be disabled or demoted. */
+const ONLY_OWNER = "This is the only active owner. Add another owner before changing it.";
+
+/**
+ * The last active OWNER can never be disabled or demoted. This early check gives the message; the database enforces the
+ * rule for every writer and race (migration 0023), and a batch it refuses is turned back into the same message.
+ */
 async function keepAnOwner(db: D1Database, account: Target): Promise<void> {
   if (account.role !== "OWNER" || !account.active) return;
   const others = await db.prepare("SELECT COUNT(*) AS total FROM staff_accounts WHERE role = 'OWNER' AND active = 1 AND id <> ?").bind(account.id).first<number>("total");
-  if (!others) throw new InputError(409, "This is the only active owner. Add another owner before changing it.");
+  if (!others) throw new InputError(409, ONLY_OWNER);
 }
+
+const lastOwnerRefused = (error: unknown) => error instanceof Error && error.message.includes("last_active_owner");
 
 /* ---------- Administration (ADMIN and OWNER) ---------- */
 
@@ -152,7 +159,7 @@ export async function updateAccount(db: D1Database, actor: Account, id: string, 
     // A recovery key belongs to the owner role; losing the role ends it for good.
     ...(current.role === "OWNER" && "role" in detail ? [db.prepare("UPDATE owner_recovery_keys SET revoked_at = ? WHERE account_id = ? AND revoked_at IS NULL").bind(new Date().toISOString(), id)] : []),
     audit(db, actor.accountId, "ACCOUNT_UPDATED", "ACCOUNT", id, { username: current.username, ...detail, sessionsRevoked: sensitive })
-  ]);
+  ]).catch((error: unknown) => { throw lastOwnerRefused(error) ? new InputError(409, ONLY_OWNER) : error; });
   return { changed: changes.length, sessionsRevoked: sensitive };
 }
 
