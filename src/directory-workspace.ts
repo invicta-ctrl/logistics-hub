@@ -1,14 +1,17 @@
 import { DEPARTMENTS, DEPARTMENT_CODES, type DepartmentCode } from "./directory-policy";
 import { type Loan, loanRow, openReturn } from "./loan-form";
 import { tiltTile } from "./card-motion";
-import { type Card, cardForm, cardSource, forgetScans, importArchive, openIdViewer, scan } from "./staff-ids";
+import { type Card, type View, cardForm, cardSource, forgetScans, importArchive, openCard, scan } from "./staff-ids";
 import { ROLE_LABELS, type Role, type Session, adminTabs, initials, loadSession, shell } from "./staff";
 import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 /*
- * Administration → Staff Directory (V1.3). One page: the department-grouped directory, and a person's profile in the same
- * place (?person=…&tab=…) with five sections, Profile | USC ID | Usage | Loans | Activity. Private to administrators and owners
- * (the Worker refuses everyone else); only the owner changes ID scans. ID images load only when the USC ID section is opened.
+ * Administration → Staff Directory (V1.3). One page: the directory as a wall of cards by department, and a person's profile in
+ * the same place (?person=…&tab=…) with five sections, Profile | USC ID | Usage | Loans | Activity. Pressing a card lifts it
+ * out in 3D and turns it over to the person's details; it turns on to both sides of their official ID (Earl, 2026-10-03: the
+ * card is what you press to see everything). The cards on the wall are drawn from the directory record, never from a scan:
+ * private to administrators and owners (the Worker refuses everyone else), ID images load only when a side is turned to or
+ * the USC ID section is opened, and each opening is recorded. Only the owner changes ID scans.
  */
 
 type Person = {
@@ -31,8 +34,27 @@ const SHOW_TEST: Record<Show, (person: Person) => boolean> = {
 };
 const DIRECTORY = "/staff/admin/directory";
 const departmentName = (code: string) => DEPARTMENTS[code as DepartmentCode] ?? code;
-const monogram = (person: Pick<Person, "name" | "department">, large = false) => html`<span class="monogram ${large ? "monogram--lg" : ""} dept-${person.department}" aria-hidden="true">${initials(person.name)}</span>`;
 const fold = (text: string) => text.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase();
+/** Whether their loans and phone records can be found: by student ID number, or by a full name (never a single name). */
+const matchable = (person: Pick<Person, "name" | "studentId">) => Boolean(person.studentId) || person.name.includes(" ");
+/** First and last name's initials, as on a badge: "Ana Marie Santos" is AS. */
+const cardInitials = (name: string) => { const words = name.split(/\s+/).filter(Boolean); return words.length > 1 ? `${words[0]![0]}${words.at(-1)![0]}`.toUpperCase() : initials(name); };
+const toElement = (markup: Html): HTMLElement => { const host = document.createElement("div"); mount(host, markup); return host.firstElementChild as HTMLElement; };
+
+/**
+ * A person's card, as the wall shows it: their department's colour, initials where an ID photo would be, name, position and
+ * department, and what is worth seeing at a glance. Officers' cards carry the foil. Drawn from the record only, never a scan.
+ */
+function cover(person: Person): Html {
+  return html`<span class="person-card person-card--cover dept-${person.department} ${person.officer ? "is-officer" : ""} ${person.active ? "" : "is-inactive"}">
+    <span class="person-card__band"><span class="person-card__org">University Student Council</span><span class="person-card__code">${person.department}</span></span>
+    <span class="person-card__photo" aria-hidden="true">${cardInitials(person.name)}</span>
+    <span class="person-card__body"><span class="person-card__name">${person.name}</span>
+      <span class="person-card__role">${person.position ?? "No position yet"}</span>
+      <span class="person-card__dept">${departmentName(person.department)}</span></span>
+    <span class="person-card__foot">${person.officer ? html`<span class="person-card__badge">Officer</span>` : ""}${person.hasId ? html`<span class="person-card__mark">${icon("shield")}<span>ID on file</span></span>` : ""}${person.account ? html`<span class="person-card__mark">${icon("user")}<span class="visually-hidden">Signs in as </span><span>${person.account.username}</span></span>` : ""}${person.active ? "" : html`<span class="person-card__mark person-card__mark--bad">Inactive</span>`}</span>
+  </span>`;
+}
 
 export async function staffDirectory(): Promise<void> {
   const session = await loadSession("admin");
@@ -82,7 +104,7 @@ export async function staffDirectory(): Promise<void> {
           ${DEPARTMENT_CODES.map((code) => html`<li><a href="${DIRECTORY}?dept=${code}${show === "all" ? "" : `&show=${show}`}" data-route data-dept="${code}" ${department === code ? html`aria-current="true"` : ""}>
             <span class="dept-dot dept-${code}" aria-hidden="true"></span><span>${DEPARTMENTS[code]}</span><span class="dir-index__count" data-dept-count="${code}"></span></a></li>`)}
         </ul></nav>
-        <div class="dir-results"><p class="dir-summary" role="status" data-summary></p><div data-results>${people ? "" : html`<div class="dept-group" aria-hidden="true">${Array.from({ length: 6 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span></div>`)}</div>`}</div></div>
+        <div class="dir-results"><p class="dir-summary" role="status" data-summary></p><div data-results>${people ? "" : html`<ul class="card-wall" aria-hidden="true">${Array.from({ length: 8 }, () => html`<li><span class="skeleton dir-card__skeleton"></span></li>`)}</ul>`}</div></div>
       </div>`);
     const search = root.querySelector<HTMLInputElement>("#dir-search")!;
     // On narrow screens the departments are one scrolling row: keep the chosen one in sight.
@@ -108,10 +130,11 @@ export async function staffDirectory(): Promise<void> {
       mount(root.querySelector("[data-results]")!, people.length === 0
         ? emptyState("The directory is empty", owner ? "Import the official ID archive, or add people one at a time." : "Add people one at a time; the owner imports the official ID archive.", html`<button class="button button--primary" type="button" data-add>${icon("plus")}Add person</button>`)
         : visible.length === 0 ? emptyState("No one matches", "Try another name, or show everyone.", html`<a class="button button--secondary" href="${DIRECTORY}" data-route>Show everyone</a>`)
-        : html`<div class="dept-groups ${department ? "dept-groups--one" : ""}">${groups.map(([code, members]) => html`<section class="dept-group" aria-labelledby="dept-${code}">
-            <h2 class="dept-group__title" id="dept-${code}"><span class="dept-dot dept-${code}" aria-hidden="true"></span><span>${DEPARTMENTS[code]}</span><span class="dept-group__meta">${code} · ${members.length}</span></h2>
-            <ul class="person-list">${members.map(personRow)}</ul></section>`)}
-          ${unknown.length ? html`<section class="dept-group"><h2 class="dept-group__title">Other</h2><ul class="person-list">${unknown.map(personRow)}</ul></section>` : ""}</div>`);
+        : html`<div class="dept-groups">${groups.map(([code, members]) => html`<section class="dept-group" aria-labelledby="dept-${code}">
+            <h2 class="dept-group__title" id="dept-${code}"><span class="dept-dot dept-${code}" aria-hidden="true"></span><span>${DEPARTMENTS[code]}</span><span class="dept-group__meta">${members.length === 1 ? "1 person" : `${members.length} people`}</span></h2>
+            <ul class="card-wall">${members.map(personCard)}</ul></section>`)}
+          ${unknown.length ? html`<section class="dept-group"><h2 class="dept-group__title">Other</h2><ul class="card-wall">${unknown.map(personCard)}</ul></section>` : ""}</div>`);
+      root.querySelectorAll<HTMLElement>(".dir-card").forEach(tiltTile);
     };
     let timer = 0;
     search.addEventListener("input", () => { window.clearTimeout(timer); timer = window.setTimeout(() => { writeParams({ q: search.value.trim() || null }); draw(); }, 120); });
@@ -125,15 +148,58 @@ export async function staffDirectory(): Promise<void> {
     draw();
   }
 
-  /** One person in a department: initials, name and position, and only the facts worth seeing at a glance (what is missing has its own filter). */
-  function personRow(person: Person): Html {
-    return html`<li><a class="person-row ${person.active ? "" : "is-inactive"}" href="${DIRECTORY}?person=${person.id}" data-route>
-      ${monogram(person)}
-      <span class="person-row__text"><strong class="person-row__name">${person.name}</strong>
-        <span class="person-row__role">${person.position ?? html`<span class="muted">No position yet</span>`}</span></span>
-      <span class="person-row__tags">${person.officer ? html`<span class="tag tag--gold">Officer</span>` : ""}${person.hasId ? html`<span class="tag tag--ok">USC ID</span>` : ""}${person.account ? html`<span class="tag tag--brand" title="Signs in as ${person.account.username}">${icon("user")}<span class="visually-hidden">Signs in as </span>${person.account.username}</span>` : ""}${person.active ? "" : html`<span class="tag tag--bad">Inactive</span>`}</span>
-      </a></li>`;
+  /**
+   * One person on the wall: their card, a link to their profile. A plain press opens the card instead; a press with a modifier
+   * key (a new tab or window) still follows the link.
+   */
+  function personCard(person: Person): Html {
+    return html`<li><a class="dir-card" href="${DIRECTORY}?person=${person.id}" data-route data-person="${person.id}" data-shows="cover" aria-haspopup="dialog">${cover(person)}</a></li>`;
   }
+
+  /** The reverse of a person's card: everything worth knowing at once, what they have out now, and the way into each section. */
+  function cardDetails(person: Person): HTMLElement {
+    const fact = (term: string, value: Html | string) => html`<div><dt>${term}</dt><dd>${value}</dd></div>`;
+    const to = (tab: Tab) => `${DIRECTORY}?person=${person.id}${tab === "profile" ? "" : `&tab=${tab}`}`;
+    const details = toElement(html`<div class="person-card person-card--details dept-${person.department} ${person.active ? "" : "is-inactive"}">
+      <div class="person-card__band"><span class="person-card__org">University Student Council</span><span class="person-card__code">${person.department}</span></div>
+      <span class="person-card__photo" aria-hidden="true">${cardInitials(person.name)}</span>
+      <div class="person-card__head"><h2 class="person-card__name">${person.name}</h2><p class="person-card__role">${person.position ?? "No position yet"}</p><p class="person-card__dept">${departmentName(person.department)}</p>
+        ${person.officer ? html`<span class="person-card__badge">Officer</span>` : ""}</div>
+      <dl class="person-card__facts">
+        ${fact("Student no.", person.studentId ? html`<span class="mono">${person.studentId}</span>` : html`<span class="muted">Not set</span>`)}
+        ${fact("Sign-in", person.account ? html`<span class="mono">${person.account.username}</span> · ${ROLE_LABELS[person.account.role]}` : html`<span class="muted">Not linked</span>`)}
+        ${fact("USC ID", person.hasId ? "On file: turn the card over" : html`<span class="muted">Not on file</span>`)}
+        ${fact("Status", person.active ? "Active" : html`<span class="person-card__mark person-card__mark--bad">Inactive</span>`)}
+      </dl>
+      <section class="person-card__out" aria-label="On loan now"><h3>On loan now</h3><div data-out><span class="muted">Checking…</span></div></section>
+      <nav class="person-card__links" aria-label="${person.name}'s profile">${TABS.filter(([key]) => key !== "id").map(([key, text]) => html`<a href="${to(key)}" data-leave>${text}</a>`)}</nav>
+    </div>`);
+    const out = details.querySelector<HTMLElement>("[data-out]")!;
+    void api<{ loans: Loan[] }>(`/api/staff/admin/directory/${person.id}/loans`).then(({ loans }) => {
+      const now = loans.filter((loan) => loan.status === "OUT");
+      mount(out, now.length ? html`<ul>${now.slice(0, 3).map((loan) => html`<li><span>${loan.quantity} × ${loan.itemName}</span>${loan.returnBy ? html`<span class="muted">due ${formatDate(loan.returnBy)}</span>` : ""}</li>`)}</ul>${now.length > 3 ? html`<p class="muted">and ${now.length - 3} more · <a href="${to("loans")}" data-leave>Loans</a></p>` : ""}`
+        : html`<span class="muted">${matchable(person) ? "Nothing out now." : "Add a full name or student ID number to find their loans."}</span>`);
+    }, () => mount(out, html`<span class="muted">Loans could not be checked.</span>`));
+    return details;
+  }
+
+  /** Opens a person's card large. Its scans are fetched only if a side is turned to, unless the section already holds them. */
+  function openPersonCard(person: Person, start: View, tileFor: (view: View) => HTMLElement | null, card?: Card | null): void {
+    void openCard(person, {
+      start, hasId: person.hasId, tileFor, details: cardDetails(person), cover: () => toElement(cover(person)),
+      card: card !== undefined ? card : () => api<Detail>(`/api/staff/admin/directory/${person.id}`).then((detail) => detail.card)
+    });
+  }
+
+  // Bound once: a plain press on a card on the wall opens it.
+  root.addEventListener("click", (event) => {
+    const tile = (event.target as HTMLElement).closest<HTMLAnchorElement>("a.dir-card[data-person]");
+    if (!tile || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const person = people?.find((entry) => entry.id === tile.dataset.person);
+    if (!person) return;
+    event.preventDefault();
+    openPersonCard(person, "details", () => tile.isConnected ? tile : root.querySelector<HTMLElement>(`a.dir-card[data-person="${person.id}"]`));
+  });
 
   /* ---------- Add or edit a person ---------- */
 
@@ -201,7 +267,7 @@ export async function staffDirectory(): Promise<void> {
     const reload = async () => { people = null; await profile(id, currentTab()); };
     mount(root.querySelector("[data-profile]")!, html`
       <header class="person-head">
-        ${monogram(person, true)}
+        <button type="button" class="dir-card dir-card--head" data-head data-shows="cover" aria-haspopup="dialog" aria-label="Open ${person.name}'s card">${cover(person)}</button>
         <div class="person-head__text">
           <h1>${person.name}</h1>
           <p>${person.position ? html`${person.position} · ` : ""}${departmentName(person.department)}</p>
@@ -234,6 +300,10 @@ export async function staffDirectory(): Promise<void> {
       });
     });
     root.querySelector("[data-edit]")!.addEventListener("click", () => openEditor(person, reload));
+    // Their card is right here: pressed, it opens on their USC ID when one is on file.
+    const head = root.querySelector<HTMLElement>("[data-head]")!;
+    tiltTile(head);
+    head.addEventListener("click", () => openPersonCard(person, person.hasId ? "front" : "details", (view) => view === "details" ? head : root.querySelector<HTMLElement>(`[data-open="${view}"]`) ?? head, detail.card));
 
     const rendered = new Set<Tab>();
     async function renderPanel(which: Tab): Promise<void> {
@@ -325,7 +395,7 @@ export async function staffDirectory(): Promise<void> {
       });
       return;
     }
-    const tile = (side: "front" | "back") => html`<figure class="id-tile"><button type="button" class="id-tile__button" data-open="${side}" aria-label="Open the ${side} of the USC ID large"><img alt="" data-scan="${side}" /></button><figcaption>${side === "front" ? "Front" : "Back"}</figcaption></figure>`;
+    const tile = (side: "front" | "back") => html`<figure class="id-tile"><button type="button" class="id-tile__button" data-open="${side}" data-shows="${side}" aria-label="Open the ${side} of the USC ID large"><img alt="" data-scan="${side}" /></button><figcaption>${side === "front" ? "Front" : "Back"}</figcaption></figure>`;
     mount(host, html`<div class="person-sections person-sections--split">
       <section class="panel" aria-labelledby="card-title"><h2 class="panel__title" id="card-title">Official USC ID</h2>
         <div class="id-pair">${tile("front")}${tile("back")}</div>
@@ -348,7 +418,7 @@ export async function staffDirectory(): Promise<void> {
     host.addEventListener("click", (event) => {
       const target = event.target as HTMLElement;
       const open = target.closest<HTMLElement>("[data-open]");
-      if (open) void openIdViewer(person, card, open.dataset.open as "front" | "back", tileOf);
+      if (open) openPersonCard(person, open.dataset.open as "front" | "back", (view) => view === "details" ? root.querySelector<HTMLElement>("[data-head]") : tileOf(view), card);
       if (target.closest("[data-replace]")) {
         host.querySelector<HTMLElement>("[data-owner-actions]")!.hidden = true;
         cardForm(host.querySelector<HTMLElement>("[data-card-form]")!, person, card.mediaId, reload, () => { void reload(); });
