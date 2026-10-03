@@ -15,8 +15,8 @@ async function mock(page: Page, size = { width: 856, height: 540 }) {
   await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-owner", username: "owner.sample", displayName: "Owner Sample", role: "OWNER", mustChangePassword: false, recovery: { configured: true, createdAt: null }, selfServiceReviews: 0, selfServiceClosed: false, directory: null }) }));
   await page.route("**/api/staff/admin/directory**", (route) => {
     const url = new URL(route.request().url());
-    if (/\/id\/(front|back)$/.test(url.pathname)) return route.fulfill({ contentType: "image/png", body: pixel });
-    const body = url.pathname === "/api/staff/admin/directory" ? { people: [person] } : url.pathname.endsWith("/accounts") ? { accounts: [] } : url.pathname.endsWith("/access") ? { account: null, suggestedUsername: "ana.santos" } : { person, card, history: [] };
+    if (/\/id\/(front|back|thumb|face)$/.test(url.pathname)) return route.fulfill({ contentType: "image/png", body: pixel });
+    const body = url.pathname === "/api/staff/admin/directory" ? { people: [person] } : url.pathname.endsWith("/accounts") ? { accounts: [] } : url.pathname.endsWith("/access") ? { account: null, suggestedUsername: "ana.santos" } : url.pathname.endsWith("/derived") ? { missing: [] } : { person, card, history: [] };
     return route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
   });
 }
@@ -61,10 +61,10 @@ test("the card flies out of its tile, leans toward the mouse, settles flat, turn
   await page.mouse.move(box.x + box.width / 2, box.y - 30);
   await expect.poll(async () => flat("front")(await pose(page)), { timeout: 8000 }).toBe(true);
 
-  await page.keyboard.press("b");
-  await expect(viewer.getByRole("button", { name: "Back" })).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("d");
+  await expect(viewer.getByRole("button", { name: "Details" })).toHaveAttribute("aria-pressed", "true");
   await expect.poll(async () => flat("back")(await pose(page)), { timeout: 4000 }).toBe(true);
-  await page.keyboard.press("f");
+  await page.keyboard.press("p");
   await expect.poll(async () => flat("front")(await pose(page)), { timeout: 4000 }).toBe(true);
 
   // Zoomed in, the card is for reading: it does not lean.
@@ -94,14 +94,14 @@ test("with reduced motion nothing flies, leans or spins: the card opens flat and
   await page.waitForTimeout(400);
   expect(flat("front")(await pose(page))).toBe(true);
   // At once: within 120 ms (the app's reduced-motion rule leaves a 0.01 ms transition), where a spring turn is still 50° short.
-  await page.evaluate(() => document.querySelector("dialog.id-viewer")!.dispatchEvent(new KeyboardEvent("keydown", { key: "b", bubbles: true })));
+  await page.evaluate(() => document.querySelector("dialog.id-viewer")!.dispatchEvent(new KeyboardEvent("keydown", { key: "d", bubbles: true })));
   await expect.poll(async () => flat("back")(await pose(page)), { timeout: 120, intervals: [16] }).toBe(true);
   await page.keyboard.press("Escape");
   await expect(viewer).toHaveCount(0);
   await expect(tile).toBeFocused();
 });
 
-test("a portrait card gets a portrait tile and viewer, and a tile leans under the mouse only", async ({ page }) => {
+test("a portrait card gets a portrait tile, its two sides side by side in the viewer, and a tile leans under the mouse only", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mock(page, { width: 540, height: 856 });
   await page.goto(`/staff/admin/directory?person=${ID}&tab=id`);
@@ -116,5 +116,6 @@ test("a portrait card gets a portrait tile and viewer, and a tile leans under th
   await tile.click();
   await expect.poll(() => page.locator("[data-flight]").evaluate((element) => element.getAnimations().length), { timeout: 4000 }).toBe(0);
   const card = (await page.locator("[data-flight]").boundingBox())!;
-  expect(card.height / card.width).toBeCloseTo(856 / 540, 1);
+  // Opened, the profile shows the front and back side by side.
+  expect(card.width / card.height).toBeCloseTo(2 * (540 / 856) * 1.02, 1);
 });
