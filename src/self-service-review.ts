@@ -1,12 +1,13 @@
 import "./self-service.css";
 import { REVIEW_REASONS, type ReviewReason } from "./catalog-policy";
+import { REPORT_LABELS, type ReportKind } from "./location-tree";
 import { loadSession, shell } from "./staff";
 import { type Html, CREST, MARK, api, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, onLeave, plural, preservingFocus, toast, units, writeParams } from "./ui";
 
 /*
  * Staff view of phone self-service (/staff/self-service). Normal records reconcile on their own;
  * this page shows only what needs a person: records held for a decision, returns to match,
- * items whose records went below zero, plus the last week of activity and the QR poster.
+ * items whose records went below zero, "can’t find it" reports from phones, plus the last week of activity and the QR poster.
  */
 
 type Entry = {
@@ -17,7 +18,8 @@ type Entry = {
 };
 type Issue = { itemId: string; itemName: string; unit: string; lowest: number; since: string; onHand: number; openLoans: number };
 type Candidate = { id: string; itemId: string; quantity: number; purpose: string; borrowerName: string; studentId: string | null; createdAt: string };
-type Review = { revision: number; open: Entry[]; stockIssues: Issue[]; recent: Entry[]; candidates: Candidate[]; enabledItems: number };
+type LocationReport = { id: string; itemId: string; itemName: string; kind: ReportKind; reporterName: string | null; createdAt: string; location: string | null };
+type Review = { revision: number; open: Entry[]; stockIssues: Issue[]; recent: Entry[]; candidates: Candidate[]; locationReports: LocationReport[]; enabledItems: number };
 type View = "attention" | "activity" | "poster";
 
 const VIEWS: Record<View, string> = { attention: "Needs attention", activity: "Last 7 days", poster: "QR code & poster" };
@@ -92,6 +94,18 @@ function reviewCard(entry: Entry, candidates: Candidate[]): Html {
     </li>`;
 }
 
+/** A phone said an item is not where it should be. It changes nothing by itself: staff look, fix the item's place if it moved, then resolve it. */
+function reportRow(report: LocationReport): Html {
+  return html`<li class="review-card review-card--report" data-report-id="${report.id}">
+      <header class="review-card__head"><p class="review-card__what"><strong>${REPORT_LABELS[report.kind]}</strong> · <a href="/staff/items?item=${report.itemId}" data-route>${report.itemName}</a></p><span class="tag tag--warn">Phone report</span></header>
+      <dl class="review-card__facts"><div><dt>Who</dt><dd>${report.reporterName ?? html`<span class="muted">No name given</span>`}</dd></div>
+        <div><dt>When</dt><dd>${formatDateTime(report.createdAt)}</dd></div>${report.location ? html`<div><dt>Said to be in</dt><dd>${report.location}</dd></div>` : ""}</dl>
+      <p class="review-card__why">Nothing was changed. Look for the item, correct its place in Edit details if it moved, then resolve this.</p>
+      <div class="field"><label for="report-note-${report.id}">Note <span class="field__optional">optional</span></label><input id="report-note-${report.id}" name="note" maxlength="300" autocomplete="off" placeholder="Found it on shelf B" /></div>
+      <div class="review-card__buttons"><button type="button" class="button button--primary button--sm" data-resolve-report="${report.id}">Resolve</button><a class="text-link" href="/staff/items?item=${report.itemId}" data-route>Open item</a></div>
+    </li>`;
+}
+
 function issueRow(issue: Issue): Html {
   return html`<li class="review-card review-card--issue">
       <header class="review-card__head"><p class="review-card__what"><a href="/staff/items?item=${issue.itemId}" data-route>${issue.itemName}</a></p><span class="tag tag--bad">Below zero</span></header>
@@ -142,7 +156,7 @@ export async function selfServiceReview(): Promise<void> {
 
   function render(): void {
     writeParams({ view: view === "attention" ? null : view });
-    const attention = data ? data.open.length + data.stockIssues.length : 0;
+    const attention = data ? data.open.length + data.stockIssues.length + data.locationReports.length : 0;
     mount(document.querySelector("#ss-views")!, html`${(Object.keys(VIEWS) as View[]).map((key) => html`<button type="button" class="view-tab" data-view="${key}" aria-pressed="${key === view}">${VIEWS[key]}${key === "attention" && attention ? html`<span class="view-tab__count">${attention}</span>` : ""}</button>`)}`);
     if (!data) return;
     mount(document.querySelector("#ss-summary")!, html`${plural(data.enabledItems, "item")} offered on phones · ${attention ? `${attention} need${attention === 1 ? "s" : ""} attention` : "nothing needs attention"}`);
@@ -151,12 +165,13 @@ export async function selfServiceReview(): Promise<void> {
   }
 
   function needsAttention(review: Review): Html {
-    if (!review.open.length && !review.stockIssues.length) {
+    if (!review.open.length && !review.stockIssues.length && !review.locationReports.length) {
       return emptyState("Nothing needs attention", review.enabledItems
         ? "Records from phones reconcile on their own. Anything ambiguous will appear here."
         : "No item is offered on Self-Service yet. Active, reviewed Consumables are taken, and Loanables listed on the Lending Hub are borrowed.");
     }
-    return html`${review.stockIssues.length ? html`<h2 class="section-label">Count needed</h2><ul class="review-list">${review.stockIssues.map(issueRow)}</ul>` : ""}
+    return html`${review.locationReports.length ? html`<h2 class="section-label">Reports from phones</h2><ul class="review-list">${review.locationReports.map(reportRow)}</ul>` : ""}
+      ${review.stockIssues.length ? html`<h2 class="section-label">Count needed</h2><ul class="review-list">${review.stockIssues.map(issueRow)}</ul>` : ""}
       ${review.open.length ? html`<h2 class="section-label">Records to check</h2><ul class="review-list">${review.open.map((entry) => reviewCard(entry, review.candidates))}</ul>` : ""}`;
   }
 
@@ -193,6 +208,20 @@ export async function selfServiceReview(): Promise<void> {
     if (target.closest("[data-print]")) {
       document.body.classList.add("printing-poster");
       window.print();
+      return;
+    }
+    const resolve = target.closest<HTMLButtonElement>("[data-resolve-report]");
+    if (resolve) {
+      const note = resolve.closest("[data-report-id]")!.querySelector<HTMLInputElement>("input[name=note]")!.value;
+      resolve.disabled = true;
+      try {
+        await api(`/api/staff/location-reports/${resolve.dataset.resolveReport}/resolve`, { method: "POST", body: JSON.stringify({ note }) });
+        toast("Report resolved.");
+        await poll.refresh();
+      } catch (error) {
+        resolve.disabled = false;
+        toast(failure(error), "error");
+      }
       return;
     }
     const button = target.closest<HTMLButtonElement>("[data-act]");
