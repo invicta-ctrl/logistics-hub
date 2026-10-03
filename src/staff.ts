@@ -437,7 +437,7 @@ export async function workspace(): Promise<void> {
     meter.hidden = reviewed === items.length;
     mount(meter, html`<p><strong>${reviewed.toLocaleString()}</strong> of ${plural(items.length, "record")} reviewed</p><progress max="${items.length}" value="${reviewed}" aria-label="Records reviewed">${reviewed}</progress>${view === "review" ? "" : html`<button type="button" class="text-link" data-view="review">Review the next records ${icon("arrow")}</button>`}`);
     fillSelect(selects.category, "All categories", inventory.categories.map((value) => [value, categoryName(value)]), filters.category);
-    fillSelect(selects.location, "All places", [[NO_LOCATION, "No place set"], ...inOrder(places).map(({ place, depth }): [string, string] => [place.id, `${"\u00a0\u00a0".repeat(depth - 1)}${place.name}${place.active ? "" : " (inactive)"}`])], filters.location);
+    fillSelect(selects.location, "All places", [[NO_LOCATION, "No place set"], ...inOrder(places).map(({ place }): [string, string] => [place.id, `${paths.get(place.id)}${place.active ? "" : " (inactive)"}`])], filters.location);
     fillSelect(selects.type, "All types", ITEM_TYPES.map((value) => [value, label(value)]), filters.type);
     const active = Object.values(filters).filter(Boolean).length;
     document.querySelector("#filters-toggle span")!.textContent = active ? `Filters (${active})` : "Filters";
@@ -891,14 +891,14 @@ export async function workspace(): Promise<void> {
 
   /** Every place in reading order, indented by depth; an inactive place stays listed only for the item that is kept in it. */
   function placeOptions(current: string | null): Html {
-    return html`${inOrder(places).filter(({ place }) => place.active || place.id === current).map(({ place, depth }) =>
-      html`<option value="${place.id}" ${place.id === current ? html`selected` : ""}>${"\u00a0\u00a0".repeat(depth - 1)}${place.name}${place.active ? "" : " (inactive)"}</option>`)}`;
+    return html`${inOrder(places).filter(({ place }) => place.active || place.id === current).map(({ place }) =>
+      html`<option value="${place.id}" ${place.id === current ? html`selected` : ""}>${paths.get(place.id)}${place.active ? "" : " (inactive)"}</option>`)}`;
   }
 
   /** The places a new place may go inside: active ones with room beneath them, and the top level. */
   function parentOptions(selected: string | null): Html {
     return html`<option value="">Top level</option>${inOrder(places).filter(({ place, depth }) => place.active && depth < MAX_DEPTH).map(({ place, depth }) =>
-      html`<option value="${place.id}" ${place.id === selected ? html`selected` : ""}>${"\u00a0\u00a0".repeat(depth - 1)}${place.name}</option>`)}`;
+      html`<option value="${place.id}" ${place.id === selected ? html`selected` : ""}>${paths.get(place.id)}</option>`)}`;
   }
 
   function detailsFormMarkup(item: Partial<DetailItem>, creating = false): Html {
