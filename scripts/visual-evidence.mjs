@@ -11,7 +11,8 @@
 // public Lending Hub and the phone Self-Service with item photos: lists, the item sheet and the narrowest phone; runs only
 // where the public thumbnail route exists), shell (the staff top/bottom bar and its menus at 320-1440 px, short screens,
 // 125/150% zoom and large text, with measured checks; works on any ref) and staff-directory (V1.3: the directory with a
-// large department and partial profiles, a profile's five sections, the USC ID viewer front, back and zoomed, and the
+// large department and partial profiles, a profile's five sections, the 3D USC ID card (tile lean, flight out of the tile,
+// tilt with glare and foil, the turn) front, back and zoomed, and the
 // owner's import with its preflight; runs only where the directory exists). Its pictures, including the obviously fake
 // sample ID cards, are drawn here in the browser and written only to a throwaway folder, so no image file enters the
 // repository and no real ID is ever used.
@@ -467,16 +468,45 @@ async function directoryScenes(browser, url, dir) {
     await page.goto(`${url}/staff/admin/directory?person=${ids.Belmonte}&tab=id`);
     await page.waitForSelector(".id-tile img[src]");
     await shot(page, `directory-id-${size}`);
+    // The evidence runs with reduced motion for steady pictures; the 3D card is the motion, so it is shown with motion on.
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    if (size === "desktop") {
+      // A tile leans toward the mouse under a glare and a light foil.
+      const tile = await page.locator("[data-open=front]").boundingBox();
+      await page.mouse.move(tile.x + tile.width * 0.85, tile.y + tile.height * 0.2, { steps: 6 });
+      await page.waitForTimeout(350);
+      await shot(page, `directory-id-tile-hover-${size}`);
+    }
+    const flying = () => document.getAnimations().some((animation) => animation.effect?.target?.matches?.("[data-flight]"));
     let start = Date.now();
     await page.locator("[data-open=front]").click();
-    await page.waitForSelector("dialog.id-viewer[open] .id-card__face--front[src]");
+    await page.waitForSelector("dialog.id-viewer[open] .id-card__face--front img[src]");
     timings[`viewerOpenMs_${size}`] = Date.now() - start;
-    await page.waitForTimeout(300);
+    // The card's flight out of its tile, frozen at fixed moments (every running animation paused together, so frames are exact).
+    await page.waitForFunction(flying);
+    for (const at of [120, 240, 400]) {
+      await page.evaluate((time) => { for (const animation of document.getAnimations()) { animation.pause(); animation.currentTime = time; } }, at);
+      await shot(page, `directory-viewer-flight-${at}-${size}`);
+    }
+    await page.evaluate(() => { for (const animation of document.getAnimations()) animation.play(); });
+    await page.waitForFunction(() => !document.getAnimations().some((animation) => animation.effect?.target?.matches?.("[data-flight]")));
+    timings[`viewerLandedMs_${size}`] = Date.now() - start;
+    // The sweep of light passes, and the card rests flat and unlit.
+    await page.waitForTimeout(2400);
     await shot(page, `directory-viewer-front-${size}`);
+    const card = await page.locator("[data-flight]").boundingBox();
+    await page.mouse.move(card.x + card.width * 0.85, card.y + card.height * 0.8, { steps: 8 });
+    await page.waitForTimeout(700);
+    await shot(page, `directory-viewer-tilt-${size}`);
+    await page.mouse.move(card.x + card.width / 2, card.y - 24);
     start = Date.now();
     await page.keyboard.press("b");
-    await page.waitForTimeout(100);
-    timings[`flipMs_${size}`] = Date.now() - start;
+    // A screenshot takes 100-200 ms itself, so this lands mid-turn.
+    await page.waitForTimeout(40);
+    await shot(page, `directory-viewer-turning-${size}`);
+    // Settled: on its back and level within about a degree.
+    await page.waitForFunction(() => { const pose = new DOMMatrixReadOnly(getComputedStyle(document.querySelector("[data-card]")).transform); return Math.abs(pose.m11 + 1) < 0.0002 && Math.abs(pose.m13) < 0.02 && Math.abs(pose.m23) < 0.02; }, null, { timeout: 10000 });
+    timings[`turnSettledMs_${size}`] = Date.now() - start;
     await shot(page, `directory-viewer-back-${size}`);
     await page.keyboard.press("f");
     await page.keyboard.press("+");
@@ -485,6 +515,7 @@ async function directoryScenes(browser, url, dir) {
     await shot(page, `directory-viewer-zoomed-${size}`);
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => !document.querySelector("dialog.id-viewer"));
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(`${url}/staff/admin/directory?person=${ids["Ana Marie Santos"]}&tab=usage`);
     await page.waitForSelector("[data-usage] .stat-strip, [data-usage] .empty");
     await shot(page, `directory-usage-${size}`);
