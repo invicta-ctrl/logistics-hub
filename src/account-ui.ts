@@ -1,4 +1,5 @@
-import { type Role, ROLE_LABELS, type Session } from "./staff";
+import { DEPARTMENT_CODES } from "./directory-policy";
+import { type Access, type Role, type Session, accessLabel } from "./staff";
 import { type Html, html, plural } from "./ui";
 
 /*
@@ -10,8 +11,16 @@ export type AccountEvent = { at: string; action: string; actor: string | null; d
 
 // Mirrors the server rules purely to show the right controls; the server decides.
 export const canManage = (actor: Pick<Session, "role">, target: { role: Role }) => actor.role === "OWNER" || (actor.role === "ADMIN" && target.role === "STAFF");
-export const assignable = (actor: Pick<Session, "role">): Role[] => actor.role === "OWNER" ? ["STAFF", "ADMIN", "OWNER"] : ["STAFF"];
-export const roleTag = (role: Role) => html`<span class="tag ${role === "OWNER" ? "tag--brand" : role === "ADMIN" ? "tag--gold" : ""}">${ROLE_LABELS[role]}</span>`;
+/**
+ * The roles an administrator chooses from (Earl, 2026-10-03): DoL Staff first (the only staff who use the Logistics Hub), the
+ * other departments' staff in the council's order, Officer, and, for an owner, Owner. Administrator is no longer offered.
+ */
+export const accessChoices = (actor: Pick<Session, "role">): Access[] => ["DoL", ...DEPARTMENT_CODES.filter((code) => code !== "DoL"), "OFFICER", ...(actor.role === "OWNER" ? ["OWNER" as const] : [])];
+export const ACCESS_HINT = "DoL Staff use the Logistics Hub. Staff of other departments and officers can sign in to their own account only, for now. The owner has full access.";
+export const accessTag = (access: Access) => html`<span class="tag ${access === "OWNER" ? "tag--brand" : access === "ADMIN" ? "tag--gold" : access === "DoL" ? "tag--ok" : ""}">${accessLabel(access)}</span>`;
+/** Whether an actor may give an account this role: an owner any; an administrator staff and officer roles only. */
+export const mayGive = (actor: Pick<Session, "role">, access: Access) => actor.role === "OWNER" || (access !== "OWNER" && access !== "ADMIN");
+export type { Role };
 
 /** A secret shown exactly once, with copy, and an explicit instruction. */
 export function oneTime(label: string, value: string, note: string): Html {
@@ -27,11 +36,13 @@ export function bindCopy(root: Element): void {
 }
 
 export const EVENT_TEXT: Record<string, (event: AccountEvent) => string> = {
-  ACCOUNT_CREATED: (event) => `created ${String((event.details as { username?: string }).username)} (${ROLE_LABELS[(event.details as { role: Role }).role] ?? ""})`,
+  ACCOUNT_CREATED: (event) => { const details = event.details as { username?: string; role?: string; access?: string }; return `created ${String(details.username)} (${accessLabel(details.access ?? (details.role === "STAFF" ? "DoL" : details.role ?? ""))})`; },
   ACCOUNT_UPDATED: (event) => {
     const details = event.details as Record<string, unknown>;
-    const parts = Object.entries(details).filter(([key, change]) => ["displayName", "username", "role", "active"].includes(key) && typeof change === "object" && change !== null)
-      .map(([key, value]) => { const change = value as { from: unknown; to: unknown }; return key === "active" ? (change.to ? "enabled" : "disabled") : `${key === "displayName" ? "name" : key} ${String(change.from)} → ${String(change.to)}`; });
+    // A change of role is told by its access (DoL Staff → Owner) when the entry has one; older entries name the role.
+    const keys = ["displayName", "username", "access" in details ? "access" : "role", "active"];
+    const parts = Object.entries(details).filter(([key, change]) => keys.includes(key) && typeof change === "object" && change !== null)
+      .map(([key, value]) => { const change = value as { from: unknown; to: unknown }; return key === "active" ? (change.to ? "enabled" : "disabled") : key === "access" ? `role ${accessLabel(String(change.from))} → ${accessLabel(String(change.to))}` : `${key === "displayName" ? "name" : key} ${String(change.from)} → ${String(change.to)}`; });
     return `${details.self ? "updated their own account" : `updated ${typeof details.username === "string" ? details.username : "an account"}`}: ${parts.join(", ")}`;
   },
   PASSWORD_RESET: (event) => `reset the password of ${String((event.details as { username?: string }).username)}`,
