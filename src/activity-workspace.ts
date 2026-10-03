@@ -32,7 +32,7 @@ export async function activityWorkspace(): Promise<void> {
   const signedIn = await loadSession("activity");
   if (!signedIn) return;
   const session: Session = signedIn;
-  const sources = (Object.keys(ACTIVITY_SOURCES) as ActivitySource[]).filter((source) => source !== "ACCOUNT" || session.role !== "STAFF");
+  const sources = (Object.keys(ACTIVITY_SOURCES) as ActivitySource[]).filter((source) => (source !== "ACCOUNT" && source !== "DIRECTORY") || session.role !== "STAFF");
   document.title = "Activity · Staff workspace";
   shell(session, "activity", html`
     <header class="page-header">
@@ -108,7 +108,7 @@ export async function activityWorkspace(): Promise<void> {
   function row(entry: Entry): Html {
     const tone = entry.change > 0 ? "is-in" : entry.change < 0 ? "is-out" : "";
     // A catalog or account entry has nothing to do with stock; anything else says so when stock stayed put.
-    const change = entry.stockChanged ? signed(entry.change) : entry.source === "CATALOG" || entry.source === "ACCOUNT" ? "" : "no change";
+    const change = entry.stockChanged ? signed(entry.change) : ["CATALOG", "ACCOUNT", "DIRECTORY"].includes(entry.source) ? "" : "no change";
     const reason = entry.reason && !entry.summary.toLowerCase().includes(entry.reason.toLowerCase()) ? entry.reason : null;
     const balance = entry.before !== null && entry.after !== null ? ` · ${entry.before} → ${entry.after}${entry.unit ? ` ${units(entry.after, entry.unit)}` : ""}` : "";
     return html`<li class="activity-row ${tone}" data-key="${entry.id}">

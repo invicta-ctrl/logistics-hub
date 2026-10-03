@@ -78,6 +78,14 @@ const ICONS = {
 
 export type IconName = keyof typeof ICONS;
 
+/**
+ * An item's public thumbnail (src/item-media.ts, publicThumb), shown beside its name in the Lending Hub and Self-Service lists.
+ * Decorative (the name is right there), with its box fixed in CSS so rows never shift as pictures arrive, and only rows near
+ * the screen are fetched. An item without one adds no element at all: a list that has any photo reserves the left margin instead.
+ */
+export const thumbImg = (photo: string | null | undefined): Html | "" =>
+  photo ? html`<img class="item-thumb" src="/api/public/media/${photo}/thumb" alt="" width="48" height="48" loading="lazy" decoding="async" />` : "";
+
 export function icon(name: IconName): Html {
   return raw(`<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${ICONS[name]}"/></svg>`);
 }

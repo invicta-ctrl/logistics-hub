@@ -139,15 +139,15 @@ function arms(admin: boolean): Arm[] {
       }
     },
     {
-      prefix: "audit:", id: "a.id", sources: admin ? ["MOVEMENT", "CATALOG", "LOAN", "ACCOUNT"] : ["MOVEMENT", "CATALOG", "LOAN"], moves: false, owns: (type) => !movementType.includes(type) && !PHONE_TYPES.includes(type) && type !== "REVIEW_RESOLVED",
+      prefix: "audit:", id: "a.id", sources: admin ? ["MOVEMENT", "CATALOG", "LOAN", "ACCOUNT", "DIRECTORY"] : ["MOVEMENT", "CATALOG", "LOAN"], moves: false, owns: (type) => !movementType.includes(type) && !PHONE_TYPES.includes(type) && type !== "REVIEW_RESOLVED",
       // A closing entry's loan is its own (`loans.id` is the key): the join adds no row and supplies the typed return note.
       from: `audit_log a LEFT JOIN items i ON a.entity_type = 'ITEM' AND i.id = a.entity_id LEFT JOIN staff_accounts c ON c.id = a.actor_user_id
         LEFT JOIN loans l ON a.action = 'LOAN_CLOSED' AND l.id = ${AUDIT_LOAN}`,
-      // Account and recovery events are refused here, before any search or page limit, unless the reader is ADMIN or OWNER.
+      // Account, recovery and Staff Directory events are refused here, before any search or page limit, unless the reader is ADMIN or OWNER.
       where: `a.action <> 'LOAN_CREATED' AND NOT (a.action = 'LOAN_CLOSED' AND COALESCE(${AUDIT_OUTCOME}, '') = 'RETURNED')${admin ? "" : " AND a.entity_type = 'ITEM'"}`,
       cols: {
         ...base, sid: "'audit:' || a.id", k: utc("a.created_at"), itemId: "i.id", itemName: "i.name", unit: "i.unit",
-        src: `CASE WHEN a.action = 'LOAN_CLOSED' THEN 'LOAN' WHEN a.action IN (${UNIT_AUDIT}) THEN 'MOVEMENT' WHEN a.entity_type = 'ITEM' THEN 'CATALOG' ELSE 'ACCOUNT' END`,
+        src: `CASE WHEN a.action = 'LOAN_CLOSED' THEN 'LOAN' WHEN a.action IN (${UNIT_AUDIT}) THEN 'MOVEMENT' WHEN a.entity_type = 'ITEM' THEN 'CATALOG' WHEN a.entity_type = 'STAFF' THEN 'DIRECTORY' ELSE 'ACCOUNT' END`,
         type: `CASE WHEN a.action = 'LOAN_CLOSED' THEN CASE ${AUDIT_OUTCOME} WHEN 'DAMAGED' THEN 'LOAN_DAMAGED' WHEN 'LOST' THEN 'LOAN_LOST' ELSE 'LOAN_CLOSED' END ELSE a.action END`,
         actorId: "a.actor_user_id", actor: actorName("c", "a.actor_user_id"), details: "a.details_json", note: "l.return_note", corr: AUDIT_LOAN
       }
@@ -332,6 +332,7 @@ function toEvent(row: Row): ActivityEvent {
     OWNER_BOOTSTRAPPED: () => `${actor} was set up as the first owner from the Owner Console.`,
     RETENTION_ERASED: () => `${actor} removed names, student IDs and photos from ${typeof details.loans === "number" ? details.loans : 0} old loans and ${typeof details.phoneRecords === "number" ? details.phoneRecords : 0} old phone records.`,
     SETTING_CHANGED: () => `${actor} ${details.to === "open" ? "reopened" : "closed"} Self-Service${details.to === "open" ? "" : " for maintenance"}.`,
+    ...directorySentences(actor, details),
     ACTIVITY_EXPORTED: () => `${actor} exported ${details.rows === 1 ? "1 activity entry" : `${typeof details.rows === "number" ? details.rows : "some"} activity entries`} to a file${fields.length ? `, filtered by ${fields.join(", ")}` : ""}${details.truncated === true ? " (the newest; more matched)" : ""}.`
   };
   const phone = () => type === "PHONE_USE"
@@ -345,6 +346,27 @@ function toEvent(row: Row): ActivityEvent {
     at: known ? String(row.k) : null, source: String(row.src), type, title: ACTIVITY_TITLES[type] ?? type, summary, actor, actorId: text(row.actorId),
     itemId: text(row.itemId), itemName: text(row.itemName), unit, quantity, change, stockChanged: change !== 0, before: after === null ? null : after - change, after,
     reason, note, fields, attention: row.attention === 1
+  };
+}
+
+/** Profile fields a directory entry may name; its values (a former name, a student ID number) are never logged. */
+const PERSON_FIELDS: Record<string, string> = { name: "full name", department: "department", position: "position", officer: "officer status", studentId: "student ID number", active: "status" };
+
+/** Staff Directory entries name the person as they were called then, and their department code. */
+function directorySentences(actor: string, details: Record<string, unknown>): Record<string, () => string> {
+  const who = `${typeof details.name === "string" ? details.name.slice(0, 120) : "a person"}${typeof details.department === "string" ? ` (${details.department.slice(0, 8)})` : ""}`;
+  const fields = Array.isArray(details.fields) ? details.fields.filter((field): field is string => typeof field === "string" && field in PERSON_FIELDS).map((field) => PERSON_FIELDS[field]!) : [];
+  const account = typeof details.username === "string" ? details.username.slice(0, 64) : "an account";
+  return {
+    STAFF_PERSON_ADDED: () => `${actor} added ${who} to the Staff Directory.`,
+    STAFF_PROFILE_UPDATED: () => `${actor} edited the directory profile of ${who}${fields.length ? `: ${fields.join(", ")}` : ""}.`,
+    STAFF_ACCOUNT_LINKED: () => `${actor} linked ${who} to the sign-in ${account}.`,
+    STAFF_ACCOUNT_UNLINKED: () => `${actor} unlinked ${who} from the sign-in ${account}.`,
+    STAFF_ID_IMPORTED: () => `${actor} imported the USC ID scans of ${who}${details.officer === true ? ", an officer" : ""}.`,
+    STAFF_ID_ADDED: () => `${actor} added USC ID scans for ${who}.`,
+    STAFF_ID_REPLACED: () => `${actor} replaced the USC ID scans of ${who}.`,
+    STAFF_ID_REMOVED: () => `${actor} removed the USC ID scans of ${who}.`,
+    STAFF_ID_VIEWED: () => `${actor} viewed the USC ID of ${who}.`
   };
 }
 
