@@ -32,7 +32,7 @@ const FIELDS: Record<string, string> = {
 /** Item types an audit entry may name: today's, and Saleable, retired by migration 0014 (its 112 reclassifications read "from Saleable"). */
 const TYPE_NAMES: Record<string, string> = { ...Object.fromEntries(ITEM_TYPES.map((type) => [type, LABELS[type] ?? type])), Saleable: "Saleable" };
 const MAX_LIMIT = 100;
-const SENTINEL = "0000-01-01T00:00:00.000Z";
+export const SENTINEL = "0000-01-01T00:00:00.000Z";
 const MANILA_OFFSET_MS = 8 * 60 * 60_000;
 
 /**
@@ -40,7 +40,7 @@ const MANILA_OFFSET_MS = 8 * 60 * 60_000;
  * (the stored timestamps mix "Z" and "+08:00"). Text that is not a date becomes the oldest possible
  * key, so it sorts last and is shown as "unknown" instead of as an invented time.
  */
-const utc = (column: string) => `COALESCE(CASE WHEN ${column} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*' THEN strftime('%Y-%m-%dT%H:%M:%fZ', ${column}) END, '${SENTINEL}')`;
+export const utc = (column: string) => `COALESCE(CASE WHEN ${column} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*' THEN strftime('%Y-%m-%dT%H:%M:%fZ', ${column}) END, '${SENTINEL}')`;
 
 /* ---------- Query ---------- */
 
