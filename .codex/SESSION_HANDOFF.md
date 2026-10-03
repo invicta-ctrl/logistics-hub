@@ -1,9 +1,26 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-## Review-driven hardening R1–R9 (Earl's prompt, 2026-10-03; mainline session on `main`) — PROPOSED, awaiting acceptance
-- **Authority:** none accepted yet. Drafted `docs/specs/proposed/2026-10-03-review-hardening-amendment.md` (slices H1–H8, migration `0023`, a Stock budget, a release-gating design). No implementation until Earl accepts all or named slices.
-- **Revalidated on `17127ef`** (review baseline `8777602` is an ancestor): R1, R2, R3, R4, R5 and R8 reproduced with a disposable test on the real migrated schema (not committed); R6, R7 confirmed by reading; R9 confirmed (`main` unprotected, no rulesets; deploy path documented two ways). R8 was introduced by this session's `0022`.
-- **Next:** on acceptance, H1 (last active Owner, `0023`) first, then H2–H4, each with a failing-then-passing regression test, verified and pushed separately.
+## Review-driven hardening R1–R9 (Earl's prompt, 2026-10-03; mainline session on `main`) — H1–H8 DONE on `main`; R9 enforcement PENDING OWNER CONFIGURATION
+- **Authority:** `docs/specs/accepted/2026-10-03-review-hardening-amendment.md` (Earl: "I accept all"). Review baseline `8777602`. Each slice is its own commit on `main`, with a regression test that failed on the old code first.
+- **Findings:**
+
+| Finding | Repair (commit) | Regression evidence | Status |
+|---|---|---|---|
+| R1 last active Owner removable under a race | `0023` triggers + 409 mapping (`06e540d`) | `tests/hardening.test.ts` R1: concurrent disable, demote, mixed; direct trigger; bootstrap | Fixed in code; `0023` not yet in production (Worker's own check still covers non-racing cases) |
+| R2 recovery key usable twice | audit-gated single batch (`2d8a154`, `3e82019`) | R2: concurrent use; after rotate, revoke, demote | Fixed |
+| R3/R4 retention double count, shared photo deleted | pinned ids, kept-key check, audit-gated batch (`46da826`) | R3/R4: shared key, missing object, concurrent runs over 100 loans, R2 and D1 failure + retry | Fixed |
+| R5 loan photo deleted when the answer was lost | delete only if not referenced (`0c59483`) | R5 in `hardening` and `self-service` tests | Fixed |
+| R6 live views could go back to older data | one request at a time, sequence numbers, abort on stop, 15 s timeout (`1c742f6`) | `tests/browser/live.spec.ts` (controlled response order) | Fixed |
+| R7 Stock activity summed the whole ledger every poll | select-recent-first on the 0016 index (`2f2f9ed`) | R7 equivalence tests (ties, odd formats); harness; same rows on wrangler local D1 | Fixed; 100k: 210 → 8.6 ms; busy-item shape unchanged (documented) |
+| R8 Activity harness broken by `0022` | fixture lifts the guard; CI smoke run (`3e418a3`) | CI runs both harnesses at 1k | Fixed |
+| R9 a red `main` still deploys | `deploy.yml` + `scripts/ops/deploy-gate.mjs` (H8 commit) | `tests/deploy-gate.test.ts`; actionlint/shellcheck clean; shell branches simulated | **Pending owner configuration.** Not validated on GitHub: no credentials here, and an armed workflow would deploy |
+
+- **Verified on the H8 commit:** build; `npm test` 295 (+2 skipped); `test:browser` 50/50; privacy, migration and catalog verifiers; Activity harness at 1000,20000; Stock harness at 1000,20000. `test:browser:worker` 31/31 ran on `2f2f9ed` (H8 changes no `src`). CI is checked on the pushed head.
+- **Owner actions:**
+  1. The next release manifest that runs the lane (V1.4 unless another comes first) pins `0022_audit_log_append_only.sql` and `0023_last_active_owner.sql`.
+  2. Switch R9 on, per `docs/DEPLOYMENT.md` "Deploys from CI": token scope, then `DEPLOY_FROM_CI=dry-run`, then Workers Builds off and `DEPLOY_FROM_CI=true`.
+  3. Any reconciliation of evidence damaged before these fixes needs its own approved procedure. Nothing was cleaned up here.
+- **Next:** none on this track. V1.3's remaining polish (6 commits on its branch, no migration) goes to `main` through its own session; then V1.3 may be closed and V1.4 started.
 
 ## Road to V2 — V1.3 USC Staff Directory (COMPLETE on its branch, INTEGRATION: WAITING ON OWNER ACTIONS; record `docs/road-to-v2/releases/v1.3.md`; Claude Cloud, 2026-10-03)
 - **Gate:** V1.2 `STATUS: COMPLETE` and merged on `main`; `origin/main` merged into `road-to-v2/v1.3-staff-directory` first. Authority: the V1.3 spec plus Earl's Google Drive source amendment (`docs/specs/accepted/road-to-v2/2026-10-03-v1.3-google-drive-source-amendment.md`).

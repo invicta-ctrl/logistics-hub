@@ -27,7 +27,7 @@ The earlier estimate, kept for provenance: `docs/MIGRATION_STATUS.md` (2026-09-2
 
 ## Migration 0016 status
 
-`migrations/0016_activity_feed_index.sql` (five indexes, no data change) is applied to every disposable in-memory database that `migratedD1()` builds, so the feature tests and run 1 use the indexes. It is NOT applied to production D1: on 2026-10-01 none of its five index names existed there (see above). Applying it needs its own authorization (docs/DEPLOYMENT.md); the code does not depend on it. Run 2 measures the query as production runs it until then.
+`migrations/0016_activity_feed_index.sql` (five indexes, no data change) is applied to every disposable in-memory database that `migratedD1()` builds, so the feature tests and run 1 use the indexes. On 2026-10-01 none of its five index names existed in production (see above); it was applied there on 2026-10-02 with `0017` (`docs/DEPLOYMENT.md`, Part 5B). Run 2 measures the query as production ran it before that.
 
 ## Part 5B recheck (2026-10-01)
 
@@ -42,6 +42,80 @@ Part 5B changed the SQL slightly: the phone arm also lists `USE` events, an empt
 - **Export (Stage 5.3).** An export runs the same statement with no cursor and a limit of `EXPORT_ROWS` (2,000), then builds the CSV. Run 1: all 1,485 entries of the 1,000 tier in 36 ms; 2,000 entries in 111 ms at 20,000 and 280 ms at 100,000 movements; a text-filtered export 9 / 83 / 529 ms. The Worker-CPU part (row mapping and CSV text, everything but SQL) was measured separately at about 10 µs per entry (roughly 20 ms for a full 2,000-entry file; 5,000 would be about 50 ms), which is why the cap is 2,000: it holds all of production's history today (about 1,400 visible entries) and bounds the CPU of one request. On 2026-10-01 a full production export (1,333 entries) succeeded, so the current Workers plan allows a full file today; if the history grows past the cap, the file says so and the dates narrow it. Exports are rare and rate-limited (10 per 10 minutes per account).
 - **Re-run after the review fix (PR #3).** The phone-resolution entry now also selects what staff decided (one projected column in one arm, no filter or order change). The tables below are that re-run: every plan id and every row count is unchanged, the SQL ids are new because the statement text changed, and the timings are within run-to-run noise of the figures quoted above (which come from the run just before it).
 - **Limits of this evidence.** Local `node:sqlite`, not D1 (its latency and SQLite build are unmeasured); one machine; synthetic distributions; `activityPage` (and `activityCsv` for exports) only, without HTTP, sessions or the ETag digest (which costs a few ms and was measured earlier).
+
+## Stock workspace activity list (R7, 2026-10-03)
+
+Finding R7 of the accepted review-hardening amendment (`docs/specs/accepted/2026-10-03-review-hardening-amendment.md`, H7): the Stock workspace's "recent activity" (`recentActivity` in `src/stock.ts`, polled every 15 s while the workspace is open) summed a running total over the **whole** ledger on every poll to show 100 rows. It now picks the 100 rows first, walking the `idx_activity_movements` time index (migration `0016`, applied to production 2026-10-02), and sums the running total only for the items those rows touch. No cache, no new state, no migration.
+
+**Exactness.** The list keeps the ledger order (`HISTORY_ORDER`: stored time, then insertion). The index key is that time normalized to UTC milliseconds, which orders the same way except for text that is not a date, which the index files under one oldest key. So the query takes every row at or after the 100th-newest key, plus every row under the oldest key, and re-sorts them exactly. A tie at the edge or an odd timestamp cannot change the page. `tests/hardening.test.ts` (R7) compares the result with the pre-R7 query, kept verbatim in `tests/stock-activity-reference.ts`, on an empty ledger, a short and a long one, 150 rows sharing the 100th time inserted out of id order, and mixed offsets, missing milliseconds, a space separator, non-dates, an impossible date, an empty string and a bare day number. Replacing the selection with a plain "newest 100 by index" fails the last two, so the tests guard the real hazard. The same two statements also returned identical rows on wrangler's local D1 (workerd's SQLite, all migrations applied, plus rows with a non-date, a `+08:00` offset, a space-separated time and a VOID status), which also shows D1 accepts `AS MATERIALIZED`.
+
+**Reproduce.** `STOCK_ACTIVITY_PERF=1 STOCK_ACTIVITY_PERF_OUT=<file> npx vitest run tests/stock-activity-perf.test.ts` (tiers via `STOCK_ACTIVITY_PERF_TIERS`, default 1000,20000,100000; `STOCK_ACTIVITY_PERF_ITEMS=<n>` for a few busy items). Each tier is a fresh in-memory SQLite with every migration and a deterministic synthetic ledger (every twentieth row imported, every fiftieth VOID). The harness fails unless the rows are identical, and CI runs it at the 1,000 tier.
+
+**Budget (from H7): met.** At 100,000 movements the median is 8.6 ms against 210 ms before (24×; the budget was at least 5× and under 30 ms). At 1,000 it is 0.8 ms against 2.2 ms (the budget was no slower than +10%). Rows were identical at every tier.
+
+Tool versions: node v22.22.0, SQLite 3.50.4, linux x64, Intel(R) Xeon(R) Processor @ 2.10GHz. Method: 2 warm-up then 7 timed runs per query through the D1 stand-in; median reported.
+
+| Movements | Items | Rows | Before median ms | After median ms | Speed-up | Identical |
+|---|---|---|---|---|---|---|
+| 1000 | 528 | 100 | 2.2 | 0.8 | 2.9x | yes |
+| 20000 | 528 | 100 | 35.0 | 4.6 | 7.6x | yes |
+| 100000 | 2222 | 100 | 210.3 | 8.6 | 24.4x | yes |
+
+#### Before, tier 100000
+
+```
+CO-ROUTINE (subquery-1)
+CO-ROUTINE (subquery-3)
+SCAN m USING INDEX idx_inventory_movements_item_created
+SEARCH i USING INDEX sqlite_autoindex_items_1 (id=?)
+SEARCH a USING INDEX sqlite_autoindex_staff_accounts_1 (id=?) LEFT-JOIN
+USE TEMP B-TREE FOR LAST 2 TERMS OF ORDER BY
+SCAN (subquery-3)
+SCAN (subquery-1)
+USE TEMP B-TREE FOR ORDER BY
+```
+
+#### After, tier 100000
+
+```
+MATERIALIZE recent
+SEARCH m USING INTEGER PRIMARY KEY (rowid=?)
+LIST SUBQUERY 3
+COMPOUND QUERY
+LEFT-MOST SUBQUERY
+SEARCH m USING INDEX idx_activity_movements (<expr>>?)
+SCALAR SUBQUERY 1
+SCAN m USING INDEX idx_activity_movements
+CREATE BLOOM FILTER
+UNION ALL
+SEARCH m USING COVERING INDEX idx_activity_movements (<expr>=?)
+CREATE BLOOM FILTER
+USE TEMP B-TREE FOR ORDER BY
+MATERIALIZE ledger
+CO-ROUTINE (subquery-8)
+SEARCH m USING INDEX idx_inventory_movements_item_created (item_id=?)
+LIST SUBQUERY 5
+SCAN recent
+CREATE BLOOM FILTER
+USE TEMP B-TREE FOR LAST 2 TERMS OF ORDER BY
+SCAN (subquery-8)
+SCAN r
+SEARCH m USING INTEGER PRIMARY KEY (rowid=?)
+SEARCH i USING INDEX sqlite_autoindex_items_1 (id=?)
+BLOOM FILTER ON l (seq=?)
+SEARCH l USING AUTOMATIC COVERING INDEX (seq=?)
+SEARCH a USING INDEX sqlite_autoindex_staff_accounts_1 (id=?) LEFT-JOIN
+```
+
+**Remaining cost.** The running totals still read every movement of each item on the page, because a balance is the sum of its item's ledger and no stored balance exists (by design, `docs/DATA_ARCHITECTURE.md`). When the newest 100 movements fall on a few items with long histories, the query costs about what it did before, never more:
+
+| Movements | Items | Rows | Before median ms | After median ms | Speed-up | Identical |
+|---|---|---|---|---|---|---|
+| 1000 | 5 | 100 | 2.5 | 2.0 | 1.2x | yes |
+| 20000 | 5 | 100 | 40.6 | 28.3 | 1.4x | yes |
+| 100000 | 5 | 100 | 285.2 | 232.3 | 1.2x | yes |
+
+Today production has under 1,000 movements over about 550 items, so both shapes are around 1 ms. Revisit with a measured, non-authoritative read model only if one item's history reaches tens of thousands of movements.
 
 ## Run 1 — 0016 indexes present
 
