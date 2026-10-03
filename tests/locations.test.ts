@@ -175,6 +175,7 @@ describe("the database keeps places and reports sound for every writer", () => {
     expect(() => sqlite.exec("DELETE FROM location_reports")).toThrow(/append-only/);
     sqlite.exec("UPDATE location_reports SET resolved_at = 'y', resolved_by = 'ACC-1'");
     expect(() => sqlite.exec("UPDATE location_reports SET resolution_note = 'later'")).toThrow(/location_report_final/);
+    expect(() => sqlite.exec("UPDATE location_reports SET reporter_name = 'Someone'")).toThrow(/location_report_final/);
     // A phone report has no staff reporter; a staff report always has one; a resolution has both halves.
     expect(() => sqlite.prepare("INSERT INTO location_reports(id, item_id, kind, source, created_at) VALUES(?, 'ITM-0001', 'CANT_FIND', 'STAFF', 'x')").run("b".repeat(36))).toThrow(/CHECK/);
     expect(() => sqlite.prepare("INSERT INTO location_reports(id, item_id, kind, source, reported_by, created_at) VALUES(?, 'ITM-0001', 'CANT_FIND', 'SELF_SERVICE', 'ACC-1', 'x')").run("c".repeat(36))).toThrow(/CHECK/);
@@ -498,10 +499,10 @@ describe("what Self-Service may show", () => {
   });
 
   describe("reports from a phone", () => {
-    const phoneReport = (itemId: string, kind = "CANT_FIND", headers: Record<string, string> = { "content-length": "100", "cf-connecting-ip": "203.0.113.7" }) =>
-      call("/api/self-service/location-report", { method: "POST", headers: { origin, "content-type": "application/json", ...headers }, body: JSON.stringify({ id: crypto.randomUUID(), itemId, kind }) });
+    const phoneReport = (itemId: string, kind = "CANT_FIND", headers: Record<string, string> = { "content-length": "100", "cf-connecting-ip": "203.0.113.7" }, name: string | null = "Maya Cruz") =>
+      call("/api/self-service/location-report", { method: "POST", headers: { origin, "content-type": "application/json", ...headers }, body: JSON.stringify({ id: crypto.randomUUID(), itemId, kind, ...name === null ? {} : { name } }) });
 
-    it("records one signal for an item the phone is offered, with no free text and no change to stock or place", async () => {
+    it("records one signal for an item the phone is offered, naming who sent it, with no note and no change to stock or place", async () => {
       const cabinet = await addPlace({ name: "Cabinet 1" });
       const water = await addItem({ name: "Water", locationId: cabinet });
       const before = stateOf(water);
@@ -512,11 +513,34 @@ describe("what Self-Service may show", () => {
       expect(await (await phoneReport(water)).json()).toMatchObject({ recorded: false });
       expect((await phoneReport(water, "LOCATION_WRONG")).status).toBe(201);
       expect(stateOf(water)).toEqual(before);
-      const rows = sqlite.prepare("SELECT source, reported_by, note, kind, location_id FROM location_reports ORDER BY rowid").all();
-      expect(rows).toEqual([{ source: "SELF_SERVICE", reported_by: null, note: null, kind: "CANT_FIND", location_id: cabinet }, { source: "SELF_SERVICE", reported_by: null, note: null, kind: "LOCATION_WRONG", location_id: cabinet }]);
+      const rows = sqlite.prepare("SELECT source, reported_by, reporter_name, note, kind, location_id FROM location_reports ORDER BY rowid").all();
+      expect(rows).toEqual([{ source: "SELF_SERVICE", reported_by: null, reporter_name: "Maya Cruz", note: null, kind: "CANT_FIND", location_id: cabinet }, { source: "SELF_SERVICE", reported_by: null, reporter_name: "Maya Cruz", note: null, kind: "LOCATION_WRONG", location_id: cabinet }]);
       expect(sqlite.prepare("SELECT actor_user_id FROM audit_log WHERE action = 'LOCATION_REPORTED'").all()).toEqual([{ actor_user_id: "SELF_SERVICE" }, { actor_user_id: "SELF_SERVICE" }]);
-      expect((await detail(water)).reports[0]).toMatchObject({ source: "SELF_SERVICE", reportedBy: "Self-Service", note: null });
+      expect((await detail(water)).reports[0]).toMatchObject({ source: "SELF_SERVICE", reportedBy: "Maya Cruz", note: null });
+      expect(JSON.parse((sqlite.prepare("SELECT details_json AS details FROM audit_log WHERE action = 'LOCATION_REPORTED' ORDER BY rowid").get() as { details: string }).details)).toMatchObject({ source: "SELF_SERVICE", reporter: "Maya Cruz" });
       function stateOf(id: string) { return { quantity: onHand(id), place: locationOf(id), updatedAt: (sqlite.prepare("SELECT updated_at FROM items WHERE id = ?").get(id) as { updated_at: string | null }).updated_at }; }
+    });
+
+    it("asks the phone for a name, and shows its open reports on the Self-Service review page, in the badge count and until staff resolve them", async () => {
+      const water = await addItem({ name: "Water" });
+      expect((await phoneReport(water, "CANT_FIND", undefined, null)).status).toBe(400);
+      expect((await phoneReport(water, "CANT_FIND", undefined, "   ")).status).toBe(400);
+      expect((await phoneReport(water, "CANT_FIND", undefined, "x".repeat(121))).status).toBe(400);
+      expect(sqlite.prepare("SELECT COUNT(*) AS n FROM location_reports").get()).toEqual({ n: 0 });
+      expect((await phoneReport(water, "CANT_FIND", undefined, "  Maya Cruz  ")).status).toBe(201);
+      // A report made before names were asked for stays readable: "no name given".
+      sqlite.prepare("INSERT INTO location_reports(id, item_id, kind, source, created_at) VALUES(?, ?, 'LOCATION_WRONG', 'SELF_SERVICE', '2026-10-03T07:00:00.000Z')").run("d".repeat(36), water);
+      const review = await (await staff("/api/staff/self-service")).json() as { locationReports: Array<{ itemId: string; itemName: string; kind: string; reporterName: string | null }> };
+      expect(review.locationReports).toMatchObject([{ itemId: water, itemName: "Water", kind: "CANT_FIND", reporterName: "Maya Cruz" }, { itemId: water, itemName: "Water", kind: "LOCATION_WRONG", reporterName: null }]);
+      const session = await (await staff("/api/staff/session")).json() as { selfServiceReviews: number };
+      expect(session.selfServiceReviews).toBe(2);
+      // A staff member's own report is not a phone report; resolving removes a report from both.
+      expect((await staff(`/api/staff/items/${water}/location-report`, "POST", { id: crypto.randomUUID(), kind: "CANT_FIND" })).status).toBe(201);
+      const first = (await (await staff("/api/staff/self-service")).json() as { locationReports: Array<{ id: string }> }).locationReports;
+      expect(first).toHaveLength(2);
+      expect((await staff(`/api/staff/location-reports/${first[0]!.id}/resolve`, "POST", { note: "Found it" })).status).toBe(200);
+      expect((await (await staff("/api/staff/self-service")).json() as { locationReports: unknown[] }).locationReports).toHaveLength(1);
+      expect(((await (await staff("/api/staff/session")).json()) as { selfServiceReviews: number }).selfServiceReviews).toBe(1);
     });
 
     it("refuses an item Self-Service does not offer, a closed Self-Service, a foreign origin, a big or unmeasured body, and floods", async () => {
@@ -604,7 +628,7 @@ describe("V1.4 release manifest (Cloud Operations lane)", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lh-v14-"));
     try {
       fs.copyFileSync("wrangler.jsonc", path.join(dir, "wrangler.jsonc"));
-      fs.cpSync("migrations", path.join(dir, "migrations"), { recursive: true });
+      fs.cpSync("migrations", path.join(dir, "migrations"), { recursive: true, filter: (source) => !/\/0025_/.test(source) });
       const sha = "a".repeat(40);
       const git = (args: string[]) => args[0] === "rev-parse" ? sha : args[0] === "status" ? "" : "ok";
       expect(ops.verifyReleaseTree({ manifest, releaseDir: dir, expectedSha: sha, git }).branch).toBe("road-to-v2/v1.4-smart-locations");
@@ -670,7 +694,7 @@ describe("V1.4 release manifest (Cloud Operations lane)", () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lh-v14run-"));
       try {
         fs.copyFileSync("wrangler.jsonc", path.join(dir, "wrangler.jsonc"));
-        fs.cpSync("migrations", path.join(dir, "migrations"), { recursive: true });
+        fs.cpSync("migrations", path.join(dir, "migrations"), { recursive: true, filter: (source) => !/\/0025_/.test(source) });
         const sha = "b".repeat(40);
         const git = (args: string[]) => args[0] === "rev-parse" ? sha : args[0] === "status" ? "" : "ok";
         const mode = options.mode ?? "prepare";
