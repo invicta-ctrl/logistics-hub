@@ -1,4 +1,4 @@
-import { type CatalogItem, type Decision, type LocalEvent, type ServerResult, type WireEvent, applyDecisions, applyResults, forgettable, nextBatch, retryAll, toWire } from "./offline-queue";
+import { type CatalogItem, type Decision, type SharedPlace, type LocalEvent, type ServerResult, type WireEvent, applyDecisions, applyResults, forgettable, nextBatch, retryAll, toWire } from "./offline-queue";
 import * as store from "./offline-store";
 
 /*
@@ -64,8 +64,8 @@ export async function refreshCatalog(): Promise<"updated" | "unchanged" | "offli
     const closed = response.status === 503 && (await response.json().catch(() => null) as { maintenance?: boolean } | null)?.maintenance === true;
     return closed ? "paused" : "offline";
   }
-  const body = await response.json() as { revision: number; items: CatalogItem[] };
-  await store.putCatalog({ revision: body.revision, items: body.items, fetchedAt: now, checkedAt: now });
+  const body = await response.json() as { revision: number; items: CatalogItem[]; places?: SharedPlace[] };
+  await store.putCatalog({ revision: body.revision, items: body.items, places: body.places ?? [], fetchedAt: now, checkedAt: now });
   announce({ type: "catalog" });
   return "updated";
 }

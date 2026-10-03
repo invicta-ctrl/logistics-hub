@@ -1,6 +1,9 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
 import { itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
+import { locationPicture, publicLocationPicture, putLocationPhoto, removeLocationPhoto } from "./location-media";
+import { reportLocation, resolveReport } from "./location-reports";
+import { createLocation, locationList, moveItems, updateLocation } from "./locations";
 import { openUnitAction } from "./open-units";
 import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
@@ -38,7 +41,13 @@ async function selfServiceClosed(request: Request, env: Env): Promise<boolean> {
 
 const SESSION_NAME = "lh_staff_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
-const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo)?$/;
+const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/location-report)?$/;
+const LOCATION_PATH = /^\/api\/staff\/locations\/(LOC-\d{4,})(\/photo|\/move-items)?$/;
+const LOCATION_MEDIA_PATH = /^\/api\/staff\/location-media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
+const REPORT_PATH = /^\/api\/staff\/location-reports\/([0-9a-f-]{36})\/resolve$/;
+/** Self-Service shows a shared place's picture by id and size. */
+const PUBLIC_LOCATION_MEDIA_PATH = /^\/api\/public\/location-media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
+const ITEM_ID = /^ITM-[A-Za-z0-9-]{1,24}$/;
 const MEDIA_PATH = /^\/api\/staff\/media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
 /** The only public image address: a thumbnail, by id. The 1280 px size has no public address. */
 const PUBLIC_THUMB_PATH = /^\/api\/public\/media\/([0-9a-f-]{36})\/thumb$/;
@@ -211,7 +220,23 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     return json({ error: target ? "Method not allowed." : "Not found." }, target ? 405 : 404);
   }
 
-  if (path === "/api/staff/inventory" && method === "GET") return revisioned(request, env.DB, () => staffInventory(env.DB));
+  if (path === "/api/staff/inventory" && method === "GET") return revisioned(request, env.DB, async () => ({ ...await staffInventory(env.DB), locations: await locationList(env.DB) }));
+  if (path === "/api/staff/locations" && method === "GET") return revisioned(request, env.DB, async () => ({ locations: await locationList(env.DB) }));
+  if (path === "/api/staff/locations" && method === "POST") return json(await createLocation(env.DB, account, await body()), 201);
+  const place = LOCATION_PATH.exec(path);
+  if (place && !place[2] && method === "PATCH") return json(await updateLocation(env.DB, account, place[1]!, await body()));
+  if (place?.[2] === "/move-items" && method === "POST") return json(await moveItems(env.DB, account, place[1]!, await body()));
+  if (place?.[2] === "/photo" && method === "PUT") {
+    if (Number(request.headers.get("content-length")) > MAX_PHOTO_BODY) throw new InputError(413, "That photo is too large.");
+    const form = await request.formData().catch(() => null);
+    if (!form) throw new InputError(400, "Invalid photo form.");
+    return json(await putLocationPhoto(env.DB, env.CATALOG_MEDIA, account, place[1]!, form));
+  }
+  if (place?.[2] === "/photo" && method === "DELETE") return json(await removeLocationPhoto(env.DB, env.CATALOG_MEDIA, account, place[1]!, url.searchParams.get("expected")));
+  const picture = LOCATION_MEDIA_PATH.exec(path);
+  if (picture && method === "GET") return locationPicture(env.CATALOG_MEDIA, picture[1]!, picture[2]!);
+  const resolving = REPORT_PATH.exec(path);
+  if (resolving && method === "POST") return json(await resolveReport(env.DB, account, resolving[1]!, await body()));
   if (path === "/api/staff/stock" && method === "GET") return revisioned(request, env.DB, () => stockOverview(env.DB));
   if (path === "/api/staff/loans" && method === "GET") return revisioned(request, env.DB, () => loansOverview(env.DB));
   if (path === "/api/staff/self-service" && method === "GET") return revisioned(request, env.DB, () => selfServiceReview(env.DB));
@@ -241,6 +266,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     return json(await updateItem(env.DB, account, match[1]!, parseItemInput(input), input?.updatedAt));
   }
   if (match?.[2] === "/movements" && method === "POST") return json(await recordMovement(env.DB, account, match[1]!, await body()));
+  if (match?.[2] === "/location-report" && method === "POST") return json(await reportLocation(env.DB, account, match[1]!, await body()), 201);
   if (match?.[2] === "/photo" && method === "PUT") {
     // Two small JPEGs: refuse a larger body before reading it into memory.
     if (Number(request.headers.get("content-length")) > MAX_PHOTO_BODY) throw new InputError(413, "That photo is too large.");
@@ -255,7 +281,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!form) throw new InputError(400, "Invalid loan form.");
     return json(await createLoan(env.DB, env.EVIDENCE, account, match[1]!, form), 201);
   }
-  const known = match || media || reorder || loan || review || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/locations", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 
@@ -324,6 +350,27 @@ async function selfServiceSync(request: Request, env: Env, url: URL): Promise<Re
 }
 
 /**
+ * A phone's "I can’t find it" / "Location looks wrong": public and anonymous, so same-origin, tiny, rate-limited per network,
+ * only for an item Self-Service offers, and no free text. It records an attention signal (location-reports.ts) and changes
+ * nothing else. In the Administration test panel nothing is recorded.
+ */
+async function selfServiceLocationReport(request: Request, env: Env, url: URL): Promise<Response> {
+  if (request.method !== "POST") return json({ error: "Method not allowed." }, 405, { allow: "POST" });
+  if (!sameOrigin(request, url)) return json({ error: "Invalid request origin." }, 403);
+  if (await selfServiceClosed(request, env)) return selfServicePaused();
+  const size = Number(request.headers.get("content-length"));
+  if (!size) return json({ error: "Missing content length." }, 411);
+  if (size > 1024) return json({ error: "Too much at once." }, 413);
+  const network = networkOf(request);
+  if (await throttled(env.DB, `location-report:${network}`, 10, 10 * 60_000)) return json({ error: "Too many reports at once. Please ask DOL staff in person." }, 429, { "retry-after": "600" });
+  const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+  const itemId = body?.itemId;
+  if (typeof itemId !== "string" || !ITEM_ID.test(itemId)) throw new InputError(400, "Choose an item.");
+  if (request.headers.get("x-self-service-test") === "1") return json({ id: body?.id ?? null, recorded: false, test: true });
+  return json(await reportLocation(env.DB, null, itemId, body, await networkTag(network, env)), 201);
+}
+
+/**
  * A short keyed hash of the sender's network, so staff can see that records came from the same
  * place without anyone storing or seeing the address itself. None without the signing secret.
  */
@@ -351,6 +398,10 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   if (thumb) {
     return request.method === "GET" ? publicThumb(env.DB, env.CATALOG_MEDIA, thumb[1]!, request.headers.get("If-None-Match"), async () => await selfServiceState(env.DB) === "open") : json({ error: "Method not allowed." }, 405, { allow: "GET" });
   }
+  const locationPictureMatch = PUBLIC_LOCATION_MEDIA_PATH.exec(path);
+  if (locationPictureMatch) {
+    return request.method === "GET" ? publicLocationPicture(env.DB, env.CATALOG_MEDIA, locationPictureMatch[1]!, locationPictureMatch[2]!, request.headers.get("If-None-Match"), async () => await selfServiceState(env.DB) === "open") : json({ error: "Method not allowed." }, 405, { allow: "GET" });
+  }
   if (path === "/api/staff/login" || path === "/api/staff/logout") {
     if (request.method !== "POST") return json({ error: "Method not allowed." }, 405, { allow: "POST" });
     return path === "/api/staff/login" ? login(request, env, url) : logout(request, env, url);
@@ -361,6 +412,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
     return await selfServiceClosed(request, env) ? selfServicePaused() : revisioned(request, env.DB, () => selfServiceCatalog(env.DB));
   }
   if (path === "/api/self-service/sync") return selfServiceSync(request, env, url);
+  if (path === "/api/self-service/location-report") return selfServiceLocationReport(request, env, url);
   if (path === "/api/self-service/decisions") {
     return request.method === "GET" ? json(await reviewDecisions(env.DB, url.searchParams.get("ids"))) : json({ error: "Method not allowed." }, 405, { allow: "GET" });
   }

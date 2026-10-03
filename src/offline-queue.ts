@@ -12,8 +12,12 @@ export type CatalogItem = {
   action: SelfServiceAction; available: number; location: string | null; audience: string | null;
   /** The item's photo id, if it has one (absent in a snapshot saved before photos were public). */
   photo?: string | null;
+  /** Its place, when staff share it with Self-Service (absent in a snapshot saved before places); `location` is that place's full path. */
+  locationId?: string | null;
 };
-export type Snapshot = { revision: number; items: CatalogItem[]; fetchedAt: number; checkedAt: number };
+/** A place staff share with Self-Service: only its name, directions and picture ever reach a phone. */
+export type SharedPlace = { id: string; name: string; parentId: string | null; directions: string | null; photo: { id: string; width: number; height: number } | null };
+export type Snapshot = { revision: number; items: CatalogItem[]; places?: SharedPlace[]; fetchedAt: number; checkedAt: number };
 
 export type EventType = "TAKE" | "BORROW" | "USE" | "RETURN";
 export type Outcome = "RETURNED" | "DAMAGED" | "LOST";

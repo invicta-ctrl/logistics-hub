@@ -1,5 +1,6 @@
 import { ACTIVITY_SOURCES, ACTIVITY_TITLES, ITEM_TYPES, LABELS, REVIEW_REASONS, STOCK_AREAS, type ActivitySource, units } from "./catalog-policy";
 import { InputError, actorName } from "./inventory";
+import { PATH_SEPARATOR } from "./location-tree";
 import { OPEN_REVIEW, balanceCtes } from "./self-service";
 
 /**
@@ -27,7 +28,9 @@ const ACTIVITY_TYPES = Object.keys(ACTIVITY_TITLES);
 const FIELDS: Record<string, string> = {
   name: "name", aliases: "aliases", category: "category", itemType: "type", unit: "unit", status: "status", storageLocation: "location", reorderThreshold: "restock level",
   lendingAudience: "lending audience", needsReview: "review flag", notes: "notes", stockArea: "stock area", expiresOn: "expiry date", consumptionMode: "how it is used",
-  desiredQuantity: "quantity to restock", note: "note"
+  desiredQuantity: "quantity to restock", note: "note",
+  // A place (V1.4): LOCATION_UPDATED names the same way.
+  directions: "directions", parentId: "place it is inside", visibility: "who sees it", active: "status"
 };
 /** Item types an audit entry may name: today's, and Saleable, retired by migration 0014 (its 112 reclassifications read "from Saleable"). */
 const TYPE_NAMES: Record<string, string> = { ...Object.fromEntries(ITEM_TYPES.map((type) => [type, LABELS[type] ?? type])), Saleable: "Saleable" };
@@ -43,6 +46,13 @@ const MANILA_OFFSET_MS = 8 * 60 * 60_000;
 export const utc = (column: string) => `COALESCE(CASE WHEN ${column} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*' THEN strftime('%Y-%m-%dT%H:%M:%fZ', ${column}) END, '${SENTINEL}')`;
 
 /* ---------- Query ---------- */
+
+/** The ids of the places named `location` (by name or full path, any letter case) and of every place inside them. */
+async function placesMatching(db: D1Database, location: string): Promise<string[]> {
+  const wanted = location.toLowerCase();
+  const { results } = await db.prepare("SELECT id, path FROM location_paths").all<{ id: string; path: string }>();
+  return results.filter(({ path }) => { const lower = path.toLowerCase(); return lower === wanted || lower.startsWith(`${wanted}${PATH_SEPARATOR}`); }).map(({ id }) => id);
+}
 
 export type ActivityFilters = {
   q?: string; item?: string; actor?: string; source?: string; type?: string; from?: string; to?: string;
@@ -83,7 +93,7 @@ export function parseActivityQuery(params: URLSearchParams): ActivityQuery {
   const filters: ActivityFilters = {
     q: text("q", 80), item: match("item", /^ITM-[A-Za-z0-9-]{1,24}$/), actor: match("actor", /^(ACC-[A-Za-z0-9-]{1,60}|SELF_SERVICE|SYSTEM)$/),
     source: pick("source", SOURCES), type: pick("type", ACTIVITY_TYPES), from: day("from"), to: day("to"),
-    stockArea: pick("stockArea", STOCK_AREAS), location: text("location", 80), changed: pick("changed", ["yes", "no"] as const), attention: pick("attention", ["1"] as const) ? true : undefined
+    stockArea: pick("stockArea", STOCK_AREAS), location: text("location", 300), changed: pick("changed", ["yes", "no"] as const), attention: pick("attention", ["1"] as const) ? true : undefined
   };
   if (filters.from && filters.to && filters.from > filters.to) throw new InputError(400, "The start date must not be after the end date.");
   const cursor = one("cursor") ?? null;
@@ -142,12 +152,12 @@ function arms(admin: boolean): Arm[] {
       prefix: "audit:", id: "a.id", sources: admin ? ["MOVEMENT", "CATALOG", "LOAN", "ACCOUNT", "DIRECTORY"] : ["MOVEMENT", "CATALOG", "LOAN"], moves: false, owns: (type) => !movementType.includes(type) && !PHONE_TYPES.includes(type) && type !== "REVIEW_RESOLVED",
       // A closing entry's loan is its own (`loans.id` is the key): the join adds no row and supplies the typed return note.
       from: `audit_log a LEFT JOIN items i ON a.entity_type = 'ITEM' AND i.id = a.entity_id LEFT JOIN staff_accounts c ON c.id = a.actor_user_id
-        LEFT JOIN loans l ON a.action = 'LOAN_CLOSED' AND l.id = ${AUDIT_LOAN}`,
+        LEFT JOIN loans l ON a.action = 'LOAN_CLOSED' AND l.id = ${AUDIT_LOAN} LEFT JOIN locations lo ON a.entity_type = 'LOCATION' AND lo.id = a.entity_id`,
       // Account, recovery and Staff Directory events are refused here, before any search or page limit, unless the reader is ADMIN or OWNER.
-      where: `a.action <> 'LOAN_CREATED' AND NOT (a.action = 'LOAN_CLOSED' AND COALESCE(${AUDIT_OUTCOME}, '') = 'RETURNED')${admin ? "" : " AND a.entity_type = 'ITEM'"}`,
+      where: `a.action <> 'LOAN_CREATED' AND NOT (a.action = 'LOAN_CLOSED' AND COALESCE(${AUDIT_OUTCOME}, '') = 'RETURNED')${admin ? "" : " AND a.entity_type IN ('ITEM', 'LOCATION')"}`,
       cols: {
-        ...base, sid: "'audit:' || a.id", k: utc("a.created_at"), itemId: "i.id", itemName: "i.name", unit: "i.unit",
-        src: `CASE WHEN a.action = 'LOAN_CLOSED' THEN 'LOAN' WHEN a.action IN (${UNIT_AUDIT}) THEN 'MOVEMENT' WHEN a.entity_type = 'ITEM' THEN 'CATALOG' WHEN a.entity_type = 'STAFF' THEN 'DIRECTORY' ELSE 'ACCOUNT' END`,
+        ...base, sid: "'audit:' || a.id", k: utc("a.created_at"), itemId: "i.id", itemName: "COALESCE(i.name, lo.name)", unit: "i.unit",
+        src: `CASE WHEN a.action = 'LOAN_CLOSED' THEN 'LOAN' WHEN a.action IN (${UNIT_AUDIT}) THEN 'MOVEMENT' WHEN a.entity_type IN ('ITEM', 'LOCATION') THEN 'CATALOG' WHEN a.entity_type = 'STAFF' THEN 'DIRECTORY' ELSE 'ACCOUNT' END`,
         type: `CASE WHEN a.action = 'LOAN_CLOSED' THEN CASE ${AUDIT_OUTCOME} WHEN 'DAMAGED' THEN 'LOAN_DAMAGED' WHEN 'LOST' THEN 'LOAN_LOST' ELSE 'LOAN_CLOSED' END ELSE a.action END`,
         actorId: "a.actor_user_id", actor: actorName("c", "a.actor_user_id"), details: "a.details_json", note: "l.return_note", corr: AUDIT_LOAN
       }
@@ -203,6 +213,10 @@ export async function activityPage(db: D1Database, admin: boolean, { filters, cu
   const from = filters.from ? bind(manilaDay(filters.from, 0)) : null;
   const to = filters.to ? bind(manilaDay(filters.to, 1)) : null;
   const size = bind(limit + 1);
+  // A place's name, or its full path, stands for the items kept there and in every place inside it. The places are few and
+  // always read whole, so they are matched here once and handed to the query as one list, not re-derived in every arm.
+  const placeIds = filters.location ? await placesMatching(db, filters.location) : null;
+  const placeTest = placeIds ? (placeIds.length === 1 ? `= ${bind(placeIds[0])}` : `IN (SELECT value FROM json_each(${bind(JSON.stringify(placeIds))}))`) : null;
 
   const selected = arms(admin).filter((arm) => (!filters.source || arm.sources.includes(filters.source)) && (!filters.type || arm.owns(filters.type)) && (filters.changed !== "yes" || arm.moves));
   if (!selected.length) return { events: [] as ActivityEvent[], nextCursor: null };
@@ -216,7 +230,7 @@ export async function activityPage(db: D1Database, admin: boolean, { filters, cu
     if (from) where.push(`${cols.k} >= ${from}`);
     if (to) where.push(`${cols.k} < ${to}`);
     if (filters.stockArea) where.push(`i.stock_area = ${bind(filters.stockArea)}`);
-    if (filters.location) where.push(`i.storage_location = ${bind(filters.location)} COLLATE NOCASE`);
+    if (placeTest) where.push(`i.location_id ${placeTest}`);
     if (filters.changed) where.push(`${cols.delta} ${filters.changed === "yes" ? "<>" : "="} 0`);
     if (filters.attention) where.push(`(${cols.itemId} IN (SELECT itemId FROM bad) OR ${cols.open} = 1)`);
     if (pattern) where.push(`(i.name LIKE ${pattern} ESCAPE '\\' OR i.id LIKE ${pattern} ESCAPE '\\' OR i.aliases LIKE ${pattern} ESCAPE '\\' OR ${cols.actor} LIKE ${pattern} ESCAPE '\\' OR ${cols.reason} LIKE ${pattern} ESCAPE '\\' OR ${cols.note} LIKE ${pattern} ESCAPE '\\')`);
@@ -270,7 +284,7 @@ function toEvent(row: Row): ActivityEvent {
   const reason = phoneRecord ? (row.review ? REVIEW_REASONS[row.review as keyof typeof REVIEW_REASONS] ?? null : null) : text(row.reason) ? LABELS[String(row.reason)] ?? String(row.reason) : null;
   // A phone record's typed reason and note are one context line; the loan and movement arms carry theirs in `reason` and `note`.
   const note = phoneRecord ? [row.reason, row.note].filter((value) => text(value)).join(" · ") || null : text(row.note);
-  const fields = ["ITEM_UPDATED", "REORDER_UPDATED"].includes(type) ? Object.keys(details).filter((key) => key in FIELDS).map((key) => FIELDS[key]!)
+  const fields = ["ITEM_UPDATED", "REORDER_UPDATED", "LOCATION_UPDATED"].includes(type) ? Object.keys(details).filter((key) => key in FIELDS).map((key) => FIELDS[key]!)
     : type === "ACTIVITY_EXPORTED" && details.filters && typeof details.filters === "object" ? Object.keys(details.filters).filter((key) => key in FILTER_NAMES).map((key) => FILTER_NAMES[key]!) : [];
   const account = row.src === "ACCOUNT" && typeof details.username === "string" ? ` for ${details.username.slice(0, 60)}` : "";
   const purpose = PURPOSE[String(row.purpose)] ?? "";
@@ -323,6 +337,16 @@ function toEvent(row: Row): ActivityEvent {
       const others = fields.filter((field) => !named.has(field));
       return `${actor} ${[done[0]![0], ...done.slice(1).map(([, it]) => it)].join(" and ")}${others.length ? `, and edited ${others.join(", ")}` : ""}.`;
     },
+    LOCATION_CREATED: () => `${actor} added the place ${item}.`,
+    LOCATION_UPDATED: () => details.active && typeof details.active === "object" && (details.active as { to?: unknown }).to === false ? `${actor} deactivated the place ${item}.`
+      : `${actor} edited the place ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`,
+    LOCATION_PHOTO_ADDED: () => `${actor} added a picture to the place ${item}.`,
+    LOCATION_PHOTO_REPLACED: () => `${actor} replaced the picture of the place ${item}.`,
+    LOCATION_PHOTO_REMOVED: () => `${actor} removed the picture of the place ${item}.`,
+    LOCATION_ITEMS_MOVED: () => `${actor} moved the items kept in ${item} to ${typeof details.toPath === "string" ? details.toPath.slice(0, 200) : "another place"}.`,
+    LOCATIONS_RECONCILED: () => `${typeof details.locationsCreated === "number" ? details.locationsCreated : "Some"} places were made from the storage locations typed on ${typeof details.itemsLinked === "number" ? details.itemsLinked : "the"} items; nothing typed was changed.`,
+    LOCATION_REPORTED: () => `${details.source === "SELF_SERVICE" ? "A phone" : actor} reported ${details.kind === "CANT_FIND" ? `that ${item} could not be found` : `that the place of ${item} looks wrong`}; stock and its place did not change.`,
+    LOCATION_REPORT_RESOLVED: () => `${actor} resolved a location report for ${item}.`,
     ITEM_PHOTO_ADDED: () => `${actor} added a photo to ${item}.`,
     ITEM_PHOTO_REPLACED: () => `${actor} replaced the photo of ${item}.`,
     ITEM_PHOTO_REMOVED: () => `${actor} removed the photo of ${item}.`,
