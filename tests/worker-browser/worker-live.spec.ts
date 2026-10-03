@@ -236,6 +236,38 @@ test.describe("owner administration", () => {
     await expect(staff).toHaveURL(/\/staff\/items$/);
   });
 
+  test("owner makes a sign-in from a directory profile and watches it being used", async ({ page, browser }) => {
+    await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
+    await page.getByRole("link", { name: "Administration" }).click();
+    await page.getByRole("link", { name: "Staff Directory" }).click();
+    await page.getByRole("button", { name: "Add person" }).first().click();
+    await page.getByLabel("Full name").fill("Lia Ventura");
+    await page.getByRole("combobox", { name: "Department", exact: true }).selectOption("DoL");
+    await page.getByRole("button", { name: "Add person" }).last().click();
+    await expect(page.getByRole("heading", { name: "Lia Ventura", level: 1 })).toBeVisible();
+    const access = page.getByRole("region", { name: "Sign-in and access" });
+    await expect(access.getByLabel("Username")).toHaveValue("lia.ventura");
+    await access.getByRole("button", { name: "Create sign-in" }).click();
+    const temporary = (await access.locator(".secret code").textContent())!;
+    expect(temporary).toMatch(/^[\w]{5}(-[\w]{5}){3}$/);
+    await access.getByRole("button", { name: "Done" }).click();
+    await expect(access.getByText("Never", { exact: true })).toBeVisible();
+    await expect(page.locator(".person-head .tags")).toContainText("Signs in as lia.ventura");
+
+    const lia = await (await browser.newContext()).newPage();
+    await signInAs(lia, "lia.ventura", temporary);
+    await expect(lia.getByText("Choose your own password to continue.")).toBeVisible();
+
+    await page.reload();
+    await expect(access.getByText("On 1 device")).toBeVisible();
+    await expect(access.locator(".access-log").first()).toContainText("signed in now");
+    page.once("dialog", (dialog) => dialog.accept());
+    await access.getByRole("button", { name: "Sign out everywhere" }).click();
+    await expect(access.getByText("Nowhere")).toBeVisible();
+    await expect(access.locator(".access-log").last()).toContainText("signed lia.ventura out everywhere");
+    expect((await lia.request.get("/api/staff/session")).status()).toBe(401);
+  });
+
   test("owner issues a recovery key that resets the owner password exactly once", async ({ page, baseURL }) => {
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("button", { name: /^Account:/ }).click();

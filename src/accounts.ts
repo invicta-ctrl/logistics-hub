@@ -97,7 +97,10 @@ export async function listAccounts(db: D1Database) {
   return { accounts: results.map((row) => ({ ...row, active: row.active === 1, mustChangePassword: row.mustChangePassword === 1 })) };
 }
 
-export async function createAccount(db: D1Database, actor: Account, input: unknown) {
+export type NewAccount = { id: string; username: string; displayName: string; role: Role; passwordHash: string; generated: string | null };
+
+/** A new account, checked (a role the actor may give, a free username, a display name, a password) but not yet written. */
+export async function newAccount(db: D1Database, actor: Account, input: unknown): Promise<NewAccount> {
   const data = body(input);
   const name = username(data.username);
   const assigned = role(data.role ?? "STAFF");
@@ -105,14 +108,58 @@ export async function createAccount(db: D1Database, actor: Account, input: unkno
   const label = displayName(data.displayName);
   const secret = passwordChoice(data);
   await usernameFree(db, name);
-  const id = `ACC-${crypto.randomUUID()}`;
+  return { id: `ACC-${crypto.randomUUID()}`, username: name, displayName: label, role: assigned, passwordHash: await hashPassword(secret.value), generated: secret.generated };
+}
+
+export async function createAccount(db: D1Database, actor: Account, input: unknown) {
+  const next = await newAccount(db, actor, input);
   await db.batch([
     // Someone else chose this password, so the new user must replace it at first sign-in.
     db.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash, role, must_change_password, updated_at) VALUES(?, ?, ?, ?, ?, 1, ?)")
-      .bind(id, name, label, await hashPassword(secret.value), assigned, new Date().toISOString()),
-    audit(db, actor.accountId, "ACCOUNT_CREATED", "ACCOUNT", id, { username: name, role: assigned })
+      .bind(next.id, next.username, next.displayName, next.passwordHash, next.role, new Date().toISOString()),
+    audit(db, actor.accountId, "ACCOUNT_CREATED", "ACCOUNT", next.id, { username: next.username, role: next.role })
   ]);
-  return { id, username: name, generatedPassword: secret.generated };
+  return { id: next.id, username: next.username, generatedPassword: next.generated };
+}
+
+/** A free username from a person's name: first.last in plain letters, with a number added if it is taken (ana.santos, ana.santos2…). */
+export async function suggestUsername(db: D1Database, fullName: string): Promise<string> {
+  const words = fullName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter(Boolean);
+  const base = (words.length > 1 ? `${words[0]}.${words.at(-1)}` : words[0] ?? "staff").slice(0, 56).padEnd(3, "0");
+  const { results } = await db.prepare("SELECT lower(username) AS name FROM staff_accounts WHERE lower(username) = ?1 OR lower(username) LIKE ?1 || '%'").bind(base).all<{ name: string }>();
+  const taken = new Set(results.map((row) => row.name));
+  for (let n = 1; ; n++) if (!taken.has(n === 1 ? base : `${base}${n}`)) return n === 1 ? base : `${base}${n}`;
+}
+
+/** SQLite's CURRENT_TIMESTAMP ("2026-10-03 08:00:00", UTC) as ISO 8601; ISO values pass through. */
+const iso = (value: string | null) => value && !value.includes("T") ? `${value.replace(" ", "T")}Z` : value;
+
+/**
+ * How an account is being used, for watching access: its state, sessions open now, failed sign-ins in the current window
+ * (they clear on a successful sign-in), the latest sign-ins with how each ended, and the latest changes made to it. Session
+ * ids are never returned. Sign-ins older than a month past their expiry have been swept (sweepStale).
+ */
+export async function accountAccess(db: D1Database, id: string) {
+  const now = Date.now();
+  const [account, sessions, events] = await db.batch([
+    db.prepare(`SELECT a.id, a.username, a.display_name AS displayName, a.role, a.active, a.must_change_password AS mustChangePassword, a.created_at AS createdAt, a.last_login_at AS lastLoginAt,
+        (SELECT COUNT(*) FROM staff_sessions s WHERE s.account_id = a.id AND s.revoked_at IS NULL AND s.expires_at > ?2) AS openSessions,
+        COALESCE((SELECT t.count FROM auth_throttle t WHERE t.key = 'login-user:' || lower(a.username) AND t.reset_at > ?2), 0) AS failedAttempts
+      FROM staff_accounts a WHERE a.id = ?1`).bind(id, now),
+    db.prepare("SELECT created_at AS startedAt, expires_at AS expiresAt, revoked_at AS endedAt FROM staff_sessions WHERE account_id = ? ORDER BY created_at DESC LIMIT 10").bind(id),
+    db.prepare(`SELECT l.created_at AS at, l.action, l.details_json AS details, a.display_name AS actor FROM audit_log l LEFT JOIN staff_accounts a ON a.id = l.actor_user_id
+      WHERE l.entity_type = 'ACCOUNT' AND l.entity_id = ? ORDER BY l.created_at DESC, l.rowid DESC LIMIT 10`).bind(id)
+  ]);
+  const row = account!.results[0] as Record<string, unknown> | undefined;
+  if (!row) throw new InputError(404, "Account not found.");
+  return {
+    account: { ...row, createdAt: iso(row.createdAt as string), active: row.active === 1, mustChangePassword: row.mustChangePassword === 1 } as {
+      id: string; username: string; displayName: string; role: Role; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number; failedAttempts: number },
+    signIns: (sessions!.results as Array<{ startedAt: string; expiresAt: number; endedAt: string | null }>).map((session) => ({
+      at: iso(session.startedAt)!, until: session.endedAt ? iso(session.endedAt)! : new Date(session.expiresAt).toISOString(),
+      state: session.endedAt ? "ENDED" as const : session.expiresAt <= now ? "EXPIRED" as const : "OPEN" as const })),
+    events: (events!.results as Array<{ details: string }>).map((event) => ({ ...event, details: JSON.parse(event.details || "{}") }))
+  };
 }
 
 export async function updateAccount(db: D1Database, actor: Account, id: string, input: unknown) {
