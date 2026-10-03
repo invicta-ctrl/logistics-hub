@@ -433,7 +433,7 @@ async function directoryScenes(browser, url, dir) {
     if (size === "desktop") {
       // The owner's import: the preflight report, then the result.
       await page.goto(`${url}/staff/admin/directory`);
-      await page.waitForSelector(".person-row");
+      await page.waitForSelector(".dir-card, .person-row");
       await page.getByRole("button", { name: "Import ID scans" }).click();
       await page.locator("#import-folder").setInputFiles(archive);
       await page.waitForSelector("[data-run]");
@@ -454,14 +454,29 @@ async function directoryScenes(browser, url, dir) {
       ids.Hidalgo = people.find((person) => person.name === "Hidalgo").id;
     }
     await page.goto(`${url}/staff/admin/directory`);
-    await page.waitForSelector(".person-row");
+    await page.waitForSelector(".dir-card, .person-row");
     await shot(page, `directory-list-${size}`);
     await page.goto(`${url}/staff/admin/directory?dept=DoL`);
-    await page.waitForSelector(".person-row");
+    await page.waitForSelector(".dir-card, .person-row");
     await shot(page, `directory-department-${size}`);
     await page.goto(`${url}/staff/admin/directory?q=director`);
-    await page.waitForSelector(".person-row");
+    await page.waitForSelector(".dir-card, .person-row");
     await shot(page, `directory-search-${size}`);
+    // A card on the wall, pressed: it opens on the person's details, then turns to the front of their ID (the wall is new in
+    // this branch; a base before it lists people in rows).
+    await page.goto(`${url}/staff/admin/directory?dept=DEM`);
+    await page.waitForSelector(".dir-card, .person-row");
+    if (await page.locator(".dir-card").count()) {
+    await page.locator(`.dir-card[data-person="${ids.Belmonte}"]`).click();
+    await page.waitForSelector("dialog.id-viewer .person-card--details [data-out] :is(ul, span)");
+    await shot(page, `directory-card-details-${size}`);
+    await page.keyboard.press("f");
+    await page.waitForSelector("dialog.id-viewer .id-card__scan:not(.is-loading) img[data-face=front]");
+    await page.waitForTimeout(150);
+    await shot(page, `directory-card-front-${size}`);
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("dialog.id-viewer", { state: "detached" });
+    }
     await page.goto(`${url}/staff/admin/directory?person=${ids.Belmonte}`);
     await page.waitForSelector(".summary-list");
     await shot(page, `directory-profile-${size}`);
