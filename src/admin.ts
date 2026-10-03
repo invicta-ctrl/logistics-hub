@@ -1,46 +1,9 @@
 import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
+import { type AccountEvent, assignable, bindCopy, canManage, eventText, oneTime, roleTag } from "./account-ui";
 import { type Role, ROLE_LABELS, type Session, adminTabs, loadSession, shell } from "./staff";
 import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, plural, setMessage, sheet as createSheet, sheetContent, toast } from "./ui";
 
 type Row = { id: string; username: string; displayName: string; role: Role; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number };
-type Event = { at: string; action: string; actor: string | null; details: Record<string, { from?: unknown; to?: unknown } | unknown> };
-
-// Mirrors the server rules purely to show the right controls; the server decides.
-const canManage = (actor: Session, target: Pick<Row, "role">) => actor.role === "OWNER" || (actor.role === "ADMIN" && target.role === "STAFF");
-const assignable = (actor: Session): Role[] => actor.role === "OWNER" ? ["STAFF", "ADMIN", "OWNER"] : ["STAFF"];
-const roleTag = (role: Role) => html`<span class="tag ${role === "OWNER" ? "tag--brand" : role === "ADMIN" ? "tag--gold" : ""}">${ROLE_LABELS[role]}</span>`;
-
-/** A secret shown exactly once, with copy, and an explicit instruction. */
-function oneTime(label: string, value: string, note: string): Html {
-  return html`<div class="secret" role="status"><p class="secret__label">${label}</p><div class="secret__row"><code>${value}</code><button type="button" class="button button--secondary button--sm" data-copy="${value}">Copy</button></div><p class="secret__note">${note}</p></div>`;
-}
-
-function bindCopy(root: Element): void {
-  root.addEventListener("click", async (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-copy]");
-    if (!button) return;
-    try { await navigator.clipboard.writeText(button.dataset.copy ?? ""); button.textContent = "Copied"; } catch { button.textContent = "Select and copy"; }
-  });
-}
-
-const EVENT_TEXT: Record<string, (event: Event) => string> = {
-  ACCOUNT_CREATED: (event) => `created ${String((event.details as { username?: string }).username)} (${ROLE_LABELS[(event.details as { role: Role }).role] ?? ""})`,
-  ACCOUNT_UPDATED: (event) => {
-    const details = event.details as Record<string, unknown>;
-    const parts = Object.entries(details).filter(([key, change]) => ["displayName", "username", "role", "active"].includes(key) && typeof change === "object" && change !== null)
-      .map(([key, value]) => { const change = value as { from: unknown; to: unknown }; return key === "active" ? (change.to ? "enabled" : "disabled") : `${key === "displayName" ? "name" : key} ${String(change.from)} → ${String(change.to)}`; });
-    return `${details.self ? "updated their own account" : `updated ${typeof details.username === "string" ? details.username : "an account"}`}: ${parts.join(", ")}`;
-  },
-  PASSWORD_RESET: (event) => `reset the password of ${String((event.details as { username?: string }).username)}`,
-  PASSWORD_CHANGED: () => "changed their own password",
-  SESSIONS_REVOKED: (event) => `signed ${String((event.details as { username?: string }).username)} out everywhere`,
-  OWNER_BOOTSTRAPPED: () => "was set up as the first owner (Owner Console)",
-  RECOVERY_KEY_ROTATED: () => "issued a new owner recovery key",
-  RECOVERY_KEY_REVOKED: () => "revoked the owner recovery key",
-  RETENTION_ERASED: (event) => { const { loans = 0, phoneRecords = 0 } = event.details as { loans?: number; phoneRecords?: number }; return `removed names, student IDs and photos from ${plural(loans, "old loan")} and ${plural(phoneRecords, "old phone record")}`; },
-  SETTING_CHANGED: (event) => (event.details as { to?: string }).to === "open" ? "reopened Self-Service" : "closed Self-Service for maintenance",
-  OWNER_RECOVERY_USED: (event) => `Owner recovery key used for ${String((event.details as { username?: string }).username)}; password reset and sessions ended`
-};
 
 /* ---------- Administration ---------- */
 
@@ -92,7 +55,7 @@ export async function administration(): Promise<void> {
 
   async function load(): Promise<void> {
     try {
-      const [{ accounts }, { events }] = await Promise.all([api<{ accounts: Row[] }>("/api/staff/admin/accounts"), api<{ events: Event[] }>("/api/staff/admin/activity")]);
+      const [{ accounts }, { events }] = await Promise.all([api<{ accounts: Row[] }>("/api/staff/admin/accounts"), api<{ events: AccountEvent[] }>("/api/staff/admin/activity")]);
       rows = accounts;
       mount(document.querySelector("#accounts")!, html`<div class="data-table-wrap"><table class="data-table data-table--static">
         <caption class="visually-hidden">Accounts that can sign in to the staff workspace</caption>
@@ -106,7 +69,7 @@ export async function administration(): Promise<void> {
           <td class="col-actions">${canManage(session!, row) && row.id !== session!.id ? html`<button type="button" class="button button--secondary button--sm" data-manage="${row.id}">Manage</button>` : row.id === session!.id ? html`<a class="text-link" href="/staff/account" data-route>My account</a>` : html`<span class="muted">Owner only</span>`}</td>
         </tr>`)}</tbody></table></div>`);
       mount(document.querySelector("#activity")!, events.length
-        ? html`${events.map((event) => html`<li class="history__item"><div><p class="history__title">${event.actor ?? "Recovery"} ${(EVENT_TEXT[event.action] ?? (() => event.action.toLowerCase()))(event)}</p><p class="history__meta"><time datetime="${event.at}">${formatDateTime(event.at)}</time></p></div></li>`)}`
+        ? html`${events.map((event) => html`<li class="history__item"><div><p class="history__title">${eventText(event)}</p><p class="history__meta"><time datetime="${event.at}">${formatDateTime(event.at)}</time></p></div></li>`)}`
         : html`<li class="history__empty">No account changes yet.</li>`);
     } catch (error) {
       mount(document.querySelector("#accounts")!, emptyState("Accounts could not be loaded", failure(error), "", "error", 3));
