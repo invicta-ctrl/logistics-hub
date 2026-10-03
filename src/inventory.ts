@@ -74,9 +74,9 @@ export async function publicCatalog(db: D1Database) {
   // The WHERE clause and isListedForLending() both enforce the listing policy:
   // unlisted rows never leave D1, and the DTO is filtered again in code.
   const audiences = [...PUBLIC_LENDING_AUDIENCES];
-  const { results } = await db.prepare(`SELECT ${ITEM_COLUMNS} FROM items i LEFT JOIN inventory_balances b ON b.id = i.id
+  const { results } = await db.prepare(`SELECT ${ITEM_COLUMNS}, p.media_id AS photoId FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id
     WHERE i.status = 'ACTIVE' AND i.needs_review = 0 AND i.item_type IN (${[...LISTABLE_ITEM_TYPES].map(() => "?").join(",")}) AND i.lending_audience IN (${audiences.map(() => "?").join(",")})
-    ORDER BY i.name COLLATE NOCASE`).bind(...LISTABLE_ITEM_TYPES, ...audiences).all<ItemRow>();
+    ORDER BY i.name COLLATE NOCASE`).bind(...LISTABLE_ITEM_TYPES, ...audiences).all<ItemRow & { photoId: string | null }>();
   const items = results.filter(isListedForLending).map((row) => ({
     id: row.id,
     name: row.name,
@@ -84,7 +84,9 @@ export async function publicCatalog(db: D1Database) {
     unit: row.unit,
     itemType: row.itemType,
     available: Math.max(0, row.onHand),
-    audience: row.lendingAudience
+    audience: row.lendingAudience,
+    // The id of the item's photo, if it has one: the thumbnail is public (src/item-media.ts, publicThumb), the large picture is not.
+    photo: row.photoId
   }));
   return { items, categories: distinct(items.map((item) => item.category)) };
 }
@@ -257,7 +259,7 @@ const stored = (value: ItemInput[keyof ItemInput]) => typeof value === "boolean"
  * The one audit writer. Details must never contain passwords, hashes, keys or tokens.
  * With `afterChange`, the row is written only when the previous statement in the batch changed a row.
  */
-export function audit(db: D1Database, actorId: string | null, action: string, entityType: "ITEM" | "ACCOUNT" | "RECOVERY" | "EXPORT" | "SETTING" | "RETENTION", entityId: string, details: unknown, afterChange = false): D1PreparedStatement {
+export function audit(db: D1Database, actorId: string | null, action: string, entityType: "ITEM" | "ACCOUNT" | "RECOVERY" | "EXPORT" | "SETTING" | "RETENTION" | "STAFF", entityId: string, details: unknown, afterChange = false): D1PreparedStatement {
   return db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json) SELECT ?, ?, ?, ?, ?, ?, ?${afterChange ? " WHERE changes() > 0" : ""}`)
     .bind(crypto.randomUUID(), new Date().toISOString(), actorId, action, entityType, entityId, JSON.stringify(details));
 }

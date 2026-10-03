@@ -15,7 +15,7 @@ async function seed(id: string, username: string, role: string, active = 1) {
 beforeEach(async () => {
   const database = migratedD1();
   sqlite = database.sqlite;
-  env = { DB: database.d1, EVIDENCE: memoryR2().bucket, CATALOG_MEDIA: memoryR2().bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
+  env = { DB: database.d1, EVIDENCE: memoryR2().bucket, CATALOG_MEDIA: memoryR2().bucket, STAFF_IDS: memoryR2().bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
   await seed("ACC-owner", "owner", "OWNER");
   await seed("ACC-admin", "admin", "ADMIN");
   await seed("ACC-staff", "staff", "STAFF");

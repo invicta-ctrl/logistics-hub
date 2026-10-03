@@ -30,7 +30,7 @@ beforeEach(async () => {
   sqlite = database.sqlite;
   const r2 = memoryR2();
   photos = r2.objects;
-  env = { DB: database.d1, EVIDENCE: r2.bucket, CATALOG_MEDIA: memoryR2().bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
+  env = { DB: database.d1, EVIDENCE: r2.bucket, CATALOG_MEDIA: memoryR2().bucket, STAFF_IDS: memoryR2().bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret" };
   selfService("open");
   sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash) VALUES('ACC-1', 'staff.one', 'Staff One', ?)").run(await hashPassword("correct horse battery"));
   const login = await call("/api/staff/login", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ username: "staff.one", password: "correct horse battery" }) });
@@ -111,8 +111,8 @@ describe("self-service catalog", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     const body = await response.json() as { items: Array<Record<string, unknown>>; revision: number };
     expect(body.items).toEqual([
-      { id: water, name: "Bottled Water", aliases: null, category: "SUPPLIES", unit: "piece", action: "TAKE", available: 20, location: "Shelf B", audience: null },
-      { id: scissors, name: "Scissors", aliases: "Gunting", category: "SUPPLIES", unit: "piece", action: "BORROW", available: 5, location: "Shelf B", audience: "STUDENTS_AND_USC_STAFF" }
+      { id: water, name: "Bottled Water", aliases: null, category: "SUPPLIES", unit: "piece", action: "TAKE", available: 20, location: "Shelf B", audience: null, photo: null },
+      { id: scissors, name: "Scissors", aliases: "Gunting", category: "SUPPLIES", unit: "piece", action: "BORROW", available: 5, location: "Shelf B", audience: "STUDENTS_AND_USC_STAFF", photo: null }
     ]);
     expect(JSON.stringify(body)).not.toContain("private staff note");
     const etag = response.headers.get("etag")!;
