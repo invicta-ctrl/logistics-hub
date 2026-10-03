@@ -223,11 +223,32 @@ async function publicPhotoScenes(browser, url, dir) {
   }
   const art = await first.page.evaluate(drawPhotos);
   const ids = catalog.items.slice(0, 18).map((item) => item.id);
+  const timings = {};
+  /** A signed-out cold load of the Lending Hub: the layout shift and which elements moved. */
+  const lendingShift = async (viewport) => {
+    const context = await browser.newContext({ viewport: { width: viewport[0], height: viewport[1] }, deviceScaleFactor: viewport[2], reducedMotion: "reduce" });
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+      window.__shift = 0; window.__moved = [];
+      new PerformanceObserver((list) => { for (const entry of list.getEntries()) if (!entry.hadRecentInput) {
+        window.__shift += entry.value;
+        for (const source of entry.sources ?? []) window.__moved.push(`${source.node?.nodeName?.toLowerCase()}.${(source.node?.className ?? "").toString().split(" ")[0]}`);
+      } }).observe({ type: "layout-shift", buffered: true });
+    });
+    await page.goto(`${url}/lending`);
+    await page.waitForSelector(".catalogue__row");
+    await page.waitForLoadState("networkidle");
+    await page.waitForTimeout(500);
+    const result = await page.evaluate(() => ({ shift: Number(window.__shift.toFixed(4)), moved: [...new Set(window.__moved)].slice(0, 8) }));
+    await context.close();
+    return result;
+  };
+  timings.shiftBeforePhotos = { desktop: await lendingShift(SIZES.desktop), phone: await lendingShift(SIZES.phone) };
   await seedPhotos(first.page, url, ids.filter((_, index) => index % 3 !== 2), art);
   await first.context.close();
+  timings.shiftAfterPhotos = { desktop: await lendingShift(SIZES.desktop), phone: await lendingShift(SIZES.phone) };
   const sheetItem = ids[0];
   const sizes = { ...SIZES, narrow: [320, 640, 2] };
-  const timings = {};
   for (const [size, [width, height, scale]] of Object.entries(sizes)) {
     // Signed out, as the public sees it.
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, reducedMotion: "reduce" });
@@ -241,14 +262,21 @@ async function publicPhotoScenes(browser, url, dir) {
     await page.goto(`${url}/lending`);
     await page.waitForSelector(".catalogue__row .item-thumb");
     await page.waitForLoadState("networkidle");
+    // The list is what changed, so the picture is taken with it in view (the header alone fills a narrow phone).
+    await page.locator(".catalogue-group").first().scrollIntoViewIfNeeded();
+    await page.evaluate(() => window.scrollBy(0, -100));
     await shot(page, `public-lending-${size}`);
     timings[size] = { lendingThumbs: thumbs, lendingKb: Math.round(bytes / 1024), lendingLayoutShift: Number((await page.evaluate(() => window.__shift)).toFixed(4)) };
     await page.goto(`${url}/self-service?do=get`);
     await page.waitForSelector(".ss-row .item-thumb");
     await page.waitForLoadState("networkidle");
     await shot(page, `public-selfservice-list-${size}`);
+    if (size === "phone") timings.topOfSelfService = await page.evaluate(() => {
+      const at = document.elementFromPoint(window.innerWidth / 2, 40);
+      return { element: at ? `${at.nodeName.toLowerCase()}.${at.className}` : null, html: at?.outerHTML.slice(0, 220) ?? null, parent: at?.parentElement ? `${at.parentElement.nodeName.toLowerCase()}.${at.parentElement.className}` : null, ssPhotos: document.querySelectorAll(".ss-photo").length, itemPhotos: document.querySelectorAll(".ss-item-photo").length, ghostVisible: getComputedStyle(document.querySelector(".ss-photo")).display };
+    });
     await page.goto(`${url}/self-service?do=${(await (await page.request.get(`${url}/api/self-service/catalog`)).json()).items.find((item) => item.id === sheetItem)?.action === "BORROW" ? "borrow" : "take"}&item=${sheetItem}`);
-    await page.waitForSelector("dialog[open] .ss-photo");
+    await page.waitForSelector("dialog[open] .ss-item-photo");
     await page.waitForLoadState("networkidle");
     await shot(page, `public-selfservice-sheet-${size}`);
     await context.close();

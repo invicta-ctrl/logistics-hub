@@ -393,7 +393,7 @@ function sheetFrame(kicker: string, title: string, body: Html): Html {
 }
 
 /** The item's picture at the top of its sheet, so the person can confirm it is what they came for (the 320 px thumbnail; no larger size is public). */
-const sheetPhoto = (item: CatalogItem): Html | "" => item.photo ? html`<img class="ss-photo" src="/api/public/media/${item.photo}/thumb" alt="" width="160" height="160" decoding="async" />` : "";
+const sheetPhoto = (item: CatalogItem): Html | "" => item.photo ? html`<img class="ss-item-photo" src="/api/public/media/${item.photo}/thumb" alt="" width="160" height="160" decoding="async" />` : "";
 
 function takeSheet(item: CatalogItem): Html {
   return sheetFrame(`Take · ${categoryName(item.category)}`, item.name, html`
