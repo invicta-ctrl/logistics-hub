@@ -54,7 +54,7 @@ The self-service catalog DTO carries only: `id`, `name`, `aliases`, `category`, 
 ## Staff workspace
 Every `/staff/*` page and `/api/staff/*` call needs a live session. Writes must come from the same origin.
 
-**Shell (V1.1).** Sections in working order: Items, Stock, Loans, Self-Service, Activity, Administration (ADMIN and OWNER). The avatar opens the account menu: My account, Public Lending Hub, Sign out. On phones (≤ 760 px) Items, Stock, Loans and Self-Service sit in a bottom bar with More, which opens the same menu as a sheet listing Activity and Administration first. Design tokens, motion rules and the screenshot evidence: `docs/visual-research/v1.1.md`.
+**Shell (V1.1).** Sections in working order: Items, Stock, Loans, Self-Service, Activity, Administration (ADMIN and OWNER). The avatar opens the account menu: My account, Public Lending Hub, Sign out. On phones (≤ 760 px) Items, Stock, Loans and Self-Service sit in a bottom bar with More, which opens the same menu as a sheet listing Activity and Administration first. Design tokens, motion rules and the screenshot evidence: `docs/visual-research/v1.1.md`. Bottom-bar sections are as wide as their labels need, so no label is cut short; larger text wraps a label at its hyphen, and only 200% text on the narrowest phones shortens labels (every section stays on screen). Icons are one family drawn in `src/ui.ts` (Activity is a history clock, the Public Lending Hub a globe with a new-tab mark; steppers use drawn minus and plus, never text glyphs), sized by five tokens; rules and evidence: `docs/visual-research/icons.md`.
 
 ### Items (`/staff/items`; `/staff/inventory` redirects here with its query)
 
