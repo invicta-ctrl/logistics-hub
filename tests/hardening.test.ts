@@ -7,7 +7,9 @@ import { verifyPassword } from "../src/session";
 import { eraseOldDetails, retentionPreview } from "../src/retention";
 import { createLoan } from "../src/loans";
 import { InputError } from "../src/inventory";
+import { recentActivity } from "../src/stock";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
+import { REFERENCE_RECENT_ACTIVITY, syntheticLedger } from "./stock-activity-reference";
 
 type Sqlite = ReturnType<typeof migratedD1>["sqlite"];
 const owner = (id: string): Account => ({ accountId: id, sessionId: `S-${id}-self`, username: id, displayName: id, role: "OWNER", mustChangePassword: false });
@@ -269,5 +271,47 @@ describe("R5: a loan's photo survives an answer that never arrived", () => {
     expect(objects.has(stored.k)).toBe(true);
     expect((await createLoan(d1, bucket, { accountId: "O1" }, "ITM-0001", form())).id).toBe(stored.id);
     expect(movements()).toBe(1);
+  });
+});
+
+describe("R7: Stock activity reads only what its page needs, with the same answer", () => {
+  const compare = (sqlite: ReturnType<typeof migratedD1>["sqlite"], d1: D1Database) => async () => {
+    const expected = sqlite.prepare(REFERENCE_RECENT_ACTIVITY).all();
+    const actual = await recentActivity(d1);
+    expect(actual).toEqual(expected);
+    return actual.length;
+  };
+  const ledger = (movements: number, items: number) => {
+    const { sqlite, d1 } = migratedD1();
+    syntheticLedger(sqlite, movements, items);
+    sqlite.prepare("INSERT OR IGNORE INTO staff_accounts(id, username, display_name, password_hash, role) VALUES('ACC-1', 'u.one', 'Person One', 'x', 'STAFF')").run();
+    return { sqlite, same: compare(sqlite, d1) };
+  };
+  const add = (sqlite: ReturnType<typeof migratedD1>["sqlite"], id: string, at: string, item = "PERF-1", imported: string | null = null) =>
+    sqlite.prepare(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, status, imported_from)
+      VALUES(?, ?, 'STOCK_IN', 'IN', ?, 2, 'piece', 2, 'POSTED', ?)`).run(id, at, item, imported);
+
+  it("matches the whole-ledger query on an empty ledger, a short one, and a long one", async () => {
+    expect(await ledger(0, 3).same()).toBe(0);
+    expect(await ledger(40, 3).same()).toBe(38);
+    expect(await ledger(2_000, 37).same()).toBe(100);
+  });
+
+  it("matches it when many rows share the 100th time, inserted out of id order", async () => {
+    const { sqlite, same } = ledger(500, 9);
+    for (let k = 0; k < 150; k += 1) add(sqlite, `TIE-${String(999 - k).padStart(3, "0")}`, "2027-01-01T00:00:00.000Z", `PERF-${1 + (k % 9)}`);
+    expect(await same()).toBe(100);
+  });
+
+  it("matches it when stored times mix offsets, missing milliseconds, a space, non-dates and a bare day number", async () => {
+    const { sqlite, same } = ledger(500, 9);
+    const odd = ["2027-09-01T10:00:00+08:00", "2027-09-01 02:00:00", "2027-09-01T02:00:00Z", "2027-09-01T02:00:00.000Z", "garbage", "", "2027-13-45T00:00:00Z", "2461700.5", "2027-02-01T00:00:00.000+08:00"];
+    odd.forEach((at, k) => { add(sqlite, `ODD-${k}`, at, `PERF-${1 + (k % 9)}`); add(sqlite, `ODD-${k}-again`, at, "PERF-2"); });
+    // Imported rows newer than everything still never appear, yet still count in their item's running total.
+    add(sqlite, "IMP-1", "2028-01-01T00:00:00.000Z", "PERF-2", "legacy sheet");
+    expect(await same()).toBe(100);
+    const sparse = ledger(20, 3);
+    odd.forEach((at, k) => add(sparse.sqlite, `ODD-${k}`, at, `PERF-${1 + (k % 3)}`));
+    expect(await sparse.same()).toBe(19 + odd.length);
   });
 });
