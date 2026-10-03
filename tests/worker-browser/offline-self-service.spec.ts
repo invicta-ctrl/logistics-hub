@@ -13,7 +13,7 @@ const WATER = "ITM-0043";
 const COTTON = "ITM-0063";
 const BASE = `http://127.0.0.1:${process.env.E2E_PORT ?? "8792"}`;
 
-type Item = { name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; storageLocation: string | null;
+type Item = { name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; locationId: string | null;
   reorderThreshold: number; lendingAudience: string; needsReview: boolean; notes: string | null; onHand: number; updatedAt: string | null };
 
 let staff: Page;
@@ -35,9 +35,9 @@ const item = async (id: string) => (await (await staff.request.get(`/api/staff/i
 
 async function setItem(id: string, changes: Partial<Item>): Promise<void> {
   const current = await item(id);
-  const { name, aliases, category, itemType, unit, status, storageLocation, reorderThreshold, lendingAudience, needsReview, notes } = current;
+  const { name, aliases, category, itemType, unit, status, locationId, reorderThreshold, lendingAudience, needsReview, notes } = current;
   const response = await staff.request.patch(`/api/staff/items/${id}`, {
-    data: { name, aliases, category, itemType, unit, status, storageLocation, reorderThreshold, lendingAudience, needsReview, notes, ...changes, updatedAt: current.updatedAt },
+    data: { name, aliases, category, itemType, unit, status, locationId, reorderThreshold, lendingAudience, needsReview, notes, ...changes, updatedAt: current.updatedAt },
     headers: { origin: BASE }
   });
   expect(response.status()).toBe(200);
@@ -116,14 +116,14 @@ test.describe.serial("offline self-service", () => {
   test.beforeAll(async ({ browser }) => {
     staff = await signIn(browser);
     original = { [WATER]: await item(WATER), [COTTON]: await item(COTTON) };
-    await setItem(WATER, { itemType: "Consumable", status: "ACTIVE", needsReview: false, storageLocation: "Pantry shelf" });
+    await setItem(WATER, { itemType: "Consumable", status: "ACTIVE", needsReview: false });
     await setItem(COTTON, { status: "ACTIVE", needsReview: false, lendingAudience: "STUDENTS_AND_USC_STAFF" });
   });
 
   test.afterAll(async () => {
     // Leave the migrated catalog as other tests expect it: nothing public or offered.
     for (const [id, before] of Object.entries(original)) {
-      await setItem(id, { itemType: before.itemType, status: before.status, needsReview: true, lendingAudience: before.lendingAudience, storageLocation: before.storageLocation });
+      await setItem(id, { itemType: before.itemType, status: before.status, needsReview: true, lendingAudience: before.lendingAudience });
     }
     if (paper) await setItem(paper, { status: "INACTIVE" });
     await staff.close();
@@ -144,7 +144,7 @@ test.describe.serial("offline self-service", () => {
     expect(body.items.find((entry) => entry.id === WATER)).toMatchObject({ action: "TAKE" });
     expect(body.items.find((entry) => entry.id === COTTON)).toMatchObject({ action: "BORROW" });
     expect(body.items.every((entry) => entry.action === "TAKE" || entry.action === "BORROW")).toBe(true);
-    expect(Object.keys(body.items[0]!).sort()).toEqual(["action", "aliases", "audience", "available", "category", "id", "location", "name", "photo", "unit"]);
+    expect(Object.keys(body.items[0]!).sort()).toEqual(["action", "aliases", "audience", "available", "category", "id", "location", "locationId", "name", "photo", "unit"]);
   });
 
   test("public pages load fresh from the network, while Self-Service opens from the phone's cache", async ({ browser }) => {
@@ -257,7 +257,7 @@ test.describe.serial("offline self-service", () => {
 
   test("an open-unit item is used, never taken: offline, double-tapped and replayed, stock never moves", async ({ browser }) => {
     const created = await staff.request.post("/api/staff/items", { headers: { origin: BASE }, data: {
-      name: "E2E Printer Paper", category: "SCHOOL SUPPLIES", itemType: "Consumable", consumptionMode: "OPEN_UNIT", unit: "ream", status: "ACTIVE", storageLocation: "Office cabinet",
+      name: "E2E Printer Paper", category: "SCHOOL SUPPLIES", itemType: "Consumable", consumptionMode: "OPEN_UNIT", unit: "ream", status: "ACTIVE", locationId: null,
       reorderThreshold: 0, lendingAudience: "NOT_AVAILABLE_FOR_LENDING", needsReview: false, notes: null, openingQuantity: 5
     } });
     expect(created.status()).toBe(201);

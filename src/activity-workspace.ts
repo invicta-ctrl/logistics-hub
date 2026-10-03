@@ -1,4 +1,5 @@
 import { ACTIVITY_SOURCES, ACTIVITY_TITLES, ACTIVITY_TYPES, STOCK_AREAS, type ActivitySource } from "./catalog-policy";
+import { type Place, inOrder, pathOf, placesOf } from "./location-tree";
 import { signed } from "./movement-form";
 import { type Session, loadSession, shell } from "./staff";
 import { type Html, ApiError, api, emptyState, expired, failure, formatDate, formatDateTime, html, icon, label, live, mount, officeDay, onLeave, preservingFocus, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
@@ -16,6 +17,7 @@ type Entry = {
 };
 type Page = { events: Entry[]; nextCursor: string | null };
 type Picker = { items: Array<{ id: string; name: string }>; locations: string[] };
+type InventoryAnswer = { items: Array<{ id: string; name: string }>; locations: Place[] };
 
 /** The API's filters, in URL order. Search and source sit on the page; the rest live in the filter sheet. */
 const KEYS = ["q", "source", "type", "actor", "item", "from", "to", "stockArea", "location", "changed", "attention"] as const;
@@ -86,7 +88,7 @@ export async function activityWorkspace(): Promise<void> {
     if (key === "from") return `From ${formatDate(value)}`;
     if (key === "to") return `To ${formatDate(value)}`;
     if (key === "stockArea") return `Stock area: ${label(value)}`;
-    if (key === "location") return `Location: ${value}`;
+    if (key === "location") return `Place: ${value}`;
     if (key === "changed") return CHANGED[value] ?? value;
     return "Needs attention only";
   }
@@ -287,7 +289,7 @@ export async function activityWorkspace(): Promise<void> {
         <div class="field"><label for="f-stockArea">Stock area</label><select id="f-stockArea" name="stockArea">${option("", "All areas")}${STOCK_AREAS.map((area) => option(area, label(area), filters.stockArea))}</select></div>
         <div class="field"><label for="f-changed">Stock change</label><select id="f-changed" name="changed">${option("", "Any")}${Object.entries(CHANGED).map(([value, text]) => option(value, text, filters.changed))}</select></div>
       </div>
-      <div class="field"><label for="f-location">Location</label><input id="f-location" name="location" list="activity-locations" maxlength="80" autocomplete="off" placeholder="Any location" value="${filters.location ?? ""}" /><datalist id="activity-locations"></datalist></div>
+      <div class="field"><label for="f-location">Place</label><input id="f-location" name="location" list="activity-locations" maxlength="300" autocomplete="off" placeholder="Any place, or everything inside one" value="${filters.location ?? ""}" /><datalist id="activity-locations"></datalist></div>
       <label class="checkbox"><input type="checkbox" name="attention" ${filters.attention ? html`checked` : ""} /><span>Needs attention only</span></label>
       <div class="form-actions form-actions--sticky"><button type="button" class="button button--ghost" data-remove="all">Clear filters</button><button type="button" class="button button--primary" data-close>Show results</button></div>
     </form>`;
@@ -332,7 +334,7 @@ export async function activityWorkspace(): Promise<void> {
     mount(sheetElement, sheetContent("Activity", "Filters", html``));
     panel.open();
     showFilters();
-    if (!picker) void api<Picker>("/api/staff/inventory").then((inventory) => { picker = { items: inventory.items, locations: inventory.locations }; fillPickers(); }).catch(() => { /* the pickers stay empty; typing an ID still works */ });
+    if (!picker) void api<InventoryAnswer>("/api/staff/inventory").then((inventory) => { const known = placesOf(inventory.locations); picker = { items: inventory.items, locations: inOrder(known).map(({ place }) => pathOf(known, place.id)!) }; fillPickers(); }).catch(() => { /* the pickers stay empty; typing an ID still works */ });
     sheetElement.querySelector<HTMLElement>("#f-type")!.focus();
   }
 
