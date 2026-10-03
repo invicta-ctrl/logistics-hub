@@ -40,14 +40,24 @@ export const forgetScans = (): void => scans.clear();
 /* ---------- The card, large ---------- */
 
 const MAX_ZOOM = 4;
-/** The directory's own card is ID-1 (ISO/IEC 7810, 85.60 × 53.98 mm), upright, like the USC ID and a trading card. */
-export const CARD_RATIO = 53.98 / 85.6;
+/** The directory's own card has the shape of the USC ID (1545 × 2000), so drawn cards and scanned ones line up on the wall. */
+export const CARD_RATIO = 1545 / 2000;
+/** The details are read from a taller card (ID-1 upright), which holds them on a phone without scrolling. */
+const DETAILS_RATIO = 53.98 / 85.6;
 
-/** What the card shows: the person's details, or a side of their official ID scan. */
-export type View = "details" | Side;
-/** What a face can hold: a view, or the directory card's own front (the tile), which the card shows while it flies. */
+/** What the card shows: the person's USC ID, front and back together (Earl, 2026-10-03), or their details. */
+export type View = "profile" | "details";
+/** What a face can hold: a view, or the wall's own picture of the card (the tile), which the card shows while it flies. */
 type Content = View | "cover";
-const VIEWS: View[] = ["details", "front", "back"];
+const VIEWS: View[] = ["profile", "details"];
+/** Front and back of a card together: side by side when they stand upright, one above the other when they lie flat. */
+const pairShape = (card: Card) => {
+  const upright = card.front.height >= card.front.width;
+  const gap = 0.04;
+  return upright
+    ? { stacked: false, ratio: (card.front.width / card.front.height + card.back.width / card.back.height) * (1 + gap / 2) }
+    : { stacked: true, ratio: 1 / ((card.front.height / card.front.width + card.back.height / card.back.width) * (1 + gap / 2)) };
+};
 
 export type Opening = {
   /** What it opens on. */
@@ -56,23 +66,23 @@ export type Opening = {
   cover: () => HTMLElement;
   /** The person's details for the reverse. Links in it marked data-leave close the card and go where they point. */
   details: HTMLElement;
-  /** The scans: null when none are on file; a function loads them the first time a side is asked for, so opening a card fetches no scan. */
+  /** The scans: null when none are on file; a function loads them the first time the profile is shown. */
   card: Card | null | (() => Promise<Card | null>);
   /** Whether a USC ID is on file, so the sides can be offered before the scans are loaded. */
   hasId: boolean;
-  /** The tile the card flies from and back into for a view, if any; its data-shows says which face it is ("cover", "front" or "back"). */
+  /** The tile the card flies from and back into for a view, if any; its data-shows says which face it is ("cover" or a view). */
   tileFor: (view: View) => HTMLElement | null;
 };
 
 /**
  * A person's card, large, over everything, in 3D (src/card-motion.ts). It flies out of its tile turning, lands on what was asked
  * for, leans toward the pointer or a finger under a glare and a holographic sheen, presses in when held, and turns over on a
- * spring between the person's details and the two sides of their official ID: each turn brings the next view onto the face
- * that is underneath, so one card holds all three. Closing flies it back into its tile, turning to the face the tile shows. It
- * rests flat and unlit, lies still while a scan is zoomed, and does none of this under reduced motion. A scan zooms up to 4×
- * with the wheel, a pinch, a double-click or + and −, and pans by dragging or with the arrow keys. Scans are fetched only when
- * a side is turned to, and that opening is recorded by the Worker. A modal dialog gives Escape, a focus trap and an inert
- * page; Back closes it (it holds a history entry); focus returns to its opener.
+ * spring between their profile (both sides of their USC ID together) and their details: each turn brings the other view onto
+ * the face underneath. Closing flies it back into its tile, turning to the face the tile shows. It rests flat and unlit, lies
+ * still while zoomed, and does none of this under reduced motion. The profile zooms up to 4× with the wheel, a pinch, a
+ * double-click or + and −, and pans by dragging or with the arrow keys. The scans are fetched when the profile is shown, and
+ * that opening is recorded by the Worker. A modal dialog gives Escape, a focus trap and an inert page; Back closes it (it
+ * holds a history entry); focus returns to its opener.
  */
 export async function openCard(person: Who, opening: Opening): Promise<void> {
   if (document.querySelector("dialog.id-viewer")) return;
@@ -84,8 +94,8 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   const face = (which: "front" | "back") => html`<div class="id-card__face id-card__face--${which}"><div class="id-card__slot" data-slot></div><span class="id-card__shine" aria-hidden="true"></span><span class="id-card__glare" aria-hidden="true"></span></div>`;
   mount(dialog, html`<header class="id-viewer__bar">
       <p class="id-viewer__title"><strong>${person.name}</strong><span>${department} · USC ID</span></p>
-      <div class="id-viewer__sides" role="group" aria-label="Side of the card" ${opening.hasId ? "" : html`hidden`}>
-        <button type="button" data-view="details">Details</button><button type="button" data-view="front">Front</button><button type="button" data-view="back">Back</button>
+      <div class="id-viewer__sides" role="group" aria-label="View" ${opening.hasId ? "" : html`hidden`}>
+        <button type="button" data-view="profile">Profile</button><button type="button" data-view="details">Details</button>
       </div>
       <div class="id-viewer__zoom" role="group" aria-label="Zoom">
         <button type="button" class="icon-button" data-zoom="out" aria-label="Zoom out"><span aria-hidden="true">−</span></button>
@@ -96,7 +106,7 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
       <button class="icon-button id-viewer__close" type="button" data-close aria-label="Close card">${icon("close")}</button>
     </header>
     <div class="id-viewer__stage" data-stage><div class="id-viewer__pan" data-pan><div class="id-card__flight" data-flight><div class="id-card" data-card>${face("front")}${face("back")}</div></div></div></div>
-    <p class="id-viewer__hint">${reducedMotion() ? "" : "Move over the card or drag it to tilt it · "}${opening.hasId ? "D, F and B turn it to the details, the front and the back of the ID · + and − zoom a side · " : ""}Esc closes.${opening.hasId ? " Opening a side of a USC ID is recorded in Activity." : ""}</p>`);
+    <p class="id-viewer__hint">${reducedMotion() ? "" : "Move over the card or drag it to tilt it · "}${opening.hasId ? "P and D turn it between the profile and the details · + and − zoom the profile · " : ""}Esc closes.${opening.hasId ? " Opening a USC ID is recorded in Activity." : ""}</p>`);
   document.body.append(dialog);
   const stage = dialog.querySelector<HTMLElement>("[data-stage]")!;
   const pan = dialog.querySelector<HTMLElement>("[data-pan]")!;
@@ -111,27 +121,28 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   let card: Card | null = typeof opening.card === "function" ? null : opening.card;
   let cardLoad: Promise<Card | null> | null = typeof opening.card === "function" ? null : Promise.resolve(card);
   const loadCard = () => cardLoad ??= (opening.card as () => Promise<Card | null>)().then((loaded) => (card = loaded), (error: unknown) => { cardLoad = null; throw error; });
-  const scanFace = (side: Side) => {
-    const holder = document.createElement("div");
-    holder.className = "id-card__scan is-loading";
-    const image = Object.assign(document.createElement("img"), { alt: `${side === "front" ? "Front" : "Back"} of ${person.name}'s USC ID`, draggable: false });
-    image.dataset.face = side;
-    holder.append(image);
-    return { holder, image, ready: null as Promise<void> | null };
-  };
-  const sides = { front: scanFace("front"), back: scanFace("back") };
+  // The profile: both sides of the USC ID together, loaded once, the first time it is shown.
+  const pair = document.createElement("div");
+  pair.className = "id-card__pair is-loading";
+  const images = { front: document.createElement("img"), back: document.createElement("img") };
+  for (const side of ["front", "back"] as const) {
+    Object.assign(images[side], { alt: `${side === "front" ? "Front" : "Back"} of ${person.name}'s USC ID`, draggable: false });
+    images[side].dataset.face = side;
+    pair.append(images[side]);
+  }
   const cover = opening.cover();
-  const element = (content: Content) => content === "details" ? opening.details : content === "cover" ? cover : sides[content].holder;
-  /** Fetches a side's scan once (the Worker records the opening) and resolves when it can be drawn. */
-  const loadSide = (side: Side) => sides[side].ready ??= loadCard().then((loaded) => {
+  const element = (content: Content) => content === "details" ? opening.details : content === "cover" ? cover : pair;
+  let profileReady: Promise<void> | null = null;
+  /** Fetches both scans once (the Worker records the opening) and resolves when they can be drawn. */
+  const loadProfile = () => profileReady ??= loadCard().then(async (loaded) => {
     if (!loaded) throw new Error("No USC ID is on file.");
-    return scan(person.id, loaded.mediaId, side);
-  }).then(async (url) => {
-    sides[side].image.src = url;
-    await sides[side].image.decode().catch(() => undefined);
-    sides[side].holder.classList.remove("is-loading");
-  }, (error: unknown) => { sides[side].ready = null; throw error; });
-  const ratio = (content: Content) => content === "front" || content === "back" ? (card ? card[content].width / card[content].height : CARD_RATIO) : CARD_RATIO;
+    pair.classList.toggle("is-stacked", pairShape(loaded).stacked);
+    const urls = await Promise.all((["front", "back"] as const).map((side) => scan(person.id, loaded.mediaId, side)));
+    (["front", "back"] as const).forEach((side, index) => { images[side].src = urls[index]!; });
+    await Promise.all(Object.values(images).map((image) => image.decode().catch(() => undefined)));
+    pair.classList.remove("is-loading");
+  }).catch((error: unknown) => { profileReady = null; throw error; });
+  const ratio = (content: Content) => content === "profile" && card ? pairShape(card).ratio : content === "details" ? DETAILS_RATIO : CARD_RATIO;
 
   // The card's turn, in degrees: always a multiple of 180, so one face is up.
   let angle = 0;
@@ -155,7 +166,7 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   // While the card flies in or out it takes no other input.
   let flying = false;
   let closing = false;
-  const zoomable = () => current !== "details";
+  const zoomable = () => current === "profile";
 
   const clamp = () => {
     // The flight box is never tilted, so it measures the card as laid out (and zoomed).
@@ -196,14 +207,14 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   };
 
   let asked = 0;
-  /** Turns the card to `next`: forward through Details, Front, Back turns it one way, back the other. */
+  /** Turns the card to `next`: to the details one way, back to the profile the other. */
   const show = async (next: View, animate = true) => {
     if (next === current || closing) return;
     const ask = ++asked;
-    if (next !== "details") {
+    if (next === "profile") {
       try {
-        // A side appears once it can be drawn, or after a short wait with its loading state.
-        await Promise.race([loadSide(next), new Promise((resolve) => window.setTimeout(resolve, 600))]);
+        // The profile appears once it can be drawn, or after a short wait with its loading state.
+        await Promise.race([loadProfile(), new Promise((resolve) => window.setTimeout(resolve, 600))]);
       } catch (error) { toast(failure(error), "error"); return; }
       if (ask !== asked || closing) return;
     }
@@ -227,12 +238,11 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   const tile = opening.tileFor(current);
   const leaves: Content = (tile?.dataset.shows as Content | undefined) ?? current;
   place(current, faces[0]);
-  const other: Content = leaves !== current ? leaves : current === "details" ? "cover" : current === "front" ? "back" : "front";
-  if (other === "front" || other === "back") { if (opening.hasId) void loadSide(other).catch(() => undefined); }
+  const other: Content = leaves !== current ? leaves : current === "details" ? "cover" : "details";
   place(other, faces[1]);
-  if (current !== "details") {
+  if (current === "profile") {
     try { await loadCard(); } catch (error) { toast(failure(error), "error"); dialog.remove(); return; }
-    await Promise.race([loadSide(current).catch((error: unknown) => toast(failure(error), "error")), new Promise((resolve) => window.setTimeout(resolve, 600))]);
+    await Promise.race([loadProfile().catch((error: unknown) => toast(failure(error), "error")), new Promise((resolve) => window.setTimeout(resolve, 600))]);
   }
   flight.style.setProperty("--ratio", String(ratio(current)));
   motion.turn(0, false);
@@ -308,7 +318,7 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
     const moves: Record<string, [number, number]> = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
     const key = event.key.toLowerCase();
     const offered = opening.hasId ? VIEWS : (["details"] as View[]);
-    if (opening.hasId && (key === "d" || key === "f" || key === "b")) void show(key === "d" ? "details" : key === "f" ? "front" : "back");
+    if (opening.hasId && (key === "p" || key === "d")) void show(key === "p" ? "profile" : "details");
     else if (event.key === "+" || event.key === "=") zoomTo(view.scale * 1.5);
     else if (event.key === "-") zoomTo(view.scale / 1.5);
     else if (event.key === "0") zoomTo(1);
@@ -402,6 +412,66 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   });
 }
 
+/* ---------- The wall's thumbnail and the profile picture ---------- */
+
+/**
+ * Where the photo sits on the back of the USC ID (2026–27 design, 1545 × 2000 px), as fractions of the card: measured on
+ * the issued cards. A fixed place on a fixed design, not a search for a face. A back of another shape gets no profile picture.
+ */
+export const PHOTO_AREA = { x: 40 / 1545, y: 710 / 2000, w: 394 / 1545, h: 396 / 2000 } as const;
+const USC_ID_RATIO = 1545 / 2000;
+const THUMB_EDGE = 720;
+const FACE_EDGE = 360;
+
+function cropJpeg(bitmap: ImageBitmap, area: typeof PHOTO_AREA, edge: number): Promise<Blob> {
+  const [sx, sy, sw, sh] = [area.x * bitmap.width, area.y * bitmap.height, area.w * bitmap.width, area.h * bitmap.height];
+  const scale = Math.min(1, edge / Math.max(sw, sh));
+  const canvas = Object.assign(document.createElement("canvas"), { width: Math.round(sw * scale), height: Math.round(sh * scale) });
+  canvas.getContext("2d")!.drawImage(bitmap, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("encode")), "image/jpeg", 0.86));
+}
+
+/** The front small, for the directory wall, and the photo cut from the back, for the profile picture (when the back is a USC ID). */
+export async function deriveImages(front: Blob, back: Blob): Promise<{ thumb: Blob; face: Blob | null }> {
+  const [frontBitmap, backBitmap] = await Promise.all([createImageBitmap(front), createImageBitmap(back)]);
+  try {
+    const usc = Math.abs(backBitmap.width / backBitmap.height - USC_ID_RATIO) < 0.03;
+    return { thumb: await jpegOf(frontBitmap, THUMB_EDGE, 0.82), face: usc ? await cropJpeg(backBitmap, PHOTO_AREA, FACE_EDGE) : null };
+  } finally { frontBitmap.close(); backBitmap.close(); }
+}
+
+/** Both scans as the Worker stores them, with the thumbnail and profile picture made from them. */
+async function addScans(form: FormData, front: File, back: File): Promise<void> {
+  const [prepared, preparedBack] = [await prepareScan(front), await prepareScan(back)];
+  form.set("front", prepared.blob, "front.jpg");
+  form.set("back", preparedBack.blob, "back.jpg");
+  const derived = await deriveImages(prepared.blob, preparedBack.blob);
+  form.set("thumb", derived.thumb, "thumb.jpg");
+  if (derived.face) form.set("face", derived.face, "face.jpg");
+}
+
+/**
+ * Makes the missing thumbnails and profile pictures (owner): each card is opened once (recorded, as any opening), the two
+ * small images are made here and stored beside the scans. Stops at the first refusal, so it can be run again later.
+ */
+export async function makeMissingImages(missing: Array<{ id: string; mediaId: string }>, progress: (done: number) => void): Promise<number> {
+  let done = 0;
+  for (const card of missing) {
+    const side = (which: Side) => fetch(`/api/staff/admin/directory/${card.id}/id/${which}?derive=1`, { credentials: "same-origin", cache: "no-store" }).then(async (response) => {
+      if (!response.ok) throw new ApiError(response.status, response.status === 429 ? "Too many ID scans opened in a short time. Wait a few minutes, then continue." : "A scan could not be opened.");
+      return response.blob();
+    });
+    const derived = await deriveImages(await side("front"), await side("back"));
+    const form = new FormData();
+    form.set("expected", card.mediaId);
+    form.set("thumb", derived.thumb, "thumb.jpg");
+    if (derived.face) form.set("face", derived.face, "face.jpg");
+    await api(`/api/staff/admin/directory/${card.id}/id/derived`, { method: "PUT", body: form });
+    progress(++done);
+  }
+  return done;
+}
+
 /* ---------- Preparing a scan ---------- */
 
 const SCAN_EDGE = 2000;
@@ -458,10 +528,9 @@ export function cardForm(host: HTMLElement, person: Who, expected: string | null
     draw(true);
     try {
       const form = new FormData();
-      for (const which of ["front", "back"] as const) {
-        form.set(which, (await prepareScan(chosen[which]!.file)).blob, `${which}.jpg`);
-        form.set(which === "front" ? "sourceFront" : "sourceBack", chosen[which]!.file.name);
-      }
+      await addScans(form, chosen.front.file, chosen.back.file);
+      form.set("sourceFront", chosen.front.file.name);
+      form.set("sourceBack", chosen.back.file.name);
       form.set("expected", expected ?? "");
       await api(`/api/staff/admin/directory/${person.id}/id`, { method: "PUT", body: form });
       toast(expected ? "ID scans replaced." : "ID scans added.");
@@ -567,11 +636,9 @@ export function importArchive(host: HTMLElement, existing: Existing, done: () =>
         form.set("identity", entry.pair.identity);
         form.set("department", entry.pair.department);
         form.set("officer", entry.pair.officer ? "1" : "0");
-        for (const which of ["front", "back"] as const) {
-          const source = entry.pair[which];
-          form.set(which, (await prepareScan(files.get(source.path)!)).blob, `${which}.jpg`);
-          form.set(which === "front" ? "sourceFront" : "sourceBack", source.path);
-        }
+        await addScans(form, files.get(entry.pair.front.path)!, files.get(entry.pair.back.path)!);
+        form.set("sourceFront", entry.pair.front.path);
+        form.set("sourceBack", entry.pair.back.path);
         const result = await api<{ status: "imported" | "exists" }>("/api/staff/admin/directory/import", { method: "POST", body: form });
         entry.status = result.status;
       } catch (error) {

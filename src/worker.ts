@@ -7,7 +7,7 @@ import { createSession, hashPassword, readCookie, verifyPassword, verifySession 
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { eraseOldDetails, retentionPreview } from "./retention";
 import { selfServiceState, setSelfService } from "./settings";
-import { MAX_SCAN_BODY, createLinkedAccount, createPerson, directory, idScan, importPair, linkAccount, linkableAccounts, linkedPerson, personAccess, personActivity, personDetail, personLoans, personUsage, putIdCard, removeIdCard, unlinkAccount, updatePerson } from "./staff-directory";
+import { MAX_SCAN_BODY, createLinkedAccount, idDerived, missingDerived, putDerived, createPerson, directory, idScan, importPair, linkAccount, linkableAccounts, linkedPerson, personAccess, personActivity, personDetail, personLoans, personUsage, putIdCard, removeIdCard, unlinkAccount, updatePerson } from "./staff-directory";
 import { openReorder, stockOverview, updateReorder } from "./stock";
 import { heldPhoto, networkOf, readBatch, resolveReview, reviewDecisions, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
 
@@ -49,7 +49,7 @@ const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|phot
 const MAX_SYNC_BYTES = 12 * 1024 * 1024;
 /** An item photo upload is a 1 MB and a 150 KB JPEG plus form framing. */
 const MAX_PHOTO_BODY = 1_300_000;
-const PERSON_PATH = /^\/api\/staff\/admin\/directory\/(PER-[0-9a-f-]{36})(\/account|\/account\/new|\/access|\/usage|\/loans|\/activity|\/id|\/id\/front|\/id\/back)?$/;
+const PERSON_PATH = /^\/api\/staff\/admin\/directory\/(PER-[0-9a-f-]{36})(\/account|\/account\/new|\/access|\/usage|\/loans|\/activity|\/id|\/id\/front|\/id\/back|\/id\/thumb|\/id\/face|\/id\/derived)?$/;
 const ACCOUNT_PATH = /^\/api\/staff\/admin\/accounts\/(ACC-[A-Za-z0-9-]{1,60})(\/password|\/sessions\/revoke)?$/;
 // Paths still usable while an account must replace a password someone else set.
 const PASSWORD_CHANGE_ALLOWED = new Set(["/api/staff/session", "/api/staff/me/password"]);
@@ -271,6 +271,7 @@ async function staffDirectory(request: Request, env: Env, account: Account, url:
   if (path === "/api/staff/admin/directory" && method === "GET") return json(await directory(env.DB));
   if (path === "/api/staff/admin/directory" && method === "POST") return json(await createPerson(env.DB, account, await body()), 201);
   if (path === "/api/staff/admin/directory/accounts" && method === "GET") return json(await linkableAccounts(env.DB, account));
+  if (path === "/api/staff/admin/directory/derived" && method === "GET") return json(await missingDerived(env.DB, env.STAFF_IDS, account));
   if (path === "/api/staff/admin/directory/import" && method === "POST") return json(await importPair(env.DB, env.STAFF_IDS, account, await scans()));
   const match = PERSON_PATH.exec(path);
   const [, id, part] = match ?? [];
@@ -285,8 +286,10 @@ async function staffDirectory(request: Request, env: Env, account: Account, url:
   if (part === "/activity" && method === "GET") return json(await personActivity(env.DB, id!, url.searchParams.get("cursor")));
   if (part === "/id" && method === "PUT") return json(await putIdCard(env.DB, env.STAFF_IDS, account, id!, await scans()));
   if (part === "/id" && method === "DELETE") return json(await removeIdCard(env.DB, env.STAFF_IDS, account, id!, url.searchParams.get("expected")));
-  if ((part === "/id/front" || part === "/id/back") && method === "GET") return idScan(env.DB, env.STAFF_IDS, account, id!, part.slice(4));
-  const known = match || ["/api/staff/admin/directory", "/api/staff/admin/directory/accounts", "/api/staff/admin/directory/import"].includes(path);
+  if ((part === "/id/front" || part === "/id/back") && method === "GET") return idScan(env.DB, env.STAFF_IDS, account, id!, part.slice(4), url.searchParams.get("derive") === "1");
+  if ((part === "/id/thumb" || part === "/id/face") && method === "GET") return idDerived(env.DB, env.STAFF_IDS, account, id!, part.slice(4));
+  if (part === "/id/derived" && method === "PUT") return json(await putDerived(env.DB, env.STAFF_IDS, account, id!, await scans()));
+  const known = match || ["/api/staff/admin/directory", "/api/staff/admin/directory/accounts", "/api/staff/admin/directory/derived", "/api/staff/admin/directory/import"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 
