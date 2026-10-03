@@ -195,8 +195,17 @@ test.describe("owner administration", () => {
     await page.getByRole("button", { name: "Import 1 pair" }).click();
     await expect(page.getByText("Finished: 1 pair imported.")).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
+    // Rivera's card on the wall opens on their details without fetching a scan; its Profile link goes to the profile.
+    let scanned = false;
+    page.on("request", (request) => { if (/\/id\/(front|back)$/.test(request.url())) scanned = true; });
     await page.getByRole("link", { name: /Rivera/ }).click();
-    await expect(page.getByRole("heading", { name: "Rivera" })).toBeVisible();
+    const opened = page.getByRole("dialog", { name: "USC ID of Rivera" });
+    await expect(opened.getByRole("heading", { name: "Rivera" })).toBeVisible();
+    await expect(opened.getByRole("button", { name: "Details" })).toHaveAttribute("aria-pressed", "true");
+    expect(scanned).toBe(false);
+    await opened.getByRole("link", { name: "Profile" }).click();
+    await expect(opened).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Rivera", level: 1 })).toBeVisible();
     const scan = page.waitForResponse((response) => /\/id\/front$/.test(response.url()));
     await page.getByRole("tab", { name: "USC ID" }).click();
     const response = await scan;
