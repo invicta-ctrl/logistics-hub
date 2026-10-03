@@ -702,6 +702,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .secret__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .secret code { padding: var(--space-2) var(--space-3); border-radius: var(--radius); background: var(--surface); font: 600 var(--text-md)/1.4 var(--mono); letter-spacing: .02em; word-break: break-all; user-select: all; }
 .secret__note { color: var(--text-2); font-size: var(--text-sm); }
+.secret + .form-actions { margin-top: var(--space-3); }
 
 /* ==========================================================================
    Quantity editor — the on-hand figure is the input
@@ -1125,6 +1126,17 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .link-card { display: flex; align-items: center; gap: var(--space-3); }
 .link-card .icon { color: var(--text-3); }
 .link-form { display: grid; max-width: 30rem; gap: var(--space-3); }
+/* A person's sign-in and how it is used (Staff Directory → Profile). */
+.link-card .tag { margin-left: auto; }
+.access-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr)); gap: var(--space-2); margin: var(--space-4) 0; }
+.access-facts > div { padding: var(--space-3); border-radius: var(--radius); background: var(--subtle); }
+.access-facts dt { color: var(--text-2); font-size: var(--text-sm); font-weight: 500; }
+.access-facts dd { margin: var(--space-1) 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.panel .section-label { margin-top: var(--space-5); }
+.access-log__open { color: var(--ok); font-weight: 600; }
+.link-existing { margin-top: var(--space-4); border-top: 1px solid var(--line); }
+.link-existing summary { display: flex; min-height: 2.75rem; align-items: center; color: var(--text-2); font-size: var(--text-sm); font-weight: 500; cursor: pointer; }
+.link-existing summary:hover { color: var(--text); }
 /* The holographic foil of the ID laminate, for the tiles and the viewer (which lives outside the page, in the top layer). */
 .id-pair, .id-viewer { --holo-foil: repeating-linear-gradient(110deg, hsl(2 100% 73%) 0%, hsl(53 100% 69%) 5%, hsl(93 100% 69%) 10%, hsl(176 100% 76%) 15%, hsl(228 100% 74%) 20%, hsl(283 100% 76%) 25%, hsl(2 100% 73%) 30%); }
 .id-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
