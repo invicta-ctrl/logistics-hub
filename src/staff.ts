@@ -63,7 +63,7 @@ const SECTIONS: ReadonlyArray<{ id: Section; href: string; text: string; icon: I
   { id: "stock", href: "/staff/stock", text: "Stock", icon: "stack" },
   { id: "loans", href: "/staff/loans", text: "Loans", icon: "swap" },
   { id: "self-service", href: "/staff/self-service", text: "Self-Service", icon: "phone" },
-  { id: "activity", href: "/staff/activity", text: "Activity", icon: "clock", more: true },
+  { id: "activity", href: "/staff/activity", text: "Activity", icon: "history", more: true },
   { id: "admin", href: "/staff/admin", text: "Administration", icon: "shield", more: true }
 ];
 
@@ -113,7 +113,7 @@ export function shell(session: Session, section: Section, main: Html): void {
       ${overflow.length ? html`<ul class="menu__list menu__list--more" aria-label="More sections">${overflow.map((entry) => html`<li><a class="menu__item" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}${entry.text}</a></li>`)}</ul>` : ""}
       <ul class="menu__list">
         <li><a class="menu__item" href="/staff/account" data-route ${current("account")}>${icon("user")}My account</a></li>
-        <li><a class="menu__item" href="/lending" target="_blank" rel="noopener">${icon("external")}Public Lending Hub<span class="visually-hidden"> (opens in a new tab)</span></a></li>
+        <li><a class="menu__item" href="/lending" target="_blank" rel="noopener">${icon("globe")}Public Lending Hub<span class="visually-hidden"> (opens in a new tab)</span><span class="menu__aside">${icon("external")}</span></a></li>
         <li><button class="menu__item" type="button" id="staff-logout">${icon("signOut")}Sign out</button></li>
       </ul>
     </div>

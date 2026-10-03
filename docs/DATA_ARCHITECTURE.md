@@ -21,11 +21,13 @@ Extend these concepts. Do not build a renamed parallel system beside one of them
 | Phone Self-Service | `self_service_events` | The idempotency record and the staff review queue. What an event changed lives in `inventory_movements` / `loans`. A resolved record is final except for retention erasure (0019 trigger). |
 | Open units | `open_units` | Which outer units are open. Never a quantity; database triggers keep open units ≤ on hand (0017). |
 | Restock plan | `reorders` | A plan, never stock. At most one open entry per item (partial unique index). |
-| People | `staff_users` (directory), `staff_accounts` (sign-in), `staff_sessions`, `owner_recovery_keys`, `auth_throttle` | Directory identity and login identity are separate on purpose (0009). An account links to a directory person through `staff_accounts.staff_user_id`; links are explicit, never inferred from names. |
+| Sign-in | `staff_accounts`, `staff_sessions`, `owner_recovery_keys`, `auth_throttle` | Login identity only. Who a person is in the USC (department, position, ID) is directory identity and stays separate on purpose (0009); a link between the two is explicit and audited, never inferred from names or photos. |
 | Accountability | `audit_log` | Who changed what, for catalog, accounts, settings and retention. Movements, loans and phone events are their own history; the Activity feed reads all of them (`src/activity.ts`). |
 | Settings | `system_settings` | One row per setting, each change audited. Add a key with a CHECK on its allowed values. |
 | Item photos | `item_media` | One primary photo per item; the row is the only reference to its R2 objects. |
-| Legacy evidence | `reservations`, `legacy_access_accounts` | Migrated as found and kept for reconciliation. Live code does not read them; nothing new should write them. |
+| Legacy evidence and placeholders | `reservations`, `legacy_access_accounts`, `staff_users` (0001 directory placeholder, written only by the private roster seed script), `staff_accounts.staff_user_id` | Kept as found. Live code does not read them; nothing new should write them. |
+
+A slice that supersedes a placeholder (V1.3's staff directory and `staff_users`, say) states so in its migration and spec, and leaves only one live version of the concept: either it extends the placeholder, or it declares it retired so that nothing reads or writes it again (the private roster seed script included), never two tables that both claim to be the directory.
 
 ## Integrity is enforced by the database
 

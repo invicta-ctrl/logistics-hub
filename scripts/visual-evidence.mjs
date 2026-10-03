@@ -9,7 +9,8 @@
 // ref, so before and after compare) and item-photos (item photos: list, profile, viewer, upload preview, missing
 // photo, and list weight/loading with 300 photos; runs only where the item photo panel exists) and public-photos (the
 // public Lending Hub and the phone Self-Service with item photos: lists, the item sheet and the narrowest phone; runs only
-// where the public thumbnail route exists). Its pictures are drawn here in the browser, so no image file enters the repository.
+// where the public thumbnail route exists) and shell (the staff top/bottom bar and its menus at 320-1440 px, short screens,
+// 125/150% zoom and large text, with measured checks; works on any ref). Its pictures are drawn here in the browser, so no image file enters the repository.
 //
 // Screenshots are JPEG so they are small enough to commit; inspect them before you do.
 import { spawn, spawnSync } from "node:child_process";
@@ -284,6 +285,82 @@ async function publicPhotoScenes(browser, url, dir) {
   return timings;
 }
 
+/**
+ * The staff shell across the widths, zooms and text sizes people use: the top or bottom bar, then the account menu (or, on
+ * phones, More). Zoom is a narrower CSS viewport at a higher pixel ratio, as a browser zooms; large text raises the root size.
+ * Besides pictures it measures what review keeps catching by eye: squashed icons, clipped labels, labels run together, overlap between the sections
+ * and the account control, and icon-only controls without a name.
+ */
+async function shellScenes(browser, url, dir) {
+  const shot = (page, name) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80 });
+  const first = await signIn(browser, url, "owner.demo", SIZES.desktop);
+  const state = await first.context.storageState();
+  await first.context.close();
+  const scenes = [
+    ["320", 320, 640, 2], ["375", 375, 667, 2], ["414", 414, 896, 2], ["768", 768, 1024, 2], ["1024", 1024, 768, 1], ["1440", 1440, 900, 1],
+    ["short-phone", 667, 375, 2], ["short-laptop", 1280, 560, 1],
+    ["zoom125-1440", 1152, 720, 1.25], ["zoom150-1440", 960, 600, 1.5], ["zoom150-768", 512, 683, 3],
+    ["text150-320", 320, 640, 2, "150%"], ["text150-375", 375, 667, 2, "150%"], ["text150-1024", 1024, 768, 1, "150%"], ["text200-320", 320, 640, 2, "200%"]
+  ];
+  const checks = {};
+  for (const [name, width, height, scale, text] of scenes) {
+    const { context, page } = await resume(browser, state, [width, height, scale]);
+    if (text) await page.addInitScript((size) => document.addEventListener("DOMContentLoaded", () => document.documentElement.style.setProperty("font-size", size, "important")), text);
+    await page.goto(`${url}/staff/items`);
+    await page.waitForSelector("tbody tr");
+    await page.waitForLoadState("networkidle");
+    await shot(page, `shell-${name}`);
+    const measure = () => page.evaluate(() => {
+      const visible = (element) => { const box = element.getBoundingClientRect(); return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== "hidden"; };
+      const label = (element) => `${element.closest("[class]")?.className.toString().split(" ")[0]}:${(element.closest("a, button")?.textContent ?? "").trim().slice(0, 20)}`;
+      const icons = [...document.querySelectorAll("svg.icon")].filter(visible);
+      const squashed = icons.filter((svg) => { const box = svg.getBoundingClientRect(); return Math.abs(box.width - box.height) > 0.5; }).map(label);
+      const clipped = [...document.querySelectorAll(".app-nav__text, .account__name, .menu__item, .app-bar__title")].filter(visible)
+        .filter((element) => element.clientWidth > 1) // visually hidden on purpose
+        .filter((element) => {
+          // The laid-out text, not the box: an ellipsis hides overflow that scrollWidth does not always report.
+          const box = element.getBoundingClientRect();
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+          const lines = [];
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            if (node.parentElement.closest(".visually-hidden")) continue;
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            lines.push(...range.getClientRects());
+          }
+          return element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1
+            || lines.some((line) => line.width > 0 && (line.left < box.left - 0.5 || line.right > box.right + 0.5));
+        }).map((element) => `${element.className}:${element.textContent.trim().slice(0, 20)}`);
+      const account = document.querySelector(".account")?.getBoundingClientRect();
+      const overlaps = account ? [...document.querySelectorAll(".app-nav__link, .app-bar__brand")].filter(visible).filter((element) => {
+        const box = element.getBoundingClientRect();
+        return box.right > account.left + 0.5 && box.left < account.right - 0.5 && box.bottom > account.top + 0.5 && box.top < account.bottom - 0.5;
+      }).map((element) => element.textContent.trim().slice(0, 20)) : ["no account control"];
+      const labels = [...document.querySelectorAll(".app-nav__text")].filter(visible).map((text) => {
+        const range = document.createRange();
+        range.selectNodeContents(text.firstChild);
+        const lines = [...range.getClientRects()];
+        const box = text.getBoundingClientRect(); // what an ellipsis leaves visible
+        return { name: text.firstChild.textContent, left: Math.max(box.left, Math.min(...lines.map((line) => line.left))), right: Math.min(box.right, Math.max(...lines.map((line) => line.right))), top: lines[0].top };
+      });
+      const crowded = labels.slice(1).filter((text, index) => Math.abs(text.top - labels[index].top) < 2 && text.left - labels[index].right < 6).map((text, index) => `${labels[index].name}|${text.name}`);
+      const unnamed = [...document.querySelectorAll("button, a[href]")].filter(visible).filter((control) => !(control.textContent ?? "").trim() && !control.getAttribute("aria-label")).map(label);
+      const small = [...document.querySelectorAll(".app-nav__link, .account, .menu__item, .icon-button")].filter(visible)
+        .filter((control) => { const box = control.getBoundingClientRect(); return box.width < 24 || box.height < 24; }).map(label);
+      return { squashed, clipped, overlaps, crowded, unnamed, under24px: small, sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+    });
+    checks[name] = { bar: await measure() };
+    const phone = await page.locator(".app-nav__more").isVisible();
+    await (phone ? page.locator(".app-nav__more") : page.locator(".account")).click();
+    await page.waitForSelector("#staff-menu:popover-open");
+    await shot(page, `shell-${name}-menu`);
+    checks[name].menu = await measure();
+    await context.close();
+  }
+  fs.writeFileSync(path.join(dir, "shell-checks.json"), `${JSON.stringify(checks, null, 2)}\n`);
+  return Object.fromEntries(Object.entries(checks).map(([name, { bar, menu }]) => [name, [bar, menu].every((entry) => entry.sideways === 0 && ["squashed", "clipped", "overlaps", "crowded", "unnamed", "under24px"].every((key) => !entry[key].length)) ? "clean" : "see shell-checks.json"]));
+}
+
 async function capture(url, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
@@ -295,7 +372,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "public-photos") continue;
+          if (name === "item-photos" || name === "public-photos" || name === "shell") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -329,6 +406,7 @@ async function capture(url, dir) {
     const timings = { coldLoadToFirstRowMs: median(cold), sectionSwitchMs: median(swap) };
     if (pages.includes("item-photos")) Object.assign(timings, { itemPhotos: await photoScenes(browser, url, dir) });
     if (pages.includes("public-photos")) Object.assign(timings, { publicPhotos: await publicPhotoScenes(browser, url, dir) });
+    if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);
     await context.close();
     return timings;
