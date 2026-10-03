@@ -134,16 +134,19 @@ test("a profile without a sign-in makes one in a step and shows its password onc
   await page.goto(`/staff/admin/directory?person=${id(2)}`);
   const access = page.getByRole("region", { name: "Sign-in and access" });
   await expect(access.getByLabel("Username")).toHaveValue("bea.reyes");
-  await expect(access.getByLabel("Role").locator("option")).toHaveText(["Staff", "Administrator", "Owner"]);
+  // Roles by department: DoL Staff (the Logistics Hub) first, then every other department's staff, Officer and, for an owner, Owner.
+  await expect(access.getByLabel("Role").locator("option")).toHaveText(["DoL Staff", "OfP Staff", "OVP Staff", "SEC Staff", "DoF Staff", "DEM Staff", "DCES Staff", "DPC Staff", "DHR Staff", "DBR Staff", "Officer", "Owner"]);
+  // Bea is in the Department of Logistics, so DoL Staff is chosen for her.
+  await expect(access.getByLabel("Role")).toHaveValue("DoL");
   await access.getByRole("button", { name: "Create sign-in" }).click();
   await expect(access.locator(".secret code")).toHaveText("sample one-time pass 1");
-  expect(made).toEqual({ username: "bea.reyes", role: "STAFF" });
+  expect(made).toEqual({ username: "bea.reyes", access: "DoL" });
   // The other way in stays out of sight once a sign-in was made.
   await expect(access.getByText("Or link a sign-in they already have")).toBeHidden();
 
   const hour = (n: number) => new Date(Date.parse("2026-10-03T10:00:00Z") - n * 3_600_000).toISOString();
   await page.route(`**/api/staff/admin/directory/${id(1)}/access`, (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ self: false, manageable: true,
-    account: { id: "ACC-1", username: "ana.santos", displayName: "Ana Santos", role: "STAFF", active: true, mustChangePassword: false, createdAt: hour(400), lastLoginAt: hour(1), openSessions: 2, failedAttempts: 4 },
+    account: { id: "ACC-1", username: "ana.santos", displayName: "Ana Santos", role: "STAFF", access: "DoL", active: true, mustChangePassword: false, createdAt: hour(400), lastLoginAt: hour(1), openSessions: 2, failedAttempts: 4 },
     signIns: [{ at: hour(1), until: hour(-7), state: "OPEN" }, { at: hour(30), until: hour(26), state: "ENDED" }],
     events: [{ at: hour(400), action: "ACCOUNT_CREATED", actor: "Owner Sample", details: { username: "ana.santos", role: "STAFF" } }] }) }));
   let reset = false;
@@ -152,9 +155,21 @@ test("a profile without a sign-in makes one in a step and shows its password onc
   await expect(access.getByText("On 2 devices")).toBeVisible();
   await expect(access.getByText("4 failed sign-ins in the last 15 minutes")).toBeVisible();
   await expect(access.locator(".access-log").first()).toContainText("signed in now");
-  await expect(access.locator(".access-log").last()).toContainText("Owner Sample created ana.santos (Staff)");
+  await expect(access.locator(".access-log").last()).toContainText("Owner Sample created ana.santos (DoL Staff)");
   page.once("dialog", (dialog) => dialog.accept());
   await access.getByRole("button", { name: "Reset password" }).click();
   await expect(access.locator(".secret code")).toHaveText("sample one-time pass 2");
   expect(reset).toBe(true);
+});
+
+test("a sign-in for another department's staff opens their account only, with no Logistics Hub sections", async ({ page }) => {
+  await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-dem", username: "dem.sample", displayName: "Dem Sample", role: "STAFF", access: "DEM", hub: false, mustChangePassword: false, recovery: null, selfServiceReviews: 0, selfServiceClosed: false, directory: null }) }));
+  await page.goto("/staff/items");
+  await expect(page).toHaveURL(/\/staff\/account$/);
+  await expect(page.getByRole("heading", { name: "My account" })).toBeVisible();
+  await expect(page.getByText("Your sign-in is set up as DEM Staff.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Items" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Administration" })).toHaveCount(0);
+  await page.goto("/staff/admin/directory");
+  await expect(page).toHaveURL(/\/staff\/account$/);
 });
