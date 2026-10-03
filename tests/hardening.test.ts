@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { recoverOwner, revokeRecoveryKey, rotateRecoveryKey, updateAccount, type Account } from "../src/accounts";
 import { verifyPassword } from "../src/session";
 import { eraseOldDetails, retentionPreview } from "../src/retention";
+import { createLoan } from "../src/loans";
 import { InputError } from "../src/inventory";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
 
@@ -210,5 +211,63 @@ describe("R3 and R4: retention erases each record once and never deletes evidenc
     await runUntilDone(d1, bucket);
     expect(count(sqlite, "SELECT COUNT(*) AS n FROM loans WHERE photo_key <> '' OR borrower_name <> '[removed]'")).toBe(0);
     expect(audited(sqlite)).toEqual({ loans: 2, phoneRecords: 0, photos: 2 });
+  });
+});
+
+describe("R5: a loan's photo survives an answer that never arrived", () => {
+  function setup() {
+    const { d1, sqlite } = migratedD1();
+    const { bucket, objects } = memoryR2();
+    sqlite.exec("UPDATE items SET item_type = 'Loanable', status = 'ACTIVE' WHERE id = 'ITM-0001'");
+    const form = () => {
+      const data = new FormData();
+      for (const [name, value] of Object.entries({ key: "request-key-1234", purpose: "INDIVIDUAL", borrowerName: "Juan Cruz", studentId: "20-1234-567", quantity: "1" })) data.set(name, value);
+      data.set("photo", new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4])], "p.jpg", { type: "image/jpeg" }));
+      return data;
+    };
+    const fail = (mode: "after-commit" | "before-commit", alsoUnreadable = false) => {
+      const real = d1.batch.bind(d1);
+      const realPrepare = d1.prepare.bind(d1);
+      (d1 as unknown as { batch: D1Database["batch"] }).batch = (async (statements: D1PreparedStatement[]) => {
+        (d1 as unknown as { batch: D1Database["batch"] }).batch = real;
+        if (mode === "after-commit") await real(statements);
+        // While D1 is unreachable, the follow-up check cannot be answered either.
+        if (alsoUnreadable) (d1 as unknown as { prepare: unknown }).prepare = () => { throw new Error("network lost"); };
+        throw new Error("network lost");
+      }) as D1Database["batch"];
+      return () => { (d1 as unknown as { prepare: unknown }).prepare = realPrepare; };
+    };
+    const movements = () => count(sqlite, "SELECT COUNT(*) AS n FROM inventory_movements WHERE movement_type = 'LOAN_OUT'");
+    return { d1, sqlite, bucket, objects, form, fail, movements };
+  }
+
+  it("saved, answer lost: the loan stands with its photo, and a retry returns the same loan with no second movement", async () => {
+    const { d1, sqlite, bucket, objects, form, fail, movements } = setup();
+    fail("after-commit");
+    const first = await createLoan(d1, bucket, { accountId: "O1" }, "ITM-0001", form());
+    const stored = sqlite.prepare("SELECT id, photo_key AS k FROM loans").get() as { id: string; k: string };
+    expect(first.id).toBe(stored.id);
+    expect(objects.has(stored.k)).toBe(true);
+    expect((await createLoan(d1, bucket, { accountId: "O1" }, "ITM-0001", form())).id).toBe(stored.id);
+    expect(movements()).toBe(1);
+  });
+
+  it("rolled back: the unused photo is removed and the error stands", async () => {
+    const { d1, bucket, objects, form, fail, movements } = setup();
+    fail("before-commit");
+    await expect(createLoan(d1, bucket, { accountId: "O1" }, "ITM-0001", form())).rejects.toThrow(/network lost/);
+    expect(objects.size).toBe(0);
+    expect(movements()).toBe(0);
+  });
+
+  it("outcome unknown: the photo is kept and the error stands; once D1 answers, a retry returns the saved loan", async () => {
+    const { d1, sqlite, bucket, objects, form, fail, movements } = setup();
+    const restore = fail("after-commit", true);
+    await expect(createLoan(d1, bucket, { accountId: "O1" }, "ITM-0001", form())).rejects.toThrow(/network lost/);
+    restore();
+    const stored = sqlite.prepare("SELECT id, photo_key AS k FROM loans").get() as { id: string; k: string };
+    expect(objects.has(stored.k)).toBe(true);
+    expect((await createLoan(d1, bucket, { accountId: "O1" }, "ITM-0001", form())).id).toBe(stored.id);
+    expect(movements()).toBe(1);
   });
 });
