@@ -27,6 +27,8 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      # The Activity performance harness is skipped in ordinary runs; this smoke run keeps it working on the current schema.
+      - run: ACTIVITY_PERF=1 ACTIVITY_PERF_TIERS=1000 npx vitest run tests/activity-perf.test.ts
       - run: npm run verify:privacy
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
