@@ -168,7 +168,7 @@ export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
   },
   DIRECTORY: {
     STAFF_PERSON_ADDED: "Person added", STAFF_PROFILE_UPDATED: "Profile edited", STAFF_ACCOUNT_LINKED: "Account linked", STAFF_ACCOUNT_UNLINKED: "Account unlinked",
-    STAFF_ID_IMPORTED: "ID scans imported", STAFF_ID_ADDED: "ID scans added", STAFF_ID_REPLACED: "ID scans replaced", STAFF_ID_REMOVED: "ID scans removed", STAFF_ID_VIEWED: "USC ID viewed"
+    STAFF_ID_IMPORTED: "ID scans imported", STAFF_ID_ADDED: "ID scans added", STAFF_ID_REPLACED: "ID scans replaced", STAFF_ID_REMOVED: "ID scans removed", STAFF_ID_VIEWED: "USC ID viewed", STAFF_ID_DERIVED: "ID thumbnail and profile picture made"
   }
 };
 export const ACTIVITY_TITLES: Record<string, string> = Object.assign({}, ...Object.values(ACTIVITY_TYPES));
