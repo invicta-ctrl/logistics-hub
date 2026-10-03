@@ -52,11 +52,10 @@ describe("migration history", () => {
   });
 
   it("never edits a migration a release manifest pins", () => {
-    const pins = releasePins();
+    // A manifest reaches main before its release does (the lane reads manifests from main), so a pinned migration may still
+    // live only on the release branch; production-release.mjs checks it there. Wherever the file is present, it must match.
+    const pins = releasePins().filter(([, file]) => files.includes(file));
     expect(pins.length).toBeGreaterThan(0);
-    for (const [manifest, file, pinned] of pins) {
-      expect(files, `${manifest} pins ${file}`).toContain(file);
-      expect(sha256(file), `${manifest}: ${file}`).toBe(pinned);
-    }
+    for (const [manifest, file, pinned] of pins) expect(sha256(file), `${manifest}: ${file}`).toBe(pinned);
   });
 });

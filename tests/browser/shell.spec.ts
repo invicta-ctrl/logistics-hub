@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(session) }));
 });
 
-/** What a person would see as broken: a cut-off label, a squashed icon, sections over each other, a nameless or announced icon. */
+/** What a person would see as broken: a cut-off label, a squashed icon, sections over each other, a nameless or announced icon, content off the screen. */
 const problems = (page: Page) => page.evaluate(() => {
   const shown = (element: Element) => { const box = element.getBoundingClientRect(); return box.width > 1 && box.height > 1; };
   const links = [...document.querySelectorAll(".app-nav__link")].filter(shown).map((link) => link.getBoundingClientRect());
@@ -40,10 +40,17 @@ const problems = (page: Page) => page.evaluate(() => {
     })(),
     announced: [...document.querySelectorAll("svg.icon")].filter((svg) => svg.getAttribute("aria-hidden") !== "true").length,
     unnamed: [...document.querySelectorAll("button, a[href]")].filter((control) => !(control.textContent ?? "").trim() && !control.getAttribute("aria-label")).length,
-    sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth
+    sideways: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    // The page clips sideways overflow (overflow-x: clip), so content pushed off a narrow screen never scrolls: count it.
+    offscreen: [...document.querySelectorAll("main *")].filter(shown).filter((element) => {
+      for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+        if (["auto", "scroll"].includes(getComputedStyle(parent).overflowX)) return false; // a scroller of its own, like the view tabs
+      }
+      return element.getBoundingClientRect().right > window.innerWidth + 1;
+    }).map((element) => element.className || element.tagName)
   };
 });
-const clean = { cutOff: [], squashed: 0, overlapping: 0, crowded: 0, announced: 0, unnamed: 0, sideways: 0 };
+const clean = { cutOff: [], squashed: 0, overlapping: 0, crowded: 0, announced: 0, unnamed: 0, sideways: 0, offscreen: [] };
 
 for (const [width, text] of [[320, ""], [320, "150%"], [375, ""], [414, ""], [375, "150%"], [768, ""], [1024, "150%"], [1440, ""]] as const) {
   test(`staff shell at ${width}px${text ? ` with ${text} text` : ""}: every label in full, square icons, named controls, both menus`, async ({ page }) => {
@@ -70,7 +77,7 @@ test("with 200% text on a 320 px phone every section stays on screen, named in f
   await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
   // Five labels cannot fit side by side at this size: a label may shorten with an ellipsis, but nothing else may break.
   const { cutOff, ...rest } = await problems(page);
-  expect(rest).toEqual({ squashed: 0, overlapping: 0, crowded: 0, announced: 0, unnamed: 0, sideways: 0 });
+  expect(rest).toEqual({ squashed: 0, overlapping: 0, crowded: 0, announced: 0, unnamed: 0, sideways: 0, offscreen: [] });
   expect(cutOff.length).toBeLessThanOrEqual(5);
   for (const link of await page.locator(".app-nav__link").filter({ visible: true }).all()) {
     const box = (await link.boundingBox())!;

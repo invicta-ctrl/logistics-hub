@@ -176,14 +176,14 @@ kbd { display: inline-grid; min-width: 1.35rem; height: 1.35rem; place-items: ce
 
 /* ---------- Form controls ---------- */
 .form { display: grid; gap: var(--space-5); }
-.field { display: grid; gap: var(--space-2); align-content: start; }
+.field { display: grid; min-width: 0; gap: var(--space-2); align-content: start; }
 .field label, .field-label { color: var(--text); font-size: var(--text-sm); font-weight: 500; }
 .field__optional { color: var(--text-3); font-weight: 400; }
 .field__hint { color: var(--text-3); font-size: var(--text-sm); }
 .field__hint--warn { color: var(--warn); }
 .field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 input:not([type=checkbox], [type=radio]), select, textarea {
-  width: 100%; min-height: 2.5rem; padding: var(--space-2) var(--space-3); border: 1px solid var(--line-field); border-radius: var(--radius);
+  width: 100%; min-width: 0; min-height: 2.5rem; padding: var(--space-2) var(--space-3); border: 1px solid var(--line-field); border-radius: var(--radius);
   background: var(--surface); font-size: var(--text-md); line-height: 1.4;
   transition: border-color var(--dur-1), box-shadow var(--dur-1);
 }
@@ -687,8 +687,10 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .ss-trial p, .admin-block p { max-width: 65ch; margin-bottom: var(--space-4); color: var(--text-2); }
 .ss-trial__frame { display: block; width: min(100%, 24.5rem); height: min(80vh, 52rem); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-sm); }
 .panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); align-items: start; }
-.panel { display: grid; gap: var(--space-4); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .panel .form-actions { justify-content: flex-start; }
+/* A long action label wraps rather than pushing the panel off a narrow screen at large text sizes. */
+.panel .button { white-space: normal; }
 .panel--wide { grid-column: 1 / -1; }
 .panel__title { font-size: var(--text-lg); }
 .form-actions--start { justify-content: flex-start; flex-wrap: wrap; }
@@ -874,7 +876,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .steps { grid-template-columns: 1fr; gap: var(--space-8); }
   .hero__inner { grid-template-columns: minmax(0, 1fr); }
   .hero__banner { order: -1; max-width: 44rem; }
-  .panels { grid-template-columns: 1fr; }
+  .panels { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 760px) {
   .lockup__text { display: none; }
@@ -911,6 +913,8 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
      hyphen; only a bar narrower than five wrapped labels (200% text on a 320 px phone; measured in label-ems, so text size
      counts) puts labels back on one line, shortened with an ellipsis, so every section stays on screen and its full name
      stays in the accessibility tree. The column gap keeps neighbouring labels apart at every size. */
+  /* The focus ring hugs the section's edge: an inset ring would cross a label that fills its column. */
+  .app-nav__link:focus-visible { outline-offset: -2px; }
   .app-nav__link { min-width: 0; flex-direction: column; justify-content: flex-start; gap: .1875rem; padding: .625rem 0 var(--space-2); font-size: 1em; font-weight: 600; }
   .app-nav__link > .icon { --icon-size: var(--icon-lg); display: block; }
   .app-nav__text { display: block; max-width: 100%; overflow: hidden; line-height: 1.25; text-align: center; text-overflow: ellipsis; text-wrap: balance; white-space: normal; }
