@@ -67,9 +67,10 @@ describe.skipIf(!process.env.ACTIVITY_PERF)("activity performance (AC-A7)", () =
       const rows = (n: number) => `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ${n})`;
       const pick = (where = "1") => `it AS (SELECT id, row_number() OVER (ORDER BY id) - 1 AS r FROM items WHERE ${where}), cnt AS (SELECT count(*) c FROM it)`;
       // Items: the migrated catalog plus synthetic ones up to the tier's item count; every fifth is Loanable, two areas, 40 shelves.
+      sqlite.exec(`${rows(40)} INSERT INTO locations(id, name, created_at, updated_at) SELECT 'LOC-' || printf('%04d', i), 'Shelf ' || (i - 1), 'x', 'x' FROM n`);
       sqlite.exec(`${rows(items - base)}
-        INSERT INTO items(id, name, category, item_type, unit, stock_area, storage_location, aliases)
-        SELECT 'PERF-' || i, 'Perf Item ' || i, 'SUPPLIES', CASE WHEN i % 5 = 0 THEN 'Loanable' ELSE 'Consumable' END, 'piece', CASE WHEN i % 2 THEN 'Inventory' ELSE 'Pantry' END, 'Shelf ' || (i % 40), NULL FROM n`);
+        INSERT INTO items(id, name, category, item_type, unit, stock_area, location_id, aliases)
+        SELECT 'PERF-' || i, 'Perf Item ' || i, 'SUPPLIES', CASE WHEN i % 5 = 0 THEN 'Loanable' ELSE 'Consumable' END, 'piece', CASE WHEN i % 2 THEN 'Inventory' ELSE 'Pantry' END, 'LOC-' || printf('%04d', 1 + i % 40), NULL FROM n`);
       // Movements: 10% counts, 30% stock out, 60% stock in, spread over items and a year; every seventh has a note.
       sqlite.exec(`${rows(scale)}, ${pick()}
         INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, notes, reason, status)

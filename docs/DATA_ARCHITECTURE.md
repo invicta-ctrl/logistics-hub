@@ -15,7 +15,7 @@ Extend these concepts. Do not build a renamed parallel system beside one of them
 
 | Concept | Authority | Notes |
 |---|---|---|
-| Catalog | `items` | One row per item. Edits write an `ITEM_UPDATED` row to `audit_log` in the same batch. `catalog_revision` is a change counter clients poll, not data. |
+| Catalog | `items` | One row per item. Edits write an `ITEM_UPDATED` row to `audit_log` in the same batch. `catalog_revision` is a change counter clients poll, not data. Where an item is kept is `items.location_id` (V1.4); `items.storage_location` is the text typed before V1.4, kept as migration evidence and never read or written again. |
 | Quantity | `inventory_movements` (+ view `inventory_balances`) | Triggers refuse UPDATE and DELETE (0009). A correction is a new movement. `idempotency_key` is unique when present. `legacy_reported_*` columns on `items` are migration evidence and never enter arithmetic. |
 | Lending | `loans` | One loan per item lent, tied to its `LOAN_OUT` movement; only a good return writes `LOAN_RETURN`. The handover photo is in R2 (`photo_key`). |
 | Phone Self-Service | `self_service_events` | The idempotency record and the staff review queue. What an event changed lives in `inventory_movements` / `loans`. A resolved record is final except for retention erasure (0019 trigger). |
@@ -26,6 +26,8 @@ Extend these concepts. Do not build a renamed parallel system beside one of them
 | Accountability | `audit_log` | Who changed what, for catalog, accounts, settings and retention. Append-only: triggers refuse UPDATE and DELETE (0022). Movements, loans and phone events are their own history; the Activity feed reads all of them (`src/activity.ts`). |
 | Settings | `system_settings` | One row per setting, each change audited. Add a key with a CHECK on its allowed values. |
 | Item photos | `item_media` | One primary photo per item; the row is the only reference to its R2 objects. |
+| Locations (V1.4) | `locations`, view `location_paths`, `items.location_id` | The places items are kept, as a hierarchy of at most five levels (`parent_id`), each with plain-language `directions`, a `visibility` (staff only, or shared with Self-Service), at most one reference picture (`media_id`, shared by every item kept there) and `active`. The view gives every place its full path, depth and whether Self-Service may show it (it and every place above it is active and shared). Migration 0024 made one place per distinct typed value and linked items by that exact value; look-alikes (`Cabinet 1`, `cabinet 1`) stay separate until staff combine them with Move items. |
+| Location reports (V1.4) | `location_reports` | "I can’t find it" and "Location looks wrong", from staff or a phone: an attention signal and an audit record that never changes stock or an item's place. Written once, resolved once with a note, never edited or removed (triggers). |
 | Staff directory (V1.3) | `staff_directory`, `staff_id_cards` | Who a person is in the USC: one row per person (`PER-` id, department code, officer status beside it, optional unique student ID, unique `source_key` for imported scans). A link to a sign-in is the explicit, audited `account_id`. A card row is the only reference to that person's two ID scans in R2. |
 | Legacy evidence | `reservations`, `legacy_access_accounts` | Migrated as found and kept for reconciliation. Live code does not read them; nothing new should write them. |
 
@@ -36,7 +38,7 @@ Authorized staff (`staff_users`) and the USC Staff Directory (V1.3) are differen
 Application checks are for good messages; the database is the backstop every writer meets, including a second Worker racing the first.
 
 - Append-only and finality triggers: `inventory_movements_no_update/_no_delete`, `audit_log_no_update/_no_delete`, `self_service_events_resolved_final`, `open_units_closed_final`, `open_units_kept`. SQLite's `INSERT OR REPLACE` gets past a delete trigger, so nothing writes the append-only tables with it (a test checks the source); `INSERT OR IGNORE` stays the way to make an audit write idempotent.
-- Cross-table invariants as triggers: `open_units_within_stock`, `movements_within_open_units`, `items_keep_open_units`, and `staff_accounts_keep_owner` / `_on_delete` (the last active Owner is never removed, 0023).
+- Cross-table invariants as triggers: `open_units_within_stock`, `movements_within_open_units`, `items_keep_open_units`, and `staff_accounts_keep_owner` / `_on_delete` (the last active Owner is never removed, 0023); for places (0024) `locations_no_cycle`, `locations_parent_active_*`, `locations_children_active` and `items_location_active_*` (no loop, no active place under an inactive one, no item kept in an inactive place), and `location_reports_no_delete` / `_resolve_only`.
 - Uniqueness as partial indexes: one live owner recovery key, one open reorder per item, one idempotency key per movement.
 - CHECK constraints for every closed vocabulary (roles, statuses, purposes, setting values) and for coupled columns (`(status = 'OUT') = (closed_at IS NULL)`).
 - Multi-statement writes go in one `db.batch` (atomic on D1). Writes that must happen once carry an idempotency key, and a retry returns the first result.
@@ -46,7 +48,7 @@ Application checks are for good messages; the database is the backstop every wri
 | Binding | Bucket | Holds | Keys | Who can read |
 |---|---|---|---|---|
 | `EVIDENCE` | `logistics-hub-evidence` | Loan handover photos, held phone-borrow photos | `loans/<loan id>`, held photo keys recorded on the phone event | Signed-in staff only |
-| `CATALOG_MEDIA` | `logistics-hub-catalog-media` | Item photos (display and thumbnail) | `items/<media id>/display`, `items/<media id>/thumb` | Staff; the public sees thumbnails of publicly listed items only |
+| `CATALOG_MEDIA` | `logistics-hub-catalog-media` | Item photos and place pictures (display and thumbnail) | `items/<media id>/display`, `items/<media id>/thumb`; `locations/<media id>/display`, `locations/<media id>/thumb` | Staff; the public sees thumbnails of publicly listed items only, and a place's picture (both sizes) only while staff share that place with Self-Service and Self-Service is open |
 | `STAFF_IDS` | `logistics-hub-staff-ids` | Official USC ID scans, front and back (V1.3) | `ids/<media id>/front`, `ids/<media id>/back` | Administrators and the owner, each opening audited; only the owner adds, replaces or removes |
 
 Rules:
@@ -86,4 +88,5 @@ Not restored: React, MUI, Radix, Apps Script, Sheets as operational truth, repos
 
 ## Pending production steps
 
+- `0024_locations.sql` (V1.4) is additive and applies with the V1.4 release manifest, after `0022` and `0023`. It creates one place per distinct typed storage value, links items by that exact value and writes one `LOCATIONS_RECONCILED` audit entry with the counts. It changes no quantity, no typed value and no `updated_at`. The code live before it keeps working on the migrated database: it still reads `items.storage_location`, which is untouched.
 - `0022_audit_log_append_only.sql` and `0023_last_active_owner.sql` are on `main` but not yet applied to production. The lane applies only migrations a release manifest pins, so the next release that runs it (V1.4, unless another comes first) pins both beside its own. Nothing depends on them meanwhile: they only add triggers, and until `0023` is applied the Worker's own check still refuses the last Owner outside a race.
