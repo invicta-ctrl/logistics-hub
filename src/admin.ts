@@ -1,9 +1,9 @@
 import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
-import { type AccountEvent, assignable, bindCopy, canManage, eventText, oneTime, roleTag } from "./account-ui";
-import { type Role, ROLE_LABELS, type Session, adminTabs, loadSession, shell } from "./staff";
+import { ACCESS_HINT, type AccountEvent, accessChoices, accessTag, bindCopy, canManage, eventText, oneTime } from "./account-ui";
+import { type Access, type Role, type Session, accessLabel, adminTabs, loadSession, sessionAccess, shell } from "./staff";
 import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, plural, setMessage, sheet as createSheet, sheetContent, toast } from "./ui";
 
-type Row = { id: string; username: string; displayName: string; role: Role; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number };
+type Row = { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number };
 
 /* ---------- Administration ---------- */
 
@@ -62,7 +62,7 @@ export async function administration(): Promise<void> {
         <thead><tr><th scope="col">Account</th><th scope="col">Role</th><th scope="col">Status</th><th scope="col">Last sign-in</th><th scope="col" class="col-qty">Sessions</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
         <tbody>${accounts.map((row) => html`<tr>
           <td><span class="cell-strong">${row.displayName}${row.id === session!.id ? html` <span class="muted">(you)</span>` : ""}</span><span class="cell-sub mono">${row.username}</span></td>
-          <td>${roleTag(row.role)}</td>
+          <td>${accessTag(row.access)}</td>
           <td><span class="tags">${row.active ? html`<span class="tag tag--ok">Active</span>` : html`<span class="tag tag--bad">Disabled</span>`}${row.mustChangePassword ? html`<span class="tag tag--warn">Must set password</span>` : ""}</span></td>
           <td>${row.lastLoginAt ? formatDateTime(row.lastLoginAt) : html`<span class="muted">Never</span>`}</td>
           <td class="col-qty">${row.openSessions}</td>
@@ -94,8 +94,8 @@ export async function administration(): Promise<void> {
     sheetShell("New account", "Create an account", html`<form class="form" id="create-form" novalidate>
       <div class="field-grid"><div class="field"><label for="c-name">Display name</label><input id="c-name" name="displayName" required maxlength="80" autocomplete="off" /></div>
       <div class="field"><label for="c-username">Username</label><input id="c-username" name="username" required maxlength="64" autocapitalize="none" spellcheck="false" autocomplete="off" /></div></div>
-      <div class="field"><label for="c-role">Role</label><select id="c-role" name="role">${assignable(session!).map((role) => html`<option value="${role}">${ROLE_LABELS[role]}</option>`)}</select>
-        <p class="field__hint">Staff: items, stock, loans, Self-Service and activity. Administrator: also manages staff accounts. Owner: everything, including recovery.</p></div>
+      <div class="field"><label for="c-role">Role</label><select id="c-role" name="access" aria-describedby="c-role-hint">${accessChoices(session!).map((access) => html`<option value="${access}">${accessLabel(access)}</option>`)}</select>
+        <p class="field__hint" id="c-role-hint">${ACCESS_HINT}</p></div>
       ${passwordFields("c")}
       <div class="form-alert" id="create-alert" role="alert" hidden></div>
       <div class="form-actions"><button class="button button--primary" type="submit">Create account</button></div>
@@ -107,7 +107,7 @@ export async function administration(): Promise<void> {
       event.preventDefault();
       const values = new FormData(form);
       try {
-        const result = await api<{ username: string; generatedPassword: string | null }>("/api/staff/admin/accounts", { method: "POST", body: JSON.stringify({ displayName: values.get("displayName"), username: values.get("username"), role: values.get("role"), ...passwordPayload(form, "c") }) });
+        const result = await api<{ username: string; generatedPassword: string | null }>("/api/staff/admin/accounts", { method: "POST", body: JSON.stringify({ displayName: values.get("displayName"), username: values.get("username"), access: values.get("access"), ...passwordPayload(form, "c") }) });
         form.hidden = true;
         mount(sheet.querySelector("#create-result")!, html`${result.generatedPassword ? oneTime(`Temporary password for ${result.username}`, result.generatedPassword, "Shown once and never stored. Give it to them privately; they must choose their own password at first sign-in.") : html`<p class="callout">${icon("check")}<span>Account created. They must replace the temporary password at first sign-in.</span></p>`}
           <div class="form-actions"><button type="button" class="button button--secondary" data-close>Done</button></div>`);
@@ -118,12 +118,14 @@ export async function administration(): Promise<void> {
   }
 
   function openManage(row: Row): void {
-    sheetShell(`${ROLE_LABELS[row.role]} · ${row.username}`, row.displayName, html`
+    // An account whose role is no longer offered (Administrator) keeps it in the list until changed.
+    const choices = accessChoices(session!).includes(row.access) ? accessChoices(session!) : [row.access, ...accessChoices(session!)];
+    sheetShell(`${accessLabel(row.access)} · ${row.username}`, row.displayName, html`
       <form class="form form-section" id="profile-form" novalidate>
         <h3 class="form-section__title">Profile and role</h3>
         <div class="field-grid"><div class="field"><label for="m-name">Display name</label><input id="m-name" name="displayName" value="${row.displayName}" maxlength="80" /></div>
         <div class="field"><label for="m-username">Username</label><input id="m-username" name="username" value="${row.username}" maxlength="64" autocapitalize="none" spellcheck="false" /></div></div>
-        <div class="field"><label for="m-role">Role</label><select id="m-role" name="role">${assignable(session!).map((role) => html`<option value="${role}" ${role === row.role ? html`selected` : ""}>${ROLE_LABELS[role]}</option>`)}</select></div>
+        <div class="field"><label for="m-role">Role</label><select id="m-role" name="access" aria-describedby="m-role-hint">${choices.map((access) => html`<option value="${access}" ${access === row.access ? html`selected` : ""}>${accessLabel(access)}</option>`)}</select><p class="field__hint" id="m-role-hint">${ACCESS_HINT}</p></div>
         <p class="field__hint">Changing the username or role signs them out everywhere.</p>
         <div class="form-alert" id="profile-alert" role="alert" hidden></div>
         <div class="form-actions"><button class="button button--primary" type="submit">Save</button></div>
@@ -150,7 +152,7 @@ export async function administration(): Promise<void> {
       event.preventDefault();
       const values = new FormData(profile);
       try {
-        const result = await api<{ changed: number; sessionsRevoked?: boolean }>(`/api/staff/admin/accounts/${encodeURIComponent(row.id)}`, { method: "PATCH", body: JSON.stringify({ displayName: values.get("displayName"), username: values.get("username"), role: values.get("role") }) });
+        const result = await api<{ changed: number; sessionsRevoked?: boolean }>(`/api/staff/admin/accounts/${encodeURIComponent(row.id)}`, { method: "PATCH", body: JSON.stringify({ displayName: values.get("displayName"), username: values.get("username"), access: values.get("access") }) });
         toast(result.changed ? `Saved${result.sessionsRevoked ? "; they were signed out" : ""}.` : "No changes to save.");
         close();
         await load();
@@ -234,8 +236,9 @@ export async function myAccount(): Promise<void> {
   document.title = "My account · Staff workspace";
   const recovery = session.recovery;
   shell(session, "account", html`
-    <header class="page-header"><div><h1>My account</h1><p>${session.displayName} · <span class="mono">${session.username}</span> · ${ROLE_LABELS[session.role]}</p>
+    <header class="page-header"><div><h1>My account</h1><p>${session.displayName} · <span class="mono">${session.username}</span> · ${accessLabel(sessionAccess(session))}</p>
       ${session.directory ? html`<p>Staff Directory: ${session.directory.name}${session.directory.position ? `, ${session.directory.position}` : ""} · ${DEPARTMENTS[session.directory.department as DepartmentCode] ?? session.directory.department}</p>` : ""}</div></header>
+    ${session.hub === false && !session.mustChangePassword ? html`<div class="callout callout--action">${icon("info")}<p><strong>Your sign-in is set up as ${accessLabel(sessionAccess(session))}.</strong> The Logistics Hub's items, stock, loans and records are for the Department of Logistics; this page is where you look after your account.</p></div>` : ""}
     ${session.mustChangePassword ? html`<div class="callout callout--action" role="alert">${icon("alert")}<p><strong>Choose your own password to continue.</strong> Your current password was set by an administrator; the rest of the workspace opens once you replace it.</p></div>` : ""}
     <div class="panels">
       <form class="panel form" id="password-form" novalidate>
