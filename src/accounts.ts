@@ -277,6 +277,10 @@ export async function revokeRecoveryKey(db: D1Database, account: Account) {
  * The only thing a recovery key can do: set a new password on the owner account
  * it belongs to, re-enable it, and sign that owner out everywhere. The key is
  * consumed; the owner then signs in normally and issues a new key.
+ *
+ * Consumption is the batch's first statement: it writes this request's success audit only if, at that moment, the key is
+ * still unrevoked and its account still an Owner. Every other statement runs only if that audit row exists, so of two
+ * requests with one key (or a key rotated, revoked or demoted meanwhile) exactly one changes anything.
  */
 export async function recoverOwner(db: D1Database, input: unknown) {
   const data = body(input);
@@ -289,12 +293,17 @@ export async function recoverOwner(db: D1Database, input: unknown) {
     WHERE k.id = ? AND k.revoked_at IS NULL AND a.role = 'OWNER'`).bind(id).first<{ verifier: string; accountId: string; username: string }>();
   if (!key || !sameText(await sha256(secret!), key.verifier)) throw rejected;
   const now = new Date().toISOString();
-  await db.batch([
-    db.prepare("UPDATE staff_accounts SET password_hash = ?, must_change_password = 0, active = 1, updated_at = ? WHERE id = ?").bind(await hashPassword(newPassword), now, key.accountId),
-    revokeSessions(db, key.accountId),
-    db.prepare("UPDATE owner_recovery_keys SET revoked_at = ? WHERE id = ?").bind(now, id),
-    audit(db, null, "OWNER_RECOVERY_USED", "RECOVERY", key.accountId, { keyId: id, username: key.username })
+  const auditId = crypto.randomUUID();
+  const won = "EXISTS (SELECT 1 FROM audit_log WHERE id = ?)";
+  const [consumed] = await db.batch([
+    db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
+      SELECT ?1, ?2, NULL, 'OWNER_RECOVERY_USED', 'RECOVERY', a.id, ?3 FROM owner_recovery_keys k JOIN staff_accounts a ON a.id = k.account_id
+      WHERE k.id = ?4 AND k.account_id = ?5 AND k.revoked_at IS NULL AND a.role = 'OWNER'`).bind(auditId, now, JSON.stringify({ keyId: id, username: key.username }), id, key.accountId),
+    db.prepare(`UPDATE staff_accounts SET password_hash = ?, must_change_password = 0, active = 1, updated_at = ? WHERE id = ? AND ${won}`).bind(await hashPassword(newPassword), now, key.accountId, auditId),
+    db.prepare(`UPDATE staff_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE account_id = ? AND revoked_at IS NULL AND ${won}`).bind(key.accountId, auditId),
+    db.prepare(`UPDATE owner_recovery_keys SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL AND ${won}`).bind(now, id, auditId)
   ]);
+  if (!consumed!.meta.changes) throw rejected;
   return { username: key.username };
 }
 
