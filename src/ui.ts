@@ -33,7 +33,10 @@ export function mount(target: Element, content: Html): void {
   target.innerHTML = content.value;
 }
 
-/* ---------- Icons (24px grid, 1.75 stroke, currentColor) ---------- */
+/* ---------- Icons ----------
+ * One family, drawn here: a 24-unit grid with at least a unit of padding, one unfilled path per icon stroked at 1.75 in
+ * currentColor with round caps and joins (src/styles.css sets size and stroke). A dot is a tiny circle, so it reads at every
+ * size without its own stroke width. Icons are decorative: the control or text beside one names it. */
 
 const ICONS = {
   search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14ZM20 20l-4-4",
@@ -41,6 +44,7 @@ const ICONS = {
   arrow: "M5 12h14M13 6l6 6-6 6",
   external: "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
   plus: "M12 5v14M5 12h14",
+  minus: "M5 12h14",
   check: "m5 12.5 4.5 4.5L19 7.5",
   info: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 11v5M12 8h.01",
   alert: "M12 3 2 20h20L12 3ZM12 10v4M12 17h.01",
@@ -61,12 +65,14 @@ const ICONS = {
   giveBack: "M12 4v11M8 11l4 4 4-4M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12",
   basket: "M4 9.5h16l-1.6 9a1.5 1.5 0 0 1-1.5 1.25H7.1a1.5 1.5 0 0 1-1.5-1.25L4 9.5ZM8.5 9.5 12 4l3.5 5.5M10 13.5v3M14 13.5v3",
   clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7.5V12l3 2",
+  history: "M3.5 12A8.5 8.5 0 1 0 6 6L3.5 8.5M3.5 4v4.5H8M12 7.5V12l3 2",
+  globe: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18",
   back: "M15 18l-6-6 6-6",
   share: "M12 3v11M8.5 6.5 12 3l3.5 3.5M8 10H6.5A1.5 1.5 0 0 0 5 11.5v7A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 17.5 10H16",
   install: "M12 4v10M8 10.5l4 4 4-4M5 19.5h14",
   cloudOff: "M3 3l18 18M8.4 8.4A5 5 0 0 0 6.5 18H17M20.2 16.4A3.8 3.8 0 0 0 17 10.2h-.6A6 6 0 0 0 10.5 6.2",
-  more: "M12 5.5v.01M12 12v.01M12 18.5v.01",
-  dots: "M5.5 12h.01M12 12h.01M18.5 12h.01",
+  more: "M12 4.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM12 17.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z",
+  dots: "M5.5 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM18.5 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z",
   swap: "M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4",
   stack: "M12 4 3.5 8.5 12 13l8.5-4.5L12 4ZM3.5 12.5 12 17l8.5-4.5M3.5 16.5 12 21l8.5-4.5",
   phone: "M8 3h8a1.5 1.5 0 0 1 1.5 1.5v15A1.5 1.5 0 0 1 16 21H8a1.5 1.5 0 0 1-1.5-1.5v-15A1.5 1.5 0 0 1 8 3ZM11 18h2",

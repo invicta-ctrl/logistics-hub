@@ -84,6 +84,8 @@ export function bindOpenUnits(container: HTMLElement, state: () => OpenUnitState
     const body = action === "open" || action === "use" ? { action, key: keyFor(intent), unitId } : action === "condition" ? { action, unitId, condition: button.dataset.condition } : { action, unitId };
     busy = true;
     container.setAttribute("aria-busy", "true");
+    // Until the refresh lands every control shows it is waiting, instead of silently ignoring a tap; render() restores them.
+    container.querySelectorAll("button").forEach((control) => { control.disabled = true; });
     try {
       const summary = await api<Summary>(`/api/staff/items/${encodeURIComponent(current.id)}/open-units`, { method: "POST", body: JSON.stringify(body) });
       keys.delete(intent);
