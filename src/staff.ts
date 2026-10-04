@@ -6,6 +6,8 @@ import { type Photo, type PhotoPanel, openViewer, photoPanel, photoUrl, rowThumb
 import { MAX_DEPTH, PATH_SEPARATOR, REPORT_LABELS, type ReportKind, VISIBILITY_LABELS, ancestry, inOrder, pathOf, placesOf, withinPlace } from "./location-tree";
 import { type Step, openWhereIsIt } from "./where-is-it";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
+import { bulkBar } from "./bulk-select";
+import { placeList } from "./catalogue-places";
 import { ApiError, MARK, type Html, type IconName, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Item = {
@@ -13,6 +15,7 @@ type Item = {
   lendingAudience: string; onHand: number; reorderThreshold: number; locationId: string | null; legacyLocation: string | null; openReports: number; listed: boolean;
   stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean; lastCountedAt: string | null; onLoan: number;
   consumptionMode: string; openUnits: number; openCondition: string | null; photoId: string | null;
+  updatedAt: string | null; model: string | null; serialNumber: string | null;
 };
 /** A place as the Worker lists it (src/locations.ts); paths, depth and order come from location-tree.ts. */
 export type PlaceRow = {
@@ -62,7 +65,7 @@ const TYPE_CHOICES: Record<string, string> = { Loanable: "Borrow (Loanable)", Co
 const FIELD_LABELS: Record<string, string> = {
   name: "Name", aliases: "Other names", category: "Category", itemType: "Type", unit: "Unit", status: "Status", storageLocation: "Place",
   reorderThreshold: "Reorder level", lendingAudience: "Who may borrow", defaultLoanDays: "Loan period (days)", maximumLoanQty: "Maximum per loan",
-  needsReview: "Review", notes: "Internal notes", stockArea: "Stock area", expiresOn: "Earliest expiry", consumptionMode: "Normally used"
+  needsReview: "Review", notes: "Internal notes", model: "Model", serialNumber: "Serial number", stockArea: "Stock area", expiresOn: "Earliest expiry", consumptionMode: "Normally used"
 };
 const LENDING_FIELDS = ["lendingAudience", "defaultLoanDays", "maximumLoanQty"];
 
@@ -332,6 +335,7 @@ export async function workspace(): Promise<void> {
         <div class="page-header__actions">
           <p class="live-status" id="live-status">Connecting…</p>
           <a class="button button--secondary" href="/staff/locations" data-route>${icon("pin")}Locations</a>
+          <a class="button button--secondary" href="/staff/catalogue" data-route>${icon("camera")}Catalogue</a>
           <button class="button button--primary" type="button" id="new-item">${icon("plus")}New item</button>
         </div>
       </header>
@@ -344,10 +348,13 @@ export async function workspace(): Promise<void> {
           <div class="select-field"><label class="visually-hidden" for="filter-location">Place</label><select id="filter-location"></select></div>
           <div class="select-field select-field--narrow"><label class="visually-hidden" for="filter-type">Type</label><select id="filter-type"></select></div>
         </div>
+        <button class="button button--secondary" type="button" id="select-toggle" aria-pressed="false">${icon("check")}Select</button>
         <p class="table-toolbar__count" id="inventory-count" aria-live="polite"></p>
       </div>
+      <div class="bulk-bar" id="bulk-bar" role="region" aria-label="Selected items" hidden></div>
       <div id="inventory-results" aria-busy="true">${tableSkeleton()}</div>
-      <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>`);
+      <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>
+      <dialog class="sheet" id="bulk-sheet" aria-labelledby="sheet-title"></dialog>`);
 
   const params = new URLSearchParams(window.location.search);
   let inventory: Inventory | null = null;
@@ -367,6 +374,10 @@ export async function workspace(): Promise<void> {
   let dirty = false;
   let pendingItem = params.get("item");
   let shownIds: string[] = [];
+  /** Select mode: a checkbox on every row, and one change applied to all the ticked items at once (src/bulk-select.ts). */
+  let selecting = false;
+  const selected = new Set<string>();
+  let lastPicked: string | null = null;
   const previous = new Map<string, number>();
   const changed = new Map<string, number>();
   const sheet = document.querySelector<HTMLDialogElement>("#sheet")!;
@@ -399,7 +410,8 @@ export async function workspace(): Promise<void> {
   };
 
   const direction = (id: string) => { const was = changed.get(id); if (was === undefined) return ""; const now = previous.get(id) ?? was; return now > was ? "is-changed is-up" : "is-changed is-down"; };
-  const row = (item: Item) => html`<tr data-key="${item.id}" class="${[direction(item.id), item.id === openId ? "is-open" : "", active(item) ? "" : "is-inactive"].join(" ")}">
+  const row = (item: Item) => html`<tr data-key="${item.id}" class="${[direction(item.id), item.id === openId ? "is-open" : "", active(item) ? "" : "is-inactive", selected.has(item.id) ? "is-selected" : ""].join(" ")}">
+    ${selecting ? html`<td class="col-select"><input type="checkbox" class="select-box" data-select="${item.id}" aria-label="Select ${item.name}" ${selected.has(item.id) ? html`checked` : ""} /></td>` : ""}
     <td class="col-id">${item.id}</td>
     <td class="col-item ${item.photoId ? "" : "col-item--bare"}">${rowThumb(item.photoId)}<button type="button" class="row-link">${item.name}</button><span class="cell-sub"><span class="cell-id">${item.id} · </span>${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}${placeText(item) ? html`<span class="cell-place"> · ${placeText(item)}</span>` : ""}</span></td>
     <td class="col-category">${categoryName(item.category)}</td>
@@ -455,7 +467,7 @@ export async function workspace(): Promise<void> {
     preservingFocus(results, () => mount(results, shown.length
       ? html`${hint}<div class="data-table-wrap"><table class="data-table data-table--items">
           <caption class="visually-hidden">Items. Select an item to see, review or edit it.</caption>
-          <thead><tr>${sortHeader("id", "ID", "col-id")}${sortHeader("name", "Item", "col-item")}${sortHeader("category", "Category", "col-category")}${sortHeader("location", "Place", "col-location")}${sortHeader("onHand", "On hand", "col-qty")}<th scope="col" class="col-status">Status</th></tr></thead>
+          <thead><tr>${selecting ? html`<th scope="col" class="col-select"><input type="checkbox" class="select-box" id="select-all" aria-label="Select all ${shown.length.toLocaleString()} shown items" ${shown.every((item) => selected.has(item.id)) ? html`checked` : ""} /></th>` : ""}${sortHeader("id", "ID", "col-id")}${sortHeader("name", "Item", "col-item")}${sortHeader("category", "Category", "col-category")}${sortHeader("location", "Place", "col-location")}${sortHeader("onHand", "On hand", "col-qty")}<th scope="col" class="col-status">Status</th></tr></thead>
           <tbody>${shown.map(row)}</tbody></table></div>`
       : view === "gradual" && !query && !Object.values(filters).some(Boolean) ? emptyState("No likely items left", "No active Consumable counted in reams, rolls, packs, bottles or similar units is still used as a whole unit.")
       : emptyState(view === "review" && !query ? "Every record is reviewed" : "No items match", view === "review" && !query ? "Nothing is waiting for review with these filters." : "Try another search, filter, or view.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
@@ -465,7 +477,19 @@ export async function workspace(): Promise<void> {
     }
     changed.clear();
     (document.querySelector("#clear-search") as HTMLElement).hidden = !search.value;
+    document.querySelector("#select-toggle")!.setAttribute("aria-pressed", String(selecting));
+    bulk.draw();
   };
+
+  /** The ticked items that still exist, as the bulk dialog needs them. */
+  const bulk = bulkBar(document.querySelector<HTMLElement>("#bulk-bar")!, document.querySelector<HTMLDialogElement>("#bulk-sheet")!, {
+    selected: () => (inventory?.items ?? []).filter((item) => selected.has(item.id)),
+    places: () => placeList(inventory?.locations ?? []),
+    categories: () => inventory?.categories ?? [],
+    refresh: () => poll.refresh(),
+    keepOnly: (ids) => { selected.clear(); ids.forEach((id) => selected.add(id)); render(); },
+    clear: () => { selected.clear(); render(); }
+  });
 
   const poll = live<Inventory>("/api/staff/inventory", {
     interval: 10_000,
@@ -561,7 +585,32 @@ export async function workspace(): Promise<void> {
       return;
     }
     const tableRow = target.closest<HTMLTableRowElement>("tr[data-key]");
+    if (selecting) {
+      if (target.id === "select-all") {
+        const on = (target as HTMLInputElement).checked;
+        for (const id of shownIds) { if (on) selected.add(id); else selected.delete(id); }
+        render();
+        return;
+      }
+      if (!tableRow) return;
+      // A tick, or a click anywhere on the row; shift extends from the last one picked to this one.
+      const id = tableRow.dataset.key!;
+      const on = target.matches("[data-select]") ? (target as HTMLInputElement).checked : !selected.has(id);
+      const span = (event as MouseEvent).shiftKey && lastPicked && shownIds.includes(lastPicked) ? shownIds.slice(Math.min(shownIds.indexOf(lastPicked), shownIds.indexOf(id)), Math.max(shownIds.indexOf(lastPicked), shownIds.indexOf(id)) + 1) : [id];
+      for (const each of span) { if (on) selected.add(each); else selected.delete(each); }
+      lastPicked = id;
+      render();
+      results.querySelector<HTMLInputElement>(`tr[data-key="${CSS.escape(id)}"] .select-box`)?.focus({ preventScroll: true });
+      return;
+    }
     if (tableRow) openItem(tableRow.dataset.key!);
+  });
+  document.querySelector("#select-toggle")!.addEventListener("click", () => {
+    selecting = !selecting;
+    if (!selecting) selected.clear();
+    lastPicked = null;
+    if (selecting && sheet.open) closeSheet();
+    render();
   });
   document.querySelector("#new-item")!.addEventListener("click", openNew);
 
@@ -691,6 +740,7 @@ export async function workspace(): Promise<void> {
     return html`<p class="profile__stock"><strong>${item.onHand}</strong> ${units(item.onHand, item.unit)} on hand${out ? html` <span class="muted">· ${out} on loan</span>` : ""}</p>
       ${tags(item)}
       <p class="profile__meta">${label(item.itemType)} · ${categoryName(item.category)}</p>
+      ${item.model || item.serialNumber ? html`<p class="profile__meta">${[item.model && `Model ${item.model}`, item.serialNumber && `Serial ${item.serialNumber}`].filter(Boolean).join(" · ")}</p>` : ""}
       <p class="profile__meta profile__meta--place">${icon("pin")}<span>${item.location ?? html`<span class="muted">No place set</span>`}${!item.location && item.legacyLocation ? html`<span class="muted"> · typed earlier: ${item.legacyLocation}</span>` : ""}</span></p>
       <p class="profile__where"><button type="button" class="button button--secondary button--sm" data-where>${icon("pin")}Where is it?</button></p>`;
   }
@@ -936,6 +986,10 @@ export async function workspace(): Promise<void> {
               <div class="field"><label for="np-parent">Inside</label><select id="np-parent"></select></div></div>
             <p class="form-alert" id="np-alert" role="alert" hidden></p>
             <div class="where__buttons"><button type="button" class="button button--secondary button--sm" data-np-add>Add place</button><button type="button" class="button button--ghost button--sm" data-np-cancel>Cancel</button></div></div></div>
+        <div class="field-grid">
+          ${text("model", "Model", item.model, html`maxlength="80" autocomplete="off"`, "", true)}
+          ${text("serialNumber", "Serial number", item.serialNumber, html`maxlength="80" autocomplete="off" spellcheck="false"`, "", true)}
+        </div>
         <div class="field"><label for="f-notes">Internal notes <span class="field__optional">optional</span></label><textarea id="f-notes" name="notes" maxlength="1000" rows="3">${item.notes ?? ""}</textarea></div>
       </div>
       <div class="form-section">
@@ -974,7 +1028,7 @@ export async function workspace(): Promise<void> {
       name: String(values.get("name") ?? ""), aliases: String(values.get("aliases") ?? ""), category: String(values.get("category") ?? ""), unit: String(values.get("unit") ?? ""),
       itemType: String(values.get("itemType")), status: String(values.get("status")), locationId: String(values.get("locationId") ?? ""),
       reorderThreshold: whole("reorderThreshold"), lendingAudience: String(values.get("lendingAudience")),
-      needsReview: values.get("reviewed") !== "on", notes: String(values.get("notes") ?? ""),
+      needsReview: values.get("reviewed") !== "on", notes: String(values.get("notes") ?? ""), model: String(values.get("model") ?? ""), serialNumber: String(values.get("serialNumber") ?? ""),
       stockArea: String(values.get("stockArea") ?? "Inventory"), expiresOn: String(values.get("expiresOn") ?? ""), consumptionMode: String(values.get("consumptionMode") ?? "WHOLE_UNIT"),
       ...(values.has("openingQuantity") ? { openingQuantity: whole("openingQuantity") } : {})
     };
