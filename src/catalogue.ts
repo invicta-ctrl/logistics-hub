@@ -1,6 +1,6 @@
 import { BEHAVIOURS, type Behaviour, UNSORTED_CATEGORY, UNSORTED_UNIT, behaviourFields } from "./catalog-policy";
 import { type Known, type Match, possibleDuplicates } from "./duplicates";
-import { type Actor, InputError, audit, createItem, parseItemInput, pathsOf, text, usablePlace } from "./inventory";
+import { type Actor, InputError, audit, createItem, distinct, parseItemInput, pathsOf, text, usablePlace } from "./inventory";
 import { LOCATION_ID } from "./location-tree";
 
 /*
@@ -77,6 +77,31 @@ export async function sessionDetail(db: D1Database, actor: Actor, id: string) {
   };
 }
 
+/**
+ * What a device needs to catalogue without a connection (V1.6), and what the capture screen reads online too, so suggestions and
+ * possible matches come out the same either way: each item's name, kind, identity signals and place, the categories and units in
+ * use, and the place tree. Nothing about people, loans, notes or history.
+ */
+export async function catalogueSnapshot(db: D1Database) {
+  const [items, places] = await db.batch([
+    db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.unit, i.stock_area AS stockArea, i.status,
+        i.model, i.serial_number AS serialNumber, i.location_id AS locationId, p.dhash AS photoHash, COALESCE(b.on_hand, 0) AS onHand
+      FROM items i LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN inventory_balances b ON b.id = i.id ORDER BY i.name COLLATE NOCASE, i.id`),
+    db.prepare("SELECT id, name, parent_id AS parentId, active FROM locations ORDER BY name COLLATE NOCASE, id")
+  ]);
+  const rows = items!.results as Array<{ category: string; unit: string }>;
+  return {
+    items: rows,
+    categories: distinct(rows.map((row) => row.category).filter((category) => category !== UNSORTED_CATEGORY)),
+    units: distinct(rows.map((row) => row.unit)),
+    places: (places!.results as Array<{ active: number }>).map((row) => ({ ...row, active: row.active === 1 }))
+  };
+}
+
+/** Whether an item came from one of this account's cataloguing sessions: the only items a device's offline lease may add a first photo to. */
+export const capturedBy = (db: D1Database, accountId: string, itemId: string): Promise<boolean> =>
+  db.prepare("SELECT 1 FROM catalogue_captures c JOIN catalogue_sessions s ON s.id = c.session_id WHERE c.item_id = ? AND s.started_by = ?").bind(itemId, accountId).first().then(Boolean);
+
 /** The classified, still-unreviewed items of a session, with the versions a bulk "mark reviewed" needs. */
 export async function unreviewed(db: D1Database, id: string) {
   if (!SESSION_ID.test(id)) throw new InputError(404, "Cataloguing session not found.");
@@ -85,13 +110,22 @@ export async function unreviewed(db: D1Database, id: string) {
   return { items: results };
 }
 
+/**
+ * Starts this person's session, or answers with the one they already have open (on any device). A device that started one without a
+ * connection proposes the id it used, so a start whose answer was lost is never repeated; whichever session this answers with is
+ * where that device's captures go.
+ */
 export async function startSession(db: D1Database, actor: Actor, input: unknown) {
   const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  if (body.id !== undefined && (typeof body.id !== "string" || !SESSION_ID.test(body.id))) throw new InputError(400, "That session id is not valid. Reload and try again.");
   const existing = await db.prepare("SELECT id FROM catalogue_sessions WHERE status = 'ACTIVE' AND started_by = ?").bind(actor.accountId).first<string>("id");
   if (existing) return { id: existing, resumed: true };
   const locationId = placeId(body.locationId);
   await usablePlace(db, locationId);
-  const id = `CS-${crypto.randomUUID()}`;
+  const used = typeof body.id === "string" ? await db.prepare("SELECT started_by FROM catalogue_sessions WHERE id = ?").bind(body.id).first<string>("started_by") : null;
+  if (used && used !== actor.accountId) throw new InputError(409, "That session id is already used. Reload and try again.");
+  // A proposed session already finished (here or on another device) cannot take more captures: a new one does.
+  const id = typeof body.id === "string" && !used ? body.id : `CS-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   const place = (await pathsOf(db, [locationId])).get(locationId) ?? null;
   try {
@@ -150,9 +184,11 @@ export async function capture(db: D1Database, actor: Actor, sessionId: string, i
   const requestId = body.id;
   if (typeof requestId !== "string" || !REQUEST_ID.test(requestId)) throw new InputError(400, "Missing request id. Reload and try again.");
   const replay = async (): Promise<Captured | null> => {
-    const found = await db.prepare("SELECT item_id AS id, session_id AS sessionId FROM catalogue_captures WHERE id = ?").bind(requestId).first<{ id: string; sessionId: string }>();
+    const found = await db.prepare("SELECT c.item_id AS id, c.session_id AS sessionId, s.started_by AS owner FROM catalogue_captures c JOIN catalogue_sessions s ON s.id = c.session_id WHERE c.id = ?")
+      .bind(requestId).first<{ id: string; sessionId: string; owner: string }>();
     if (!found) return null;
-    if (found.sessionId !== sessionId) throw new InputError(409, "That request was already used. Reload and try again.");
+    // A device re-sends a capture to its person's newer session when the first was finished meanwhile: it was saved once, there.
+    if (found.sessionId !== sessionId && found.owner !== actor.accountId) throw new InputError(409, "That request was already used. Reload and try again.");
     return { id: found.id, captureId: requestId, replayed: true };
   };
   const earlier = await replay();
