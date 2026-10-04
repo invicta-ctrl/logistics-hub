@@ -76,7 +76,7 @@ test("a cataloguing session on a shelf: mixed items, a dropped connection, a dup
   expect(await named(page, "e2e hammer")).toHaveLength(1);
 
   await capture(page, { name: "E2E Mystery crate", how: "Not sure", more: 2 });
-  await expect(rows.first().getByText("Review later")).toBeVisible();
+  await expect(rows.first().getByText("Review later", { exact: true })).toBeVisible();
 
   // A reload keeps the session; it resumes with everything in it.
   await page.reload();
