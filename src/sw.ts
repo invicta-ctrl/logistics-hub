@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { access } from "./catalogue-store";
+import { CATALOGUE_DB, access } from "./catalogue-store";
 import { nextAttemptAt, syncNow } from "./offline-sync";
 
 /*
@@ -33,9 +33,21 @@ self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(SHELL);
     await cache.addAll([PAGE, ...__BUILD__.files]);
-    if (await access().catch(() => null)) await cache.addAll(__BUILD__.catalogue);
+    if (await catalogueOn()) await cache.addAll(__BUILD__.catalogue);
   })());
 });
+
+/**
+ * Whether offline cataloguing is on here. Only such a device has the catalogue store at version 2: opening it anywhere else would
+ * create it on every Self-Service phone, or upgrade it under a V1.5 page still open there.
+ */
+async function catalogueOn(): Promise<boolean> {
+  if (indexedDB.databases) {
+    const known = await indexedDB.databases().catch(() => []);
+    if (!known.some((db) => db.name === CATALOGUE_DB && (db.version ?? 0) >= 2)) return false;
+  }
+  return (await access().catch(() => null)) !== null;
+}
 
 /** Saves the Catalogue's screens in this version's shell (what is already there is not fetched again); false if any is missing. */
 async function keepCatalogue(): Promise<boolean> {
