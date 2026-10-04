@@ -1,6 +1,6 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-## Road to V2 — V1.5 Rapid Catalogue & Bulk Operations (COMPLETE on its branch, INTEGRATION: WAITING ON OWNER ACTIONS; record `docs/road-to-v2/releases/v1.5.md`; Claude Cloud, 2026-10-04)
+## Road to V2 — V1.5 Rapid Catalogue & Bulk Operations (COMPLETE and MERGED to main at `aa8da59`, 2026-10-04; record `docs/road-to-v2/releases/v1.5.md`; Claude Cloud, 2026-10-04)
 - **Gate:** V1.4 `STATUS: COMPLETE`, `INTEGRATION: MERGED 540853e` on `main` (V1.4.1 at `629bf3f`); `origin/main` was already in this branch. Authority: `docs/specs/accepted/road-to-v2/v1.5-rapid-catalogue.md`. Every pushed checkpoint was merged forward through V1.15 without conflicts (script: merge each branch into the next, normal push).
 - **Built:**
   - Migration `0027_catalogue_sessions.sql` (additive: `catalogue_sessions`, `catalogue_captures`, `items.model`, `items.serial_number`, `item_media.dhash`; triggers keep a session's captures append-only, refuse captures in a finished session, one open session per person).
@@ -14,7 +14,7 @@
 - **Verified:** build; `npm test` (385+ with `tests/catalogue.test.ts`, 37 cases incl. a 520-item session); `npm run test:browser` (85 existing + 21 in `tests/browser/catalogue.spec.ts`, incl. dropped and lost-answer saves, photo retry, 600-item bulk in pieces of 50, accessibility); `npm run test:browser:worker` (36 + 2 in `tests/worker-browser/worker-v15-catalogue.spec.ts` with a real offline switch and a real photo). Visual evidence and review: `docs/visual-research/v1.5.md` and `docs/visual-research/v1.5/` (11 defects found and fixed).
 - **Owner actions (to be written into the release record at `finish`):** manifest `ops/releases/v1.5.json` pinning `0027_catalogue_sessions.sql`; apply through the Cloud Operations lane (preflight, prepare), then integrate. No new bucket. Expected: schema added `catalogue_sessions`, `catalogue_captures` and their indexes/triggers; `items` and `item_media` change (one column added to each, plus `model` / `serial_number`); items, movements, on hand, loans and phone events unchanged.
 - **Finished:** privacy / migration / catalog scans, an independent read-only review (nine real findings fixed), manifest `ops/releases/v1.5.json` (pins `0027`), `docs/DEPLOYMENT.md` "V1.5", release record, CI green on `ba6f991`. Every pushed checkpoint was merged forward through V1.15.
-- **Next (Earl):** the owner actions in the release record (manifest to `main`, lane preflight and prepare for `v1.5`, then integrate V1.5 and the waiting successors in version order, then the signed-in checks). V1.6 (`road-to-v2/v1.6-catalog-pwa`) may start; it must not assume `0026` is in production.
+- **Integrated:** manifest on `main`, lane preflight (run 37190272963) and prepare (run 37191120246, READY_TO_MERGE, `0027` now in production), then `main` fast-forwarded to `aa8da59` after CI run 721. **Next (Earl):** the signed-in check (record step 5). V1.6 (`road-to-v2/v1.6-catalog-pwa`) may start; `0027` is in production.
 
 ## 2026-10-04 Independent Catalog Visual foundation (Codex, main)
 
