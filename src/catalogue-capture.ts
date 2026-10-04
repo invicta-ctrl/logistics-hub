@@ -80,7 +80,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
       <a class="button button--ghost button--sm" href="/staff/catalogue" data-route>${icon("back")}Catalogue</a>
       <div class="cat-bar__place"><span class="cat-bar__label">Cataloguing in</span>
         <button type="button" class="cat-place" id="cat-place" aria-expanded="false" aria-controls="cat-place-panel">${icon("pin")}<span id="cat-place-name"></span><span class="cat-place__change">Change</span></button></div>
-      <p class="cat-bar__count"><strong id="cat-count"></strong> <span id="cat-sync" class="live-status" data-state="live"></span></p>
+      <p class="cat-bar__count"><strong id="cat-count"></strong> <span id="cat-sync" class="live-status" data-state="live"></span> <button type="button" class="text-link cat-see" id="cat-see" hidden>See</button></p>
       <button type="button" class="button button--secondary button--sm" id="cat-finish">Finish</button>
     </header>
     <div class="cat-place-panel" id="cat-place-panel" hidden>
@@ -498,12 +498,15 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     const offline = waiting.some((entry) => entry.state === "waiting" && entry.message);
     sync.dataset.state = offline || stopped ? "offline" : "live";
     sync.textContent = stopped ? "Needs you" : offline ? `${holding} waiting to send` : holding ? "Saving…" : "All saved";
+    // On a phone the list sits below the form: one tap goes to whatever is waiting.
+    $("#cat-see").hidden = !(offline || stopped);
     preservingFocus($("#cat-list"), () => mount($("#cat-list"), queued.length || sent.length
       ? html`${!durable() && holding ? html`<p class="callout">${icon("alert")}<span>This browser cannot keep unsent items if the page closes. Stay on this page until they are saved.</span></p>` : ""}<ul class="cat-rows">${queued.map(queuedRow)}${sent.map(savedRow)}</ul>
         ${detail.session.saved > sent.length ? html`<p class="muted">Showing the newest ${sent.length}. The others are saved; find them under Items.</p>` : ""}`
       : html`<p class="muted">Nothing yet. The first item you save appears here.</p>`));
   }
 
+  $("#cat-see").addEventListener("click", () => { $("#cat-recent-title").scrollIntoView({ block: "start", behavior: "smooth" }); });
   $("#cat-list").addEventListener("click", async (event) => {
     const target = event.target as HTMLElement;
     const act = target.closest<HTMLElement>("[data-separate], [data-edit], [data-discard]");

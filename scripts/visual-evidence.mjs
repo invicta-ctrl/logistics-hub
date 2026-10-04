@@ -888,10 +888,14 @@ async function catalogueScenes(browser, url, dir) {
     await page.getByRole("button", { name: /^Save & next/ }).click();
     await page.getByText("Not saved yet").first().waitFor();
     await shot(page, `catalogue-unsaved-${size}`);
+    await page.locator("#cat-list").scrollIntoViewIfNeeded();
+    await page.evaluate(() => document.querySelector("#cat-recent-title").scrollIntoView());
+    await shot(page, `catalogue-unsaved-list-${size}`);
     await context.setOffline(false);
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
     await page.getByText("All saved").waitFor();
     await settle();
+    await page.evaluate(() => document.querySelector("#cat-recent-title").scrollIntoView());
     await shot(page, `catalogue-retried-${size}`);
     await context.close();
   }
