@@ -67,6 +67,9 @@ async function capture(target: Page, options: { name: string; how: string; categ
   if (options.unit) await target.getByLabel("Counted in").fill(options.unit);
   for (let tap = 0; tap < (options.more ?? 0); tap += 1) await target.getByRole("button", { name: "One more" }).click();
   await target.getByRole("button", { name: /^Save/ }).first().click();
+  // The form empties once the item is on the device. Typing the next one sooner races that: a slow photo write lets the
+  // emptying wipe half of it, or the next press lands while this one is still saving.
+  await expect(target.getByLabel("Name", { exact: true })).toHaveValue("");
 }
 
 const rows = (target: Page) => target.locator("#cat-list .cat-row");
