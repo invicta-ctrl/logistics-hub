@@ -54,7 +54,8 @@ async function capture(target: Page, options: { name: string; how: string; categ
       canvas.width = 640;
       canvas.height = 480;
       const context = canvas.getContext("2d")!;
-      for (let band = 0; band < 8; band += 1) { context.fillStyle = `hsl(${(band * 47 + Date.now()) % 360} 60% ${30 + band * 7}%)`; context.fillRect(band * 80, 0, 80, 480); }
+      // Random blocks of light and dark: the photo's 64-bit hash is effectively random, so it never looks like another item's photo.
+      for (let x = 0; x < 16; x += 1) for (let y = 0; y < 12; y += 1) { context.fillStyle = `hsl(0 0% ${Math.floor(Math.random() * 90) + 5}%)`; context.fillRect(x * 40, y * 40, 40, 40); }
       const blob = await new Promise<Blob>((resolve) => canvas.toBlob((value) => resolve(value!), "image/jpeg", 0.85));
       return [...new Uint8Array(await blob.arrayBuffer())];
     });
