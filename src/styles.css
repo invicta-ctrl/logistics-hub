@@ -139,7 +139,7 @@ button { cursor: pointer; }
 kbd { display: inline-grid; min-width: 1.35rem; height: 1.35rem; place-items: center; padding: 0 var(--space-1); border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: var(--radius); background: var(--surface); color: var(--text-3); font: 500 var(--text-sm)/1 var(--sans); }
 .icon { width: var(--icon-size, var(--icon-md)); height: var(--icon-size, var(--icon-md)); flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
 /* An icon leading a run of text sits centred on its first line at any text size, instead of a nudge per component. */
-:is(.form-alert, .callout, .toast, .hint-line, .listing-status, .profile__meta--place, .ss-test, .ss-ready, .ss-stamp, .ss-hint, .ss-warning) > .icon { margin-top: calc((1lh - var(--icon-size, var(--icon-md))) / 2); }
+:is(.form-alert, .callout, .toast, .hint-line, .listing-status, .profile__meta--place, .profile__meta--fresh, .profile__meta--finding, .ss-test, .ss-ready, .ss-stamp, .ss-hint, .ss-warning) > .icon { margin-top: calc((1lh - var(--icon-size, var(--icon-md))) / 2); }
 .mark, .crest { width: auto; }
 .mono { font-family: var(--mono); font-size: .92em; letter-spacing: -.01em; }
 .muted { color: var(--text-3); }
@@ -536,6 +536,11 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .profile__meta { color: var(--text-2); font-size: var(--text-sm); }
 .profile__meta--place { display: flex; align-items: flex-start; gap: var(--space-2); }
 .profile__meta--place .icon { --icon-size: var(--icon-sm); color: var(--text-3); }
+/* V1.7: how fresh the record is (seen in a check, counted), and a check's finding still to settle. */
+.profile__meta--fresh, .profile__meta--finding { display: flex; align-items: flex-start; gap: var(--space-2); }
+.profile__meta--fresh .icon { --icon-size: var(--icon-sm); color: var(--text-3); }
+.profile__meta--finding { color: var(--warn-ink); }
+.profile__meta--finding .icon { --icon-size: var(--icon-sm); color: var(--warn); }
 
 /* The photo viewer: a full-screen modal dialog; the thumbnail grows into it where view transitions exist. */
 .viewer { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: #fff; }
