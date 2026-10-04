@@ -39,7 +39,7 @@ self.addEventListener("install", (event) => {
 });
 
 /**
- * Whether offline cataloguing is on here. Only such a device has the catalogue store at version 2: opening it anywhere else would
+ * Whether offline cataloguing is on here. Only such a device has the catalogue store at version 2 or later: opening it anywhere else would
  * create it on every Self-Service phone, or upgrade it under a V1.5 page still open there.
  */
 async function catalogueOn(): Promise<boolean> {
