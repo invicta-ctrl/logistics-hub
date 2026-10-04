@@ -495,15 +495,19 @@ function stockIssues(db: D1Database, since: string): D1PreparedStatement {
 /** The staff exception view in one revisioned payload: open reviews, stock issues, the last week's activity and loans an unmatched return could belong to. */
 export async function selfServiceReview(db: D1Database) {
   const since = new Date(Date.now() - 7 * 24 * 60 * MINUTE).toISOString();
-  const [open, issues, recent, candidates] = await db.batch([
+  const [open, issues, recent, candidates, reports] = await db.batch([
     db.prepare(`${EVENT_COLUMNS} WHERE ${OPEN_REVIEW} ORDER BY e.received_at DESC LIMIT 200`),
     stockIssues(db, new Date(Date.now() - 30 * 24 * 60 * MINUTE).toISOString()),
     db.prepare(`${EVENT_COLUMNS} WHERE e.received_at >= ? ORDER BY e.occurred_at DESC LIMIT 200`).bind(since),
     db.prepare(`SELECT l.id, l.item_id AS itemId, l.quantity, l.purpose, l.borrower_name AS borrowerName, l.student_id AS studentId, l.created_at AS createdAt
       FROM loans l WHERE l.status = 'OUT' AND l.item_id IN (SELECT item_id FROM self_service_events WHERE review IN ('RETURN_CHECK', 'UNMATCHED_RETURN', 'RETURN_CONFLICT', 'CLOCK') AND event_type = 'RETURN' AND resolved_at IS NULL)
-      ORDER BY l.created_at`)
+      ORDER BY l.created_at`),
+    // Phone reports that nobody has looked at yet ("I can’t find it", "Location looks wrong"); each is resolved from the item or here.
+    db.prepare(`SELECT r.id, r.item_id AS itemId, i.name AS itemName, r.kind, r.reporter_name AS reporterName, r.created_at AS createdAt, lp.path AS location
+      FROM location_reports r JOIN items i ON i.id = r.item_id LEFT JOIN location_paths lp ON lp.id = r.location_id
+      WHERE r.source = 'SELF_SERVICE' AND r.resolved_at IS NULL ORDER BY r.created_at DESC, r.id LIMIT 200`)
   ]);
-  return { open: open.results, stockIssues: issues.results, recent: recent.results, candidates: candidates.results, enabledItems: (await selfServiceCatalog(db)).items.length };
+  return { open: open.results, stockIssues: issues.results, recent: recent.results, candidates: candidates.results, locationReports: reports.results, enabledItems: (await selfServiceCatalog(db)).items.length };
 }
 
 type HeldEvent = {
