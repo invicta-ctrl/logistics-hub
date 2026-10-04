@@ -24,8 +24,9 @@ type SyncEvent = ExtendableEvent & { tag: string };
 
 const SHELL = `logistics-shell-${__BUILD__.version}`;
 const MEDIA = "logistics-media";
-/** The app's one HTML page. Every route is rendered from it in the browser. */
+/** The page every route but the Catalogue is rendered from in the browser. */
 const PAGE = "/";
+/** The Catalog's own page (it links the Catalog's manifest), saved with the Catalogue's screens. */
 const CATALOGUE = "/staff/catalogue";
 const precached = new Set([...__BUILD__.files, ...__BUILD__.catalogue]);
 
@@ -96,13 +97,14 @@ self.addEventListener("fetch", (event) => {
 async function page(request: Request, url: URL): Promise<Response> {
   const cached = await caches.match(PAGE, { cacheName: SHELL });
   if (url.pathname.startsWith("/self-service")) return cached ?? fetch(request);
+  const catalogue = url.pathname === CATALOGUE ? await caches.match(CATALOGUE, { cacheName: SHELL }) : undefined;
   // On a device that catalogues offline, the Catalogue opens from what it saved, so a shelf with no signal still works.
-  if (url.pathname === CATALOGUE && cached && await catalogueKept()) return cached;
+  if (catalogue && await catalogueKept()) return catalogue;
   // The original request keeps the browser's own redirect handling (the Worker may redirect to sign-in).
   try {
     return await fetch(request);
   } catch {
-    return cached ?? Response.error();
+    return catalogue ?? cached ?? Response.error();
   }
 }
 

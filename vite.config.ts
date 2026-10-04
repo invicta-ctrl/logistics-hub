@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
 import { build, defineConfig, type Plugin, type Rollup } from "vite";
 
+/** The two apps' pages: Self-Service and the staff workspace share index.html; the Catalog has its own, so it installs as itself. */
+const PAGES = ["index.html", "staff/catalogue.html"];
+
 /** Files the app needs offline that come from public/ rather than the bundle. */
 const PUBLIC_SHELL = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-512.png", "/touch-icon.png", "/brand/dol-mark.png", "/brand/hau-usc-crest.webp", "/brand/hau-campus-dusk.webp"];
-/** The Catalog app's own manifest and icons, saved with the Catalogue's screens. */
-const CATALOGUE_SHELL = ["/catalogue.webmanifest", "/icons/catalog-192.png", "/icons/catalog-512.png", "/icons/catalog-maskable-512.png", "/icons/catalog-touch-icon.png"];
+/** The Catalog app's own page (staff/catalogue.html, served at /staff/catalogue), manifest and icons, saved with the Catalogue's screens. */
+const CATALOGUE_SHELL = ["/staff/catalogue", "/catalogue.webmanifest", "/icons/catalog-192.png", "/icons/catalog-512.png", "/icons/catalog-maskable-512.png", "/icons/catalog-touch-icon.png"];
 
 /** Lazy screens every installed device saves to open offline. The other staff tools always need a connection and are not saved. */
 const OFFLINE_SCREENS = new Set(["self-service-app"]);
@@ -51,9 +54,10 @@ function serviceWorker(): Plugin {
       const offline = offlineFiles(bundle);
       const files = [...offline.files, ...PUBLIC_SHELL];
       const catalogue = [...offline.catalogue, ...CATALOGUE_SHELL];
-      const page = bundle["index.html"];
       // Every file of the build counts toward the version, so a staff-only change also updates phones.
-      const version = createHash("sha256").update(Object.keys(bundle).sort().join("\n")).update(page?.type === "asset" ? String(page.source) : "").digest("hex").slice(0, 12);
+      const hash = createHash("sha256").update(Object.keys(bundle).sort().join("\n"));
+      for (const name of PAGES) { const page = bundle[name]; hash.update(page?.type === "asset" ? String(page.source) : ""); }
+      const version = hash.digest("hex").slice(0, 12);
       const output = await build({
         configFile: false,
         publicDir: false,
@@ -67,7 +71,7 @@ function serviceWorker(): Plugin {
 }
 
 export default defineConfig({
-  build: { sourcemap: true },
+  build: { sourcemap: true, rollupOptions: { input: PAGES } },
   plugins: [serviceWorker()],
   server: { host: "127.0.0.1", port: 4173, strictPort: true }
 });

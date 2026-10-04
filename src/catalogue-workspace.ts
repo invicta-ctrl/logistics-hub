@@ -6,8 +6,8 @@ import { onSyncChange, sendable, startSending, syncNow } from "./catalogue-sync"
 import { BEHAVIOUR_LABELS, BULK_LIMIT, type Behaviour } from "./catalog-policy";
 import { photoUrl } from "./item-photo";
 import { applyUpdate, canPromptInstall, hasUpdate, isStandalone, onPwaChange, platform, promptInstall, whenIdle } from "./pwa";
-import { shell } from "./staff";
-import { ApiError, type Html, api, app, emptyState, failure, formatDateTime, html, icon, mount, navigate, onLeave, plural, toast, units } from "./ui";
+import { catalogueShell } from "./catalogue-shell";
+import { ApiError, type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, onLeave, plural, toast, units } from "./ui";
 
 /*
  * Catalogue (/staff/catalogue): where a cataloguing session starts, resumes and ends, and the start page of the installed Logistics
@@ -32,7 +32,7 @@ export async function catalogueWorkspace(): Promise<void> {
   try {
     who = await identify();
   } catch (error) {
-    mount(app, html`<main id="main-content" class="container page-message">${emptyState("The Catalogue could not be opened", failure(error), html`<a class="button button--secondary" href="/staff/catalogue" data-route>Try again</a>`, "error", 1)}</main>`);
+    catalogueShell(null, emptyState("The Catalogue could not be opened", failure(error), html`<a class="button button--secondary" href="/staff/catalogue" data-route>Try again</a>`, "error", 1));
     return;
   }
   if (who.mode === "signed-out") return navigate(signInHere(), true);
@@ -42,15 +42,14 @@ export async function catalogueWorkspace(): Promise<void> {
   startSending({ owner: who.session.id, legacy: who.mode === "signed-in" });
   const open = new URLSearchParams(window.location.search).get("session");
   if (open) return captureScreen(who, open);
-  document.title = "Catalogue · Staff workspace";
+  document.title = "Catalogue · Catalog";
   whenIdle(() => true);
   onLeave(() => whenIdle(() => false));
-  shell(who.session, "items", html`
-    <header class="page-header">
-      <div class="page-header__title"><h1>Catalogue</h1><p>Walk a shelf with a phone or tablet: photo, name, how it is used, how many, next.</p></div>
-      ${who.mode === "signed-in" ? html`<div class="page-header__actions"><a class="button button--secondary" href="/staff/items" data-route>${icon("box")}Items</a></div>` : ""}
-    </header>
-    <div id="cat-start" aria-busy="true"><div class="skeleton skeleton--block"></div></div>`);
+  catalogueShell(who, html`<div id="cat-start" aria-busy="true"><div class="skeleton skeleton--block"></div></div>`, html`
+    <h1>Catalogue</h1>
+    <p class="cg-hero__lead">Walk a shelf with a phone or tablet: photo, name, how it is used, how many, next.</p>
+    ${who.mode === "offline" ? html`<p class="cg-mode" role="status">${icon("cloudOff")}<span><strong>You're offline.</strong> You can keep cataloguing on this device until ${day(who.access.expiresAt)}. What you save here is sent when you're back online.</span></p>` : ""}
+    ${who.mode === "lease" ? html`<p class="cg-mode" role="status">${icon("user")}<span><strong>You're signed out.</strong> This device can still catalogue for you until ${day(who.access.expiresAt)}, and sends what you save. Sign in again for Items, Stock and the rest.</span> <a class="cg-mode__action" href="${signInHere()}" data-route>Sign in</a></p>` : ""}`);
   const root = document.querySelector<HTMLElement>("#cat-start")!;
   try {
     const [state, catalog] = await Promise.all([
@@ -67,12 +66,12 @@ export async function catalogueWorkspace(): Promise<void> {
 
 /** Offline, with no offline access on this device: nothing can be catalogued until there is a connection. */
 async function closed(granted: Access | null): Promise<void> {
-  document.title = "Catalogue · Staff workspace";
+  document.title = "Catalogue · Catalog";
   const held = await entries();
   const ended = granted && granted.expiresAt <= Date.now() ? ` Offline cataloguing on this device ended ${day(granted.expiresAt)}.` : "";
-  mount(app, html`<main id="main-content" class="container page-message">${emptyState("The Catalogue needs a connection here",
+  catalogueShell(null, emptyState("The Catalogue needs a connection here",
     `You're offline, and this device isn't set up to catalogue without one.${ended} Connect, sign in, and turn on offline cataloguing on the Catalogue page to use it offline next time.${held.length ? ` ${plural(held.length, "item")} catalogued here ${held.length === 1 ? "is" : "are"} waiting on this device and will be sent once you're back online and signed in.` : ""}`,
-    html`<a class="button button--secondary" href="/staff/catalogue" data-route>Try again</a>`, "error", 1)}</main>`);
+    html`<a class="button button--secondary" href="/staff/catalogue" data-route>Try again</a>`, "error", 1));
 }
 
 /** The member's open session as this device knows it: one started or opened here (unless finished here), else the server's. */
@@ -89,8 +88,6 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
   const choice = remembered() && list.places.get(remembered()!)?.active ? remembered() : null;
   const online = who.mode !== "offline";
   mount(root, html`
-    ${who.mode === "offline" ? html`<section class="callout cat-mode" role="status">${icon("cloudOff")}<p><strong>You're offline.</strong> You can keep cataloguing on this device until ${day(who.access.expiresAt)}. What you save here is sent when you're back online.</p></section>` : ""}
-    ${who.mode === "lease" ? html`<section class="callout cat-mode" role="status">${icon("user")}<p><strong>You're signed out.</strong> This device can still catalogue for you until ${day(who.access.expiresAt)}, and sends what you save. Sign in again for Items, Stock and the rest.</p><a class="button button--secondary button--sm" href="${signInHere()}" data-route>Sign in</a></section>` : ""}
     <div id="cat-held"></div>
     ${mine ? html`<section class="card cat-card" aria-labelledby="resume-title">
         <div class="card__head"><h2 id="resume-title">Your session is open</h2></div>
