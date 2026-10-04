@@ -1,0 +1,72 @@
+/* The Logistics Catalog (V1.6): its own frame, as Self-Service has its own. A field tool for one hand at a shelf: the dark oxblood of its
+   icon in the bar and home's band, warm paper for the work, one column wide enough for a tablet held upright. Shared components inside
+   keep their look; only the frame and the Catalogue's own cards are styled here. */
+
+.is-catalog { background: var(--bg); }
+.is-catalog #app { min-height: 100dvh; }
+
+/* ---------- Bar ---------- */
+.cg-bar { position: sticky; top: 0; z-index: 30; padding-top: env(safe-area-inset-top); background: var(--brand-dark); color: var(--on-dark); }
+.cg-bar :focus-visible { outline-color: var(--gold-action); }
+.cg-bar__inner { display: flex; max-width: 46rem; min-height: 3.5rem; margin-inline: auto; align-items: center; justify-content: space-between; gap: var(--space-3); padding-inline: max(var(--space-4), env(safe-area-inset-left)) max(var(--space-4), env(safe-area-inset-right)); }
+.cg-bar__brand { display: flex; min-width: 0; min-height: var(--target); align-items: center; gap: var(--space-3); border-radius: var(--radius); color: inherit; text-decoration: none; }
+/* The DOL mark on a cream disc, as on the Catalog's icon, so the app and its icon read as one. */
+.cg-bar__mark { display: grid; width: 2.25rem; height: 2.25rem; flex: none; place-items: center; border-radius: 50%; background: var(--on-dark); }
+.cg-bar__mark .mark { width: auto; height: 1.4rem; }
+.cg-bar__title { display: grid; min-width: 0; font-family: var(--serif); font-size: 1.125rem; font-weight: 500; line-height: 1.1; white-space: nowrap; }
+.cg-bar__title > * { overflow: hidden; text-overflow: ellipsis; }
+.cg-bar__title small { color: var(--gold-action); font-family: var(--sans); font-size: .625rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+.cg-bar__end { display: flex; flex: none; align-items: center; gap: var(--space-2); }
+
+/* How this device is connected: a small light. */
+.cg-pill { display: inline-flex; min-height: 2rem; align-items: center; gap: var(--space-2); padding: .25rem .75rem; border: 1px solid var(--on-dark-line); border-radius: var(--radius-pill); color: var(--on-dark); font-size: var(--text-sm); font-weight: 500; white-space: nowrap; }
+.cg-pill__dot { width: .5rem; height: .5rem; flex: none; border-radius: 50%; background: var(--ok-on-dark); }
+.cg-pill--offline .cg-pill__dot, .cg-pill--lease .cg-pill__dot { background: var(--gold-action); }
+.cg-pill--offline { border-color: var(--gold-action); }
+
+.cg-account { position: relative; display: grid; width: var(--target); height: var(--target); flex: none; place-items: center; padding: 0; border: 0; border-radius: 50%; background: none; }
+.cg-account:hover { background: var(--on-dark-hover); }
+.cg-avatar { display: inline-grid; width: 2.125rem; height: 2.125rem; place-items: center; border-radius: 50%; background: var(--gold-action); color: var(--brand-deep); font-size: var(--text-sm); font-weight: 600; line-height: 1; }
+.cg-menu { inset: calc(3.25rem + env(safe-area-inset-top)) max(var(--space-4), calc((100% - 46rem) / 2 + var(--space-4))) auto auto; }
+.cg-menu__note { display: flex; gap: var(--space-3); padding: var(--space-2) var(--space-3); color: var(--text-2); font-size: var(--text-sm); }
+.cg-menu__note .icon { flex: none; color: var(--text-3); }
+
+/* ---------- Home's band ---------- */
+/* The band runs on from the bar and scrolls away under it; the first card overlaps its foot, so where to start is the first thing under the thumb. */
+.cg-band { background: var(--brand-dark); color: var(--on-dark); }
+.cg-band :focus-visible { outline-color: var(--gold-action); }
+.cg-hero { display: grid; max-width: 46rem; margin-inline: auto; gap: var(--space-2); padding: var(--space-4) max(var(--space-4), env(safe-area-inset-right)) var(--space-12) max(var(--space-4), env(safe-area-inset-left)); }
+.cg-hero h1 { font-family: var(--serif); font-size: clamp(2.25rem, 9vw, 3rem); font-weight: 500; letter-spacing: -.03em; line-height: 1; }
+.cg-hero__lead { max-width: 34rem; color: var(--on-dark-2); font-size: var(--text-base); }
+.cg-mode { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2) var(--space-3); margin-top: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--gold-action); border-radius: var(--radius-lg); background: rgb(232 185 60 / 10%); color: var(--on-dark); font-size: var(--text-sm); line-height: 1.5; }
+.cg-mode > .icon { flex: none; margin-top: .125rem; color: var(--gold-action); }
+.cg-mode > span { flex: 1 1 14rem; min-width: 0; }
+.cg-mode__action { display: inline-flex; min-height: var(--target-min); align-items: center; margin-left: auto; padding: 0 var(--space-4); border-radius: var(--radius); background: var(--gold-action); color: var(--brand-deep); font-weight: 600; text-decoration: none; }
+.cg-mode__action:hover { background: var(--gold-action-hover); }
+
+/* ---------- Main column ---------- */
+.cg-main { display: grid; width: 100%; max-width: 46rem; margin-inline: auto; align-content: start; gap: var(--space-4); padding: var(--space-5) max(var(--space-4), env(safe-area-inset-right)) calc(var(--space-12) + env(safe-area-inset-bottom)) max(var(--space-4), env(safe-area-inset-left)); }
+.cg-band ~ .cg-main { position: relative; margin-top: calc(-1 * var(--space-8)); padding-top: 0; }
+.cg-main > .empty { margin-top: var(--space-8); }
+#cat-start { display: grid; gap: var(--space-4); }
+#cat-start > :empty { display: none; }
+.is-catalog .cat { padding-block: 0; }
+.is-catalog .page-header { padding-top: var(--space-2); }
+
+/* The Catalogue's cards: white on paper, rounder and lifted, the primary action full width for a thumb. */
+.is-catalog .cat-card { gap: var(--space-4); padding: var(--space-5); border-color: var(--line); border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-md); }
+.is-catalog .cat-card h2 { font-family: var(--serif); font-size: var(--text-2xl); font-weight: 500; letter-spacing: -.01em; line-height: 1.15; }
+.is-catalog .cat-card .button--lg { width: 100%; justify-content: center; min-height: 3.5rem; }
+.is-catalog .cat-card__place { padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); background: var(--subtle); }
+.is-catalog .cat-card__place .icon { color: var(--brand); }
+.is-catalog .cat-device { box-shadow: none; }
+.is-catalog .cat-device h2 { font-family: var(--sans); font-size: var(--text-lg); font-weight: 600; letter-spacing: 0; }
+/* The grid spaces the home's blocks; the margins the staff workspace's flow gives them are dropped. */
+.is-catalog :is(.cat-held, .cat-device, .cat-later, .cat-others, .cat-review) { margin-block: 0; }
+/* What waits on the device can be the first block, over the band's foot: white like the cards, the clock in the waiting colour. */
+.is-catalog .cat-held { border-color: var(--line-warn); border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-md); color: var(--text); }
+.is-catalog .cat-later { padding: var(--space-2) var(--space-1); font-size: var(--text-sm); }
+
+@media (min-width: 48rem) {
+  .cg-hero { padding-top: var(--space-8); }
+}
