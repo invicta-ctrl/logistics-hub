@@ -54,7 +54,8 @@ async function capture(target: Page, options: { name: string; how: string; categ
       canvas.width = 640;
       canvas.height = 480;
       const context = canvas.getContext("2d")!;
-      for (let band = 0; band < 8; band += 1) { context.fillStyle = `hsl(${(band * 47 + Date.now()) % 360} 60% ${30 + band * 7}%)`; context.fillRect(band * 80, 0, 80, 480); }
+      // Random blocks of light and dark: the photo's 64-bit hash is effectively random, so it never looks like another item's photo.
+      for (let x = 0; x < 16; x += 1) for (let y = 0; y < 12; y += 1) { context.fillStyle = `hsl(0 0% ${Math.floor(Math.random() * 90) + 5}%)`; context.fillRect(x * 40, y * 40, 40, 40); }
       const blob = await new Promise<Blob>((resolve) => canvas.toBlob((value) => resolve(value!), "image/jpeg", 0.85));
       return [...new Uint8Array(await blob.arrayBuffer())];
     });
@@ -195,7 +196,9 @@ test.describe.serial("the Catalog PWA", () => {
     expect((await page.request.get("/api/staff/inventory")).status()).toBe(401);
     await page.getByRole("link", { name: /^Resume cataloguing/ }).click();
     await capture(page, { name: "E2E V16 Sponge", how: "Consume", category: "E2E V16 TOOLS", unit: "piece" });
-    await expect(page.locator("#cat-sync")).toHaveText("All saved", { timeout: 30_000 });
+    // The bar may still say "All saved" from before this save: wait for the item's own row.
+    await expect(rows(page).filter({ hasText: "E2E V16 Sponge" }).getByText("Saved", { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator("#cat-sync")).toHaveText("All saved");
     expect((await held(page)).length).toBe(0);
     // Turning it off ends the lease: the device can no longer catalogue on it.
     await page.goto("/staff/catalogue");

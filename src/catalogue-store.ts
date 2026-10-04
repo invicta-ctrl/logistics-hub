@@ -66,7 +66,8 @@ export type SnapshotItem = {
 };
 export type Snapshot = { revision: number; items: SnapshotItem[]; categories: string[]; units: string[]; places: Place[]; fetchedAt: string };
 
-const NAME = "logistics-hub-catalogue";
+/** The database's name; version 2 exists only where offline cataloguing was turned on (V1.6). */
+export const CATALOGUE_DB = "logistics-hub-catalogue";
 type StoreName = "captures" | "sessions" | "meta";
 /** The page's own copy: what is read when the browser keeps nothing. */
 const memory: Record<StoreName, Map<string, unknown>> = { captures: new Map(), sessions: new Map(), meta: new Map() };
@@ -80,7 +81,7 @@ function open(): Promise<IDBDatabase | null> {
   opening ??= new Promise<IDBDatabase | null>((resolve) => {
     try {
       // Version 2 (V1.6) adds sessions and meta; captures a V1.5 page left are kept as they are.
-      const request = indexedDB.open(NAME, 2);
+      const request = indexedDB.open(CATALOGUE_DB, 2);
       request.onupgradeneeded = () => {
         const db = request.result;
         for (const store of ["captures", "sessions"] as const) if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: "id" });
