@@ -601,6 +601,54 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     expect(await page.locator("h1").count()).toBe(1);
   });
 
+  test("a signed-out visitor is sent to sign in and brought back; staff of another department are not let in", async ({ page }) => {
+    const server = serve(page);
+    await server.ready;
+    const refused = (route: Route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "Your staff session has ended. Please sign in again." }) });
+    await page.route("**/api/staff/session", refused);
+    await page.route("**/api/staff/catalogue/offline", refused);
+    await page.goto("/staff/catalogue");
+    await expect(page).toHaveURL(/\/staff\?next=%2Fstaff%2Fcatalogue$/);
+    await expect(page.getByRole("heading", { name: "Staff sign in" })).toBeVisible();
+    await page.unroute("**/api/staff/session", refused);
+    await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...session, access: "DEM", hub: false }) }));
+    await page.goto("/staff/catalogue");
+    await expect(page).toHaveURL(/\/staff\/account$/);
+  });
+
+  test("every state of the Catalogue page: one heading, labelled fields, named controls, and 200% text fits at 320 px", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await page.setViewportSize({ width: 320, height: 800 });
+    const check = async (state: string) => {
+      await expect(page.locator("main h1")).toHaveCount(1);
+      const problems = await page.evaluate(() => ({
+        unlabelled: [...document.querySelectorAll("main input:not([type=hidden]), main select, main textarea")].filter((field) =>
+          !field.getAttribute("aria-label") && !field.getAttribute("aria-labelledby") && !field.closest("label") && !(field.id && document.querySelector(`label[for="${CSS.escape(field.id)}"]`))).length,
+        unnamed: [...document.querySelectorAll("main button, main a[href], main summary")].filter((control) => !(control.textContent ?? "").trim() && !control.getAttribute("aria-label")).length
+      }));
+      expect(problems, state).toEqual({ unlabelled: 0, unnamed: 0 });
+      await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), state).toBe(0);
+      await page.evaluate(() => document.documentElement.style.removeProperty("font-size"));
+    };
+    await server.ready;
+    await page.goto("/staff/catalogue");
+    await expect(page.getByRole("button", { name: "Turn on offline cataloguing" })).toBeVisible();
+    await check("off");
+    await page.getByRole("button", { name: "Turn on offline cataloguing" }).click();
+    await expect(page.getByRole("button", { name: "Turn off" })).toBeVisible();
+    await check("on");
+    await page.route("**/api/staff/session", (route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "Your staff session has ended." }) }));
+    await page.route("**/api/staff/catalogue/offline", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ signedIn: false, lease: { expiresAt: server.state.lease }, account: { id: session.id, displayName: session.displayName, username: session.username, role: session.role, access: session.access } }) }));
+    await page.reload();
+    await expect(page.getByText("You're signed out.", { exact: true })).toBeVisible();
+    await check("signed out, on the lease");
+    await disconnect(page);
+    await page.reload();
+    await expect(page.getByText("You're offline.", { exact: true })).toBeVisible();
+    await check("offline");
+  });
+
   for (const [label, device, steps] of [
     ["an Android phone", devices["Pixel 7"], ["Chrome", "Add to Home screen", "Install", "Create shortcut"]],
     ["an iPhone", devices["iPhone 15"], ["Safari", "Share", "View More", "Add to Home Screen", "Open as Web App", "Add"]],

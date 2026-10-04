@@ -195,7 +195,9 @@ test.describe.serial("the Catalog PWA", () => {
     expect((await page.request.get("/api/staff/inventory")).status()).toBe(401);
     await page.getByRole("link", { name: /^Resume cataloguing/ }).click();
     await capture(page, { name: "E2E V16 Sponge", how: "Consume", category: "E2E V16 TOOLS", unit: "piece" });
-    await expect(page.locator("#cat-sync")).toHaveText("All saved", { timeout: 30_000 });
+    // The bar may still say "All saved" from before this save: wait for the item's own row.
+    await expect(rows(page).filter({ hasText: "E2E V16 Sponge" }).getByText("Saved", { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator("#cat-sync")).toHaveText("All saved");
     expect((await held(page)).length).toBe(0);
     // Turning it off ends the lease: the device can no longer catalogue on it.
     await page.goto("/staff/catalogue");

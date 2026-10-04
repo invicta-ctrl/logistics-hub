@@ -174,7 +174,7 @@ const leaseFor = (request: Request, env: Env) => signedIn(request, env, true);
 
 /** What an offline cataloguing lease may do without a full session: catalogue, and nothing else. */
 function leaseMayUse(method: string, path: string): boolean {
-  // The Catalogue page: this member's open session (the page shows nothing else on a lease).
+  // The Catalogue page, answered with this member's own open session only (staffApi).
   if (path === "/api/staff/catalogue") return method === "GET";
   if (path === "/api/staff/catalogue/offline") return method === "GET" || method === "DELETE";
   if (path === "/api/staff/catalogue/snapshot") return method === "GET";
@@ -343,7 +343,12 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (path === "/api/staff/catalogue/snapshot" && method === "GET") return revisioned(request, env.DB, () => catalogueSnapshot(env.DB));
   if (path === "/api/staff/catalogue/sessions" && method === "POST") { const started = await startSession(env.DB, account, await body()); return json(started, started.resumed ? 200 : 201); }
   const session = CATALOGUE_PATH.exec(path);
-  if (session && !session[2] && method === "GET") return json(await sessionDetail(env.DB, account, session[1]!));
+  if (session && !session[2] && method === "GET") {
+    const detail = await sessionDetail(env.DB, account, session[1]!);
+    // Any Logistics member may read a session; a lease, only its own member's.
+    if (leased && !detail.session.mine) throw new InputError(403, "Sign in again to see someone else's session.");
+    return json(detail);
+  }
   if (session && !session[2] && method === "PATCH") return json(await setSessionPlace(env.DB, account, session[1]!, await body()));
   if (session?.[2] === "/unreviewed" && method === "GET") return json(await unreviewed(env.DB, session[1]!));
   if (session?.[2] === "/finish" && method === "POST") return json(await finishSession(env.DB, account, session[1]!));

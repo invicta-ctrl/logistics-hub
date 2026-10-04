@@ -143,6 +143,9 @@ describe("a lease on its own", () => {
     const theirs = ((await (await as(other, "/api/staff/catalogue/sessions", "POST", { locationId: shelf })).json()) as { id: string }).id;
     const item = ((await (await as(other, `/api/staff/catalogue/sessions/${theirs}/captures`, "POST", shot(shelf))).json()) as { id: string }).id;
     expect((await putPhoto(lease, item)).status).toBe(403);
+    // Another member's session: any signed-in member may read it, a lease may not.
+    expect((await as(session, `/api/staff/catalogue/sessions/${theirs}`)).status).toBe(200);
+    expect((await as(lease, `/api/staff/catalogue/sessions/${theirs}`)).status).toBe(403);
     for (const [method, path] of [
       ["GET", "/api/staff/session"], ["GET", "/api/staff/inventory"], ["GET", `/api/staff/items/${item}`], ["POST", "/api/staff/items"],
       ["GET", `/api/staff/catalogue/sessions/${id}/unreviewed`], ["POST", "/api/staff/items/bulk"], ["POST", "/api/staff/locations"], ["GET", "/api/staff/loans"],

@@ -37,7 +37,7 @@ const sessionOf = (granted: Access): Session => ({
 const accessFrom = (state: OfflineState): Access | null => state.lease ? { accountId: state.account.id, displayName: state.account.displayName, username: state.account.username, role: state.account.role, access: state.account.access, expiresAt: state.lease.expiresAt } : null;
 
 /** Whether the access this device remembers can still be used here without asking the server. */
-export const usable = (granted: Access | null): granted is Access => granted !== null && granted.expiresAt > Date.now();
+const usable = (granted: Access | null): granted is Access => granted !== null && granted.expiresAt > Date.now();
 
 /** Finds out who may catalogue here, keeping what this device remembers in step with the server whenever it can ask. */
 export async function identify(): Promise<Who> {
@@ -110,7 +110,7 @@ async function askWorker(type: "KEEP_CATALOGUE" | "CATALOGUE_KEPT"): Promise<boo
   });
 }
 
-export const keepScreens = () => askWorker("KEEP_CATALOGUE");
+const keepScreens = () => askWorker("KEEP_CATALOGUE");
 
 export type Readiness = {
   /** Offline access for this device, still valid. */
