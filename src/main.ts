@@ -5,7 +5,7 @@ import "@fontsource/newsreader/latin-400.css";
 import "@fontsource/newsreader/latin-500.css";
 import "./styles.css";
 import { landing, lending, notFound, offlinePage } from "./public";
-import { startPwa } from "./pwa";
+import { forgetInstallPrompt, startPwa } from "./pwa";
 import { handOverQuery, leave, navigate, shown, toast } from "./ui";
 
 type View = () => void | Promise<void>;
@@ -38,8 +38,14 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
  */
 function installableAs(path: string): void {
   const catalog = path === "/staff/catalogue";
-  const set = (selector: string, href: string) => { const link = document.querySelector<HTMLLinkElement>(selector); if (link && link.getAttribute("href") !== href) link.setAttribute("href", href); };
-  set('link[rel="manifest"]', catalog ? "/catalogue.webmanifest" : "/manifest.webmanifest");
+  const set = (selector: string, href: string) => {
+    const link = document.querySelector<HTMLLinkElement>(selector);
+    if (!link || link.getAttribute("href") === href) return false;
+    link.setAttribute("href", href);
+    return true;
+  };
+  // An install prompt the browser offered for the other app would install that one: only a prompt offered after the switch is used.
+  if (set('link[rel="manifest"]', catalog ? "/catalogue.webmanifest" : "/manifest.webmanifest")) forgetInstallPrompt();
   set('link[rel="apple-touch-icon"]', catalog ? "/icons/catalog-touch-icon.png" : "/touch-icon.png");
 }
 
