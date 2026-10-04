@@ -32,7 +32,7 @@ export const COUNT_KEYS = ["items", "movements", "onHand", "loans", "phoneEvents
 /* ---------- Manifest and release tree ---------- */
 
 export function loadManifest(file, release) {
-  if (!/^v1\.\d{1,2}(\.\d{1,2})?$/.test(release ?? "")) throw new Stop("PRECHECK", "BAD_RELEASE", `The release must look like v1.2 (or v1.4.1 for a follow-up), not "${release}".`);
+  if (!/^(?:v1\.\d{1,2}(?:\.\d{1,2})?|catalog-visuals)$/.test(release ?? "")) throw new Stop("PRECHECK", "BAD_RELEASE", `The release must look like v1.2 (or v1.4.1 for a follow-up), or be catalog-visuals, not "${release}".`);
   if (!fs.existsSync(file)) throw new Stop("PRECHECK", "NO_MANIFEST", `There is no release manifest at ${file}.`);
   const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
   const text = (value) => typeof value === "string" && value.length > 0;

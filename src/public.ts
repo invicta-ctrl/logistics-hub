@@ -1,6 +1,6 @@
 import { CREST, MARK, type Html, animateNumber, app, categoryName, emptyState, html, icon, label, live, mount, onLeave, plural, preservingFocus, thumbImg, units, writeParams } from "./ui";
 
-type LendingItem = { id: string; name: string; category: string; unit: string; itemType: string; available: number; audience: string; photo: string | null };
+type LendingItem = { id: string; name: string; category: string; unit: string; itemType: string; available: number; audience: string; photo: string | null; iconKey?: string | null };
 type Catalog = { revision: number; items: LendingItem[]; categories: string[] };
 type Sort = "name" | "available";
 
@@ -146,7 +146,7 @@ export function lending(): void {
   let before = new Map<string, number>();
   const changed = new Set<string>();
 
-  const row = (item: LendingItem) => html`<li class="catalogue__row ${changed.has(item.id) ? "is-changed" : ""}" data-key="${item.id}">${thumbImg(item.photo)}
+  const row = (item: LendingItem) => html`<li class="catalogue__row ${changed.has(item.id) ? "is-changed" : ""}" data-key="${item.id}">${thumbImg(item)}
     <div class="catalogue__main"><h3 class="catalogue__name">${item.name}</h3>${terms(item) ? html`<p class="catalogue__meta">${terms(item)}</p>` : ""}</div>${availability(item)}</li>`;
 
   const render = (reason: "filter" | "data") => {
@@ -177,8 +177,8 @@ export function lending(): void {
       .sort((a, b) => sort === "available" ? b.available - a.available || a.name.localeCompare(b.name) : a.name.localeCompare(b.name));
     const ready = shown.filter((item) => item.available > 0).length;
     count.textContent = `${plural(shown.length, "item")}, ${ready} available`;
-    // Once any item has a photo, every row keeps the same left margin, so names line up whether or not a row has its picture.
-    const photos = catalog.items.some((item) => item.photo);
+    // Every item has the same reserved icon/photo frame, keeping names aligned.
+    const photos = catalog.items.length > 0;
     const groups = sort === "name" ? [...new Set(shown.map((item) => item.category))] : [null];
     preservingFocus(results, () => mount(results, shown.length
       ? html`${groups.map((group, index) => {
