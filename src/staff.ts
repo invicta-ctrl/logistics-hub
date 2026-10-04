@@ -242,7 +242,9 @@ export function staffLogin(): void {
     setMessage(alert, "");
     try {
       const result = await api<{ mustChangePassword: boolean }>("/api/staff/login", { method: "POST", body: JSON.stringify({ username: values.get("username"), password: values.get("password") }) });
-      navigate(result.mustChangePassword ? "/staff/account" : "/staff/items");
+      // The installed Catalog signs in here and goes back to the Catalogue; nothing else is accepted as a destination.
+      const next = new URLSearchParams(window.location.search).get("next");
+      navigate(result.mustChangePassword ? "/staff/account" : next && /^\/staff\/catalogue(\?session=CS-[0-9a-f-]{36})?$/.test(next) ? next : "/staff/items");
     } catch (error) {
       setMessage(alert, error instanceof Error ? error.message : "Sign-in failed.");
       button.disabled = false;

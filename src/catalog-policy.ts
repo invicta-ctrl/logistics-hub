@@ -190,7 +190,8 @@ export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
   ACCOUNT: {
     ACCOUNT_CREATED: "Account created", ACCOUNT_UPDATED: "Account updated", PASSWORD_RESET: "Password reset", PASSWORD_CHANGED: "Password changed", SESSIONS_REVOKED: "Sessions ended",
     RECOVERY_KEY_ROTATED: "Recovery key replaced", RECOVERY_KEY_REVOKED: "Recovery key revoked", OWNER_RECOVERY_USED: "Owner recovery used", OWNER_BOOTSTRAPPED: "First owner set up",
-    ACTIVITY_EXPORTED: "Activity exported", SETTING_CHANGED: "Setting changed", RETENTION_ERASED: "Old personal details removed"
+    ACTIVITY_EXPORTED: "Activity exported", SETTING_CHANGED: "Setting changed", RETENTION_ERASED: "Old personal details removed",
+    CATALOGUE_OFFLINE_ON: "Offline cataloguing turned on", CATALOGUE_OFFLINE_OFF: "Offline cataloguing turned off"
   },
   DIRECTORY: {
     STAFF_PERSON_ADDED: "Person added", STAFF_PROFILE_UPDATED: "Profile edited", STAFF_ACCOUNT_LINKED: "Account linked", STAFF_ACCOUNT_UNLINKED: "Account unlinked",
