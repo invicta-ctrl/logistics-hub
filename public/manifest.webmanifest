@@ -5,7 +5,7 @@
   "description": "Borrow, take and return HAU USC Department of Logistics items with your own phone, even when the office internet is down.",
   "lang": "en",
   "start_url": "/self-service",
-  "scope": "/",
+  "scope": "/self-service",
   "display": "standalone",
   "background_color": "#140609",
   "theme_color": "#140609",
