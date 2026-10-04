@@ -1,0 +1,106 @@
+{
+  "coldLoadToFirstRowMs": 1061,
+  "sectionSwitchMs": 245,
+  "itemPhotos": {
+    "withoutPhotos": {
+      "rowsMs": 1333,
+      "requestsAtLoad": 0,
+      "kbAtLoad": 0,
+      "requestsAfterScroll": 0,
+      "kbAfterScroll": 0,
+      "layoutShift": 0.0383
+    },
+    "with300Photos": {
+      "rowsMs": 509,
+      "requestsAtLoad": 34,
+      "kbAtLoad": 99,
+      "requestsAfterScroll": 204,
+      "kbAfterScroll": 592,
+      "layoutShift": 0.0383
+    }
+  },
+  "publicPhotos": {
+    "shiftBeforePhotos": {
+      "desktop": {
+        "shift": 0.5452,
+        "moved": [
+          "div.container",
+          "footer.site-footer",
+          "p.lending-note",
+          "p.live-status",
+          "nav.site-nav",
+          "button.chip",
+          "div.sort-toggle",
+          "li."
+        ]
+      },
+      "phone": {
+        "shift": 0.0327,
+        "moved": [
+          "div.container",
+          "span.",
+          "nav.site-nav",
+          "button.chip",
+          "li."
+        ]
+      }
+    },
+    "shiftAfterPhotos": {
+      "desktop": {
+        "shift": 0.5452,
+        "moved": [
+          "div.container",
+          "footer.site-footer",
+          "p.lending-note",
+          "p.live-status",
+          "nav.site-nav",
+          "button.chip",
+          "div.sort-toggle",
+          "li."
+        ]
+      },
+      "phone": {
+        "shift": 0.0342,
+        "moved": [
+          "div.container",
+          "nav.site-nav",
+          "li.",
+          "span."
+        ]
+      }
+    },
+    "desktop": {
+      "lendingThumbs": 18,
+      "lendingKb": 52,
+      "lendingLayoutShift": 0.5452
+    },
+    "tablet": {
+      "lendingThumbs": 18,
+      "lendingKb": 52,
+      "lendingLayoutShift": 0.6845
+    },
+    "phone": {
+      "lendingThumbs": 18,
+      "lendingKb": 52,
+      "lendingLayoutShift": 0.0327
+    },
+    "topOfSelfService": {
+      "element": "small.",
+      "html": "<small>HAU USC Logistics</small>",
+      "parent": "span.ss-bar__title",
+      "ssPhotos": 1,
+      "itemPhotos": 0,
+      "ghostVisible": "none"
+    },
+    "narrow": {
+      "lendingThumbs": 18,
+      "lendingKb": 52,
+      "lendingLayoutShift": 0.022
+    }
+  },
+  "locations": {},
+  "catalogVisuals": {
+    "genericItem": "ITM-0398",
+    "states": "icon, picker, dark, loading, error, offline; desktop and phone"
+  }
+}

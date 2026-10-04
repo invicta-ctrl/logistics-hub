@@ -1,3 +1,5 @@
+import { ITEM_ICONS, itemIconSvg, resolveItemIcon, suggestItemIcon } from "./item-icons";
+import { itemVisualControl } from "./item-visual-control";
 import type { DepartmentCode } from "./directory-policy";
 import { CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
@@ -8,13 +10,13 @@ import { type Step, openWhereIsIt } from "./where-is-it";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { bulkBar } from "./bulk-select";
 import { placeList } from "./catalogue-places";
-import { ApiError, MARK, type Html, type IconName, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { ApiError, MARK, type Html, type IconName, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, raw, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
   lendingAudience: string; onHand: number; reorderThreshold: number; locationId: string | null; legacyLocation: string | null; openReports: number; listed: boolean;
   stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean; lastCountedAt: string | null; onLoan: number;
-  consumptionMode: string; openUnits: number; openCondition: string | null; photoId: string | null;
+  consumptionMode: string; openUnits: number; openCondition: string | null; photoId: string | null; visualType?: "SYSTEM_ICON" | "PHOTO" | null; iconKey?: string | null;
   updatedAt: string | null; model: string | null; serialNumber: string | null;
 };
 /** A place as the Worker lists it (src/locations.ts); paths, depth and order come from location-tree.ts. */
@@ -301,6 +303,7 @@ function eventTitle(event: CatalogEvent): string {
   if (event.action === "UNIT_RECONCILED") return `Count closed ${plural(Number(event.details.closed), "open unit")}`;
   if (event.action === "ITEM_PHOTO_ADDED") return "Photo added";
   if (event.action === "ITEM_PHOTO_REPLACED") return "Photo replaced";
+  if (event.action === "ITEM_VISUAL_CHANGED") return "Item visual changed";
   if (event.action === "ITEM_PHOTO_REMOVED") return "Photo removed";
   if (event.action === "LOCATION_REPORTED") return `Reported: ${REPORT_LABELS[event.details.kind as ReportKind] ?? "location"}${event.details.source === "SELF_SERVICE" ? ` (from a phone${typeof event.details.reporter === "string" ? `, ${event.details.reporter}` : ""})` : ""}`;
   if (event.action === "LOCATION_REPORT_RESOLVED") return `Report resolved: ${REPORT_LABELS[event.details.kind as ReportKind] ?? "location"}`;
@@ -413,7 +416,7 @@ export async function workspace(): Promise<void> {
   const row = (item: Item) => html`<tr data-key="${item.id}" class="${[direction(item.id), item.id === openId ? "is-open" : "", active(item) ? "" : "is-inactive", selected.has(item.id) ? "is-selected" : ""].join(" ")}">
     ${selecting ? html`<td class="col-select"><input type="checkbox" class="select-box" data-select="${item.id}" aria-label="Select ${item.name}" ${selected.has(item.id) ? html`checked` : ""} /></td>` : ""}
     <td class="col-id">${item.id}</td>
-    <td class="col-item ${item.photoId ? "" : "col-item--bare"}">${rowThumb(item.photoId)}<button type="button" class="row-link">${item.name}</button><span class="cell-sub"><span class="cell-id">${item.id} · </span>${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}${placeText(item) ? html`<span class="cell-place"> · ${placeText(item)}</span>` : ""}</span></td>
+    <td class="col-item">${rowThumb(item)}<button type="button" class="row-link">${item.name}</button><span class="cell-sub"><span class="cell-id">${item.id} · </span>${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}${placeText(item) ? html`<span class="cell-place"> · ${placeText(item)}</span>` : ""}</span></td>
     <td class="col-category">${categoryName(item.category)}</td>
     <td class="col-location">${placeCell(item)}</td>
     <td class="col-qty"><span class="qty" data-qty="${item.id}">${item.onHand}</span> <span class="qty-unit">${units(item.onHand, item.unit)}</span>${item.openUnits ? html`<span class="cell-sub">${sealedLine(item.onHand, item.openUnits, item.openCondition)}</span>` : ""}</td>
@@ -512,7 +515,7 @@ export async function workspace(): Promise<void> {
       render();
       // Refresh the open sheet when another staff member changes its quantity or open units.
       const shown = data.items.find((item) => item.id === openId);
-      if (openId && detail && shown && (openChanged || (shown.photoId ?? null) !== (detail.item.photo?.id ?? null) || shown.openReports !== detail.reports.filter((report) => !report.resolvedAt).length || stockSignature(shown.onHand, shown.openUnits, shown.openCondition) !== stockSignature(detail.item.onHand, detail.openUnits.length, worstCondition(detail.openUnits)))) void refreshStock(openId);
+      if (openId && detail && shown && (openChanged || (shown.photoId ?? null) !== (detail.item.photo?.id ?? null) || shown.iconKey !== detail.item.iconKey || shown.visualType !== detail.item.visualType || shown.openReports !== detail.reports.filter((report) => !report.resolvedAt).length || stockSignature(shown.onHand, shown.openUnits, shown.openCondition) !== stockSignature(detail.item.onHand, detail.openUnits.length, worstCondition(detail.openUnits)))) void refreshStock(openId);
       if (pendingItem) { openItem(pendingItem); pendingItem = null; }
     },
     onError: (error) => {
@@ -564,7 +567,8 @@ export async function workspace(): Promise<void> {
     if (thumb) {
       const id = thumb.closest<HTMLElement>("tr[data-key]")!.dataset.key!;
       const name = inventory?.items.find((entry) => entry.id === id)?.name ?? id;
-      void openViewer(photoUrl(thumb.dataset.photo!, "display"), `Photo of ${name}`, () => results.querySelector<HTMLElement>(`tr[data-key="${CSS.escape(id)}"] img[data-photo]`), name);
+      const item = inventory?.items.find((entry) => entry.id === id);
+      void openViewer(photoUrl(thumb.dataset.photo!, "display"), `Photo of ${name}`, () => results.querySelector<HTMLElement>(`tr[data-key="${CSS.escape(id)}"] img[data-photo]`), name, resolveItemIcon(item ?? { name }).key);
       return;
     }
     const sort = target.closest<HTMLButtonElement>("[data-sort]");
@@ -667,10 +671,11 @@ export async function workspace(): Promise<void> {
     try {
       const loaded = await fetchDetail(id);
       if (!loaded || !detail) return;
-      const { onHand, photo: loadedPhoto, openReports, location, legacyLocation } = loaded.item;
-      detail = { ...detail, item: { ...detail.item, onHand, photo: loadedPhoto, openReports, location, legacyLocation }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
+      const { onHand, photo: loadedPhoto, openReports, location, legacyLocation, iconKey, visualType, updatedAt } = loaded.item;
+      detail = { ...detail, item: { ...detail.item, onHand, photo: loadedPhoto, openReports, location, legacyLocation, iconKey, visualType, updatedAt }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
         openUnits: loaded.openUnits, reports: loaded.reports, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied };
       photo?.render(loaded.item.photo);
+      visualControl?.render();
       mount(sheet.querySelector("#reports-card")!, reportsCard(detail));
       mount(sheet.querySelector("#profile-info")!, profileInfo(detail));
       mount(sheet.querySelector("#quantity-context")!, quantityContext(detail));
@@ -800,6 +805,7 @@ export async function workspace(): Promise<void> {
   let stockForm: ReturnType<typeof bindQuantityEditor> | null = null;
   let openPanel: ReturnType<typeof bindOpenUnits> | null = null;
   let photo: PhotoPanel | null = null;
+  let visualControl: ReturnType<typeof itemVisualControl> | null = null;
   let loanForm: ReturnType<typeof bindLoanForm> | null = null;
   let known: Borrower[] = [];
   let knownLoaded = false;
@@ -857,7 +863,7 @@ export async function workspace(): Promise<void> {
     const tabs: Array<[Tab, string]> = [["overview", "Overview"], ...(lendable ? [["loan", out ? `Loan · ${out} out` : "Loan"] as [Tab, string]] : []), ["details", item.needsReview ? "Review & edit" : "Edit details"], ["history", "History"]];
     if (tab === "loan" && !lendable) tab = "overview";
     sheetShell(html`<span class="mono">${item.id}</span>`, item.name, html`
-      <section class="profile" id="photo-panel" aria-label="Item profile"><div class="profile__photo" data-tile></div><div class="profile__info"><div id="profile-info">${profileInfo(loaded)}</div><div class="profile__actions" data-actions></div></div></section>
+      <section class="profile" id="photo-panel" aria-label="Item profile"><div class="profile__photo" data-tile></div><div class="profile__info"><div id="profile-info">${profileInfo(loaded)}</div><div class="profile__actions" data-actions></div><div class="item-visual-control" id="item-visual-control"></div></div></section>
       <div class="tabs" role="tablist" aria-label="Item sections">
         ${tabs.map(([key, text]) => html`<button type="button" role="tab" id="tab-${key}" aria-controls="panel-${key}" aria-selected="${key === tab}" tabindex="${key === tab ? 0 : -1}">${text}</button>`)}
       </div>
@@ -929,13 +935,19 @@ export async function workspace(): Promise<void> {
     }) : null;
     bindDetailsForm(item);
     photo = photoPanel(sheet.querySelector<HTMLElement>("#photo-panel")!, {
+      visual: () => ({ ...detail!.item, photoId: detail!.item.photo?.id }), updatedAt: () => detail!.item.updatedAt,
       id: item.id, name: item.name, photo: item.photo, noun: "photo", endpoint: `/api/staff/items/${encodeURIComponent(item.id)}/photo`, thumbUrl: (id) => photoUrl(id, "thumb"),
       hintAdd: "Everyone sees this photo on the Lending Hub and Self-Service. Show the item itself, not people or documents.",
       hintHas: "Everyone sees this photo on the Lending Hub and Self-Service. The large version stays staff-only.", removeNote: "The item keeps its stock and history.",
-      view: (shown) => void openViewer(photoUrl(shown.id, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLElement>("#photo-panel [data-view] img"), item.name),
+      view: (shown) => void openViewer(photoUrl(shown.id, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLElement>("#photo-panel [data-view] img"), item.name, resolveItemIcon(detail!.item).key),
       changed: async (next) => { if (detail?.item.id === item.id) detail = { ...detail, item: { ...detail.item, photo: next } }; await refreshStock(item.id); await poll.refresh(); },
       // Someone else changed the photo first: show theirs, and the list with it.
-      refresh: async () => { const loaded = await fetchDetail(item.id); if (loaded && detail) { detail = { ...detail, item: { ...detail.item, photo: loaded.item.photo } }; photo?.render(loaded.item.photo); } await poll.refresh(); }
+      refresh: async () => { await refreshStock(item.id); await poll.refresh(); }
+    });
+    visualControl = itemVisualControl(sheet.querySelector<HTMLElement>("#item-visual-control")!, () => ({ ...detail!.item, photoId: detail!.item.photo?.id, updatedAt: detail!.item.updatedAt }), async () => {
+      const loaded = await fetchDetail(item.id);
+      if (loaded) { detail = loaded; photo?.render(loaded.item.photo); }
+      await poll.refresh();
     });
   }
 
@@ -965,6 +977,8 @@ export async function workspace(): Promise<void> {
       <div class="form-section">
         <h3 class="form-section__title">Catalog</h3>
         ${text("name", "Name", item.name, html`required maxlength="120" autocomplete="off"`)}
+        <div id="suggested-visual" class="visual-suggestion" aria-live="polite"></div>
+        ${creating ? html`<div class="field"><label for="f-iconKey">System Icon</label><select id="f-iconKey" name="iconKey"><option value="">Use suggested icon</option>${ITEM_ICONS.map((entry) => html`<option value="tabler:${entry.key}">${entry.label}</option>`)}</select><p class="field__hint">Optional. A suggestion is already selected; you can upload a real photo after creating the item.</p></div>` : ""}
         <p class="field__hint field__hint--warn" id="duplicate-hint" hidden></p>
         ${text("aliases", "Other names", item.aliases, html`maxlength="300" autocomplete="off"`, "Names people also use for it, separated by commas. Search finds these too.", true)}
         <div class="field-grid">
@@ -1030,7 +1044,7 @@ export async function workspace(): Promise<void> {
       reorderThreshold: whole("reorderThreshold"), lendingAudience: String(values.get("lendingAudience")),
       needsReview: values.get("reviewed") !== "on", notes: String(values.get("notes") ?? ""), model: String(values.get("model") ?? ""), serialNumber: String(values.get("serialNumber") ?? ""),
       stockArea: String(values.get("stockArea") ?? "Inventory"), expiresOn: String(values.get("expiresOn") ?? ""), consumptionMode: String(values.get("consumptionMode") ?? "WHOLE_UNIT"),
-      ...(values.has("openingQuantity") ? { openingQuantity: whole("openingQuantity") } : {})
+      ...(values.has("openingQuantity") ? { openingQuantity: whole("openingQuantity"), iconKey: String(values.get("iconKey") ?? "") || null } : {})
     };
   }
 
@@ -1058,6 +1072,8 @@ export async function workspace(): Promise<void> {
     let intent = "save";
     const preview = () => {
       const values = readDetails(form);
+      const suggested = suggestItemIcon(values).key;
+      mount(form.querySelector("#suggested-visual")!, html`${raw(itemIconSvg(suggested))}<span>Suggested visual · ${ITEM_ICONS.find((entry) => entry.key === suggested)!.label}</span>`);
       const gaps = listingGaps(values);
       const element = form.querySelector("#listing-preview")!;
       element.className = `listing-status ${gaps.length ? "" : "is-listed"}`;

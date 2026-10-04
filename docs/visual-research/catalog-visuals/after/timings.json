@@ -1,0 +1,88 @@
+{
+  "coldLoadToFirstRowMs": 400,
+  "sectionSwitchMs": 81,
+  "publicPhotos": {
+    "shiftBeforePhotos": {
+      "desktop": {
+        "shift": 0.5453,
+        "moved": [
+          "div.container",
+          "footer.site-footer",
+          "p.lending-note",
+          "p.live-status",
+          "nav.site-nav",
+          "button.chip",
+          "div.sort-toggle",
+          "li."
+        ]
+      },
+      "phone": {
+        "shift": 0.0327,
+        "moved": [
+          "div.container",
+          "span.",
+          "nav.site-nav",
+          "button.chip",
+          "li."
+        ]
+      }
+    },
+    "shiftAfterPhotos": {
+      "desktop": {
+        "shift": 0.5453,
+        "moved": [
+          "div.container",
+          "footer.site-footer",
+          "p.lending-note",
+          "p.live-status",
+          "nav.site-nav",
+          "button.chip",
+          "div.sort-toggle",
+          "li."
+        ]
+      },
+      "phone": {
+        "shift": 0.0327,
+        "moved": [
+          "div.container",
+          "nav.site-nav",
+          "button.chip",
+          "li.",
+          "span."
+        ]
+      }
+    },
+    "desktop": {
+      "lendingThumbs": 12,
+      "lendingKb": 34,
+      "lendingLayoutShift": 0.5453
+    },
+    "tablet": {
+      "lendingThumbs": 12,
+      "lendingKb": 34,
+      "lendingLayoutShift": 0.6823
+    },
+    "phone": {
+      "lendingThumbs": 12,
+      "lendingKb": 34,
+      "lendingLayoutShift": 0.0327
+    },
+    "topOfSelfService": {
+      "element": "small.",
+      "html": "<small>HAU USC Logistics</small>",
+      "parent": "span.ss-bar__title",
+      "ssPhotos": 1,
+      "itemPhotos": 0,
+      "ghostVisible": "none"
+    },
+    "narrow": {
+      "lendingThumbs": 12,
+      "lendingKb": 34,
+      "lendingLayoutShift": 0.022
+    }
+  },
+  "catalogVisuals": {
+    "genericItem": "ITM-0398",
+    "states": "icon, picker, dark, loading, error, offline; desktop and phone"
+  }
+}
