@@ -69,7 +69,7 @@ export async function catalogRevision(db: D1Database): Promise<number> {
   return (await db.prepare("SELECT value FROM catalog_revision WHERE id = 1").first<number>("value")) ?? 0;
 }
 
-function distinct(values: Array<string | null>): string[] {
+export function distinct(values: Array<string | null>): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b));
 }
 

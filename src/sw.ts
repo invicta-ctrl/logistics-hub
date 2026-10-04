@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import { access } from "./catalogue-store";
 import { nextAttemptAt, syncNow } from "./offline-sync";
 
 /*
@@ -11,22 +12,44 @@ import { nextAttemptAt, syncNow } from "./offline-sync";
  * - /api/* is never intercepted or cached: live data and anything personal go to the network.
  * - A new version waits until the page says it is a good moment (pwa.ts), so nobody's
  *   half-filled form is reloaded away.
+ * - The Catalogue's screens (V1.6) are saved only on a device where staff turned offline
+ *   cataloguing on, and saved again by every new version there, so an update never takes
+ *   offline cataloguing away. What was catalogued waits in IndexedDB (catalogue-store.ts).
  */
 
 declare const self: ServiceWorkerGlobalScope;
-/** Written by the build (vite.config.ts): this build's version and the files it needs offline. */
-declare const __BUILD__: { version: string; files: string[] };
+/** Written by the build (vite.config.ts): this build's version, the files it needs offline, and the Catalogue's own. */
+declare const __BUILD__: { version: string; files: string[]; catalogue: string[] };
 type SyncEvent = ExtendableEvent & { tag: string };
 
 const SHELL = `logistics-shell-${__BUILD__.version}`;
 const MEDIA = "logistics-media";
 /** The app's one HTML page. Every route is rendered from it in the browser. */
 const PAGE = "/";
-const precached = new Set(__BUILD__.files);
+const CATALOGUE = "/staff/catalogue";
+const precached = new Set([...__BUILD__.files, ...__BUILD__.catalogue]);
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(SHELL).then((cache) => cache.addAll([PAGE, ...__BUILD__.files])));
+  event.waitUntil((async () => {
+    const cache = await caches.open(SHELL);
+    await cache.addAll([PAGE, ...__BUILD__.files]);
+    if (await access().catch(() => null)) await cache.addAll(__BUILD__.catalogue);
+  })());
 });
+
+/** Saves the Catalogue's screens in this version's shell (what is already there is not fetched again); false if any is missing. */
+async function keepCatalogue(): Promise<boolean> {
+  try {
+    const cache = await caches.open(SHELL);
+    const missing = (await Promise.all(__BUILD__.catalogue.map(async (file) => (await cache.match(file)) ? null : file))).filter((file): file is string => file !== null);
+    if (missing.length) await cache.addAll(missing);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const catalogueKept = async () => (await Promise.all(__BUILD__.catalogue.map((file) => caches.match(file, { cacheName: SHELL })))).every(Boolean);
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
@@ -36,7 +59,11 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
-  if ((event.data as { type?: string } | null)?.type === "SKIP_WAITING") void self.skipWaiting();
+  const type = (event.data as { type?: string } | null)?.type;
+  if (type === "SKIP_WAITING") void self.skipWaiting();
+  // The Catalogue asks for its screens to be saved when offline cataloguing is turned on, and whether they are (catalogue-offline.ts).
+  if (type === "KEEP_CATALOGUE") event.waitUntil(keepCatalogue().then((kept) => event.ports[0]?.postMessage({ kept })));
+  if (type === "CATALOGUE_KEPT") event.waitUntil(catalogueKept().then((kept) => event.ports[0]?.postMessage({ kept })));
 });
 
 self.addEventListener("fetch", (event) => {
@@ -57,6 +84,8 @@ self.addEventListener("fetch", (event) => {
 async function page(request: Request, url: URL): Promise<Response> {
   const cached = await caches.match(PAGE, { cacheName: SHELL });
   if (url.pathname.startsWith("/self-service")) return cached ?? fetch(request);
+  // On a device that catalogues offline, the Catalogue opens from what it saved, so a shelf with no signal still works.
+  if (url.pathname === CATALOGUE && cached && await catalogueKept()) return cached;
   // The original request keeps the browser's own redirect handling (the Worker may redirect to sign-in).
   try {
     return await fetch(request);
