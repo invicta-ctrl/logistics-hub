@@ -76,3 +76,5 @@ For visual work, "the CSS/code is cleaner" is not evidence that the result looks
 
 ## Product rule
 Keep the product sophisticated underneath and obvious on top. Every new capability must reduce user decisions, reduce staff work, improve accountability, or improve operational visibility without sacrificing speed, privacy or maintainability.
+
+Catalog intelligence and semantic hardening (accepted amendment `docs/specs/accepted/road-to-v2/2026-10-04-catalog-intelligence-semantic-hardening-amendment.md`, Earl, 2026-10-04) applies to V1.6–V1.15: built-in deterministic intelligence stays authoritative, external AI stays optional and is limited to V1.11's off-by-default Workers AI second opinion, suggestions show evidence tiers and reasons rather than percentages, and visible copy uses one term per concept (amendment §4). Each slice's own item is in its spec under "Catalog intelligence amendment".
