@@ -1,0 +1,9 @@
+{
+  "coldLoadToFirstRowMs": 685,
+  "sectionSwitchMs": 127,
+  "catalogPwa": {
+    "readyAfterTurnOnMs": 813,
+    "reopenOfflineMs": 63,
+    "sendTwoAfterReconnectMs": 1832
+  }
+}
