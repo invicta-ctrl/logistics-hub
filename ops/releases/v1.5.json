@@ -14,7 +14,7 @@
   },
   "migrations": {
     "pending": [
-      { "name": "0026_catalogue_sessions.sql", "sha256": "b748cb87c7a3d924bae17c888a33441bef5497666c0817682eabd854773c0bad" }
+      { "name": "0027_catalogue_sessions.sql", "sha256": "b748cb87c7a3d924bae17c888a33441bef5497666c0817682eabd854773c0bad" }
     ]
   },
   "expect": {

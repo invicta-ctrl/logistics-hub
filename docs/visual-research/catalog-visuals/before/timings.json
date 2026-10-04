@@ -1,0 +1,104 @@
+{
+  "coldLoadToFirstRowMs": 1187,
+  "sectionSwitchMs": 251,
+  "itemPhotos": {
+    "withoutPhotos": {
+      "rowsMs": 1418,
+      "requestsAtLoad": 0,
+      "kbAtLoad": 0,
+      "requestsAfterScroll": 0,
+      "kbAfterScroll": 0,
+      "layoutShift": 0.0383
+    },
+    "with300Photos": {
+      "rowsMs": 1385,
+      "requestsAtLoad": 34,
+      "kbAtLoad": 99,
+      "requestsAfterScroll": 161,
+      "kbAfterScroll": 468,
+      "layoutShift": 0.0383
+    }
+  },
+  "publicPhotos": {
+    "shiftBeforePhotos": {
+      "desktop": {
+        "shift": 0.5452,
+        "moved": [
+          "div.container",
+          "footer.site-footer",
+          "p.lending-note",
+          "p.live-status",
+          "nav.site-nav",
+          "button.chip",
+          "div.sort-toggle",
+          "li."
+        ]
+      },
+      "phone": {
+        "shift": 0.0327,
+        "moved": [
+          "div.container",
+          "nav.site-nav",
+          "button.chip",
+          "span.",
+          "li."
+        ]
+      }
+    },
+    "shiftAfterPhotos": {
+      "desktop": {
+        "shift": 0.5452,
+        "moved": [
+          "div.container",
+          "footer.site-footer",
+          "p.lending-note",
+          "p.live-status",
+          "nav.site-nav",
+          "button.chip",
+          "div.sort-toggle",
+          "li."
+        ]
+      },
+      "phone": {
+        "shift": 0.0328,
+        "moved": [
+          "nav.site-nav",
+          "div.container",
+          "li."
+        ]
+      }
+    },
+    "desktop": {
+      "lendingThumbs": 18,
+      "lendingKb": 52,
+      "lendingLayoutShift": 0.5452
+    },
+    "tablet": {
+      "lendingThumbs": 18,
+      "lendingKb": 52,
+      "lendingLayoutShift": 0.6821
+    },
+    "phone": {
+      "lendingThumbs": 18,
+      "lendingKb": 52,
+      "lendingLayoutShift": 0.0327
+    },
+    "topOfSelfService": {
+      "element": "small.",
+      "html": "<small>HAU USC Logistics</small>",
+      "parent": "span.ss-bar__title",
+      "ssPhotos": 1,
+      "itemPhotos": 0,
+      "ghostVisible": "none"
+    },
+    "narrow": {
+      "lendingThumbs": 18,
+      "lendingKb": 52,
+      "lendingLayoutShift": 0.0219
+    }
+  },
+  "locations": {},
+  "catalogVisuals": {
+    "skipped": "baseline has no icon controls"
+  }
+}

@@ -7,7 +7,7 @@ import { type Draft, checkDecisions, clearHistory, nextAttemptAt, onSyncMessage,
 import { type Readiness, applyUpdate, canPromptInstall, hasUpdate, isStandalone, onPwaChange, platform, promptInstall, readiness, requestBackgroundSync, requestPersistence, whenIdle } from "./pwa";
 import { ancestry, placesOf, type ReportKind } from "./location-tree";
 import { type Step, openWhereIsIt } from "./where-is-it";
-import { ApiError, CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, thumbImg, units } from "./ui";
+import { ApiError, CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, itemVisual, thumbImg, units } from "./ui";
 
 /*
  * Self-Service (/self-service): what a student or staff member sees after scanning the QR code
@@ -260,7 +260,7 @@ function renderResults(query: string): void {
   const available = estimate(snapshot, events);
   results.classList.toggle("ss-list--photos", hasPhotos());
   mount(results, found.length
-    ? html`${found.map((item) => html`<li><a class="ss-row" href="/self-service?do=${SCREEN_FOR[item.action]}&item=${item.id}" data-open-item="${item.id}" data-screen="${SCREEN_FOR[item.action]}">${thumbImg(item.photo)}
+    ? html`${found.map((item) => html`<li><a class="ss-row" href="/self-service?do=${SCREEN_FOR[item.action]}&item=${item.id}" data-open-item="${item.id}" data-screen="${SCREEN_FOR[item.action]}">${thumbImg(item)}
         <span class="ss-row__main"><span class="ss-row__name">${item.name}</span><span class="ss-row__sub">${ACTION_WORD[item.action]} · ${categoryName(item.category)}</span></span>
         ${countBadge(item, available.get(item.id) ?? 0)}</a></li>`)}`
     : html`<li class="ss-results__none">Nothing matches “${query}”.</li>`);
@@ -322,7 +322,7 @@ function back(title: string): Html {
 
 let listQuery = "";
 
-const hasPhotos = () => Boolean(snapshot?.items.some((item) => item.photo));
+const hasPhotos = () => Boolean(snapshot?.items.length);
 
 function listRows(): Html {
   if (!snapshot) return offline ? emptyNote("The catalog hasn't been downloaded to this phone yet. Connect to the internet once, then try again.") : skeleton();
@@ -337,9 +337,9 @@ function listRows(): Html {
     .map((id) => found.find((item) => item.id === id)).filter((item): item is CatalogItem => Boolean(item));
   const byCategory = new Map<string, CatalogItem[]>();
   for (const item of found) byCategory.set(item.category, [...byCategory.get(item.category) ?? [], item]);
-  // Once any item has a photo, every row keeps the same left margin, so names line up whether or not a row has its picture.
+  // Every item has the same reserved icon/photo frame, keeping names aligned.
   const photoClass = hasPhotos() ? "ss-list--photos" : "";
-  const row = (item: CatalogItem) => html`<li><a class="ss-row ${(available.get(item.id) ?? 0) <= 0 ? "ss-row--out" : ""}" href="/self-service?do=${SCREEN_FOR[item.action]}&item=${item.id}" data-open-item="${item.id}" data-screen="${SCREEN_FOR[item.action]}">${thumbImg(item.photo)}
+  const row = (item: CatalogItem) => html`<li><a class="ss-row ${(available.get(item.id) ?? 0) <= 0 ? "ss-row--out" : ""}" href="/self-service?do=${SCREEN_FOR[item.action]}&item=${item.id}" data-open-item="${item.id}" data-screen="${SCREEN_FOR[item.action]}">${thumbImg(item)}
       <span class="ss-row__main"><span class="ss-row__name">${item.name}</span>${sub(item, waiting.get(item.id))}</span>
       ${countBadge(item, available.get(item.id) ?? 0)}</a></li>`;
   return html`${recent.length && !listQuery ? html`<h2 class="ss-section">Recent on this phone</h2><ul class="ss-list ${photoClass}">${recent.map(row)}</ul>` : ""}
@@ -413,7 +413,7 @@ function sheetFrame(kicker: string, title: string, body: Html): Html {
 }
 
 /** The item's picture at the top of its sheet, so the person can confirm it is what they came for (the 320 px thumbnail; no larger size is public). */
-const sheetPhoto = (item: CatalogItem): Html | "" => item.photo ? html`<img class="ss-item-photo" src="/api/public/media/${item.photo}/thumb" alt="" width="160" height="160" decoding="async" />` : "";
+const sheetPhoto = (item: CatalogItem): Html => itemVisual({ ...item, photoId: item.photo }, (id) => `/api/public/media/${id}/thumb`, "ss-item-photo", true);
 
 /** Where the item is kept, when staff share it, and the way into the full route. Without a shared place the person is pointed to the desk. */
 const whereLine = (item: CatalogItem): Html => html`<p class="ss-where">${icon("pin")}<span>${item.location ?? "Ask DOL staff where this is kept."}</span><button type="button" class="text-link" data-where="${item.id}">Where is it?</button></p>`;
