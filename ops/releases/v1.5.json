@@ -1,0 +1,32 @@
+{
+  "release": "v1.5",
+  "title": "Rapid Catalogue & Bulk Operations",
+  "branch": "road-to-v2/v1.5-rapid-catalogue",
+  "record": "docs/road-to-v2/releases/v1.5.md",
+  "target": {
+    "worker": "logistics-hub",
+    "d1": { "binding": "DB", "name": "logistics-hub", "id": "3ffd8edf-a176-4f63-8b7c-5215d11c98d8" },
+    "r2": {
+      "existing": [{ "binding": "EVIDENCE", "name": "logistics-hub-evidence" }, { "binding": "CATALOG_MEDIA", "name": "logistics-hub-catalog-media" }, { "binding": "STAFF_IDS", "name": "logistics-hub-staff-ids" }],
+      "create": []
+    },
+    "forbidden": ["hau-usc-logistics-production", "hau-usc-logistics-staging"]
+  },
+  "migrations": {
+    "pending": [
+      { "name": "0027_catalogue_sessions.sql", "sha256": "b748cb87c7a3d924bae17c888a33441bef5497666c0817682eabd854773c0bad" }
+    ]
+  },
+  "expect": {
+    "schemaAdded": [
+      "index:idx_catalogue_captures_session", "index:idx_catalogue_one_active", "index:idx_items_serial",
+      "index:sqlite_autoindex_catalogue_captures_1", "index:sqlite_autoindex_catalogue_captures_2", "index:sqlite_autoindex_catalogue_sessions_1",
+      "table:catalogue_captures", "table:catalogue_sessions",
+      "trigger:catalogue_captures_append_only_delete", "trigger:catalogue_captures_append_only_update", "trigger:catalogue_captures_session_active",
+      "trigger:catalogue_sessions_finished_final", "trigger:catalogue_sessions_kept"
+    ],
+    "schemaChanged": ["table:item_media", "table:items"],
+    "tableRowsAfter": { "catalogue_sessions": 0, "catalogue_captures": 0 },
+    "unchanged": ["items", "movements", "onHand", "loans", "phoneEvents"]
+  }
+}
