@@ -336,6 +336,8 @@ describe("capturing an item", () => {
     const feed = await (await staff("/api/staff/activity?source=CATALOG")).json() as { events: Array<{ type: string; summary: string }> };
     expect(feed.events.map((event) => event.type)).toEqual(expect.arrayContaining(["CATALOGUE_STARTED", "CATALOGUE_FINISHED", "ITEM_CREATED"]));
     expect(feed.events.find((event) => event.type === "ITEM_CREATED")!.summary).toContain("while cataloguing");
+    expect(feed.events.find((event) => event.type === "CATALOGUE_STARTED")).toMatchObject({ title: "Cataloguing started" });
+    expect(feed.events.find((event) => event.type === "CATALOGUE_FINISHED")).toMatchObject({ title: "Cataloguing finished" });
     expect(feed.events.find((event) => event.type === "CATALOGUE_FINISHED")!.summary).toBe("Staff One finished cataloguing in Shelf 2: 1 items saved.");
   });
   it("lists the session's classified, unreviewed items for sign-off, and nothing else", async () => {
@@ -348,6 +350,20 @@ describe("capturing an item", () => {
     const answer = await (await staff(`/api/staff/catalogue/sessions/${session}/unreviewed`)).json() as { items: Array<{ id: string; updatedAt: string }> };
     expect(answer.items.map((entry) => entry.id)).toEqual([ok]);
     expect(answer.items[0]!.updatedAt).toBe(row(ok).updated_at);
+  });
+  it("will not mark an item reviewed while its category is still Unsorted", async () => {
+    const shelf = await place("Shelf 2");
+    const session = await begin(shelf);
+    const { id } = await (await save(session, shot(shelf, { name: "Zephyr mystery", behaviour: "REVIEW_LATER", category: "", unit: "" }))).json() as { id: string };
+    const current = (await (await staff(`/api/staff/items/${id}`)).json() as { item: Record<string, unknown> }).item;
+    const edit = (changes: Record<string, unknown>) => staff(`/api/staff/items/${id}`, "PATCH", { name: current.name, category: current.category, itemType: "Consumable", unit: "piece", status: "ACTIVE", locationId: shelf, reorderThreshold: 0, lendingAudience: "NOT_AVAILABLE_FOR_LENDING", needsReview: false, notes: null, updatedAt: current.updatedAt, ...changes });
+    const refused = await edit({});
+    expect(refused.status).toBe(400);
+    expect((await refused.json() as { error: string }).error).toContain("Choose a category");
+    expect((await edit({ category: "unsorted" })).status).toBe(400);
+    expect((await edit({ needsReview: true })).status).toBe(200);
+    const fresh = (await (await staff(`/api/staff/items/${id}`)).json() as { item: Record<string, unknown> }).item;
+    expect((await staff(`/api/staff/items/${id}`, "PATCH", { name: fresh.name, category: "HARDWARE", itemType: "Consumable", unit: "piece", status: "ACTIVE", locationId: shelf, reorderThreshold: 0, lendingAudience: "NOT_AVAILABLE_FOR_LENDING", needsReview: false, notes: null, updatedAt: fresh.updatedAt })).status).toBe(200);
   });
   it("keeps model and serial number on the item and in its edits", async () => {
     const shelf = await place("Shelf 2");
