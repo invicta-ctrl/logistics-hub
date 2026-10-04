@@ -1,5 +1,5 @@
 import { LOCATION_ID } from "./location-tree";
-import { CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_AUDIENCES, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
+import { UNSORTED_CATEGORY, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_AUDIENCES, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
 
 export class InputError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -10,13 +10,13 @@ export type Actor = { accountId: string };
 type ItemRow = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: number;
   lendingAudience: string; onHand: number; reorderThreshold: number; locationId: string | null; notes: string | null; updatedAt: string | null;
-  stockArea: string | null; expiresOn: string | null; consumptionMode: string;
+  stockArea: string | null; expiresOn: string | null; consumptionMode: string; model: string | null; serialNumber: string | null;
 };
 
 const ITEM_COLUMNS = `i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.unit, i.status, i.needs_review AS needsReview,
  i.lending_audience AS lendingAudience, COALESCE(b.on_hand, 0) AS onHand, i.reorder_threshold AS reorderThreshold,
  i.location_id AS locationId, i.notes, i.updated_at AS updatedAt,
- i.stock_area AS stockArea, i.expires_on AS expiresOn, i.consumption_mode AS consumptionMode`;
+ i.stock_area AS stockArea, i.expires_on AS expiresOn, i.consumption_mode AS consumptionMode, i.model, i.serial_number AS serialNumber`;
 export const BUMP_REVISION = "UPDATE catalog_revision SET value = value + 1 WHERE id = 1";
 /**
  * History is shown in business order: migrated rows keep their import order, then everything
@@ -93,7 +93,7 @@ export async function publicCatalog(db: D1Database) {
   return { items, categories: distinct(items.map((item) => item.category)) };
 }
 
-type StaffRow = ItemRow & { lastCountedAt: string | null; migrationDelta: number | null; reorderStatus: string | null; onLoan: number; openUnits: number; openCondition: string | null; photoId: string | null; openReports: number; legacyLocation: string | null };
+type StaffRow = ItemRow & { lastCountedAt: string | null; migrationDelta: number | null; reorderStatus: string | null; onLoan: number; openUnits: number; openCondition: string | null; photoId: string | null; openReports: number; legacyLocation: string | null; photoHash: string | null };
 
 export async function staffInventory(db: D1Database) {
   // lastCountedAt counts only physical counts recorded in the Hub, not migrated rows.
@@ -105,21 +105,22 @@ export async function staffInventory(db: D1Database) {
       (SELECT COUNT(*) FROM location_reports r WHERE r.item_id = i.id AND r.resolved_at IS NULL) AS openReports,
       CASE WHEN i.location_id IS NULL AND trim(i.storage_location) <> '' THEN trim(i.storage_location) END AS legacyLocation,
       (SELECT o.condition FROM open_units o WHERE o.item_id = i.id AND o.closed_at IS NULL ORDER BY CASE o.condition WHEN 'LOW' THEN 0 WHEN 'HALF' THEN 1 WHEN 'PLENTY' THEN 2 ELSE 3 END LIMIT 1) AS openCondition,
-      p.media_id AS photoId
+      p.media_id AS photoId, p.dhash AS photoHash
     FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id ORDER BY i.name COLLATE NOCASE`).all<StaffRow>();
   const items = results.map((row) => ({
     id: row.id, name: row.name, aliases: row.aliases, category: row.category, itemType: row.itemType, unit: row.unit, status: row.status,
     needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand,
     reorderThreshold: row.reorderThreshold, locationId: row.locationId, legacyLocation: row.legacyLocation, openReports: row.openReports, listed: isListedForLending(row),
     stockArea: row.stockArea, expiresOn: row.expiresOn, lastCountedAt: row.lastCountedAt, reorderStatus: row.reorderStatus, onLoan: row.onLoan,
-    consumptionMode: row.consumptionMode, openUnits: row.openUnits, openCondition: row.openCondition, photoId: row.photoId,
+    consumptionMode: row.consumptionMode, openUnits: row.openUnits, openCondition: row.openCondition, photoId: row.photoId, photoHash: row.photoHash,
+    model: row.model, serialNumber: row.serialNumber,
     // The legacy quantity is doubtful (migration discrepancy or a VERIFY record) until someone counts it.
     countNeeded: row.status !== "INACTIVE" && !row.lastCountedAt && ((row.migrationDelta ?? 0) !== 0 || row.status === "VERIFY")
   }));
   // Existing values feed the pickers, so staff reuse a spelling instead of inventing a near-duplicate. Places come with the answer (worker.ts).
   return {
     items,
-    categories: distinct(results.map((row) => row.category)),
+    categories: distinct(results.map((row) => row.category).filter((category) => category !== UNSORTED_CATEGORY)),
     units: distinct(results.map((row) => row.unit))
   };
 }
@@ -173,7 +174,7 @@ type ItemInput = {
   name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; locationId: string | null;
   reorderThreshold: number; lendingAudience: string; needsReview: boolean; notes: string | null;
   // Optional: an older form that omits them keeps the stored value.
-  stockArea?: string; expiresOn?: string | null; consumptionMode?: string;
+  stockArea?: string; expiresOn?: string | null; consumptionMode?: string; model?: string | null; serialNumber?: string | null;
 };
 
 export function text(body: Record<string, unknown>, key: string, label: string, max: number, required: boolean, multiline = false): string | null {
@@ -228,7 +229,9 @@ export function parseItemInput(body: unknown): ItemInput {
     needsReview: record.needsReview === true,
     notes: text(record, "notes", "Notes", 1000, false, true),
     ...(record.stockArea === undefined ? {} : { stockArea: choice(record, "stockArea", "stock area", STOCK_AREAS) }),
-    ...(record.expiresOn === undefined ? {} : { expiresOn: isoDate(record.expiresOn, "Expiry date") })
+    ...(record.expiresOn === undefined ? {} : { expiresOn: isoDate(record.expiresOn, "Expiry date") }),
+    ...(record.model === undefined ? {} : { model: text(record, "model", "Model", 80, false) }),
+    ...(record.serialNumber === undefined ? {} : { serialNumber: text(record, "serialNumber", "Serial number", 80, false) })
   };
   // Only a Consumable is opened and used gradually; anything else is stored as a whole unit.
   if (input.itemType !== "Consumable") input.consumptionMode = "WHOLE_UNIT";
@@ -284,7 +287,7 @@ const EDITABLE: Array<[keyof ItemInput, string]> = [
   ["name", "name"], ["aliases", "aliases"], ["category", "category"], ["itemType", "item_type"], ["unit", "unit"], ["status", "status"],
   ["locationId", "location_id"], ["reorderThreshold", "reorder_threshold"], ["lendingAudience", "lending_audience"],
   ["needsReview", "needs_review"], ["notes", "notes"],
-  ["stockArea", "stock_area"], ["expiresOn", "expires_on"], ["consumptionMode", "consumption_mode"]
+  ["stockArea", "stock_area"], ["expiresOn", "expires_on"], ["consumptionMode", "consumption_mode"], ["model", "model"], ["serialNumber", "serial_number"]
 ];
 const stored = (value: ItemInput[keyof ItemInput]) => typeof value === "boolean" ? Number(value) : value;
 
@@ -292,7 +295,7 @@ const stored = (value: ItemInput[keyof ItemInput]) => typeof value === "boolean"
  * The one audit writer. Details must never contain passwords, hashes, keys or tokens.
  * With `afterChange`, the row is written only when the previous statement in the batch changed a row.
  */
-export function audit(db: D1Database, actorId: string | null, action: string, entityType: "ITEM" | "ACCOUNT" | "RECOVERY" | "EXPORT" | "SETTING" | "RETENTION" | "STAFF" | "LOCATION", entityId: string, details: unknown, afterChange = false): D1PreparedStatement {
+export function audit(db: D1Database, actorId: string | null, action: string, entityType: "ITEM" | "ACCOUNT" | "RECOVERY" | "EXPORT" | "SETTING" | "RETENTION" | "STAFF" | "LOCATION" | "CATALOGUE", entityId: string, details: unknown, afterChange = false): D1PreparedStatement {
   return db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json) SELECT ?, ?, ?, ?, ?, ?, ?${afterChange ? " WHERE changes() > 0" : ""}`)
     .bind(crypto.randomUUID(), new Date().toISOString(), actorId, action, entityType, entityId, JSON.stringify(details));
 }
@@ -328,7 +331,10 @@ export async function updateItem(db: D1Database, actor: Actor, id: string, parse
   return { changed: changed.length, updatedAt: now };
 }
 
-export async function createItem(db: D1Database, actor: Actor, parsed: ItemInput, openingQuantity: number) {
+/** What a caller adds to the creation of an item: audit details, and statements that must succeed or fail with it (a capture row). */
+export type Creation = { audit?: Record<string, unknown>; also?: (itemId: string) => D1PreparedStatement[] };
+
+export async function createItem(db: D1Database, actor: Actor, parsed: ItemInput, openingQuantity: number, creation: Creation = {}) {
   const input = await canonical(db, parsed);
   await usablePlace(db, input.locationId);
   const places = await pathsOf(db, [input.locationId]);
@@ -339,23 +345,26 @@ export async function createItem(db: D1Database, actor: Actor, parsed: ItemInput
     const id = `ITM-${String(next).padStart(4, "0")}`;
     const statements = [
       db.prepare(`INSERT INTO items(id, name, aliases, category, item_type, unit, status, location_id, reorder_threshold, lending_audience,
-        needs_review, notes, stock_area, expires_on, consumption_mode, imported_from, imported_at, updated_at)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
+        needs_review, notes, stock_area, expires_on, consumption_mode, model, serial_number, imported_from, imported_at, updated_at)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
         .bind(id, input.name, input.aliases, input.category, input.itemType, input.unit, input.status, input.locationId, input.reorderThreshold, input.lendingAudience,
-          Number(input.needsReview), input.notes, input.stockArea ?? "Inventory", input.expiresOn ?? null, input.consumptionMode ?? "WHOLE_UNIT", now, now),
-      audit(db, actor.accountId, "ITEM_CREATED", "ITEM", id, { ...input, locationId: undefined, storageLocation: places.get(input.locationId!) ?? null, openingQuantity }),
+          Number(input.needsReview), input.notes, input.stockArea ?? "Inventory", input.expiresOn ?? null, input.consumptionMode ?? "WHOLE_UNIT", input.model ?? null, input.serialNumber ?? null, now, now),
+      audit(db, actor.accountId, "ITEM_CREATED", "ITEM", id, { ...input, locationId: undefined, storageLocation: places.get(input.locationId!) ?? null, openingQuantity, ...creation.audit }),
       db.prepare(BUMP_REVISION)
     ];
     if (openingQuantity > 0) {
       statements.push(db.prepare(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, status)
         VALUES(?, ?, 'OPENING_BALANCE', 'IN', ?, ?, ?, ?, ?, 'POSTED')`).bind(`MOV-${crypto.randomUUID()}`, now, id, openingQuantity, input.unit, openingQuantity, actor.accountId));
     }
+    statements.push(...creation.also?.(id) ?? []);
     try {
       await db.batch(statements);
       return { id };
     } catch (error) {
       if (error instanceof Error && error.message.includes("location_inactive")) throw new InputError(409, "That place is inactive, so items cannot be kept there. Choose another place.");
       if (!(error instanceof Error && /UNIQUE|PRIMARY KEY/i.test(error.message)) || attempt === 2) throw error;
+      // Only an ID race is retried; anything the caller's own statements refused (a repeated request id) is theirs to read.
+      if (!/items\.id|PRIMARY KEY constraint failed: items/i.test(error.message)) throw error;
     }
   }
   throw new InputError(409, "Could not allocate an item ID. Please try again.");
