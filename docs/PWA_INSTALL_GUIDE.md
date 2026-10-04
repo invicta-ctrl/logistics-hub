@@ -170,6 +170,18 @@ Your password is never kept on the device. Signing out on the device, **Turn off
 
 **While anything is waiting to send, do not** clear the browser's data for the site, delete the Catalog app, or reset the device. Waiting items exist only on that device until they are sent.
 
+### Check a place
+
+Go through what should be at one shelf, cabinet or room (and the places inside it), on the Catalog's home under **Check a place**.
+
+1. Choose the place and tap **Start checking**. The list shows what the records say is there, with how many.
+2. For each item tap **Here** (the number matches), **Count differs** (enter what you count) or **Can’t find**. If the record itself looks wrong (wrong name, wrong unit), tap **⋯** and say what.
+3. Something on the shelf that isn’t on the list: **Found something not on the list**. Pick it from the catalog (it is recorded somewhere else) or, if it isn’t in the catalog, say what it is.
+4. **Pause** any time and pick it up from the Catalog's home on any device. It works offline too: what you mark waits on the device and is sent when you are back online.
+5. **Finish check**. Nothing has changed stock yet: the summary lists the findings. Signed in and online, settle each one: **Post count**, **Move it here**, **Report its location**, or **Leave it as it is** with a reason. If stock changed after you counted (someone took one out), it asks you to count again. **Print summary** gives a copy for handover.
+
+Only one person checks a place at a time; the Catalog says who is checking it.
+
 ### Troubleshooting
 
 - **"Getting ready for offline cataloguing…" does not go away:** stay online with the page open; if it says something could not be saved, tap **Try again**. Check that the device has free storage and that you are not in a private window.

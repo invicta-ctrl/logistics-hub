@@ -1,0 +1,32 @@
+{
+  "release": "v1.7",
+  "title": "Physical Inventory & Location Audits",
+  "branch": "road-to-v2/v1.7-physical-inventory",
+  "record": "docs/road-to-v2/releases/v1.7.md",
+  "target": {
+    "worker": "logistics-hub",
+    "d1": { "binding": "DB", "name": "logistics-hub", "id": "3ffd8edf-a176-4f63-8b7c-5215d11c98d8" },
+    "r2": {
+      "existing": [{ "binding": "EVIDENCE", "name": "logistics-hub-evidence" }, { "binding": "CATALOG_MEDIA", "name": "logistics-hub-catalog-media" }, { "binding": "STAFF_IDS", "name": "logistics-hub-staff-ids" }],
+      "create": []
+    },
+    "forbidden": ["hau-usc-logistics-production", "hau-usc-logistics-staging"]
+  },
+  "migrations": {
+    "pending": [
+      { "name": "0028_location_audits.sql", "sha256": "58e90e5b63c73be8622576bc7e60c33afa8794fb31e9dae1f2672f5ad2ef073d" }
+    ]
+  },
+  "expect": {
+    "schemaAdded": [
+      "index:idx_audit_observations_audit", "index:idx_audit_observations_item", "index:idx_location_audits_one_open", "index:idx_location_audits_person",
+      "index:sqlite_autoindex_location_audit_observations_1", "index:sqlite_autoindex_location_audit_resolutions_1", "index:sqlite_autoindex_location_audits_1",
+      "table:location_audit_observations", "table:location_audit_resolutions", "table:location_audits",
+      "trigger:location_audit_observations_no_delete", "trigger:location_audit_observations_no_update", "trigger:location_audit_observations_open",
+      "trigger:location_audit_resolutions_no_delete", "trigger:location_audit_resolutions_no_update", "trigger:location_audits_finished_final", "trigger:location_audits_kept"
+    ],
+    "schemaChanged": [],
+    "tableRowsAfter": { "location_audits": 0, "location_audit_observations": 0, "location_audit_resolutions": 0 },
+    "unchanged": ["items", "movements", "onHand", "loans", "phoneEvents"]
+  }
+}
