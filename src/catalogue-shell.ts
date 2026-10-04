@@ -11,9 +11,12 @@ import { type Html, MARK, app, html, icon, mount, onLeave } from "./ui";
 
 type Signed = Exclude<Who, { mode: "closed" } | { mode: "signed-out" }>;
 
-/** The light in the bar says only how this device is connected: what waits to send is counted where the work is (home, the capture bar). */
+/**
+ * The light in the bar says only how this device is connected, now (a page opened offline turns Online when the connection is back):
+ * what waits to send is counted where the work is (home, the capture bar, a check's progress).
+ */
 function pill(who: Signed): Html {
-  const [tone, text] = who.mode === "offline" || !navigator.onLine ? ["offline", "Offline"] : who.mode === "lease" ? ["lease", "Signed out"] : ["ok", "Online"];
+  const [tone, text] = !navigator.onLine ? ["offline", "Offline"] : who.mode === "lease" ? ["lease", "Signed out"] : ["ok", "Online"];
   return html`<span class="cg-pill cg-pill--${tone}"><span class="cg-pill__dot" aria-hidden="true"></span>${text}</span>`;
 }
 

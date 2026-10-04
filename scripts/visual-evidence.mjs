@@ -19,7 +19,9 @@
 // with loanable, consumable, gradually used and review-later items; the start page, suggestion, photo preview, possible-match and
 // review-later states, a save that failed offline and was retried, the finish summary, and Select mode with its dialog; runs only
 // where /staff/catalogue exists) and catalog-pwa (V1.6: offline cataloguing on an Android phone and tablet, an iPhone's Safari tab and a
-// computer, with the service worker on and the connection really cut; runs only where the catalogue snapshot exists). Its pictures, including the obviously fake
+// computer, with the service worker on and the connection really cut; runs only where the catalogue snapshot exists) and location-audit (V1.7: a
+// dozen-item shelf checked on a phone, paused, resumed and continued offline, a stock conflict, the summary and the review on a computer;
+// runs only where checks of a place exist). Its pictures, including the obviously fake
 // sample ID cards, are drawn here in the browser and written only to a throwaway folder, so no image file enters the
 // repository and no real ID is ever used.
 //
@@ -1157,6 +1159,155 @@ async function catalogPwaScenes(browser, url, dir) {
   return timings;
 }
 
+/**
+ * V1.7 checking a place: a realistic shelf of a dozen items, checked on a phone (here, a different count, not found, a record that looks
+ * wrong, something found that belongs elsewhere, and something not in the catalog), paused and resumed, continued offline and sent on
+ * reconnecting; stock moved by someone else after a count (the conflict); then the summary and the review, settled on a computer.
+ */
+async function locationAuditScenes(browser, url, dir) {
+  const shot = (page, name) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80 });
+  const first = await signIn(browser, url, "staff.demo", SIZES.desktop);
+  if ((await first.page.request.get(`${url}/api/staff/audits`)).status() === 404) {
+    console.log("location-audit: this ref has no checks of a place, skipped");
+    await first.context.close();
+    return {};
+  }
+  const state = await first.context.storageState();
+  const post = async (route, body) => (await first.page.request.post(`${url}${route}`, { headers: { origin: url }, data: body })).json();
+  const store = (await post("/api/staff/locations", { name: "Store room", parentId: null })).id;
+  const shelf = (await post("/api/staff/locations", { name: "Shelf B", parentId: store, directions: "Back wall, second metal shelf from the door. Top row is tape and glue; bottom row is cables." })).id;
+  const cabinet = (await post("/api/staff/locations", { name: "Cabinet 2", parentId: store })).id;
+  const base = { category: "OFFICE SUPPLIES", itemType: "Consumable", unit: "piece", status: "ACTIVE", reorderThreshold: 0, lendingAudience: "NOT_AVAILABLE_FOR_LENDING", needsReview: false, notes: null };
+  const stock = [["Masking tape 1 in", 12, "roll"], ["Packing tape clear", 6, "roll"], ["Glue stick", 20, "piece"], ["White glue 500 ml", 3, "bottle"], ["Cable ties 200 mm", 4, "pack"],
+    ["Extension cord 5 m", 2, "piece"], ["HDMI cable 3 m", 3, "piece"], ["Duct tape silver", 5, "roll"], ["Double-sided tape", 8, "roll"], ["Stapler wires No. 35", 10, "box"], ["Scissors large", 4, "piece"], ["Cutter knife", 6, "piece"]];
+  const ids = {};
+  for (const [name, quantity, unit] of stock) ids[name] = (await post("/api/staff/items", { ...base, name, unit, locationId: shelf, openingQuantity: quantity })).id;
+  ids.stray = (await post("/api/staff/items", { ...base, name: "Extension reel 10 m", itemType: "Loanable", locationId: cabinet, openingQuantity: 1 })).id;
+  await first.context.close();
+  const { defaultBrowserType: _android, ...pixel } = devices["Pixel 7"];
+  const { defaultBrowserType: _tablet, ...tablet } = devices["Galaxy Tab S4"];
+  const open = async (device) => {
+    const context = await browser.newContext({ ...device, reducedMotion: "reduce", storageState: state });
+    return { context, page: await context.newPage() };
+  };
+  const settle = async (page) => { await page.waitForLoadState("networkidle").catch(() => undefined); await page.waitForTimeout(300); };
+  const row = (page, name) => page.locator(".ck-row", { hasText: name });
+  const timings = {};
+
+  // A phone: offline cataloguing on (a check may go offline), then a check of Shelf B.
+  const { context, page } = await open(pixel);
+  await page.goto(`${url}/staff/catalogue`);
+  await page.getByRole("button", { name: "Turn on offline cataloguing" }).click();
+  await page.locator(".cat-ready--ok").waitFor({ timeout: 60_000 });
+  await page.locator(".ck-home").scrollIntoViewIfNeeded();
+  await settle(page);
+  await shot(page, "check-home-phone");
+  await page.getByLabel("Place to check").selectOption(shelf);
+  let started = Date.now();
+  await page.getByRole("button", { name: /Start checking/ }).click();
+  await page.locator(".ck-row").first().waitFor();
+  timings.startToListMs = Date.now() - started;
+  await settle(page);
+  await shot(page, "check-start-phone");
+  for (const name of ["Masking tape 1 in", "Packing tape clear", "Glue stick", "Cable ties 200 mm"]) await row(page, name).getByRole("button", { name: /^Here/ }).click();
+  await row(page, "White glue 500 ml").getByRole("button", { name: /^Count differs/ }).click();
+  await page.locator("#ck-count-" + ids["White glue 500 ml"]).fill("2");
+  await settle(page);
+  await shot(page, "check-mismatch-phone");
+  await page.getByRole("button", { name: "Save count" }).click();
+  await row(page, "Extension cord 5 m").getByRole("button", { name: /^Can.t find/ }).click();
+  await row(page, "Double-sided tape").getByRole("button", { name: /^Record looks wrong/ }).click();
+  await page.locator("#ck-why-" + ids["Double-sided tape"]).fill("These are foam mounting squares, not tape rolls.");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await settle(page);
+  await shot(page, "check-progress-phone");
+  // Paused, then resumed from the home screen.
+  await page.getByRole("button", { name: "Pause" }).click();
+  await page.locator(".ck-mine__row").waitFor();
+  await page.locator(".ck-home").scrollIntoViewIfNeeded();
+  await settle(page);
+  await shot(page, "check-paused-phone");
+  await page.locator(".ck-mine__row").click();
+  await page.locator(".ck-row").first().waitFor();
+  // Offline: keep going, and find two things that are not on the list.
+  await context.setOffline(true);
+  started = Date.now();
+  await page.reload();
+  await page.locator(".ck-note", { hasText: "Offline." }).waitFor();
+  timings.reopenOfflineMs = Date.now() - started;
+  for (const name of ["HDMI cable 3 m", "Duct tape silver", "Stapler wires No. 35"]) await row(page, name).getByRole("button", { name: /^Here/ }).click();
+  await page.getByRole("button", { name: /Found something not on the list/ }).click();
+  await page.getByLabel("Search the catalog").fill("reel");
+  await page.locator(".ck-result").first().click();
+  await settle(page);
+  await shot(page, "check-found-phone");
+  await page.getByRole("button", { name: "Save as found here" }).click();
+  await page.getByRole("button", { name: /Found something not on the list/ }).click();
+  await page.locator(".ck-unlisted summary").click();
+  await page.getByLabel("What is it?").fill("Blue label printer (no tag)");
+  await page.getByRole("button", { name: "Save as not in the catalog" }).click();
+  await page.getByRole("tab", { name: /^To check/ }).click();
+  await settle(page);
+  await shot(page, "check-offline-phone");
+  // Back online: what waited is sent once.
+  started = Date.now();
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await page.locator(".ck-progress .live-status").waitFor({ state: "detached", timeout: 60_000 });
+  timings.sendAfterReconnectMs = Date.now() - started;
+  await context.close();
+
+  // A tablet, mid-check.
+  {
+    const { context, page } = await open(tablet);
+    await page.goto(`${url}/staff/catalogue`);
+    await page.locator(".ck-mine__row").click();
+    await page.locator(".ck-row").first().waitFor();
+    await settle(page);
+    await shot(page, "check-progress-tablet");
+    await context.close();
+  }
+
+  // Someone takes a glue bottle out after it was counted: the review asks for a fresh count instead of posting the old one.
+  const second = await signIn(browser, url, "staff.demo", SIZES.desktop);
+  await second.page.request.post(`${url}/api/staff/items/${ids["White glue 500 ml"]}/movements`, { headers: { origin: url }, data: { kind: "OUT", quantity: 1, reason: "ISSUED", key: crypto.randomUUID() } });
+  await second.context.close();
+  {
+    const { context, page } = await open(pixel);
+    await page.goto(`${url}/staff/catalogue`);
+    await page.locator(".ck-mine__row").click();
+    await page.locator(".ck-row").first().waitFor();
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "Finish check" }).click();
+    await page.locator(".ck-stats").waitFor();
+    await settle(page);
+    await shot(page, "check-summary-phone");
+    await page.locator(".ck-finding", { hasText: "White glue" }).scrollIntoViewIfNeeded();
+    await shot(page, "check-conflict-phone");
+    await context.close();
+  }
+  // The review on a computer: post a count, move what was found here, and leave a reasoned no-change.
+  {
+    const { context, page } = await open({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    await page.goto(`${url}/staff/catalogue`);
+    await page.locator(".ck-finished summary").click();
+    await page.locator(".ck-finished a").first().click();
+    await page.locator(".ck-stats").waitFor();
+    await settle(page);
+    await shot(page, "check-review-desktop");
+    await page.locator(".ck-finding", { hasText: "Extension reel" }).getByRole("button", { name: "Move it here" }).click();
+    await page.locator(".ck-finding.is-settled", { hasText: "Extension reel" }).waitFor();
+    const glue = page.locator(".ck-finding", { hasText: "White glue" });
+    await glue.locator("[data-fresh-count]").fill("1");
+    await glue.getByRole("button", { name: "Post this count" }).click();
+    await page.locator(".ck-finding.is-settled", { hasText: "White glue" }).waitFor();
+    await settle(page);
+    await shot(page, "check-settled-desktop");
+    await context.close();
+  }
+  return timings;
+}
+
 async function capture(url, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
@@ -1168,7 +1319,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa") continue;
+          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -1206,6 +1357,7 @@ async function capture(url, dir) {
     if (pages.includes("catalogue")) Object.assign(timings, { catalogue: await catalogueScenes(browser, url, dir) });
     if (pages.includes("catalog-visuals")) Object.assign(timings, { catalogVisuals: await catalogVisualScenes(browser, url, dir) });
     if (pages.includes("catalog-pwa")) Object.assign(timings, { catalogPwa: await catalogPwaScenes(browser, url, dir) });
+    if (pages.includes("location-audit")) Object.assign(timings, { locationAudit: await locationAuditScenes(browser, url, dir) });
     if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
     if (pages.includes("staff-directory")) Object.assign(timings, { staffDirectory: await directoryScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);
