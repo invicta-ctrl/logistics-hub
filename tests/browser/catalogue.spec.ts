@@ -230,6 +230,26 @@ test.describe("capturing a mixed shelf", () => {
   });
 });
 
+test("a look-alike of an item saved a moment ago on this page is saved as a separate item, naming it", async ({ page }) => {
+  const server = serve(page, { active: true });
+  await begin(page, server);
+  for (const press of [1, 2]) {
+    await name(page).fill(press === 1 ? "Label maker" : "label maker");
+    await pick(page, "Borrow").click();
+    await page.getByLabel("Category").fill("EQUIPMENT");
+    await page.getByLabel("Counted in").fill("piece");
+    await page.getByRole("button", { name: "Save & next" }).click();
+    if (press === 1) await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
+  }
+  // The first item is on the server now: it is named by its item, and the second press saves past it.
+  await expect(page.getByRole("group", { name: "Possible matches" })).toContainText("Label maker");
+  await page.getByRole("button", { name: "Save as a separate item" }).click();
+  await expect.poll(() => server.state.captures.length).toBe(2);
+  await expect(bar(page)).toHaveText("All saved");
+  expect(server.state.captures.map((entry) => entry.name)).toEqual(["Label maker", "label maker"]);
+  expect(server.state.captures[1]!.acknowledged).toEqual([server.state.captures[0]!.itemId]);
+});
+
 test.describe("saving survives a dropped connection", () => {
   test("a record that could not be sent is shown as unsaved, kept through a reload, and sent once when the connection is back", async ({ page }) => {
     const server = serve(page, { active: true });
@@ -325,7 +345,8 @@ test.describe("when the sign-in ends or the session is gone", () => {
     const NEXT = "CS-00000000-0000-4000-8000-000000000002";
     const started: Array<Record<string, unknown>> = [];
     const saved: Array<Record<string, unknown>> = [];
-    await page.route(`**/api/staff/catalogue/sessions/${SESSION_ID}/captures`, (route) => route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "That cataloguing session is finished. Start a new one to keep adding items." }) }));
+    await page.route(`**/api/staff/catalogue/sessions/${SESSION_ID}/captures`, (route) => server.state.fail === "drop" ? route.abort("connectionrefused")
+      : route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "That cataloguing session is finished. Start a new one to keep adding items." }) }));
     await page.route("**/api/staff/catalogue/sessions", (route) => { started.push(route.request().postDataJSON() as Record<string, unknown>); return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: NEXT, resumed: false }) }); });
     await page.route(`**/api/staff/catalogue/sessions/${NEXT}/captures`, (route) => { saved.push(route.request().postDataJSON() as Record<string, unknown>); return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: "ITM-2000", captureId: "x", replayed: false }) }); });
     await page.goto("/staff/catalogue");

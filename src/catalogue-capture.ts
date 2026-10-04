@@ -2,7 +2,7 @@ import type { Who } from "./catalogue-offline";
 import { suggest } from "./catalogue-suggest";
 import { type Detail, type Entry, type SessionRecord, type Snapshot, type SnapshotItem, drop, dropSession, durable, entries, keep, keepSession, sessions, setAccess, setSnapshot, snapshot } from "./catalogue-store";
 import { type PlaceList, bindNewPlace, newPlaceForm, placeList, placeOptions, refreshParents } from "./catalogue-places";
-import { onSyncChange, signedOut, syncNow } from "./catalogue-sync";
+import { onSyncChange, savedItem, signedOut, syncNow } from "./catalogue-sync";
 import { BEHAVIOURS, BEHAVIOUR_LABELS, type Behaviour, UNSORTED_CATEGORY } from "./catalog-policy";
 import { type Known as DuplicateKnown, type Match, possibleDuplicates } from "./duplicates";
 import { preparePhoto, photoUrl } from "./item-photo";
@@ -379,7 +379,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       submitting = false;
     }
     clear(like);
-    announce(online ? `Saving ${name}.` : `${name} saved on this device.`);
+    announce(online ? `Saving ${name}.` : `${name} is not saved yet. It will be sent when you're back online.`);
     drawList();
     void syncNow();
   };
@@ -422,9 +422,13 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const now = await here();
     // Something reached the server: it can be reached again.
     if (waiting.some((entry) => !now.some((each) => each.id === entry.id) || (entry.itemId === null && now.find((each) => each.id === entry.id)?.itemId))) connected(true);
+    // A capture the server has saved is known by its item from now on, so the next look-alike names it as "a different one".
+    for (const entry of waiting) {
+      const item = savedItem(entry.id) ?? now.find((each) => each.id === entry.id)?.itemId;
+      if (item) local.set(entry.id, { ...known(entry), id: item });
+    }
     // Once the server has everything an item leaves the queue; its row must come back from the server's list in the same moment,
     // so it never seems to vanish in between.
-    for (const entry of waiting) if (entry.itemId && !now.some((each) => each.id === entry.id)) local.set(entry.id, known(entry));
     if (waiting.some((entry) => !now.some((each) => each.id === entry.id))) await reload();
     waiting = now;
     drawList();
@@ -435,8 +439,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
 
   const stateOf = (entry: Entry): Html => {
     if (entry.state === "stopped") return html`<span class="tag tag--bad">Needs you</span>`;
-    if (!online) return html`<span class="tag tag--warn">On this device</span>`;
-    if (!entry.itemId) return entry.message ? html`<span class="tag tag--warn">Not saved yet</span>` : html`<span class="tag tag--pending">Saving…</span>`;
+    // One term for a capture the server does not have yet, whatever the reason (amendment §4): offline is said once, above the form.
+    if (!entry.itemId) return entry.message || !online ? html`<span class="tag tag--warn">Not saved yet</span>` : html`<span class="tag tag--pending">Saving…</span>`;
     return entry.message ? html`<span class="tag tag--warn">Saved, photo to send</span>` : html`<span class="tag tag--pending">Sending photo…</span>`;
   };
 
@@ -451,11 +455,10 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const body = entry.body;
     const stopped = entry.state === "stopped";
     const open = (entry.matches ?? []).map((match) => html`<li>${match.reason}: <a class="text-link" href="/staff/items?item=${match.id}" target="_blank" rel="noopener">${match.id}<span class="visually-hidden"> (opens in a new tab)</span></a></li>`);
-    const note = entry.message ?? (!online && !stopped ? "Sent when you're back online." : null);
     return html`<li class="cat-row ${stopped ? "is-stopped" : ""}" data-key="${entry.id}">
       ${thumbFor(entry)}
       <span class="cat-row__text"><strong>${String(body.name)}</strong><span>${BEHAVIOUR_LABELS[body.behaviour as Behaviour]} · ${Number(body.quantity)} ${units(Number(body.quantity), String(body.unit || "piece"))}</span>
-        ${note ? html`<span class="cat-row__note ${stopped ? "is-bad" : ""}">${note}</span>` : ""}
+        ${entry.message ? html`<span class="cat-row__note ${stopped ? "is-bad" : ""}">${entry.message}</span>` : ""}
         ${open.length ? html`<ul class="cat-row__matches">${open}</ul>` : ""}
         ${stopped ? html`<span class="cat-row__actions">${entry.matches ? html`<button type="button" class="button button--secondary button--sm" data-separate="${entry.id}">Save as a separate item</button>` : ""}${entry.itemId ? "" : html`<button type="button" class="button button--secondary button--sm" data-edit="${entry.id}">Edit</button>`}<button type="button" class="button button--ghost button--sm" data-discard="${entry.id}">${entry.itemId ? "Keep without photo" : "Discard"}</button></span>` : ""}</span>
       <span class="cat-row__state">${stateOf(entry)}</span></li>`;
@@ -476,7 +479,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const stopped = waiting.some((entry) => entry.state === "stopped");
     const offline = !online || waiting.some((entry) => entry.state === "waiting" && entry.message);
     sync.dataset.state = offline || stopped ? "offline" : "live";
-    sync.textContent = stopped ? "Needs you" : !online ? (holding ? `${holding} on this device` : "Offline") : offline ? `${holding} waiting to send` : holding ? "Saving…" : "All saved";
+    sync.textContent = stopped ? "Needs you" : offline && holding ? `${holding} waiting to send` : holding ? "Saving…" : online ? "All saved" : "Offline";
     // On a phone the list sits below the form: one tap goes to whatever is waiting.
     $("#cat-see").hidden = !((offline && holding) || stopped);
     preservingFocus($("#cat-list"), () => mount($("#cat-list"), queued.length || sent.length

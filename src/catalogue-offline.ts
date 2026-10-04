@@ -93,10 +93,14 @@ export async function refreshSnapshot(): Promise<Snapshot | null> {
   return saved;
 }
 
-/** Asks the service worker about the Catalogue's saved screens: `keep` saves any that are missing. False where there is no service worker. */
+/**
+ * Asks the service worker about the Catalogue's saved screens: KEEP_CATALOGUE saves any that are missing. The active worker answers
+ * even before it controls this page (a first visit): it is what opens the Catalogue next time. False where there is none.
+ */
 async function askWorker(type: "KEEP_CATALOGUE" | "CATALOGUE_KEPT"): Promise<boolean> {
   if (!("serviceWorker" in navigator) || !import.meta.env.PROD) return false;
-  const worker = navigator.serviceWorker.controller ?? (await navigator.serviceWorker.ready).active;
+  const worker = navigator.serviceWorker.controller
+    ?? await Promise.race([navigator.serviceWorker.ready.then((registration) => registration.active), new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 10_000))]);
   if (!worker) return false;
   return new Promise<boolean>((resolve) => {
     const channel = new MessageChannel();
@@ -111,7 +115,7 @@ export const keepScreens = () => askWorker("KEEP_CATALOGUE");
 export type Readiness = {
   /** Offline access for this device, still valid. */
   access: boolean;
-  /** The Catalogue's screens are saved, and the service worker runs this page. */
+  /** The Catalogue's screens are saved, and a service worker is there to open them without a connection. */
   screens: boolean;
   /** A copy of the catalog is saved. */
   catalog: boolean;
@@ -131,7 +135,7 @@ export const ready = (state: Readiness) => state.access && state.screens && stat
 export async function readiness(granted: Access | null): Promise<Readiness> {
   const [saved, screens, persisted] = await Promise.all([
     snapshot(),
-    navigator.serviceWorker?.controller ? askWorker("CATALOGUE_KEPT") : Promise.resolve(false),
+    askWorker("CATALOGUE_KEPT"),
     navigator.storage?.persisted?.().catch(() => false) ?? Promise.resolve(false)
   ]);
   return { access: usable(granted), screens, catalog: saved !== null, storage: durable(), persisted, needsHomeScreen: platform() === "ios" && !isStandalone(), savedAt: saved?.fetchedAt ?? null };
