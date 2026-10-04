@@ -25,7 +25,6 @@ export type Detail = { session: SessionInfo; counts: Record<string, number>; rec
 
 const HINTS: Record<Behaviour, string> = { BORROW: "Lent out and brought back", CONSUME: "Taken and used up", GRADUAL: "Opened, used a little at a time", REVIEW_LATER: "Keep it counted, decide later" };
 const ORDER = ["cat-name", "cat-qty", "cat-category", "cat-unit"];
-const TYPING = "input, textarea, select, [contenteditable=true]";
 
 /** What a queued capture looks like to the lists and rules that read items. */
 function known(entry: Entry): InventoryItem {
@@ -96,7 +95,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
         </div>
         <div class="cat-dup" id="cat-dup" aria-live="polite"></div>
         <fieldset class="cat-behaviour" id="cat-behaviour"><legend>How is it used?</legend>
-          <div class="cat-choices">${BEHAVIOURS.map((value, index) => html`<button type="button" class="cat-choice" data-behaviour="${value}" aria-pressed="false" aria-keyshortcuts="${index + 1}"><span class="cat-choice__title">${BEHAVIOUR_LABELS[value]}</span><span class="cat-choice__hint">${HINTS[value]}</span><span class="cat-choice__suggest" hidden>Suggested</span></button>`)}</div>
+          <div class="cat-choices">${BEHAVIOURS.map((value, index) => html`<button type="button" class="cat-choice" data-behaviour="${value}" aria-pressed="false" aria-keyshortcuts="Alt+${index + 1}"><span class="cat-choice__title">${BEHAVIOUR_LABELS[value]}</span><span class="cat-choice__hint">${HINTS[value]}</span><span class="cat-choice__suggest" hidden>Suggested</span></button>`)}</div>
           <p class="cat-suggest" id="cat-why" aria-live="polite"></p>
         </fieldset>
         <div class="cat-qty field"><label for="cat-qty">How many are here?</label>
@@ -121,7 +120,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
           <button type="submit" class="button button--primary button--lg" id="cat-save">Save &amp; next ${icon("next")}</button>
           <button type="button" class="button button--secondary" id="cat-like">Save, then add another like this</button>
         </div>
-        <p class="cat-keys" aria-hidden="true"><kbd>Ctrl</kbd> <kbd>Enter</kbd> save · <kbd>1</kbd>–<kbd>4</kbd> how it is used · <kbd>P</kbd> photo</p>
+        <p class="cat-keys" aria-hidden="true"><kbd>Ctrl</kbd> <kbd>Enter</kbd> save · <kbd>Alt</kbd> <kbd>1</kbd>–<kbd>4</kbd> how it is used · <kbd>Alt</kbd> <kbd>P</kbd> photo</p>
       </form>
       <section class="cat-recent" aria-labelledby="cat-recent-title"><h2 id="cat-recent-title">Just added</h2><div id="cat-list"></div></section>
     </div>`);
@@ -186,7 +185,8 @@ export async function captureScreen(session: Session, sessionId: string): Promis
       <ul class="cat-dup__list">${matchRows()}</ul></div></div>`);
   };
 
-  const chip = (text: string, attribute: string, suggested = false) => html`<button type="button" class="cat-chip ${suggested ? "is-suggested" : ""}" ${attribute}>${text}${suggested ? html`<span class="visually-hidden"> (suggested)</span>` : ""}</button>`;
+  /** A tappable suggestion: `kind` names the field it fills ("category" or "unit") and `value` is what it puts there, escaped as an attribute value. */
+  const chip = (text: string, kind: "category" | "unit", value: string, suggested = false) => html`<button type="button" class="cat-chip ${suggested ? "is-suggested" : ""}" data-fill="${kind}" data-value="${value}">${text}${suggested ? html`<span class="visually-hidden"> (suggested)</span>` : ""}</button>`;
 
   let suggestions = suggest("", [], []);
   const draw = () => {
@@ -210,9 +210,9 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     // Everything "Use these" would fill is named here first: nothing changes silently, including the stock area behind "More details".
     mount($("#cat-why"), lines.length && pending ? html`<span>${icon("info")}Suggested: ${[suggestions.behaviour && BEHAVIOUR_LABELS[suggestions.behaviour.value], suggestions.category && categoryName(suggestions.category.value), suggestions.unit?.value, stock && (stock.value === "Pantry" ? "Pantry" : "General stock")].filter(Boolean).join(" · ")}. ${lines[0]!.why}.</span> <button type="button" class="text-link" id="cat-use-all">Use these</button>` : html``);
     const categories = [...new Set([suggestions.category?.value, ...recent().map((item) => item.category), ...(inventory?.categories ?? [])].filter((entry): entry is string => Boolean(entry) && entry !== UNSORTED_CATEGORY))];
-    mount($("#cat-category-chips"), html`${categories.slice(0, 4).map((category) => chip(categoryName(category), `data-category="${category}"`, category === suggestions.category?.value))}`);
+    mount($("#cat-category-chips"), html`${categories.slice(0, 4).map((category) => chip(categoryName(category), "category", category, category === suggestions.category?.value))}`);
     const common = [suggestions.unit?.value, ...recent().map((item) => item.unit), ...(inventory?.units ?? [])].filter((entry): entry is string => Boolean(entry));
-    mount($("#cat-unit-chips"), html`${[...new Set(common)].slice(0, 4).map((unit) => chip(unit, `data-unit="${unit}"`, unit === suggestions.unit?.value))}`);
+    mount($("#cat-unit-chips"), html`${[...new Set(common)].slice(0, 4).map((unit) => chip(unit, "unit", unit, unit === suggestions.unit?.value))}`);
     mount($("#cat-categories"), html`${(inventory?.categories ?? []).map((category) => html`<option value="${category}">`)}`);
     mount($("#cat-units"), html`${(inventory?.units ?? []).map((unit) => html`<option value="${unit}">`)}`);
     const later = behaviour === "REVIEW_LATER";
@@ -225,14 +225,13 @@ export async function captureScreen(session: Session, sessionId: string): Promis
   onLeave(() => window.clearTimeout(drawTimer));
   form.addEventListener("input", () => { armed = false; later(); });
 
-  const choose = (next: Behaviour) => { behaviour = next; armed = false; setMessage($("#cat-alert"), ""); $("#cat-behaviour").removeAttribute("aria-invalid"); draw(); };
+  const choose = (next: Behaviour) => { behaviour = next; armed = false; setMessage($("#cat-alert"), ""); $("#cat-behaviour").classList.remove("is-invalid"); draw(); };
   root.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
-    const button = target.closest<HTMLElement>("[data-behaviour], [data-category], [data-unit], [data-step], #cat-use-all");
+    const button = target.closest<HTMLElement>("[data-behaviour], [data-fill], [data-step], #cat-use-all");
     if (!button) return;
     if (button.dataset.behaviour) choose(button.dataset.behaviour as Behaviour);
-    else if (button.dataset.category) { field("cat-category").value = button.dataset.category; armed = false; draw(); }
-    else if (button.dataset.unit) { field("cat-unit").value = button.dataset.unit; armed = false; draw(); }
+    else if (button.dataset.fill) { field(`cat-${button.dataset.fill}`).value = button.dataset.value ?? ""; armed = false; draw(); }
     else if (button.dataset.step) {
       const quantity = field("cat-qty");
       quantity.value = String(Math.min(100_000, Math.max(0, (Number(quantity.value) || 0) + Number(button.dataset.step))));
@@ -277,7 +276,8 @@ export async function captureScreen(session: Session, sessionId: string): Promis
 
   const invalid = (id: string, message: string) => {
     const element = id === "cat-behaviour" ? $("#cat-behaviour") : field(id);
-    element.setAttribute("aria-invalid", "true");
+    // A fieldset cannot be invalid; the group is marked by a class and the message is read from the alert.
+    if (id === "cat-behaviour") element.classList.add("is-invalid"); else element.setAttribute("aria-invalid", "true");
     setMessage($("#cat-alert"), message);
     (id === "cat-behaviour" ? root.querySelector<HTMLElement>("[data-behaviour]")! : element).focus();
     element.scrollIntoView?.({ block: "center", behavior: "smooth" });
@@ -305,8 +305,12 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     if (keep) field("cat-name").select();
   };
 
+  /** True from pressing Save until the item is on this device: a second press or a held key cannot queue it twice. */
+  let submitting = false;
   const submit = async (like: boolean) => {
+    if (submitting) return;
     form.querySelectorAll("[aria-invalid]").forEach((element) => element.removeAttribute("aria-invalid"));
+    $("#cat-behaviour").classList.remove("is-invalid");
     const name = value("cat-name");
     const quantity = field("cat-qty").value === "" ? NaN : Number(field("cat-qty").value);
     if (!name) return invalid("cat-name", "Give it a name, even a temporary one.");
@@ -326,6 +330,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
       $("#cat-save").focus();
       return;
     }
+    submitting = true;
     const id = crypto.randomUUID();
     const body: Record<string, unknown> = {
       id, behaviour, name, aliases: value("cat-aliases"), category: value("cat-category"), unit: value("cat-unit"), quantity, locationId: placeId,
@@ -338,9 +343,13 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     };
     if (photo) thumbs.set(id, photo.preview);
     // On the device before anything is sent: from here a dropped connection or a reload cannot lose it.
-    await keep(entry);
-    local.set(id, known(entry));
-    waiting = await entries().then((all) => all.filter((each) => each.sessionId === sessionId));
+    try {
+      await keep(entry);
+      local.set(id, known(entry));
+      waiting = await entries().then((all) => all.filter((each) => each.sessionId === sessionId));
+    } finally {
+      submitting = false;
+    }
     clear(like);
     announce(`Saving ${name}.`);
     void pump();
@@ -354,6 +363,9 @@ export async function captureScreen(session: Session, sessionId: string): Promis
   /* ---------- Sending ---------- */
 
   let pumping = false;
+  /** Set when the server says the sign-in has ended or the page is left: nothing more is sent from this page. */
+  let stopped = false;
+  onLeave(() => { stopped = true; });
   const retryAt = new Map<string, number>();
   const attempts = new Map<string, number>();
   let retryTimer = 0;
@@ -377,7 +389,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
         local.set(entry.id, known(entry));
       } catch (error) {
         if (!(error instanceof ApiError)) throw error;
-        if (error.status === 401) { expired(); return; }
+        if (error.status === 401) { stopped = true; expired(); return; }
         if (error.status === 0 || error.status >= 500 || error.status === 429) {
           const tries = attempts.get(entry.id) ?? 0;
           attempts.set(entry.id, tries + 1);
@@ -400,7 +412,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
         await api(`/api/staff/items/${entry.itemId}/photo`, { method: "PUT", body: form });
       } catch (error) {
         if (!(error instanceof ApiError)) throw error;
-        if (error.status === 401) { expired(); return; }
+        if (error.status === 401) { stopped = true; expired(); return; }
         if (error.status === 409) {
           // A repeat of an upload whose answer was lost finds the photo already there.
           const there = await api<{ item: { photo: unknown } }>(`/api/staff/items/${entry.itemId}`).then((answer) => Boolean(answer.item.photo), () => false);
@@ -423,6 +435,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     pumping = true;
     try {
       for (;;) {
+        if (stopped) break;
         waiting = (await entries()).filter((entry) => entry.sessionId === sessionId);
         const next = waiting.find((entry) => entry.state === "waiting" && (retryAt.get(entry.id) ?? 0) <= Date.now());
         if (!next) break;
@@ -435,6 +448,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
       waiting = (await entries()).filter((entry) => entry.sessionId === sessionId);
       const soon = Math.min(...waiting.filter((entry) => entry.state === "waiting").map((entry) => retryAt.get(entry.id) ?? Date.now() + 2_000));
       window.clearTimeout(retryTimer);
+      if (stopped) return;
       if (Number.isFinite(soon)) retryTimer = window.setTimeout(() => void pump(), Math.max(500, soon - Date.now()));
       await reload();
       drawList();
@@ -517,6 +531,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
       await settle(entry, { state: "waiting", message: null, body: { ...entry.body, acknowledged: (entry.matches ?? []).map((match) => match.id) }, matches: null });
       void pump();
     } else if (act.dataset.edit) {
+      if ((value("cat-name") || photo) && !window.confirm("Replace what you are typing with this item?")) return;
       const body = entry.body;
       field("cat-name").value = String(body.name);
       behaviour = body.behaviour as Behaviour;
@@ -547,21 +562,23 @@ export async function captureScreen(session: Session, sessionId: string): Promis
 
   const onKey = (event: KeyboardEvent) => {
     if (document.querySelector("dialog[open]")) return;
-    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); void submit(false); return; }
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); if (!event.repeat) void submit(false); return; }
     const target = event.target as HTMLElement;
     if (event.key === "Enter" && target instanceof HTMLInputElement && form.contains(target) && !event.isComposing) {
       // Enter moves on rather than saving: saving is a deliberate press.
       event.preventDefault();
       const next = ORDER[ORDER.indexOf(target.id) + 1];
+      if (!ORDER.includes(target.id)) return;
       if (target.id === "cat-name" && !behaviour) root.querySelector<HTMLElement>(".cat-choice.is-suggested, .cat-choice")!.focus();
       else if (next) field(next).focus();
       else $("#cat-save").focus();
       return;
     }
-    if (target.closest(TYPING) || event.metaKey || event.ctrlKey || event.altKey) return;
-    const digit = Number(event.key);
-    if (digit >= 1 && digit <= BEHAVIOURS.length) { event.preventDefault(); choose(BEHAVIOURS[digit - 1]!); }
-    else if (event.key.toLowerCase() === "p") { event.preventDefault(); file.click(); }
+    // Alt + a key, so a shortcut never fires while someone is typing a name (WCAG 2.1.4); it works from any field.
+    if (!event.altKey || event.ctrlKey || event.metaKey) return;
+    const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
+    if (digit && Number(digit) <= BEHAVIOURS.length) { event.preventDefault(); choose(BEHAVIOURS[Number(digit) - 1]!); }
+    else if (event.code === "KeyP") { event.preventDefault(); file.click(); }
   };
   document.addEventListener("keydown", onKey);
   onLeave(() => document.removeEventListener("keydown", onKey));

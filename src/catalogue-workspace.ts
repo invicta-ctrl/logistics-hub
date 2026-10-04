@@ -1,5 +1,5 @@
 import { type Detail, type SessionInfo, captureScreen } from "./catalogue-capture";
-import { entries } from "./catalogue-outbox";
+import { type Entry, drop, entries } from "./catalogue-outbox";
 import { bindNewPlace, newPlaceForm, placeList, placeOptions } from "./catalogue-places";
 import { BEHAVIOUR_LABELS, BULK_LIMIT, type Behaviour } from "./catalog-policy";
 import { photoUrl } from "./item-photo";
@@ -35,20 +35,21 @@ export async function catalogueWorkspace(): Promise<void> {
   try {
     const [state, locations, held] = await Promise.all([api<State>("/api/staff/catalogue"), api<{ locations: PlaceRow[] }>("/api/staff/locations"), entries()]);
     root.removeAttribute("aria-busy");
-    draw(root, state, locations.locations, held.length);
+    draw(root, state, locations.locations, held);
   } catch (error) {
     root.removeAttribute("aria-busy");
     mount(root, emptyState("The Catalogue could not be opened", failure(error), html`<a class="button button--secondary" href="/staff/catalogue" data-route>Try again</a>`, "error"));
   }
 }
 
-function draw(root: HTMLElement, state: State, rows: PlaceRow[], unsent: number): void {
+function draw(root: HTMLElement, state: State, rows: PlaceRow[], held: Entry[]): void {
   const list = placeList(rows);
   const mine = state.session;
   const active = rows.filter((row) => row.active);
   const choice = remembered() && list.places.get(remembered()!)?.active ? remembered() : null;
   mount(root, html`
-    ${unsent ? html`<div class="callout" role="status">${icon("alert")}<span>${plural(unsent, "item")} on this device ${unsent === 1 ? "has" : "have"} not been saved to the server yet. Open the session they belong to and they will be sent.</span></div>` : ""}
+    ${held.length ? html`<section class="callout cat-held" role="status" aria-labelledby="held-title">${icon("alert")}<div><p id="held-title"><strong>${plural(held.length, "item")} on this device ${held.length === 1 ? "has" : "have"} not been saved to the server.</strong></p>
+      <ul>${held.map((entry) => html`<li>${String(entry.body.name)}${entry.itemId ? " (saved, photo not sent)" : ""}: ${entry.sessionId === mine?.id ? html`<a class="text-link" href="/staff/catalogue?session=${mine.id}" data-route>open the session to send ${held.length === 1 ? "it" : "them"}</a>` : html`its session is finished, so it cannot be sent. <button type="button" class="text-link" data-discard-held="${entry.id}">Discard</button>`}</li>`)}</ul></div></section>` : ""}
     ${mine ? html`<section class="card cat-card" aria-labelledby="resume-title">
         <div class="card__head"><h2 id="resume-title">Your session is open</h2></div>
         <p class="cat-card__place">${icon("pin")}<span>${mine.place ?? "No place"}</span></p>
@@ -74,6 +75,13 @@ function draw(root: HTMLElement, state: State, rows: PlaceRow[], unsent: number)
         : html`<p class="muted">Nothing is waiting for a decision.</p>`}
     </section>`);
 
+  root.querySelector("[data-discard-held]")?.closest("section")?.addEventListener("click", async (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-discard-held]");
+    const entry = held.find((each) => each.id === button?.dataset.discardHeld);
+    if (!button || !entry || !window.confirm(`Discard ${String(entry.body.name)}? It was never saved.`)) return;
+    await drop(entry.id);
+    button.closest("li")!.remove();
+  });
   if (mine || !active.length) return;
   const select = root.querySelector<HTMLSelectElement>("#start-place")!;
   const alert = root.querySelector<HTMLElement>("#start-alert")!;

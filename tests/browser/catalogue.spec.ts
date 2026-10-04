@@ -138,12 +138,12 @@ test.describe("capturing a mixed shelf", () => {
     await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
     expect(server.state.captures[0]).toMatchObject({ behaviour: "CONSUME", quantity: 2, locationId: "LOC-0003", category: "OFFICE SUPPLIES", unit: "piece" });
 
-    // A loanable on the same shelf, chosen with the keyboard (1 to 4).
+    // A loanable on the same shelf, chosen with the keyboard (Alt + 1 to 4).
     await name(page).fill("Extension cord 5 m");
     await page.getByLabel("Category").fill("ELECTRICAL");
     await page.getByLabel("Counted in").fill("piece");
     await page.getByLabel("Counted in").blur();
-    await page.keyboard.press("1");
+    await page.keyboard.press("Alt+1");
     await expect(pick(page, "Borrow & return")).toHaveAttribute("aria-pressed", "true");
     await page.keyboard.press("Control+Enter");
     await expect(rows(page)).toHaveCount(2);
@@ -190,6 +190,32 @@ test.describe("capturing a mixed shelf", () => {
     await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
     await name(page).fill("paper trimmer");
     await expect(page.getByRole("group", { name: "Possible matches" })).toContainText("Paper trimmer");
+  });
+
+  test("tapping a category or unit chip fills exactly that value, spaces and all", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await begin(page, server);
+    await name(page).fill("Pencil case");
+    await page.locator("#cat-category-chips .cat-chip", { hasText: "Office Supplies" }).click();
+    await expect(page.getByLabel("Category")).toHaveValue("OFFICE SUPPLIES");
+    await page.locator("#cat-unit-chips .cat-chip", { hasText: "ream" }).click();
+    await expect(page.getByLabel("Counted in")).toHaveValue("ream");
+    await pick(page, "Consume").click();
+    await page.getByRole("button", { name: "Save & next" }).click();
+    await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
+    expect(server.state.captures[0]).toMatchObject({ category: "OFFICE SUPPLIES", unit: "ream" });
+  });
+
+  test("Save pressed twice quickly queues the item once", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await begin(page, server);
+    await name(page).fill("Stamp pad");
+    await pick(page, "Consume").click();
+    await page.getByLabel("Category").fill("OFFICE SUPPLIES");
+    await page.getByLabel("Counted in").fill("piece");
+    await page.evaluate(() => { const form = document.querySelector("#cat-form")!; form.dispatchEvent(new Event("submit", { cancelable: true })); form.dispatchEvent(new Event("submit", { cancelable: true })); });
+    await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
+    expect(server.state.captures).toHaveLength(1);
   });
 
   test("Enter moves to the next field instead of saving", async ({ page }) => {
@@ -263,6 +289,44 @@ test.describe("saving survives a dropped connection", () => {
     await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
     expect(server.state.photos).toHaveLength(1);
     expect(server.state.photos[0]!.hash).toMatch(/^[0-9a-f]{16}$/);
+  });
+});
+
+test.describe("when the sign-in ends or the session is gone", () => {
+  test("an ended sign-in stops sending instead of asking again and again", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await begin(page, server);
+    let asked = 0;
+    await page.route(`**/api/staff/catalogue/sessions/${SESSION_ID}/captures`, (route) => { asked += 1; return route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "Your staff session has ended. Please sign in again." }) }); });
+    await name(page).fill("Ruler");
+    await pick(page, "Consume").click();
+    await page.getByLabel("Category").fill("OFFICE SUPPLIES");
+    await page.getByLabel("Counted in").fill("piece");
+    await page.getByRole("button", { name: "Save & next" }).click();
+    await expect(page).toHaveURL(/\/staff\?expired=1/);
+    await page.waitForTimeout(1500);
+    expect(asked).toBe(1);
+  });
+
+  test("an item held for a session that is finished is listed on the Catalogue page and can be discarded", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await begin(page, server);
+    server.state.fail = "drop";
+    await name(page).fill("Whiteboard eraser");
+    await pick(page, "Consume").click();
+    await page.getByLabel("Category").fill("OFFICE SUPPLIES");
+    await page.getByLabel("Counted in").fill("piece");
+    await page.getByRole("button", { name: "Save & next" }).click();
+    await expect(rows(page).first()).toContainText("Not saved yet");
+    server.state.finished = true;
+    await page.goto("/staff/catalogue");
+    await expect(page.locator(".cat-held")).toContainText("Whiteboard eraser");
+    await expect(page.locator(".cat-held")).toContainText("its session is finished");
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "Discard" }).click();
+    await expect(page.locator(".cat-held li")).toHaveCount(0);
+    await page.reload();
+    await expect(page.locator(".cat-held")).toHaveCount(0);
   });
 });
 
