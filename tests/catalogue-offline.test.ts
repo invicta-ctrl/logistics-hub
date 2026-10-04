@@ -105,6 +105,18 @@ describe("turning offline cataloguing on", () => {
     expect(await response.json()).toMatchObject({ code: "NO_HUB_ACCESS" });
   });
 
+  it("signing in ends a lease another member left on the device, and keeps one's own", async () => {
+    const login = (cookie: string) => call("/api/staff/login", { method: "POST", headers: { origin, cookie, "content-type": "application/json", "cf-connecting-ip": "ip-shared" }, body: JSON.stringify({ username: "staff.one", password: "correct horse battery" }) });
+    const theirs = await turnOn(other);
+    const shared = await login(theirs);
+    expect(shared.headers.getSetCookie().map((value) => value.split("=")[0])).toEqual(["lh_staff_session", "lh_catalogue_lease"]);
+    expect((await as(theirs, "/api/staff/catalogue/snapshot")).status).toBe(401);
+    const mine = await turnOn();
+    const own = await login(mine);
+    expect(own.headers.getSetCookie().map((value) => value.split("=")[0])).toEqual(["lh_staff_session"]);
+    expect((await as(mine, "/api/staff/catalogue/snapshot")).status).toBe(200);
+  });
+
   it("reports no lease for a member whose device holds someone else's", async () => {
     const theirs = await turnOn(other);
     expect(await (await as(both(session, theirs), "/api/staff/catalogue/offline")).json()).toMatchObject({ signedIn: true, lease: null, account: { id: "ACC-1" } });
@@ -143,6 +155,9 @@ describe("a lease on its own", () => {
     const theirs = ((await (await as(other, "/api/staff/catalogue/sessions", "POST", { locationId: shelf })).json()) as { id: string }).id;
     const item = ((await (await as(other, `/api/staff/catalogue/sessions/${theirs}/captures`, "POST", shot(shelf))).json()) as { id: string }).id;
     expect((await putPhoto(lease, item)).status).toBe(403);
+    // Another member's session: any signed-in member may read it, a lease may not.
+    expect((await as(session, `/api/staff/catalogue/sessions/${theirs}`)).status).toBe(200);
+    expect((await as(lease, `/api/staff/catalogue/sessions/${theirs}`)).status).toBe(403);
     for (const [method, path] of [
       ["GET", "/api/staff/session"], ["GET", "/api/staff/inventory"], ["GET", `/api/staff/items/${item}`], ["POST", "/api/staff/items"],
       ["GET", `/api/staff/catalogue/sessions/${id}/unreviewed`], ["POST", "/api/staff/items/bulk"], ["POST", "/api/staff/locations"], ["GET", "/api/staff/loans"],

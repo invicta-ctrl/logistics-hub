@@ -54,7 +54,10 @@ export function syncNow(): Promise<void> {
   if (running) { again = true; return running; }
   running = (async () => {
     try {
-      do { again = false; await pass(); } while (again && sender && !ended);
+      const passes = async () => { do { again = false; await pass(); } while (again && sender && !ended); };
+      // One sender per device: two tabs (or the installed app and a tab) never send the same capture at once.
+      if (navigator.locks) await navigator.locks.request("logistics-hub-catalogue-sync", passes);
+      else await passes();
     } finally {
       running = null;
       await schedule();
@@ -88,15 +91,21 @@ async function schedule(): Promise<void> {
 
 const settle = async (entry: Entry, change: Partial<Entry>) => { Object.assign(entry, change); await keep(entry); };
 const transient = (error: ApiError) => error.status === 0 || error.status >= 500 || error.status === 429;
+/** A request that has not answered in `ms` counts as a dropped connection, so one stalled request on a weak signal never stalls the rest. */
+const within = (ms: number): RequestInit => typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(ms) } : {};
+/** The next try for an entry: 2 s, doubling to 30 s. */
+const backOff = (entry: Entry) => {
+  const tries = attempts.get(entry.id) ?? 0;
+  attempts.set(entry.id, tries + 1);
+  retryAt.set(entry.id, Date.now() + Math.min(30_000, 2_000 * 2 ** tries));
+};
 
 /** A refusal: a person decides (or, for a dropped connection or a busy server, it waits and goes again by itself). */
 async function failed(entry: Entry, error: unknown): Promise<void> {
   if (!(error instanceof ApiError)) throw error;
   if (error.status === 401) { ended = true; return; }
   if (transient(error)) {
-    const tries = attempts.get(entry.id) ?? 0;
-    attempts.set(entry.id, tries + 1);
-    retryAt.set(entry.id, Date.now() + Math.min(30_000, 2_000 * 2 ** tries));
+    backOff(entry);
     await settle(entry, { state: "waiting", message: error.status === 0 ? "It will be sent when the connection is back." : "The server is busy; it will be sent shortly." });
     return;
   }
@@ -110,16 +119,24 @@ const acknowledged = (entry: Entry): string[] => [...new Set([
   ...entry.after.map((id) => id.startsWith("ITM-") ? id : savedAs.get(id)).filter((id): id is string => Boolean(id))
 ])];
 
-/** Where the server keeps the entry's session, starting it there first if this device started it without a connection. */
-async function serverSession(entry: Entry): Promise<string> {
+/**
+ * Where the server keeps the entry's session, starting it there first if this device started it without a connection; null while it
+ * must wait (below).
+ */
+async function serverSession(entry: Entry): Promise<string | null> {
   const record = (await sessions()).find((each) => each.id === entry.sessionId);
   if (!record) return entry.sessionId;
   if (record.serverId) return record.serverId;
-  // A session finished here before this one was started must be finished on the server first, or the start would find it still
-  // open and file this session's captures under it. Captures go oldest first, so everything in it has been sent by now.
+  // A session finished here before this one started must be finished on the server first, or the start would find it still open
+  // and file this session's captures under it. While one of its captures is still on its way (a retry pending), this one waits;
+  // one that needs a person does not hold it up (this session then joins it, as one open session per person means anyway).
   await finishSessions();
+  const held = await entries();
+  const before = (await sessions()).some((other) => other.finishing && other.owner === record.owner && other.id !== record.id
+    && held.some((each) => each.sessionId === other.id && each.state === "waiting"));
+  if (before) return null;
   // The capture's own place: it is where the person was standing, and is a place the server can check.
-  const started = await api<{ id: string }>("/api/staff/catalogue/sessions", { method: "POST", body: JSON.stringify({ id: record.id, locationId: entry.body.locationId }) });
+  const started = await api<{ id: string }>("/api/staff/catalogue/sessions", { method: "POST", body: JSON.stringify({ id: record.id, locationId: entry.body.locationId }), ...within(20_000) });
   await keepSession({ ...record, serverId: started.id });
   return started.id;
 }
@@ -129,7 +146,7 @@ async function serverSession(entry: Entry): Promise<string> {
  * a new session: the next start proposes the finished one's id, and the server answers with the person's open or a new session.
  */
 async function finishedElsewhere(entry: Entry, target: string): Promise<boolean> {
-  const detail = await api<Detail>(`/api/staff/catalogue/sessions/${target}`).catch(() => null);
+  const detail = await api<Detail>(`/api/staff/catalogue/sessions/${target}`, within(20_000)).catch(() => null);
   if (detail?.session.status !== "FINISHED") return false;
   const record = (await sessions()).find((each) => each.id === entry.sessionId);
   await keepSession({ ...(record ?? { id: entry.sessionId, owner: sender!.owner, detail, finishing: false }), serverId: null });
@@ -140,8 +157,9 @@ async function send(entry: Entry): Promise<void> {
   if (!entry.itemId) {
     let target: string | undefined;
     try {
-      target = await serverSession(entry);
-      const saved = await api<{ id: string }>(`/api/staff/catalogue/sessions/${target}/captures`, { method: "POST", body: JSON.stringify({ ...entry.body, acknowledged: acknowledged(entry) }) });
+      target = await serverSession(entry) ?? undefined;
+      if (!target) { retryAt.set(entry.id, Date.now() + 4_000); return; }
+      const saved = await api<{ id: string }>(`/api/staff/catalogue/sessions/${target}/captures`, { method: "POST", body: JSON.stringify({ ...entry.body, acknowledged: acknowledged(entry) }), ...within(20_000) });
       attempts.delete(entry.id);
       savedAs.set(entry.id, saved.id);
       await settle(entry, { itemId: saved.id, state: "waiting", message: null, matches: null });
@@ -159,14 +177,14 @@ async function send(entry: Entry): Promise<void> {
     form.set("expected", "");
     form.set("hash", entry.photo.hash);
     try {
-      await api(`/api/staff/items/${entry.itemId}/photo`, { method: "PUT", body: form });
+      await api(`/api/staff/items/${entry.itemId}/photo`, { method: "PUT", body: form, ...within(90_000) });
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
       if (error.status === 401) { ended = true; return; }
       // A first photo is refused with 409 only when the item has one already: a repeat of an upload whose answer was lost.
       if (error.status !== 409) {
         if (transient(error)) {
-          retryAt.set(entry.id, Date.now() + 4_000);
+          backOff(entry);
           await settle(entry, { state: "waiting", message: "Saved. The photo has not gone up yet; trying again." });
         } else await settle(entry, { state: "stopped", message: `Saved, but the photo was not: ${error.message}` });
         return;
@@ -176,15 +194,22 @@ async function send(entry: Entry): Promise<void> {
   await drop(entry.id);
 }
 
-/** Tells the server about sessions finished on this device, once everything captured in them has been sent (or discarded). */
+/**
+ * Tells the server about sessions finished on this device, once everything captured in them has been sent (or discarded), and forgets
+ * a session the server finished elsewhere once nothing here refers to it.
+ */
 async function finishSessions(): Promise<void> {
   const waiting = await entries();
   for (const record of await sessions()) {
-    if (!record.finishing || record.owner !== sender?.owner || waiting.some((entry) => entry.sessionId === record.id)) continue;
+    if (record.owner !== sender?.owner || waiting.some((entry) => entry.sessionId === record.id)) continue;
+    if (!record.finishing) {
+      if (record.detail.session.status !== "ACTIVE") await dropSession(record.id);
+      continue;
+    }
     // Never started on the server: nothing was saved in it, so there is nothing to finish.
     if (record.serverId) {
       try {
-        await api(`/api/staff/catalogue/sessions/${record.serverId}/finish`, { method: "POST" });
+        await api(`/api/staff/catalogue/sessions/${record.serverId}/finish`, { method: "POST", ...within(20_000) });
       } catch (error) {
         if (!(error instanceof ApiError)) throw error;
         if (error.status === 401) { ended = true; return; }
