@@ -125,6 +125,74 @@ const revision = () => (sqlite.prepare("SELECT value FROM catalog_revision").get
 const listed = async () => ((await (await staff("/api/staff/inventory")).json()) as { items: Array<{ id: string; photoId: string | null }> }).items.find((item) => item.id === ITEM)!;
 const detail = async () => ((await (await staff(`/api/staff/items/${ITEM}`)).json()) as { item: { photo: { id: string; width: number; height: number } | null } }).item;
 
+describe("catalog visual choices", () => {
+  const visual = async (visualType: string, iconKey: unknown, updatedAt?: unknown) => {
+    const current = await (await staff(`/api/staff/items/${ITEM}`)).json() as { item: { updatedAt: string | null } };
+    return staff(`/api/staff/items/${ITEM}/visual`, "PATCH", { visualType, iconKey, updatedAt: updatedAt === undefined ? current.item.updatedAt : updatedAt });
+  };
+  it("keeps item truth and the photo when selecting an icon, and supports automatic reset and Photo selection", async () => {
+    list(ITEM); openSelfService();
+    const image = await add();
+    expect((await thumb(image)).status).toBe(200);
+    const before = sqlite.prepare("SELECT name, category, item_type, location_id FROM items WHERE id = ?").get(ITEM);
+    const movements = sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements").get();
+    expect((await visual("SYSTEM_ICON", "tabler:scissors")).status).toBe(200);
+    expect(sqlite.prepare("SELECT visual_type, icon_key FROM items WHERE id = ?").get(ITEM)).toEqual({ visual_type: "SYSTEM_ICON", icon_key: "tabler:scissors" });
+    expect((await detail()).photo?.id).toBe(image);
+    expect((await publicItems()).find((item) => item.id === ITEM)?.photo).toBeNull();
+    expect((await phoneItems()).find((item) => item.id === ITEM)?.photo).toBeNull();
+    expect((await thumb(image, { headers: { 'if-none-match': `"${image}"` } })).status).toBe(404);
+    expect((await staff(`/api/staff/media/${image}/thumb`)).status).toBe(200);
+    expect((await visual("SYSTEM_ICON", null)).status).toBe(200);
+    expect(sqlite.prepare("SELECT icon_key FROM items WHERE id = ?").get(ITEM)).toEqual({ icon_key: null });
+    expect((await visual("PHOTO", "tabler:box")).status).toBe(200);
+    expect((await thumb(image)).status).toBe(200);
+    expect(sqlite.prepare("SELECT name, category, item_type, location_id FROM items WHERE id = ?").get(ITEM)).toEqual(before);
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements").get()).toEqual(movements);
+    expect(keys()).toEqual([`items/${image}/display`, `items/${image}/thumb`]);
+  });
+  it("guards permissions, icon keys, missing photos and stale item choices", async () => {
+    expect((await call(`/api/staff/items/${ITEM}/visual`, { method: "PATCH", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ visualType: "SYSTEM_ICON", iconKey: null, updatedAt: null }) })).status).toBe(401);
+    expect((await visual("SYSTEM_ICON", "noun:secret")).status).toBe(400);
+    expect((await visual("SYSTEM_ICON", "tabler:../../evidence")).status).toBe(400);
+    expect((await visual("PHOTO", null)).status).toBe(409);
+    expect((await visual("SYSTEM_ICON", "tabler:files")).status).toBe(200);
+    const revisionBefore = revision();
+    expect((await visual("SYSTEM_ICON", "tabler:box", "stale")).status).toBe(409);
+    expect(revision()).toBe(revisionBefore);
+    expect(sqlite.prepare("SELECT icon_key FROM items WHERE id = ?").get(ITEM)).toEqual({ icon_key: "tabler:files" });
+    const cross = await call(`/api/staff/items/${ITEM}/visual`, { method: "PATCH", headers: { origin: "https://other.example", cookie, "content-type": "application/json" }, body: "{}" });
+    expect(cross.status).toBe(403);
+  });
+  it("a successful upload selects Photo and keeps the chosen fallback icon", async () => {
+    await visual("SYSTEM_ICON", "tabler:scissors");
+    expect((await put()).status).toBe(200);
+    expect(sqlite.prepare("SELECT visual_type, icon_key FROM items WHERE id = ?").get(ITEM)).toEqual({ visual_type: "PHOTO", icon_key: "tabler:scissors" });
+  });
+  it("rejects mismatched MIME even when its bytes look like a JPEG", async () => {
+    const form = photoForm(null);
+    form.set("display", new File([jpeg() as BlobPart], "../../private.html", { type: "text/html" }));
+    expect((await put(null, ITEM, form)).status).toBe(400);
+    expect(keys()).toEqual([]);
+    expect(rows()).toEqual([]);
+  });
+  it("a stale upload cannot replace a newer visual choice, including a change while R2 is writing", async () => {
+    const current = await (await staff(`/api/staff/items/${ITEM}`)).json() as { item: { updatedAt: string | null } };
+    const form = photoForm(null);
+    form.set("updatedAt", current.item.updatedAt ?? "");
+    const original = media.bucket.put.bind(media.bucket);
+    let changed = false;
+    vi.spyOn(media.bucket, "put").mockImplementation(async (...args: Parameters<R2Bucket["put"]>) => {
+      if (!changed) { changed = true; expect((await visual("SYSTEM_ICON", "tabler:camera")).status).toBe(200); }
+      return original(...args);
+    });
+    expect((await put(null, ITEM, form)).status).toBe(409);
+    expect(keys()).toEqual([]); expect(rows()).toEqual([]);
+    expect(sqlite.prepare("SELECT visual_type, icon_key FROM items WHERE id = ?").get(ITEM)).toEqual({ visual_type: "SYSTEM_ICON", icon_key: "tabler:camera" });
+    expect(actions()).toEqual([]);
+  });
+});
+
 describe("adding a photo", () => {
   it("stores both variants, one reference and one audit entry, and shows the photo in the list and the profile", async () => {
     const before = revision();
@@ -454,7 +522,7 @@ describe("privacy and history", () => {
       expect(text, path).toContain(id);
       expect(text, path).not.toMatch(/display|original|width|height|createdBy|ACC-1|\/api\/staff\/media/i);
     }
-    expect(Object.keys((await publicItems()).find((item) => item.id === ITEM)!).sort()).toEqual(["audience", "available", "category", "id", "itemType", "name", "photo", "unit"]);
+    expect(Object.keys((await publicItems()).find((item) => item.id === ITEM)!).sort()).toEqual(["audience", "available", "category", "iconKey", "id", "itemType", "name", "photo", "unit"]);
   });
 
   // Activity breaks time ties on a random audit id, so three changes made in the same millisecond (easy in an in-memory

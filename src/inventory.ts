@@ -1,3 +1,4 @@
+import { itemIconKey, resolveItemIcon } from "./item-icons";
 import { LOCATION_ID } from "./location-tree";
 import { UNSORTED_CATEGORY, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_AUDIENCES, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
 
@@ -10,13 +11,13 @@ export type Actor = { accountId: string };
 type ItemRow = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: number;
   lendingAudience: string; onHand: number; reorderThreshold: number; locationId: string | null; notes: string | null; updatedAt: string | null;
-  stockArea: string | null; expiresOn: string | null; consumptionMode: string; model: string | null; serialNumber: string | null;
+  stockArea: string | null; expiresOn: string | null; consumptionMode: string; model: string | null; serialNumber: string | null; visualType: "SYSTEM_ICON" | "PHOTO" | null; iconKey: string | null;
 };
 
 const ITEM_COLUMNS = `i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.unit, i.status, i.needs_review AS needsReview,
  i.lending_audience AS lendingAudience, COALESCE(b.on_hand, 0) AS onHand, i.reorder_threshold AS reorderThreshold,
  i.location_id AS locationId, i.notes, i.updated_at AS updatedAt,
- i.stock_area AS stockArea, i.expires_on AS expiresOn, i.consumption_mode AS consumptionMode, i.model, i.serial_number AS serialNumber`;
+ i.stock_area AS stockArea, i.expires_on AS expiresOn, i.consumption_mode AS consumptionMode, i.model, i.serial_number AS serialNumber, i.visual_type AS visualType, i.icon_key AS iconKey`;
 export const BUMP_REVISION = "UPDATE catalog_revision SET value = value + 1 WHERE id = 1";
 /**
  * History is shown in business order: migrated rows keep their import order, then everything
@@ -88,7 +89,8 @@ export async function publicCatalog(db: D1Database) {
     available: Math.max(0, row.onHand),
     audience: row.lendingAudience,
     // The id of the item's photo, if it has one: the thumbnail is public (src/item-media.ts, publicThumb), the large picture is not.
-    photo: row.photoId
+    photo: row.visualType === "SYSTEM_ICON" ? null : row.photoId,
+    iconKey: resolveItemIcon(row).key
   }));
   return { items, categories: distinct(items.map((item) => item.category)) };
 }
@@ -112,7 +114,7 @@ export async function staffInventory(db: D1Database) {
     needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand, updatedAt: row.updatedAt,
     reorderThreshold: row.reorderThreshold, locationId: row.locationId, legacyLocation: row.legacyLocation, openReports: row.openReports, listed: isListedForLending(row),
     stockArea: row.stockArea, expiresOn: row.expiresOn, lastCountedAt: row.lastCountedAt, reorderStatus: row.reorderStatus, onLoan: row.onLoan,
-    consumptionMode: row.consumptionMode, openUnits: row.openUnits, openCondition: row.openCondition, photoId: row.photoId, photoHash: row.photoHash,
+    consumptionMode: row.consumptionMode, openUnits: row.openUnits, openCondition: row.openCondition, photoId: row.photoId, photoHash: row.photoHash, visualType: row.visualType, iconKey: row.iconKey,
     model: row.model, serialNumber: row.serialNumber,
     // The legacy quantity is doubtful (migration discrepancy or a VERIFY record) until someone counts it.
     countNeeded: row.status !== "INACTIVE" && !row.lastCountedAt && ((row.migrationDelta ?? 0) !== 0 || row.status === "VERIFY")
@@ -174,7 +176,7 @@ type ItemInput = {
   name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; locationId: string | null;
   reorderThreshold: number; lendingAudience: string; needsReview: boolean; notes: string | null;
   // Optional: an older form that omits them keeps the stored value.
-  stockArea?: string; expiresOn?: string | null; consumptionMode?: string; model?: string | null; serialNumber?: string | null;
+  stockArea?: string; expiresOn?: string | null; consumptionMode?: string; model?: string | null; serialNumber?: string | null; iconKey?: string | null;
 };
 
 export function text(body: Record<string, unknown>, key: string, label: string, max: number, required: boolean, multiline = false): string | null {
@@ -233,6 +235,11 @@ export function parseItemInput(body: unknown): ItemInput {
     ...(record.model === undefined ? {} : { model: text(record, "model", "Model", 80, false) }),
     ...(record.serialNumber === undefined ? {} : { serialNumber: text(record, "serialNumber", "Serial number", 80, false) })
   };
+  if (record.iconKey !== undefined) {
+    const key = typeof record.iconKey === "string" ? itemIconKey(record.iconKey) : null;
+    if (record.iconKey !== null && !key) throw new InputError(400, "Choose an available system icon.");
+    input.iconKey = key ? `tabler:${key}` : null;
+  }
   // Only a Consumable is opened and used gradually; anything else is stored as a whole unit.
   if (input.itemType !== "Consumable") input.consumptionMode = "WHOLE_UNIT";
   else if (record.consumptionMode !== undefined) input.consumptionMode = choice(record, "consumptionMode", "way it is used", CONSUMPTION_MODES);
@@ -347,10 +354,10 @@ export async function createItem(db: D1Database, actor: Actor, parsed: ItemInput
     const id = `ITM-${String(next).padStart(4, "0")}`;
     const statements = [
       db.prepare(`INSERT INTO items(id, name, aliases, category, item_type, unit, status, location_id, reorder_threshold, lending_audience,
-        needs_review, notes, stock_area, expires_on, consumption_mode, model, serial_number, imported_from, imported_at, updated_at)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?)`)
+        needs_review, notes, stock_area, expires_on, consumption_mode, model, serial_number, imported_from, imported_at, updated_at, icon_key)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGISTICS_HUB', ?, ?, ?)`)
         .bind(id, input.name, input.aliases, input.category, input.itemType, input.unit, input.status, input.locationId, input.reorderThreshold, input.lendingAudience,
-          Number(input.needsReview), input.notes, input.stockArea ?? "Inventory", input.expiresOn ?? null, input.consumptionMode ?? "WHOLE_UNIT", input.model ?? null, input.serialNumber ?? null, now, now),
+          Number(input.needsReview), input.notes, input.stockArea ?? "Inventory", input.expiresOn ?? null, input.consumptionMode ?? "WHOLE_UNIT", input.model ?? null, input.serialNumber ?? null, now, now, input.iconKey ?? null),
       audit(db, actor.accountId, "ITEM_CREATED", "ITEM", id, { ...input, locationId: undefined, storageLocation: places.get(input.locationId!) ?? null, openingQuantity, ...creation.audit }),
       db.prepare(BUMP_REVISION)
     ];
