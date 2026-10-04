@@ -133,7 +133,8 @@ test.describe.serial("offline self-service", () => {
     expect(await (await request.get("/self-service")).text()).toContain('rel="manifest" href="/manifest.webmanifest"');
     const manifest = await request.get("/manifest.webmanifest");
     expect(manifest.headers()["content-type"]).toContain("application/manifest+json");
-    expect(await manifest.json()).toMatchObject({ name: "Logistics Hub", start_url: "/self-service", display: "standalone", scope: "/" });
+    // Its own path (V1.6): the staff Catalog app is scoped to /staff beside it, and two apps on one site must not overlap.
+    expect(await manifest.json()).toMatchObject({ id: "/self-service", name: "Logistics Hub", start_url: "/self-service", display: "standalone", scope: "/self-service" });
     const worker = await request.get("/sw.js");
     expect(worker.headers()["cache-control"]).toBe("no-cache");
     expect(await worker.text()).toContain("logistics-shell-");
