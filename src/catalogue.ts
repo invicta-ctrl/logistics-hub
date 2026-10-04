@@ -37,7 +37,8 @@ async function ownSession(db: D1Database, actor: Actor, id: string): Promise<Ses
   return row;
 }
 
-const shown = ({ startedBy: _startedBy, ...row }: SessionRow) => row;
+/** A session as the browser sees it; `mine` says whether the reader may add to it. */
+const shown = ({ startedBy, ...row }: SessionRow, me: string) => ({ ...row, mine: startedBy === me });
 
 /** What the Catalogue page opens with: your open session (if any), who else is cataloguing, and the items waiting for a decision. */
 export async function catalogueState(db: D1Database, actor: Actor) {
@@ -50,14 +51,14 @@ export async function catalogueState(db: D1Database, actor: Actor) {
     db.prepare("SELECT COUNT(*) AS total FROM catalogue_captures c JOIN items i ON i.id = c.item_id WHERE i.item_type = 'NEEDS_REVIEW'")
   ]);
   return {
-    session: mine!.results[0] ? shown(mine!.results[0] as SessionRow) : null,
-    others: (others!.results as SessionRow[]).map(shown),
+    session: mine!.results[0] ? shown(mine!.results[0] as SessionRow, actor.accountId) : null,
+    others: (others!.results as SessionRow[]).map((row) => shown(row, actor.accountId)),
     reviewLater: { total: (total!.results[0] as { total: number }).total, items: review!.results }
   };
 }
 
 /** One session with its newest captures; `counts` say how the whole session went, whatever has scrolled away. */
-export async function sessionDetail(db: D1Database, id: string) {
+export async function sessionDetail(db: D1Database, actor: Actor, id: string) {
   if (!SESSION_ID.test(id)) throw new InputError(404, "Cataloguing session not found.");
   const [session, counts, recent] = await db.batch([
     db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.id = ?`).bind(id),
@@ -70,10 +71,18 @@ export async function sessionDetail(db: D1Database, id: string) {
   const found = session!.results[0] as SessionRow | undefined;
   if (!found) throw new InputError(404, "Cataloguing session not found.");
   return {
-    session: shown(found),
+    session: shown(found, actor.accountId),
     counts: Object.fromEntries((counts!.results as Array<{ behaviour: string; n: number }>).map((row) => [row.behaviour, row.n])),
     recent: recent!.results
   };
+}
+
+/** The classified, still-unreviewed items of a session, with the versions a bulk "mark reviewed" needs. */
+export async function unreviewed(db: D1Database, id: string) {
+  if (!SESSION_ID.test(id)) throw new InputError(404, "Cataloguing session not found.");
+  const { results } = await db.prepare(`SELECT i.id, i.updated_at AS updatedAt FROM catalogue_captures c JOIN items i ON i.id = c.item_id
+    WHERE c.session_id = ? AND i.needs_review = 1 AND i.item_type <> 'NEEDS_REVIEW' AND i.category <> '${UNSORTED_CATEGORY}' ORDER BY c.created_at, c.rowid LIMIT 1000`).bind(id).all();
+  return { items: results };
 }
 
 export async function startSession(db: D1Database, actor: Actor, input: unknown) {
