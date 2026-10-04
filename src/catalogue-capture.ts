@@ -7,7 +7,7 @@ import { BEHAVIOURS, BEHAVIOUR_LABELS, type Behaviour, UNSORTED_CATEGORY } from 
 import { type Known as DuplicateKnown, type Match, possibleDuplicates } from "./duplicates";
 import { preparePhoto, photoUrl } from "./item-photo";
 import { whenIdle } from "./pwa";
-import { shell } from "./staff";
+import { catalogueShell } from "./catalogue-shell";
 import { ApiError, type Html, api, categoryName, dataUrl, emptyState, failure, html, icon, leave, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, toast, units } from "./ui";
 
 /*
@@ -43,8 +43,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   const session = who.session;
   /** Whether the server can be reached: opened offline, it follows the connection from then on. */
   let online = who.mode !== "offline";
-  document.title = "Cataloguing · Staff workspace";
-  shell(session, "items", html`<div class="cat" id="cat"><div class="skeleton skeleton--block"></div></div>`);
+  document.title = "Cataloguing · Catalog";
+  catalogueShell(who, html`<div class="cat" id="cat"><div class="skeleton skeleton--block"></div></div>`);
   const root = document.querySelector<HTMLElement>("#cat")!;
   const { finishedView, signInHere } = await import("./catalogue-workspace");
 
