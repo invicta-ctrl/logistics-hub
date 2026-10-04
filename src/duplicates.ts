@@ -44,7 +44,10 @@ export function possibleDuplicates(candidate: Candidate, known: readonly Known[]
   for (const item of known) {
     if (item.id === ignore) continue;
     let match: (Match & { rank: number }) | null = null;
-    if (serial.length >= 3 && compact(item.serialNumber) === serial) match = { id: item.id, reason: "Same serial number", strong: true, rank: 0 };
+    // Two serial numbers that differ are two individual things, however alike their names and photos.
+    const otherSerial = compact(item.serialNumber);
+    if (serial && otherSerial && serial !== otherSerial) continue;
+    if (serial.length >= 3 && otherSerial === serial) match = { id: item.id, reason: "Same serial number", strong: true, rank: 0 };
     else if (name.length && (sameSet(name, words(item.name)) || (item.aliases ?? "").split(",").some((alias) => sameSet(name, words(alias))))) match = { id: item.id, reason: "Same name", strong: true, rank: 1 };
     else if (model.length >= 2 && compact(item.model) === model && category && item.category.trim().toLowerCase() === category) match = { id: item.id, reason: "Same model in the same category", strong: false, rank: 2 };
     else if (candidate.photoHash && item.photoHash && hamming(candidate.photoHash, item.photoHash) <= PHOTO_DISTANCE) match = { id: item.id, reason: "Its photo looks the same", strong: false, rank: 3 };
