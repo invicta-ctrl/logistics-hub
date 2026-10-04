@@ -30,7 +30,7 @@ export function hamming(a: string, b: string): number {
 export const PHOTO_DISTANCE = 5;
 
 /** The most matches shown: enough to recognise the item, few enough to read at the shelf. */
-export const MAX_MATCHES = 4;
+export const MAX_MATCHES = 3;
 
 const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((word) => b.includes(word));
 
@@ -54,7 +54,8 @@ export function possibleDuplicates(candidate: Candidate, known: readonly Known[]
     else if (name.length >= 2) {
       const other = words(item.name);
       const shared = name.filter((word) => other.includes(word)).length;
-      if (shared >= 2 && (shared === Math.min(name.length, other.length) || shared / new Set([...name, ...other]).size >= 0.75)) match = { id: item.id, reason: "Almost the same name", strong: false, rank: 4 };
+      // One name inside the other with at most a word more ("Whiteboard marker" and "Whiteboard marker black"); "Acrylic paint" and each of its twelve colours are not twins.
+      if (shared >= 2 && ((shared === Math.min(name.length, other.length) && Math.abs(name.length - other.length) <= 1) || shared / new Set([...name, ...other]).size >= 0.75)) match = { id: item.id, reason: "Almost the same name", strong: false, rank: 4 };
     }
     if (match) found.push(match);
   }
