@@ -11,7 +11,7 @@ import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { bulkBar } from "./bulk-select";
 import { placeList } from "./catalogue-places";
 import { setAccess } from "./catalogue-store";
-import { ApiError, MARK, type Html, type IconName, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, raw, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { ApiError, MARK, type Html, type IconName, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDate, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, raw, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
@@ -23,7 +23,7 @@ type Item = {
 /** A place as the Worker lists it (src/locations.ts); paths, depth and order come from location-tree.ts. */
 export type PlaceRow = {
   id: string; name: string; parentId: string | null; directions: string | null; visibility: string; active: boolean; updatedAt: string;
-  photo: Photo | null; itemCount: number; openReports: number;
+  photo: Photo | null; itemCount: number; openReports: number; lastCheckedAt?: string | null;
 };
 type Inventory = { revision: number; items: Item[]; categories: string[]; locations: PlaceRow[]; units: string[] };
 type Report = {
@@ -38,7 +38,20 @@ type DetailItem = Item & {
   legacyReportedAvailable: number | null; migratedOnHand: number; migrationDelta: number | null;
   legacySourceSheet: string | null; legacySourceRow: string | null; verificationNote: string | null; importedFrom: string | null;
 };
-type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number };
+/** Derived from checks of a place and counts (V1.7), never stored: when the item was last seen at its place, and a finding nothing has settled. */
+type Freshness = { lastVerifiedAt: string | null; lastCountedAt: string | null; openDiscrepancy: { outcome: string; at: string; auditId: string } | null };
+/** A check's finding, as the profile says it. */
+const FINDING_WORDS: Record<string, string> = { MISMATCH: "a different count", CANT_FIND: "it couldn’t be found", FOUND_HERE: "it somewhere else", NEEDS_REVIEW: "the record looks wrong" };
+/** "today", "yesterday", "5 days ago", "3 weeks ago", or the date after two months. */
+export function ageOf(iso: string): string {
+  const days = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
+  if (days < 1) return "today";
+  if (days < 2) return "yesterday";
+  if (days < 14) return `${days} days ago`;
+  if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
+  return `on ${formatDate(iso.slice(0, 10))}`;
+}
+type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness };
 type SortKey = "id" | "name" | "category" | "location" | "onHand";
 type Tab = "overview" | "loan" | "details" | "history";
 
@@ -681,7 +694,7 @@ export async function workspace(): Promise<void> {
       if (!loaded || !detail) return;
       const { onHand, photo: loadedPhoto, openReports, location, legacyLocation, iconKey, visualType, updatedAt } = loaded.item;
       detail = { ...detail, item: { ...detail.item, onHand, photo: loadedPhoto, openReports, location, legacyLocation, iconKey, visualType, updatedAt }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
-        openUnits: loaded.openUnits, reports: loaded.reports, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied };
+        openUnits: loaded.openUnits, reports: loaded.reports, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied, freshness: loaded.freshness };
       photo?.render(loaded.item.photo);
       visualControl?.render();
       mount(sheet.querySelector("#reports-card")!, reportsCard(detail));
@@ -747,15 +760,26 @@ export async function workspace(): Promise<void> {
     }
   }
 
-  /** Who and what the item is at a glance, beside its photo: availability, status, type, category and place. */
-  function profileInfo({ item, loans }: Detail): Html {
+  /** Who and what the item is at a glance, beside its photo: availability, status, type, category, place, and how fresh that is. */
+  function profileInfo({ item, loans, freshness }: Detail): Html {
     const out = loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
     return html`<p class="profile__stock"><strong>${item.onHand}</strong> ${units(item.onHand, item.unit)} on hand${out ? html` <span class="muted">· ${out} on loan</span>` : ""}</p>
       ${tags(item)}
       <p class="profile__meta">${label(item.itemType)} · ${categoryName(item.category)}</p>
       ${item.model || item.serialNumber ? html`<p class="profile__meta">${[item.model && `Model ${item.model}`, item.serialNumber && `Serial ${item.serialNumber}`].filter(Boolean).join(" · ")}</p>` : ""}
       <p class="profile__meta profile__meta--place">${icon("pin")}<span>${item.location ?? html`<span class="muted">No place set</span>`}${!item.location && item.legacyLocation ? html`<span class="muted"> · typed earlier: ${item.legacyLocation}</span>` : ""}</span></p>
+      ${freshnessLine(item, freshness)}
       <p class="profile__where"><button type="button" class="button button--secondary button--sm" data-where>${icon("pin")}Where is it?</button></p>`;
+  }
+
+  /** When the record was last confirmed on the shelf: seen at its place in a check, counted, and any check finding still to settle. */
+  function freshnessLine(item: DetailItem, freshness: Freshness | undefined): Html {
+    const seen = freshness?.lastVerifiedAt ? `Seen at its place ${ageOf(freshness.lastVerifiedAt)}` : item.location ? "Not yet seen in a check of its place" : null;
+    const last = freshness?.lastCountedAt ?? item.lastCountedAt;
+    const counted = last ? `counted ${ageOf(last)}` : "never counted here";
+    const open = freshness?.openDiscrepancy;
+    return html`${seen || last ? html`<p class="profile__meta profile__meta--fresh">${icon("clock")}<span>${seen ? `${seen} · ${counted}` : counted.charAt(0).toUpperCase() + counted.slice(1)}</span></p>` : ""}
+      ${open ? html`<p class="profile__meta profile__meta--finding">${icon("alert")}<span>A check found: ${FINDING_WORDS[open.outcome] ?? "something to look at"} (${ageOf(open.at)}). <a class="text-link" href="/staff/catalogue?audit=${open.auditId}">Settle it</a></span></p>` : ""}`;
   }
 
   function quantityContext({ item, loans, openUnits }: Detail): Html {

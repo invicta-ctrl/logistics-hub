@@ -1,0 +1,9 @@
+{
+  "coldLoadToFirstRowMs": 457,
+  "sectionSwitchMs": 95,
+  "locationAudit": {
+    "startToListMs": 235,
+    "reopenOfflineMs": 139,
+    "sendAfterReconnectMs": 222
+  }
+}

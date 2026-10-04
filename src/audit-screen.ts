@@ -5,7 +5,7 @@ import { type AuditDetail, type AuditItem, type AuditRecord, type ObservationEnt
 import { onSyncChange, refreshCheck, syncNow } from "./catalogue-sync";
 import { childrenOf, pathOf, placesOf } from "./location-tree";
 import { whenIdle } from "./pwa";
-import { ApiError, type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, onLeave, plural, sheet, sheetContent, toast, units } from "./ui";
+import { ApiError, type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, onLeave, plural, reducedMotion, sheet, sheetContent, toast, units } from "./ui";
 
 /*
  * Checking a place (V1.7), in the Catalog app. A check is one person verifying what should be at one place and the places inside it:
@@ -237,8 +237,12 @@ async function checking(root: HTMLElement, who: Signed, start: AuditRecord): Pro
           <button type="button" class="button button--primary" data-finish>Finish check</button>
         </div>
       </div>`);
-    if (counting) root.querySelector<HTMLInputElement>(`#ck-count-${CSS.escape(counting)}`)?.focus();
-    if (reviewing) root.querySelector<HTMLTextAreaElement>(`#ck-why-${CSS.escape(reviewing)}`)?.focus();
+    // An opened row comes fully into view, clear of the sticky progress above and the actions below, with its field ready.
+    const opened = counting ? root.querySelector<HTMLElement>(`#ck-count-${CSS.escape(counting)}`) : reviewing ? root.querySelector<HTMLElement>(`#ck-why-${CSS.escape(reviewing)}`) : null;
+    if (opened) {
+      opened.focus({ preventScroll: true });
+      opened.closest(".ck-row")?.scrollIntoView({ block: "center", behavior: reducedMotion() ? "auto" : "smooth" });
+    }
   };
 
   const row = (item: AuditItem, pending: Set<string>): Html => {
@@ -512,14 +516,17 @@ function findingRow(entry: Finding): Html {
     : `Record looks wrong${entry.note ? `: “${entry.note}”` : ""}`;
   if (entry.resolution) return html`<li class="ck-finding is-settled" data-key="${entry.id}"><strong>${name}</strong><span>${what}</span>
       <span class="ck-chip ck-chip--done">${icon("check")}${RESOLVED_LABELS[entry.resolution] ?? entry.resolution}${entry.resolvedBy ? ` by ${entry.resolvedBy}` : ""}</span>${entry.resolutionNote ? html`<span class="muted">${entry.resolutionNote}</span>` : ""}</li>`;
-  const countable = entry.itemId && entry.outcome !== "NEEDS_REVIEW" && entry.outcome !== "UNLISTED";
+  // A count is the item's whole stock: only one made at its own place can be posted (a few found elsewhere say nothing about the rest).
+  const countable = entry.itemId && (entry.outcome === "MISMATCH" || entry.outcome === "CANT_FIND");
   const posted = entry.outcome === "CANT_FIND" ? 0 : entry.counted;
   return html`<li class="ck-finding" data-finding="${entry.id}"><strong>${name}</strong><span>${what}</span>
     ${entry.changedSince && countable ? html`<p class="cat-ready cat-ready--bad">${icon("alert")}<span><strong>Stock changed since this was counted.</strong> ${amount(entry.onHandNow, unit)} recorded now. Count it again and post what you see.</span></p>
       <div class="ck-fresh"><label for="ck-fresh-${entry.id}">How many are there now?</label><div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One fewer">${icon("minus")}</button><input id="ck-fresh-${entry.id}" data-fresh-count type="number" inputmode="numeric" min="0" max="100000" step="1" value="${entry.onHandNow}" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div>
       <button type="button" class="button button--primary button--sm" data-settle="POSTED_COUNT" data-fresh="${entry.onHandNow}">Post this count</button></div>`
-      : countable ? html`<div class="where__buttons"><button type="button" class="button button--primary button--sm" data-settle="POSTED_COUNT">Post count: ${posted}</button>${entry.outcome === "FOUND_HERE" ? html`<button type="button" class="button button--secondary button--sm" data-settle="MOVED_HERE">Move it here</button>` : ""}
-        ${entry.outcome === "CANT_FIND" || entry.outcome === "FOUND_HERE" ? html`<button type="button" class="button button--secondary button--sm" data-settle="REPORTED">Report its location</button>` : ""}</div>` : ""}
+      : countable ? html`<div class="where__buttons"><button type="button" class="button button--primary button--sm" data-settle="POSTED_COUNT">Post count: ${posted}</button>
+        ${entry.outcome === "CANT_FIND" ? html`<button type="button" class="button button--secondary button--sm" data-settle="REPORTED">Report its location</button>` : ""}</div>`
+      : entry.outcome === "FOUND_HERE" && entry.itemId ? html`<div class="where__buttons"><button type="button" class="button button--primary button--sm" data-settle="MOVED_HERE">Move it here</button>
+        <button type="button" class="button button--secondary button--sm" data-settle="REPORTED">Report its location</button></div>` : ""}
     ${entry.outcome === "NEEDS_REVIEW" && entry.itemId ? html`<p><a class="text-link" href="/staff/items?item=${entry.itemId}" data-route>Open the item to fix its record</a></p>` : ""}
     <details class="ck-why"><summary>Leave it as it is</summary>
       <div class="ck-why__form"><label for="ck-why-${entry.id}">Why it stays as it is</label><input id="ck-why-${entry.id}" data-why maxlength="300" />
