@@ -47,6 +47,19 @@ describe("possible duplicates", () => {
   });
 });
 
+describe("at 600 items", () => {
+  const many = Array.from({ length: 600 }, (_, index) => known({ id: `ITM-${index + 1}`, name: `Sample ${["Marker", "Stapler", "Paper", "Cord", "Tape"][index % 5]} ${index}`, model: index % 3 ? null : `M${index}`, serialNumber: index % 7 ? null : `SN${index}`, photoHash: (index * 2654435761 % 2 ** 32).toString(16).padStart(16, "0") }));
+  it("judges possible matches and suggestions for every keystroke in a few milliseconds", () => {
+    const catalog = many.map((item) => ({ name: item.name, category: item.category, itemType: "Consumable", consumptionMode: "WHOLE_UNIT", unit: "piece", stockArea: "Inventory", status: "ACTIVE" }));
+    const started = performance.now();
+    for (let run = 0; run < 100; run += 1) {
+      possibleDuplicates({ name: `Sample Marker ${run}`, category: "SUPPLIES", model: "M3", serialNumber: "SN9", photoHash: "00000000ffffffff" }, many);
+      suggest(`sample mar${run}`, catalog, []);
+    }
+    expect((performance.now() - started) / 100).toBeLessThan(10);
+  });
+});
+
 describe("suggestions", () => {
   const item = (fields: Partial<Parameters<typeof suggest>[1][number]> & { name: string }) => ({ category: "SUPPLIES", itemType: "Consumable", consumptionMode: "WHOLE_UNIT", unit: "piece", stockArea: "Inventory", status: "ACTIVE", ...fields });
   const catalog = [
@@ -426,4 +439,29 @@ describe("bulk edits", () => {
     expect((await as(otherCookie, "/api/staff/catalogue")).status).toBe(403);
     expect((await as(otherCookie, "/api/staff/items/bulk", "POST", { action: "REVIEWED", items: [] })).status).toBe(403);
   });
+});
+
+describe("a long session", () => {
+  it("keeps saving at the same pace at 500+ items, and its page stays bounded", async () => {
+    const shelf = await place("Shelf 2");
+    const session = await begin(shelf);
+    const times: number[] = [];
+    for (let index = 0; index < 520; index += 1) {
+      const started = performance.now();
+      const response = await save(session, shot(shelf, { name: `Zephyr ${["bolt", "clamp", "hinge", "valve"][index % 4]} lot ${index}`, behaviour: (["BORROW", "CONSUME", "GRADUAL", "REVIEW_LATER"] as const)[index % 4], category: index % 4 === 3 ? "" : "HARDWARE" }));
+      times.push(performance.now() - started);
+      expect(response.status, `capture ${index}`).toBe(201);
+    }
+    const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)]!;
+    expect(median(times.slice(-40))).toBeLessThan(Math.max(60, median(times.slice(0, 40)) * 4));
+    const detail = await (await staff(`/api/staff/catalogue/sessions/${session}`)).json() as { session: { saved: number }; counts: Record<string, number>; recent: unknown[] };
+    expect(detail.session.saved).toBe(520);
+    expect(detail.counts).toEqual({ BORROW: 130, CONSUME: 130, GRADUAL: 130, REVIEW_LATER: 130 });
+    expect(detail.recent).toHaveLength(40);
+    const state = await (await staff("/api/staff/catalogue")).json() as { reviewLater: { total: number; items: unknown[] } };
+    expect(state.reviewLater.total).toBe(130);
+    expect(state.reviewLater.items).toHaveLength(100);
+    const review = await (await staff(`/api/staff/catalogue/sessions/${session}/unreviewed`)).json() as { items: unknown[] };
+    expect(review.items).toHaveLength(390);
+  }, 60_000);
 });
