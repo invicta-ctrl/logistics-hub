@@ -129,6 +129,14 @@ export function expectedPhoto(value: unknown): string | null {
   return value;
 }
 
+/** The photo's 64-bit difference hash the browser made (src/item-photo.ts), or none. Only ever a hint for finding duplicates. */
+export function photoHash(form: FormData): string | null {
+  const value = form.get("hash");
+  if (value === null || value === "") return null;
+  if (typeof value !== "string" || !/^[0-9a-f]{16}$/.test(value)) throw new InputError(400, "The photo's fingerprint is not valid.");
+  return value;
+}
+
 export const CHANGED = "Someone else changed this photo. Reload to see the latest, then try again.";
 
 /** Removes a photo's objects. D1 no longer points at them, so a failure here only leaves an unused file behind. */
@@ -147,6 +155,7 @@ export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Acto
   const expected = expectedPhoto(form.get("expected"));
   const display = await readVariant(form, "display");
   const thumb = await readVariant(form, "thumb");
+  const hash = photoHash(form);
   if (!await db.prepare("SELECT 1 FROM items WHERE id = ?").bind(itemId).first()) throw new InputError(404, "Item not found.");
   const mediaId = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -155,10 +164,10 @@ export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Acto
     await bucket.put(key(mediaId, "thumb"), thumb.bytes, { httpMetadata: { contentType: "image/jpeg" } });
     const [write] = await db.batch([
       expected
-        ? db.prepare("UPDATE item_media SET media_id = ?, width = ?, height = ?, created_at = ?, created_by = ? WHERE item_id = ? AND media_id = ?")
-          .bind(mediaId, display.width, display.height, now, actor.accountId, itemId, expected)
-        : db.prepare("INSERT INTO item_media(item_id, media_id, width, height, created_at, created_by) SELECT ?1, ?2, ?3, ?4, ?5, ?6 WHERE NOT EXISTS (SELECT 1 FROM item_media WHERE item_id = ?1)")
-          .bind(itemId, mediaId, display.width, display.height, now, actor.accountId),
+        ? db.prepare("UPDATE item_media SET media_id = ?, width = ?, height = ?, created_at = ?, created_by = ?, dhash = ? WHERE item_id = ? AND media_id = ?")
+          .bind(mediaId, display.width, display.height, now, actor.accountId, hash, itemId, expected)
+        : db.prepare("INSERT INTO item_media(item_id, media_id, width, height, created_at, created_by, dhash) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7 WHERE NOT EXISTS (SELECT 1 FROM item_media WHERE item_id = ?1)")
+          .bind(itemId, mediaId, display.width, display.height, now, actor.accountId, hash),
       audit(db, actor.accountId, expected ? "ITEM_PHOTO_REPLACED" : "ITEM_PHOTO_ADDED", "ITEM", itemId, { mediaId }, true),
       db.prepare(`${BUMP_REVISION} AND changes() > 0`)
     ]);

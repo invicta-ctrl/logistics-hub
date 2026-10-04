@@ -628,7 +628,7 @@ describe("V1.4 release manifest (Cloud Operations lane)", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lh-v14-"));
     try {
       fs.copyFileSync("wrangler.jsonc", path.join(dir, "wrangler.jsonc"));
-      fs.cpSync("migrations", path.join(dir, "migrations"), { recursive: true, filter: (source) => !/\/0025_/.test(source) });
+      fs.cpSync("migrations", path.join(dir, "migrations"), { recursive: true, filter: (source) => !/\/002[56]_/.test(source) });
       const sha = "a".repeat(40);
       const git = (args: string[]) => args[0] === "rev-parse" ? sha : args[0] === "status" ? "" : "ok";
       expect(ops.verifyReleaseTree({ manifest, releaseDir: dir, expectedSha: sha, git }).branch).toBe("road-to-v2/v1.4-smart-locations");
@@ -694,7 +694,7 @@ describe("V1.4 release manifest (Cloud Operations lane)", () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lh-v14run-"));
       try {
         fs.copyFileSync("wrangler.jsonc", path.join(dir, "wrangler.jsonc"));
-        fs.cpSync("migrations", path.join(dir, "migrations"), { recursive: true, filter: (source) => !/\/0025_/.test(source) });
+        fs.cpSync("migrations", path.join(dir, "migrations"), { recursive: true, filter: (source) => !/\/002[56]_/.test(source) });
         const sha = "b".repeat(40);
         const git = (args: string[]) => args[0] === "rev-parse" ? sha : args[0] === "status" ? "" : "ok";
         const mode = options.mode ?? "prepare";
