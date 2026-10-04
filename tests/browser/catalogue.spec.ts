@@ -155,7 +155,7 @@ test.describe("capturing a mixed shelf", () => {
     await page.getByRole("button", { name: "One more" }).click();
     await page.getByRole("button", { name: "Save & next" }).click();
     await expect(rows(page)).toHaveCount(3);
-    await expect(rows(page).first().getByText("Review later")).toBeVisible();
+    await expect(rows(page).first().getByText("Review later", { exact: true })).toBeVisible();
     await expect.poll(() => server.state.captures.map((entry) => entry.behaviour)).toEqual(["CONSUME", "BORROW", "REVIEW_LATER"]);
     expect(server.state.captures[2]).toMatchObject({ category: "", unit: "", quantity: 2 });
     await expect(page.locator("#cat-count")).toHaveText("3 items");
