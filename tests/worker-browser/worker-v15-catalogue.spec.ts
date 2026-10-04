@@ -61,7 +61,7 @@ test("a cataloguing session on a shelf: mixed items, a dropped connection, a dup
   await page.context().setOffline(false);
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await expect(rows.first().getByText("Saved", { exact: true })).toBeVisible();
-  expect(await named(page, "E2E Duct tape")).toHaveLength(1);
+  await expect.poll(async () => (await named(page, "E2E Duct tape")).length).toBe(1);
 
   // A look-alike is shown first; the second press makes a separate item.
   await page.getByLabel("Name", { exact: true }).fill("e2e hammer");
@@ -73,7 +73,7 @@ test("a cataloguing session on a shelf: mixed items, a dropped connection, a dup
   expect(await named(page, "e2e hammer")).toHaveLength(0);
   await page.getByRole("button", { name: "Save as a separate item" }).click();
   await expect(rows.first().getByText("Saved", { exact: true })).toBeVisible();
-  expect(await named(page, "e2e hammer")).toHaveLength(1);
+  await expect.poll(async () => (await named(page, "e2e hammer")).length).toBe(1);
 
   await capture(page, { name: "E2E Mystery crate", how: "Not sure", more: 2 });
   await expect(rows.first().getByText("Review later", { exact: true })).toBeVisible();
