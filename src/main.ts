@@ -47,6 +47,7 @@ let loaded = false;
 async function render(): Promise<void> {
   const current = ++navigation;
   const moveFocus = loaded && window.self === window.top;
+  const focusedBefore = document.activeElement;
   loaded = true;
   shown.address = window.location.pathname + window.location.search;
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
@@ -81,6 +82,9 @@ async function render(): Promise<void> {
   if (!moveFocus) return;
   window.requestAnimationFrame(() => {
     const main = document.querySelector<HTMLElement>("#main-content");
+    // A view that already put focus in its page on purpose (the Catalogue's Name field) keeps it.
+    const focused = document.activeElement;
+    if (main && focused && focused !== focusedBefore && focused !== main && main.contains(focused)) return;
     main?.setAttribute("tabindex", "-1");
     main?.focus({ preventScroll: true });
   });
