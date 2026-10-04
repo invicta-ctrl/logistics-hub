@@ -4,8 +4,8 @@
 
 SPEC: `docs/specs/accepted/road-to-v2/v1.6-catalog-pwa.md` (with the amendment's §11 item). BRANCH: `road-to-v2/v1.6-catalog-pwa`.
 GATE: V1.5 `STATUS: COMPLETE`, `INTEGRATION: MERGED aa8da59` on `main` (its one open owner step, the signed-in check, is not a dependency). `origin/main` (`c701509`) merged in at the start.
-STATE: Implemented and verified on the branch; not yet `finish`ed (no release record, not integrated). Engineering guide `docs/OFFLINE_CATALOGUE.md`; visual research and rendered evidence `docs/visual-research/v1.6.md` and `docs/visual-research/v1.6/`. No migration: the offline lease is a `staff_sessions` row with a `CL-` id, so V1.6 has no production owner action. Self-Service's manifest scope narrowed from `/` to `/self-service` so the two apps do not overlap (same id; installed phones update in place).
-NEXT_EXACT_ACTION: `finish`: reconcile every acceptance criterion against the evidence, final diff review, CI green on the final commit, write `docs/road-to-v2/releases/v1.6.md` (`OWNER_ACTIONS: none` beyond the optional signed-in check on a real phone), integrate to `main`, propagate.
+STATE: COMPLETE and integrated: `docs/road-to-v2/releases/v1.6.md` (`STATUS: COMPLETE`, `INTEGRATION: MERGED d4bd246`, `OWNER_ACTIONS: none required`). Engineering guide `docs/OFFLINE_CATALOGUE.md`; visual research and rendered evidence `docs/visual-research/v1.6.md` and `docs/visual-research/v1.6/`. No migration: the offline lease is a `staff_sessions` row with a `CL-` id, so V1.6 has no production owner action. Self-Service's manifest scope narrowed from `/` to `/self-service` so the two apps do not overlap (same id; installed phones update in place).
+NEXT_EXACT_ACTION: `start` V1.7 on `road-to-v2/v1.7-physical-inventory` (its predecessor gate passes on `main`). Optional for Earl: the real-device check in the V1.6 record.
 
 ## Road-to-V2 amendment accepted — 2026-10-04
 

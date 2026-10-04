@@ -248,6 +248,10 @@ V1.5 **needs migration `0027_catalogue_sessions.sql` before its code reaches `ma
 
 Rollback before the merge: the migration only adds objects, so the Time Travel bookmark in the report restores the previous state, or drop the two empty tables and the triggers; the live code ignores them. After the merge, a finished session and its captures are kept (append-only); items are made inactive rather than removed.
 
+## V1.6 Catalog PWA: no production preparation
+
+V1.6 adds no migration, bucket or secret: an offline cataloguing lease is a `staff_sessions` row with a `CL-` id, signed with a key derived from the existing `SESSION_SECRET`. It deploys like any change once on `main`. Self-Service's manifest scope changes from `/` to `/self-service`; installed phones pick it up by themselves. The optional real-device check is in `docs/road-to-v2/releases/v1.6.md`.
+
 ## Cloud Operations (production preparation from GitHub, not from a PC)
 
 From V1.2 on, preparing production for a release (an R2 bucket, a D1 migration) is done by the workflow **Production operations** (`.github/workflows/production-ops.yml`), driven by a manifest in `ops/releases/<release>.json`. Authority and the full list of safety rules: `docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`. The older manual runbooks above (Parts 5B and 6) stay as the emergency fallback and as history.
