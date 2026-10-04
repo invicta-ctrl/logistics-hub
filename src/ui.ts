@@ -1,3 +1,4 @@
+import { type VisualItem, itemIconSvg, resolveItemVisual } from "./item-icons";
 import { LABELS } from "./catalog-policy";
 
 export const app = document.querySelector<HTMLDivElement>("#app")!;
@@ -84,13 +85,28 @@ const ICONS = {
 
 export type IconName = keyof typeof ICONS;
 
-/**
- * An item's public thumbnail (src/item-media.ts, publicThumb), shown beside its name in the Lending Hub and Self-Service lists.
- * Decorative (the name is right there), with its box fixed in CSS so rows never shift as pictures arrive, and only rows near
- * the screen are fetched. An item without one adds no element at all: a list that has any photo reserves the left margin instead.
- */
-export const thumbImg = (photo: string | null | undefined): Html | "" =>
-  photo ? html`<img class="item-thumb" src="/api/public/media/${photo}/thumb" alt="" width="48" height="48" loading="lazy" decoding="async" />` : "";
+/** A fixed frame always contains a local icon, beneath a selected photo while it loads. */
+export function itemVisual(item: VisualItem, url: (id: string) => string, className = "", meaningful = false): Html {
+  const visual = resolveItemVisual(item);
+  const key = visual.type === "PHOTO" ? visual.fallback.key : visual.icon.key;
+  return html`<span class="item-visual ${className}">${raw(itemIconSvg(key))}${visual.type === "PHOTO"
+    ? html`<img class="item-visual__photo" data-item-photo data-photo="${visual.photoId}" src="${url(visual.photoId)}" alt="${meaningful ? `Photo of ${item.name}` : ""}" width="160" height="160" loading="lazy" decoding="async" />` : ""}</span>`;
+}
+export const thumbImg = (item: VisualItem & { photo?: string | null }): Html =>
+  itemVisual({ ...item, photoId: item.photo }, (id) => `/api/public/media/${id}/thumb`, "item-thumb");
+
+// Resource events do not bubble. Capture lets redraws share one fallback handler without per-row listeners.
+document.addEventListener("load", (event) => {
+  const image = event.target;
+  if (image instanceof HTMLImageElement && image.hasAttribute("data-item-photo")) image.parentElement?.classList.add("item-visual--loaded");
+}, true);
+document.addEventListener("error", (event) => {
+  const image = event.target;
+  if (image instanceof HTMLImageElement && image.hasAttribute("data-item-photo")) {
+    image.parentElement?.classList.remove("item-visual--loaded");
+    image.remove();
+  }
+}, true);
 
 export function icon(name: IconName): Html {
   return raw(`<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${ICONS[name]}"/></svg>`);

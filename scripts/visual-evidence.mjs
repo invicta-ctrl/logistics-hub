@@ -145,11 +145,13 @@ function drawPhotos() {
 
 /** Gives items photos through the real endpoint, as signed in as the owner. */
 async function seedPhotos(page, url, ids, art) {
+  const inventory = await (await page.request.get(`${url}/api/staff/inventory`)).json();
+  const existing = new Map(inventory.items.map((item) => [item.id, item.photoId]));
   for (const [index, id] of ids.entries()) {
     const picture = art[index % art.length];
     const response = await page.request.put(`${url}/api/staff/items/${id}/photo`, { headers: { origin: url }, multipart: {
       display: { name: "display.jpg", mimeType: "image/jpeg", buffer: Buffer.from(picture.display, "base64") },
-      thumb: { name: "thumb.jpg", mimeType: "image/jpeg", buffer: Buffer.from(picture.thumb, "base64") }, expected: "" } });
+      thumb: { name: "thumb.jpg", mimeType: "image/jpeg", buffer: Buffer.from(picture.thumb, "base64") }, expected: existing.get(id) ?? "" } });
     if (!response.ok()) throw new Error(`seeding a photo for ${id} failed: ${response.status()}`);
   }
 }
@@ -203,7 +205,7 @@ async function photoScenes(browser, url, dir) {
   for (const [size, viewport] of Object.entries(SIZES)) {
     const { context, page } = await resume(browser, state, viewport);
     await page.goto(`${url}/staff/items`);
-    await page.waitForSelector("img.thumb");
+    await page.waitForSelector("img.thumb, .thumb [data-item-photo]");
     await page.waitForLoadState("networkidle");
     await shot(page, `photos-list-${size}`);
     await page.goto(`${url}/staff/items?item=${scissors}`);
@@ -373,6 +375,66 @@ async function locationScenes(browser, url, dir) {
     await context.close();
   }
   return timings;
+}
+
+/** Independent visual foundation: real app states, synthetic artwork and a deliberately unmatched demo item. */
+async function catalogVisualScenes(browser, url, dir) {
+  const first = await signIn(browser, url, "owner.demo", SIZES.desktop);
+  await first.page.goto(`${url}/staff/items?item=ITM-0262`);
+  await first.page.waitForSelector("#photo-panel");
+  if (!await first.page.locator("#item-visual-control").count()) { await first.context.close(); return { skipped: "baseline has no icon controls" }; }
+  const state = await first.context.storageState();
+  const art = await first.page.evaluate(drawPhotos);
+  const made = await first.page.request.post(`${url}/api/staff/items`, { headers: { origin: url }, data: {
+    name: "Unmapped demo object", aliases: "", category: "Other", itemType: "NEEDS_REVIEW", unit: "piece", status: "ACTIVE", locationId: null,
+    reorderThreshold: 0, lendingAudience: "NOT_AVAILABLE_FOR_LENDING", needsReview: true, notes: "", openingQuantity: 0
+  } });
+  if (!made.ok()) throw new Error("Could not create generic visual demo");
+  const generic = (await made.json()).id;
+  await seedPhotos(first.page, url, ["ITM-0262"], art);
+  await first.context.close();
+  const shot = (page, name) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80 });
+  for (const [size, viewport] of Object.entries(SIZES).filter(([name]) => name !== "tablet")) {
+    const { context, page } = await resume(browser, state, viewport);
+    await page.goto(`${url}/staff/items?item=${generic}`);
+    await page.waitForSelector("#item-visual-control");
+    await shot(page, `visual-generic-${size}`);
+    await page.goto(`${url}/staff/items?item=ITM-0262`);
+    const controls = page.locator("#item-visual-control");
+    await controls.waitFor();
+    await controls.getByRole("button", { name: "System Icon", exact: true }).click();
+    await page.waitForSelector("#photo-panel [data-tile] .item-icon", { state: "visible" });
+    await shot(page, `visual-icon-profile-${size}`);
+    await controls.getByRole("button", { name: "Choose another icon" }).click();
+    await page.getByRole("searchbox", { name: "Find a system icon" }).fill("cleaning");
+    await shot(page, `visual-picker-${size}`);
+    await controls.getByRole("button", { name: "Choose another icon" }).click();
+    // Dark mode belongs to Self-Service; staff pages intentionally have no theme switch.
+    const phoneCatalog = await (await page.request.get(`${url}/api/self-service/catalog`)).json();
+    const offered = phoneCatalog.items[0];
+    if (offered) {
+      await page.route("**/api/public/media/*/thumb", (route) => route.abort());
+      await page.goto(`${url}/self-service?do=${offered.action.toLowerCase()}&item=${offered.id}`);
+      await page.waitForSelector("dialog[open] .ss-item-photo .item-icon", { state: "visible" });
+      await page.evaluate(() => { document.body.dataset.theme = "dark"; });
+      await shot(page, `visual-selfservice-dark-${size}`);
+      await page.goto(`${url}/staff/items?item=ITM-0262`);
+      await controls.waitFor();
+    }
+    let releaseImage;
+    const blocked = new Promise((resolve) => { releaseImage = resolve; });
+    await page.route("**/api/staff/media/*/thumb", async (route) => { await blocked; await route.abort(); });
+    await controls.getByRole("button", { name: "Real Photo", exact: true }).click();
+    await page.waitForSelector("#photo-panel [data-item-photo]");
+    await shot(page, `visual-photo-loading-${size}`);
+    releaseImage();
+    await page.waitForFunction(() => document.querySelectorAll("#photo-panel [data-item-photo]").length === 0);
+    await shot(page, `visual-photo-error-${size}`);
+    await context.setOffline(true);
+    await shot(page, `visual-offline-fallback-${size}`);
+    await context.close();
+  }
+  return { genericItem: generic, states: "icon, picker, dark, loading, error, offline; desktop and phone" };
 }
 
 /** The public Lending Hub and phone Self-Service with item photos: every third item has none, so alignment and the gaps are visible. */
@@ -813,7 +875,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory" || name === "locations") continue;
+          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalog-visuals") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -848,6 +910,7 @@ async function capture(url, dir) {
     if (pages.includes("item-photos")) Object.assign(timings, { itemPhotos: await photoScenes(browser, url, dir) });
     if (pages.includes("public-photos")) Object.assign(timings, { publicPhotos: await publicPhotoScenes(browser, url, dir) });
     if (pages.includes("locations")) Object.assign(timings, { locations: await locationScenes(browser, url, dir) });
+    if (pages.includes("catalog-visuals")) Object.assign(timings, { catalogVisuals: await catalogVisualScenes(browser, url, dir) });
     if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
     if (pages.includes("staff-directory")) Object.assign(timings, { staffDirectory: await directoryScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);

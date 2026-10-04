@@ -118,6 +118,7 @@ export function checkJpeg(bytes: Uint8Array, label: string, edge: number): { byt
 export async function readVariant(form: FormData, variant: Variant) {
   const value = form.get(variant);
   if (!(value instanceof File) || value.size === 0) throw new InputError(400, `The ${variant} photo is missing.`);
+  if (value.type !== "image/jpeg") throw new InputError(400, `The ${variant} photo must be a JPEG image.`);
   if (value.size > VARIANTS[variant].bytes) throw new InputError(400, `The ${variant} photo is too large.`);
   return cleanJpeg(new Uint8Array(await value.arrayBuffer()), variant);
 }
@@ -145,21 +146,27 @@ export async function dropObjects(bucket: R2Bucket, mediaId: string, folder: "it
  */
 export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Actor, itemId: string, form: FormData) {
   const expected = expectedPhoto(form.get("expected"));
+  const hasVersion = form.has("updatedAt");
+  const expectedVersion = form.get("updatedAt") || null;
+  if (expectedVersion !== null && typeof expectedVersion !== "string") throw new InputError(400, "Reload the item and try again.");
   const display = await readVariant(form, "display");
   const thumb = await readVariant(form, "thumb");
-  if (!await db.prepare("SELECT 1 FROM items WHERE id = ?").bind(itemId).first()) throw new InputError(404, "Item not found.");
+  const item = await db.prepare("SELECT updated_at AS updatedAt FROM items WHERE id = ?").bind(itemId).first<{ updatedAt: string | null }>();
+  if (!item) throw new InputError(404, "Item not found.");
+  if (hasVersion && item.updatedAt !== expectedVersion) throw new InputError(409, CHANGED);
   const mediaId = crypto.randomUUID();
-  const now = new Date().toISOString();
+  const now = new Date(Math.max(Date.now(), Date.parse(item.updatedAt ?? "") + 1 || 0)).toISOString();
   try {
     await bucket.put(key(mediaId, "display"), display.bytes, { httpMetadata: { contentType: "image/jpeg" } });
     await bucket.put(key(mediaId, "thumb"), thumb.bytes, { httpMetadata: { contentType: "image/jpeg" } });
     const [write] = await db.batch([
       expected
-        ? db.prepare("UPDATE item_media SET media_id = ?, width = ?, height = ?, created_at = ?, created_by = ? WHERE item_id = ? AND media_id = ?")
-          .bind(mediaId, display.width, display.height, now, actor.accountId, itemId, expected)
-        : db.prepare("INSERT INTO item_media(item_id, media_id, width, height, created_at, created_by) SELECT ?1, ?2, ?3, ?4, ?5, ?6 WHERE NOT EXISTS (SELECT 1 FROM item_media WHERE item_id = ?1)")
-          .bind(itemId, mediaId, display.width, display.height, now, actor.accountId),
+        ? db.prepare("UPDATE item_media SET media_id = ?, width = ?, height = ?, created_at = ?, created_by = ? WHERE item_id = ? AND media_id = ? AND (? = 0 OR EXISTS (SELECT 1 FROM items WHERE id = item_id AND updated_at IS ?))")
+          .bind(mediaId, display.width, display.height, now, actor.accountId, itemId, expected, Number(hasVersion), expectedVersion)
+        : db.prepare("INSERT INTO item_media(item_id, media_id, width, height, created_at, created_by) SELECT ?1, ?2, ?3, ?4, ?5, ?6 WHERE NOT EXISTS (SELECT 1 FROM item_media WHERE item_id = ?1) AND (?7 = 0 OR EXISTS (SELECT 1 FROM items WHERE id = ?1 AND updated_at IS ?8))")
+          .bind(itemId, mediaId, display.width, display.height, now, actor.accountId, Number(hasVersion), expectedVersion),
       audit(db, actor.accountId, expected ? "ITEM_PHOTO_REPLACED" : "ITEM_PHOTO_ADDED", "ITEM", itemId, { mediaId }, true),
+      db.prepare("UPDATE items SET visual_type = 'PHOTO', updated_at = ? WHERE id = ? AND changes() > 0").bind(now, itemId),
       db.prepare(`${BUMP_REVISION} AND changes() > 0`)
     ]);
     if (!write!.meta.changes) throw new InputError(409, CHANGED);
@@ -202,7 +209,7 @@ export async function itemPhoto(bucket: R2Bucket, mediaId: string, variant: stri
 
 /**
  * The one public image route: the small thumbnail of an item's current photo, for the Lending Hub and Self-Service lists.
- * It answers only while the id is the item's current photo AND a public list actually shows the item: the Lending Hub
+ * It answers only while the id is the item's selected current photo AND a public list actually shows the item: the Lending Hub
  * lists it, or Self-Service offers it and is open (the same policy functions the two catalogs use). So a removed or
  * replaced photo, an unlisted item, the 1280 px display size and any guessed id all answer 404, and nothing but the id
  * is read from the request. An hour in a browser's cache bounds how long a removed photo can linger on a phone that
@@ -211,7 +218,7 @@ export async function itemPhoto(bucket: R2Bucket, mediaId: string, variant: stri
 export async function publicThumb(db: D1Database, bucket: R2Bucket, mediaId: string, ifNoneMatch: string | null, selfServiceOpen: () => Promise<boolean>): Promise<Response> {
   if (!MEDIA_ID.test(mediaId)) throw new InputError(404, "Not found.");
   const item = await db.prepare(`SELECT i.item_type AS itemType, i.lending_audience AS lendingAudience, i.status AS status, i.needs_review AS needsReview, i.consumption_mode AS consumptionMode
-    FROM item_media m JOIN items i ON i.id = m.item_id WHERE m.media_id = ?`).bind(mediaId).first<{ itemType: string; lendingAudience: string; status: string; needsReview: number; consumptionMode: string }>();
+    FROM item_media m JOIN items i ON i.id = m.item_id WHERE m.media_id = ? AND i.visual_type IS NOT 'SYSTEM_ICON'`).bind(mediaId).first<{ itemType: string; lendingAudience: string; status: string; needsReview: number; consumptionMode: string }>();
   const shown = Boolean(item) && (isListedForLending(item!) || (Boolean(selfServiceAction(item!)) && await selfServiceOpen()));
   if (!shown) throw new InputError(404, "Not found.");
   const headers = { "cache-control": "public, max-age=3600", etag: `"${mediaId}"` };
