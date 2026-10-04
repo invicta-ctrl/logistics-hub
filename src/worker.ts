@@ -174,6 +174,8 @@ const leaseFor = (request: Request, env: Env) => signedIn(request, env, true);
 
 /** What an offline cataloguing lease may do without a full session: catalogue, and nothing else. */
 function leaseMayUse(method: string, path: string): boolean {
+  // The Catalogue page: this member's open session (the page shows nothing else on a lease).
+  if (path === "/api/staff/catalogue") return method === "GET";
   if (path === "/api/staff/catalogue/offline") return method === "GET" || method === "DELETE";
   if (path === "/api/staff/catalogue/snapshot") return method === "GET";
   if (path === "/api/staff/catalogue/sessions") return method === "POST";
@@ -330,7 +332,11 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (picture && method === "GET") return locationPicture(env.CATALOG_MEDIA, picture[1]!, picture[2]!);
   const resolving = REPORT_PATH.exec(path);
   if (resolving && method === "POST") return json(await resolveReport(env.DB, account, resolving[1]!, await body()));
-  if (path === "/api/staff/catalogue" && method === "GET") return json(await catalogueState(env.DB, account));
+  if (path === "/api/staff/catalogue" && method === "GET") {
+    const state = await catalogueState(env.DB, account);
+    // A lease sees only its member's own open session: who else is cataloguing and what waits for review need a sign-in.
+    return json(leased ? { session: state.session, others: [], reviewLater: { total: 0, items: [] } } : state);
+  }
   if (path === "/api/staff/catalogue/offline" && method === "GET") return offlineState(request, env, account, leased);
   if (path === "/api/staff/catalogue/offline" && method === "POST") return enableOffline(request, env, url, account);
   if (path === "/api/staff/catalogue/offline" && method === "DELETE") return disableOffline(request, env, url, account, leased);

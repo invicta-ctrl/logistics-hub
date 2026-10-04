@@ -222,6 +222,6 @@ test.describe.serial("the Catalog PWA", () => {
     const catalog = await app("/staff/catalogue");
     expect(catalog).toMatchObject({ url: "/catalogue.webmanifest", errors: [], data: { id: "/staff/catalogue", start_url: "/staff/catalogue", scope: "/staff", name: "Logistics Catalog", display: "standalone" }, installabilityErrors: [] });
     const selfService = await app("/self-service");
-    expect(selfService).toMatchObject({ url: "/manifest.webmanifest", errors: [], data: { id: "/self-service", start_url: "/self-service", scope: "/" }, installabilityErrors: [] });
+    expect(selfService).toMatchObject({ url: "/manifest.webmanifest", errors: [], data: { id: "/self-service", start_url: "/self-service", scope: "/self-service" }, installabilityErrors: [] });
   });
 });

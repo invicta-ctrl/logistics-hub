@@ -1451,14 +1451,14 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .cat-device, .cat-later { margin-top: var(--space-6); }
 .cat-ready { display: flex; align-items: flex-start; gap: var(--space-3); margin: 0; color: var(--text-2); font-size: var(--text-sm); line-height: 1.5; }
 .cat-ready .icon { flex: none; margin-top: .125rem; color: var(--text-3); }
-.cat-ready strong { color: var(--text); }
+/* The state is its own line; what it means follows. */
+.cat-ready strong { display: block; color: var(--text); }
 .cat-ready--ok .icon { color: var(--ok); }
 .cat-ready--bad .icon { color: var(--bad); }
 .cat-offline { padding: var(--space-3) var(--space-4); border: 1px solid var(--line-warn); border-radius: var(--radius); background: var(--warn-tint); }
 .cat-offline .icon { color: var(--warn); }
 .cat-offline[hidden] { display: none; }
 .cat-install summary { display: inline-flex; min-height: var(--target); align-items: center; gap: var(--space-2); color: var(--brand); font-size: var(--text-sm); font-weight: 500; cursor: pointer; }
-.cat-install[open] summary { margin-bottom: var(--space-2); }
 .cat-install > * + * { margin-top: var(--space-3); }
 .cat-steps { display: grid; gap: var(--space-2); padding-left: 1.25rem; color: var(--text-2); font-size: var(--text-sm); line-height: 1.5; list-style: decimal; }
 .cat-steps .icon { --icon-size: var(--icon-xs); margin-inline: .125rem; vertical-align: -.15em; }
