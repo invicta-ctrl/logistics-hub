@@ -2,6 +2,7 @@ import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseA
 import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
 import { bulkUpdate } from "./bulk";
 import { capture, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
+import { updateItemVisual } from "./item-visuals";
 import { itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
 import { locationPicture, publicLocationPicture, putLocationPhoto, removeLocationPhoto } from "./location-media";
 import { reportLocation, resolveReport } from "./location-reports";
@@ -43,7 +44,7 @@ async function selfServiceClosed(request: Request, env: Env): Promise<boolean> {
 
 const SESSION_NAME = "lh_staff_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
-const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/location-report)?$/;
+const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/location-report|\/visual)?$/;
 const LOCATION_PATH = /^\/api\/staff\/locations\/(LOC-\d{4,})(\/photo|\/move-items)?$/;
 const LOCATION_MEDIA_PATH = /^\/api\/staff\/location-media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
 const REPORT_PATH = /^\/api\/staff\/location-reports\/([0-9a-f-]{36})\/resolve$/;
@@ -281,6 +282,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     const input = await body() as Record<string, unknown> | null;
     return json(await updateItem(env.DB, account, match[1]!, parseItemInput(input), input?.updatedAt));
   }
+  if (match?.[2] === "/visual" && method === "PATCH") return json(await updateItemVisual(env.DB, account, match[1]!, await body()));
   if (match?.[2] === "/movements" && method === "POST") return json(await recordMovement(env.DB, account, match[1]!, await body()));
   if (match?.[2] === "/location-report" && method === "POST") return json(await reportLocation(env.DB, account, match[1]!, await body()), 201);
   if (match?.[2] === "/photo" && method === "PUT") {

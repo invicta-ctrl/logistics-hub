@@ -487,7 +487,7 @@ describe("a long session", () => {
   }, 60_000);
 });
 
-describe("migration 0026 and its release manifest", () => {
+describe("migration 0027 and its release manifest", () => {
   const manifest = JSON.parse(fs.readFileSync("ops/releases/v1.5.json", "utf8")) as { migrations: { pending: Array<{ name: string; sha256: string }> }; expect: { schemaAdded: string[]; schemaChanged: string[]; tableRowsAfter: Record<string, number> } };
   const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
@@ -495,13 +495,13 @@ describe("migration 0026 and its release manifest", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("PRAGMA foreign_keys = ON");
     const apply = (file: string) => { db.exec("BEGIN"); db.exec(fs.readFileSync(`migrations/${file}`, "utf8")); db.exec("COMMIT"); };
-    fs.readdirSync("migrations").sort().filter((file) => file < "0026").forEach(apply);
+    fs.readdirSync("migrations").sort().filter((file) => file < "0027").forEach(apply);
     const schema = () => Object.fromEntries((db.prepare("SELECT type, name, sql FROM sqlite_master").all() as Array<{ type: string; name: string; sql: string | null }>).map((row) => [`${row.type}:${row.name}`, sha(row.sql ?? "")]));
     const counts = () => db.prepare("SELECT (SELECT COUNT(*) FROM items) AS items, (SELECT COUNT(*) FROM inventory_movements) AS movements, (SELECT COALESCE(SUM(on_hand), 0) FROM inventory_balances) AS onHand, (SELECT COUNT(*) FROM loans) AS loans, (SELECT COUNT(*) FROM audit_log) AS audit").get();
     const items = db.prepare("SELECT * FROM items ORDER BY id").all();
     const before = schema();
     const figures = counts();
-    apply("0026_catalogue_sessions.sql");
+    apply("0027_catalogue_sessions.sql");
     const after = schema();
     expect(Object.keys(after).filter((key) => !(key in before)).sort()).toEqual([...manifest.expect.schemaAdded].sort());
     expect(Object.keys(before).filter((key) => key in after && before[key] !== after[key]).sort()).toEqual([...manifest.expect.schemaChanged].sort());
@@ -517,6 +517,6 @@ describe("migration 0026 and its release manifest", () => {
   });
 
   it("pins the migration file it will apply", () => {
-    expect(manifest.migrations.pending).toEqual([{ name: "0026_catalogue_sessions.sql", sha256: sha(fs.readFileSync("migrations/0026_catalogue_sessions.sql", "utf8")) }]);
+    expect(manifest.migrations.pending).toEqual([{ name: "0027_catalogue_sessions.sql", sha256: sha(fs.readFileSync("migrations/0027_catalogue_sessions.sql", "utf8")) }]);
   });
 });

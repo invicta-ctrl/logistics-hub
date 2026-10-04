@@ -1,3 +1,4 @@
+import { resolveItemIcon } from "./item-icons";
 import { LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, STUDENT_ID_PATTERN, selfServiceAction } from "./catalog-policy";
 import { throttled } from "./accounts";
 import { ancestry, pathOf, placesOf } from "./location-tree";
@@ -57,10 +58,10 @@ type ItemRow = { id: string; itemType: string; status: string; needsReview: numb
 export async function selfServiceCatalog(db: D1Database) {
   const { results } = await db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.unit, i.item_type AS itemType, i.status, i.needs_review AS needsReview,
       i.lending_audience AS lendingAudience, i.consumption_mode AS consumptionMode, i.location_id AS locationId, COALESCE(b.on_hand, 0) AS onHand,
-      p.media_id AS photo
+      p.media_id AS photo, i.visual_type AS visualType, i.icon_key AS iconKey
     FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id
     WHERE i.status = 'ACTIVE' AND i.needs_review = 0 ORDER BY i.name COLLATE NOCASE`)
-    .all<ItemRow & { name: string; aliases: string | null; category: string; unit: string; locationId: string | null; onHand: number; photo: string | null }>();
+    .all<ItemRow & { name: string; aliases: string | null; category: string; unit: string; locationId: string | null; onHand: number; photo: string | null; visualType: "SYSTEM_ICON" | "PHOTO" | null; iconKey: string | null }>();
   // Where an item is kept is shown only for places staff share with Self-Service (and only the shared places travel to the phone).
   const shared = await sharedPlaces(db);
   const known = placesOf([...shared.values()].map((place) => ({ ...place, active: true })));
@@ -72,7 +73,7 @@ export async function selfServiceCatalog(db: D1Database) {
     for (const step of ancestry(known, place)) used.add(step.id);
     return [{
       id: row.id, name: row.name, aliases: row.aliases, category: row.category, unit: row.unit, action,
-      available: Math.max(0, row.onHand), location: pathOf(known, place), locationId: place, audience: action === "BORROW" ? row.lendingAudience : null, photo: row.photo
+      available: Math.max(0, row.onHand), location: pathOf(known, place), locationId: place, audience: action === "BORROW" ? row.lendingAudience : null, photo: row.visualType === "SYSTEM_ICON" ? null : row.photo, iconKey: resolveItemIcon(row).key
     }];
   });
   return { items, places: [...used].map((id) => shared.get(id)!) };
