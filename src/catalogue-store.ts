@@ -8,6 +8,9 @@ import type { Place } from "./location-tree";
  *             without a connection; one started here offline, until the server has it; one finished here, until the server is told
  *   meta      "access": who may catalogue on this device without a connection, and until when; "snapshot": the catalog to catalogue
  *             against (suggestions and possible matches read it online and offline alike)
+ *   audits    the checks of a place this device is working on (V1.7), with what the server last said about each so it reopens offline;
+ *             one started here offline until the server has it; a pause, a note about the place or a finish made here until it is sent
+ *   observations  what was seen during a check, written before any request and removed once the server has it
  * Nothing here is authoritative: the server decides when anything is saved. Where the browser will not keep data (a private window),
  * everything lives in memory for the page's life and the screens say so.
  */
@@ -57,6 +60,48 @@ export type SessionRecord = {
   finishing: boolean;
 };
 
+/** One thing seen during a check of a place (V1.7), as it will be sent. */
+export type ObservationEntry = {
+  /** The request id: also the server's key, so a resend is never a second observation. */
+  id: string;
+  /** The check, as this device files it (see AuditRecord). */
+  auditId: string;
+  owner: string;
+  body: { itemId?: string; outcome: string; expectedOnHand?: number; counted?: number; note?: string; observedAt: string; seenLocationId?: string };
+  /** waiting: will be (re)sent; stopped: the server refused it and a person must look. */
+  state: "waiting" | "stopped";
+  message: string | null;
+  at: string;
+};
+
+/** An item expected at a checked place, with the latest thing seen about it. */
+export type AuditItem = {
+  id: string; name: string; unit: string; locationId: string | null; place: string | null; onHand: number; photoId?: string | null; onLoan?: number; lastCountedAt?: string | null;
+  observation: { id: string; outcome: string; counted: number | null; note: string | null } | null;
+};
+export type AuditInfo = { id: string; locationId: string; place: string | null; status: string; expectedAtStart: number; placeNote: string | null; startedAt: string; finishedAt: string | null; owner: string; mine: boolean };
+export type AuditDetail = {
+  audit: AuditInfo;
+  place: { directions: string | null; mediaId: string | null; mediaWidth: number | null; mediaHeight: number | null } | null;
+  items: AuditItem[];
+  extras: Array<{ id: string; itemId: string | null; outcome: string; counted: number | null; note: string | null; name: string | null }>;
+  checked: number;
+};
+
+export type AuditRecord = {
+  /** The id this device files the check's observations under: the server's, or the one it proposed when starting offline. */
+  id: string;
+  owner: string;
+  /** Where the server keeps it: null until a start sent from here is answered. */
+  serverId: string | null;
+  /** What the server last said, or what this device knows of a check it started offline. */
+  detail: AuditDetail;
+  /** A pause, resume or note about the place made here and not yet sent. */
+  pending: { status?: "OPEN" | "PAUSED"; placeNote?: string | null } | null;
+  /** Finished on this device: the server is told once every observation in it has been sent. */
+  finishing: boolean;
+};
+
 /** Who may catalogue here without a connection, as the server last confirmed, and until when (its lease, V1.6). */
 export type Access = { accountId: string; displayName: string; username: string; role: string; access: string; expiresAt: number };
 
@@ -64,13 +109,13 @@ export type SnapshotItem = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; consumptionMode: string; unit: string; stockArea: string | null; status: string;
   model: string | null; serialNumber: string | null; locationId: string | null; photoHash: string | null; onHand: number;
 };
-export type Snapshot = { revision: number; items: SnapshotItem[]; categories: string[]; units: string[]; places: Place[]; fetchedAt: string };
+export type Snapshot = { revision: number; items: SnapshotItem[]; categories: string[]; units: string[]; places: Array<Place & { directions?: string | null }>; fetchedAt: string };
 
-/** The database's name; version 2 exists only where offline cataloguing was turned on (V1.6). */
+/** The database's name; version 2 or later exists only where offline cataloguing was turned on (V1.6). */
 export const CATALOGUE_DB = "logistics-hub-catalogue";
-type StoreName = "captures" | "sessions" | "meta";
+type StoreName = "captures" | "sessions" | "meta" | "audits" | "observations";
 /** The page's own copy: what is read when the browser keeps nothing. */
-const memory: Record<StoreName, Map<string, unknown>> = { captures: new Map(), sessions: new Map(), meta: new Map() };
+const memory: Record<StoreName, Map<string, unknown>> = { captures: new Map(), sessions: new Map(), meta: new Map(), audits: new Map(), observations: new Map() };
 let opening: Promise<IDBDatabase | null> | null = null;
 let kept = true;
 
@@ -80,11 +125,11 @@ export const durable = () => kept;
 function open(): Promise<IDBDatabase | null> {
   opening ??= new Promise<IDBDatabase | null>((resolve) => {
     try {
-      // Version 2 (V1.6) adds sessions and meta; captures a V1.5 page left are kept as they are.
-      const request = indexedDB.open(CATALOGUE_DB, 2);
+      // Version 2 (V1.6) adds sessions and meta, version 3 (V1.7) audits and observations; what an older page left is kept as it is.
+      const request = indexedDB.open(CATALOGUE_DB, 3);
       request.onupgradeneeded = () => {
         const db = request.result;
-        for (const store of ["captures", "sessions"] as const) if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: "id" });
+        for (const store of ["captures", "sessions", "audits", "observations"] as const) if (!db.objectStoreNames.contains(store)) db.createObjectStore(store, { keyPath: "id" });
         if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta");
       };
       request.onsuccess = () => {
@@ -150,3 +195,13 @@ export const access = async (): Promise<Access | null> => (await all<Access>("me
 export const setAccess = (value: Access | null) => put("meta", "access", value ?? undefined);
 export const snapshot = async (): Promise<Snapshot | null> => (await all<Snapshot>("meta")).get("snapshot") ?? null;
 export const setSnapshot = (value: Snapshot) => put("meta", "snapshot", value);
+
+export const audits = async (): Promise<AuditRecord[]> => [...(await all<AuditRecord>("audits")).values()];
+export const keepAudit = (record: AuditRecord) => put("audits", record.id, record);
+export const dropAudit = (id: string) => put("audits", id, undefined);
+
+/** Every observation still held here, oldest first. */
+export const observations = async (): Promise<ObservationEntry[]> => [...(await all<ObservationEntry>("observations")).values()].sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
+export const keepObservation = (entry: ObservationEntry) => put("observations", entry.id, entry);
+export const dropObservation = (id: string) => put("observations", id, undefined);
+
