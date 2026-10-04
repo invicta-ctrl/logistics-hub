@@ -185,14 +185,16 @@ function leaseMayUse(method: string, path: string): boolean {
 
 const endSession = (db: D1Database, id: string) => db.prepare("UPDATE staff_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL").bind(id);
 
-/** Whether this device may catalogue offline, and as whom: the Catalogue asks on every visit it can make online. */
+/** Whether this device may catalogue offline (until `expiresAt`), and as whom. */
+const offlineView = (account: SignedIn, signedIn: boolean, expiresAt: number | null) => ({
+  signedIn, lease: expiresAt === null ? null : { expiresAt },
+  account: { id: account.accountId, displayName: account.displayName, username: account.username, role: account.role, access: accessOf(account.role, account.group) }
+});
+
+/** The Catalogue asks on every visit it can make online. */
 async function offlineState(request: Request, env: Env, account: SignedIn, leased: boolean): Promise<Response> {
   const lease = leased ? account : await leaseFor(request, env);
-  const mine = lease?.accountId === account.accountId ? lease : null;
-  return json({
-    signedIn: !leased, lease: mine ? { expiresAt: mine.expiresAt } : null,
-    account: { id: account.accountId, displayName: account.displayName, username: account.username, role: account.role, access: accessOf(account.role, account.group) }
-  });
+  return json(offlineView(account, !leased, lease?.accountId === account.accountId ? lease.expiresAt : null));
 }
 
 /** Turns offline cataloguing on for this device, or extends it: a signed-in visit keeps the lease a full week ahead. */
@@ -211,7 +213,7 @@ async function enableOffline(request: Request, env: Env, url: URL, account: Sign
     ]);
   }
   const token = await createSession({ id, subject: account.accountId, role: "CATALOGUE", exp: expiresAt }, leaseKey(env.SESSION_SECRET!));
-  return json({ lease: { expiresAt } }, 200, { "set-cookie": leaseCookie(token, LEASE_DURATION_MS / 1000, url.protocol === "https:") });
+  return json(offlineView(account, true, expiresAt), 200, { "set-cookie": leaseCookie(token, LEASE_DURATION_MS / 1000, url.protocol === "https:") });
 }
 
 /** Turns offline cataloguing off for this device. Whatever it has not sent stays on it until someone signs in there. */
@@ -548,7 +550,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
  */
 function assetCaching(response: Response, path: string): Response {
   const cacheControl = path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : path === "/sw.js" ? "no-cache" : null;
-  const manifest = path === "/manifest.webmanifest";
+  const manifest = path.endsWith(".webmanifest");
   if (!response.ok || (!cacheControl && !manifest)) return response;
   const headers = new Headers(response.headers);
   if (cacheControl) headers.set("cache-control", cacheControl);

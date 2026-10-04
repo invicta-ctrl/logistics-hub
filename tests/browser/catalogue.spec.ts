@@ -36,6 +36,8 @@ function serve(page: Page, options: { items?: Item[]; active?: boolean } = {}) {
   const ready = (async () => {
     await page.route("**/api/staff/session", (route) => json(route, session));
     await page.route("**/api/staff/inventory", (route) => json(route, { revision: 1, items: state.items, categories: ["EQUIPMENT", "OFFICE SUPPLIES", "PAPER"], units: ["piece", "ream"], locations: PLACES }, 200, { etag: `"r${state.items.length}"` }));
+    await page.route("**/api/staff/catalogue/snapshot", (route) => route.request().headers()["if-none-match"] === `"r${state.items.length}"` ? route.fulfill({ status: 304 })
+      : json(route, { revision: state.items.length, items: state.items, categories: ["EQUIPMENT", "OFFICE SUPPLIES", "PAPER"], units: ["piece", "ream"], places: PLACES.map(({ id, name, parentId, active }) => ({ id, name, parentId, active })) }, 200, { etag: `"r${state.items.length}"` }));
     await page.route("**/api/staff/locations", (route) => json(route, { revision: 1, locations: PLACES }, 200, { etag: '"r1"' }));
     await page.route("**/api/staff/catalogue", (route) => json(route, { session: state.started && !state.finished ? info() : null, others: [], reviewLater: { total: state.captures.filter((entry) => entry.behaviour === "REVIEW_LATER").length, items: state.captures.filter((entry) => entry.behaviour === "REVIEW_LATER").map((entry) => ({ id: entry.itemId, name: entry.name, capturedAt: "2026-10-04T01:05:00.000Z", place: "Office › Cabinet 1 › Shelf 2", photoId: null, onHand: entry.quantity, unit: "piece" })) } }));
     await page.route("**/api/staff/catalogue/sessions", async (route) => { state.started = true; await json(route, { id: SESSION_ID, resumed: false }, 201); });
@@ -308,7 +310,7 @@ test.describe("when the sign-in ends or the session is gone", () => {
     expect(asked).toBe(1);
   });
 
-  test("an item held for a session that is finished is listed on the Catalogue page and can be discarded", async ({ page }) => {
+  test("an item held for a session finished on another device is saved once, in a new session, when it can be sent (V1.6)", async ({ page }) => {
     const server = serve(page, { active: true });
     await begin(page, server);
     server.state.fail = "drop";
@@ -318,13 +320,22 @@ test.describe("when the sign-in ends or the session is gone", () => {
     await page.getByLabel("Counted in").fill("piece");
     await page.getByRole("button", { name: "Save & next" }).click();
     await expect(rows(page).first()).toContainText("Not saved yet");
+    // Meanwhile the session is finished elsewhere: the server refuses captures into it, and starting again makes a new one.
     server.state.finished = true;
+    const NEXT = "CS-00000000-0000-4000-8000-000000000002";
+    const started: Array<Record<string, unknown>> = [];
+    const saved: Array<Record<string, unknown>> = [];
+    await page.route(`**/api/staff/catalogue/sessions/${SESSION_ID}/captures`, (route) => route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "That cataloguing session is finished. Start a new one to keep adding items." }) }));
+    await page.route("**/api/staff/catalogue/sessions", (route) => { started.push(route.request().postDataJSON() as Record<string, unknown>); return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: NEXT, resumed: false }) }); });
+    await page.route(`**/api/staff/catalogue/sessions/${NEXT}/captures`, (route) => { saved.push(route.request().postDataJSON() as Record<string, unknown>); return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: "ITM-2000", captureId: "x", replayed: false }) }); });
     await page.goto("/staff/catalogue");
     await expect(page.locator(".cat-held")).toContainText("Whiteboard eraser");
-    await expect(page.locator(".cat-held")).toContainText("its session is finished");
-    page.once("dialog", (dialog) => void dialog.accept());
-    await page.getByRole("button", { name: "Discard" }).click();
-    await expect(page.locator(".cat-held li")).toHaveCount(0);
+    server.state.fail = "";
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await expect(page.locator(".cat-held")).toHaveCount(0);
+    // The new session was proposed under the finished one's id; the server answered with a new one, and the item went there once.
+    expect(started).toEqual([{ id: SESSION_ID, locationId: "LOC-0003" }]);
+    expect(saved.map((body) => body.name)).toEqual(["Whiteboard eraser"]);
     await page.reload();
     await expect(page.locator(".cat-held")).toHaveCount(0);
   });
