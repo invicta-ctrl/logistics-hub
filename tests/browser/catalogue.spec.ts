@@ -614,6 +614,8 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     await page.getByRole("button", { name: /^Account:/ }).click();
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/staff$/);
+    // Sign-in is the staff workspace's page, not the Catalog's: the browser loads it, so read the device only once it has.
+    await expect(page.getByRole("heading", { name: "Staff sign in" })).toBeVisible();
     expect(await access()).toBeNull();
   });
 
