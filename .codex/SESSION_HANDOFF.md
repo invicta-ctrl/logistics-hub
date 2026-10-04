@@ -1,5 +1,18 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Road to V2 — V1.6 Staff Catalog PWA & offline cataloguing (IMPLEMENTED on `road-to-v2/v1.6-catalog-pwa`, not yet finished; Claude desktop, 2026-10-04)
+- **Where:** a Claude worktree of a separate clone (`D:\Documents\Codex\HAU-USC Logistics\active\logistics-hub\.claude\worktrees\v1.6-catalog-pwa`), authorized by Earl in the session; every checkpoint pushed and propagated V1.7–V1.15 (no conflicts). The shared worktree's writer lock was not reachable from there.
+- **Gate:** V1.5 COMPLETE and MERGED `aa8da59` on `main`; `origin/main` merged at the start (`e56f3ac`).
+- **Built:**
+  - Worker (`worker.ts`, `catalogue.ts`): the offline cataloguing lease (a `CL-` `staff_sessions` row in its own HttpOnly cookie and key; `leaseMayUse` lists what it may do; every way a session ends ends it; logout ends it on the device; audited on/off), `GET /api/staff/catalogue/snapshot` (minimal, revisioned), device-proposed session ids, capture replay across a person's sessions, `/staff/catalogue` served without a session. No migration.
+  - Client: `catalogue-store.ts` (the V1.5 outbox as IndexedDB v2: captures with owner, sessions, access, snapshot), `catalogue-sync.ts` (one sender: offline starts under proposed ids, finishes first, re-filing captures of a session finished elsewhere, exactly once), `catalogue-offline.ts` (who, turn on/off, snapshot, readiness), Catalogue page device card and offline/lease notes, capture screen on the snapshot (same suggestions online and offline), finishing offline, `?next=` on sign-in.
+  - Install: `catalogue.webmanifest` (id/start `/staff/catalogue`, scope `/staff`, own icons); `main.ts` links the route's manifest and iOS touch icon; Self-Service scope narrowed to `/self-service`.
+  - Service worker: Catalogue files saved only where offline cataloguing is on, re-saved by every update, cache-first there.
+- **Decisions to know:** see `docs/OFFLINE_CATALOGUE.md` §3 (two apps, non-overlapping scopes, separate origin rejected), §4 (lease), §9 (resolution paths). One term for a capture the server does not have: **Not saved yet** / **N waiting to send** (amendment §4).
+- **Verified (Windows, this worktree):** build; `npm test` 443 passed (+2 skipped) apart from `tests/production-release.test.ts`, which fails only on Windows (its throwaway repo gets a CRLF copy of a pinned migration; it passes on Linux CI); `npm run test:browser` 105; `npm run test:browser:worker` 42 (incl. 4 in `worker-v16-catalog-pwa.spec.ts`); privacy scan clean; CI green on `1b0f0bb`. Rendered evidence inspected; nine visual defects fixed (listed in `docs/visual-research/v1.6.md`).
+- **Also fixed on the way:** `scripts/visual-evidence.mjs` ran `node.exe` through a shell (breaks on `C:\Program Files`) and let a cleanup error hide the real one.
+- **Next:** `finish` (release record, final review, integration). Owner actions: none required; optionally Earl tries the Catalog on a real Android phone and iPhone (install, turn on, airplane mode, save, reconnect).
+
 ## Road to V2 — V1.5 Rapid Catalogue & Bulk Operations (COMPLETE and MERGED to main at `aa8da59`, 2026-10-04; record `docs/road-to-v2/releases/v1.5.md`; Claude Cloud, 2026-10-04)
 - **Gate:** V1.4 `STATUS: COMPLETE`, `INTEGRATION: MERGED 540853e` on `main` (V1.4.1 at `629bf3f`); `origin/main` was already in this branch. Authority: `docs/specs/accepted/road-to-v2/v1.5-rapid-catalogue.md`. Every pushed checkpoint was merged forward through V1.15 without conflicts (script: merge each branch into the next, normal push).
 - **Built:**

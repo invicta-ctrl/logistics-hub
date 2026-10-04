@@ -54,7 +54,7 @@ export async function catalogueWorkspace(): Promise<void> {
   const root = document.querySelector<HTMLElement>("#cat-start")!;
   try {
     const [state, catalog] = await Promise.all([
-      who.mode === "signed-in" ? api<State>("/api/staff/catalogue") : Promise.resolve(null),
+      who.mode === "offline" ? Promise.resolve(null) : api<State>("/api/staff/catalogue"),
       who.mode === "offline" ? snapshot() : refreshSnapshot()
     ]);
     root.removeAttribute("aria-busy");
@@ -109,9 +109,9 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
       </section>`
       : html`<section class="card cat-card">${emptyState("Add a place first", "Cataloguing records where each item is kept. Add the shelf or cabinet you are standing at, then start.", who.mode === "signed-in" ? html`<a class="button button--primary" href="/staff/locations" data-route>${icon("pin")}Add a place</a>` : "", "", 2)}</section>`}
     <div id="cat-device"></div>
-    ${state?.others.length ? html`<section class="cat-others" aria-labelledby="others-title"><h2 id="others-title">Cataloguing now</h2>
+    ${state && who.mode === "signed-in" && state.others.length ? html`<section class="cat-others" aria-labelledby="others-title"><h2 id="others-title">Cataloguing now</h2>
       <ul class="plain-list">${state.others.map((other) => html`<li>${icon("user")}<span><strong>${other.owner}</strong> in ${other.place ?? "no place"} · ${plural(other.saved, "item")} saved</span></li>`)}</ul></section>` : ""}
-    ${state ? html`<section class="cat-review" aria-labelledby="review-title"><h2 id="review-title">Review later${state.reviewLater.total ? html` <span class="view-tab__count">${state.reviewLater.total}</span>` : ""}</h2>
+    ${state && who.mode === "signed-in" ? html`<section class="cat-review" aria-labelledby="review-title"><h2 id="review-title">Review later${state.reviewLater.total ? html` <span class="view-tab__count">${state.reviewLater.total}</span>` : ""}</h2>
       ${state.reviewLater.total ? html`<p class="card__text">Counted and placed, but nobody has decided how they are used. They stay out of the Lending Hub and Self-Service until someone does.</p>
         <ul class="cat-rows">${state.reviewLater.items.map(reviewRow)}</ul>
         ${state.reviewLater.total > state.reviewLater.items.length ? html`<p class="muted">Showing the newest ${state.reviewLater.items.length}. <a class="text-link" href="/staff/items?view=review" data-route>See them all under Items</a>.</p>` : ""}`
@@ -122,7 +122,8 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
   await drawHeld();
   onLeave(onSyncChange(() => void drawHeld()));
   bindHeld(root, drawHeld);
-  void deviceCard(root.querySelector<HTMLElement>("#cat-device")!, who);
+  // Offline, the note above says all there is to say about this device, and installing needs a connection.
+  if (who.mode !== "offline") void deviceCard(root.querySelector<HTMLElement>("#cat-device")!, who);
   if (mine || !active.length) return;
 
   const select = root.querySelector<HTMLSelectElement>("#start-place")!;
@@ -171,12 +172,13 @@ function heldList(all: Entry[], owner: string, online: boolean): Html {
   const ours = all.filter((entry) => entry.owner === owner || !entry.owner);
   const others = all.length - ours.length;
   if (!all.length) return html``;
-  return html`<section class="callout cat-held" role="status" aria-labelledby="held-title">${icon(online ? "refresh" : "cloudOff")}<div>
+  // Offline, the note above already says they are sent when the connection is back; only what needs a person is spelled out per item.
+  return html`<section class="callout cat-held" role="status" aria-labelledby="held-title">${icon("clock")}<div>
     <p id="held-title"><strong>${ours.length ? `${plural(ours.length, "item")} on this device ${ours.length === 1 ? "has" : "have"} not been saved to the server.` : "Items on this device are waiting for their member."}</strong>
-      ${ours.length ? (online ? ` ${ours.length === 1 ? "It is" : "They are"} being sent.` : ` ${ours.length === 1 ? "It" : "They"} will be sent when you're back online.`) : ""}</p>
-    ${ours.length ? html`<ul>${ours.map((entry) => html`<li>${String(entry.body.name)}: ${entry.state === "stopped"
-      ? html`<span class="cat-row__note is-bad">${entry.message ?? "Needs you."}</span> ${entry.matches ? html`<button type="button" class="text-link" data-held-separate="${entry.id}">Save as a separate item</button>` : ""} <button type="button" class="text-link" data-held-discard="${entry.id}">${entry.itemId ? "Keep without photo" : "Discard"}</button>`
-      : entry.itemId ? "saved, photo to send" : "not saved yet"}</li>`)}</ul>` : ""}
+      ${ours.length && online ? ` ${ours.length === 1 ? "It is" : "They are"} being sent.` : ""}</p>
+    ${ours.length ? html`<ul>${ours.map((entry) => html`<li>${String(entry.body.name)}${entry.state === "stopped"
+      ? html`: <span class="cat-row__note is-bad">${entry.message ?? "Needs you."}</span> ${entry.matches ? html`<button type="button" class="text-link" data-held-separate="${entry.id}">Save as a separate item</button>` : ""} <button type="button" class="text-link" data-held-discard="${entry.id}">${entry.itemId ? "Keep without photo" : "Discard"}</button>`
+      : entry.itemId ? " (saved, photo to send)" : ""}</li>`)}</ul>` : ""}
     ${others ? html`<p>${plural(others, "item")} another member catalogued here ${others === 1 ? "is" : "are"} waiting for them to sign in on this device. <button type="button" class="text-link" data-held-others>Discard ${others === 1 ? "it" : "them"}</button></p>` : ""}
   </div></section>`;
 }
@@ -214,7 +216,7 @@ function installSteps(): Html[] {
   const kind = platform();
   if (kind === "ios") return [
     html`Open this page in <strong>Safari</strong>.`,
-    html`Tap ${icon("share")}<strong>Share</strong> (on newer iPhones it's in the ${icon("more")} menu beside the address bar; tap <strong>View More</strong> if the next step isn't listed).`,
+    html`Tap ${icon("share")}<strong>Share</strong> (on newer iPhones it's in the ${icon("dots")} menu beside the address bar; tap <strong>View More</strong> if the next step isn't listed).`,
     html`Tap <strong>Add to Home Screen</strong>, keep <strong>Open as Web App</strong> on where it's shown, then tap <strong>Add</strong>.`,
     html`Open <strong>Catalog</strong> from your Home Screen while you're online, sign in, and turn on offline cataloguing there.`,
     html`Wait for <strong>Ready for offline cataloguing</strong> before you rely on it without a connection.`
@@ -227,7 +229,7 @@ function installSteps(): Html[] {
   ];
   return [
     html`Use <strong>Chrome</strong> or <strong>Edge</strong>.`,
-    html`Click the install icon in the address bar, or open the browser menu and choose <strong>Install</strong> (in Chrome: <strong>Cast, save and share</strong> › <strong>Install page as app</strong>).`,
+    html`Click the install icon at the right of the address bar. Or open the browser menu: in Chrome, <strong>Cast, save, and share</strong> › <strong>Install Logistics Catalog</strong>; in Edge, <strong>Apps</strong> › <strong>Install Logistics Catalog</strong>.`,
     html`Open <strong>Logistics Catalog</strong>, and turn on offline cataloguing there.`
   ];
 }
@@ -247,8 +249,8 @@ async function deviceCard(host: HTMLElement, who: Signed): Promise<void> {
     }
     if (!state.storage) return html`<p class="cat-ready cat-ready--bad">${icon("alert")}<span><strong>This browser won't keep data for the Catalogue.</strong> It may be a private window. Open the Catalogue in a normal window to catalogue offline.</span></p>`;
     if (state.needsHomeScreen) return html`<p class="cat-ready cat-ready--bad">${icon("alert")}<span><strong>Open the Catalog from your Home Screen.</strong> On iPhone and iPad a Safari tab keeps its data apart from the Home Screen app, so offline cataloguing works from the app.</span></p>`;
-    const until = html`Until ${day(granted.expiresAt)}${state.savedAt ? html` · catalog saved ${formatDateTime(state.savedAt)}` : ""}.`;
-    if (ready(state)) return html`<p class="cat-ready cat-ready--ok">${icon("check")}<span><strong>Ready for offline cataloguing</strong> ${until} What you save without a connection is sent when you're back online.</span></p>
+    const until = html`Works without a connection until ${day(granted.expiresAt)}.${state.savedAt ? ` Catalog saved ${day(Date.parse(state.savedAt))}.` : ""}`;
+    if (ready(state)) return html`<p class="cat-ready cat-ready--ok">${icon("check")}<span><strong>Ready for offline cataloguing</strong> ${until} What you save offline is sent when you're back online.</span></p>
       ${granted.expiresAt - Date.now() < 24 * 60 * 60 * 1000 ? html`<p class="card__text">Offline cataloguing here ends soon. Open the Catalogue while you're signed in and online to keep it on for another week.</p>` : ""}
       ${state.persisted ? "" : html`<p class="card__text">The browser may clear saved data if this device runs out of space, so send your work when you can.</p>`}`;
     if (problem) return html`<p class="cat-ready cat-ready--bad">${icon("alert")}<span><strong>Not ready for offline cataloguing.</strong> ${problem}</span></p>
@@ -258,16 +260,16 @@ async function deviceCard(host: HTMLElement, who: Signed): Promise<void> {
 
   const install = (): Html => isStandalone() ? html`` : html`<details class="cat-install"${!granted && ios ? html` open` : ""}>
       <summary>${icon("install")}Install the Catalog on this ${ios || platform() === "android" ? "phone or tablet" : "computer"}</summary>
-      <p class="card__text">It opens straight to the Catalogue, like an app, and works best offline.${ios ? " On iPhone and iPad it is how offline cataloguing works." : ""}</p>
+      ${ios ? "" : html`<p class="card__text">It opens straight to the Catalogue, like an app, and works best offline.</p>`}
       ${canPromptInstall() ? html`<div class="where__buttons"><button type="button" class="button button--secondary" data-install>${icon("install")}Install</button></div>` : ""}
       <ol class="cat-steps">${installSteps().map((step) => html`<li>${step}</li>`)}</ol>
     </details>`;
 
   const render = () => mount(host, html`<section class="card cat-card cat-device" aria-labelledby="device-title">
-      <div class="card__head"><h2 id="device-title">Offline cataloguing on this device</h2>
-        ${granted && who.mode !== "offline" ? html`<button type="button" class="text-link" data-offline-off>Turn off</button>` : ""}</div>
+      <div class="card__head"><h2 id="device-title">Offline cataloguing on this device</h2></div>
       ${status()}
       ${hasUpdate() ? html`<p class="card__text">A new version of the Catalogue is ready. <button type="button" class="text-link" data-update>Update now</button></p>` : ""}
+      ${granted ? html`<p class="card__text"><button type="button" class="text-link" data-offline-off>Turn off offline cataloguing</button></p>` : ""}
       ${install()}
     </section>`);
 
@@ -337,7 +339,7 @@ export function finishedView(root: HTMLElement, detail: Detail, onDevice = 0, ca
       <div class="page-header__title"><h1>${done ? "Cataloguing finished" : `${session.owner} is cataloguing`}</h1><p>${session.place ?? "No place"} · started ${formatDateTime(session.startedAt)}</p></div>
       <div class="page-header__actions"><a class="button button--secondary" href="/staff/catalogue" data-route>Back to Catalogue</a></div>
     </header>
-    <section class="card cat-card" aria-labelledby="sum-title"><div class="card__head"><h2 id="sum-title">${plural(total, "item")} saved</h2></div>
+    <section class="card cat-card" aria-labelledby="sum-title"><div class="card__head"><h2 id="sum-title">${plural(total, "item")} ${onDevice ? "catalogued" : "saved"}</h2></div>
       ${total ? html`<ul class="plain-list">${(Object.keys(BEHAVIOUR_LABELS) as Behaviour[]).filter((key) => counts[key]).map((key) => html`<li><span class="cat-count">${counts[key]}</span> ${BEHAVIOUR_LABELS[key]}</li>`)}</ul>` : html`<p class="muted">Nothing was saved in this session.</p>`}
       ${onDevice ? html`<p class="cat-ready">${icon("cloudOff")}<span><strong>${plural(onDevice, "item")} ${onDevice === 1 ? "is" : "are"} not saved yet.</strong> ${onDevice === 1 ? "It waits" : "They wait"} on this device and ${onDevice === 1 ? "is" : "are"} sent when you're back online; the session is finished on the server once ${onDevice === 1 ? "it is" : "they are"} all there.</span></p>` : ""}
       ${counts.REVIEW_LATER ? html`<p class="card__text">${plural(counts.REVIEW_LATER, "item")} still ${counts.REVIEW_LATER === 1 ? "needs" : "need"} a decision. They stay out of the Lending Hub and Self-Service until someone makes it.</p>` : ""}
