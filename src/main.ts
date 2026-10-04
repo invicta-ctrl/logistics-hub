@@ -5,7 +5,7 @@ import "@fontsource/newsreader/latin-400.css";
 import "@fontsource/newsreader/latin-500.css";
 import "./styles.css";
 import { landing, lending, notFound, offlinePage } from "./public";
-import { forgetInstallPrompt, startPwa } from "./pwa";
+import { startPwa } from "./pwa";
 import { handOverQuery, leave, navigate, shown, toast } from "./ui";
 
 type View = () => void | Promise<void>;
@@ -32,22 +32,12 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
 };
 
 /**
- * Which app installing this page gives: the Logistics Catalog on the Catalogue (staff; start /staff/catalogue, scope /staff), Self-Service
- * everywhere else (start and scope /self-service). Two manifests with their own ids and scopes that do not overlap install side by side,
- * and neither captures the other's pages (docs/OFFLINE_CATALOGUE.md).
+ * The Logistics Catalog has its own page (staff/catalogue.html), which links its manifest from the first byte; every other route is
+ * index.html, which links Self-Service's. Browsers read the manifest as the page loads (iOS only then), so moving between the two apps
+ * loads the other page rather than re-pointing the manifest (docs/OFFLINE_CATALOGUE.md).
  */
-function installableAs(path: string): void {
-  const catalog = path === "/staff/catalogue";
-  const set = (selector: string, href: string) => {
-    const link = document.querySelector<HTMLLinkElement>(selector);
-    if (!link || link.getAttribute("href") === href) return false;
-    link.setAttribute("href", href);
-    return true;
-  };
-  // An install prompt the browser offered for the other app would install that one: only a prompt offered after the switch is used.
-  if (set('link[rel="manifest"]', catalog ? "/catalogue.webmanifest" : "/manifest.webmanifest")) forgetInstallPrompt();
-  set('link[rel="apple-touch-icon"]', catalog ? "/icons/catalog-touch-icon.png" : "/touch-icon.png");
-}
+const CATALOG_PAGE = document.documentElement.dataset.app === "catalog";
+const catalogRoute = (path: string) => path === "/staff/catalogue";
 
 let navigation = 0;
 // A fresh page load already starts at the top, so only in-app navigation moves focus to the page body. It never does inside a
@@ -61,7 +51,13 @@ async function render(): Promise<void> {
   shown.address = window.location.pathname + window.location.search;
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/items", true);
-  installableAs(path);
+  // Offline the server cannot hand over the other page; the router renders what it can (the offline page) instead.
+  if (catalogRoute(path) !== CATALOG_PAGE && navigator.onLine && sessionStorage.getItem("reloaded-for-page") !== path) {
+    sessionStorage.setItem("reloaded-for-page", path);
+    window.location.reload();
+    return;
+  }
+  sessionStorage.removeItem("reloaded-for-page");
   let view: View;
   try {
     view = await (ROUTES[path] ?? (() => notFound))();

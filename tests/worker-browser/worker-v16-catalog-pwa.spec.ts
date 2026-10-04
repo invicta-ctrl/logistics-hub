@@ -105,6 +105,8 @@ test.describe.serial("the Catalog PWA", () => {
     await context.setOffline(true);
     await page.reload();
     await expect(page.locator("#cat-offline")).toBeVisible();
+    // The page saved for offline is the Catalog's own, with its own manifest.
+    expect(await page.evaluate(() => [document.documentElement.dataset.app, document.querySelector('link[rel="manifest"]')?.getAttribute("href")])).toEqual(["catalog", "/catalogue.webmanifest"]);
     await page.getByLabel("Name", { exact: true }).fill(probe);
     await expect(page.locator("#cat-why")).toHaveText(onlineWhy);
     await page.getByLabel("Name", { exact: true }).fill("");
@@ -214,8 +216,9 @@ test.describe.serial("the Catalog PWA", () => {
   test("the Catalog installs as its own app beside Self-Service", async () => {
     const cdp = await context.newCDPSession(page);
     const app = async (path: string) => {
+      // The manifest is in the page as served: iOS reads it only as the page loads, never after a script changes it.
+      expect(await (await page.request.get(path)).text()).toContain(`rel="manifest" href="${path.startsWith("/staff") ? "/catalogue.webmanifest" : "/manifest.webmanifest"}"`);
       await page.goto(path);
-      await page.waitForFunction((href) => document.querySelector('link[rel="manifest"]')?.getAttribute("href") === href, path.startsWith("/staff") ? "/catalogue.webmanifest" : "/manifest.webmanifest");
       const manifest = await cdp.send("Page.getAppManifest") as { url: string; errors: unknown[]; data: string };
       // Chromium's own verdict on whether the page can be installed as an app: empty means it can.
       const { installabilityErrors } = await cdp.send("Page.getInstallabilityErrors") as { installabilityErrors: unknown[] };
