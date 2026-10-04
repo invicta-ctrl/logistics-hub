@@ -117,6 +117,10 @@ describe("a lease on its own", () => {
     const lease = await turnOn();
     expect(await (await as(lease, "/api/staff/catalogue/offline")).json()).toMatchObject({ signedIn: false, lease: { expiresAt: expect.any(Number) }, account: { id: "ACC-1" } });
     expect((await as(lease, "/api/staff/catalogue/snapshot")).status).toBe(200);
+    // Only this member's own session: who else is cataloguing, and what waits for review, need a sign-in.
+    await as(other, "/api/staff/catalogue/sessions", "POST", { locationId: shelf });
+    expect(await (await as(lease, "/api/staff/catalogue")).json()).toEqual({ session: null, others: [], reviewLater: { total: 0, items: [] } });
+    expect(((await (await as(session, "/api/staff/catalogue")).json()) as { others: unknown[] }).others).toHaveLength(1);
     const started = await as(lease, "/api/staff/catalogue/sessions", "POST", { locationId: shelf });
     expect(started.status).toBe(201);
     const { id } = (await started.json()) as { id: string };
@@ -140,7 +144,7 @@ describe("a lease on its own", () => {
     const item = ((await (await as(other, `/api/staff/catalogue/sessions/${theirs}/captures`, "POST", shot(shelf))).json()) as { id: string }).id;
     expect((await putPhoto(lease, item)).status).toBe(403);
     for (const [method, path] of [
-      ["GET", "/api/staff/session"], ["GET", "/api/staff/inventory"], ["GET", "/api/staff/catalogue"], ["GET", `/api/staff/items/${item}`], ["POST", "/api/staff/items"],
+      ["GET", "/api/staff/session"], ["GET", "/api/staff/inventory"], ["GET", `/api/staff/items/${item}`], ["POST", "/api/staff/items"],
       ["GET", `/api/staff/catalogue/sessions/${id}/unreviewed`], ["POST", "/api/staff/items/bulk"], ["POST", "/api/staff/locations"], ["GET", "/api/staff/loans"],
       ["GET", "/api/staff/activity"], ["GET", "/api/staff/admin/accounts"], ["PATCH", "/api/staff/me"], ["POST", "/api/staff/me/sessions/revoke"], ["DELETE", `/api/staff/items/${item}/photo`]
     ] as const) expect((await as(lease, path, method, method === "GET" ? undefined : {})).status, `${method} ${path}`).toBe(401);

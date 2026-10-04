@@ -97,7 +97,7 @@ async function failed(entry: Entry, error: unknown): Promise<void> {
     const tries = attempts.get(entry.id) ?? 0;
     attempts.set(entry.id, tries + 1);
     retryAt.set(entry.id, Date.now() + Math.min(30_000, 2_000 * 2 ** tries));
-    await settle(entry, { state: "waiting", message: error.status === 0 ? "Not saved yet. It will be sent when the connection is back." : "Not saved yet. The server is busy; trying again." });
+    await settle(entry, { state: "waiting", message: error.status === 0 ? "It will be sent when the connection is back." : "The server is busy; it will be sent shortly." });
     return;
   }
   const found = error.status === 409 && Array.isArray(error.body.duplicates) ? error.body.duplicates as Entry["matches"] : null;

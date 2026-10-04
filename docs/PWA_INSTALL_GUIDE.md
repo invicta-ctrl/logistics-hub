@@ -139,3 +139,38 @@ Records that are waiting exist only on your phone until they are sent. If they a
 - Connect to the internet, open the app and tap **Sync now** in **My activity**.
 - Keep the app open until the top bar says **Synced**. The photo is removed from your phone after it is received.
 - Do not delete the app or clear data until then.
+
+## Logistics Catalog (staff)
+
+The Catalogue for Logistics staff installs as its own app, **Catalog** (the mark on a dark background), beside Logistics Hub. It catalogues items shelf by shelf, and keeps working where there is no signal once you turn on **offline cataloguing**.
+
+Address: **logistics.hausc.org/staff/catalogue**. You need your staff sign-in.
+
+### Install
+
+- **Android (Chrome):** open the address and sign in. On the Catalogue page, open **Install the Catalog on this phone or tablet** and tap **Install**. No button? Tap Chrome's menu (three dots), **Add to Home screen**, then **Install**. Do not choose **Create shortcut**.
+- **iPhone / iPad (Safari):** open the address. Tap **Share** (on newer iPhones it is in the **⋯** menu beside the address bar; tap **View More** if needed), then **Add to Home Screen**. Keep **Open as Web App** on, then tap **Add**. Open **Catalog** from your Home Screen and sign in there: on iPhone and iPad, offline cataloguing works only from the Home Screen app.
+- **Computer (Chrome or Edge):** click the install icon in the address bar, or Chrome's menu **Cast, save, and share** › **Install Logistics Catalog** (Edge: **Apps** › **Install Logistics Catalog**).
+
+### Turn on offline cataloguing
+
+1. Open the Catalog while you have internet and are signed in.
+2. On the Catalogue page, tap **Turn on offline cataloguing**.
+3. Wait until the card says **Ready for offline cataloguing**. It also says until when this device can catalogue offline (a week; it is extended each time you open the Catalog while signed in and online).
+
+Your password is never kept on the device. Signing out on the device, **Turn off offline cataloguing**, or an administrator signing you out everywhere ends offline cataloguing on the device.
+
+### Offline
+
+- The Catalogue says **You're offline** and keeps working: start or resume a session, take photos, save items, finish.
+- Items you save show **Not saved yet**, and the bar says how many are **waiting to send**. They are sent by themselves when you are back online with the Catalog open.
+- Adding a new place needs a connection.
+
+**While anything is waiting to send, do not** clear the browser's data for the site, delete the Catalog app, or reset the device. Waiting items exist only on that device until they are sent.
+
+### Troubleshooting
+
+- **"Getting ready for offline cataloguing…" does not go away:** stay online with the page open; if it says something could not be saved, tap **Try again**. Check that the device has free storage and that you are not in a private window.
+- **"You're signed out":** this device can still catalogue for you until the date shown. Sign in again to use Items, Stock and the rest.
+- **"The Catalogue needs a connection here":** offline cataloguing is not on for this device (or it ended). Connect, sign in, and turn it on.
+- **Someone else's items are waiting on a shared device:** they are sent when that person signs in on it. Discard them only if you are sure they were never needed.

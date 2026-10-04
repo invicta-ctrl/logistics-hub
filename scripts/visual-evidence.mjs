@@ -18,7 +18,8 @@
 // owner's import with its preflight; runs only where the directory exists) and catalogue (V1.5: a long cataloguing session on one shelf
 // with loanable, consumable, gradually used and review-later items; the start page, suggestion, photo preview, possible-match and
 // review-later states, a save that failed offline and was retried, the finish summary, and Select mode with its dialog; runs only
-// where /staff/catalogue exists). Its pictures, including the obviously fake
+// where /staff/catalogue exists) and catalog-pwa (V1.6: offline cataloguing on an Android phone and tablet, an iPhone's Safari tab and a
+// computer, with the service worker on and the connection really cut; runs only where the catalogue snapshot exists). Its pictures, including the obviously fake
 // sample ID cards, are drawn here in the browser and written only to a throwaway folder, so no image file enters the
 // repository and no real ID is ever used.
 //
@@ -28,7 +29,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { chromium } from "@playwright/test";
+import { chromium, devices } from "@playwright/test";
 import { createAccountSql, runD1, wrangler } from "./staff-account.mjs";
 
 const { values: args } = parseArgs({ options: { out: { type: "string" }, base: { type: "string" }, pages: { type: "string" } } });
@@ -41,7 +42,8 @@ const password = randomBytes(18).toString("base64url");
 const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 
 function run(command, commandArgs, cwd) {
-  const result = spawnSync(command, commandArgs, { cwd, stdio: "inherit", shell: process.platform === "win32" });
+  // Windows needs a shell to find npm.cmd, but a shell splits an absolute path with a space in it (C:\Program Files\nodejs\node.exe).
+  const result = spawnSync(command, commandArgs, { cwd, stdio: "inherit", shell: process.platform === "win32" && !path.isAbsolute(command) });
   if (result.status !== 0) throw new Error(`${command} ${commandArgs.join(" ")} failed in ${cwd}`);
 }
 
@@ -70,7 +72,8 @@ async function serve(dir, port) {
   const stop = () => {
     if (process.platform === "win32") spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"]);
     else try { process.kill(-child.pid); } catch { /* already gone */ }
-    fs.rmSync(state, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+    // Windows may hold the database files a moment after the Worker is killed; a leftover folder must not hide the run's own error.
+    try { fs.rmSync(state, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 }); } catch (error) { console.warn(`evidence cleanup skipped for ${state}: ${error.message}`); }
   };
   return { url, stop };
 }
@@ -991,6 +994,169 @@ async function catalogueScenes(browser, url, dir) {
   return timings;
 }
 
+/**
+ * V1.6 Catalog PWA on the production build with its service worker: the Catalogue's "Offline cataloguing on this device" card off,
+ * getting ready and ready; install steps on an Android phone, an iPhone (Safari tab) and a computer; the Catalogue reopened offline;
+ * an offline session with items not saved yet; finishing offline; a signed-out device on its lease; a device without offline access;
+ * and everything sent once the connection is back. Devices are Chromium with each device's screen, touch and user agent.
+ */
+async function catalogPwaScenes(browser, url, dir) {
+  const shot = (page, name) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80 });
+  const first = await signIn(browser, url, "staff.demo", SIZES.desktop);
+  if ((await first.page.request.get(`${url}/api/staff/catalogue/snapshot`)).status() === 404) {
+    console.log("catalog-pwa: this ref has no offline Catalogue, skipped");
+    await first.context.close();
+    return {};
+  }
+  const state = await first.context.storageState();
+  const art = await first.page.evaluate(drawPhotos);
+  const post = async (route, body) => (await first.page.request.post(`${url}${route}`, { headers: { origin: url }, data: body })).json();
+  const store = (await post("/api/staff/locations", { name: "Store room", parentId: null })).id;
+  const shelf = (await post("/api/staff/locations", { name: "Shelf B", parentId: store })).id;
+  await first.context.close();
+  // One picture per device: the same one twice would rightly be flagged as looking like the item already saved with it.
+  const folder = fs.mkdtempSync(path.join(root, ".wrangler", "evidence-art-"));
+  const pictures = [2, 4].map((index) => { const file = path.join(folder, `shelf-${index}.jpg`); fs.writeFileSync(file, Buffer.from(art[index].display, "base64")); return file; });
+  const { defaultBrowserType: _android, ...pixel } = devices["Pixel 7"];
+  const { defaultBrowserType: _tablet, ...tablet } = devices["Galaxy Tab S4"];
+  const { defaultBrowserType: _ios, ...iphone } = devices["iPhone 15"];
+  const open = async (device) => {
+    const context = await browser.newContext({ ...device, reducedMotion: "reduce", storageState: state });
+    return { context, page: await context.newPage() };
+  };
+  const card = (page) => page.locator(".cat-device");
+  const settle = async (page) => { await page.waitForLoadState("networkidle").catch(() => undefined); await page.waitForTimeout(300); };
+  const save = async (page, name, how, category, unit, picture = null) => {
+    await page.getByLabel("Name", { exact: true }).fill(name);
+    if (picture) { await page.locator("#cat-file").setInputFiles(picture); await page.waitForSelector("#cat-photo img"); }
+    await page.locator(".cat-choice", { hasText: how }).first().click();
+    if (category) await page.getByLabel("Category").fill(category);
+    if (unit) await page.getByLabel("Counted in").fill(unit);
+    await page.getByRole("button", { name: /^Save & next/ }).click();
+    // Drawn pictures can look alike to the photo hint: as a person would, say "a different one".
+    if (await page.locator(".cat-dup__card.is-armed").count()) await page.getByRole("button", { name: /^Save as a separate item/ }).click();
+    await page.getByLabel("Name", { exact: true }).and(page.locator(":focus")).waitFor();
+  };
+  const timings = {};
+
+  // A computer: the card off, with the install steps open.
+  {
+    const { context, page } = await open({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+    await page.goto(`${url}/staff/catalogue`);
+    await card(page).locator("summary").click();
+    await settle(page);
+    await card(page).scrollIntoViewIfNeeded();
+    await shot(page, "catalog-off-desktop");
+    await context.close();
+  }
+  // An iPhone in a Safari tab: offline cataloguing is turned on in the Home Screen app.
+  {
+    const { context, page } = await open(iphone);
+    await page.goto(`${url}/staff/catalogue`);
+    await settle(page);
+    await card(page).scrollIntoViewIfNeeded();
+    await shot(page, "catalog-iphone-safari");
+    await context.close();
+  }
+  // An Android tablet: turned on, ready, then a whole offline session.
+  {
+    const { context, page } = await open(tablet);
+    await page.goto(`${url}/staff/catalogue`);
+    await page.getByRole("button", { name: "Turn on offline cataloguing" }).click();
+    const started = Date.now();
+    await page.locator(".cat-ready--ok").waitFor({ timeout: 60_000 });
+    timings.readyAfterTurnOnMs = Date.now() - started;
+    await settle(page);
+    await shot(page, "catalog-ready-tablet");
+    await context.setOffline(true);
+    let reopened = Date.now();
+    await page.reload();
+    await page.getByText("You're offline.", { exact: true }).waitFor();
+    timings.reopenOfflineMs = Date.now() - reopened;
+    await settle(page);
+    await shot(page, "catalog-offline-start-tablet");
+    await page.getByLabel("Place", { exact: true }).selectOption(shelf);
+    await page.getByRole("button", { name: /^Start cataloguing/ }).click();
+    await page.waitForSelector("#cat-form");
+    await save(page, "Extension reel 10 m", "Borrow", "EQUIPMENT", "piece", pictures[0]);
+    await save(page, "Cable ties (pack)", "Consume", "OFFICE SUPPLIES", "pack");
+    await page.getByLabel("Name", { exact: true }).fill("Whiteboard");
+    await page.waitForTimeout(200);
+    await shot(page, "catalog-offline-session-tablet");
+    await page.getByLabel("Name", { exact: true }).fill("");
+    // Back online: everything goes.
+    await context.setOffline(false);
+    reopened = Date.now();
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await page.locator("#cat-sync", { hasText: "All saved" }).waitFor({ timeout: 60_000 });
+    timings.sendTwoAfterReconnectMs = Date.now() - reopened;
+    await settle(page);
+    await page.evaluate(() => document.querySelector("#cat-recent-title").scrollIntoView());
+    await shot(page, "catalog-sent-tablet");
+    await context.close();
+  }
+  // An Android phone: ready, an offline session finished offline, signed out on the lease, and offline after turning it off.
+  {
+    const { context, page } = await open(pixel);
+    await page.goto(`${url}/staff/catalogue`);
+    await settle(page);
+    await card(page).scrollIntoViewIfNeeded();
+    await shot(page, "catalog-off-phone");
+    await page.getByRole("button", { name: "Turn on offline cataloguing" }).click();
+    await page.locator(".cat-ready").first().waitFor();
+    await card(page).scrollIntoViewIfNeeded();
+    await shot(page, "catalog-getting-ready-phone");
+    await page.locator(".cat-ready--ok").waitFor({ timeout: 60_000 });
+    await card(page).scrollIntoViewIfNeeded();
+    await shot(page, "catalog-ready-phone");
+    await context.setOffline(true);
+    await page.reload();
+    await page.getByText("You're offline.", { exact: true }).waitFor();
+    await settle(page);
+    await shot(page, "catalog-offline-start-phone");
+    await page.getByLabel("Place", { exact: true }).selectOption(shelf);
+    await page.getByRole("button", { name: /^Start cataloguing/ }).click();
+    await page.waitForSelector("#cat-form");
+    await save(page, "Folding table", "Borrow", "FURNITURE", "piece", pictures[1]);
+    await save(page, "Masking tape", "Use gradually", "OFFICE SUPPLIES", "roll");
+    await save(page, "Unmarked crate", "Not sure", "", "");
+    await page.getByText("3 waiting to send").waitFor();
+    await settle(page);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await shot(page, "catalog-offline-session-phone");
+    await page.evaluate(() => document.querySelector("#cat-recent-title").scrollIntoView());
+    await shot(page, "catalog-offline-list-phone");
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "Finish" }).click();
+    await page.getByRole("heading", { name: "Cataloguing finished" }).waitFor();
+    await shot(page, "catalog-finished-offline-phone");
+    await page.goto(`${url}/staff/catalogue`).catch(() => undefined);
+    await page.getByText("You're offline.", { exact: true }).waitFor();
+    await settle(page);
+    await shot(page, "catalog-offline-waiting-phone");
+    await context.setOffline(false);
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await page.locator(".cat-held").waitFor({ state: "detached", timeout: 60_000 });
+    // Signed out: the lease still catalogues.
+    await context.clearCookies({ name: "lh_staff_session" });
+    await page.reload();
+    await page.getByText("You're signed out.", { exact: true }).waitFor();
+    await settle(page);
+    await shot(page, "catalog-signed-out-phone");
+    // Turned off, then offline: this device can no longer catalogue without a connection.
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "Turn off" }).click();
+    await page.getByText("Offline cataloguing is off on this device.").waitFor();
+    await context.setOffline(true);
+    await page.reload();
+    await page.getByRole("heading", { name: "The Catalogue needs a connection here" }).waitFor();
+    await shot(page, "catalog-closed-phone");
+    await context.close();
+  }
+  fs.rmSync(folder, { recursive: true, force: true });
+  return timings;
+}
+
 async function capture(url, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
@@ -1002,7 +1168,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals") continue;
+          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -1039,6 +1205,7 @@ async function capture(url, dir) {
     if (pages.includes("locations")) Object.assign(timings, { locations: await locationScenes(browser, url, dir) });
     if (pages.includes("catalogue")) Object.assign(timings, { catalogue: await catalogueScenes(browser, url, dir) });
     if (pages.includes("catalog-visuals")) Object.assign(timings, { catalogVisuals: await catalogVisualScenes(browser, url, dir) });
+    if (pages.includes("catalog-pwa")) Object.assign(timings, { catalogPwa: await catalogPwaScenes(browser, url, dir) });
     if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
     if (pages.includes("staff-directory")) Object.assign(timings, { staffDirectory: await directoryScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);
