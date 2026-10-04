@@ -869,16 +869,16 @@ async function catalogueScenes(browser, url, dir) {
     await page.waitForSelector(".cat-dup__card.is-armed");
     await shot(page, `catalogue-duplicate-${size}`);
     // Not sure: kept and counted, the rest can wait.
-    await name.fill("Grey cable bag");
+    await name.fill(`Grey cable bag ${size}`);
     await page.locator(".cat-choice", { hasText: "Not sure" }).click();
     await page.getByLabel("Category").fill("");
     await page.getByLabel("Counted in").fill("");
     await shot(page, `catalogue-reviewlater-${size}`);
     await page.getByRole("button", { name: /^Save & next/ }).click();
-    await page.waitForSelector("#cat-list .cat-row");
+    await page.getByText("All saved").waitFor();
     // A save that fails offline, then goes through.
     await context.setOffline(true);
-    await name.fill("Label printer");
+    await name.fill(`Label printer ${size}`);
     await page.locator(".cat-choice", { hasText: "Borrow" }).first().click();
     await page.getByLabel("Category").fill("EQUIPMENT");
     await page.getByLabel("Counted in").fill("piece");

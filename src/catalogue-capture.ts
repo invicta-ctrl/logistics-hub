@@ -210,9 +210,9 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     // Everything "Use these" would fill is named here first: nothing changes silently, including the stock area behind "More details".
     mount($("#cat-why"), lines.length && pending ? html`<span>${icon("info")}Suggested: ${[suggestions.behaviour && BEHAVIOUR_LABELS[suggestions.behaviour.value], suggestions.category && categoryName(suggestions.category.value), suggestions.unit?.value, stock && (stock.value === "Pantry" ? "Pantry" : "General stock")].filter(Boolean).join(" · ")}. ${lines[0]!.why}.</span> <button type="button" class="text-link" id="cat-use-all">Use these</button>` : html``);
     const categories = [...new Set([suggestions.category?.value, ...recent().map((item) => item.category), ...(inventory?.categories ?? [])].filter((entry): entry is string => Boolean(entry) && entry !== UNSORTED_CATEGORY))];
-    mount($("#cat-category-chips"), html`${categories.slice(0, 5).map((category) => chip(categoryName(category), `data-category="${category}"`, category === suggestions.category?.value))}`);
+    mount($("#cat-category-chips"), html`${categories.slice(0, 4).map((category) => chip(categoryName(category), `data-category="${category}"`, category === suggestions.category?.value))}`);
     const common = [suggestions.unit?.value, ...recent().map((item) => item.unit), ...(inventory?.units ?? [])].filter((entry): entry is string => Boolean(entry));
-    mount($("#cat-unit-chips"), html`${[...new Set(common)].slice(0, 5).map((unit) => chip(unit, `data-unit="${unit}"`, unit === suggestions.unit?.value))}`);
+    mount($("#cat-unit-chips"), html`${[...new Set(common)].slice(0, 4).map((unit) => chip(unit, `data-unit="${unit}"`, unit === suggestions.unit?.value))}`);
     mount($("#cat-categories"), html`${(inventory?.categories ?? []).map((category) => html`<option value="${category}">`)}`);
     mount($("#cat-units"), html`${(inventory?.units ?? []).map((unit) => html`<option value="${unit}">`)}`);
     const later = behaviour === "REVIEW_LATER";
