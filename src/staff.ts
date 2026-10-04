@@ -174,12 +174,15 @@ export function shell(session: Session, section: Section, main: Html): void {
     if (native) menu.hidePopover();
     else { menu.hidden = true; expanded(false); }
   });
-  document.querySelector("#staff-logout")!.addEventListener("click", async () => {
-    try { await api("/api/staff/logout", { method: "POST" }); } catch { /* the session is dropped client-side regardless */ }
-    // Signing out ends offline cataloguing on this device too (the server ended its lease); what waits here stays for the next sign-in.
-    await setAccess(null);
-    navigate("/staff", true);
-  });
+  document.querySelector("#staff-logout")!.addEventListener("click", signOut);
+}
+
+/** Signs out here, in the staff workspace or the Catalog. */
+export async function signOut(): Promise<void> {
+  try { await api("/api/staff/logout", { method: "POST" }); } catch { /* the session is dropped client-side regardless */ }
+  // Signing out ends offline cataloguing on this device too (the server ended its lease); what waits here stays for the next sign-in.
+  await setAccess(null);
+  navigate("/staff", true);
 }
 
 
