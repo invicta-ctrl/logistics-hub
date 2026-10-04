@@ -22,7 +22,8 @@ V1.6 adds no cataloguing feature: the capture screen, suggestions (`catalogue-su
 | Capture screen | `src/catalogue-capture.ts` | reads the snapshot; finishes offline |
 | Service worker | `src/sw.ts`, `vite.config.ts` | `CATALOGUE_SCREENS`, `__BUILD__.catalogue`, `KEEP_CATALOGUE` / `CATALOGUE_KEPT` |
 | Manifests and icons | `public/catalogue.webmanifest`, `public/icons/catalog-*.png`, linked from `staff/catalogue.html` (and `index.html` for Self-Service) | |
-| Tests | `tests/catalogue-offline.test.ts`, `tests/browser/catalogue.spec.ts` (V1.6 block), `tests/worker-browser/worker-v16-catalog-pwa.spec.ts` | |
+| Checking a place (V1.7) | `src/audits.ts`, `src/audit-screen.ts`, migration `0028` | the check screen, the summary and review; observations queued in the store and sent by `catalogue-sync.ts` |
+| Tests | `tests/catalogue-offline.test.ts`, `tests/browser/catalogue.spec.ts` (V1.6 block), `tests/worker-browser/worker-v16-catalog-pwa.spec.ts`; V1.7: `tests/audits.test.ts`, `tests/browser/audit.spec.ts`, `tests/worker-browser/worker-v17-location-audit.spec.ts` | |
 
 ## 3. Two apps, one site (the install decision)
 
@@ -49,7 +50,8 @@ V1.6 adds no cataloguing feature: the capture screen, suggestions (`catalogue-su
 - **Neither cookie passes as the other.** `signedIn()` verifies each with its own key and requires the right kind of id. A lease is used only when there is no valid full session, and only for:
   - `GET /api/staff/catalogue`, answered with the member's own open session only (no one else's, no Review later list), `GET`/`DELETE /api/staff/catalogue/offline`, `GET /api/staff/catalogue/snapshot`;
   - `POST /api/staff/catalogue/sessions`; `GET` (its own member's only) and `PATCH` a session; `POST …/captures`, `POST …/finish` (changing a session stays its owner's alone, as in V1.5);
-  - `PUT /api/staff/items/:id/photo` only for an item one of this account's sessions catalogued, and only its first photo (`expected` empty).
+  - `PUT /api/staff/items/:id/photo` only for an item one of this account's sessions catalogued, and only its first photo (`expected` empty);
+  - V1.7, checking a place: `GET`/`POST /api/staff/audits` (its own checks only; who else is checking and finished checks need a sign-in), `GET`/`PATCH` its own check, `POST …/observations` and `…/finish`. Settling a check's findings (`…/review`, `…/resolve`) changes stock or a record and needs a full sign-in.
   Everything else answers 401, exactly as with no sign-in (tested route by route).
 - **Bounded and revocable.** 7 days, moved a full week ahead (at most once a day) whenever the Catalogue opens online with a full sign-in. Being a session row, it ends with every way a session ends: **sign out everywhere**, a password change or reset, a change of role or access, deactivation (no lease of an inactive account is honoured), owner recovery. **Signing out on the device** ends the lease there too. **Turn off offline cataloguing** ends it (audited `CATALOGUE_OFFLINE_OFF`; turning on is `CATALOGUE_OFFLINE_ON`). A device holds one lease: a member turning it on where another member's lease was left ends that one. Expired rows are swept with old sessions.
 - **Scoped to Logistics staff.** The same `hubAccess` and must-change-password checks apply on a lease.
@@ -57,14 +59,16 @@ V1.6 adds no cataloguing feature: the capture screen, suggestions (`catalogue-su
 
 ## 5. What the device keeps
 
-IndexedDB `logistics-hub-catalogue`, version 2 (version 1 was V1.5's outbox; its captures are kept on upgrade):
+IndexedDB `logistics-hub-catalogue`, version 3 (version 1 was V1.5's outbox, version 2 V1.6's; what an older page left is kept on upgrade):
 
 | Store | Holds | Personal data |
 | --- | --- | --- |
 | `captures` | each capture not yet fully on the server: the request as it will be sent, its photo (display and thumbnail JPEG), its state, and `owner` (the account that captured it) | the photo; nothing about people |
 | `sessions` | the session open here (with what the server last said about it: place, counts, newest captures, so it reopens offline), one started here offline, one finished here not yet reported | the member's display name as the session owner |
 | `meta.access` | account id, display name, username, role, access, lease end | the member's own name and username |
-| `meta.snapshot` | the catalog snapshot (`GET /api/staff/catalogue/snapshot`): each item's id, name, other names, category, type, how used, unit, stock area, status, model, serial number, place, photo hash and on hand; categories and units in use; the place tree | none: no notes, loans, borrowers, history, audit, or staff |
+| `meta.snapshot` | the catalog snapshot (`GET /api/staff/catalogue/snapshot`): each item's id, name, other names, category, type, how used, unit, stock area, status, model, serial number, place, photo hash and on hand; categories and units in use; the place tree with each place's directions (V1.7) | none: no notes, loans, borrowers, history, audit, or staff |
+| `audits` (V1.7) | each check of a place this device works on: what the server last said (expected items, latest observation each, findings) so it reopens offline, a check started here offline until the server has it, a pause or note about the place, and a finish made here until it is sent | the member's display name as the check's owner |
+| `observations` (V1.7) | each thing seen in a check that the server does not have yet: item, outcome, the figure shown, the count, a note | a note staff wrote about a record or an unlisted thing |
 
 Nothing personal goes to Cache Storage; the service worker caches only the app's files.
 
@@ -80,6 +84,14 @@ Nothing personal goes to Cache Storage; the service worker caches only the app's
 - **Shared devices.** Signing in ends a lease another member left on the device (the server, at sign-in), and signing out forgets this device's access (the page), so a device never catalogues as someone who is not signed in there.
 - **"A different one".** A capture checked against one taken just before it names that capture's item once it exists, whether it was sent before or after (persisted in `after`, and remembered for the page's life).
 - **One term per concept** (amendment §4): a capture the server does not have is **Not saved yet** (row) / **N waiting to send** (bar), online or offline; being offline is said once, in the note above the form.
+
+### Checks of a place (V1.7)
+
+- **Same sender, same rules.** After captures, `sendChecks()` sends each of this member's checks in order: a start made offline (`POST /api/staff/audits` with the id the device proposed, or the person's open check of that place), each observation oldest first, then a pause or note, then the finish once nothing in it waits. One Web Lock, the same back-off, the same 401 rule.
+- **Order matters.** The server keeps an item's latest observation by arrival, so within a check sending stops at the first observation that must wait: a second look never overtakes the first.
+- **Someone else checking that place** (a start refused 409): what was seen here stops and waits for a person (Discard on the check screen); nothing is filed under the other check.
+- **The connection is read live.** A page opened offline asks the server again once the connection is back, and every refresh lays what this device has not sent over the server's answer (`withHeld`), so progress never goes backwards.
+- **Conflicts are kept, not resolved silently.** Each observation stores the on-hand figure the device showed and the server's on arrival. If they differ, or stock moved after it arrived, the review shows "Stock changed since this was counted" and asks for a fresh count, posted against the figure on screen then (the ledger's own guard refuses anything else).
 
 ## 7. Service worker and updates
 

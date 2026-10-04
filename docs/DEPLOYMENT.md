@@ -252,6 +252,17 @@ Rollback before the merge: the migration only adds objects, so the Time Travel b
 
 V1.6 adds no migration, bucket or secret: an offline cataloguing lease is a `staff_sessions` row with a `CL-` id, signed with a key derived from the existing `SESSION_SECRET`. It deploys like any change once on `main`. Self-Service's manifest scope changes from `/` to `/self-service`; installed phones pick it up by themselves. The optional real-device check is in `docs/road-to-v2/releases/v1.6.md`.
 
+## V1.7 Physical inventory & location audits: production preparation
+
+V1.7 **needs migration `0028_location_audits.sql` before its code reaches `main`**, and no new bucket or secret. The migration only adds: three tables (`location_audits`, `location_audit_observations`, `location_audit_resolutions`, all empty), their indexes and finality triggers. No existing table, item, movement, quantity or place changes. The code live before it never reads them.
+
+1. **Put the manifest on `main`**: `git fetch origin && git switch main && git pull && git checkout origin/road-to-v2/v1.7-physical-inventory -- ops/releases/v1.7.json && git commit -m "ops: V1.7 release manifest" && git push`. The manifest pins `0028` by SHA-256 (`58e90e5b…f073d`).
+2. **Preflight, then prepare** (Cloud Operations, below): `release` = `v1.7`, `expected_sha` = the head of `road-to-v2/v1.7-physical-inventory`, `mode` = `preflight`; then `prepare` with `confirm` = `PREPARE v1.7 <that sha>`. Expected: exactly `0028` pending; after it, 17 schema objects added, no table changed, the three new tables empty, and items, movements, on hand, loans and phone events equal before and after.
+3. **Integrate** V1.7 to `main` by the normal protocol (CI green); Workers Builds deploys it. The new code reads the new tables, so the migration comes first.
+4. **Check signed in** (optional): in the Catalog, check a real shelf (Here, a different count, can't find, found something), pause and resume, finish, settle one count and leave one as it is, and read Activity and the item's history.
+
+Rollback before the merge: the migration only adds objects, so the Time Travel bookmark in the report restores the previous state, or drop the three empty tables and their triggers; the live code ignores them. After the merge, checks and their observations and resolutions are kept (append-only); a count posted at a review is corrected by a new count.
+
 ## Cloud Operations (production preparation from GitHub, not from a PC)
 
 From V1.2 on, preparing production for a release (an R2 bucket, a D1 migration) is done by the workflow **Production operations** (`.github/workflows/production-ops.yml`), driven by a manifest in `ops/releases/<release>.json`. Authority and the full list of safety rules: `docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`. The older manual runbooks above (Parts 5B and 6) stay as the emergency fallback and as history.

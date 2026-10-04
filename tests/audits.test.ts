@@ -236,6 +236,8 @@ describe("the review", () => {
       await observe(one, id, { itemId: tape, outcome: "NEEDS_REVIEW", note: "Looks like a different size" });
     });
     const by = (outcome: string) => found.find((entry) => entry.outcome === outcome)!;
+    // A few found here say nothing about the item's stock elsewhere: no count is posted from it.
+    expect((await resolve(one, by("FOUND_HERE").id, { action: "POSTED_COUNT" })).status).toBe(400);
     expect((await resolve(one, by("FOUND_HERE").id, { action: "MOVED_HERE" })).status).toBe(200);
     expect(locationOf(items.stray)).toBe(room);
     // The finding still says where the item was recorded when it was seen, not where it is now.
@@ -300,7 +302,7 @@ describe("freshness, derived from the record", () => {
     const tape = await item("Tape", room, 5);
     const glue = await item("Glue", room, 3);
     const fresh = async (id: string) => (await json<{ freshness: { lastVerifiedAt: string | null; openDiscrepancy: { outcome: string } | null } }>(as(one, `/api/staff/items/${id}`))).freshness;
-    expect(await fresh(tape)).toEqual({ lastVerifiedAt: null, openDiscrepancy: null });
+    expect(await fresh(tape)).toEqual({ lastVerifiedAt: null, lastCountedAt: null, openDiscrepancy: null });
     const id = await start(one, room);
     await observe(one, id, { itemId: tape, outcome: "CONFIRMED", expectedOnHand: 5 });
     await observe(one, id, { itemId: glue, outcome: "CANT_FIND", expectedOnHand: 3 });

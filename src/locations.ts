@@ -20,8 +20,9 @@ export async function locationList(db: D1Database) {
   const { results } = await db.prepare(`SELECT l.id, l.name, l.parent_id AS parentId, l.directions, l.visibility, l.active, l.updated_at AS updatedAt,
       l.media_id AS photoId, l.media_width AS photoWidth, l.media_height AS photoHeight,
       (SELECT COUNT(*) FROM items i WHERE i.location_id = l.id) AS itemCount,
-      (SELECT COUNT(*) FROM location_reports r JOIN items i ON i.id = r.item_id WHERE r.resolved_at IS NULL AND i.location_id = l.id) AS openReports
-    FROM locations l ORDER BY l.name COLLATE NOCASE, l.id`).all<Row & { itemCount: number; openReports: number }>();
+      (SELECT COUNT(*) FROM location_reports r JOIN items i ON i.id = r.item_id WHERE r.resolved_at IS NULL AND i.location_id = l.id) AS openReports,
+      (SELECT MAX(a.finished_at) FROM location_audits a WHERE a.location_id = l.id AND a.status = 'FINISHED') AS lastCheckedAt
+    FROM locations l ORDER BY l.name COLLATE NOCASE, l.id`).all<Row & { itemCount: number; openReports: number; lastCheckedAt: string | null }>();
   return results.map(({ photoId, photoWidth, photoHeight, active, ...row }) => ({
     ...row, active: active === 1, photo: photoId ? { id: photoId, width: photoWidth!, height: photoHeight! } : null
   }));

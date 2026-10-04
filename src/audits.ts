@@ -277,7 +277,8 @@ export async function auditReview(db: D1Database, actor: Actor, id: string) {
 /**
  * Settles one discrepancy, after the check is finished, with a full sign-in. Every path goes through what already guards that change:
  *   POSTED_COUNT  a count movement (the ledger's COUNT, keyed `audit-<observation>` so a retry never posts twice), guarded by the figure
- *                 the count was made against; when stock moved since, a fresh count (`counted` + the figure on screen) is required
+ *                 the count was made against; when stock moved since, a fresh count (`counted` + the figure on screen) is required.
+ *                 Only for a count differs or can't find, at the item's own place: a count is the item's whole stock
  *   MOVED_HERE    the item's place becomes where it was seen (the bulk Move, with its own "changed meanwhile" guard and audit entry)
  *   REPORTED      an "I can't find it" / "Location looks wrong" report for staff to follow up
  *   NO_CHANGE     a decision to leave the record as it is, with the reason
@@ -306,7 +307,9 @@ export async function resolveObservation(db: D1Database, actor: Actor, observati
   let movementId: string | null = null;
   let reportId: string | null = null;
   if (chosen === "POSTED_COUNT") {
-    if (found.outcome === "NEEDS_REVIEW") throw new InputError(400, "Nothing was counted for this one.");
+    // A count is the item's whole stock, so it stands only for an item checked at its own place: a few found somewhere else say
+    // nothing about the rest (move it, report it, or count it where it is kept).
+    if (found.outcome !== "MISMATCH" && found.outcome !== "CANT_FIND") throw new InputError(400, "Only a count made at the item's own place can be posted.");
     // A fresh count replaces a stale one: it is made against the figure on screen now, and recorded as a new observation would be.
     const fresh = body.counted !== undefined;
     // As recorded, a count stands only if nothing moved between what the counter saw and its arrival; the ledger's guard covers the rest.
@@ -342,13 +345,15 @@ export async function resolveObservation(db: D1Database, actor: Actor, observati
 }
 
 /**
- * Derived freshness for an item, never stored: when it was last seen at its recorded place, and the latest discrepancy that nothing has
- * settled since (no resolution, no later count, no later confirmation).
+ * Derived freshness for an item, never stored: when it was last seen at its recorded place, when it was last counted, and the latest
+ * discrepancy that nothing has settled since (no resolution, no later count, no later confirmation).
  */
 export async function itemFreshness(db: D1Database, itemId: string) {
-  const [verified, open] = await db.batch([
+  const [verified, counted, open] = await db.batch([
     db.prepare(`SELECT MAX(o.received_at) AS at FROM location_audit_observations o JOIN items i ON i.id = o.item_id
       WHERE o.item_id = ? AND o.outcome IN ('CONFIRMED','MISMATCH') AND o.recorded_location_id IS i.location_id`).bind(itemId),
+    // Counts recorded in the Hub only: a migrated row is not a physical count anyone made here.
+    db.prepare("SELECT MAX(created_at) AS at FROM inventory_movements WHERE item_id = ? AND movement_type = 'COUNT_ADJUSTMENT' AND imported_from IS NULL").bind(itemId),
     db.prepare(`SELECT o.outcome, o.received_at AS at, o.audit_id AS auditId FROM location_audit_observations o JOIN location_audits a ON a.id = o.audit_id
       WHERE o.item_id = ?1 AND a.status = 'FINISHED' AND o.outcome IN (${DISCREPANCIES.map((outcome) => `'${outcome}'`).join(",")})
         AND NOT EXISTS (SELECT 1 FROM location_audit_resolutions r WHERE r.observation_id = o.id)
@@ -358,6 +363,7 @@ export async function itemFreshness(db: D1Database, itemId: string) {
   ]);
   return {
     lastVerifiedAt: (verified!.results[0] as { at: string | null } | undefined)?.at ?? null,
+    lastCountedAt: (counted!.results[0] as { at: string | null } | undefined)?.at ?? null,
     openDiscrepancy: (open!.results[0] as { outcome: Outcome; at: string; auditId: string } | undefined) ?? null
   };
 }
