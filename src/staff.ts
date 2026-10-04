@@ -10,6 +10,7 @@ import { type Step, openWhereIsIt } from "./where-is-it";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { bulkBar } from "./bulk-select";
 import { placeList } from "./catalogue-places";
+import { setAccess } from "./catalogue-store";
 import { ApiError, MARK, type Html, type IconName, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, raw, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Item = {
@@ -175,6 +176,8 @@ export function shell(session: Session, section: Section, main: Html): void {
   });
   document.querySelector("#staff-logout")!.addEventListener("click", async () => {
     try { await api("/api/staff/logout", { method: "POST" }); } catch { /* the session is dropped client-side regardless */ }
+    // Signing out ends offline cataloguing on this device too (the server ended its lease); what waits here stays for the next sign-in.
+    await setAccess(null);
     navigate("/staff", true);
   });
 }
