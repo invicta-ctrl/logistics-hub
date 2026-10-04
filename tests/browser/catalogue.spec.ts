@@ -179,6 +179,19 @@ test.describe("capturing a mixed shelf", () => {
     expect(server.state.captures[0]).toMatchObject({ name: "stapler", acknowledged: ["ITM-0002"] });
   });
 
+  test("an item saved a moment ago is noticed as a possible match before the server's list has caught up", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await begin(page, server);
+    await name(page).fill("Paper trimmer");
+    await pick(page, "Borrow").click();
+    await page.getByLabel("Category").fill("EQUIPMENT");
+    await page.getByLabel("Counted in").fill("piece");
+    await page.getByRole("button", { name: "Save & next" }).click();
+    await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
+    await name(page).fill("paper trimmer");
+    await expect(page.getByRole("group", { name: "Possible matches" })).toContainText("Paper trimmer");
+  });
+
   test("Enter moves to the next field instead of saving", async ({ page }) => {
     const server = serve(page, { active: true });
     await begin(page, server);
@@ -336,5 +349,55 @@ test.describe("bulk edits", () => {
     const dialog = page.locator("#bulk-sheet");
     await expect(dialog.locator("#bulk-preview")).toContainText("1 item will change");
     await expect(dialog.locator("#bulk-preview")).toContainText("1 item will be skipped until it is classified");
+  });
+});
+
+test.describe("accessibility", () => {
+  for (const width of [320, 390, 1366]) {
+    test(`the capture screen at ${width} px: one heading, labelled fields, named controls, 200% text fits`, async ({ page }) => {
+      const server = serve(page, { active: true });
+      await server.ready;
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/staff/catalogue?session=${SESSION_ID}`);
+      await expect(name(page)).toBeVisible();
+      await expect(page.locator("main h1")).toHaveCount(1);
+      const problems = await page.evaluate(() => {
+        const unlabelled = [...document.querySelectorAll("#cat input:not([type=hidden]), #cat select, #cat textarea")].filter((field) =>
+          !field.getAttribute("aria-label") && !field.getAttribute("aria-labelledby") && !field.closest("label") && !(field.id && document.querySelector(`label[for="${CSS.escape(field.id)}"]`)));
+        const unnamed = [...document.querySelectorAll("#cat button, #cat a[href]")].filter((control) => !(control.textContent ?? "").trim() && !control.getAttribute("aria-label") && !control.getAttribute("title"));
+        return { unlabelled: unlabelled.map((field) => field.id), unnamed: unnamed.map((control) => control.id || control.className) };
+      });
+      expect(problems).toEqual({ unlabelled: [], unnamed: [] });
+      await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+    });
+  }
+
+  test("mistakes are announced and reach the field, and the choice is a labelled group of toggle buttons", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await begin(page, server);
+    await expect(page.getByRole("group", { name: "How is it used?" })).toBeVisible();
+    await page.getByRole("button", { name: "Save & next" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Give it a name" })).toBeVisible();
+    await expect(name(page)).toBeFocused();
+    await expect(name(page)).toHaveAttribute("aria-invalid", "true");
+    await name(page).fill("Tape");
+    await page.getByRole("button", { name: "Save & next" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Choose how it is used" })).toBeVisible();
+    await pick(page, "Consume").click();
+    await expect(pick(page, "Consume")).toHaveAttribute("aria-pressed", "true");
+    await expect(pick(page, "Borrow")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("Select mode names every checkbox and tells the count to a screen reader", async ({ page }) => {
+    const server = serve(page, { items: structuredClone(MANY.slice(0, 20)) });
+    await server.ready;
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/staff/items");
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await page.getByRole("checkbox", { name: "Select Sample Item 2", exact: true }).check();
+    await expect(page.locator("#bulk-bar").getByRole("status")).toContainText("1 selected");
+    const unnamed = await page.evaluate(() => [...document.querySelectorAll(".select-box")].filter((box) => !box.getAttribute("aria-label")).length);
+    expect(unnamed).toBe(0);
   });
 });
