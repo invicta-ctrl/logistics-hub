@@ -12,6 +12,8 @@ export type CatalogItem = {
   action: SelfServiceAction; available: number; location: string | null; audience: string | null;
   /** The item's photo id, if it has one (absent in a snapshot saved before photos were public). */
   photo?: string | null;
+  /** Absent in older snapshots: the bundled resolver computes the automatic icon. */
+  iconKey?: string | null;
   /** Its place, when staff share it with Self-Service (absent in a snapshot saved before places); `location` is that place's full path. */
   locationId?: string | null;
 };
