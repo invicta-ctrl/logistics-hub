@@ -441,6 +441,9 @@ export async function captureScreen(session: Session, sessionId: string): Promis
         if (!next) break;
         retryAt.delete(next.id);
         await send(next);
+        // Once the server has everything the item leaves the queue; its row must come back from the server's list in the same
+        // moment, so it never seems to vanish in between.
+        if (!(await entries()).some((entry) => entry.id === next.id)) await reload();
         drawList();
       }
     } finally {
@@ -450,7 +453,6 @@ export async function captureScreen(session: Session, sessionId: string): Promis
       window.clearTimeout(retryTimer);
       if (stopped) return;
       if (Number.isFinite(soon)) retryTimer = window.setTimeout(() => void pump(), Math.max(500, soon - Date.now()));
-      await reload();
       drawList();
       void poll.refresh();
     }
