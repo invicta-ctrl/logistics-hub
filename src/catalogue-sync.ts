@@ -22,6 +22,9 @@ let listening = false;
 let ended = false;
 const retryAt = new Map<string, number>();
 const attempts = new Map<string, number>();
+/** The item each capture sent from this page became, by request id: a capture taken afterwards can still name it ("a different one"). */
+const savedAs = new Map<string, string>();
+export const savedItem = (requestId: string): string | null => savedAs.get(requestId) ?? null;
 
 /** Something was sent, refused or held: the screens redraw. */
 export const onSyncChange = (listener: () => void): (() => void) => {
@@ -102,13 +105,19 @@ async function failed(entry: Entry, error: unknown): Promise<void> {
 }
 
 /** The possible matches the person saw and saved past: item ids, including captures taken just before this one that have items now. */
-const acknowledged = (entry: Entry): string[] => [...new Set([...((entry.body.acknowledged as string[] | undefined) ?? []), ...entry.after.filter((id) => id.startsWith("ITM-"))])];
+const acknowledged = (entry: Entry): string[] => [...new Set([
+  ...((entry.body.acknowledged as string[] | undefined) ?? []),
+  ...entry.after.map((id) => id.startsWith("ITM-") ? id : savedAs.get(id)).filter((id): id is string => Boolean(id))
+])];
 
 /** Where the server keeps the entry's session, starting it there first if this device started it without a connection. */
 async function serverSession(entry: Entry): Promise<string> {
   const record = (await sessions()).find((each) => each.id === entry.sessionId);
   if (!record) return entry.sessionId;
   if (record.serverId) return record.serverId;
+  // A session finished here before this one was started must be finished on the server first, or the start would find it still
+  // open and file this session's captures under it. Captures go oldest first, so everything in it has been sent by now.
+  await finishSessions();
   // The capture's own place: it is where the person was standing, and is a place the server can check.
   const started = await api<{ id: string }>("/api/staff/catalogue/sessions", { method: "POST", body: JSON.stringify({ id: record.id, locationId: entry.body.locationId }) });
   await keepSession({ ...record, serverId: started.id });
@@ -134,6 +143,7 @@ async function send(entry: Entry): Promise<void> {
       target = await serverSession(entry);
       const saved = await api<{ id: string }>(`/api/staff/catalogue/sessions/${target}/captures`, { method: "POST", body: JSON.stringify({ ...entry.body, acknowledged: acknowledged(entry) }) });
       attempts.delete(entry.id);
+      savedAs.set(entry.id, saved.id);
       await settle(entry, { itemId: saved.id, state: "waiting", message: null, matches: null });
       // Captures checked against this one ("a different one") now name its item, even after a reload.
       for (const other of await entries()) if (other.after.includes(entry.id)) await settle(other, { after: other.after.map((id) => id === entry.id ? saved.id : id) });
