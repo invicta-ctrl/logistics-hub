@@ -50,8 +50,8 @@ describe("public Lending Hub", () => {
     const snack = await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: "Paper Plates", itemType: "Consumable", openingQuantity: 9 })).json() as { id: string };
     const items = await publicItems();
     expect(items).toEqual([
-      { id: created.id, name: "Folding Table", category: "FURNITURE", unit: "piece", itemType: "Loanable", available: 4, audience: "STUDENTS_AND_USC_STAFF", photo: null },
-      { id: snack.id, name: "Paper Plates", category: "FURNITURE", unit: "piece", itemType: "Consumable", available: 9, audience: "STUDENTS_AND_USC_STAFF", photo: null }
+      { id: created.id, name: "Folding Table", iconKey: "picnic-table", category: "FURNITURE", unit: "piece", itemType: "Loanable", available: 4, audience: "STUDENTS_AND_USC_STAFF", photo: null },
+      { id: snack.id, name: "Paper Plates", iconKey: "soup", category: "FURNITURE", unit: "piece", itemType: "Consumable", available: 9, audience: "STUDENTS_AND_USC_STAFF", photo: null }
     ]);
   });
 
