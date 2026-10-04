@@ -80,14 +80,15 @@ export async function sessionDetail(db: D1Database, actor: Actor, id: string) {
 /**
  * What a device needs to catalogue without a connection (V1.6), and what the capture screen reads online too, so suggestions and
  * possible matches come out the same either way: each item's name, kind, identity signals and place, the categories and units in
- * use, and the place tree. Nothing about people, loans, notes or history.
+ * use, and the place tree with each place's directions (V1.7: a check of a place shows them offline). Nothing about people, loans,
+ * notes or history.
  */
 export async function catalogueSnapshot(db: D1Database) {
   const [items, places] = await db.batch([
     db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.unit, i.stock_area AS stockArea, i.status,
         i.model, i.serial_number AS serialNumber, i.location_id AS locationId, p.dhash AS photoHash, COALESCE(b.on_hand, 0) AS onHand
       FROM items i LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN inventory_balances b ON b.id = i.id ORDER BY i.name COLLATE NOCASE, i.id`),
-    db.prepare("SELECT id, name, parent_id AS parentId, active FROM locations ORDER BY name COLLATE NOCASE, id")
+    db.prepare("SELECT id, name, parent_id AS parentId, active, directions FROM locations ORDER BY name COLLATE NOCASE, id")
   ]);
   const rows = items!.results as Array<{ category: string; unit: string }>;
   return {

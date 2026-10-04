@@ -45,7 +45,7 @@
 .cg-mode__action:hover { background: var(--gold-action-hover); }
 
 /* ---------- Main column ---------- */
-.cg-main { display: grid; width: 100%; max-width: 46rem; margin-inline: auto; align-content: start; gap: var(--space-4); padding: var(--space-5) max(var(--space-4), env(safe-area-inset-right)) calc(var(--space-12) + env(safe-area-inset-bottom)) max(var(--space-4), env(safe-area-inset-left)); }
+.cg-main { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; max-width: 46rem; margin-inline: auto; align-content: start; gap: var(--space-4); padding: var(--space-5) max(var(--space-4), env(safe-area-inset-right)) calc(var(--space-12) + env(safe-area-inset-bottom)) max(var(--space-4), env(safe-area-inset-left)); }
 .cg-band ~ .cg-main { position: relative; margin-top: calc(-1 * var(--space-8)); padding-top: 0; }
 .cg-main > .empty { margin-top: var(--space-8); }
 #cat-start { display: grid; gap: var(--space-4); }
@@ -69,4 +69,121 @@
 
 @media (min-width: 48rem) {
   .cg-hero { padding-top: var(--space-8); }
+}
+
+/* ---------- Checking a place (V1.7) ---------- */
+.ck { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
+/* Long labels wrap rather than push the page wider (large text, narrow phones). */
+.ck .button { white-space: normal; text-align: center; }
+.ck-head { display: grid; gap: var(--space-1); }
+.ck-head__kicker { color: var(--brand); font-size: var(--text-sm); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.ck-head h1 { font-family: var(--serif); font-size: clamp(1.75rem, 7vw, 2.25rem); font-weight: 500; letter-spacing: -.02em; line-height: 1.1; overflow-wrap: anywhere; }
+.ck-head__meta { color: var(--text-2); font-size: var(--text-sm); }
+.ck-paused { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-top: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--line-warn); border-radius: var(--radius-lg); background: var(--warn-tint); color: var(--warn-ink); font-size: var(--text-sm); }
+.ck-paused > span { flex: 1 1 14rem; }
+
+/* Progress first, in numbers and a bar: "31 / 38 checked" is the question every glance asks. */
+.ck-progress { position: sticky; top: calc(3.5rem + env(safe-area-inset-top)); z-index: 5; display: grid; gap: var(--space-2); margin-inline: calc(-1 * var(--space-4)); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); background: var(--bg); }
+.ck-progress__count { font-size: var(--text-md); }
+.ck-progress__count strong { font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+.ck-progress__findings { color: var(--warn); font-weight: 600; }
+.ck-bar { display: block; width: 100%; height: .5rem; overflow: hidden; border: 0; border-radius: var(--radius-pill); background: var(--line); color: var(--ok-dot); appearance: none; }
+.ck-bar::-webkit-progress-bar { border-radius: inherit; background: var(--line); }
+.ck-bar::-webkit-progress-value { border-radius: inherit; background: var(--ok-dot); transition: width var(--dur-3) var(--ease); }
+.ck-bar::-moz-progress-bar { border-radius: inherit; background: var(--ok-dot); }
+.ck-note { display: flex; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line-warn); border-radius: var(--radius-lg); background: var(--warn-tint); color: var(--warn-ink); font-size: var(--text-sm); line-height: 1.5; }
+.ck-note .icon { flex: none; margin-top: .125rem; color: var(--warn); }
+.ck-stopped { border-radius: var(--radius-lg); }
+
+.ck-place { padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.ck-place summary { display: flex; min-height: var(--target-min); align-items: center; gap: var(--space-2); font-weight: 600; cursor: pointer; }
+.ck-place summary .icon { color: var(--brand); }
+.ck-place > * + * { margin-top: var(--space-3); }
+.ck-place__directions { white-space: pre-line; }
+.ck-place__picture { width: 100%; max-width: 28rem; height: auto; border-radius: var(--radius); }
+.ck-place__flag { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--warn-ink); }
+
+.ck-tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr)); }
+.ck-tabs button { min-height: var(--target); }
+.ck-empty { display: flex; align-items: center; gap: var(--space-2); color: var(--ok); font-weight: 500; }
+.ck-section { font-size: var(--text-lg); }
+
+/* One item per row, its three answers big enough for a thumb, and the rarer one quiet underneath. */
+.ck-list { display: grid; gap: var(--space-2); }
+.ck-row { display: grid; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.ck-row__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.ck-row__main { display: grid; gap: .125rem; min-width: 0; }
+.ck-row__main strong { font-size: var(--text-md); overflow-wrap: anywhere; }
+.ck-row__main span { color: var(--text-2); font-size: var(--text-sm); }
+/* Three across on a phone; fewer when the screen is narrower or the text larger, never wider than the screen. */
+.ck-row__actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 6rem), 1fr)); gap: var(--space-2); }
+.ck-row__actions .button { min-height: 3rem; justify-content: center; padding-inline: var(--space-2); }
+.ck-row__more { flex: none; margin: calc(-1 * var(--space-2)) calc(-1 * var(--space-2)) 0 0; color: var(--text-3); }
+.ck-row.is-checked { padding-block: var(--space-2); background: var(--subtle); }
+.ck-row.is-finding { border-color: var(--line-warn); }
+.ck-row.is-open { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.ck-row__state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: 0; }
+.ck-chip { display: inline-flex; align-items: center; gap: var(--space-1); padding: .125rem var(--space-2); border-radius: var(--radius-pill); background: var(--ok-tint); color: var(--ok); font-size: var(--text-sm); font-weight: 600; }
+.ck-chip .icon { --icon-size: var(--icon-xs); }
+.ck-chip--mismatch, .ck-chip--cant_find, .ck-chip--found_here, .ck-chip--unlisted, .ck-chip--needs_review { background: var(--warn-tint); color: var(--warn-ink); }
+.ck-count { display: grid; gap: var(--space-2); }
+.ck-count .stepper { max-width: 14rem; }
+.ck-count .stepper input { min-height: 3.25rem; font-family: var(--serif); font-size: var(--text-2xl); }
+.ck-count textarea { width: 100%; }
+
+/* The way out of a check stays in reach at the bottom of a phone; on a wider screen it is just the end of the page. */
+.ck-actions { position: sticky; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); margin-inline: calc(-1 * var(--space-4)); padding: var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--bg); }
+.ck-actions__end { display: flex; gap: var(--space-2); margin-left: auto; }
+.ck-actions .button { min-height: var(--target); }
+
+.ck-results { display: grid; gap: var(--space-1); }
+.ck-result { display: grid; width: 100%; min-height: var(--target); gap: .125rem; padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); text-align: left; }
+.ck-result:hover { border-color: var(--text-3); }
+.ck-result span { color: var(--text-2); font-size: var(--text-sm); }
+.ck-found-count { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--subtle); }
+.ck-unlisted { margin-top: var(--space-4); }
+.ck-unlisted summary { min-height: var(--target-min); color: var(--brand); font-weight: 500; cursor: pointer; }
+.ck-unlisted > * + * { margin-top: var(--space-3); }
+
+/* Home: this person's checks to resume, and starting one. */
+.ck-mine { display: grid; gap: var(--space-2); }
+.ck-mine__row { display: flex; min-height: var(--target); align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line-strong); border-radius: var(--radius-lg); color: inherit; text-decoration: none; }
+.ck-mine__row:hover { border-color: var(--brand); }
+.ck-mine__text { display: grid; min-width: 0; }
+.ck-mine__text span { color: var(--text-2); font-size: var(--text-sm); }
+.ck-mine__go { display: inline-flex; flex: none; align-items: center; gap: var(--space-1); color: var(--brand); font-weight: 600; }
+.ck-others { display: flex; gap: var(--space-2); }
+.ck-finished summary, .ck-notchecked summary { min-height: var(--target-min); color: var(--brand); font-weight: 500; cursor: pointer; }
+.ck-finished ul, .ck-notchecked ul { display: grid; gap: var(--space-1); margin-top: var(--space-2); }
+
+/* Summary: the figures an auditor asks for, then the findings to settle. */
+.ck-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); gap: var(--space-2); margin: 0; }
+.ck-stats > div { display: grid; gap: .125rem; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.ck-stats dt { color: var(--text-2); font-size: var(--text-sm); }
+.ck-stats dd { margin: 0; font-family: var(--serif); font-size: var(--text-2xl); font-variant-numeric: tabular-nums; }
+.ck-stats .is-finding { border-color: var(--line-warn); background: var(--warn-tint); }
+.ck-findings { display: grid; gap: var(--space-3); }
+.ck-finding { display: grid; gap: var(--space-2); padding: var(--space-3) 0; border-top: 1px solid var(--line); }
+.ck-finding > span { color: var(--text-2); font-size: var(--text-sm); }
+.ck-finding.is-settled { opacity: .85; }
+.ck-chip--done { justify-self: start; }
+.ck-fresh { display: grid; justify-items: start; gap: var(--space-2); }
+.ck-fresh .stepper { max-width: 14rem; }
+.ck-why summary { display: inline-flex; min-height: var(--target-min); align-items: center; color: var(--text-2); font-size: var(--text-sm); cursor: pointer; }
+.ck-why__form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
+.ck-why__form label { flex-basis: 100%; font-size: var(--text-sm); }
+.ck-why__form input { flex: 1 1 12rem; min-height: var(--target-min); }
+
+@media (min-width: 40rem) {
+  .ck-row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .ck-row__actions { grid-template-columns: repeat(3, minmax(min(100%, 6rem), auto)); }
+  .ck-row.is-open { grid-template-columns: 1fr; }
+}
+
+@media print {
+  .cg-bar, .cat-back, .ck-summary-actions, .ck-why, .ck-finding .where__buttons, .ck-fresh, .toast-region { display: none !important; }
+  .is-catalog { background: #fff; }
+  .cg-main { max-width: none; padding: 0; }
+  .ck-notchecked { display: block; }
+  .ck-notchecked > summary { list-style: none; }
 }

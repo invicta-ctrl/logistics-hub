@@ -1,10 +1,11 @@
-import { type Detail, type Entry, drop, dropSession, entries, keep, keepSession, sessions } from "./catalogue-store";
+import { type AuditDetail, type Detail, type Entry, type ObservationEntry, audits, drop, dropAudit, dropObservation, dropSession, entries, keep, keepAudit, keepObservation, keepSession, observations, sessions } from "./catalogue-store";
 import { ApiError, api } from "./ui";
 
 /*
  * Sends what this device catalogued (catalogue-store.ts), oldest first: a session started here without a connection (under the id
  * this device proposed, so a start whose answer was lost is never a second session), each capture and then its photo, and last a
- * finish made here. Every request is keyed, so a retry, or a save whose answer was lost, never changes anything twice. Only the
+ * finish made here; then the checks of a place made here (V1.7): a check started offline, what was seen in it, a pause or note, and
+ * its finish. Every request is keyed, so a retry, or a save whose answer was lost, never changes anything twice. Only the
  * account that captured something sends it: a device two members share never files one member's work under the other.
  * Nothing is the record until the server has answered; until then the screens show it as waiting.
  */
@@ -77,14 +78,17 @@ async function pass(): Promise<void> {
     changed();
   }
   await finishSessions();
+  await sendChecks();
 }
 
-/** The next try: the soonest retry due, or a finish still to tell the server. */
+/** The next try: the soonest retry due, or a finish (or a check's pause or finish) still to tell the server. */
 async function schedule(): Promise<void> {
   window.clearTimeout(timer);
   if (!sender || ended) return;
-  const waiting = (await entries()).filter((entry) => sendable(entry) && entry.state === "waiting");
-  const finishing = (await sessions()).some((record) => record.finishing && record.owner === sender!.owner);
+  const waiting = [...(await entries()).filter((entry) => sendable(entry) && entry.state === "waiting"),
+    ...(await observations()).filter((entry) => entry.owner === sender!.owner && entry.state === "waiting")];
+  const finishing = (await sessions()).some((record) => record.finishing && record.owner === sender!.owner)
+    || (await audits()).some((record) => record.owner === sender!.owner && (record.finishing || record.pending !== null));
   const soon = Math.min(...waiting.map((entry) => retryAt.get(entry.id) ?? Date.now() + 2_000), finishing ? Date.now() + 15_000 : Infinity);
   if (Number.isFinite(soon)) timer = window.setTimeout(() => void syncNow(), Math.max(500, soon - Date.now()));
 }
@@ -94,7 +98,7 @@ const transient = (error: ApiError) => error.status === 0 || error.status >= 500
 /** A request that has not answered in `ms` counts as a dropped connection, so one stalled request on a weak signal never stalls the rest. */
 const within = (ms: number): RequestInit => typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(ms) } : {};
 /** The next try for an entry: 2 s, doubling to 30 s. */
-const backOff = (entry: Entry) => {
+const backOff = (entry: { id: string }) => {
   const tries = attempts.get(entry.id) ?? 0;
   attempts.set(entry.id, tries + 1);
   retryAt.set(entry.id, Date.now() + Math.min(30_000, 2_000 * 2 ** tries));
@@ -219,3 +223,97 @@ async function finishSessions(): Promise<void> {
     await dropSession(record.id);
   }
 }
+
+/**
+ * Sends this member's checks of a place (V1.7), each in order: a start made offline (under the id this device proposed), then what was
+ * seen, oldest first, then a pause or a note about the place, then a finish once nothing in it waits. Within a check, sending stops at the
+ * first observation that must wait, so a second look at an item never arrives before the first (the server keeps the latest).
+ */
+async function sendChecks(): Promise<void> {
+  for (const record of await audits()) {
+    if (!sender || ended || record.owner !== sender.owner) continue;
+    const held = (await observations()).filter((entry) => entry.auditId === record.id && entry.owner === sender!.owner);
+    if (!held.length && !record.pending && !record.finishing) continue;
+    try {
+      if (!record.serverId) {
+        const started = await api<{ id: string }>("/api/staff/audits", { method: "POST", body: JSON.stringify({ id: record.id, locationId: record.detail.audit.locationId }), ...within(20_000) });
+        record.serverId = started.id;
+        await keepAudit(record);
+      }
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      if (error.status === 401) { ended = true; return; }
+      if (transient(error)) continue;
+      // Someone else is checking this place now: what was seen here waits for a person to decide.
+      for (const entry of held) if (entry.state === "waiting") await keepObservation({ ...entry, state: "stopped", message: error.message });
+      changed();
+      continue;
+    }
+    let blocked = false;
+    for (const entry of held) {
+      if (entry.state !== "waiting") continue;
+      if ((retryAt.get(entry.id) ?? 0) > Date.now()) { blocked = true; break; }
+      try {
+        await api(`/api/staff/audits/${record.serverId}/observations`, { method: "POST", body: JSON.stringify({ id: entry.id, ...entry.body }), ...within(20_000) });
+        attempts.delete(entry.id);
+        retryAt.delete(entry.id);
+        await dropObservation(entry.id);
+        changed();
+      } catch (error) {
+        if (!(error instanceof ApiError)) throw error;
+        if (error.status === 401) { ended = true; return; }
+        if (transient(error)) { backOff(entry); await keepObservation({ ...entry, message: "It will be sent when the connection is back." }); blocked = true; break; }
+        await keepObservation({ ...entry, state: "stopped", message: error.message });
+        changed();
+      }
+    }
+    if (blocked || (await observations()).some((entry) => entry.auditId === record.id && entry.state === "waiting")) continue;
+    try {
+      if (record.pending) {
+        await api(`/api/staff/audits/${record.serverId}`, { method: "PATCH", body: JSON.stringify(record.pending), ...within(20_000) });
+        record.pending = null;
+        await keepAudit(record);
+      }
+      if (record.finishing) {
+        await api(`/api/staff/audits/${record.serverId}/finish`, { method: "POST", ...within(20_000) });
+        // The server has it all now: its summary is the record. What was stopped stays until a person looks.
+        if (!(await observations()).some((entry) => entry.auditId === record.id)) await dropAudit(record.id);
+        else await keepAudit({ ...record, finishing: false, detail: { ...record.detail, audit: { ...record.detail.audit, status: "FINISHED" } } });
+      }
+      changed();
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      if (error.status === 401) { ended = true; return; }
+      // A finished check refuses a pause: it was finished elsewhere, and its pause no longer matters.
+      if (error.status === 409 && record.pending) { record.pending = null; await keepAudit(record); }
+    }
+  }
+}
+
+/** What this device saw in a check and has not sent yet, laid over what the server last said: the device's view of the check. */
+export function withHeld(detail: AuditDetail, held: ObservationEntry[]): AuditDetail {
+  for (const entry of held) {
+    const seen = { id: entry.id, outcome: entry.body.outcome, counted: entry.body.counted ?? null, note: entry.body.note ?? null };
+    const item = detail.items.find((each) => each.id === entry.body.itemId);
+    if (item) item.observation = seen;
+    else if (!detail.extras.some((extra) => extra.id === entry.id)) detail.extras.push({ ...seen, itemId: entry.body.itemId ?? null, name: entry.body.itemId ? detail.extras.find((extra) => extra.itemId === entry.body.itemId)?.name ?? null : entry.body.note ?? null });
+  }
+  detail.checked = detail.items.filter((each) => each.observation).length;
+  return detail;
+}
+
+/** The check as the server has it now (with what this device has not sent yet), kept on the device so it reopens offline; null without a connection. */
+export async function refreshCheck(id: string, owner: string): Promise<AuditDetail | null> {
+  const record = (await audits()).find((each) => each.id === id || each.serverId === id);
+  try {
+    const answer = await api<AuditDetail>(`/api/staff/audits/${record?.serverId ?? id}`, within(20_000));
+    const detail = record ? withHeld(answer, (await observations()).filter((entry) => entry.auditId === record.id)) : answer;
+    if (detail.audit.mine && detail.audit.status !== "FINISHED") await keepAudit({ id: record?.id ?? id, owner, serverId: detail.audit.id, pending: record?.pending ?? null, finishing: record?.finishing ?? false, detail });
+    else if (record && !record.finishing && detail.audit.status === "FINISHED" && !(await observations()).some((entry) => entry.auditId === record.id)) await dropAudit(record.id);
+    return detail;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 0) return null;
+    throw error;
+  }
+}
+
