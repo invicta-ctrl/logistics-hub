@@ -868,6 +868,9 @@ async function catalogueScenes(browser, url, dir) {
     await page.getByRole("button", { name: /^Save & next/ }).click();
     await page.waitForSelector(".cat-dup__card.is-armed");
     await shot(page, `catalogue-duplicate-${size}`);
+    // Start the next item from a clean form (the photo above would otherwise look like the one just saved elsewhere).
+    await page.reload();
+    await page.waitForSelector("#cat-form");
     // Not sure: kept and counted, the rest can wait.
     await name.fill(`Grey cable bag ${size}`);
     await page.locator(".cat-choice", { hasText: "Not sure" }).click();
