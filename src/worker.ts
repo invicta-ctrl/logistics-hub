@@ -1,5 +1,7 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
+import { bulkUpdate } from "./bulk";
+import { capture, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession } from "./catalogue";
 import { itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
 import { locationPicture, publicLocationPicture, putLocationPhoto, removeLocationPhoto } from "./location-media";
 import { reportLocation, resolveReport } from "./location-reports";
@@ -47,6 +49,7 @@ const LOCATION_MEDIA_PATH = /^\/api\/staff\/location-media\/([0-9a-f-]{36})\/([a
 const REPORT_PATH = /^\/api\/staff\/location-reports\/([0-9a-f-]{36})\/resolve$/;
 /** Self-Service shows a shared place's picture by id and size. */
 const PUBLIC_LOCATION_MEDIA_PATH = /^\/api\/public\/location-media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
+const CATALOGUE_PATH = /^\/api\/staff\/catalogue\/sessions\/(CS-[0-9a-f-]{36})(\/captures|\/finish)?$/;
 const ITEM_ID = /^ITM-[A-Za-z0-9-]{1,24}$/;
 const MEDIA_PATH = /^\/api\/staff\/media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
 /** The only public image address: a thumbnail, by id. The 1280 px size has no public address. */
@@ -238,6 +241,17 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (picture && method === "GET") return locationPicture(env.CATALOG_MEDIA, picture[1]!, picture[2]!);
   const resolving = REPORT_PATH.exec(path);
   if (resolving && method === "POST") return json(await resolveReport(env.DB, account, resolving[1]!, await body()));
+  if (path === "/api/staff/catalogue" && method === "GET") return json(await catalogueState(env.DB, account));
+  if (path === "/api/staff/catalogue/sessions" && method === "POST") { const started = await startSession(env.DB, account, await body()); return json(started, started.resumed ? 200 : 201); }
+  const session = CATALOGUE_PATH.exec(path);
+  if (session && !session[2] && method === "GET") return json(await sessionDetail(env.DB, session[1]!));
+  if (session && !session[2] && method === "PATCH") return json(await setSessionPlace(env.DB, account, session[1]!, await body()));
+  if (session?.[2] === "/finish" && method === "POST") return json(await finishSession(env.DB, account, session[1]!));
+  if (session?.[2] === "/captures" && method === "POST") {
+    const saved = await capture(env.DB, account, session[1]!, await body());
+    return "duplicates" in saved ? json({ error: "This may already be in the catalog.", ...saved }, 409) : json(saved, saved.replayed ? 200 : 201);
+  }
+  if (path === "/api/staff/items/bulk" && method === "POST") return json(await bulkUpdate(env.DB, account, await body()));
   if (path === "/api/staff/stock" && method === "GET") return revisioned(request, env.DB, () => stockOverview(env.DB));
   if (path === "/api/staff/loans" && method === "GET") return revisioned(request, env.DB, () => loansOverview(env.DB));
   if (path === "/api/staff/self-service" && method === "GET") return revisioned(request, env.DB, () => selfServiceReview(env.DB));
@@ -282,7 +296,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!form) throw new InputError(400, "Invalid loan form.");
     return json(await createLoan(env.DB, env.EVIDENCE, account, match[1]!, form), 201);
   }
-  const known = match || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/locations", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 

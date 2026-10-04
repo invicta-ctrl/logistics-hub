@@ -27,7 +27,7 @@ const ACTIVITY_TYPES = Object.keys(ACTIVITY_TITLES);
 /** Catalog and restock fields an audit entry may name; anything else in its JSON is never read. */
 const FIELDS: Record<string, string> = {
   name: "name", aliases: "aliases", category: "category", itemType: "type", unit: "unit", status: "status", storageLocation: "location", reorderThreshold: "restock level",
-  lendingAudience: "lending audience", needsReview: "review flag", notes: "notes", stockArea: "stock area", expiresOn: "expiry date", consumptionMode: "how it is used",
+  lendingAudience: "lending audience", needsReview: "review flag", notes: "notes", stockArea: "stock area", expiresOn: "expiry date", consumptionMode: "how it is used", model: "model", serialNumber: "serial number",
   desiredQuantity: "quantity to restock", note: "note",
   // A place (V1.4): LOCATION_UPDATED names the same way.
   directions: "directions", parentId: "place it is inside", visibility: "who sees it", active: "status"
@@ -154,10 +154,10 @@ function arms(admin: boolean): Arm[] {
       from: `audit_log a LEFT JOIN items i ON a.entity_type = 'ITEM' AND i.id = a.entity_id LEFT JOIN staff_accounts c ON c.id = a.actor_user_id
         LEFT JOIN loans l ON a.action = 'LOAN_CLOSED' AND l.id = ${AUDIT_LOAN} LEFT JOIN locations lo ON a.entity_type = 'LOCATION' AND lo.id = a.entity_id`,
       // Account, recovery and Staff Directory events are refused here, before any search or page limit, unless the reader is ADMIN or OWNER.
-      where: `a.action <> 'LOAN_CREATED' AND NOT (a.action = 'LOAN_CLOSED' AND COALESCE(${AUDIT_OUTCOME}, '') = 'RETURNED')${admin ? "" : " AND a.entity_type IN ('ITEM', 'LOCATION')"}`,
+      where: `a.action <> 'LOAN_CREATED' AND NOT (a.action = 'LOAN_CLOSED' AND COALESCE(${AUDIT_OUTCOME}, '') = 'RETURNED')${admin ? "" : " AND a.entity_type IN ('ITEM', 'LOCATION', 'CATALOGUE')"}`,
       cols: {
         ...base, sid: "'audit:' || a.id", k: utc("a.created_at"), itemId: "i.id", itemName: "COALESCE(i.name, lo.name)", unit: "i.unit",
-        src: `CASE WHEN a.action = 'LOAN_CLOSED' THEN 'LOAN' WHEN a.action IN (${UNIT_AUDIT}) THEN 'MOVEMENT' WHEN a.entity_type IN ('ITEM', 'LOCATION') THEN 'CATALOG' WHEN a.entity_type = 'STAFF' THEN 'DIRECTORY' ELSE 'ACCOUNT' END`,
+        src: `CASE WHEN a.action = 'LOAN_CLOSED' THEN 'LOAN' WHEN a.action IN (${UNIT_AUDIT}) THEN 'MOVEMENT' WHEN a.entity_type IN ('ITEM', 'LOCATION', 'CATALOGUE') THEN 'CATALOG' WHEN a.entity_type = 'STAFF' THEN 'DIRECTORY' ELSE 'ACCOUNT' END`,
         type: `CASE WHEN a.action = 'LOAN_CLOSED' THEN CASE ${AUDIT_OUTCOME} WHEN 'DAMAGED' THEN 'LOAN_DAMAGED' WHEN 'LOST' THEN 'LOAN_LOST' ELSE 'LOAN_CLOSED' END ELSE a.action END`,
         actorId: "a.actor_user_id", actor: actorName("c", "a.actor_user_id"), details: "a.details_json", note: "l.return_note", corr: AUDIT_LOAN
       }
@@ -319,7 +319,9 @@ function toEvent(row: Row): ActivityEvent {
       if (decision === "DISMISSED") return `${actor} dismissed ${what}; nothing changed.`;
       return kind === "RETURN" ? `${actor} confirmed ${what}; the loan is closed.` : `${actor} applied ${what} that was held for staff.`;
     },
-    ITEM_CREATED: () => `${actor} added ${item} to the catalog.`,
+    ITEM_CREATED: () => `${actor} added ${item} to the catalog${typeof details.catalogueSession === "string" ? " while cataloguing" : ""}.`,
+    CATALOGUE_STARTED: () => `${actor} started cataloguing${typeof details.place === "string" ? ` in ${details.place.slice(0, 200)}` : ""}.`,
+    CATALOGUE_FINISHED: () => `${actor} finished cataloguing${typeof details.place === "string" ? ` in ${details.place.slice(0, 200)}` : ""}: ${typeof details.saved === "number" ? details.saved : "some"} items saved${typeof details.reviewLater === "number" && details.reviewLater ? `, ${details.reviewLater} to review later` : ""}.`,
     ITEM_UPDATED: () => {
       // Status, type and usage are fixed lists, so their values can be named; every other field is named, never quoted.
       const change = (field: string) => details[field] && typeof details[field] === "object" ? details[field] as { from?: unknown; to?: unknown } : null;
@@ -332,7 +334,8 @@ function toEvent(row: Row): ActivityEvent {
         const how = change("consumptionMode")!.to === "OPEN_UNIT" ? "to be opened and used gradually" : "to be used a whole unit at a time";
         done.push([`set ${item} ${how}`, `set it ${how}`]);
       }
-      if (!done.length) return `${actor} edited ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`;
+      const bulk = details.bulk && typeof details.bulk === "object" && typeof (details.bulk as { items?: unknown }).items === "number" ? ` (one of ${(details.bulk as { items: number }).items} edited together)` : "";
+      if (!done.length) return `${actor} edited ${item}${fields.length ? `: ${fields.join(", ")}` : ""}${bulk}.`;
       const named = new Set(["type", "how it is used", ...(done.some(([, it]) => it.endsWith("activated it")) ? ["status"] : [])]);
       const others = fields.filter((field) => !named.has(field));
       return `${actor} ${[done[0]![0], ...done.slice(1).map(([, it]) => it)].join(" and ")}${others.length ? `, and edited ${others.join(", ")}` : ""}.`;
