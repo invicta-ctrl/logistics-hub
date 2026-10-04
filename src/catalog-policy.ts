@@ -27,6 +27,8 @@ export const behaviourFields = (behaviour: Behaviour): { itemType: string; consu
 });
 export const behaviourOf = (item: { itemType: string; consumptionMode: string }): Behaviour | null =>
   item.itemType === "Loanable" ? "BORROW" : item.itemType === "Consumable" ? (item.consumptionMode === "OPEN_UNIT" ? "GRADUAL" : "CONSUME") : item.itemType === "NEEDS_REVIEW" ? "REVIEW_LATER" : null;
+/** One bulk edit changes at most this many items: it is one D1 batch, and a longer selection is sent in pieces. */
+export const BULK_LIMIT = 50;
 /** The category of a record captured before anyone knew its category. Shown as "Unsorted", never offered as a choice. */
 export const UNSORTED_CATEGORY = "UNSORTED";
 /** The unit of a record captured before anyone knew how it is counted. */
