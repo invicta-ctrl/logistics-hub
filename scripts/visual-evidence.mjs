@@ -15,7 +15,10 @@
 // 125/150% zoom and large text, with measured checks; works on any ref) and staff-directory (V1.3: the directory with a
 // large department and partial profiles, a profile's five sections, the 3D USC ID card (tile lean, flight out of the tile,
 // tilt with glare and foil, the turn) front, back and zoomed, and the
-// owner's import with its preflight; runs only where the directory exists). Its pictures, including the obviously fake
+// owner's import with its preflight; runs only where the directory exists) and catalogue (V1.5: a long cataloguing session on one shelf
+// with loanable, consumable, gradually used and review-later items; the start page, suggestion, photo preview, possible-match and
+// review-later states, a save that failed offline and was retried, the finish summary, and Select mode with its dialog; runs only
+// where /staff/catalogue exists). Its pictures, including the obviously fake
 // sample ID cards, are drawn here in the browser and written only to a throwaway folder, so no image file enters the
 // repository and no real ID is ever used.
 //
@@ -802,6 +805,123 @@ async function shellScenes(browser, url, dir) {
   return Object.fromEntries(Object.entries(checks).map(([name, { bar, menu }]) => [name, [bar, menu].every((entry) => entry.sideways === 0 && ["squashed", "clipped", "overlaps", "crowded", "unnamed", "under24px"].every((key) => !entry[key].length)) ? "clean" : "see shell-checks.json"]));
 }
 
+/** V1.5: a realistic cataloguing session on one shelf, driven through the real screens against the real Worker and D1. */
+async function catalogueScenes(browser, url, dir) {
+  const shot = (page, name) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80 });
+  const first = await signIn(browser, url, "owner.demo", SIZES.desktop);
+  if ((await first.page.request.get(`${url}/api/staff/catalogue`)).status() === 404) {
+    console.log("catalogue: this ref has no Catalogue, skipped");
+    await first.context.close();
+    return {};
+  }
+  const state = await first.context.storageState();
+  const art = await first.page.evaluate(drawPhotos);
+  const api = async (method, route, body) => {
+    const response = await first.page.request.fetch(`${url}${route}`, { method, headers: { origin: url, "content-type": "application/json" }, data: body === undefined ? undefined : JSON.stringify(body) });
+    if (!response.ok()) throw new Error(`${method} ${route} failed: ${response.status()} ${await response.text()}`);
+    return response.json();
+  };
+  const office = (await api("POST", "/api/staff/locations", { name: "Office", parentId: null })).id;
+  const cabinet = (await api("POST", "/api/staff/locations", { name: "Cabinet 1", parentId: office })).id;
+  const shelf = (await api("POST", "/api/staff/locations", { name: "Shelf 2", parentId: cabinet })).id;
+  const items = (await (await first.page.request.get(`${url}/api/staff/inventory`)).json()).items;
+  const consumable = items.find((item) => item.itemType === "Consumable" && /\s/.test(item.name) && item.status === "ACTIVE");
+  const loanable = items.find((item) => item.itemType === "Loanable" && item.status === "ACTIVE");
+  const picture = path.join(fs.mkdtempSync(path.join(root, ".wrangler", "evidence-art-")), "shelf.jpg");
+  fs.writeFileSync(picture, Buffer.from(art[3].display, "base64"));
+  // A long morning already behind: 36 items of every kind on this shelf, made through the real endpoint.
+  const started = await api("POST", "/api/staff/catalogue/sessions", { locationId: shelf });
+  const kinds = [["BORROW", "Projector", "EQUIPMENT", "piece"], ["CONSUME", "Marker", "OFFICE SUPPLIES", "piece"], ["GRADUAL", "Bond paper", "PAPER", "ream"], ["REVIEW_LATER", "Unlabelled box", "", ""]];
+  for (let index = 0; index < 36; index++) {
+    const [behaviour, base, category, unit] = kinds[index % 4];
+    await api("POST", `/api/staff/catalogue/sessions/${started.id}/captures`, { id: crypto.randomUUID(), behaviour, name: `${base} ${index + 1}`, category, unit, quantity: 1 + (index % 6), locationId: shelf });
+  }
+  await first.context.close();
+
+  const timings = {};
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    const { context, page } = await resume(browser, state, viewport);
+    const settle = async () => { await page.waitForLoadState("networkidle"); await page.waitForTimeout(250); };
+    await page.goto(`${url}/staff/catalogue`);
+    await page.getByRole("heading", { name: "Your session is open" }).waitFor();
+    await settle();
+    await shot(page, `catalogue-start-${size}`);
+    await page.goto(`${url}/staff/catalogue?session=${started.id}`);
+    await page.waitForSelector("#cat-form");
+    await settle();
+    await shot(page, `catalogue-session-${size}`);
+    const name = page.getByLabel("Name", { exact: true });
+    // A suggestion, explained, nothing chosen yet.
+    await name.fill(consumable.name.split(/\s+/).slice(0, 2).join(" "));
+    await page.waitForTimeout(200);
+    await shot(page, `catalogue-suggestion-${size}`);
+    await page.getByRole("button", { name: "Use these" }).click();
+    await page.locator("#cat-file").setInputFiles(picture);
+    await page.waitForSelector("#cat-photo img");
+    await page.getByRole("button", { name: "One more" }).click();
+    await shot(page, `catalogue-photo-${size}`);
+    // The possible-match card, shown by the first press of Save.
+    await name.fill(loanable.name);
+    await page.locator(".cat-choice", { hasText: "Borrow" }).first().click();
+    await page.getByLabel("Category").fill(loanable.category);
+    await page.getByLabel("Counted in").fill(loanable.unit);
+    await page.getByRole("button", { name: /^Save & next/ }).click();
+    await page.waitForSelector(".cat-dup__card.is-armed");
+    await shot(page, `catalogue-duplicate-${size}`);
+    // Not sure: kept and counted, the rest can wait.
+    await name.fill("Grey cable bag");
+    await page.locator(".cat-choice", { hasText: "Not sure" }).click();
+    await page.getByLabel("Category").fill("");
+    await page.getByLabel("Counted in").fill("");
+    await shot(page, `catalogue-reviewlater-${size}`);
+    await page.getByRole("button", { name: /^Save & next/ }).click();
+    await page.waitForSelector("#cat-list .cat-row");
+    // A save that fails offline, then goes through.
+    await context.setOffline(true);
+    await name.fill("Label printer");
+    await page.locator(".cat-choice", { hasText: "Borrow" }).first().click();
+    await page.getByLabel("Category").fill("EQUIPMENT");
+    await page.getByLabel("Counted in").fill("piece");
+    await page.getByRole("button", { name: /^Save & next/ }).click();
+    await page.getByText("Not saved yet").first().waitFor();
+    await shot(page, `catalogue-unsaved-${size}`);
+    await context.setOffline(false);
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    await page.getByText("All saved").waitFor();
+    await settle();
+    await shot(page, `catalogue-retried-${size}`);
+    await context.close();
+  }
+  // Select mode in Items, and the dialog that shows what a change touches.
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    const { context, page } = await resume(browser, state, viewport);
+    await page.goto(`${url}/staff/items`);
+    await page.waitForSelector("tbody tr");
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    const boxes = page.locator(".select-box[data-select]");
+    for (let index = 0; index < 5; index++) await boxes.nth(index).check();
+    await page.waitForTimeout(200);
+    await shot(page, `catalogue-select-${size}`);
+    await page.getByRole("button", { name: "Move to…" }).click();
+    await page.getByLabel("Move them to").selectOption(shelf);
+    await page.waitForTimeout(250);
+    await shot(page, `catalogue-bulk-${size}`);
+    await context.close();
+  }
+  // Finishing, as a person sees it.
+  const { context, page } = await resume(browser, state, SIZES.phone);
+  await page.goto(`${url}/staff/catalogue?session=${started.id}`);
+  await page.waitForSelector("#cat-form");
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "Finish" }).click();
+  await page.getByRole("heading", { name: "Cataloguing finished" }).waitFor();
+  await page.waitForFunction(() => document.querySelector("#rev-go") && !document.querySelector("#rev-go").hidden);
+  await shot(page, "catalogue-finished-phone");
+  await context.close();
+  fs.rmSync(path.dirname(picture), { recursive: true, force: true });
+  return timings;
+}
+
 async function capture(url, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
@@ -813,7 +933,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory" || name === "locations") continue;
+          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -848,6 +968,7 @@ async function capture(url, dir) {
     if (pages.includes("item-photos")) Object.assign(timings, { itemPhotos: await photoScenes(browser, url, dir) });
     if (pages.includes("public-photos")) Object.assign(timings, { publicPhotos: await publicPhotoScenes(browser, url, dir) });
     if (pages.includes("locations")) Object.assign(timings, { locations: await locationScenes(browser, url, dir) });
+    if (pages.includes("catalogue")) Object.assign(timings, { catalogue: await catalogueScenes(browser, url, dir) });
     if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
     if (pages.includes("staff-directory")) Object.assign(timings, { staffDirectory: await directoryScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);

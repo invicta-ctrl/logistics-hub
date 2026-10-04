@@ -63,6 +63,8 @@ export async function captureScreen(session: Session, sessionId: string): Promis
   let waiting: Entry[] = [];
   /** Captures taken on this page, by request id, so a possible match can name the thing just added. */
   const created = new Map<string, string>();
+  /** Everything this page has captured, as the lists and rules read items, until the server's own list catches up with it. */
+  const local = new Map<string, InventoryItem>();
   let photo: { display: Blob; thumb: Blob; preview: string; hash: string } | null = null;
   let behaviour: Behaviour | null = null;
   /** True once Save has shown the possible matches: the next Save is the person saying "a different one". */
@@ -71,6 +73,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
   const thumbs = new Map<string, string>();
 
   mount(root, html`
+    <h1 class="visually-hidden">Cataloguing</h1>
     <p class="visually-hidden" id="cat-announce" role="status"></p>
     <input class="visually-hidden" type="file" id="cat-file" accept="image/*" capture="environment" tabindex="-1" aria-label="Choose a photo" />
     <header class="cat-bar">
@@ -156,11 +159,10 @@ export async function captureScreen(session: Session, sessionId: string): Promis
 
   /* ---------- The form: suggestions and possible matches ---------- */
 
-  /** Everything known so far: what the server listed, and what this page has queued and not yet seen come back. */
+  /** Everything known so far: what the server listed, and what this page has captured since (queued, or saved and not yet listed). */
   const everything = (): InventoryItem[] => {
-    const queued = waiting.map(known);
-    const ids = new Set(queued.map((item) => item.id));
-    return [...queued, ...(inventory?.items ?? []).filter((item) => !ids.has(item.id))];
+    const ours = new Map([...local.values(), ...waiting.map(known)].map((item) => [item.id, item]));
+    return [...ours.values(), ...(inventory?.items ?? []).filter((item) => !ours.has(item.id))];
   };
 
   const recent = (): InventoryItem[] => [...waiting].reverse().map(known).concat(detail.recent.filter((row) => !waiting.some((entry) => entry.id === row.captureId)).map((row) => ({
@@ -202,9 +204,11 @@ export async function captureScreen(session: Session, sessionId: string): Promis
       button.classList.toggle("is-suggested", suggested);
       button.querySelector<HTMLElement>(".cat-choice__suggest")!.hidden = !suggested;
     }
-    const lines = [suggestions.behaviour, suggestions.category, suggestions.unit].filter(Boolean);
-    const pending = [suggestions.behaviour && behaviour === null, suggestions.category && !value("cat-category"), suggestions.unit && !value("cat-unit")].filter(Boolean).length;
-    mount($("#cat-why"), lines.length && pending ? html`<span>${icon("info")}Suggested: ${[suggestions.behaviour && BEHAVIOUR_LABELS[suggestions.behaviour.value], suggestions.category && categoryName(suggestions.category.value), suggestions.unit?.value].filter(Boolean).join(" · ")}. ${lines[0]!.why}.</span> <button type="button" class="text-link" id="cat-use-all">Use these</button>` : html``);
+    const stock = suggestions.stockArea && suggestions.stockArea.value !== $<HTMLSelectElement>("#cat-stock").value ? suggestions.stockArea : undefined;
+    const lines = [suggestions.behaviour, suggestions.category, suggestions.unit, stock].filter(Boolean);
+    const pending = [suggestions.behaviour && behaviour === null, suggestions.category && !value("cat-category"), suggestions.unit && !value("cat-unit"), stock].filter(Boolean).length;
+    // Everything "Use these" would fill is named here first: nothing changes silently, including the stock area behind "More details".
+    mount($("#cat-why"), lines.length && pending ? html`<span>${icon("info")}Suggested: ${[suggestions.behaviour && BEHAVIOUR_LABELS[suggestions.behaviour.value], suggestions.category && categoryName(suggestions.category.value), suggestions.unit?.value, stock && (stock.value === "Pantry" ? "Pantry" : "General stock")].filter(Boolean).join(" · ")}. ${lines[0]!.why}.</span> <button type="button" class="text-link" id="cat-use-all">Use these</button>` : html``);
     const categories = [...new Set([suggestions.category?.value, ...recent().map((item) => item.category), ...(inventory?.categories ?? [])].filter((entry): entry is string => Boolean(entry) && entry !== UNSORTED_CATEGORY))];
     mount($("#cat-category-chips"), html`${categories.slice(0, 5).map((category) => chip(categoryName(category), `data-category="${category}"`, category === suggestions.category?.value))}`);
     const common = [suggestions.unit?.value, ...recent().map((item) => item.unit), ...(inventory?.units ?? [])].filter((entry): entry is string => Boolean(entry));
@@ -236,7 +240,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
       if (suggestions.behaviour) behaviour = suggestions.behaviour.value;
       if (suggestions.category && !value("cat-category")) field("cat-category").value = suggestions.category.value;
       if (suggestions.unit && !value("cat-unit")) field("cat-unit").value = suggestions.unit.value;
-      if (suggestions.stockArea) $<HTMLSelectElement>("#cat-stock").value = suggestions.stockArea.value;
+      if (suggestions.stockArea && suggestions.stockArea.value !== $<HTMLSelectElement>("#cat-stock").value) $<HTMLSelectElement>("#cat-stock").value = suggestions.stockArea.value;
       armed = false;
       draw();
       field("cat-qty").focus();
@@ -335,6 +339,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     if (photo) thumbs.set(id, photo.preview);
     // On the device before anything is sent: from here a dropped connection or a reload cannot lose it.
     await keep(entry);
+    local.set(id, known(entry));
     waiting = await entries().then((all) => all.filter((each) => each.sessionId === sessionId));
     clear(like);
     announce(`Saving ${name}.`);
@@ -369,6 +374,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
         const saved = await api<{ id: string }>(`/api/staff/catalogue/sessions/${sessionId}/captures`, { method: "POST", body: JSON.stringify({ ...entry.body, acknowledged: acknowledged(entry) }) });
         created.set(entry.id, saved.id);
         await settle(entry, { itemId: saved.id, state: "waiting", message: null, matches: null });
+        local.set(entry.id, known(entry));
       } catch (error) {
         if (!(error instanceof ApiError)) throw error;
         if (error.status === 401) { expired(); return; }
@@ -432,6 +438,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
       if (Number.isFinite(soon)) retryTimer = window.setTimeout(() => void pump(), Math.max(500, soon - Date.now()));
       await reload();
       drawList();
+      void poll.refresh();
     }
   }
 
