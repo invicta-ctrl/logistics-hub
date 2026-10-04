@@ -258,11 +258,12 @@ const changedSince = (entry: { itemId: string | null; expectedOnHand: number | n
  */
 export async function auditReview(db: D1Database, actor: Actor, id: string) {
   const row = await auditRow(db, id);
+  // Where the item was recorded when it was seen (not where it is now: settling may have moved it), and where it was seen.
   const { results } = await db.prepare(`SELECT ${OBSERVATION_COLUMNS}, i.name, i.unit, i.location_id AS locationId, lp.path AS recordedPlace, sp.path AS seenPlace,
       COALESCE(b.on_hand, 0) AS onHandNow, i.updated_at AS itemUpdatedAt,
       r.action AS resolution, r.note AS resolutionNote, r.resolved_at AS resolvedAt, rs.display_name AS resolvedBy, r.movement_id AS movementId
     FROM location_audit_observations o JOIN staff_accounts s ON s.id = o.observed_by LEFT JOIN items i ON i.id = o.item_id
-    LEFT JOIN inventory_balances b ON b.id = o.item_id LEFT JOIN location_paths lp ON lp.id = i.location_id LEFT JOIN location_paths sp ON sp.id = o.seen_location_id
+    LEFT JOIN inventory_balances b ON b.id = o.item_id LEFT JOIN location_paths lp ON lp.id = o.recorded_location_id LEFT JOIN location_paths sp ON sp.id = o.seen_location_id
     LEFT JOIN location_audit_resolutions r ON r.observation_id = o.id LEFT JOIN staff_accounts rs ON rs.id = r.resolved_by
     WHERE o.rowid IN (SELECT MAX(rowid) FROM location_audit_observations WHERE audit_id = ?1 GROUP BY COALESCE(item_id, id))
       AND o.outcome IN (${DISCREPANCIES.map((outcome) => `'${outcome}'`).join(",")})
