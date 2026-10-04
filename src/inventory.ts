@@ -109,7 +109,7 @@ export async function staffInventory(db: D1Database) {
     FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id ORDER BY i.name COLLATE NOCASE`).all<StaffRow>();
   const items = results.map((row) => ({
     id: row.id, name: row.name, aliases: row.aliases, category: row.category, itemType: row.itemType, unit: row.unit, status: row.status,
-    needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand,
+    needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand, updatedAt: row.updatedAt,
     reorderThreshold: row.reorderThreshold, locationId: row.locationId, legacyLocation: row.legacyLocation, openReports: row.openReports, listed: isListedForLending(row),
     stockArea: row.stockArea, expiresOn: row.expiresOn, lastCountedAt: row.lastCountedAt, reorderStatus: row.reorderStatus, onLoan: row.onLoan,
     consumptionMode: row.consumptionMode, openUnits: row.openUnits, openCondition: row.openCondition, photoId: row.photoId, photoHash: row.photoHash,
