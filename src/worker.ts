@@ -174,7 +174,7 @@ const leaseFor = (request: Request, env: Env) => signedIn(request, env, true);
 
 /** What an offline cataloguing lease may do without a full session: catalogue, and nothing else. */
 function leaseMayUse(method: string, path: string): boolean {
-  // The Catalogue page: this member's open session (the page shows nothing else on a lease).
+  // The Catalogue page, answered with this member's own open session only (staffApi).
   if (path === "/api/staff/catalogue") return method === "GET";
   if (path === "/api/staff/catalogue/offline") return method === "GET" || method === "DELETE";
   if (path === "/api/staff/catalogue/snapshot") return method === "GET";
@@ -252,7 +252,15 @@ async function login(request: Request, env: Env, url: URL): Promise<Response> {
   ]);
   await clearThrottle(env.DB, clientKey(request, "login"), userKey);
   await sweepStale(env.DB);
-  return json({ ok: true, mustChangePassword: account.mustChangePassword === 1 }, 200, { "set-cookie": cookie(token, SESSION_DURATION_MS / 1000, url.protocol === "https:") });
+  const secure = url.protocol === "https:";
+  const response = json({ ok: true, mustChangePassword: account.mustChangePassword === 1 }, 200, { "set-cookie": cookie(token, SESSION_DURATION_MS / 1000, secure) });
+  // Someone else's offline cataloguing lease left on this device ends now: when this sign-in lapses, the device must not act as them.
+  const lease = await verifySession(readCookie(request, LEASE_NAME), leaseKey(env.SESSION_SECRET));
+  if (lease && lease.subject !== account.id) {
+    await endSession(env.DB, lease.id).run();
+    response.headers.append("set-cookie", leaseCookie("", 0, secure));
+  }
+  return response;
 }
 
 /** Signing out on a device also ends offline cataloguing there; anything not yet sent stays on the device for the next sign-in. */
@@ -343,7 +351,12 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (path === "/api/staff/catalogue/snapshot" && method === "GET") return revisioned(request, env.DB, () => catalogueSnapshot(env.DB));
   if (path === "/api/staff/catalogue/sessions" && method === "POST") { const started = await startSession(env.DB, account, await body()); return json(started, started.resumed ? 200 : 201); }
   const session = CATALOGUE_PATH.exec(path);
-  if (session && !session[2] && method === "GET") return json(await sessionDetail(env.DB, account, session[1]!));
+  if (session && !session[2] && method === "GET") {
+    const detail = await sessionDetail(env.DB, account, session[1]!);
+    // Any Logistics member may read a session; a lease, only its own member's.
+    if (leased && !detail.session.mine) throw new InputError(403, "Sign in again to see someone else's session.");
+    return json(detail);
+  }
   if (session && !session[2] && method === "PATCH") return json(await setSessionPlace(env.DB, account, session[1]!, await body()));
   if (session?.[2] === "/unreviewed" && method === "GET") return json(await unreviewed(env.DB, session[1]!));
   if (session?.[2] === "/finish" && method === "POST") return json(await finishSession(env.DB, account, session[1]!));
