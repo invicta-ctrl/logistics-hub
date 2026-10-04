@@ -1,5 +1,11 @@
 # Current Work Pointer — Logistics Hub
 
+## Road-to-V2 amendment accepted — 2026-10-04
+
+AMENDMENT: `docs/specs/accepted/road-to-v2/2026-10-04-catalog-intelligence-semantic-hardening-amendment.md` (ACCEPTED by Earl, 2026-10-04; supersedes proposal revision 1, `docs/specs/proposed/2026-10-04-catalog-intelligence-semantic-hardening.md`). Applies to V1.6–V1.15: deterministic-first catalog suggestions with evidence tiers, a built-in item knowledge base (V1.8), the renames Consume → Take and Consumed or used → Taken or used (V1.8), semantic-minimization rules (V1.9 surfaces, V1.15 sweep), and an optional, off-by-default Workers AI classification second opinion (V1.11 only).
+STATE: Recorded on `main`. §16 steps 2–3 are pending: the shared `CLAUDE.md` line on `road-to-v2/v1.6-catalog-pwa` and each slice's §11 item in its own accepted spec, propagated forward V1.6 → V1.15.
+NEXT_EXACT_ACTION: Apply §16 steps 2–3 in version order with Earl's push authorization, then `start` on `road-to-v2/v1.6-catalog-pwa` as normal (V1.5 is COMPLETE on `main`).
+
 ## Independent Catalog Visual update — 2026-10-04
 
 CURRENT_STATUS: Independent feature implemented and locally verified for main. The feature commit is the introducing commit of `src/item-icons.ts` (resolve with `git log --diff-filter=A --format=%H -- src/item-icons.ts`). Starting main: `8951c899bbd632c774ed37e134f5aa25abae961f`; reconciled V1.4.1 main: `1913716`; preparation: `6a3aa4a5d7d9617e535e113ccb625c852d1d18c5`. Local gates pass: typecheck/build, 409 unit tests (+2 opt-in skips), 71 browser, 36 Worker browser, privacy (479 files, zero matches), catalog/migration verification, both 1k performance smokes and Worker dry-run. Actual desktop/phone/dark/loading/error/offline renders and complete diff reviewed. Preparation CI 37178419355/CodeQL 37178419246 and feature CI 37182200454/CodeQL 37182200496 are green. Feature d4fb55e1f1d977c35e8a223b43633447b38f9161 is deployed and its live public catalog/desktop/phone visuals were checked. Final live review found a plural clip alias missing; the accompanying small correction passes all local gates and its CI/deployment are checked after publication.
