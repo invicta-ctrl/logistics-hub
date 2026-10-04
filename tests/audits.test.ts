@@ -238,6 +238,10 @@ describe("the review", () => {
     const by = (outcome: string) => found.find((entry) => entry.outcome === outcome)!;
     expect((await resolve(one, by("FOUND_HERE").id, { action: "MOVED_HERE" })).status).toBe(200);
     expect(locationOf(items.stray)).toBe(room);
+    // The finding still says where the item was recorded when it was seen, not where it is now.
+    const audit = (sqlite.prepare("SELECT audit_id AS id FROM location_audit_observations WHERE id = ?").get(by("FOUND_HERE").id) as { id: string }).id;
+    expect((await json<{ discrepancies: Array<{ outcome: string; recordedPlace: string | null; seenPlace: string | null }> }>(as(one, `/api/staff/audits/${audit}/review`))).discrepancies.find((entry) => entry.outcome === "FOUND_HERE"))
+      .toMatchObject({ recordedPlace: "Other room", seenPlace: "Audit room" });
     expect((await resolve(one, by("CANT_FIND").id, { action: "REPORTED" })).status).toBe(200);
     expect(sqlite.prepare("SELECT kind, item_id AS item FROM location_reports WHERE id = ?").get(by("CANT_FIND").id)).toEqual({ kind: "CANT_FIND", item: items.pens });
     expect(onHand(items.pens)).toBe(10);

@@ -244,7 +244,7 @@ describe("the catalog snapshot", () => {
     expect(Object.keys(tape).sort()).toEqual(["aliases", "category", "consumptionMode", "id", "itemType", "locationId", "model", "name", "onHand", "photoHash", "serialNumber", "status", "stockArea", "unit"]);
     expect(tape).toMatchObject({ model: "GT-2", serialNumber: "SN-9", onHand: 3, locationId: shelf });
     expect(JSON.stringify(body)).not.toContain("Private note");
-    expect(body.places).toEqual([{ id: shelf, name: "Shelf 2", parentId: null, active: true }]);
+    expect(body.places).toEqual([{ id: shelf, name: "Shelf 2", parentId: null, active: true, directions: null }]);
     expect(body.categories).toContain("SUPPLIES");
     const etag = response.headers.get("etag")!;
     expect((await call("/api/staff/catalogue/snapshot", { headers: { cookie: session, "if-none-match": etag } })).status).toBe(304);
