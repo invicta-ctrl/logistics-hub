@@ -13,6 +13,25 @@ export const STOCK_AREAS = ["Inventory", "Pantry"] as const;
  * Either way only outer units are counted. Every item starts WHOLE_UNIT; staff opt an item in.
  */
 export const CONSUMPTION_MODES = ["WHOLE_UNIT", "OPEN_UNIT"] as const;
+/**
+ * What a staff member decides about an item at the shelf (Rapid Catalogue). It is the item's behaviour, never a session default:
+ * one shelf holds loanable, whole-unit and gradually used things together. REVIEW_LATER is "not sure": the item is kept, counted
+ * and located but stays unclassified (and so hidden from every public surface) until someone decides.
+ */
+export const BEHAVIOURS = ["BORROW", "CONSUME", "GRADUAL", "REVIEW_LATER"] as const;
+export type Behaviour = typeof BEHAVIOURS[number];
+export const BEHAVIOUR_LABELS: Record<Behaviour, string> = { BORROW: "Borrow & return", CONSUME: "Consume", GRADUAL: "Use gradually", REVIEW_LATER: "Not sure / Review later" };
+export const behaviourFields = (behaviour: Behaviour): { itemType: string; consumptionMode: string } => ({
+  itemType: behaviour === "BORROW" ? "Loanable" : behaviour === "REVIEW_LATER" ? "NEEDS_REVIEW" : "Consumable",
+  consumptionMode: behaviour === "GRADUAL" ? "OPEN_UNIT" : "WHOLE_UNIT"
+});
+export const behaviourOf = (item: { itemType: string; consumptionMode: string }): Behaviour | null =>
+  item.itemType === "Loanable" ? "BORROW" : item.itemType === "Consumable" ? (item.consumptionMode === "OPEN_UNIT" ? "GRADUAL" : "CONSUME") : item.itemType === "NEEDS_REVIEW" ? "REVIEW_LATER" : null;
+/** The category of a record captured before anyone knew its category. Shown as "Unsorted", never offered as a choice. */
+export const UNSORTED_CATEGORY = "UNSORTED";
+/** The unit of a record captured before anyone knew how it is counted. */
+export const UNSORTED_UNIT = "piece";
+
 /** A rough label for an open unit. Never an amount: it does not change stock. */
 export const OPEN_UNIT_CONDITIONS = ["PLENTY", "HALF", "LOW"] as const;
 /** Counting words of things usually opened and used a little at a time (units are stored singular). */
@@ -163,6 +182,7 @@ export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
   CATALOG: { ITEM_CREATED: "Item added", ITEM_UPDATED: "Item edited", ITEM_PHOTO_ADDED: "Photo added", ITEM_PHOTO_REPLACED: "Photo replaced", ITEM_PHOTO_REMOVED: "Photo removed",
     LOCATION_CREATED: "Place added", LOCATION_UPDATED: "Place edited", LOCATION_PHOTO_ADDED: "Place picture added", LOCATION_PHOTO_REPLACED: "Place picture replaced", LOCATION_PHOTO_REMOVED: "Place picture removed",
     LOCATION_ITEMS_MOVED: "Items moved to another place", LOCATIONS_RECONCILED: "Places made from item locations", LOCATION_REPORTED: "Location reported", LOCATION_REPORT_RESOLVED: "Location report resolved",
+    CATALOGUE_STARTED: "Cataloguing started", CATALOGUE_FINISHED: "Cataloguing finished",
     REORDER_OPENED: "Restock requested", REORDER_UPDATED: "Restock updated", REORDER_RESTOCKED: "Restocked" },
   ACCOUNT: {
     ACCOUNT_CREATED: "Account created", ACCOUNT_UPDATED: "Account updated", PASSWORD_RESET: "Password reset", PASSWORD_CHANGED: "Password changed", SESSIONS_REVOKED: "Sessions ended",
