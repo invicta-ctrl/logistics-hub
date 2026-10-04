@@ -118,7 +118,7 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
         : html`<p class="muted">Nothing is waiting for a decision.</p>`}
     </section>` : html`<p class="muted cat-later">Who else is cataloguing, and the items waiting for a decision, show when you're signed in and online.</p>`}`);
 
-  const drawHeld = async () => mount(root.querySelector<HTMLElement>("#cat-held")!, heldList(await entries(), who.session.id, online));
+  const drawHeld = async () => mount(root.querySelector<HTMLElement>("#cat-held")!, heldList(await entries(), who.session.id, who.mode === "signed-in", online));
   await drawHeld();
   onLeave(onSyncChange(() => void drawHeld()));
   bindHeld(root, drawHeld);
@@ -167,9 +167,12 @@ async function start(who: Signed, placeId: string, place: string | null): Promis
 
 const setAlert = (element: HTMLElement, message: string) => { element.hidden = !message; element.textContent = message; };
 
-/** What this device still holds that the server does not have: this member's, with what each is waiting for, and anyone else's, counted. */
-function heldList(all: Entry[], owner: string, online: boolean): Html {
-  const ours = all.filter((entry) => entry.owner === owner || !entry.owner);
+/**
+ * What this device still holds that the server does not have: this member's, with what each is waiting for, and the rest counted (another
+ * member's, and on a lease, what a V1.5 page left without an owner: only a full sign-in sends those).
+ */
+function heldList(all: Entry[], owner: string, legacy: boolean, online: boolean): Html {
+  const ours = all.filter((entry) => entry.owner === owner || (!entry.owner && legacy));
   const others = all.length - ours.length;
   if (!all.length) return html``;
   // Offline, the note above already says they are sent when the connection is back; only what needs a person is spelled out per item.
@@ -189,7 +192,7 @@ function bindHeld(root: HTMLElement, redraw: () => Promise<void>): void {
     if (!target) return;
     const all = await entries();
     if (target.dataset.heldOthers !== undefined) {
-      const others = all.filter((entry) => !sendable(entry) && entry.owner);
+      const others = all.filter((entry) => !sendable(entry));
       if (!window.confirm(`Discard ${plural(others.length, "item")} another member catalogued on this device? ${others.length === 1 ? "It was" : "They were"} never saved to the server.`)) return;
       for (const entry of others) await drop(entry.id);
     } else {
