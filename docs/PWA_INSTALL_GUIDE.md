@@ -152,6 +152,8 @@ Address: **logistics.hausc.org/staff/catalogue**. You need your staff sign-in.
 - **iPhone / iPad (Safari):** open the address. Tap **Share** (on newer iPhones it is in the **⋯** menu beside the address bar; tap **View More** if needed), then **Add to Home Screen**. Keep **Open as Web App** on, then tap **Add**. Open **Catalog** from your Home Screen and sign in there: on iPhone and iPad, offline cataloguing works only from the Home Screen app.
 - **Computer (Chrome or Edge):** click the install icon in the address bar, or Chrome's menu **Cast, save, and share** › **Install Logistics Catalog** (Edge: **Apps** › **Install Logistics Catalog**).
 
+The Catalog has its own look: a dark bar with **Catalog**, a light that says **Online**, **Offline** or **Signed out**, and your initials. Tap your initials for **Staff workspace** (Items, Stock and the rest) or **Sign out**.
+
 ### Turn on offline cataloguing
 
 1. Open the Catalog while you have internet and are signed in.
@@ -173,4 +175,5 @@ Your password is never kept on the device. Signing out on the device, **Turn off
 - **"Getting ready for offline cataloguing…" does not go away:** stay online with the page open; if it says something could not be saved, tap **Try again**. Check that the device has free storage and that you are not in a private window.
 - **"You're signed out":** this device can still catalogue for you until the date shown. Sign in again to use Items, Stock and the rest.
 - **"The Catalogue needs a connection here":** offline cataloguing is not on for this device (or it ended). Connect, sign in, and turn it on.
+- **The Catalog icon opens Logistics Hub (Self-Service) instead:** it was added from the first V1.6 build, which gave iPhones the wrong app. Remove that icon and add the Catalog again from **logistics.hausc.org/staff/catalogue** as above. Check the new icon's name is **Catalog**.
 - **Someone else's items are waiting on a shared device:** they are sent when that person signs in on it. Discard them only if you are sure they were never needed.

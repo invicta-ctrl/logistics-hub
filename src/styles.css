@@ -1444,8 +1444,6 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .cat-others h2, .cat-review h2 { font-size: var(--text-lg); }
 .cat-count { display: inline-block; min-width: 2ch; font-family: var(--serif); font-size: var(--text-lg); font-weight: 600; font-variant-numeric: tabular-nums; }
 /* V1.6: offline cataloguing. One status line style for every state, so ready, getting ready and a problem read alike. */
-.cat-mode { align-items: center; margin-bottom: var(--space-4); }
-.cat-mode p { flex: 1; margin: 0; }
 .cat-held { margin-bottom: var(--space-4); }
 .cat-held ul { display: grid; gap: var(--space-1); margin-top: var(--space-2); }
 .cat-device, .cat-later { margin-top: var(--space-6); }
