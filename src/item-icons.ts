@@ -31,7 +31,7 @@ export const ITEM_ICONS = [
   {"key": "palette", "label": "Art supplies", "keywords": ["paint", "gouache", "poster color", "pastel", "clay", "squeeze bottle paint"]},
   {"key": "ruler", "label": "Ruler", "keywords": ["ruler"]},
   {"key": "eraser", "label": "Eraser and correction", "keywords": ["eraser", "correction pen", "correction tape", "whiteboard eraser"]},
-  {"key": "paperclip", "label": "Clips and fasteners", "keywords": ["paper clip", "binder clip", "clip", "binder rings", "fastener", "pins", "tucks", "safetypins", "label keychains"]},
+  {"key": "paperclip", "label": "Clips and fasteners", "keywords": ["paper clip", "paper clips", "paperclip", "paperclips", "binder clip", "binder clips", "clip", "binder rings", "fastener", "pins", "tucks", "safetypins", "label keychains"]},
   {"key": "folder", "label": "Folder", "keywords": ["folder", "certificate holder", "certificate holders"]},
   {"key": "mail", "label": "Mail", "keywords": ["envelope", "envelop"]},
   {"key": "notebook", "label": "Notebook", "keywords": ["notebook"]},

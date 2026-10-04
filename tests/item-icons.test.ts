@@ -10,6 +10,8 @@ for (const [name, key] of [
   ["Cling Wrap", "toilet-paper"], ["Fork", "tools-kitchen-2"], ["Chopsticks", "bowl-chopsticks"],
   ["Cook Pot", "soup"], ["Coffee", "coffee"], ["Drinking Glass", "glass"], ["Storage Container", "box"],
   ["Correction Pen", "eraser"], ["Whiteboard Eraser", "eraser"], ["Whiteboard Marker", "pencil"],
+  ["33mm Paper Clips (assorted)", "paperclip"], ["Binder Clips (large)", "paperclip"],
+  ["Paperclip", "paperclip"], ["Paperclips", "paperclip"],
   ["Squeeze Bottle Paint", "palette"], ["Paper Bowl Lid", "soup"], ["Kopiko Blanca - Twin Pack", "coffee"], ["Water Bottle", "bottle"], ["Placemat", "soup"], ["Raincoat", "jacket"]
 ]) {
   test(`specific suggestion: ${name}`, () => assert.deepEqual(suggestItemIcon({ name }), { key, source: "specific" }));
