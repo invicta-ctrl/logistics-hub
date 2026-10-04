@@ -1,4 +1,5 @@
-import { ApiError, type Html, api, dataUrl, failure, html, icon, jpegOf, mount, reducedMotion, toast } from "./ui";
+import { type VisualItem, itemIconSvg } from "./item-icons";
+import { ApiError, type Html, api, dataUrl, failure, html, icon, jpegOf, itemVisual, mount, raw, reducedMotion, toast } from "./ui";
 
 export type Photo = { id: string; width: number; height: number };
 type Size = "thumb" | "display";
@@ -10,16 +11,8 @@ const QUALITIES = [0.82, 0.6, 0.4];
 
 export const photoUrl = (id: string, size: Size) => `/api/staff/media/${id}/${size}`;
 
-/**
- * The square at the start of an item row: the image itself, and nothing at all for an item without a photo (its
- * placeholder is a background on the cell, `col-item--bare`, so a mostly unphotographed list adds no elements). It is
- * decorative (the name sits beside it) and pointer-only: the same photo opens from the item's profile, so keyboard
- * users lose nothing and 500 rows add no tab stops. Its size is fixed in CSS, so rows never shift as images arrive,
- * and only rows near the screen are fetched.
- */
-export function rowThumb(photoId: string | null): Html | "" {
-  return photoId ? html`<img class="thumb" data-photo="${photoId}" src="${photoUrl(photoId, "thumb")}" alt="" width="40" height="40" loading="lazy" decoding="async" />` : "";
-}
+/** Decorative fixed-size item visual; only loaded real photos open the viewer. */
+export const rowThumb = (item: VisualItem): Html => itemVisual(item, (id) => photoUrl(id, "thumb"), "thumb");
 
 /**
  * A 64-bit difference hash of the picture as 16 hex digits: the picture at 9 × 8 grey pixels, one bit for each pixel brighter than
@@ -51,6 +44,8 @@ function dhashOf(bitmap: ImageBitmap): string {
  */
 export type Prepared = { display: Blob; thumb: Blob; preview: string; hash: string };
 export async function preparePhoto(file: File): Promise<Prepared> {
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("Choose a JPEG, PNG or WebP photo.");
+  if (file.size === 0 || file.size > 20_000_000) throw new Error("Choose a photo smaller than 20 MB.");
   let bitmap: ImageBitmap;
   try { bitmap = await createImageBitmap(file, { imageOrientation: "from-image" }); } catch { throw new Error("This photo could not be read. Choose a JPEG, PNG or WebP image."); }
   try {
@@ -84,7 +79,7 @@ function morph(from: HTMLElement | null, to: HTMLElement | null, update: () => v
  * thumbnail it grows from, looked up again on closing because a live list may have redrawn it meanwhile. `url` is the
  * large image, `description` its alternative text ("Photo of Stapler") and `caption` the line under it.
  */
-export async function openViewer(url: string, description: string, source: () => HTMLElement | null, caption = description): Promise<void> {
+export async function openViewer(url: string, description: string, source: () => HTMLElement | null, caption = description, fallbackKey?: string): Promise<void> {
   if (document.querySelector("dialog.viewer")) return;
   const opener = document.activeElement as HTMLElement | null;
   const dialog = document.createElement("dialog");
@@ -94,6 +89,15 @@ export async function openViewer(url: string, description: string, source: () =>
     <figure class="viewer__figure" data-backdrop><img class="viewer__image" src="${url}" alt="${description}" /><figcaption>${caption}</figcaption></figure>`);
   document.body.append(dialog);
   const image = dialog.querySelector("img")!;
+  if (fallbackKey) image.addEventListener("error", () => {
+    image.hidden = true;
+    const fallback = document.createElement("div");
+    fallback.className = "viewer__fallback";
+    fallback.setAttribute("role", "img");
+    fallback.setAttribute("aria-label", `${description}. Photo unavailable; system icon shown.`);
+    mount(fallback, raw(itemIconSvg(fallbackKey)));
+    image.after(fallback);
+  }, { once: true });
   // The large image is ready before it grows, so the movement never ends in a blank frame.
   await Promise.race([image.decode().catch(() => undefined), new Promise((resolve) => window.setTimeout(resolve, 400))]);
   let entryGone = false;
@@ -135,7 +139,7 @@ export type PhotoSubject = {
  * `[data-tile]` for the picture and a `[data-actions]` beside it for the buttons. `refresh` re-reads the record after
  * another person changed the picture first; `changed` runs after every save.
  */
-export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: string; name: string; photo: Photo | null; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo) => void }): PhotoPanel {
+export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: string; name: string; photo: Photo | null; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo) => void; visual?: () => VisualItem; updatedAt?: () => string | null }): PhotoPanel {
   const { id: itemId, name, noun, endpoint } = options;
   let photo = options.photo;
   let staged: Prepared | null = null;
@@ -147,7 +151,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   const input = document.createElement("input");
   input.className = "visually-hidden";
   input.type = "file";
-  input.accept = "image/*";
+  input.accept = "image/jpeg,image/png,image/webp";
   input.tabIndex = -1;
   input.setAttribute("aria-label", `Choose a ${noun} of ${name}`);
   host.append(input);
@@ -163,14 +167,16 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
           <button type="button" class="button button--ghost button--sm" data-cancel ${busy() ? "disabled" : ""}>Cancel</button></div>${alert}`);
     }
     if (!photo) {
-      return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick aria-describedby="photo-hint-${itemId}">${icon("camera")}<span>Add ${noun}</span></button>`,
+      return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick aria-describedby="photo-hint-${itemId}">${options.visual ? itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual") : icon("camera")}<span>${options.visual ? "Upload photo" : `Add ${noun}`}</span></button>`,
         html`<p class="field__hint" id="photo-hint-${itemId}">${options.hintAdd}</p>${alert}`);
     }
-    show(html`<button type="button" class="photo-tile" data-view aria-label="View ${noun} of ${name}"><img src="${options.thumbUrl(photo.id)}" alt="" width="160" height="160" /></button>`,
+    show(options.visual && options.visual().visualType === "SYSTEM_ICON"
+      ? html`<div class="photo-tile">${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}</div>`
+      : html`<button type="button" class="photo-tile" data-view aria-label="View ${noun} of ${name}">${options.visual ? itemVisual({ ...options.visual(), photoId: photo.id }, options.thumbUrl, "profile-visual", true) : html`<img src="${options.thumbUrl(photo.id)}" alt="" width="160" height="160" />`}</button>`,
       html`${confirming
         ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>
             <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : `Remove ${noun}`}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>`
-        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-remove>Remove</button></div><p class="field__hint">${options.hintHas}</p>`}${alert}`);
+        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-remove>Remove</button></div><p class="field__hint">${options.visual?.().visualType === "SYSTEM_ICON" ? "Your photo is saved. Select Real Photo to display it on the catalog." : options.hintHas}</p>`}${alert}`);
   };
   const focus = (selector: string) => host.querySelector<HTMLElement>(selector)?.focus();
 
@@ -220,6 +226,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       form.set("thumb", staged.thumb, "thumb.jpg");
       form.set("expected", photo?.id ?? "");
       form.set("hash", staged.hash);
+      if (options.updatedAt) form.set("updatedAt", options.updatedAt() ?? "");
       try {
         const saved = await api<{ photo: Photo }>(endpoint, { method: "PUT", body: form });
         photo = saved.photo;
