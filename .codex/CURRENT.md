@@ -3,8 +3,8 @@
 ## Road-to-V2 amendment accepted — 2026-10-04
 
 AMENDMENT: `docs/specs/accepted/road-to-v2/2026-10-04-catalog-intelligence-semantic-hardening-amendment.md` (ACCEPTED by Earl, 2026-10-04; supersedes proposal revision 1, `docs/specs/proposed/2026-10-04-catalog-intelligence-semantic-hardening.md`). Applies to V1.6–V1.15: deterministic-first catalog suggestions with evidence tiers, a built-in item knowledge base (V1.8), the renames Consume → Take and Consumed or used → Taken or used (V1.8), semantic-minimization rules (V1.9 surfaces, V1.15 sweep), and an optional, off-by-default Workers AI classification second opinion (V1.11 only).
-STATE: Recorded on `main`. §16 steps 2–3 are pending: the shared `CLAUDE.md` line on `road-to-v2/v1.6-catalog-pwa` and each slice's §11 item in its own accepted spec, propagated forward V1.6 → V1.15.
-NEXT_EXACT_ACTION: Apply §16 steps 2–3 in version order with Earl's push authorization, then `start` on `road-to-v2/v1.6-catalog-pwa` as normal (V1.5 is COMPLETE on `main`).
+STATE: Propagated (2026-10-04). Accepted on `main` 7d765f8. `road-to-v2/v1.6-catalog-pwa` merged `main` and carries the shared `CLAUDE.md` line (3cabecc); each branch V1.6–V1.15 carries its §11 item in its own spec under "Catalog intelligence amendment", merged forward in order: v1.6 3cabecc, v1.7 dcf7dae, v1.8 868bddd, v1.9 b23e0e1, v1.10 c4e7c6d, v1.11 f936c13, v1.12 04c48bd, v1.13 9acf5e6, v1.14 d1a2b64, v1.15 70e8cd8. No conflicts.
+NEXT_EXACT_ACTION: `start` on `road-to-v2/v1.6-catalog-pwa` as normal (V1.5 is COMPLETE on `main`); its start-gate merge of `main` picks up this pointer.
 
 ## Independent Catalog Visual update — 2026-10-04
 

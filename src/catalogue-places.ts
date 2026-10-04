@@ -1,11 +1,10 @@
-import { MAX_DEPTH, inOrder, pathOf, placesOf } from "./location-tree";
-import type { PlaceRow } from "./staff";
+import { MAX_DEPTH, type Place, inOrder, pathOf, placesOf } from "./location-tree";
 import { ApiError, type Html, api, failure, html, icon, mount, setMessage } from "./ui";
 
 /** The places a cataloguing session can be in: the tree's active places, each labelled with its full path. */
 export type PlaceList = { places: ReturnType<typeof placesOf>; paths: Map<string, string> };
 
-export function placeList(rows: readonly PlaceRow[]): PlaceList {
+export function placeList(rows: readonly Place[]): PlaceList {
   const places = placesOf(rows);
   return { places, paths: new Map(rows.map((row) => [row.id, pathOf(places, row.id)!])) };
 }
