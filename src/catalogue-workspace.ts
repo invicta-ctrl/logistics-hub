@@ -172,11 +172,11 @@ function heldList(all: Entry[], owner: string, online: boolean): Html {
   const others = all.length - ours.length;
   if (!all.length) return html``;
   return html`<section class="callout cat-held" role="status" aria-labelledby="held-title">${icon(online ? "refresh" : "cloudOff")}<div>
-    <p id="held-title"><strong>${ours.length ? `${plural(ours.length, "item")} on this device ${ours.length === 1 ? "is" : "are"} not on the server yet.` : "Items on this device are waiting for their member."}</strong>
-      ${ours.length ? (online ? " They are being sent." : " They will be sent when you're back online.") : ""}</p>
+    <p id="held-title"><strong>${ours.length ? `${plural(ours.length, "item")} on this device ${ours.length === 1 ? "has" : "have"} not been saved to the server.` : "Items on this device are waiting for their member."}</strong>
+      ${ours.length ? (online ? ` ${ours.length === 1 ? "It is" : "They are"} being sent.` : ` ${ours.length === 1 ? "It" : "They"} will be sent when you're back online.`) : ""}</p>
     ${ours.length ? html`<ul>${ours.map((entry) => html`<li>${String(entry.body.name)}: ${entry.state === "stopped"
       ? html`<span class="cat-row__note is-bad">${entry.message ?? "Needs you."}</span> ${entry.matches ? html`<button type="button" class="text-link" data-held-separate="${entry.id}">Save as a separate item</button>` : ""} <button type="button" class="text-link" data-held-discard="${entry.id}">${entry.itemId ? "Keep without photo" : "Discard"}</button>`
-      : entry.itemId ? "saved, photo to send" : online ? "sending" : "waiting to send"}</li>`)}</ul>` : ""}
+      : entry.itemId ? "saved, photo to send" : "not saved yet"}</li>`)}</ul>` : ""}
     ${others ? html`<p>${plural(others, "item")} another member catalogued here ${others === 1 ? "is" : "are"} waiting for them to sign in on this device. <button type="button" class="text-link" data-held-others>Discard ${others === 1 ? "it" : "them"}</button></p>` : ""}
   </div></section>`;
 }
@@ -339,7 +339,7 @@ export function finishedView(root: HTMLElement, detail: Detail, onDevice = 0, ca
     </header>
     <section class="card cat-card" aria-labelledby="sum-title"><div class="card__head"><h2 id="sum-title">${plural(total, "item")} saved</h2></div>
       ${total ? html`<ul class="plain-list">${(Object.keys(BEHAVIOUR_LABELS) as Behaviour[]).filter((key) => counts[key]).map((key) => html`<li><span class="cat-count">${counts[key]}</span> ${BEHAVIOUR_LABELS[key]}</li>`)}</ul>` : html`<p class="muted">Nothing was saved in this session.</p>`}
-      ${onDevice ? html`<p class="cat-ready">${icon("cloudOff")}<span><strong>${plural(onDevice, "item")} ${onDevice === 1 ? "is" : "are"} on this device.</strong> ${onDevice === 1 ? "It is" : "They are"} sent when you're back online; the session is finished on the server once ${onDevice === 1 ? "it is" : "they are"} all there.</span></p>` : ""}
+      ${onDevice ? html`<p class="cat-ready">${icon("cloudOff")}<span><strong>${plural(onDevice, "item")} ${onDevice === 1 ? "is" : "are"} not saved yet.</strong> ${onDevice === 1 ? "It waits" : "They wait"} on this device and ${onDevice === 1 ? "is" : "are"} sent when you're back online; the session is finished on the server once ${onDevice === 1 ? "it is" : "they are"} all there.</span></p>` : ""}
       ${counts.REVIEW_LATER ? html`<p class="card__text">${plural(counts.REVIEW_LATER, "item")} still ${counts.REVIEW_LATER === 1 ? "needs" : "need"} a decision. They stay out of the Lending Hub and Self-Service until someone makes it.</p>` : ""}
     </section>
     ${done && session.mine && canSignOff && !onDevice ? html`<section class="card cat-card" id="cat-review" aria-labelledby="rev-title"><div class="card__head"><h2 id="rev-title">Make them official</h2></div>
