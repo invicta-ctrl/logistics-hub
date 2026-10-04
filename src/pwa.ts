@@ -36,6 +36,13 @@ export function platform(): Platform {
 
 export const isStandalone = (): boolean => window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 export const canPromptInstall = (): boolean => installPrompt !== null;
+
+/** The page now installs the other app (its manifest changed): a prompt the browser offered for the previous one must not be used. */
+export function forgetInstallPrompt(): void {
+  if (!installPrompt) return;
+  installPrompt = null;
+  changed();
+}
 export const hasUpdate = (): boolean => updateReady;
 
 /** Shows the browser's own install dialog (Chrome, Edge, Samsung Internet). */
