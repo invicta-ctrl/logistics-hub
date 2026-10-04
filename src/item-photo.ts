@@ -22,17 +22,41 @@ export function rowThumb(photoId: string | null): Html | "" {
 }
 
 /**
+ * A 64-bit difference hash of the picture as 16 hex digits: the picture at 9 × 8 grey pixels, one bit for each pixel brighter than
+ * its right-hand neighbour. Two photos of one object usually differ by a few bits, two different objects by about thirty. It
+ * is only a hint for finding duplicates (src/duplicates.ts) and says nothing a person could recognise.
+ */
+function dhashOf(bitmap: ImageBitmap): string {
+  const context = Object.assign(document.createElement("canvas"), { width: 9, height: 8 }).getContext("2d", { willReadFrequently: true })!;
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, 9, 8);
+  context.drawImage(bitmap, 0, 0, 9, 8);
+  const { data } = context.getImageData(0, 0, 9, 8);
+  const grey = (index: number) => data[index * 4]! * 0.299 + data[index * 4 + 1]! * 0.587 + data[index * 4 + 2]! * 0.114;
+  let hex = "";
+  for (let row = 0; row < 8; row += 1) {
+    for (let group = 0; group < 2; group += 1) {
+      let nibble = 0;
+      for (let bit = 0; bit < 4; bit += 1) { const at = row * 9 + group * 4 + bit; nibble = (nibble << 1) | (grey(at) > grey(at + 1) ? 1 : 0); }
+      hex += nibble.toString(16);
+    }
+  }
+  return hex;
+}
+
+/**
  * Turns a camera or library photo into the two stored variants. Decoding with `from-image` applies the camera's
  * rotation to the pixels, and re-drawing on a canvas leaves no EXIF or location behind; the original never leaves
  * the device. A browser that cannot decode the file refuses it rather than sending it as it is.
  */
-async function prepare(file: File): Promise<{ display: Blob; thumb: Blob; preview: string }> {
+export type Prepared = { display: Blob; thumb: Blob; preview: string; hash: string };
+export async function preparePhoto(file: File): Promise<Prepared> {
   let bitmap: ImageBitmap;
   try { bitmap = await createImageBitmap(file, { imageOrientation: "from-image" }); } catch { throw new Error("This photo could not be read. Choose a JPEG, PNG or WebP image."); }
   try {
     let display = await jpegOf(bitmap, EDGES.display, QUALITIES[0]!);
     for (const quality of QUALITIES.slice(1)) if (display.size > 900_000) display = await jpegOf(bitmap, EDGES.display, quality);
-    return { display, thumb: await jpegOf(bitmap, EDGES.thumb, 0.8), preview: await dataUrl(display) };
+    return { display, thumb: await jpegOf(bitmap, EDGES.thumb, 0.8), preview: await dataUrl(display), hash: dhashOf(bitmap) };
   } finally { bitmap.close(); }
 }
 
@@ -114,7 +138,7 @@ export type PhotoSubject = {
 export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: string; name: string; photo: Photo | null; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo) => void }): PhotoPanel {
   const { id: itemId, name, noun, endpoint } = options;
   let photo = options.photo;
-  let staged: { display: Blob; thumb: Blob; preview: string } | null = null;
+  let staged: Prepared | null = null;
   let state: "" | "preparing" | "saving" | "removing" = "";
   let confirming = false;
   let error = "";
@@ -157,7 +181,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     state = "preparing";
     error = "";
     draw();
-    try { staged = await prepare(file); } catch (problem) { error = problem instanceof Error ? problem.message : "This photo could not be used."; }
+    try { staged = await preparePhoto(file); } catch (problem) { error = problem instanceof Error ? problem.message : "This photo could not be used."; }
     state = "";
     draw();
     focus(staged ? "[data-save]" : "[data-pick]");
@@ -195,6 +219,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       form.set("display", staged.display, "display.jpg");
       form.set("thumb", staged.thumb, "thumb.jpg");
       form.set("expected", photo?.id ?? "");
+      form.set("hash", staged.hash);
       try {
         const saved = await api<{ photo: Photo }>(endpoint, { method: "PUT", body: form });
         photo = saved.photo;
