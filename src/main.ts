@@ -32,8 +32,9 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
 };
 
 /**
- * Which app installing this page gives: the Logistics Catalog on the Catalogue (staff, start /staff/catalogue, scope /staff), Logistics
- * Self-Service everywhere else. Two manifests with their own ids install side by side; neither changes the other (docs/OFFLINE_CATALOGUE.md).
+ * Which app installing this page gives: the Logistics Catalog on the Catalogue (staff; start /staff/catalogue, scope /staff), Self-Service
+ * everywhere else (start and scope /self-service). Two manifests with their own ids and scopes that do not overlap install side by side,
+ * and neither captures the other's pages (docs/OFFLINE_CATALOGUE.md).
  */
 function installableAs(path: string): void {
   const catalog = path === "/staff/catalogue";
