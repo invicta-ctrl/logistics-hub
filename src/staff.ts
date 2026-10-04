@@ -271,7 +271,7 @@ export function initials(name: string): string {
 /** The metadata a reviewer confirms for a migrated record. */
 function reviewChecklist(item: Pick<Item, "category" | "itemType" | "unit" | "locationId">): Array<[string, boolean]> {
   return [
-    ["Category chosen", Boolean(item.category)],
+    ["Category chosen", Boolean(item.category) && item.category.toUpperCase() !== "UNSORTED"],
     ["Type classified", item.itemType !== "NEEDS_REVIEW"],
     ["Unit set", Boolean(item.unit)],
     ["Place recorded", Boolean(item.locationId)]
@@ -968,7 +968,7 @@ export async function workspace(): Promise<void> {
         <p class="field__hint field__hint--warn" id="duplicate-hint" hidden></p>
         ${text("aliases", "Other names", item.aliases, html`maxlength="300" autocomplete="off"`, "Names people also use for it, separated by commas. Search finds these too.", true)}
         <div class="field-grid">
-          ${text("category", "Category", item.category, html`required maxlength="100" autocomplete="off"`, "Letter case does not matter; an existing category is reused.")}
+          ${text("category", "Category", item.category?.toUpperCase() === "UNSORTED" ? "" : item.category, html`required maxlength="100" autocomplete="off"`, "Letter case does not matter; an existing category is reused.")}
           <div class="field"><label for="f-itemType">Borrow or consume</label><select id="f-itemType" name="itemType" aria-describedby="f-itemType-hint">${types.map((type) => html`<option value="${type}" ${type === (item.itemType ?? "Loanable") ? html`selected` : ""}>${TYPE_CHOICES[type] ?? label(type)}</option>`)}</select><p class="field__hint" id="f-itemType-hint">Your choice sets everything else: Borrow is lent and comes back; Consume is used up and never returned. Both appear on the Lending Hub and on phones.</p></div>
         </div>
         <div class="field" data-consumption ${(item.itemType ?? "Loanable") === "Consumable" ? "" : html`hidden`}><label for="f-consumptionMode">How is this item normally used?</label><select id="f-consumptionMode" name="consumptionMode" aria-describedby="f-consumptionMode-hint">${options(CONSUMPTION_MODES, item.consumptionMode ?? "WHOLE_UNIT")}</select><p class="field__hint" id="f-consumptionMode-hint">Open and use gradually suits reams, bottles, rolls and boxes: staff open one unit at a time and mark it empty when it runs out. Stock is still counted in whole units.</p></div>

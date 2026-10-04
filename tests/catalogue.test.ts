@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
@@ -5,6 +8,8 @@ import { suggest } from "../src/catalogue-suggest";
 import { type Known, hamming, possibleDuplicates, words } from "../src/duplicates";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
 import { jpeg } from "./jpeg";
+// @ts-expect-error: a plain .mjs tool
+import * as ops from "../scripts/ops/production-release.mjs";
 
 /* V1.5 Rapid Catalogue: the duplicate and suggestion rules, then sessions, captures and bulk edits through the Worker. */
 
@@ -331,6 +336,8 @@ describe("capturing an item", () => {
     const feed = await (await staff("/api/staff/activity?source=CATALOG")).json() as { events: Array<{ type: string; summary: string }> };
     expect(feed.events.map((event) => event.type)).toEqual(expect.arrayContaining(["CATALOGUE_STARTED", "CATALOGUE_FINISHED", "ITEM_CREATED"]));
     expect(feed.events.find((event) => event.type === "ITEM_CREATED")!.summary).toContain("while cataloguing");
+    expect(feed.events.find((event) => event.type === "CATALOGUE_STARTED")).toMatchObject({ title: "Cataloguing started" });
+    expect(feed.events.find((event) => event.type === "CATALOGUE_FINISHED")).toMatchObject({ title: "Cataloguing finished" });
     expect(feed.events.find((event) => event.type === "CATALOGUE_FINISHED")!.summary).toBe("Staff One finished cataloguing in Shelf 2: 1 items saved.");
   });
   it("lists the session's classified, unreviewed items for sign-off, and nothing else", async () => {
@@ -343,6 +350,20 @@ describe("capturing an item", () => {
     const answer = await (await staff(`/api/staff/catalogue/sessions/${session}/unreviewed`)).json() as { items: Array<{ id: string; updatedAt: string }> };
     expect(answer.items.map((entry) => entry.id)).toEqual([ok]);
     expect(answer.items[0]!.updatedAt).toBe(row(ok).updated_at);
+  });
+  it("will not mark an item reviewed while its category is still Unsorted", async () => {
+    const shelf = await place("Shelf 2");
+    const session = await begin(shelf);
+    const { id } = await (await save(session, shot(shelf, { name: "Zephyr mystery", behaviour: "REVIEW_LATER", category: "", unit: "" }))).json() as { id: string };
+    const current = (await (await staff(`/api/staff/items/${id}`)).json() as { item: Record<string, unknown> }).item;
+    const edit = (changes: Record<string, unknown>) => staff(`/api/staff/items/${id}`, "PATCH", { name: current.name, category: current.category, itemType: "Consumable", unit: "piece", status: "ACTIVE", locationId: shelf, reorderThreshold: 0, lendingAudience: "NOT_AVAILABLE_FOR_LENDING", needsReview: false, notes: null, updatedAt: current.updatedAt, ...changes });
+    const refused = await edit({});
+    expect(refused.status).toBe(400);
+    expect((await refused.json() as { error: string }).error).toContain("Choose a category");
+    expect((await edit({ category: "unsorted" })).status).toBe(400);
+    expect((await edit({ needsReview: true })).status).toBe(200);
+    const fresh = (await (await staff(`/api/staff/items/${id}`)).json() as { item: Record<string, unknown> }).item;
+    expect((await staff(`/api/staff/items/${id}`, "PATCH", { name: fresh.name, category: "HARDWARE", itemType: "Consumable", unit: "piece", status: "ACTIVE", locationId: shelf, reorderThreshold: 0, lendingAudience: "NOT_AVAILABLE_FOR_LENDING", needsReview: false, notes: null, updatedAt: fresh.updatedAt })).status).toBe(200);
   });
   it("keeps model and serial number on the item and in its edits", async () => {
     const shelf = await place("Shelf 2");
@@ -464,4 +485,38 @@ describe("a long session", () => {
     const review = await (await staff(`/api/staff/catalogue/sessions/${session}/unreviewed`)).json() as { items: unknown[] };
     expect(review.items).toHaveLength(390);
   }, 60_000);
+});
+
+describe("migration 0026 and its release manifest", () => {
+  const manifest = JSON.parse(fs.readFileSync("ops/releases/v1.5.json", "utf8")) as { migrations: { pending: Array<{ name: string; sha256: string }> }; expect: { schemaAdded: string[]; schemaChanged: string[]; tableRowsAfter: Record<string, number> } };
+  const sha = (text: string) => createHash("sha256").update(text).digest("hex");
+
+  it("adds exactly what the manifest says to a database in production's state, and changes no row", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    const apply = (file: string) => { db.exec("BEGIN"); db.exec(fs.readFileSync(`migrations/${file}`, "utf8")); db.exec("COMMIT"); };
+    fs.readdirSync("migrations").sort().filter((file) => file < "0026").forEach(apply);
+    const schema = () => Object.fromEntries((db.prepare("SELECT type, name, sql FROM sqlite_master").all() as Array<{ type: string; name: string; sql: string | null }>).map((row) => [`${row.type}:${row.name}`, sha(row.sql ?? "")]));
+    const counts = () => db.prepare("SELECT (SELECT COUNT(*) FROM items) AS items, (SELECT COUNT(*) FROM inventory_movements) AS movements, (SELECT COALESCE(SUM(on_hand), 0) FROM inventory_balances) AS onHand, (SELECT COUNT(*) FROM loans) AS loans, (SELECT COUNT(*) FROM audit_log) AS audit").get();
+    const items = db.prepare("SELECT * FROM items ORDER BY id").all();
+    const before = schema();
+    const figures = counts();
+    apply("0026_catalogue_sessions.sql");
+    const after = schema();
+    expect(Object.keys(after).filter((key) => !(key in before)).sort()).toEqual([...manifest.expect.schemaAdded].sort());
+    expect(Object.keys(before).filter((key) => key in after && before[key] !== after[key]).sort()).toEqual([...manifest.expect.schemaChanged].sort());
+    expect(Object.keys(before).filter((key) => !(key in after))).toEqual([]);
+    expect(counts()).toEqual(figures);
+    // Every existing item is byte-for-byte what it was; the new columns start empty.
+    expect((db.prepare("SELECT * FROM items ORDER BY id").all() as Array<Record<string, unknown>>).map(({ model, serial_number, ...rest }) => { expect([model, serial_number]).toEqual([null, null]); return rest; })).toEqual(items);
+    for (const [table, rows] of Object.entries(manifest.expect.tableRowsAfter)) expect((db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n).toBe(rows);
+  });
+
+  it("is a manifest the Cloud Operations lane accepts", () => {
+    expect(() => ops.loadManifest("ops/releases/v1.5.json", "v1.5")).not.toThrow();
+  });
+
+  it("pins the migration file it will apply", () => {
+    expect(manifest.migrations.pending).toEqual([{ name: "0026_catalogue_sessions.sql", sha256: sha(fs.readFileSync("migrations/0026_catalogue_sessions.sql", "utf8")) }]);
+  });
 });
