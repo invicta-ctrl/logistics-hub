@@ -1,0 +1,57 @@
+{
+  "release": "catalog-visuals",
+  "title": "Independent Catalog Visual System",
+  "branch": "main",
+  "record": "docs/catalog-visuals-implementation.md",
+  "target": {
+    "worker": "logistics-hub",
+    "d1": {
+      "binding": "DB",
+      "name": "logistics-hub",
+      "id": "3ffd8edf-a176-4f63-8b7c-5215d11c98d8"
+    },
+    "r2": {
+      "existing": [
+        {
+          "binding": "EVIDENCE",
+          "name": "logistics-hub-evidence"
+        },
+        {
+          "binding": "CATALOG_MEDIA",
+          "name": "logistics-hub-catalog-media"
+        },
+        {
+          "binding": "STAFF_IDS",
+          "name": "logistics-hub-staff-ids"
+        }
+      ],
+      "create": []
+    },
+    "forbidden": [
+      "hau-usc-logistics-production",
+      "hau-usc-logistics-staging"
+    ]
+  },
+  "migrations": {
+    "pending": [
+      {
+        "name": "0026_item_visuals.sql",
+        "sha256": "49e2942ce6ad9360600fba163dca72f8f49aebc73f576833018542c0e0065762"
+      }
+    ]
+  },
+  "expect": {
+    "schemaAdded": [],
+    "schemaChanged": [
+      "table:items"
+    ],
+    "tableRowsAfter": {},
+    "unchanged": [
+      "items",
+      "movements",
+      "onHand",
+      "loans",
+      "phoneEvents"
+    ]
+  }
+}
