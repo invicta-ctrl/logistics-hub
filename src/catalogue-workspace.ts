@@ -1,3 +1,4 @@
+import { checkScreen, checksCard } from "./audit-screen";
 import { captureScreen } from "./catalogue-capture";
 import { type Who, identify, prepare, readiness, ready, refreshSnapshot, turnOff, turnOn } from "./catalogue-offline";
 import { bindNewPlace, newPlaceForm, placeList, placeOptions } from "./catalogue-places";
@@ -40,8 +41,11 @@ export async function catalogueWorkspace(): Promise<void> {
   if (who.mode === "signed-in" && (who.session.mustChangePassword || who.session.hub === false)) return navigate("/staff/account", true);
   // From here this member's work is sent whenever it can be, on this page and the capture screen alike.
   startSending({ owner: who.session.id, legacy: who.mode === "signed-in" });
-  const open = new URLSearchParams(window.location.search).get("session");
+  const query = new URLSearchParams(window.location.search);
+  const open = query.get("session");
   if (open) return captureScreen(who, open);
+  const check = query.get("audit");
+  if (check) return checkScreen(who, check);
   document.title = "Catalogue · Catalog";
   whenIdle(() => true);
   onLeave(() => whenIdle(() => false));
@@ -105,6 +109,7 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
         <div class="where__buttons"><button class="button button--primary button--lg" type="button" id="start-go">Start cataloguing ${icon("next")}</button></div>
       </section>`
       : html`<section class="card cat-card">${emptyState("Add a place first", "Cataloguing records where each item is kept. Add the shelf or cabinet you are standing at, then start.", who.mode === "signed-in" ? html`<a class="button button--primary" href="/staff/locations" data-route>${icon("pin")}Add a place</a>` : "", "", 2)}</section>`}
+    <div id="cat-checks"></div>
     <div id="cat-device"></div>
     ${state && who.mode === "signed-in" && state.others.length ? html`<section class="cat-others" aria-labelledby="others-title"><h2 id="others-title">Cataloguing now</h2>
       <ul class="plain-list">${state.others.map((other) => html`<li>${icon("user")}<span><strong>${other.owner}</strong> in ${other.place ?? "no place"} · ${plural(other.saved, "item")} saved</span></li>`)}</ul></section>` : ""}
@@ -119,6 +124,7 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
   await drawHeld();
   onLeave(onSyncChange(() => void drawHeld()));
   bindHeld(root, drawHeld);
+  void checksCard(root.querySelector<HTMLElement>("#cat-checks")!, who, places);
   // Offline, the note above says all there is to say about this device, and installing needs a connection.
   if (who.mode !== "offline") void deviceCard(root.querySelector<HTMLElement>("#cat-device")!, who);
   if (mine || !active.length) return;
