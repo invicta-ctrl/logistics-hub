@@ -388,7 +388,15 @@ test.describe("bulk edits", () => {
     await expect(page.locator("#bulk-bar")).toContainText("5 selected");
     await page.getByRole("button", { name: "Clear" }).click();
     await expect(page.locator("#bulk-bar")).toBeHidden();
-    await page.getByRole("checkbox", { name: /Select all 600 shown items/ }).check();
+    // Ticking all 600 draws every row again; the click handler is synchronous, so the clock around it is the cost.
+    const spent = await page.evaluate(() => {
+      const box = document.querySelector<HTMLInputElement>("#select-all")!;
+      const started = performance.now();
+      box.click();
+      return performance.now() - started;
+    });
+    console.log(`select all 600 rows: ${spent.toFixed(0)} ms`);
+    expect(spent).toBeLessThan(600);
     await expect(page.locator("#bulk-bar")).toContainText("600 selected");
     await page.getByRole("button", { name: "Move to…" }).click();
     const dialog = page.locator("#bulk-sheet");
