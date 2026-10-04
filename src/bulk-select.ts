@@ -81,7 +81,8 @@ export function bulkBar(bar: HTMLElement, dialog: HTMLDialogElement, deps: BulkD
       const ready = (action === "MOVE" || action === "CATEGORY" ? Boolean(value) : true) ? items.filter((item) => !wanted(item) && !blocked.includes(item)) : [];
       const same = (action === "MOVE" || action === "CATEGORY") && !value ? [] : items.filter(wanted);
       const what = action === "MOVE" ? (value ? `to ${list.paths.get(value) ?? "that place"}` : "") : action === "CATEGORY" ? (value ? `to ${categoryName(value)}` : "") : action === "STOCK_AREA" ? `to ${label(value)}` : "";
-      mount(form.querySelector("#bulk-preview")!, html`<p>${ready.length ? html`<strong>${plural(ready.length, "item")}</strong> will change${what ? ` ${what}` : ""}: ${names(ready)}.` : html`Nothing will change.`}</p>
+      mount(form.querySelector("#bulk-preview")!, html`<p>${ready.length ? html`<strong>${plural(ready.length, "item")}</strong> will change${what ? ` ${what}` : ""}.` : html`Nothing will change.`}</p>
+        ${ready.length ? html`<p class="muted">${names(ready)}</p>` : ""}
         ${same.length ? html`<p class="muted">${plural(same.length, "item")} already ${same.length === 1 ? "has" : "have"} this.</p>` : ""}
         ${blocked.length ? html`<p class="muted">${plural(blocked.length, "item")} will be skipped until ${blocked.length === 1 ? "it is" : "they are"} classified or ${blocked.length === 1 ? "has" : "have"} a category: ${names(blocked)}.</p>` : ""}
         <p class="muted">Quantities are not changed. Each change is written to the item’s history.</p>`);
