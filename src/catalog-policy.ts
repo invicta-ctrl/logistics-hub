@@ -186,6 +186,7 @@ export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
     LOCATION_CREATED: "Place added", LOCATION_UPDATED: "Place edited", LOCATION_PHOTO_ADDED: "Place picture added", LOCATION_PHOTO_REPLACED: "Place picture replaced", LOCATION_PHOTO_REMOVED: "Place picture removed",
     LOCATION_ITEMS_MOVED: "Items moved to another place", LOCATIONS_RECONCILED: "Places made from item locations", LOCATION_REPORTED: "Location reported", LOCATION_REPORT_RESOLVED: "Location report resolved",
     CATALOGUE_STARTED: "Cataloguing started", CATALOGUE_FINISHED: "Cataloguing finished",
+    AUDIT_STARTED: "Place check started", AUDIT_PAUSED: "Place check paused", AUDIT_RESUMED: "Place check resumed", AUDIT_FINISHED: "Place check finished", AUDIT_RESOLVED: "Check finding settled",
     REORDER_OPENED: "Restock requested", REORDER_UPDATED: "Restock updated", REORDER_RESTOCKED: "Restocked" },
   ACCOUNT: {
     ACCOUNT_CREATED: "Account created", ACCOUNT_UPDATED: "Account updated", PASSWORD_RESET: "Password reset", PASSWORD_CHANGED: "Password changed", SESSIONS_REVOKED: "Sessions ended",

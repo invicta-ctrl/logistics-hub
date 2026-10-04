@@ -1,5 +1,6 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
+import { auditDetail, auditReview, auditState, finishAudit, itemFreshness, observe, resolveObservation, startAudit, updateAudit } from "./audits";
 import { bulkUpdate } from "./bulk";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
@@ -62,6 +63,8 @@ const REPORT_PATH = /^\/api\/staff\/location-reports\/([0-9a-f-]{36})\/resolve$/
 /** Self-Service shows a shared place's picture by id and size. */
 const PUBLIC_LOCATION_MEDIA_PATH = /^\/api\/public\/location-media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
 const CATALOGUE_PATH = /^\/api\/staff\/catalogue\/sessions\/(CS-[0-9a-f-]{36})(\/captures|\/finish|\/unreviewed)?$/;
+const AUDIT_PATH = /^\/api\/staff\/audits\/(LA-[0-9a-f-]{36})(\/observations|\/finish|\/review)?$/;
+const RESOLVE_PATH = /^\/api\/staff\/audits\/observations\/([0-9a-f-]{36})\/resolve$/;
 const ITEM_ID = /^ITM-[A-Za-z0-9-]{1,24}$/;
 const MEDIA_PATH = /^\/api\/staff\/media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
 /** The only public image address: a thumbnail, by id. The 1280 px size has no public address. */
@@ -181,6 +184,11 @@ function leaseMayUse(method: string, path: string): boolean {
   if (path === "/api/staff/catalogue/sessions") return method === "POST";
   const session = CATALOGUE_PATH.exec(path);
   if (session) return session[2] === undefined ? method === "GET" || method === "PATCH" : (session[2] === "/captures" || session[2] === "/finish") && method === "POST";
+  // Checking a place (V1.7): its own checks, observed and finished offline alike. Settling what a check found changes stock or a
+  // record, so it needs a full sign-in.
+  if (path === "/api/staff/audits") return method === "GET" || method === "POST";
+  const check = AUDIT_PATH.exec(path);
+  if (check) return check[2] === undefined ? method === "GET" || method === "PATCH" : (check[2] === "/observations" || check[2] === "/finish") && method === "POST";
   // The first photo of an item this account catalogued; staffApi checks the item.
   return ITEM_PATH.exec(path)?.[2] === "/photo" && method === "PUT";
 }
@@ -364,6 +372,24 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     const saved = await capture(env.DB, account, session[1]!, await body());
     return "duplicates" in saved ? json({ error: "This may already be in the catalog.", ...saved }, 409) : json(saved, saved.replayed ? 200 : 201);
   }
+  if (path === "/api/staff/audits" && method === "GET") {
+    const state = await auditState(env.DB, account);
+    // A lease sees only its member's own checks: who else is checking and what was finished need a sign-in.
+    return json(leased ? { mine: state.mine, others: [], finished: [] } : state);
+  }
+  if (path === "/api/staff/audits" && method === "POST") { const started = await startAudit(env.DB, account, await body()); return json(started, started.resumed ? 200 : 201); }
+  const check = AUDIT_PATH.exec(path);
+  if (check && !check[2] && method === "GET") {
+    const detail = await auditDetail(env.DB, account, check[1]!);
+    if (leased && !detail.audit.mine) throw new InputError(403, "Sign in again to see someone else's check.");
+    return json(detail);
+  }
+  if (check && !check[2] && method === "PATCH") return json(await updateAudit(env.DB, account, check[1]!, await body()));
+  if (check?.[2] === "/observations" && method === "POST") { const seen = await observe(env.DB, account, check[1]!, await body()); return json(seen, seen.replayed ? 200 : 201); }
+  if (check?.[2] === "/finish" && method === "POST") return json(await finishAudit(env.DB, account, check[1]!));
+  if (check?.[2] === "/review" && method === "GET") return json(await auditReview(env.DB, account, check[1]!));
+  const settling = RESOLVE_PATH.exec(path);
+  if (settling && method === "POST") return json(await resolveObservation(env.DB, account, settling[1]!, await body()));
   if (path === "/api/staff/items/bulk" && method === "POST") return json(await bulkUpdate(env.DB, account, await body()));
   if (path === "/api/staff/stock" && method === "GET") return revisioned(request, env.DB, () => stockOverview(env.DB));
   if (path === "/api/staff/loans" && method === "GET") return revisioned(request, env.DB, () => loansOverview(env.DB));
@@ -388,7 +414,10 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   const media = MEDIA_PATH.exec(path);
   if (media && method === "GET") return itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!);
   const match = ITEM_PATH.exec(path);
-  if (match && !match[2] && method === "GET") return json(await itemDetail(env.DB, match[1]!));
+  if (match && !match[2] && method === "GET") {
+    const [detail, freshness] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!)]);
+    return json({ ...detail, freshness });
+  }
   if (match && !match[2] && method === "PATCH") {
     const input = await body() as Record<string, unknown> | null;
     return json(await updateItem(env.DB, account, match[1]!, parseItemInput(input), input?.updatedAt));
