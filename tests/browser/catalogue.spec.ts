@@ -581,6 +581,27 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     await expect(page.getByRole("link", { name: /^Resume cataloguing/ })).toBeVisible();
   });
 
+  test("the Catalog is its own page with its own manifest, and moving to the staff workspace and back loads the other app's page", async ({ page }) => {
+    const server = serve(page);
+    await server.ready;
+    const shown = () => page.evaluate(() => ({ app: document.documentElement.dataset.app ?? null, manifest: document.querySelector('link[rel="manifest"]')?.getAttribute("href") }));
+    await page.goto("/staff/catalogue");
+    await expect(page.getByRole("heading", { level: 1, name: "Catalogue" })).toBeVisible();
+    expect(await shown()).toEqual({ app: "catalog", manifest: "/catalogue.webmanifest" });
+    // The Catalog's own frame: its name and connection, no staff sections.
+    await expect(page.getByRole("link", { name: "Catalog home" })).toBeVisible();
+    await expect(page.locator(".cg-pill")).toHaveText("Online");
+    await expect(page.getByRole("navigation", { name: "Sections" })).toHaveCount(0);
+    await page.getByRole("button", { name: /^Account:/ }).click();
+    await page.getByRole("link", { name: "Staff workspace" }).click();
+    await expect(page).toHaveURL(/\/staff\/items$/);
+    await expect.poll(shown).toEqual({ app: null, manifest: "/manifest.webmanifest" });
+    await page.goBack();
+    await expect(page).toHaveURL(/\/staff\/catalogue$/);
+    await expect.poll(shown).toEqual({ app: "catalog", manifest: "/catalogue.webmanifest" });
+    await expect(page.getByRole("heading", { level: 1, name: "Catalogue" })).toBeVisible();
+  });
+
   test("signing out on the device forgets its offline access", async ({ page }) => {
     const server = serve(page);
     await turnOn(page, server);
