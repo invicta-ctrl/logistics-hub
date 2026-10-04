@@ -1,6 +1,6 @@
 # Road to V2 — Proposed Amendments: Catalog Intelligence & Semantic Hardening
 
-STATUS: PROPOSED — OWNER REVIEW REQUIRED
+STATUS: SUPERSEDED — accepted as revised in `docs/specs/accepted/road-to-v2/2026-10-04-catalog-intelligence-semantic-hardening-amendment.md` (Earl, 2026-10-04). Kept as history; not implementation authority.
 DATE: 2026-10-04
 APPLIES TO: Road-to-V2 V1.6–V1.15
 INTENT: Add organization-specific catalog intelligence and reduce visible semantic/UI noise without creating a mandatory external AI dependency.
