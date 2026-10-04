@@ -31,6 +31,17 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
   "/staff/account": () => import("./admin").then((module) => module.myAccount)
 };
 
+/**
+ * Which app installing this page gives: the Logistics Catalog on the Catalogue (staff, start /staff/catalogue, scope /staff), Logistics
+ * Self-Service everywhere else. Two manifests with their own ids install side by side; neither changes the other (docs/OFFLINE_CATALOGUE.md).
+ */
+function installableAs(path: string): void {
+  const catalog = path === "/staff/catalogue";
+  const set = (selector: string, href: string) => { const link = document.querySelector<HTMLLinkElement>(selector); if (link && link.getAttribute("href") !== href) link.setAttribute("href", href); };
+  set('link[rel="manifest"]', catalog ? "/catalogue.webmanifest" : "/manifest.webmanifest");
+  set('link[rel="apple-touch-icon"]', catalog ? "/icons/catalog-touch-icon.png" : "/touch-icon.png");
+}
+
 let navigation = 0;
 // A fresh page load already starts at the top, so only in-app navigation moves focus to the page body. It never does inside a
 // frame (Administration's Self-Service test panel): that would pull focus out of the page around it.
@@ -43,6 +54,7 @@ async function render(): Promise<void> {
   shown.address = window.location.pathname + window.location.search;
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/items", true);
+  installableAs(path);
   let view: View;
   try {
     view = await (ROUTES[path] ?? (() => notFound))();

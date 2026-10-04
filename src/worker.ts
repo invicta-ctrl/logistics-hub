@@ -1,7 +1,7 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
 import { bulkUpdate } from "./bulk";
-import { capture, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
+import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
 import { itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
 import { locationPicture, publicLocationPicture, putLocationPhoto, removeLocationPhoto } from "./location-media";
@@ -44,6 +44,17 @@ async function selfServiceClosed(request: Request, env: Env): Promise<boolean> {
 
 const SESSION_NAME = "lh_staff_session";
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
+/**
+ * Offline cataloguing (V1.6). A lease is a `staff_sessions` row whose id starts `CL-` (a full session's id is a plain UUID). Only
+ * someone signed in with a full session can take one, for the device they are on; it travels in its own cookie, signed with its own
+ * key, and lets that device keep cataloguing, and send what it catalogued, without a password until it expires (see leaseMayUse).
+ * Being a session row, every way a session ends (sign out everywhere, a password change or reset, a change of role or access,
+ * deactivation, owner recovery) ends it too; signing out on the device ends it there.
+ */
+const LEASE_NAME = "lh_catalogue_lease";
+const LEASE_PREFIX = "CL-";
+const LEASE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+const leaseKey = (secret: string) => `catalogue-lease:${secret}`;
 const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/location-report|\/visual)?$/;
 const LOCATION_PATH = /^\/api\/staff\/locations\/(LOC-\d{4,})(\/photo|\/move-items)?$/;
 const LOCATION_MEDIA_PATH = /^\/api\/staff\/location-media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
@@ -95,6 +106,11 @@ function cookie(value: string, maxAge: number, secure: boolean): string {
   return `${SESSION_NAME}=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
 }
 
+/** The lease is only ever needed by staff API calls, so no page request carries it. */
+function leaseCookie(value: string, maxAge: number, secure: boolean): string {
+  return `${LEASE_NAME}=${value}; Path=/api/staff/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
+}
+
 const clientKey = (request: Request, purpose: string) => `${purpose}:${request.headers.get("CF-Connecting-IP") ?? "local"}`;
 
 /**
@@ -136,14 +152,77 @@ async function revisioned(request: Request, db: D1Database, load: () => Promise<
   return json({ revision, ...await load() }, 200, { etag });
 }
 
-async function accountFor(request: Request, env: Env): Promise<Account | null> {
-  const session = await verifySession(readCookie(request, SESSION_NAME), env.SESSION_SECRET);
-  if (!session) return null;
-  const row = await env.DB.prepare(`SELECT a.id AS accountId, s.id AS sessionId, a.display_name AS displayName, a.username, a.role, a.must_change_password AS mustChangePassword, g.value AS "group"
+type SignedIn = Account & { expiresAt: number };
+
+/**
+ * The account behind the full session cookie, or (`lease`) behind this device's offline cataloguing lease. Neither can pass as the
+ * other: each cookie is signed with its own key and must name its own kind of row.
+ */
+async function signedIn(request: Request, env: Env, lease = false): Promise<SignedIn | null> {
+  const secret = env.SESSION_SECRET && (lease ? leaseKey(env.SESSION_SECRET) : env.SESSION_SECRET);
+  const session = await verifySession(readCookie(request, lease ? LEASE_NAME : SESSION_NAME), secret);
+  if (!session || session.id.startsWith(LEASE_PREFIX) !== lease) return null;
+  const row = await env.DB.prepare(`SELECT a.id AS accountId, s.id AS sessionId, a.display_name AS displayName, a.username, a.role, a.must_change_password AS mustChangePassword, g.value AS "group", s.expires_at AS expiresAt
     FROM staff_sessions s JOIN staff_accounts a ON a.id = s.account_id LEFT JOIN system_settings g ON g.key = 'account_access:' || a.id
     WHERE s.id = ? AND s.revoked_at IS NULL AND s.expires_at > ? AND a.active = 1`)
-    .bind(session.id, Date.now()).first<Omit<Account, "mustChangePassword"> & { mustChangePassword: number }>();
+    .bind(session.id, Date.now()).first<Omit<SignedIn, "mustChangePassword"> & { mustChangePassword: number }>();
   return row ? { ...row, mustChangePassword: row.mustChangePassword === 1 } : null;
+}
+
+const accountFor = (request: Request, env: Env) => signedIn(request, env);
+const leaseFor = (request: Request, env: Env) => signedIn(request, env, true);
+
+/** What an offline cataloguing lease may do without a full session: catalogue, and nothing else. */
+function leaseMayUse(method: string, path: string): boolean {
+  if (path === "/api/staff/catalogue/offline") return method === "GET" || method === "DELETE";
+  if (path === "/api/staff/catalogue/snapshot") return method === "GET";
+  if (path === "/api/staff/catalogue/sessions") return method === "POST";
+  const session = CATALOGUE_PATH.exec(path);
+  if (session) return session[2] === undefined ? method === "GET" || method === "PATCH" : (session[2] === "/captures" || session[2] === "/finish") && method === "POST";
+  // The first photo of an item this account catalogued; staffApi checks the item.
+  return ITEM_PATH.exec(path)?.[2] === "/photo" && method === "PUT";
+}
+
+const endSession = (db: D1Database, id: string) => db.prepare("UPDATE staff_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL").bind(id);
+
+/** Whether this device may catalogue offline (until `expiresAt`), and as whom. */
+const offlineView = (account: SignedIn, signedIn: boolean, expiresAt: number | null) => ({
+  signedIn, lease: expiresAt === null ? null : { expiresAt },
+  account: { id: account.accountId, displayName: account.displayName, username: account.username, role: account.role, access: accessOf(account.role, account.group) }
+});
+
+/** The Catalogue asks on every visit it can make online. */
+async function offlineState(request: Request, env: Env, account: SignedIn, leased: boolean): Promise<Response> {
+  const lease = leased ? account : await leaseFor(request, env);
+  return json(offlineView(account, !leased, lease?.accountId === account.accountId ? lease.expiresAt : null));
+}
+
+/** Turns offline cataloguing on for this device, or extends it: a signed-in visit keeps the lease a full week ahead. */
+async function enableOffline(request: Request, env: Env, url: URL, account: SignedIn): Promise<Response> {
+  const current = await leaseFor(request, env);
+  const expiresAt = Date.now() + LEASE_DURATION_MS;
+  let id = current?.accountId === account.accountId ? current.sessionId : "";
+  if (id && !(await env.DB.prepare("UPDATE staff_sessions SET expires_at = ? WHERE id = ? AND revoked_at IS NULL").bind(expiresAt, id).run()).meta.changes) id = "";
+  if (!id) {
+    id = `${LEASE_PREFIX}${crypto.randomUUID()}`;
+    await env.DB.batch([
+      // A device holds one lease: one left here by someone else ends now.
+      ...(current ? [endSession(env.DB, current.sessionId)] : []),
+      env.DB.prepare("INSERT INTO staff_sessions (id, expires_at, account_id) VALUES (?, ?, ?)").bind(id, expiresAt, account.accountId),
+      audit(env.DB, account.accountId, "CATALOGUE_OFFLINE_ON", "ACCOUNT", account.accountId, { username: account.username, until: new Date(expiresAt).toISOString() })
+    ]);
+  }
+  const token = await createSession({ id, subject: account.accountId, role: "CATALOGUE", exp: expiresAt }, leaseKey(env.SESSION_SECRET!));
+  return json(offlineView(account, true, expiresAt), 200, { "set-cookie": leaseCookie(token, LEASE_DURATION_MS / 1000, url.protocol === "https:") });
+}
+
+/** Turns offline cataloguing off for this device. Whatever it has not sent stays on it until someone signs in there. */
+async function disableOffline(request: Request, env: Env, url: URL, account: SignedIn, leased: boolean): Promise<Response> {
+  const lease = leased ? account : await leaseFor(request, env);
+  if (lease?.accountId === account.accountId) {
+    await env.DB.batch([endSession(env.DB, lease.sessionId), audit(env.DB, account.accountId, "CATALOGUE_OFFLINE_OFF", "ACCOUNT", account.accountId, { username: account.username })]);
+  }
+  return json({ ok: true }, 200, { "set-cookie": leaseCookie("", 0, url.protocol === "https:") });
 }
 
 async function login(request: Request, env: Env, url: URL): Promise<Response> {
@@ -174,27 +253,36 @@ async function login(request: Request, env: Env, url: URL): Promise<Response> {
   return json({ ok: true, mustChangePassword: account.mustChangePassword === 1 }, 200, { "set-cookie": cookie(token, SESSION_DURATION_MS / 1000, url.protocol === "https:") });
 }
 
+/** Signing out on a device also ends offline cataloguing there; anything not yet sent stays on the device for the next sign-in. */
 async function logout(request: Request, env: Env, url: URL): Promise<Response> {
   if (!sameOrigin(request, url)) return json({ error: "Invalid request origin." }, 403);
   const session = await verifySession(readCookie(request, SESSION_NAME), env.SESSION_SECRET);
-  if (session) await env.DB.prepare("UPDATE staff_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL").bind(session.id).run();
-  return json({ ok: true }, 200, { "set-cookie": cookie("", 0, url.protocol === "https:") });
+  const lease = await verifySession(readCookie(request, LEASE_NAME), env.SESSION_SECRET && leaseKey(env.SESSION_SECRET));
+  const ended = [session, lease].filter((each) => each !== null).map((each) => endSession(env.DB, each.id));
+  if (ended.length) await env.DB.batch(ended);
+  const secure = url.protocol === "https:";
+  const response = json({ ok: true }, 200, { "set-cookie": cookie("", 0, secure) });
+  response.headers.append("set-cookie", leaseCookie("", 0, secure));
+  return response;
 }
 
 async function staffApi(request: Request, env: Env, url: URL): Promise<Response> {
   const mutating = request.method !== "GET";
   if (mutating && !sameOrigin(request, url)) return json({ error: "Invalid request origin." }, 403);
-  const account = await accountFor(request, env);
-  if (!account) return json({ error: "Your staff session has ended. Please sign in again." }, 401);
   const path = url.pathname;
   const method = request.method;
+  const full = await accountFor(request, env);
+  const account = full ?? (leaseMayUse(method, path) ? await leaseFor(request, env) : null);
+  if (!account) return json({ error: "Your staff session has ended. Please sign in again." }, 401);
+  /** Signed in only by this device's offline cataloguing lease, not a full session. */
+  const leased = !full;
   const body = () => request.json().catch(() => null);
   if (account.mustChangePassword && !PASSWORD_CHANGE_ALLOWED.has(path)) return json({ error: "Set a new password before continuing.", code: "PASSWORD_CHANGE_REQUIRED" }, 403);
   // Staff of other departments and officers sign in to their own account only (Earl, 2026-10-03).
   if (!hubAccess(account) && !OWN_ACCOUNT_PATHS.has(path)) return json({ error: "The Logistics Hub is for the Department of Logistics. Your sign-in opens your account only.", code: "NO_HUB_ACCESS" }, 403);
 
   if (path === "/api/staff/session" && method === "GET") {
-    const { accountId, sessionId, group, ...profile } = account;
+    const { accountId, sessionId, group, expiresAt, ...profile } = account;
     const reviews = await env.DB.prepare(`SELECT (SELECT COUNT(*) FROM self_service_events WHERE review IS NOT NULL AND resolved_at IS NULL)
       + (SELECT COUNT(*) FROM location_reports WHERE source = 'SELF_SERVICE' AND resolved_at IS NULL) AS total`).first<number>("total");
     return json({ authenticated: true, id: accountId, ...profile, access: accessOf(account.role, group), hub: hubAccess(account), recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews ?? 0, selfServiceClosed: await selfServiceState(env.DB) === "paused", directory: await linkedPerson(env.DB, accountId) });
@@ -243,6 +331,10 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   const resolving = REPORT_PATH.exec(path);
   if (resolving && method === "POST") return json(await resolveReport(env.DB, account, resolving[1]!, await body()));
   if (path === "/api/staff/catalogue" && method === "GET") return json(await catalogueState(env.DB, account));
+  if (path === "/api/staff/catalogue/offline" && method === "GET") return offlineState(request, env, account, leased);
+  if (path === "/api/staff/catalogue/offline" && method === "POST") return enableOffline(request, env, url, account);
+  if (path === "/api/staff/catalogue/offline" && method === "DELETE") return disableOffline(request, env, url, account, leased);
+  if (path === "/api/staff/catalogue/snapshot" && method === "GET") return revisioned(request, env.DB, () => catalogueSnapshot(env.DB));
   if (path === "/api/staff/catalogue/sessions" && method === "POST") { const started = await startSession(env.DB, account, await body()); return json(started, started.resumed ? 200 : 201); }
   const session = CATALOGUE_PATH.exec(path);
   if (session && !session[2] && method === "GET") return json(await sessionDetail(env.DB, account, session[1]!));
@@ -290,6 +382,8 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (Number(request.headers.get("content-length")) > MAX_PHOTO_BODY) throw new InputError(413, "That photo is too large.");
     const form = await request.formData().catch(() => null);
     if (!form) throw new InputError(400, "Invalid photo form.");
+    // On a lease, only the first photo of an item this account catalogued.
+    if (leased && (form.get("expected") !== "" || !await capturedBy(env.DB, account.accountId, match[1]!))) throw new InputError(403, "Sign in again to change this item's photo.");
     return json(await putItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, form));
   }
   if (match?.[2] === "/photo" && method === "DELETE") return json(await removeItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
@@ -299,7 +393,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!form) throw new InputError(400, "Invalid loan form.");
     return json(await createLoan(env.DB, env.EVIDENCE, account, match[1]!, form), 201);
   }
-  const known = match || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 
@@ -438,9 +532,10 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   if (path.startsWith("/api/")) return json({ error: "Not found." }, 404);
   // Items lived at /staff/inventory until V1.1; keep saved links and bookmarks working.
   if (path === "/staff/inventory") return Response.redirect(new URL(`/staff/items${url.search}`, url), 301);
-  // Every staff page below /staff requires a live session before any HTML is served;
-  // a signed-in visit to the login page goes straight to the workspace.
-  if (path.startsWith("/staff/")) {
+  // Every staff page below /staff requires a live session before any HTML is served, except the Catalogue: it also opens on a
+  // device's offline cataloguing lease (and offline, from the service worker), so the page itself decides. A signed-in visit to
+  // the login page goes straight to the workspace.
+  if (path.startsWith("/staff/") && path !== "/staff/catalogue") {
     const account = await accountFor(request, env);
     if (!account) return Response.redirect(new URL("/staff", url), 302);
     if (path.startsWith("/staff/admin") && !isAdmin(account)) return Response.redirect(new URL("/staff/items", url), 302);
@@ -455,7 +550,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
  */
 function assetCaching(response: Response, path: string): Response {
   const cacheControl = path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : path === "/sw.js" ? "no-cache" : null;
-  const manifest = path === "/manifest.webmanifest";
+  const manifest = path.endsWith(".webmanifest");
   if (!response.ok || (!cacheControl && !manifest)) return response;
   const headers = new Headers(response.headers);
   if (cacheControl) headers.set("cache-control", cacheControl);

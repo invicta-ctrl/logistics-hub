@@ -3,15 +3,16 @@ import { build, defineConfig, type Plugin, type Rollup } from "vite";
 
 /** Files the app needs offline that come from public/ rather than the bundle. */
 const PUBLIC_SHELL = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-512.png", "/touch-icon.png", "/brand/dol-mark.png", "/brand/hau-usc-crest.webp", "/brand/hau-campus-dusk.webp"];
+/** The Catalog app's own manifest and icons, saved with the Catalogue's screens. */
+const CATALOGUE_SHELL = ["/catalogue.webmanifest", "/icons/catalog-192.png", "/icons/catalog-512.png", "/icons/catalog-maskable-512.png", "/icons/catalog-touch-icon.png"];
 
-/** Lazy screens that must open offline; the staff tools always need a connection and are not saved on phones. */
+/** Lazy screens every installed device saves to open offline. The other staff tools always need a connection and are not saved. */
 const OFFLINE_SCREENS = new Set(["self-service-app"]);
+/** The Catalogue's screens: saved only on a device where staff turned offline cataloguing on (sw.ts). */
+const CATALOGUE_SCREENS = new Set(["catalogue-workspace"]);
 
-/**
- * The scripts and styles of the public pages and the offline screens, with everything they
- * import. Only WOFF2 fonts are listed: every browser that runs service workers uses them.
- */
-function offlineFiles(bundle: Rollup.OutputBundle): string[] {
+/** The scripts and styles of the chunks `wanted` picks, with everything they import. */
+function filesOf(bundle: Rollup.OutputBundle, wanted: (chunk: Rollup.OutputChunk) => boolean): Set<string> {
   const files = new Set<string>();
   const visit = (name: string) => {
     const chunk = bundle[name];
@@ -20,9 +21,20 @@ function offlineFiles(bundle: Rollup.OutputBundle): string[] {
     chunk.viteMetadata?.importedCss.forEach((css) => files.add(css));
     chunk.imports.forEach(visit);
   };
-  for (const [name, chunk] of Object.entries(bundle)) if (chunk.type === "chunk" && (chunk.isEntry || OFFLINE_SCREENS.has(chunk.name))) visit(name);
+  for (const [name, chunk] of Object.entries(bundle)) if (chunk.type === "chunk" && wanted(chunk)) visit(name);
+  return files;
+}
+
+/**
+ * The files of the public pages and the offline screens, then (apart) the Catalogue's own. Only WOFF2 fonts are listed: every
+ * browser that runs service workers uses them.
+ */
+function offlineFiles(bundle: Rollup.OutputBundle): { files: string[]; catalogue: string[] } {
+  const files = filesOf(bundle, (chunk) => chunk.isEntry || OFFLINE_SCREENS.has(chunk.name));
   for (const name of Object.keys(bundle)) if (name.endsWith(".woff2")) files.add(name);
-  return [...files].map((name) => `/${name}`).sort();
+  const catalogue = [...filesOf(bundle, (chunk) => CATALOGUE_SCREENS.has(chunk.name))].filter((name) => !files.has(name));
+  const paths = (names: Iterable<string>) => [...names].map((name) => `/${name}`).sort();
+  return { files: paths(files), catalogue: paths(catalogue) };
 }
 
 /**
@@ -36,7 +48,9 @@ function serviceWorker(): Plugin {
     apply: "build",
     enforce: "post",
     async generateBundle(_, bundle) {
-      const files = [...offlineFiles(bundle), ...PUBLIC_SHELL];
+      const offline = offlineFiles(bundle);
+      const files = [...offline.files, ...PUBLIC_SHELL];
+      const catalogue = [...offline.catalogue, ...CATALOGUE_SHELL];
       const page = bundle["index.html"];
       // Every file of the build counts toward the version, so a staff-only change also updates phones.
       const version = createHash("sha256").update(Object.keys(bundle).sort().join("\n")).update(page?.type === "asset" ? String(page.source) : "").digest("hex").slice(0, 12);
@@ -44,7 +58,7 @@ function serviceWorker(): Plugin {
         configFile: false,
         publicDir: false,
         logLevel: "warn",
-        define: { __BUILD__: JSON.stringify({ version, files }) },
+        define: { __BUILD__: JSON.stringify({ version, files, catalogue }) },
         build: { write: false, minify: true, lib: { entry: "src/sw.ts", formats: ["iife"], name: "logisticsServiceWorker", fileName: () => "sw.js" } }
       }) as Rollup.RollupOutput[];
       this.emitFile({ type: "asset", fileName: "sw.js", source: output[0]!.output[0].code });

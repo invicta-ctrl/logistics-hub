@@ -48,6 +48,8 @@ export const EVENT_TEXT: Record<string, (event: AccountEvent) => string> = {
   PASSWORD_RESET: (event) => `reset the password of ${String((event.details as { username?: string }).username)}`,
   PASSWORD_CHANGED: () => "changed their own password",
   SESSIONS_REVOKED: (event) => `signed ${String((event.details as { username?: string }).username)} out everywhere`,
+  CATALOGUE_OFFLINE_ON: () => "turned on offline cataloguing on a device",
+  CATALOGUE_OFFLINE_OFF: () => "turned off offline cataloguing on a device",
   OWNER_BOOTSTRAPPED: () => "was set up as the first owner (Owner Console)",
   RECOVERY_KEY_ROTATED: () => "issued a new owner recovery key",
   RECOVERY_KEY_REVOKED: () => "revoked the owner recovery key",

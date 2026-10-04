@@ -1,75 +1,95 @@
+import type { Who } from "./catalogue-offline";
 import { suggest } from "./catalogue-suggest";
-import { type Entry, drop, durable, entries, keep } from "./catalogue-outbox";
+import { type Detail, type Entry, type SessionRecord, type Snapshot, type SnapshotItem, drop, dropSession, durable, entries, keep, keepSession, sessions, setAccess, setSnapshot, snapshot } from "./catalogue-store";
 import { type PlaceList, bindNewPlace, newPlaceForm, placeList, placeOptions, refreshParents } from "./catalogue-places";
+import { onSyncChange, signedOut, syncNow } from "./catalogue-sync";
 import { BEHAVIOURS, BEHAVIOUR_LABELS, type Behaviour, UNSORTED_CATEGORY } from "./catalog-policy";
 import { type Known as DuplicateKnown, type Match, possibleDuplicates } from "./duplicates";
 import { preparePhoto, photoUrl } from "./item-photo";
-import type { PlaceRow, Session } from "./staff";
+import { whenIdle } from "./pwa";
 import { shell } from "./staff";
-import { ApiError, type Html, api, categoryName, dataUrl, emptyState, expired, failure, html, icon, leave, live, mount, onLeave, plural, preservingFocus, setMessage, toast, units } from "./ui";
+import { ApiError, type Html, api, categoryName, dataUrl, emptyState, failure, html, icon, leave, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, toast, units } from "./ui";
 
 /*
  * The capture screen of a cataloguing session (/staff/catalogue?session=…): one form, kept on screen, that turns a thing on a shelf
- * into a saved record in a few taps, then clears for the next. Saving never waits: the form is cleared at once and the record goes
- * to the server from a short queue (catalogue-outbox.ts), shown below with its state until the server has everything.
+ * into a saved record in a few taps, then clears for the next. Saving never waits: the form is cleared at once and the record is kept
+ * on this device (catalogue-store.ts) and sent from there (catalogue-sync.ts), shown below with its state until the server has
+ * everything. With offline cataloguing on (V1.6) it works the same without a connection, against the catalog this device saved.
  */
 
-type InventoryItem = {
-  id: string; name: string; aliases: string | null; category: string; itemType: string; consumptionMode: string; unit: string; stockArea: string | null;
-  status: string; model: string | null; serialNumber: string | null; photoHash: string | null; photoId: string | null; locationId: string | null; onHand: number;
-};
-type Inventory = { revision: number; items: InventoryItem[]; categories: string[]; units: string[]; locations: PlaceRow[] };
-export type SessionInfo = { id: string; locationId: string | null; place: string | null; status: string; startedAt: string; finishedAt: string | null; saved: number; reviewLater: number; owner: string; mine: boolean };
-type Recent = { captureId: string; behaviour: Behaviour; capturedAt: string; itemId: string; name: string; category: string; itemType: string; consumptionMode: string; unit: string; stockArea: string | null; onHand: number; place: string | null; photoId: string | null };
-export type Detail = { session: SessionInfo; counts: Record<string, number>; recent: Recent[] };
+type Signed = Exclude<Who, { mode: "closed" } | { mode: "signed-out" }>;
+type Item = SnapshotItem & { photoId?: string | null };
 
 const HINTS: Record<Behaviour, string> = { BORROW: "Lent out and brought back", CONSUME: "Taken and used up", GRADUAL: "Opened, used a little at a time", REVIEW_LATER: "Keep it counted, decide later" };
 const ORDER = ["cat-name", "cat-qty", "cat-category", "cat-unit"];
 
 /** What a queued capture looks like to the lists and rules that read items. */
-function known(entry: Entry): InventoryItem {
+function known(entry: Entry): Item {
   const body = entry.body;
   const text = (key: string) => (typeof body[key] === "string" && body[key] ? body[key] as string : null);
   const behaviour = body.behaviour as Behaviour;
   return {
     id: entry.itemId ?? `pending:${entry.id}`, name: String(body.name), aliases: text("aliases"), category: text("category") ?? UNSORTED_CATEGORY, unit: text("unit") ?? "piece",
     itemType: behaviour === "BORROW" ? "Loanable" : behaviour === "REVIEW_LATER" ? "NEEDS_REVIEW" : "Consumable", consumptionMode: behaviour === "GRADUAL" ? "OPEN_UNIT" : "WHOLE_UNIT",
-    stockArea: text("stockArea"), status: "ACTIVE", model: text("model"), serialNumber: text("serialNumber"), photoHash: entry.photo?.hash ?? null, photoId: null,
+    stockArea: text("stockArea"), status: "ACTIVE", model: text("model"), serialNumber: text("serialNumber"), photoHash: entry.photo?.hash ?? null,
     locationId: text("locationId"), onHand: Number(body.quantity)
   };
 }
 
-export async function captureScreen(session: Session, sessionId: string): Promise<void> {
+/** How many of each kind a list of captures holds, as the server counts a session. */
+const countsOf = (list: Entry[]) => list.reduce<Record<string, number>>((out, entry) => ({ ...out, [String(entry.body.behaviour)]: (out[String(entry.body.behaviour)] ?? 0) + 1 }), {});
+
+export async function captureScreen(who: Signed, sessionId: string): Promise<void> {
+  const session = who.session;
+  /** Whether the server can be reached: opened offline, it follows the connection from then on. */
+  let online = who.mode !== "offline";
   document.title = "Cataloguing · Staff workspace";
   shell(session, "items", html`<div class="cat" id="cat"><div class="skeleton skeleton--block"></div></div>`);
   const root = document.querySelector<HTMLElement>("#cat")!;
+  const { finishedView, signInHere } = await import("./catalogue-workspace");
+
+  // What the server says about the session where it can be asked; otherwise what this device knows of it.
+  let record: SessionRecord | null = (await sessions()).find((each) => each.id === sessionId) ?? null;
   let detail: Detail;
   try {
-    detail = await api<Detail>(`/api/staff/catalogue/sessions/${sessionId}`);
+    if (record && (!online || !record.serverId)) detail = record.detail;
+    else detail = await api<Detail>(`/api/staff/catalogue/sessions/${record?.serverId ?? sessionId}`);
   } catch (error) {
-    mount(root, emptyState("This cataloguing session could not be opened", failure(error), html`<a class="button button--secondary" href="/staff/catalogue" data-route>Back to Catalogue</a>`, "error", 1));
+    if (!(record && error instanceof ApiError && error.status === 0)) {
+      mount(root, emptyState("This cataloguing session could not be opened", record || online ? failure(error) : "It isn't saved on this device, so it opens only with a connection.", html`<a class="button button--secondary" href="/staff/catalogue" data-route>Back to Catalogue</a>`, "error", 1));
+      return;
+    }
+    detail = record.detail;
+  }
+  const here = async () => (await entries()).filter((entry) => entry.sessionId === sessionId);
+  if (record?.finishing) {
+    const left = await here();
+    finishedView(root, { ...detail, session: { ...detail.session, status: "FINISHED" }, counts: Object.entries(countsOf(left)).reduce((out, [key, n]) => ({ ...out, [key]: (out[key] ?? 0) + n }), { ...detail.counts }) }, left.length, false);
     return;
   }
   if (detail.session.status !== "ACTIVE" || !detail.session.mine) {
-    const { finishedView } = await import("./catalogue-workspace");
-    finishedView(root, detail);
+    // Finished on another device: no longer this device's open session. Anything still here goes to a new one (catalogue-sync.ts).
+    if (record && detail.session.mine) await ((await here()).length ? keepSession({ ...record, detail }) : dropSession(record.id));
+    finishedView(root, detail, 0, who.mode === "signed-in");
     return;
   }
+  // This device keeps the open session, so it reopens here without a connection; a start sent from here keeps the server's answer.
+  record = { id: sessionId, owner: session.id, finishing: false, ...record, serverId: record?.serverId ?? (online ? detail.session.id : null), detail };
+  await keepSession(record);
 
-  let inventory: Inventory | null = null;
-  let list: PlaceList = placeList([]);
+  let catalog: Snapshot | null = await snapshot();
+  let list: PlaceList = placeList(catalog?.places ?? []);
   let placeId = detail.session.locationId;
   let waiting: Entry[] = [];
-  /** Captures taken on this page, by request id, so a possible match can name the thing just added. */
-  const created = new Map<string, string>();
-  /** Everything this page has captured, as the lists and rules read items, until the server's own list catches up with it. */
-  const local = new Map<string, InventoryItem>();
+  /** Everything this page has captured, as the lists and rules read items, until the saved catalog catches up with it. */
+  const local = new Map<string, Item>();
   let photo: { display: Blob; thumb: Blob; preview: string; hash: string } | null = null;
   let behaviour: Behaviour | null = null;
   /** True once Save has shown the possible matches: the next Save is the person saying "a different one". */
   let armed = false;
   let preparing = false;
   const thumbs = new Map<string, string>();
+  const canAddPlace = who.mode === "signed-in";
 
   mount(root, html`
     <h1 class="visually-hidden">Cataloguing</h1>
@@ -82,10 +102,11 @@ export async function captureScreen(session: Session, sessionId: string): Promis
       <p class="cat-bar__count"><strong id="cat-count"></strong> <span id="cat-sync" class="live-status" data-state="live"></span> <button type="button" class="text-link cat-see" id="cat-see" hidden>See</button></p>
       <button type="button" class="button button--secondary button--sm" id="cat-finish">Finish</button>
     </header>
+    <p class="cat-ready cat-offline" id="cat-offline" role="status" ${online ? html`hidden` : ""}>${icon("cloudOff")}<span><strong>Offline.</strong> Keep going: what you save stays on this device and is sent when you're back online.</span></p>
     <div class="cat-place-panel" id="cat-place-panel" hidden>
       <div class="field"><label for="cat-place-select">Next items are in</label><select id="cat-place-select"></select></div>
-      <p><button type="button" class="text-link" data-new-place-toggle aria-expanded="false" aria-controls="cat-new-place">${icon("plus")} New place</button></p>
-      <div id="cat-new-place"></div>
+      ${canAddPlace ? html`<p><button type="button" class="text-link" data-new-place-toggle aria-expanded="false" aria-controls="cat-new-place">${icon("plus")} New place</button></p>
+        <div id="cat-new-place"></div>` : html`<p class="field__hint">Adding a new place needs a connection and a sign-in.</p>`}
     </div>
     <div class="cat-layout">
       <form class="cat-form card" id="cat-form" novalidate aria-label="Add an item">
@@ -130,6 +151,9 @@ export async function captureScreen(session: Session, sessionId: string): Promis
   const field = (id: string) => $<HTMLInputElement>(`#${id}`);
   const value = (id: string) => field(id).value.trim();
   const sync = $("#cat-sync");
+  // A new version of the app waits until nothing is being typed here (pwa.ts).
+  whenIdle(() => root.isConnected && !value("cat-name") && !photo && !preparing);
+  onLeave(() => whenIdle(() => false));
 
   /* ---------- Places ---------- */
 
@@ -148,23 +172,27 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     showPlace();
     panel.hidden = true;
     $("#cat-place").setAttribute("aria-expanded", "false");
-    // Where a resumed session opens; every capture also names its own place, so a failure here loses nothing.
-    void api(`/api/staff/catalogue/sessions/${sessionId}`, { method: "PATCH", body: JSON.stringify({ locationId: id }) }).catch(() => undefined);
+    // Where a resumed session opens, here and on the server; every capture also names its own place, so a failure here loses nothing.
+    record = { ...record!, detail: { ...record!.detail, session: { ...record!.detail.session, locationId: id, place: list.paths.get(id) ?? null } } };
+    await keepSession(record);
+    if (online && record.serverId) void api(`/api/staff/catalogue/sessions/${record.serverId}`, { method: "PATCH", body: JSON.stringify({ locationId: id }) }).catch(() => undefined);
     field("cat-name").focus();
   };
   $("#cat-place-select").addEventListener("change", (event) => { void choosePlace((event.target as HTMLSelectElement).value); });
-  mount($("#cat-new-place"), newPlaceForm(list, placeId));
-  bindNewPlace(panel, async (id) => { await poll.refresh(); await choosePlace(id); toast("Place added."); });
+  if (canAddPlace) {
+    mount($("#cat-new-place"), newPlaceForm(list, placeId));
+    bindNewPlace(panel, async (id) => { await poll?.refresh(); await choosePlace(id); toast("Place added."); });
+  }
 
   /* ---------- The form: suggestions and possible matches ---------- */
 
-  /** Everything known so far: what the server listed, and what this page has captured since (queued, or saved and not yet listed). */
-  const everything = (): InventoryItem[] => {
+  /** Everything known so far: the saved catalog, and what this page and this device have captured since. */
+  const everything = (): Item[] => {
     const ours = new Map([...local.values(), ...waiting.map(known)].map((item) => [item.id, item]));
-    return [...ours.values(), ...(inventory?.items ?? []).filter((item) => !ours.has(item.id))];
+    return [...ours.values(), ...(catalog?.items ?? []).filter((item) => !ours.has(item.id))];
   };
 
-  const recent = (): InventoryItem[] => [...waiting].reverse().map(known).concat(detail.recent.filter((row) => !waiting.some((entry) => entry.id === row.captureId)).map((row) => ({
+  const recent = (): Item[] => [...waiting].reverse().map(known).concat(detail.recent.filter((row) => !waiting.some((entry) => entry.id === row.captureId)).map((row) => ({
     id: row.itemId, name: row.name, aliases: null, category: row.category, itemType: row.itemType, consumptionMode: row.consumptionMode, unit: row.unit, stockArea: row.stockArea,
     status: "ACTIVE", model: null, serialNumber: null, photoHash: null, photoId: row.photoId, locationId: null, onHand: row.onHand
   })));
@@ -209,12 +237,12 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     const pending = [suggestions.behaviour && behaviour === null, suggestions.category && !value("cat-category"), suggestions.unit && !value("cat-unit"), stock].filter(Boolean).length;
     // Everything "Use these" would fill is named here first: nothing changes silently, including the stock area behind "More details".
     mount($("#cat-why"), lines.length && pending ? html`<span>${icon("info")}Suggested: ${[suggestions.behaviour && BEHAVIOUR_LABELS[suggestions.behaviour.value], suggestions.category && categoryName(suggestions.category.value), suggestions.unit?.value, stock && (stock.value === "Pantry" ? "Pantry" : "General stock")].filter(Boolean).join(" · ")}. ${lines[0]!.why}.</span> <button type="button" class="text-link" id="cat-use-all">Use these</button>` : html``);
-    const categories = [...new Set([suggestions.category?.value, ...recent().map((item) => item.category), ...(inventory?.categories ?? [])].filter((entry): entry is string => Boolean(entry) && entry !== UNSORTED_CATEGORY))];
+    const categories = [...new Set([suggestions.category?.value, ...recent().map((item) => item.category), ...(catalog?.categories ?? [])].filter((entry): entry is string => Boolean(entry) && entry !== UNSORTED_CATEGORY))];
     mount($("#cat-category-chips"), html`${categories.slice(0, 4).map((category) => chip(categoryName(category), "category", category, category === suggestions.category?.value))}`);
-    const common = [suggestions.unit?.value, ...recent().map((item) => item.unit), ...(inventory?.units ?? [])].filter((entry): entry is string => Boolean(entry));
+    const common = [suggestions.unit?.value, ...recent().map((item) => item.unit), ...(catalog?.units ?? [])].filter((entry): entry is string => Boolean(entry));
     mount($("#cat-unit-chips"), html`${[...new Set(common)].slice(0, 4).map((unit) => chip(unit, "unit", unit, unit === suggestions.unit?.value))}`);
-    mount($("#cat-categories"), html`${(inventory?.categories ?? []).map((category) => html`<option value="${category}">`)}`);
-    mount($("#cat-units"), html`${(inventory?.units ?? []).map((unit) => html`<option value="${unit}">`)}`);
+    mount($("#cat-categories"), html`${(catalog?.categories ?? []).map((category) => html`<option value="${category}">`)}`);
+    mount($("#cat-units"), html`${(catalog?.units ?? []).map((unit) => html`<option value="${unit}">`)}`);
     const later = behaviour === "REVIEW_LATER";
     root.querySelectorAll<HTMLElement>("[data-optional]").forEach((element) => { element.hidden = !later; });
     $("#cat-save").firstChild!.textContent = matches.length && armed ? "Save as a separate item " : "Save & next ";
@@ -284,8 +312,8 @@ export async function captureScreen(session: Session, sessionId: string): Promis
   };
 
   /** Empties the form for the next item; "like this" keeps what a second one of the same would share. */
-  const clear = (keep: boolean) => {
-    const kept = keep ? { name: value("cat-name"), category: value("cat-category"), unit: value("cat-unit"), model: value("cat-model"), stock: $<HTMLSelectElement>("#cat-stock").value } : null;
+  const clear = (keepShared: boolean) => {
+    const kept = keepShared ? { name: value("cat-name"), category: value("cat-category"), unit: value("cat-unit"), model: value("cat-model"), stock: $<HTMLSelectElement>("#cat-stock").value } : null;
     form.reset();
     photo = null;
     armed = false;
@@ -302,7 +330,7 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     drawPhoto();
     draw();
     field("cat-name").focus();
-    if (keep) field("cat-name").select();
+    if (keepShared) field("cat-name").select();
   };
 
   /** True from pressing Save until the item is on this device: a second press or a held key cannot queue it twice. */
@@ -338,143 +366,76 @@ export async function captureScreen(session: Session, sessionId: string): Promis
       photoHash: photo?.hash ?? "", acknowledged: matches.filter((match) => !match.id.startsWith("pending:")).map((match) => match.id)
     };
     const entry: Entry = {
-      id, sessionId, body, photo: photo ? { display: photo.display, thumb: photo.thumb, hash: photo.hash } : null, itemId: null, state: "waiting", message: null, matches: null,
+      id, sessionId, owner: session.id, body, photo: photo ? { display: photo.display, thumb: photo.thumb, hash: photo.hash } : null, itemId: null, state: "waiting", message: null, matches: null,
       at: new Date().toISOString(), after: matches.filter((match) => match.id.startsWith("pending:")).map((match) => match.id.slice(8))
     };
     if (photo) thumbs.set(id, photo.preview);
-    // On the device before anything is sent: from here a dropped connection or a reload cannot lose it.
+    // On the device before anything is sent: from here a dropped connection, a reload or an update cannot lose it.
     try {
       await keep(entry);
       local.set(id, known(entry));
-      waiting = await entries().then((all) => all.filter((each) => each.sessionId === sessionId));
+      waiting = await here();
     } finally {
       submitting = false;
     }
     clear(like);
-    announce(`Saving ${name}.`);
-    void pump();
+    announce(online ? `Saving ${name}.` : `${name} saved on this device.`);
     drawList();
+    void syncNow();
   };
   form.addEventListener("submit", (event) => { event.preventDefault(); void submit(false); });
   $("#cat-like").addEventListener("click", () => { void submit(true); });
 
   const announce = (text: string) => { $("#cat-announce").textContent = text; };
 
-  /* ---------- Sending ---------- */
+  /* ---------- Sending (catalogue-sync.ts) ---------- */
 
-  let pumping = false;
-  /** Set when the server says the sign-in has ended or the page is left: nothing more is sent from this page. */
-  let stopped = false;
-  onLeave(() => { stopped = true; });
-  const retryAt = new Map<string, number>();
-  const attempts = new Map<string, number>();
-  let retryTimer = 0;
-  onLeave(() => window.clearTimeout(retryTimer));
-
-  const settle = async (entry: Entry, change: Partial<Entry>) => { Object.assign(entry, change); await keep(entry); };
-
-  /** The ids of the earlier captures this one was told about, now that they have items of their own. */
-  const acknowledged = (entry: Entry): string[] => {
-    const own = (entry.body.acknowledged as string[]) ?? [];
-    const earlier = (entry.after ?? []).map((request) => created.get(request) ?? waiting.find((other) => other.id === request)?.itemId).filter((id): id is string => Boolean(id));
-    return [...new Set([...own, ...earlier])];
-  };
-
-  async function send(entry: Entry): Promise<void> {
-    if (!entry.itemId) {
-      try {
-        const saved = await api<{ id: string }>(`/api/staff/catalogue/sessions/${sessionId}/captures`, { method: "POST", body: JSON.stringify({ ...entry.body, acknowledged: acknowledged(entry) }) });
-        created.set(entry.id, saved.id);
-        await settle(entry, { itemId: saved.id, state: "waiting", message: null, matches: null });
-        local.set(entry.id, known(entry));
-      } catch (error) {
-        if (!(error instanceof ApiError)) throw error;
-        if (error.status === 401) { stopped = true; expired(); return; }
-        if (error.status === 0 || error.status >= 500 || error.status === 429) {
-          const tries = attempts.get(entry.id) ?? 0;
-          attempts.set(entry.id, tries + 1);
-          retryAt.set(entry.id, Date.now() + Math.min(30_000, 2_000 * 2 ** tries));
-          await settle(entry, { state: "waiting", message: error.status === 0 ? "Not saved yet. It will be sent when the connection is back." : "Not saved yet. The server is busy; trying again." });
-        } else {
-          const found = error.status === 409 && Array.isArray(error.body.duplicates) ? error.body.duplicates as Match[] : null;
-          await settle(entry, { state: "stopped", message: found ? "This may already be in the catalog." : error.message, matches: found });
-        }
-        return;
-      }
-    }
-    if (entry.photo && entry.itemId) {
-      const form = new FormData();
-      form.set("display", entry.photo.display, "display.jpg");
-      form.set("thumb", entry.photo.thumb, "thumb.jpg");
-      form.set("expected", "");
-      form.set("hash", entry.photo.hash);
-      try {
-        await api(`/api/staff/items/${entry.itemId}/photo`, { method: "PUT", body: form });
-      } catch (error) {
-        if (!(error instanceof ApiError)) throw error;
-        if (error.status === 401) { stopped = true; expired(); return; }
-        if (error.status === 409) {
-          // A repeat of an upload whose answer was lost finds the photo already there.
-          const there = await api<{ item: { photo: unknown } }>(`/api/staff/items/${entry.itemId}`).then((answer) => Boolean(answer.item.photo), () => false);
-          if (!there) { await settle(entry, { state: "stopped", message: `Saved, but the photo was not: ${error.message}` }); return; }
-        } else if (error.status === 0 || error.status >= 500 || error.status === 429) {
-          retryAt.set(entry.id, Date.now() + 4_000);
-          await settle(entry, { state: "waiting", message: "Saved. The photo has not gone up yet; trying again." });
-          return;
-        } else {
-          await settle(entry, { state: "stopped", message: `Saved, but the photo was not: ${error.message}` });
-          return;
-        }
-      }
-    }
-    await drop(entry.id);
-  }
-
-  async function pump(): Promise<void> {
-    if (pumping) return;
-    pumping = true;
-    try {
-      for (;;) {
-        if (stopped) break;
-        waiting = (await entries()).filter((entry) => entry.sessionId === sessionId);
-        const next = waiting.find((entry) => entry.state === "waiting" && (retryAt.get(entry.id) ?? 0) <= Date.now());
-        if (!next) break;
-        retryAt.delete(next.id);
-        await send(next);
-        // Once the server has everything the item leaves the queue; its row must come back from the server's list in the same
-        // moment, so it never seems to vanish in between.
-        if (!(await entries()).some((entry) => entry.id === next.id)) await reload();
-        drawList();
-      }
-    } finally {
-      pumping = false;
-      waiting = (await entries()).filter((entry) => entry.sessionId === sessionId);
-      const soon = Math.min(...waiting.filter((entry) => entry.state === "waiting").map((entry) => retryAt.get(entry.id) ?? Date.now() + 2_000));
-      window.clearTimeout(retryTimer);
-      if (stopped) return;
-      if (Number.isFinite(soon)) retryTimer = window.setTimeout(() => void pump(), Math.max(500, soon - Date.now()));
-      drawList();
-      void poll.refresh();
-    }
-  }
-
-  /** The server's own view of the session: what is saved, and how many. */
+  /** The server's own view of the session: what is saved, and how many. Kept on this device for opening it again offline. */
   async function reload(): Promise<void> {
-    try { detail = await api<Detail>(`/api/staff/catalogue/sessions/${sessionId}`); } catch (error) { if (error instanceof ApiError && error.status === 401) expired(); }
+    const target = (await sessions()).find((each) => each.id === sessionId)?.serverId;
+    if (!online || !target) return;
+    try {
+      detail = await api<Detail>(`/api/staff/catalogue/sessions/${target}`);
+      record = { ...record!, serverId: target, detail };
+      if (detail.session.status === "ACTIVE") await keepSession(record);
+    } catch { /* the next change tries again */ }
   }
 
-  const resume = () => { retryAt.clear(); void pump(); };
-  window.addEventListener("online", resume);
-  const visible = () => { if (document.visibilityState === "visible") resume(); };
-  document.addEventListener("visibilitychange", visible);
-  const leaving = (event: BeforeUnloadEvent) => { if (waiting.length && !durable()) { event.preventDefault(); event.returnValue = ""; } };
-  window.addEventListener("beforeunload", leaving);
-  onLeave(() => { window.removeEventListener("online", resume); document.removeEventListener("visibilitychange", visible); window.removeEventListener("beforeunload", leaving); });
+  /** Neither a sign-in nor this device's offline access is valid any more: what is here waits on the device for the next sign-in. */
+  const ended = async () => {
+    await setAccess(null);
+    navigate(signInHere(true), true);
+  };
+  const connected = (now: boolean) => {
+    if (online === now) return;
+    online = now;
+    $("#cat-offline").hidden = online;
+    drawList();
+  };
+  const onConnection = () => connected(navigator.onLine);
+  window.addEventListener("online", onConnection);
+  window.addEventListener("offline", onConnection);
+  onLeave(() => { window.removeEventListener("online", onConnection); window.removeEventListener("offline", onConnection); });
+
+  const refresh = async () => {
+    if (signedOut()) return ended();
+    const now = await here();
+    // Something reached the server: it can be reached again.
+    if (waiting.some((entry) => !now.some((each) => each.id === entry.id) || (entry.itemId === null && now.find((each) => each.id === entry.id)?.itemId))) connected(true);
+    // Once the server has everything an item leaves the queue; its row must come back from the server's list in the same moment,
+    // so it never seems to vanish in between.
+    for (const entry of waiting) if (entry.itemId && !now.some((each) => each.id === entry.id)) local.set(entry.id, known(entry));
+    if (waiting.some((entry) => !now.some((each) => each.id === entry.id))) await reload();
+    waiting = now;
+    drawList();
+  };
+  onLeave(onSyncChange(() => void refresh()));
 
   /* ---------- Just added ---------- */
 
   const stateOf = (entry: Entry): Html => {
     if (entry.state === "stopped") return html`<span class="tag tag--bad">Needs you</span>`;
+    if (!online) return html`<span class="tag tag--warn">On this device</span>`;
     if (!entry.itemId) return entry.message ? html`<span class="tag tag--warn">Not saved yet</span>` : html`<span class="tag tag--pending">Saving…</span>`;
     return entry.message ? html`<span class="tag tag--warn">Saved, photo to send</span>` : html`<span class="tag tag--pending">Sending photo…</span>`;
   };
@@ -490,20 +451,22 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     const body = entry.body;
     const stopped = entry.state === "stopped";
     const open = (entry.matches ?? []).map((match) => html`<li>${match.reason}: <a class="text-link" href="/staff/items?item=${match.id}" target="_blank" rel="noopener">${match.id}<span class="visually-hidden"> (opens in a new tab)</span></a></li>`);
+    const note = entry.message ?? (!online && !stopped ? "Sent when you're back online." : null);
     return html`<li class="cat-row ${stopped ? "is-stopped" : ""}" data-key="${entry.id}">
       ${thumbFor(entry)}
       <span class="cat-row__text"><strong>${String(body.name)}</strong><span>${BEHAVIOUR_LABELS[body.behaviour as Behaviour]} · ${Number(body.quantity)} ${units(Number(body.quantity), String(body.unit || "piece"))}</span>
-        ${entry.message ? html`<span class="cat-row__note ${stopped ? "is-bad" : ""}">${entry.message}</span>` : ""}
+        ${note ? html`<span class="cat-row__note ${stopped ? "is-bad" : ""}">${note}</span>` : ""}
         ${open.length ? html`<ul class="cat-row__matches">${open}</ul>` : ""}
         ${stopped ? html`<span class="cat-row__actions">${entry.matches ? html`<button type="button" class="button button--secondary button--sm" data-separate="${entry.id}">Save as a separate item</button>` : ""}${entry.itemId ? "" : html`<button type="button" class="button button--secondary button--sm" data-edit="${entry.id}">Edit</button>`}<button type="button" class="button button--ghost button--sm" data-discard="${entry.id}">${entry.itemId ? "Keep without photo" : "Discard"}</button></span>` : ""}</span>
       <span class="cat-row__state">${stateOf(entry)}</span></li>`;
   };
 
-  const savedRow = (row: Recent): Html => html`<li class="cat-row" data-key="${row.captureId}">
-    ${row.photoId ? html`<img class="cat-row__thumb" src="${photoUrl(row.photoId, "thumb")}" alt="" width="44" height="44" loading="lazy" decoding="async" />` : html`<span class="cat-row__thumb cat-row__thumb--none">${icon("box")}</span>`}
-    <span class="cat-row__text"><strong>${row.name}</strong><span>${BEHAVIOUR_LABELS[row.behaviour]} · ${row.onHand} ${units(row.onHand, row.unit)}${row.place ? ` · ${row.place.split(" › ").pop()}` : ""}</span></span>
+  // Saved photos are served to signed-in staff only, from the network: without one, the row shows the plain tile.
+  const savedRow = (row: Detail["recent"][number]): Html => html`<li class="cat-row" data-key="${row.captureId}">
+    ${row.photoId && who.mode === "signed-in" ? html`<img class="cat-row__thumb" src="${photoUrl(row.photoId, "thumb")}" alt="" width="44" height="44" loading="lazy" decoding="async" />` : html`<span class="cat-row__thumb cat-row__thumb--none">${icon("box")}</span>`}
+    <span class="cat-row__text"><strong>${row.name}</strong><span>${BEHAVIOUR_LABELS[row.behaviour as Behaviour]} · ${row.onHand} ${units(row.onHand, row.unit)}${row.place ? ` · ${row.place.split(" › ").pop()}` : ""}</span></span>
     <span class="cat-row__state">${row.behaviour === "REVIEW_LATER" ? html`<span class="tag tag--pending">Review later</span>` : html`<span class="tag tag--ok">Saved</span>`}
-      <a class="icon-button" href="/staff/items?item=${row.itemId}" target="_blank" rel="noopener" aria-label="Open ${row.name} (opens in a new tab)">${icon("external")}</a></span></li>`;
+      ${who.mode === "signed-in" ? html`<a class="icon-button" href="/staff/items?item=${row.itemId}" target="_blank" rel="noopener" aria-label="Open ${row.name} (opens in a new tab)">${icon("external")}</a>` : ""}</span></li>`;
 
   function drawList(): void {
     const queued = [...waiting].reverse();
@@ -511,11 +474,11 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     const holding = waiting.length;
     $("#cat-count").textContent = plural(detail.session.saved + waiting.filter((entry) => !entry.itemId).length, "item");
     const stopped = waiting.some((entry) => entry.state === "stopped");
-    const offline = waiting.some((entry) => entry.state === "waiting" && entry.message);
+    const offline = !online || waiting.some((entry) => entry.state === "waiting" && entry.message);
     sync.dataset.state = offline || stopped ? "offline" : "live";
-    sync.textContent = stopped ? "Needs you" : offline ? `${holding} waiting to send` : holding ? "Saving…" : "All saved";
+    sync.textContent = stopped ? "Needs you" : !online ? (holding ? `${holding} on this device` : "Offline") : offline ? `${holding} waiting to send` : holding ? "Saving…" : "All saved";
     // On a phone the list sits below the form: one tap goes to whatever is waiting.
-    $("#cat-see").hidden = !(offline || stopped);
+    $("#cat-see").hidden = !((offline && holding) || stopped);
     preservingFocus($("#cat-list"), () => mount($("#cat-list"), queued.length || sent.length
       ? html`${!durable() && holding ? html`<p class="callout">${icon("alert")}<span>This browser cannot keep unsent items if the page closes. Stay on this page until they are saved.</span></p>` : ""}<ul class="cat-rows">${queued.map(queuedRow)}${sent.map(savedRow)}</ul>
         ${detail.session.saved > sent.length ? html`<p class="muted">Showing the newest ${sent.length}. The others are saved; find them under Items.</p>` : ""}`
@@ -530,8 +493,9 @@ export async function captureScreen(session: Session, sessionId: string): Promis
     const entry = waiting.find((each) => each.id === (act.dataset.separate ?? act.dataset.edit ?? act.dataset.discard));
     if (!entry) return;
     if (act.dataset.separate) {
-      await settle(entry, { state: "waiting", message: null, body: { ...entry.body, acknowledged: (entry.matches ?? []).map((match) => match.id) }, matches: null });
-      void pump();
+      Object.assign(entry, { state: "waiting", message: null, body: { ...entry.body, acknowledged: (entry.matches ?? []).map((match) => match.id) }, matches: null });
+      await keep(entry);
+      void syncNow();
     } else if (act.dataset.edit) {
       if ((value("cat-name") || photo) && !window.confirm("Replace what you are typing with this item?")) return;
       const body = entry.body;
@@ -588,14 +552,26 @@ export async function captureScreen(session: Session, sessionId: string): Promis
   /* ---------- Finishing ---------- */
 
   $("#cat-finish").addEventListener("click", async () => {
-    await pump();
-    if (waiting.length) { toast(`${plural(waiting.length, "item")} here ${waiting.length === 1 ? "is" : "are"} not saved yet. Wait for ${waiting.length === 1 ? "it" : "them"}, or resolve ${waiting.length === 1 ? "it" : "them"} first.`, "error"); drawList(); return; }
-    if (!window.confirm(`Finish cataloguing? ${plural(detail.session.saved, "item")} saved.`)) return;
+    await syncNow();
+    waiting = await here();
+    const stopped = waiting.filter((entry) => entry.state === "stopped");
+    if (stopped.length) { toast(`${plural(stopped.length, "item")} here ${stopped.length === 1 ? "needs" : "need"} you first: save, edit or discard ${stopped.length === 1 ? "it" : "them"}.`, "error"); drawList(); return; }
+    const unsent = waiting.filter((entry) => !entry.itemId).length;
+    const total = detail.session.saved + unsent;
+    if (!window.confirm(`Finish cataloguing? ${plural(total, "item")} saved${waiting.length ? `; ${waiting.length === 1 ? "1 is" : `${waiting.length} are`} still on this device and will be sent when ${online ? "the connection allows" : "you're back online"}` : ""}.`)) return;
     try {
-      await api(`/api/staff/catalogue/sessions/${sessionId}/finish`, { method: "POST" });
+      if (!waiting.length && online && record?.serverId) {
+        await api(`/api/staff/catalogue/sessions/${record.serverId}/finish`, { method: "POST" });
+        // Finished on the server: the page drawn next is the server's summary, with signing items off.
+        await dropSession(record.id);
+      } else {
+        // Finished here: the server is told once everything in it has been sent (catalogue-sync.ts).
+        await keepSession({ ...record!, finishing: true });
+      }
+      void syncNow();
       // The address does not change, so the page is drawn again rather than navigated to.
       leave();
-      await captureScreen(session, sessionId);
+      await captureScreen(who, sessionId);
     } catch (error) {
       toast(failure(error), "error");
     }
@@ -603,29 +579,30 @@ export async function captureScreen(session: Session, sessionId: string): Promis
 
   /* ---------- Data ---------- */
 
-  const poll = live<Inventory>("/api/staff/inventory", {
+  const takeCatalog = (fresh: Snapshot) => {
+    catalog = fresh;
+    list = placeList(fresh.places);
+    if (!placeId || !list.places.get(placeId)?.active) placeId = detail.session.locationId && list.places.get(detail.session.locationId)?.active ? detail.session.locationId : null;
+    const selected = $<HTMLSelectElement>("#cat-place-select");
+    showPlace();
+    if (placeId) selected.value = placeId;
+    if (canAddPlace) refreshParents(panel, list, placeId);
+    draw();
+  };
+  // Online, the saved catalog is kept current (one small 304 while nothing changes) and the screen reads the same copy offline.
+  const poll = online ? live<Omit<Snapshot, "fetchedAt">>("/api/staff/catalogue/snapshot", {
     interval: 30_000,
+    etag: catalog ? `"r${catalog.revision}"` : "",
     status: () => null,
-    onData: (data) => {
-      inventory = data;
-      list = placeList(data.locations);
-      if (!placeId || !list.places.get(placeId)?.active) placeId = detail.session.locationId && list.places.get(detail.session.locationId)?.active ? detail.session.locationId : null;
-      const selected = $<HTMLSelectElement>("#cat-place-select");
-      showPlace();
-      if (placeId) selected.value = placeId;
-      refreshParents(panel, list, placeId);
-      draw();
-    },
-    onError: (error) => { if (error.status === 401) expired(); }
-  });
+    onData: (data) => { const fresh = { ...data, fetchedAt: new Date().toISOString() }; void setSnapshot(fresh); takeCatalog(fresh); },
+    onError: (error) => { if (error.status === 401) void ended(); }
+  }) : null;
 
   drawPhoto();
-  showPlace();
-  waiting = (await entries()).filter((entry) => entry.sessionId === sessionId);
-  for (const entry of waiting) if (entry.itemId) created.set(entry.id, entry.itemId);
+  if (catalog) takeCatalog(catalog); else showPlace();
+  waiting = await here();
   draw();
   drawList();
   field("cat-name").focus();
-  void pump();
+  void syncNow();
 }
-
