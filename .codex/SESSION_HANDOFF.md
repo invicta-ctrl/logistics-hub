@@ -1,5 +1,13 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Road to V2 — V1.7 Physical inventory & location audits (COMPLETE, WAITING ON OWNER ACTIONS; record `docs/road-to-v2/releases/v1.7.md`; Claude Cloud, 2026-10-04)
+- **Where:** Claude Cloud session on `road-to-v2/v1.7-physical-inventory`; every checkpoint pushed and propagated V1.8–V1.15 (no conflicts).
+- **First, V1.6 follow-up (Earl's report):** iOS installed a second Self-Service from the Catalogue (late manifest swap) and the Catalogue wore the staff shell. Fixed in `fec74bf`: `staff/catalogue.html` (own manifest from the first byte), router reloads between the two apps' pages, `catalogueShell()` gives the Catalog its own frame. Integrated to `main` (`5c82943`), plus a racy sign-out test fixed (`aee3b63`, on `main`).
+- **Built (V1.7):** migration `0028` (`location_audits`, append-only `location_audit_observations` and `location_audit_resolutions`); `src/audits.ts` (start / resume / one per place, observe idempotently, pause, finish, review, settle through the ledger's COUNT with `audit-<observation>` key, the bulk Move, a location report or a reasoned no-change; derived freshness); routes and lease scope in `worker.ts`; Catalog UI `src/audit-screen.ts` + `catalogue.css`; device store v3 (`audits`, `observations`) sent by `catalogue-sync.ts`; freshness on the item profile and a place's detail; Activity wording.
+- **Decisions to know:** a count posts only when what the counter saw = server on arrival = now (else "count it again"); only for count differs / can't find (never from Found here); terms recorded in the V1.7 spec ("Check", "Here", "Count differs", "Found here", "Not in the catalog", "Record looks wrong", "Finding", "Settle").
+- **Verified:** build; `npm test` 489; browser 114 (+ new `audit.spec.ts`); end to end incl. new `worker-v17-location-audit.spec.ts`; privacy clean; 12 rendered scenes, nine defects found by looking fixed. In this container two older tests are load- or browser-sensitive (`id-card` reduced-motion timing; `production-release` 5 s case under full load) and pass alone; CI is the judge.
+- **Next:** Earl: V1.7 owner actions (record). Agent: `start` V1.8 when asked.
+
 ## Road to V2 — V1.6 Staff Catalog PWA & offline cataloguing (COMPLETE and MERGED to main, record `docs/road-to-v2/releases/v1.6.md`; Claude desktop, 2026-10-04)
 - **Where:** a Claude worktree of a separate clone (`D:\Documents\Codex\HAU-USC Logistics\active\logistics-hub\.claude\worktrees\v1.6-catalog-pwa`), authorized by Earl in the session; every checkpoint pushed and propagated V1.7–V1.15 (no conflicts). The shared worktree's writer lock was not reachable from there.
 - **Gate:** V1.5 COMPLETE and MERGED `aa8da59` on `main`; `origin/main` merged at the start (`e56f3ac`).

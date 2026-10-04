@@ -1,5 +1,12 @@
 # Current Work Pointer — Logistics Hub
 
+## Road to V2 — V1.7 Physical inventory & location audits — 2026-10-04
+
+SPEC: `docs/specs/accepted/road-to-v2/v1.7-physical-inventory.md` (with the amendment's §11 item and the vocabulary this slice added). BRANCH: `road-to-v2/v1.7-physical-inventory`.
+GATE: V1.6 `STATUS: COMPLETE` on `main`; its follow-up (Catalog's own page and frame, `fec74bf`) and a test fix (`aee3b63`) were integrated to `main` (`aee3b63`) and propagated before and during V1.7.
+STATE: COMPLETE, WAITING ON OWNER ACTIONS: `docs/road-to-v2/releases/v1.7.md`. Migration `0028_location_audits.sql` (additive, 17 objects, pinned in `ops/releases/v1.7.json`) must be applied through the Cloud Operations lane before V1.7 merges. Checking a place lives in the Catalog (`src/audit-screen.ts`, server `src/audits.ts`); visual research and evidence `docs/visual-research/v1.7.md`, `docs/visual-research/v1.7/`.
+NEXT_EXACT_ACTION: Earl runs the V1.7 owner actions (manifest on `main`, preflight, prepare), then V1.7 integrates to `main`. V1.8 may start on its branch (its predecessor gate passes with V1.7 waiting on owner actions) but must not depend on `0028` being in production.
+
 ## Road to V2 — V1.6 Staff Catalog PWA & offline cataloguing — 2026-10-04
 
 SPEC: `docs/specs/accepted/road-to-v2/v1.6-catalog-pwa.md` (with the amendment's §11 item). BRANCH: `road-to-v2/v1.6-catalog-pwa`.

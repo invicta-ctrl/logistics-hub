@@ -1,6 +1,6 @@
 import { openViewer, photoPanel } from "./item-photo";
 import { MAX_DEPTH, VISIBILITIES, VISIBILITY_LABELS, ancestry, inOrder, levelsBelow, lookAlikes, pathOf, placesOf, withinPlace } from "./location-tree";
-import { type PlaceRow, loadSession, shell } from "./staff";
+import { type PlaceRow, ageOf, loadSession, shell } from "./staff";
 import { ApiError, type Html, api, emptyState, expired, failure, html, icon, live, mount, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, writeParams } from "./ui";
 
 /*
@@ -168,6 +168,7 @@ export async function locationsWorkspace(): Promise<void> {
       ${row ? html`<section class="profile" id="place-photo" aria-label="Picture"><div class="profile__photo" data-tile></div>
         <div class="profile__info"><p class="profile__meta profile__meta--place">${icon("pin")}<span>${paths.get(row.id)}</span></p>
           <p class="profile__meta">${row.itemCount ? html`<a class="text-link" href="/staff/items?location=${row.id}" data-route>${countLabel(row)} kept here</a>` : "No items kept here"}${row.openReports ? ` · ${plural(row.openReports, "open report")}` : ""}</p>
+          <p class="profile__meta profile__meta--fresh">${icon("clock")}<span>${row.lastCheckedAt ? `Last checked ${ageOf(row.lastCheckedAt)}` : "Not checked yet"} · <a class="text-link" href="/staff/catalogue">Check it in the Catalog</a></span></p>
           <div class="profile__actions" data-actions></div></div></section>` : ""}
       <form id="place-form" class="form" novalidate>
         <div class="field"><label for="p-name">Name</label><input id="p-name" name="name" value="${row?.name ?? ""}" required maxlength="120" autocomplete="off" placeholder="Cabinet 1" aria-describedby="p-name-hint" />${hint("name", "What staff call it. Cabinet 1 inside Storage Area reads as Storage Area › Cabinet 1.")}</div>
