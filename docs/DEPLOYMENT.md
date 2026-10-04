@@ -236,6 +236,18 @@ A phone's "I can’t find it" report now names who sent it and appears under Sel
 3. Merge to `main` straight after; Workers Builds deploys it.
 4. Check signed in: Self-Service → Needs attention lists any open phone report with who sent it; send one from a phone and see it appear there and in the badge; resolve it with a note.
 
+## V1.5 Rapid Catalogue: production preparation
+
+V1.5 **needs migration `0026_catalogue_sessions.sql` before its code reaches `main`**, and no new bucket (item photos use the existing `CATALOG_MEDIA` bucket). The migration only adds: two tables (`catalogue_sessions`, `catalogue_captures`, both empty), their indexes and triggers, and one nullable column on each of `items` (`model`, `serial_number`) and `item_media` (`dhash`). No item, movement or quantity changes. The code live before it ignores all of it.
+
+1. **Put the manifest on `main`** (the lane reads manifests from `main` only): `git fetch origin && git switch main && git pull && git checkout origin/road-to-v2/v1.5-rapid-catalogue -- ops/releases/v1.5.json && git commit -m "ops: V1.5 release manifest" && git push`. The manifest pins `0026` by SHA-256 (`b748cb87…c0bad`).
+2. **Preflight, then prepare** (Cloud Operations, below): `release` = `v1.5`, `expected_sha` = the head of `road-to-v2/v1.5-rapid-catalogue`, `mode` = `preflight`; then `prepare` with `confirm` = `PREPARE v1.5 <that sha>`. Expected: exactly `0026` pending; after it, 13 schema objects added (`catalogue_*` tables, indexes and triggers, `idx_items_serial`), only `items` and `item_media` changed, `catalogue_sessions` and `catalogue_captures` empty, and items, movements, on hand, loans and phone events equal before and after.
+3. **Integrate** V1.5 to `main` by the normal protocol (CI green); Workers Builds deploys it. Merging never migrates production by itself, so the migration must come first: the new code reads the new columns.
+4. **Check signed in** (the agent has no staff login): Items now has **Catalogue** and **Select**. Start a session on a real shelf, save one item with a photo and one with *Not sure*, finish, and read the two entries in Activity. Check that the *Not sure* item is not on the Lending Hub or in Self-Service, and that *Mark reviewed* offers only the classified one. Then try a bulk move of two items and read their history.
+5. **Decide when Self-Service offers what was catalogued.** Captured items are saved as *needing review*, so nothing reaches phones until someone presses *Mark reviewed* (on the finish screen, in Select mode, or in an item). Self-Service is closed by the setting in Administration until Earl reopens it.
+
+Rollback before the merge: the migration only adds objects, so the Time Travel bookmark in the report restores the previous state, or drop the two empty tables and the triggers; the live code ignores them. After the merge, a finished session and its captures are kept (append-only); items are made inactive rather than removed.
+
 ## Cloud Operations (production preparation from GitHub, not from a PC)
 
 From V1.2 on, preparing production for a release (an R2 bucket, a D1 migration) is done by the workflow **Production operations** (`.github/workflows/production-ops.yml`), driven by a manifest in `ops/releases/<release>.json`. Authority and the full list of safety rules: `docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`. The older manual runbooks above (Parts 5B and 6) stay as the emergency fallback and as history.
