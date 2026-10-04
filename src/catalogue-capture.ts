@@ -76,6 +76,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   // This device keeps the open session, so it reopens here without a connection; a start sent from here keeps the server's answer.
   record = { id: sessionId, owner: session.id, finishing: false, ...record, serverId: record?.serverId ?? (online ? detail.session.id : null), detail };
   await keepSession(record);
+  /** This session as the device holds it now: sending updates it (the server's id) while this page is open. */
+  const stored = async () => (await sessions()).find((each) => each.id === sessionId) ?? null;
 
   let catalog: Snapshot | null = await snapshot();
   let list: PlaceList = placeList(catalog?.places ?? []);
@@ -173,7 +175,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     panel.hidden = true;
     $("#cat-place").setAttribute("aria-expanded", "false");
     // Where a resumed session opens, here and on the server; every capture also names its own place, so a failure here loses nothing.
-    record = { ...record!, detail: { ...record!.detail, session: { ...record!.detail.session, locationId: id, place: list.paths.get(id) ?? null } } };
+    const latest = (await stored()) ?? record!;
+    record = { ...latest, detail: { ...latest.detail, session: { ...latest.detail.session, locationId: id, place: list.paths.get(id) ?? null } } };
     await keepSession(record);
     if (online && record.serverId) void api(`/api/staff/catalogue/sessions/${record.serverId}`, { method: "PATCH", body: JSON.stringify({ locationId: id }) }).catch(() => undefined);
     field("cat-name").focus();
@@ -392,12 +395,13 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
 
   /** The server's own view of the session: what is saved, and how many. Kept on this device for opening it again offline. */
   async function reload(): Promise<void> {
-    const target = (await sessions()).find((each) => each.id === sessionId)?.serverId;
+    const target = (await stored())?.serverId;
     if (!online || !target) return;
     try {
       detail = await api<Detail>(`/api/staff/catalogue/sessions/${target}`);
-      record = { ...record!, serverId: target, detail };
-      if (detail.session.status === "ACTIVE") await keepSession(record);
+      // Written back from what is stored now, and only while still open here: a finish pressed meanwhile is never undone.
+      const latest = await stored();
+      if (latest && !latest.finishing && detail.session.status === "ACTIVE") await keepSession(record = { ...latest, detail });
     } catch { /* the next change tries again */ }
   }
 
@@ -563,13 +567,17 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const total = detail.session.saved + unsent;
     if (!window.confirm(`Finish cataloguing? ${plural(total, "item")} saved${waiting.length ? `; ${waiting.length === 1 ? "1 is" : `${waiting.length} are`} still on this device and will be sent when ${online ? "the connection allows" : "you're back online"}` : ""}.`)) return;
     try {
-      if (!waiting.length && online && record?.serverId) {
-        await api(`/api/staff/catalogue/sessions/${record.serverId}/finish`, { method: "POST" });
-        // Finished on the server: the page drawn next is the server's summary, with signing items off.
-        await dropSession(record.id);
+      // What is stored now: sending may have started the session on the server since this page read it.
+      const latest = (await stored()) ?? record!;
+      if (!waiting.length && online && latest.serverId) {
+        await api(`/api/staff/catalogue/sessions/${latest.serverId}/finish`, { method: "POST" });
+        // Finished on the server: the page drawn next is the server's summary, with signing items off, under the server's id (a
+        // session started here offline may have joined the one this person had open elsewhere).
+        await dropSession(latest.id);
+        if (latest.serverId !== sessionId) { navigate(`/staff/catalogue?session=${latest.serverId}`, true); return; }
       } else {
         // Finished here: the server is told once everything in it has been sent (catalogue-sync.ts).
-        await keepSession({ ...record!, finishing: true });
+        await keepSession({ ...latest, finishing: true });
       }
       void syncNow();
       // The address does not change, so the page is drawn again rather than navigated to.

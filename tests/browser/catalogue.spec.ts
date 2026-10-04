@@ -581,6 +581,44 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     await expect(page.getByRole("link", { name: /^Resume cataloguing/ })).toBeVisible();
   });
 
+  test("signing out on the device forgets its offline access", async ({ page }) => {
+    const server = serve(page);
+    await turnOn(page, server);
+    await page.route("**/api/staff/logout", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ ok: true }) }));
+    const access = () => page.evaluate(() => new Promise<unknown>((resolve) => {
+      const request = indexedDB.open("logistics-hub-catalogue");
+      request.onsuccess = () => { const read = request.result.transaction("meta").objectStore("meta").get("access"); read.onsuccess = () => resolve(read.result ?? null); };
+    }));
+    expect(await access()).toMatchObject({ accountId: session.id });
+    await page.getByRole("button", { name: /^Account:/ }).click();
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/staff$/);
+    expect(await access()).toBeNull();
+  });
+
+  test("finishing just after the connection returns finishes the session on the server too", async ({ page }) => {
+    const server = serve(page);
+    await turnOn(page, server);
+    await disconnect(page);
+    await page.reload();
+    await page.getByLabel("Place", { exact: true }).selectOption("LOC-0003");
+    await page.getByRole("button", { name: /^Start cataloguing/ }).click();
+    await expect(page).toHaveURL(/session=CS-/);
+    await name(page).fill("Paper cutter");
+    await pick(page, "Borrow").click();
+    await page.getByLabel("Category").fill("EQUIPMENT");
+    await page.getByLabel("Counted in").fill("piece");
+    await page.getByRole("button", { name: "Save & next" }).click();
+    await expect(rows(page).first()).toContainText("Not saved yet");
+    await page.unroute("**/api/**");
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "Finish" }).click();
+    await expect(page.getByRole("heading", { name: "Cataloguing finished" })).toBeVisible();
+    await expect.poll(() => server.state.finished).toBe(true);
+    expect(server.state.captures.map((entry) => entry.name)).toEqual(["Paper cutter"]);
+  });
+
   test("turning it off asks first and ends it on the server", async ({ page }) => {
     const server = serve(page);
     await turnOn(page, server);

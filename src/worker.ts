@@ -252,7 +252,15 @@ async function login(request: Request, env: Env, url: URL): Promise<Response> {
   ]);
   await clearThrottle(env.DB, clientKey(request, "login"), userKey);
   await sweepStale(env.DB);
-  return json({ ok: true, mustChangePassword: account.mustChangePassword === 1 }, 200, { "set-cookie": cookie(token, SESSION_DURATION_MS / 1000, url.protocol === "https:") });
+  const secure = url.protocol === "https:";
+  const response = json({ ok: true, mustChangePassword: account.mustChangePassword === 1 }, 200, { "set-cookie": cookie(token, SESSION_DURATION_MS / 1000, secure) });
+  // Someone else's offline cataloguing lease left on this device ends now: when this sign-in lapses, the device must not act as them.
+  const lease = await verifySession(readCookie(request, LEASE_NAME), leaseKey(env.SESSION_SECRET));
+  if (lease && lease.subject !== account.id) {
+    await endSession(env.DB, lease.id).run();
+    response.headers.append("set-cookie", leaseCookie("", 0, secure));
+  }
+  return response;
 }
 
 /** Signing out on a device also ends offline cataloguing there; anything not yet sent stays on the device for the next sign-in. */

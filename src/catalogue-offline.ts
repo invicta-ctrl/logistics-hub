@@ -49,9 +49,16 @@ export async function identify(): Promise<Who> {
     if (!(error instanceof ApiError)) throw error;
     if (error.status === 0) return usable(remembered) ? { mode: "offline", session: sessionOf(remembered), access: remembered } : { mode: "closed", access: remembered };
     if (error.status !== 401) throw error;
-    // Signed out: this device's lease may still catalogue.
-    const state = await api<OfflineState>("/api/staff/catalogue/offline").catch(() => null);
-    const granted = state ? accessFrom(state) : null;
+    // Signed out: this device's lease may still catalogue. Only the server saying it does not ends what this device remembers;
+    // a request lost on the way keeps it (sending soon tells).
+    let state: OfflineState;
+    try {
+      state = await api<OfflineState>("/api/staff/catalogue/offline");
+    } catch (failure) {
+      if (failure instanceof ApiError && failure.status === 401) { await setAccess(null); return { mode: "signed-out" }; }
+      return usable(remembered) ? { mode: "lease", session: sessionOf(remembered), access: remembered } : { mode: "signed-out" };
+    }
+    const granted = accessFrom(state);
     await setAccess(granted);
     return granted ? { mode: "lease", session: sessionOf(granted), access: granted } : { mode: "signed-out" };
   }
@@ -93,21 +100,27 @@ export async function refreshSnapshot(): Promise<Snapshot | null> {
   return saved;
 }
 
-/**
- * Asks the service worker about the Catalogue's saved screens: KEEP_CATALOGUE saves any that are missing. The active worker answers
- * even before it controls this page (a first visit): it is what opens the Catalogue next time. False where there is none.
- */
-async function askWorker(type: "KEEP_CATALOGUE" | "CATALOGUE_KEPT"): Promise<boolean> {
-  if (!("serviceWorker" in navigator) || !import.meta.env.PROD) return false;
-  const worker = navigator.serviceWorker.controller
-    ?? await Promise.race([navigator.serviceWorker.ready.then((registration) => registration.active), new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 10_000))]);
-  if (!worker) return false;
+/** One service worker's answer about the Catalogue's saved screens (sw.ts); false if it does not answer. */
+function ask(worker: ServiceWorker, type: "KEEP_CATALOGUE" | "CATALOGUE_KEPT"): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const channel = new MessageChannel();
     const timeout = window.setTimeout(() => resolve(false), 30_000);
     channel.port1.onmessage = (event) => { window.clearTimeout(timeout); resolve(Boolean((event.data as { kept?: boolean }).kept)); };
     worker.postMessage({ type }, [channel.port2]);
   });
+}
+
+/**
+ * Asks the service workers about the Catalogue's saved screens: KEEP_CATALOGUE saves any that are missing. The active worker opens the
+ * Catalogue now (even before it controls this page, on a first visit); a waiting one, a new version, opens it after the next update and
+ * deletes the active one's files then, so both must have them. False where there is no service worker.
+ */
+async function askWorker(type: "KEEP_CATALOGUE" | "CATALOGUE_KEPT"): Promise<boolean> {
+  if (!("serviceWorker" in navigator) || !import.meta.env.PROD) return false;
+  const registration = await Promise.race([navigator.serviceWorker.ready, new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 10_000))]);
+  const workers = [registration?.active, registration?.waiting].filter((worker): worker is ServiceWorker => Boolean(worker));
+  if (!workers.length) return false;
+  return (await Promise.all(workers.map((worker) => ask(worker, type)))).every(Boolean);
 }
 
 const keepScreens = () => askWorker("KEEP_CATALOGUE");
