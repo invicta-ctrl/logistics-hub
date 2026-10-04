@@ -236,6 +236,8 @@ export function parseItemInput(body: unknown): ItemInput {
   // Only a Consumable is opened and used gradually; anything else is stored as a whole unit.
   if (input.itemType !== "Consumable") input.consumptionMode = "WHOLE_UNIT";
   else if (record.consumptionMode !== undefined) input.consumptionMode = choice(record, "consumptionMode", "way it is used", CONSUMPTION_MODES);
+  // "Unsorted" stands for a category nobody has chosen yet: an item cannot be signed off as reviewed while it is still that.
+  if (input.category.toUpperCase() === UNSORTED_CATEGORY && !input.needsReview) throw new InputError(400, "Choose a category before marking the details reviewed.");
   if (input.lendingAudience !== "NOT_AVAILABLE_FOR_LENDING" && !LISTABLE_ITEM_TYPES.has(input.itemType)) {
     throw new InputError(400, "Only Loanable or Consumable items can be listed on the Lending Hub.");
   }
