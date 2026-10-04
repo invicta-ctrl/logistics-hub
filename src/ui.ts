@@ -380,7 +380,8 @@ export function setMessage(element: HTMLElement, message: string | Html, tone: "
   mount(element, message ? html`${icon(tone === "ok" ? "check" : "alert")}<span>${message}</span>` : html``);
 }
 
-type LiveOptions<T> = { interval: number; onData: (data: T) => void; onError?: (error: ApiError) => void; status?: () => HTMLElement | null };
+/** `etag`: the version the caller already holds (a copy saved on the device), so an unchanged first answer is a 304 too. */
+type LiveOptions<T> = { interval: number; onData: (data: T) => void; onError?: (error: ApiError) => void; status?: () => HTMLElement | null; etag?: string };
 
 /** A poll that has not answered in this long counts as offline; the next one tries again. */
 const LIVE_TIMEOUT = 15_000;
@@ -393,7 +394,7 @@ const LIVE_TIMEOUT = 15_000;
  * its promise resolves only after data fetched after the call has been applied.
  */
 export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => Promise<void>; stop: () => void } {
-  let etag = "";
+  let etag = options.etag ?? "";
   let timer = 0;
   let settle = 0;
   let stopped = false;
