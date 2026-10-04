@@ -38,6 +38,10 @@ describe("possible duplicates", () => {
     expect(possibleDuplicates({ name: "Whiteboard Marker" }, catalog)[0]).toMatchObject({ id: "ITM-1", reason: "Almost the same name" });
     expect(possibleDuplicates({ name: "Whiteboard" }, catalog)).toEqual([]);
   });
+  it("does not call two different serial numbers a duplicate", () => {
+    expect(possibleDuplicates({ name: "Stapler", serialNumber: "SN-0043" }, catalog)).toEqual([]);
+    expect(possibleDuplicates({ name: "Stapler" }, catalog)[0]).toMatchObject({ id: "ITM-2", reason: "Same name" });
+  });
   it("leaves out the item being edited", () => {
     expect(possibleDuplicates({ name: "Stapler" }, catalog, "ITM-2")).toEqual([]);
   });
@@ -316,6 +320,17 @@ describe("capturing an item", () => {
     expect(feed.events.find((event) => event.type === "ITEM_CREATED")!.summary).toContain("while cataloguing");
     expect(feed.events.find((event) => event.type === "CATALOGUE_FINISHED")!.summary).toBe("Staff One finished cataloguing in Shelf 2: 1 items saved.");
   });
+  it("lists the session's classified, unreviewed items for sign-off, and nothing else", async () => {
+    const shelf = await place("Shelf 2");
+    const session = await begin(shelf);
+    const ok = (await (await save(session, shot(shelf, { name: "Zephyr glue" }))).json() as { id: string }).id;
+    await save(session, shot(shelf, { name: "Zephyr unknown", behaviour: "REVIEW_LATER", category: "", unit: "" }));
+    const done = (await (await save(session, shot(shelf, { name: "Zephyr tape" }))).json() as { id: string }).id;
+    sqlite.prepare("UPDATE items SET needs_review = 0 WHERE id = ?").run(done);
+    const answer = await (await staff(`/api/staff/catalogue/sessions/${session}/unreviewed`)).json() as { items: Array<{ id: string; updatedAt: string }> };
+    expect(answer.items.map((entry) => entry.id)).toEqual([ok]);
+    expect(answer.items[0]!.updatedAt).toBe(row(ok).updated_at);
+  });
   it("keeps model and serial number on the item and in its edits", async () => {
     const shelf = await place("Shelf 2");
     const session = await begin(shelf);
@@ -399,7 +414,7 @@ describe("bulk edits", () => {
     sqlite.prepare("UPDATE locations SET active = 0 WHERE id = ?").run(two);
     expect((await staff("/api/staff/items/bulk", "POST", { action: "MOVE", value: two, items: list })).status).toBe(409);
     expect((await staff("/api/staff/items/bulk", "POST", { action: "MOVE", value: one, items: [] })).status).toBe(400);
-    expect((await staff("/api/staff/items/bulk", "POST", { action: "MOVE", value: one, items: Array.from({ length: 101 }, (_, n) => ({ id: `ITM-${n}`, updatedAt: null })) })).status).toBe(400);
+    expect((await staff("/api/staff/items/bulk", "POST", { action: "MOVE", value: one, items: Array.from({ length: 51 }, (_, n) => ({ id: `ITM-${n}`, updatedAt: null })) })).status).toBe(400);
     expect((await staff("/api/staff/items/bulk", "POST", { action: "DELETE", items: list })).status).toBe(400);
     expect(await bulk({ action: "MOVE", value: one, items: [{ id: "ITM-9998", updatedAt: null }] })).toMatchObject({ skipped: [{ id: "ITM-9998", reason: "It no longer exists." }] });
   });

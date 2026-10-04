@@ -330,7 +330,8 @@ export const dataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => 
 /* ---------- Data ---------- */
 
 export class ApiError extends Error {
-  constructor(readonly status: number, message: string) { super(message); }
+  /** `body` is the whole answer, for the few that carry more than a message (possible duplicates). */
+  constructor(readonly status: number, message: string, readonly body: Record<string, unknown> = {}) { super(message); }
 }
 
 export async function api<T>(url: string, init: RequestInit = {}): Promise<T> {
@@ -342,7 +343,7 @@ export async function api<T>(url: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(0, "You appear to be offline. Check your connection and try again.");
   }
   const body = await response.json().catch(() => ({})) as T & { error?: string };
-  if (!response.ok) throw new ApiError(response.status, body.error ?? "Something went wrong. Please try again.");
+  if (!response.ok) throw new ApiError(response.status, body.error ?? "Something went wrong. Please try again.", body as Record<string, unknown>);
   return body;
 }
 

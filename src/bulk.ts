@@ -1,4 +1,4 @@
-import { STOCK_AREAS, UNSORTED_CATEGORY } from "./catalog-policy";
+import { BULK_LIMIT, STOCK_AREAS, UNSORTED_CATEGORY } from "./catalog-policy";
 import { type Actor, BUMP_REVISION, InputError, audit, guarded, pathsOf, text, usablePlace } from "./inventory";
 import { LOCATION_ID } from "./location-tree";
 
@@ -11,8 +11,6 @@ import { LOCATION_ID } from "./location-tree";
 
 export const BULK_ACTIONS = ["MOVE", "CATEGORY", "STOCK_AREA", "REVIEWED"] as const;
 type BulkAction = typeof BULK_ACTIONS[number];
-/** One request edits at most this many items: it is one D1 batch, and a longer selection is sent in pieces. */
-export const BULK_LIMIT = 100;
 const ITEM_ID = /^ITM-[A-Za-z0-9-]{1,24}$/;
 
 type Row = { id: string; name: string; itemType: string; category: string; stockArea: string | null; locationId: string | null; needsReview: number; updatedAt: string | null };
