@@ -112,6 +112,31 @@ test.describe("Locations page", () => {
     await expect(page.locator("#place-count")).toHaveText("1 place");
   });
 
+  test("deletes an empty place added by mistake after a confirmation, and says what to do first for one in use", async ({ page }) => {
+    let listed = [...PLACES, place("LOC-0098", "Cabinet Row 4", null)];
+    await page.route("**/api/staff/locations", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ revision: 3, locations: listed.map((entry) => ({ ...entry, itemCount: ITEMS.filter((it) => it.locationId === entry.id).length })) }) }));
+    let sent = "";
+    await page.route("**/api/staff/locations/LOC-0098?*", async (route) => {
+      sent = `${route.request().method()} ${new URL(route.request().url()).search}`;
+      listed = listed.filter((entry) => entry.id !== "LOC-0098");
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ deleted: "LOC-0098" }) });
+    });
+    await page.goto("/staff/locations?place=LOC-0003");
+    const busy = page.getByRole("dialog", { name: "Cabinet 1" });
+    await expect(busy.getByRole("region", { name: "Delete place" })).toContainText("first");
+    await expect(busy.getByRole("button", { name: /^Delete/ })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+
+    await page.goto("/staff/locations?place=LOC-0098");
+    const sheet = page.getByRole("dialog", { name: "Cabinet Row 4" });
+    page.once("dialog", (dialog) => { expect(dialog.message()).toBe("Delete Cabinet Row 4? This can't be undone."); void dialog.accept(); });
+    await sheet.getByRole("button", { name: "Delete Cabinet Row 4" }).click();
+    await expect(sheet).toHaveCount(0);
+    expect(sent).toBe(`DELETE ?expected=${encodeURIComponent("2026-10-03T00:00:00.000Z")}`);
+    await expect(page.getByText("Cabinet Row 4 deleted.")).toBeVisible();
+    await expect(page.locator(".place-row__name", { hasText: "Cabinet Row 4" })).toHaveCount(0);
+  });
+
   test("opens a place to edit it: only legal parents are offered, the picture and sharing are shown, and Escape returns focus", async ({ page }) => {
     await page.goto("/staff/locations?place=LOC-0003");
     const sheet = page.getByRole("dialog", { name: "Cabinet 1" });
