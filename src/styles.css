@@ -534,8 +534,8 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .profile__stock { font-size: var(--text-md); }
 .profile__stock strong { font-family: var(--serif); font-size: var(--text-2xl); font-variant-numeric: tabular-nums; line-height: 1.1; }
 .profile__meta { color: var(--text-2); font-size: var(--text-sm); }
-.profile__meta--place { display: flex; align-items: flex-start; gap: var(--space-2); }
-.profile__meta--place .icon { --icon-size: var(--icon-sm); color: var(--text-3); }
+.profile__meta--place, .profile__meta--kits { display: flex; align-items: flex-start; gap: var(--space-2); }
+.profile__meta--place .icon, .profile__meta--kits .icon { --icon-size: var(--icon-sm); color: var(--text-3); }
 /* V1.7: how fresh the record is (seen in a check, counted), and a check's finding still to settle. */
 .profile__meta--fresh, .profile__meta--finding { display: flex; align-items: flex-start; gap: var(--space-2); }
 .profile__meta--fresh .icon { --icon-size: var(--icon-sm); color: var(--text-3); }
@@ -1512,3 +1512,5 @@ tr.is-selected { background: var(--brand-tint); }
 }
 /* A hidden file input must not take the width every other input does. */
 input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
+.cat-suggest__split { display: block; }
+.cat-suggest__line.is-weak { color: var(--text-3, var(--text-2)); }

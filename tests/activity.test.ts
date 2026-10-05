@@ -567,7 +567,7 @@ describe("activity export (CSV)", () => {
     expect(byId["mov:MOV-F3"]![12]).toBe("'-2 short, \"quoted\"\r\nsecond line");
     expect(byId["mov:MOV-F4"]![12]).toBe("'@SUM(A1)");
     expect(byId["mov:MOV-F5"]![12]).toBe("'\tTabbed");
-    expect(text).toContain(',-1,3,2,"Consumed or used",');
+    expect(text).toContain(',-1,3,2,"Taken or used",');
     expect(byId["mov:MOV-F1"]!.slice(0, 11)).toEqual(["2026-09-30 09:00:00", "Stock in", "Staff One received 5 pieces of Folding Table.", "Staff One", "Stock", "ITM-T", "Folding Table", "piece", "5", "0", "5"]);
 
     // B(ii): the loan's typed reason and the closing, phone and resolution notes are blank; the fixed review reason stays.

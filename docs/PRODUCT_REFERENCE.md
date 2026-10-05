@@ -144,6 +144,12 @@ One newest-first list of who did what, to which item, when, from where, and whet
 - **My account (`/staff/account`, from the avatar menu):** password, profile, sign out other devices, and (for an OWNER) the recovery key.
 - The Owner Console (`npm run admin`, or `LOGISTICS_ADMIN.cmd`) uses the same Admin API. `docs/DEPLOYMENT.md` is the only runbook.
 
+## Kits, and the container/contents pattern (V1.8)
+
+A **kit** is a named list of existing items with how many of each it should hold, a place, an optional picture and an optional template it was made from (`/staff/kits`). It holds no stock: each component is the item's own record, so borrow & return, Take and use-gradually items sit together in one kit and each keeps its own rules. The kit's state is derived when it is read, never stored: **Ready**, **Needs replenishment** (a component is short, running low or expiring) or **Needs review** (a component is retired, unverified, unclassified, or was missing or damaged at the last check). Stock that one item pool cannot cover for two kits at once counts as short for both. A **check** records what a person saw (all there, running low, missing, damaged) and never writes a movement; stock changes only through the item's own Stock in, Stock out and Count. Templates copy their list when a kit is made and are not linked afterwards.
+
+**A box with things in it is two linked records, not a new kind of item.** A container (a toolbox, a cabinet, a bag) is an item or a kit like any other, and what is inside it is its own items with their own counts, placed with the Locations page (a place inside a place) or listed as a kit's components. Nothing in the item model says "this holds that": there is no behaviour column for containers, no nested stock and no contents count on the container. If someone needs "what is in the red toolbox?", they make a kit named for it; if they need "where is the red toolbox?", it is an item with a place. Keeping the two records separate is what lets each follow its own rules (a toolbox is borrowed and returned, the screws inside it are taken).
+
 ## Roles
 | Role | Can |
 | --- | --- |

@@ -20,7 +20,7 @@ export const CONSUMPTION_MODES = ["WHOLE_UNIT", "OPEN_UNIT"] as const;
  */
 export const BEHAVIOURS = ["BORROW", "CONSUME", "GRADUAL", "REVIEW_LATER"] as const;
 export type Behaviour = typeof BEHAVIOURS[number];
-export const BEHAVIOUR_LABELS: Record<Behaviour, string> = { BORROW: "Borrow & return", CONSUME: "Consume", GRADUAL: "Use gradually", REVIEW_LATER: "Not sure / Review later" };
+export const BEHAVIOUR_LABELS: Record<Behaviour, string> = { BORROW: "Borrow & return", CONSUME: "Take", GRADUAL: "Use gradually", REVIEW_LATER: "Not sure / Review later" };
 export const behaviourFields = (behaviour: Behaviour): { itemType: string; consumptionMode: string } => ({
   itemType: behaviour === "BORROW" ? "Loanable" : behaviour === "REVIEW_LATER" ? "NEEDS_REVIEW" : "Consumable",
   consumptionMode: behaviour === "GRADUAL" ? "OPEN_UNIT" : "WHOLE_UNIT"
@@ -71,7 +71,7 @@ export const LABELS: Record<string, string> = {
   DELIVERY: "New stock received",
   RETURNED: "Returned",
   DONATION: "Donation",
-  CONSUMED: "Consumed or used",
+  CONSUMED: "Taken or used",
   ISSUED: "Given out",
   DAMAGED: "Damaged",
   MISSING: "Missing",
@@ -187,6 +187,8 @@ export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
     LOCATION_DELETED: "Place deleted", LOCATION_ITEMS_MOVED: "Items moved to another place", LOCATIONS_RECONCILED: "Places made from item locations", LOCATION_REPORTED: "Location reported", LOCATION_REPORT_RESOLVED: "Location report resolved",
     CATALOGUE_STARTED: "Cataloguing started", CATALOGUE_FINISHED: "Cataloguing finished",
     AUDIT_STARTED: "Place check started", AUDIT_PAUSED: "Place check paused", AUDIT_RESUMED: "Place check resumed", AUDIT_FINISHED: "Place check finished", AUDIT_RESOLVED: "Check finding settled",
+    KIT_CREATED: "Kit made", KIT_UPDATED: "Kit edited", KIT_CHECKED: "Kit checked", KIT_PHOTO_ADDED: "Kit picture added", KIT_PHOTO_REPLACED: "Kit picture replaced", KIT_PHOTO_REMOVED: "Kit picture removed",
+    KIT_TEMPLATE_CREATED: "Kit template made", KIT_TEMPLATE_UPDATED: "Kit template edited",
     REORDER_OPENED: "Restock requested", REORDER_UPDATED: "Restock updated", REORDER_RESTOCKED: "Restocked" },
   ACCOUNT: {
     ACCOUNT_CREATED: "Account created", ACCOUNT_UPDATED: "Account updated", PASSWORD_RESET: "Password reset", PASSWORD_CHANGED: "Password changed", SESSIONS_REVOKED: "Sessions ended",
