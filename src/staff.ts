@@ -51,7 +51,7 @@ export function ageOf(iso: string): string {
   if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
   return `on ${formatDate(iso.slice(0, 10))}`;
 }
-type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness };
+type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness; kits?: Array<{ id: string; name: string; active: boolean; required: number }> };
 type SortKey = "id" | "name" | "category" | "location" | "onHand";
 type Tab = "overview" | "loan" | "details" | "history";
 
@@ -359,6 +359,7 @@ export async function workspace(): Promise<void> {
         <div class="page-header__actions">
           <p class="live-status" id="live-status">Connecting…</p>
           <a class="button button--secondary" href="/staff/locations" data-route>${icon("pin")}Locations</a>
+          <a class="button button--secondary" href="/staff/kits" data-route>${icon("stack")}Kits</a>
           <a class="button button--secondary" href="/staff/catalogue" data-route>${icon("camera")}Catalogue</a>
           <button class="button button--primary" type="button" id="new-item">${icon("plus")}New item</button>
         </div>
@@ -694,7 +695,7 @@ export async function workspace(): Promise<void> {
       if (!loaded || !detail) return;
       const { onHand, photo: loadedPhoto, openReports, location, legacyLocation, iconKey, visualType, updatedAt } = loaded.item;
       detail = { ...detail, item: { ...detail.item, onHand, photo: loadedPhoto, openReports, location, legacyLocation, iconKey, visualType, updatedAt }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
-        openUnits: loaded.openUnits, reports: loaded.reports, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied, freshness: loaded.freshness };
+        openUnits: loaded.openUnits, reports: loaded.reports, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied, freshness: loaded.freshness, kits: loaded.kits };
       photo?.render(loaded.item.photo);
       visualControl?.render();
       mount(sheet.querySelector("#reports-card")!, reportsCard(detail));
@@ -761,7 +762,7 @@ export async function workspace(): Promise<void> {
   }
 
   /** Who and what the item is at a glance, beside its photo: availability, status, type, category, place, and how fresh that is. */
-  function profileInfo({ item, loans, freshness }: Detail): Html {
+  function profileInfo({ item, loans, freshness, kits }: Detail): Html {
     const out = loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
     return html`<p class="profile__stock"><strong>${item.onHand}</strong> ${units(item.onHand, item.unit)} on hand${out ? html` <span class="muted">· ${out} on loan</span>` : ""}</p>
       ${tags(item)}
@@ -769,6 +770,7 @@ export async function workspace(): Promise<void> {
       ${item.model || item.serialNumber ? html`<p class="profile__meta">${[item.model && `Model ${item.model}`, item.serialNumber && `Serial ${item.serialNumber}`].filter(Boolean).join(" · ")}</p>` : ""}
       <p class="profile__meta profile__meta--place">${icon("pin")}<span>${item.location ?? html`<span class="muted">No place set</span>`}${!item.location && item.legacyLocation ? html`<span class="muted"> · typed earlier: ${item.legacyLocation}</span>` : ""}</span></p>
       ${freshnessLine(item, freshness)}
+      ${kits?.length ? html`<p class="profile__meta profile__meta--kits">${icon("stack")}<span>In ${kits.length === 1 ? "the kit" : "kits"}: ${kits.map((kit, index) => html`${index ? ", " : ""}<a class="text-link" href="/staff/kits?kit=${kit.id}" data-route>${kit.name}</a>${kit.active ? "" : " (inactive)"}`)}</span></p>` : ""}
       <p class="profile__where"><button type="button" class="button button--secondary button--sm" data-where>${icon("pin")}Where is it?</button></p>`;
   }
 

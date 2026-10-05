@@ -84,13 +84,13 @@ function placeOf(body: Record<string, unknown>): string | null {
 /* ---------- Reading ---------- */
 
 type Fact = {
-  kitId: string; itemId: string; required: number; name: string; unit: string; category: string; itemType: string; iconKey: string | null; visualType: string | null; photoId: string | null;
+  kitId: string; itemId: string; required: number; name: string; unit: string; category: string; itemType: string; consumptionMode: string; iconKey: string | null; visualType: string | null; photoId: string | null;
   itemStatus: string; reorderThreshold: number; expiresOn: string | null; onHand: number; onLoan: number; demand: number; openCondition: string | null; seen: CheckOutcome | null; seenNote: string | null; seenAt: string | null;
 };
 
 /** Every component of the kits asked for (all of them without `only`) with the facts its state is read from. */
 async function components(db: D1Database, only?: string): Promise<Map<string, Fact[]>> {
-  const { results } = await db.prepare(`SELECT kc.kit_id AS kitId, kc.item_id AS itemId, kc.required, i.name, i.unit, i.category, i.item_type AS itemType, i.icon_key AS iconKey, i.visual_type AS visualType,
+  const { results } = await db.prepare(`SELECT kc.kit_id AS kitId, kc.item_id AS itemId, kc.required, i.name, i.unit, i.category, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.icon_key AS iconKey, i.visual_type AS visualType,
       p.media_id AS photoId, i.status AS itemStatus, i.reorder_threshold AS reorderThreshold, i.expires_on AS expiresOn, COALESCE(b.on_hand, 0) AS onHand,
       (SELECT COALESCE(SUM(l.quantity), 0) FROM loans l WHERE l.item_id = i.id AND l.status = 'OUT') AS onLoan,
       (SELECT COALESCE(SUM(k2.required), 0) FROM kit_components k2 JOIN kits k ON k.id = k2.kit_id WHERE k2.item_id = i.id AND k.active = 1) AS demand,
@@ -165,7 +165,7 @@ export async function kitDetail(db: D1Database, id: string) {
   return {
     kit: shape(row, facts, places),
     components: rows.map(({ fact, state, reason }) => ({
-      itemId: fact.itemId, name: fact.name, unit: fact.unit, category: fact.category, itemType: fact.itemType, iconKey: fact.iconKey, visualType: fact.visualType, photoId: fact.photoId,
+      itemId: fact.itemId, name: fact.name, unit: fact.unit, category: fact.category, itemType: fact.itemType, consumptionMode: fact.consumptionMode, iconKey: fact.iconKey, visualType: fact.visualType, photoId: fact.photoId,
       required: fact.required, demand: fact.demand, onHand: fact.onHand, onLoan: fact.onLoan, expiresOn: fact.expiresOn, state, reason,
       seen: fact.seen ? { outcome: fact.seen, note: fact.seenNote, at: fact.seenAt } : null
     })),

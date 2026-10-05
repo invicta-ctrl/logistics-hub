@@ -87,7 +87,7 @@ describe("kits", () => {
     const { id, needles, scissors } = await sewing();
     const detail = await stateOf(id);
     expect(detail.kit).toMatchObject({ name: "Sewing Kit A", state: "READY", ready: 4, total: 4, active: true });
-    expect(detail.components.map((entry: { itemType: string }) => entry.itemType)).toEqual(["Consumable", "Consumable", "Loanable", "Consumable"]);
+    expect(detail.components.map((entry: { itemType: string; consumptionMode: string }) => `${entry.itemType}/${entry.consumptionMode}`)).toEqual(["Consumable/WHOLE_UNIT", "Consumable/WHOLE_UNIT", "Loanable/WHOLE_UNIT", "Consumable/OPEN_UNIT"]);
     // Stock moves through the item's own rules; the kit follows without being told.
     expect((await as(cookie, `/api/staff/items/${needles}/movements`, "POST", { kind: "OUT", quantity: 2, reason: "CONSUMED", key: "k1-out-0001" })).status).toBe(200);
     const after = await stateOf(id);
