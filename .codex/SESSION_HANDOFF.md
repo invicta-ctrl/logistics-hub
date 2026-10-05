@@ -1,5 +1,12 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Road to V2 — V1.9 Self-Service 2.0 (COMPLETE, WAITING ON INTEGRATION; record `docs/road-to-v2/releases/v1.9.md`; Claude Cloud, 2026-10-05)
+- **Where:** Claude Cloud thread on `road-to-v2/v1.9-self-service-2`; code `d0caad1`; no migration.
+- **Built:** `src/self-service-app.ts` rewritten (home groups, item page, who-you-are, check before sending, receipt reference, My activity, view-transition card morph), `src/self-service-browse.ts` (groups, frequent, matching), `src/contextual-help.ts` (the one toggletip), `selfServiceReference()` in `catalog-policy.ts`, catalog DTO `area`, staff find box and reference in `self-service-review.ts`, CSS in `self-service.css`, a V1.9 scene in `scripts/visual-evidence.mjs`.
+- **Decisions to know:** groups are derived (Borrow = Equipment; `area` Pantry = Pantry; else Supplies); the reference is derived from the event id (no schema); the identity policy is the existing one; kits are not offered; Escape closes a help note first, then the sheet; scrolling closes an open note on purpose.
+- **Verified:** build; 529 unit; 126 browser; worker-browser with the two known container-only failures (V1.6 install `in-incognito`, offline `/staff` assertion, same at the V1.8 head); privacy clean; 38 images, seven visual defects found by looking and fixed.
+- **Next:** integrate V1.9 to `main` from Earl's computer after CI, propagate through V1.15, then `start` V1.10.
+
 ## Road to V2 — V1.7 Physical inventory & location audits (COMPLETE, WAITING ON OWNER ACTIONS; record `docs/road-to-v2/releases/v1.7.md`; Claude Cloud, 2026-10-04)
 - **Where:** Claude Cloud session on `road-to-v2/v1.7-physical-inventory`; every checkpoint pushed and propagated V1.8–V1.15 (no conflicts).
 - **First, V1.6 follow-up (Earl's report):** iOS installed a second Self-Service from the Catalogue (late manifest swap) and the Catalogue wore the staff shell. Fixed in `fec74bf`: `staff/catalogue.html` (own manifest from the first byte), router reloads between the two apps' pages, `catalogueShell()` gives the Catalog its own frame. Integrated to `main` (`5c82943`), plus a racy sign-out test fixed (`aee3b63`, on `main`).
