@@ -49,13 +49,13 @@ test("a cataloguing session on a shelf: mixed items, a dropped connection, a dup
 
   await capture(page, { name: "E2E Hammer", how: "Borrow", category: "E2E TOOLS", unit: "piece", more: 1, photo: true });
   await expect(rows.first().getByText("Saved", { exact: true })).toBeVisible();
-  await capture(page, { name: "E2E Gloves", how: "Consume", category: "E2E TOOLS", unit: "pair", more: 4 });
+  await capture(page, { name: "E2E Gloves", how: "Take", category: "E2E TOOLS", unit: "pair", more: 4 });
   await expect(rows).toHaveCount(2);
   await expect(page.locator("#cat-sync")).toHaveText("All saved");
 
   // The connection drops: the item is shown as unsaved, then sent once when it returns.
   await page.context().setOffline(true);
-  await capture(page, { name: "E2E Duct tape", how: "Consume", category: "E2E TOOLS", unit: "roll" });
+  await capture(page, { name: "E2E Duct tape", how: "Take", category: "E2E TOOLS", unit: "roll" });
   await expect(rows.first()).toContainText("Not saved yet");
   await expect(page.locator("#cat-sync")).toContainText("waiting to send");
   await page.context().setOffline(false);

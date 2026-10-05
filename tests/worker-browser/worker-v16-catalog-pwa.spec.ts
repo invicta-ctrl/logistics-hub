@@ -115,7 +115,7 @@ test.describe.serial("the Catalog PWA", () => {
     await page.getByLabel("Name", { exact: true }).fill("");
 
     await capture(page, { name: "E2E V16 Ladder", how: "Borrow", category: "E2E V16 TOOLS", unit: "piece", photo: true });
-    await capture(page, { name: "E2E V16 Rags", how: "Consume", category: "E2E V16 TOOLS", unit: "pack", more: 2 });
+    await capture(page, { name: "E2E V16 Rags", how: "Take", category: "E2E V16 TOOLS", unit: "pack", more: 2 });
     await expect(rows(page)).toHaveCount(2);
     await expect(rows(page).filter({ hasText: "Not saved yet" })).toHaveCount(2);
     await expect(page.locator("#cat-sync")).toHaveText("2 waiting to send");
@@ -182,7 +182,7 @@ test.describe.serial("the Catalog PWA", () => {
   test("work waiting on the device survives losing the app's saved files, and the device gets ready again by itself", async () => {
     await context.setOffline(true);
     await page.reload();
-    await capture(page, { name: "E2E V16 Mop", how: "Consume", category: "E2E V16 TOOLS", unit: "piece" });
+    await capture(page, { name: "E2E V16 Mop", how: "Take", category: "E2E V16 TOOLS", unit: "piece" });
     await expect(rows(page).filter({ hasText: "Not saved yet" })).toHaveCount(1);
     // As an update replacing every saved file would: the queue lives in IndexedDB, which nothing here touches.
     await page.evaluate(async () => { for (const key of await caches.keys()) await caches.delete(key); });
@@ -200,7 +200,7 @@ test.describe.serial("the Catalog PWA", () => {
     await expect(page.getByText("You're signed out.", { exact: true })).toBeVisible();
     expect((await page.request.get("/api/staff/inventory")).status()).toBe(401);
     await page.getByRole("link", { name: /^Resume cataloguing/ }).click();
-    await capture(page, { name: "E2E V16 Sponge", how: "Consume", category: "E2E V16 TOOLS", unit: "piece" });
+    await capture(page, { name: "E2E V16 Sponge", how: "Take", category: "E2E V16 TOOLS", unit: "piece" });
     // The bar may still say "All saved" from before this save: wait for the item's own row.
     await expect(rows(page).filter({ hasText: "E2E V16 Sponge" }).getByText("Saved", { exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(page.locator("#cat-sync")).toHaveText("All saved");

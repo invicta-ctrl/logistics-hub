@@ -51,7 +51,7 @@ export function ageOf(iso: string): string {
   if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
   return `on ${formatDate(iso.slice(0, 10))}`;
 }
-type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness };
+type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness; kits?: Array<{ id: string; name: string; active: boolean; required: number }> };
 type SortKey = "id" | "name" | "category" | "location" | "onHand";
 type Tab = "overview" | "loan" | "details" | "history";
 
@@ -77,7 +77,7 @@ const VIEWS = {
 type View = keyof typeof VIEWS;
 const NO_LOCATION = "__none";
 /** How staff see the type: their choice between lending an item out and using it up. */
-const TYPE_CHOICES: Record<string, string> = { Loanable: "Borrow (Loanable)", Consumable: "Consume (Consumable)" };
+const TYPE_CHOICES: Record<string, string> = { Loanable: "Borrow (Loanable)", Consumable: "Take (Consumable)" };
 const FIELD_LABELS: Record<string, string> = {
   name: "Name", aliases: "Other names", category: "Category", itemType: "Type", unit: "Unit", status: "Status", storageLocation: "Place",
   reorderThreshold: "Reorder level", lendingAudience: "Who may borrow", defaultLoanDays: "Loan period (days)", maximumLoanQty: "Maximum per loan",
@@ -359,6 +359,7 @@ export async function workspace(): Promise<void> {
         <div class="page-header__actions">
           <p class="live-status" id="live-status">Connecting…</p>
           <a class="button button--secondary" href="/staff/locations" data-route>${icon("pin")}Locations</a>
+          <a class="button button--secondary" href="/staff/kits" data-route>${icon("stack")}Kits</a>
           <a class="button button--secondary" href="/staff/catalogue" data-route>${icon("camera")}Catalogue</a>
           <button class="button button--primary" type="button" id="new-item">${icon("plus")}New item</button>
         </div>
@@ -694,7 +695,7 @@ export async function workspace(): Promise<void> {
       if (!loaded || !detail) return;
       const { onHand, photo: loadedPhoto, openReports, location, legacyLocation, iconKey, visualType, updatedAt } = loaded.item;
       detail = { ...detail, item: { ...detail.item, onHand, photo: loadedPhoto, openReports, location, legacyLocation, iconKey, visualType, updatedAt }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
-        openUnits: loaded.openUnits, reports: loaded.reports, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied, freshness: loaded.freshness };
+        openUnits: loaded.openUnits, reports: loaded.reports, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied, freshness: loaded.freshness, kits: loaded.kits };
       photo?.render(loaded.item.photo);
       visualControl?.render();
       mount(sheet.querySelector("#reports-card")!, reportsCard(detail));
@@ -761,7 +762,7 @@ export async function workspace(): Promise<void> {
   }
 
   /** Who and what the item is at a glance, beside its photo: availability, status, type, category, place, and how fresh that is. */
-  function profileInfo({ item, loans, freshness }: Detail): Html {
+  function profileInfo({ item, loans, freshness, kits }: Detail): Html {
     const out = loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
     return html`<p class="profile__stock"><strong>${item.onHand}</strong> ${units(item.onHand, item.unit)} on hand${out ? html` <span class="muted">· ${out} on loan</span>` : ""}</p>
       ${tags(item)}
@@ -769,6 +770,7 @@ export async function workspace(): Promise<void> {
       ${item.model || item.serialNumber ? html`<p class="profile__meta">${[item.model && `Model ${item.model}`, item.serialNumber && `Serial ${item.serialNumber}`].filter(Boolean).join(" · ")}</p>` : ""}
       <p class="profile__meta profile__meta--place">${icon("pin")}<span>${item.location ?? html`<span class="muted">No place set</span>`}${!item.location && item.legacyLocation ? html`<span class="muted"> · typed earlier: ${item.legacyLocation}</span>` : ""}</span></p>
       ${freshnessLine(item, freshness)}
+      ${kits?.length ? html`<p class="profile__meta profile__meta--kits">${icon("stack")}<span>In ${kits.length === 1 ? "the kit" : "kits"}: ${kits.map((kit, index) => html`${index ? ", " : ""}<a class="text-link" href="/staff/kits?kit=${kit.id}" data-route>${kit.name}</a>${kit.active ? "" : " (inactive)"}`)}</span></p>` : ""}
       <p class="profile__where"><button type="button" class="button button--secondary button--sm" data-where>${icon("pin")}Where is it?</button></p>`;
   }
 
@@ -1015,7 +1017,7 @@ export async function workspace(): Promise<void> {
         ${text("aliases", "Other names", item.aliases, html`maxlength="300" autocomplete="off"`, "Names people also use for it, separated by commas. Search finds these too.", true)}
         <div class="field-grid">
           ${text("category", "Category", item.category?.toUpperCase() === "UNSORTED" ? "" : item.category, html`required maxlength="100" autocomplete="off"`, "Letter case does not matter; an existing category is reused.")}
-          <div class="field"><label for="f-itemType">Borrow or consume</label><select id="f-itemType" name="itemType" aria-describedby="f-itemType-hint">${types.map((type) => html`<option value="${type}" ${type === (item.itemType ?? "Loanable") ? html`selected` : ""}>${TYPE_CHOICES[type] ?? label(type)}</option>`)}</select><p class="field__hint" id="f-itemType-hint">Your choice sets everything else: Borrow is lent and comes back; Consume is used up and never returned. Both appear on the Lending Hub and on phones.</p></div>
+          <div class="field"><label for="f-itemType">Borrow or take</label><select id="f-itemType" name="itemType" aria-describedby="f-itemType-hint">${types.map((type) => html`<option value="${type}" ${type === (item.itemType ?? "Loanable") ? html`selected` : ""}>${TYPE_CHOICES[type] ?? label(type)}</option>`)}</select><p class="field__hint" id="f-itemType-hint">Your choice sets everything else: Borrow is lent and comes back; Take is used up and never returned. Both appear on the Lending Hub and on phones.</p></div>
         </div>
         <div class="field" data-consumption ${(item.itemType ?? "Loanable") === "Consumable" ? "" : html`hidden`}><label for="f-consumptionMode">How is this item normally used?</label><select id="f-consumptionMode" name="consumptionMode" aria-describedby="f-consumptionMode-hint">${options(CONSUMPTION_MODES, item.consumptionMode ?? "WHOLE_UNIT")}</select><p class="field__hint" id="f-consumptionMode-hint">Open and use gradually suits reams, bottles, rolls and boxes: staff open one unit at a time and mark it empty when it runs out. Stock is still counted in whole units.</p></div>
         <div class="field-grid">
@@ -1169,7 +1171,7 @@ export async function workspace(): Promise<void> {
     });
     form.addEventListener("input", (event) => {
       dirty = true;
-      // Choosing Borrow or Consume lists the item, unless staff already picked who sees it.
+      // Choosing Borrow or Take lists the item, unless staff already picked who sees it.
       const audience = form.querySelector<HTMLSelectElement>("#f-lendingAudience")!;
       if ((event.target as HTMLElement).id === "f-itemType" && audience.value === "NOT_AVAILABLE_FOR_LENDING" && LISTABLE_ITEM_TYPES.has((event.target as HTMLSelectElement).value)) audience.value = "STUDENTS_AND_USC_STAFF";
       preview();
