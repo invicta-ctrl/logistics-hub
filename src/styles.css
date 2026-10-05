@@ -1029,6 +1029,15 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .choice:has(input:checked) { border-color: var(--brand); background: var(--brand-tint); }
 .choice:has(input:focus-visible) { box-shadow: var(--focus); }
 .where__buttons { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* Locations: the Inside list adds and removes its own entries. */
+.inside-tools { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin-top: var(--space-2); }
+.inside-tools .text-link { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 44px; }
+.inside-tools .icon { width: 1rem; height: 1rem; }
+.inside-tools__remove { color: var(--bad); }
+.inside-new { margin-top: var(--space-2); }
+.inside-new__row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.inside-new__row input { flex: 1 1 12rem; min-width: 0; }
+.inside-new + .form-alert, .inside-tools + .form-alert { margin-top: var(--space-2); }
 
 .place-tree { display: grid; grid-template-columns: minmax(0, 1fr); margin: 0; padding: 0; overflow: clip; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); list-style: none; }
 .place-row { --depth: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-4); padding: var(--space-2) var(--space-4) var(--space-2) calc(var(--space-2) + var(--depth) * min(1.75rem, 7vw)); border-bottom: 1px solid var(--line); transition: background-color var(--dur-1); }

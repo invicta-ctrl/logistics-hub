@@ -172,7 +172,10 @@ export async function locationsWorkspace(): Promise<void> {
           <div class="profile__actions" data-actions></div></div></section>` : ""}
       <form id="place-form" class="form" novalidate>
         <div class="field"><label for="p-name">Name</label><input id="p-name" name="name" value="${row?.name ?? ""}" required maxlength="120" autocomplete="off" placeholder="Cabinet 1" aria-describedby="p-name-hint" />${hint("name", "What staff call it. Cabinet 1 inside Storage Area reads as Storage Area › Cabinet 1.")}</div>
-        <div class="field"><label for="p-parent">Inside</label><select id="p-parent" name="parentId" aria-describedby="p-parent-hint">${parentChoices(row?.id ?? null, row?.parentId ?? null)}</select>${hint("parent", `Places nest up to ${MAX_DEPTH} levels, for example Office, Storage Area, Cabinet 1, Shelf 2, Box.`)}</div>
+        <div class="field"><label for="p-parent">Inside</label><select id="p-parent" name="parentId" aria-describedby="p-parent-hint">${parentChoices(row?.id ?? null, row?.parentId ?? null)}</select>${hint("parent", `Places nest up to ${MAX_DEPTH} levels, for example Office, Storage Area, Cabinet 1, Shelf 2, Box.`)}
+          <div class="inside-tools"><button type="button" class="text-link" id="inside-add">${icon("plus")}Add a place to this list</button><button type="button" class="text-link inside-tools__remove" id="inside-remove" hidden></button></div>
+          <div class="inside-new" id="inside-new" hidden><label for="inside-name">New place</label><div class="inside-new__row"><input id="inside-name" maxlength="120" autocomplete="off" placeholder="Cabinet 2" /><button type="button" class="button button--secondary" id="inside-save">Add</button></div></div>
+          <div class="form-alert" id="inside-alert" role="alert" hidden></div></div>
         <div class="field"><label for="p-directions">Directions <span class="field__optional">optional</span></label><textarea id="p-directions" name="directions" rows="3" maxlength="600" aria-describedby="p-directions-hint">${row?.directions ?? ""}</textarea>${hint("directions", "Plain words for someone who has never been here: “Second door on the left, grey cabinet by the window.” Keep it short.")}</div>
         <fieldset class="field fieldset"><legend>Who sees the directions and picture</legend>
           ${VISIBILITIES.map((value) => html`<label class="choice"><input type="radio" name="visibility" value="${value}" ${(row?.visibility ?? "STAFF_ONLY") === value ? html`checked` : ""} /><span><strong>${VISIBILITY_LABELS[value]}</strong>
@@ -188,6 +191,69 @@ export async function locationsWorkspace(): Promise<void> {
         <div class="form-alert" id="move-alert" role="alert" hidden></div>
         <div class="where__buttons"><button type="button" class="button button--secondary" id="move-go">Move ${plural(row.itemCount, "item")}</button></div></section>` : ""}
       ${row ? deleteCard(row) : ""}`;
+  }
+
+  /**
+   * The Inside list manages itself: a place can be added to it (top level, nestable later from its own sheet) or the chosen
+   * one removed (deleted, under the same rules as Delete place), without leaving the form being edited.
+   */
+  function bindInside(row: PlaceRow | undefined): void {
+    const select = sheetElement.querySelector<HTMLSelectElement>("#p-parent")!;
+    const remove = sheetElement.querySelector<HTMLButtonElement>("#inside-remove")!;
+    const adding = sheetElement.querySelector<HTMLElement>("#inside-new")!;
+    const name = sheetElement.querySelector<HTMLInputElement>("#inside-name")!;
+    const save = sheetElement.querySelector<HTMLButtonElement>("#inside-save")!;
+    const problem = sheetElement.querySelector<HTMLElement>("#inside-alert")!;
+    const choose = (id: string) => {
+      mount(select, parentChoices(row?.id ?? null, id || null));
+      select.value = id;
+      const chosen = id ? rows.get(id) : undefined;
+      remove.hidden = !chosen;
+      remove.textContent = chosen ? `Remove ${chosen.name} from this list` : "";
+    };
+    choose(select.value);
+    select.addEventListener("change", () => { setMessage(problem, ""); choose(select.value); });
+    sheetElement.querySelector("#inside-add")!.addEventListener("click", () => { adding.hidden = false; setMessage(problem, ""); name.focus(); });
+    const add = async () => {
+      const value = name.value.trim();
+      if (!value) { setMessage(problem, "Give the new place a name."); name.focus(); return; }
+      save.disabled = true;
+      setMessage(problem, "");
+      try {
+        const { id } = await api<{ id: string }>("/api/staff/locations", { method: "POST", body: JSON.stringify({ name: value, parentId: null, directions: "", visibility: "STAFF_ONLY" }) });
+        await poll.refresh();
+        name.value = "";
+        adding.hidden = true;
+        choose(id);
+        dirty = true;
+        select.focus();
+        toast(`${value} added to the list.`);
+      } catch (error) {
+        setMessage(problem, failure(error));
+      } finally {
+        save.disabled = false;
+      }
+    };
+    save.addEventListener("click", () => void add());
+    name.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); void add(); } });
+    remove.addEventListener("click", async () => {
+      const chosen = rows.get(select.value);
+      if (!chosen || !window.confirm(`Remove ${paths.get(chosen.id)} from the list? This deletes the place and can't be undone.`)) return;
+      remove.disabled = true;
+      setMessage(problem, "");
+      try {
+        await api(`/api/staff/locations/${chosen.id}?expected=${encodeURIComponent(chosen.updatedAt)}`, { method: "DELETE" });
+        await poll.refresh();
+        choose("");
+        dirty = true;
+        toast(`${chosen.name} removed.`);
+      } catch (error) {
+        setMessage(problem, html`${failure(error)} <button type="button" class="text-link" data-open-chosen>Open ${chosen.name}</button>`);
+        problem.querySelector("[data-open-chosen]")?.addEventListener("click", () => openPlace(chosen.id));
+      } finally {
+        remove.disabled = false;
+      }
+    });
   }
 
   /** Delete, for a place added by mistake. What blocks it is said up front; the server also refuses a place past records name. */
@@ -236,6 +302,7 @@ export async function locationsWorkspace(): Promise<void> {
         button.disabled = false;
       }
     });
+    bindInside(row);
     if (!row) { place.querySelector<HTMLInputElement>("#p-name")!.focus(); return; }
     photoPanel(sheetElement.querySelector<HTMLElement>("#place-photo")!, {
       id: row.id, name: row.name, photo: row.photo, noun: "picture", endpoint: `/api/staff/locations/${row.id}/photo`, thumbUrl: (id) => `/api/staff/location-media/${id}/thumb`,

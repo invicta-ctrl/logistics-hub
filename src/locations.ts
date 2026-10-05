@@ -156,7 +156,7 @@ export async function deleteLocation(db: D1Database, actor: Actor, id: string, e
       + (SELECT COUNT(*) FROM catalogue_captures WHERE location_id = ?1) + (SELECT COUNT(*) FROM location_audits WHERE location_id = ?1)
       + (SELECT COUNT(*) FROM location_audit_observations WHERE recorded_location_id = ?1 OR seen_location_id = ?1) AS records`)
     .bind(id).first<{ items: number; places: number; records: number }>())!;
-  if (uses.items) throw new InputError(409, `${uses.items === 1 ? "1 item is" : `${uses.items} items are`} kept here. Move ${uses.items === 1 ? "it" : "them"} to another place first (Move items, below), then delete it.`);
+  if (uses.items) throw new InputError(409, `${uses.items === 1 ? "1 item is" : `${uses.items} items are`} kept here. Move ${uses.items === 1 ? "it" : "them"} to another place first with Move items in its sheet, then delete it.`);
   if (uses.places) throw new InputError(409, `${uses.places === 1 ? "1 place is" : `${uses.places} places are`} inside it. Move or delete ${uses.places === 1 ? "it" : "them"} first.`);
   if (uses.records) throw new InputError(409, IN_RECORDS);
   const path = (await pathsOf(db, [id])).get(id) ?? current.name;
