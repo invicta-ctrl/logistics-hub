@@ -156,13 +156,13 @@ function arms(admin: boolean): Arm[] {
       prefix: "audit:", id: "a.id", sources: admin ? ["MOVEMENT", "CATALOG", "LOAN", "ACCOUNT", "DIRECTORY"] : ["MOVEMENT", "CATALOG", "LOAN"], moves: false, owns: (type) => !movementType.includes(type) && !PHONE_TYPES.includes(type) && type !== "REVIEW_RESOLVED",
       // A closing entry's loan is its own (`loans.id` is the key): the join adds no row and supplies the typed return note.
       from: `audit_log a LEFT JOIN items i ON a.entity_type = 'ITEM' AND i.id = a.entity_id LEFT JOIN staff_accounts c ON c.id = a.actor_user_id
-        LEFT JOIN loans l ON a.action = 'LOAN_CLOSED' AND l.id = ${AUDIT_LOAN} LEFT JOIN locations lo ON a.entity_type = 'LOCATION' AND lo.id = a.entity_id`,
+        LEFT JOIN loans l ON a.action = 'LOAN_CLOSED' AND l.id = ${AUDIT_LOAN} LEFT JOIN locations lo ON a.entity_type = 'LOCATION' AND lo.id = a.entity_id LEFT JOIN kits ki ON a.entity_type = 'KIT' AND ki.id = a.entity_id`,
       // Account, recovery and Staff Directory events are refused here, before any search or page limit, unless the reader is ADMIN or OWNER.
-      where: `a.action <> 'LOAN_CREATED' AND NOT (a.action = 'LOAN_CLOSED' AND COALESCE(${AUDIT_OUTCOME}, '') = 'RETURNED')${admin ? "" : " AND a.entity_type IN ('ITEM', 'LOCATION', 'CATALOGUE', 'AUDIT')"}`,
+      where: `a.action <> 'LOAN_CREATED' AND NOT (a.action = 'LOAN_CLOSED' AND COALESCE(${AUDIT_OUTCOME}, '') = 'RETURNED')${admin ? "" : " AND a.entity_type IN ('ITEM', 'LOCATION', 'CATALOGUE', 'AUDIT', 'KIT')"}`,
       cols: {
-        ...base, sid: "'audit:' || a.id", k: utc("a.created_at"), itemId: "i.id", itemName: `COALESCE(i.name, lo.name, CASE WHEN a.entity_type = 'LOCATION' THEN (SELECT json_extract(d.details_json, '$.path') FROM audit_log d
+        ...base, sid: "'audit:' || a.id", k: utc("a.created_at"), itemId: "i.id", itemName: `COALESCE(i.name, lo.name, ki.name, CASE WHEN a.entity_type = 'LOCATION' THEN (SELECT json_extract(d.details_json, '$.path') FROM audit_log d
           WHERE d.entity_type = 'LOCATION' AND d.entity_id = a.entity_id AND d.action = 'LOCATION_DELETED' LIMIT 1) END)`, unit: "i.unit",
-        src: `CASE WHEN a.action = 'LOAN_CLOSED' THEN 'LOAN' WHEN a.action IN (${UNIT_AUDIT}) THEN 'MOVEMENT' WHEN a.entity_type IN ('ITEM', 'LOCATION', 'CATALOGUE', 'AUDIT') THEN 'CATALOG' WHEN a.entity_type = 'STAFF' THEN 'DIRECTORY' ELSE 'ACCOUNT' END`,
+        src: `CASE WHEN a.action = 'LOAN_CLOSED' THEN 'LOAN' WHEN a.action IN (${UNIT_AUDIT}) THEN 'MOVEMENT' WHEN a.entity_type IN ('ITEM', 'LOCATION', 'CATALOGUE', 'AUDIT', 'KIT') THEN 'CATALOG' WHEN a.entity_type = 'STAFF' THEN 'DIRECTORY' ELSE 'ACCOUNT' END`,
         type: `CASE WHEN a.action = 'LOAN_CLOSED' THEN CASE ${AUDIT_OUTCOME} WHEN 'DAMAGED' THEN 'LOAN_DAMAGED' WHEN 'LOST' THEN 'LOAN_LOST' ELSE 'LOAN_CLOSED' END ELSE a.action END`,
         actorId: "a.actor_user_id", actor: actorName("c", "a.actor_user_id"), details: "a.details_json", note: "l.return_note", corr: AUDIT_LOAN
       }
@@ -331,6 +331,14 @@ function toEvent(row: Row): ActivityEvent {
     AUDIT_PAUSED: () => `${actor} paused the check of ${place(details)}.`,
     AUDIT_RESUMED: () => `${actor} resumed the check of ${place(details)}.`,
     AUDIT_FINISHED: () => `${actor} finished checking ${place(details)}${typeof details.checked === "number" && typeof details.expected === "number" ? `: ${details.checked} of ${details.expected} checked` : ""}.`,
+    KIT_CREATED: () => `${actor} made the kit ${item}${typeof details.components === "number" ? ` with ${details.components} ${details.components === 1 ? "component" : "components"}` : ""}.`,
+    KIT_UPDATED: () => `${actor} edited the kit ${item}.`,
+    KIT_CHECKED: () => `${actor} checked the kit ${item}: ${typeof details.ok === "number" ? details.ok : "some"} all there${typeof details.flagged === "number" && details.flagged ? `, ${details.flagged} to look at` : ""}; stock did not change.`,
+    KIT_PHOTO_ADDED: () => `${actor} added a picture to the kit ${item}.`,
+    KIT_PHOTO_REPLACED: () => `${actor} replaced the picture of the kit ${item}.`,
+    KIT_PHOTO_REMOVED: () => `${actor} removed the picture of the kit ${item}.`,
+    KIT_TEMPLATE_CREATED: () => `${actor} made the kit template ${typeof details.name === "string" ? details.name.slice(0, 80) : "a template"}.`,
+    KIT_TEMPLATE_UPDATED: () => `${actor} edited the kit template ${typeof details.name === "string" ? details.name.slice(0, 80) : "a template"}.`,
     AUDIT_RESOLVED: () => `${actor} settled a finding from a check: ${RESOLUTION_WORDS[String(details.action)] ?? "decided"}.`,
     ITEM_UPDATED: () => {
       // Status, type and usage are fixed lists, so their values can be named; every other field is named, never quoted.

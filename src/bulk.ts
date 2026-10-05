@@ -68,7 +68,7 @@ export async function bulkUpdate(db: D1Database, actor: Actor, input: unknown) {
       if ((row.stockArea ?? "Inventory") === value) unchanged += 1;
       else writes.push({ row, column: "stock_area", to: value!, detail: { stockArea: { from: row.stockArea, to: value } } });
     } else if (row.needsReview === 0) unchanged += 1;
-    else if (row.itemType === "NEEDS_REVIEW") skipped.push({ id, name: row.name, reason: "Choose Borrow or Consume for it first." });
+    else if (row.itemType === "NEEDS_REVIEW") skipped.push({ id, name: row.name, reason: "Choose Borrow or Take for it first." });
     else if (row.category === UNSORTED_CATEGORY) skipped.push({ id, name: row.name, reason: "Choose its category first." });
     else writes.push({ row, column: "needs_review", to: 0, detail: { needsReview: { from: true, to: false } } });
   }

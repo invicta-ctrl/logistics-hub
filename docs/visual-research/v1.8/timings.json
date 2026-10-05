@@ -1,0 +1,8 @@
+{
+  "coldLoadToFirstRowMs": 265,
+  "sectionSwitchMs": 61,
+  "kits": {
+    "checkOpens-desktop": 42,
+    "checkOpens-phone": 52
+  }
+}

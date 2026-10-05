@@ -11,7 +11,7 @@ import { LOCATION_ID, MAX_DEPTH, type Place, VISIBILITIES, ancestry, cleanName, 
 /** A bound on the whole set, so "load every place" stays a small, fixed read. */
 const MAX_LOCATIONS = 500;
 const STALE = "Someone else changed this place while you were editing. Your changes were not saved; review the latest details and try again.";
-const IN_RECORDS = "Past records name this place (a location report, a cataloguing session or a check), so it can't be deleted. Turn off In use instead: it leaves every list and its history stays.";
+const IN_RECORDS = "Past records name this place (a location report, a cataloguing session, a check or a kit), so it can't be deleted. Turn off In use instead: it leaves every list and its history stays.";
 
 export type Photo = { id: string; width: number; height: number };
 type Row = { id: string; name: string; parentId: string | null; directions: string | null; visibility: string; active: number; updatedAt: string; photoId: string | null; photoWidth: number | null; photoHeight: number | null };
@@ -153,7 +153,7 @@ export async function deleteLocation(db: D1Database, actor: Actor, id: string, e
   if (expected !== current.updatedAt) throw new InputError(409, STALE);
   const uses = (await db.prepare(`SELECT (SELECT COUNT(*) FROM items WHERE location_id = ?1) AS items, (SELECT COUNT(*) FROM locations WHERE parent_id = ?1) AS places,
       (SELECT COUNT(*) FROM location_reports WHERE location_id = ?1) + (SELECT COUNT(*) FROM catalogue_sessions WHERE location_id = ?1)
-      + (SELECT COUNT(*) FROM catalogue_captures WHERE location_id = ?1) + (SELECT COUNT(*) FROM location_audits WHERE location_id = ?1)
+      + (SELECT COUNT(*) FROM catalogue_captures WHERE location_id = ?1) + (SELECT COUNT(*) FROM location_audits WHERE location_id = ?1) + (SELECT COUNT(*) FROM kits WHERE location_id = ?1)
       + (SELECT COUNT(*) FROM location_audit_observations WHERE recorded_location_id = ?1 OR seen_location_id = ?1) AS records`)
     .bind(id).first<{ items: number; places: number; records: number }>())!;
   if (uses.items) throw new InputError(409, `${uses.items === 1 ? "1 item is" : `${uses.items} items are`} kept here. Move ${uses.items === 1 ? "it" : "them"} to another place first with Move items in its sheet, then delete it.`);
