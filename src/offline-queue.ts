@@ -14,6 +14,8 @@ export type CatalogItem = {
   photo?: string | null;
   /** Absent in older snapshots: the bundled resolver computes the automatic icon. */
   iconKey?: string | null;
+  /** Where staff keep it: "Pantry", or "Inventory" for everything else (absent in an older snapshot). */
+  area?: string | null;
   /** Its place, when staff share it with Self-Service (absent in a snapshot saved before places); `location` is that place's full path. */
   locationId?: string | null;
 };

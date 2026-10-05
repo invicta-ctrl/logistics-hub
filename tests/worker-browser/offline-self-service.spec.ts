@@ -1,4 +1,5 @@
 import { expect, test, devices, type Browser, type Page } from "@playwright/test";
+import { selfServiceReference } from "../../src/catalog-policy";
 
 /*
  * Part 4.5 end to end, on the real Worker + D1 and the production build (service worker on):
@@ -102,12 +103,26 @@ async function forgetAnswers(page: Page): Promise<void> {
   }));
 }
 
-async function take(page: Page, name: RegExp, count: number, person: string): Promise<void> {
-  await page.getByRole("link", { name: /^Get an item/ }).click();
-  await page.getByRole("link", { name }).click();
+/** From home: search for the item, open its page, and start its one action. Works from the phone's own catalog, so it works offline. */
+async function openItem(page: Page, name: string, action: "Take" | "Borrow" | "Use"): Promise<void> {
+  await page.getByRole("searchbox", { name: "Search everything" }).fill(name);
+  await page.getByRole("link", { name: new RegExp(name) }).first().click();
+  await page.getByRole("link", { name: action, exact: true }).click();
+}
+
+/** A remembered person shows as a card; the fields are one tap away. */
+async function asSomeone(page: Page, label: string, person: string): Promise<void> {
+  const change = page.getByRole("button", { name: "Not you? Change" });
+  if (await change.isVisible()) await change.click();
+  await page.getByLabel(label).fill(person);
+}
+
+async function take(page: Page, name: string, count: number, person: string): Promise<void> {
+  await openItem(page, name, "Take");
   for (let step = 1; step < count; step += 1) await page.getByRole("button", { name: "One more" }).click();
-  await page.getByLabel("Your name").fill(person);
-  await page.getByRole("button", { name: new RegExp(`^Take ${count}`) }).click();
+  await asSomeone(page, "Your name", person);
+  await page.getByRole("button", { name: "Review and take" }).click();
+  await page.getByRole("button", { name: "Confirm take" }).click();
   await expect(page.getByRole("heading", { name: "Taken" })).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();
 }
@@ -145,7 +160,7 @@ test.describe.serial("offline self-service", () => {
     expect(body.items.find((entry) => entry.id === WATER)).toMatchObject({ action: "TAKE" });
     expect(body.items.find((entry) => entry.id === COTTON)).toMatchObject({ action: "BORROW" });
     expect(body.items.every((entry) => entry.action === "TAKE" || entry.action === "BORROW")).toBe(true);
-    expect(Object.keys(body.items[0]!).sort()).toEqual(["action", "aliases", "audience", "available", "category", "iconKey", "id", "location", "locationId", "name", "photo", "unit"]);
+    expect(Object.keys(body.items[0]!).sort()).toEqual(["action", "aliases", "area", "audience", "available", "category", "iconKey", "id", "location", "locationId", "name", "photo", "unit"]);
   });
 
   test("public pages load fresh from the network, while Self-Service opens from the phone's cache", async ({ browser }) => {
@@ -165,16 +180,20 @@ test.describe.serial("offline self-service", () => {
     const { context, page } = await phone(browser);
 
     await context.setOffline(true);
-    await take(page, /Bottled Water/, 2, "Juan Dela Cruz");
+    await take(page, "Bottled Water", 2, "Juan Dela Cruz");
     await expect(page.getByRole("link", { name: /Offline · 1 waiting/ })).toBeVisible();
 
-    await page.getByRole("link", { name: /^Get an item/ }).click();
-    await page.getByRole("link", { name: /Cotton - roll/ }).click();
+    await openItem(page, "Cotton - roll", "Borrow");
+    // The phone remembered the name from the take; without an ID on file the fields stay in view.
     await expect(page.getByLabel("Your full name")).toHaveValue("Juan Dela Cruz");
     await page.getByLabel("Student ID number").fill("20-1234-567");
     await attachPhoto(page);
-    await page.getByRole("button", { name: "Borrow", exact: true }).click();
-    await expect(page.getByText("Saved on this phone. It will sync when you're back online.")).toBeVisible();
+    await page.getByRole("button", { name: "Review and borrow" }).click();
+    await expect(page.locator(".ss-summary")).toContainText("20-1234-567");
+    await expect(page.locator(".ss-summary img")).toBeVisible();
+    await page.getByRole("button", { name: "Confirm borrow" }).click();
+    await expect(page.getByText("Saved on this phone. It will send when you're back online.")).toBeVisible();
+    await expect(page.locator(".ss-receipt__ref strong")).toHaveText(/^SS-/);
     await page.getByRole("button", { name: "Done" }).click();
 
     // The app opens from its own cache without a network, with everything still waiting.
@@ -185,10 +204,11 @@ test.describe.serial("offline self-service", () => {
 
     await page.getByRole("link", { name: /^Return/ }).click();
     await page.getByRole("link", { name: /Cotton - roll/ }).first().click();
-    await page.getByRole("button", { name: "Return", exact: true }).click();
+    await page.getByRole("button", { name: "Review and return" }).click();
     await expect(page.getByText("Take a photo of the item you are returning.")).toBeVisible();
     await attachPhoto(page);
-    await page.getByRole("button", { name: "Return", exact: true }).click();
+    await page.getByRole("button", { name: "Review and return" }).click();
+    await page.getByRole("button", { name: "Confirm return" }).click();
     await expect(page.getByRole("heading", { name: "Return sent" })).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
     expect((await localState(page)).states).toEqual(["pending", "pending", "pending"]);
@@ -245,8 +265,8 @@ test.describe.serial("offline self-service", () => {
     const [a, b] = [await phone(browser), await phone(browser)];
     await a.context.setOffline(true);
     await b.context.setOffline(true);
-    await take(a.page, /Bottled Water/, 1, "Ana");
-    await take(b.page, /Bottled Water/, 3, "Ben");
+    await take(a.page, "Bottled Water", 1, "Ana");
+    await take(b.page, "Bottled Water", 3, "Ben");
     await b.context.setOffline(false);
     await expect(b.page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });
     await a.context.setOffline(false);
@@ -265,12 +285,13 @@ test.describe.serial("offline self-service", () => {
     paper = (await created.json() as { id: string }).id;
     const { context, page } = await phone(browser);
     await context.setOffline(true);
-    await page.getByRole("link", { name: /^Get an item/ }).click();
+    await page.getByRole("searchbox", { name: "Search everything" }).fill("E2E Printer Paper");
     await expect(page.getByRole("link", { name: /E2E Printer Paper/ })).toContainText("Use");
-    await page.getByRole("link", { name: /E2E Printer Paper/ }).click();
+    await openItem(page, "E2E Printer Paper", "Use");
     await expect(page.getByLabel("How many?")).toHaveCount(0);
-    await page.getByLabel("Your name").fill("Ana Reyes");
-    await page.getByRole("button", { name: "Record use" }).dblclick();
+    await asSomeone(page, "Your name", "Ana Reyes");
+    await page.getByRole("button", { name: "Review and use" }).click();
+    await page.getByRole("button", { name: "Confirm use" }).dblclick();
     await expect(page.getByRole("heading", { name: "Use recorded" })).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
     expect(await localState(page)).toEqual({ states: ["pending"], photos: 0 });
@@ -293,6 +314,15 @@ test.describe.serial("offline self-service", () => {
     await expect(staff.getByRole("heading", { name: "Self-Service" })).toBeVisible();
     await expect(staff.locator("#ss-results")).toContainText("Juan Dela Cruz");
     await expect(staff.locator("#ss-results")).toContainText("Cotton - roll");
+    // A person reads the reference from their receipt; staff find the record by typing it, in any case and with or without the dash.
+    const week = await (await staff.request.get("/api/staff/self-service")).json() as { recent: Array<{ id: string; type: string; itemId: string }> };
+    const borrow = week.recent.find((entry) => entry.type === "BORROW" && entry.itemId === COTTON)!;
+    const reference = selfServiceReference(borrow.id);
+    await staff.getByLabel("Find a record").fill(reference.toLowerCase().replace("-", " "));
+    await expect(staff.locator("#ss-results tbody tr")).toHaveCount(1);
+    await expect(staff.locator("#ss-results")).toContainText(reference);
+    await expect(staff.locator("#ss-results").getByRole("link", { name: /^Photo/ })).toBeVisible();
+    await staff.getByLabel("Find a record").fill("");
     await staff.getByRole("button", { name: "QR code & poster" }).click();
     await expect(staff.getByRole("img", { name: "QR code that opens logistics.hausc.org/self-service" })).toBeVisible();
     await expect(staff.getByText("logistics.hausc.org/self-service", { exact: true })).toBeVisible();

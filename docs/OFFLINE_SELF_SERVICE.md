@@ -30,7 +30,9 @@ After one online visit, the app is installed on the phone (a PWA) and keeps work
 | Sync engine | `src/offline-sync.ts` | `record()`, `syncNow()`, `refreshCatalog()`. No DOM. |
 | Service worker | `src/sw.ts` → `/sw.js` | Built by the plugin in `vite.config.ts`. |
 | Install, update, readiness | `src/pwa.ts` | `startPwa()` in `main.ts`. |
-| Phone screens | `src/self-service-app.ts`, `src/self-service.css` | Home, Take, Borrow, Return, My activity, Install. The "Dusk" theme (section 16). |
+| Phone screens | `src/self-service-app.ts`, `src/self-service.css` | Home, browse, the item's page, Take, Borrow, Use, Return, the check before sending, receipt, My activity, Install. The "Dusk" theme (section 16); V1.9 in section 17. |
+| Browse rules (pure, unit-tested) | `src/self-service-browse.ts` | Groups, frequent items, concise location, the behaviour sentence, matching. |
+| Contextual help | `src/contextual-help.ts` | The one toggletip (`helpTip`, `bindHelp`). |
 | Staff exception view + poster | `src/self-service-review.ts` | `/staff/self-service`. |
 | Schema | `migrations/0015_self_service.sql` | Additive, plus a trigger that keeps a staff resolution final. |
 | QR | `public/qr/logistics-self-service.{svg,png}`, `scripts/generate-self-service-qr.py` | |
@@ -50,7 +52,7 @@ Staff screens show only the item's type (Loanable or Consumable); there is no se
 
 ## 4. The catalog snapshot — `GET /api/self-service/catalog`
 
-Public, revisioned (the shared `catalog_revision` is the ETag; unchanged → `304`), `no-store`. It carries only `id, name, aliases, category, unit, action, available, location, audience` plus the `revision`. Never notes, migration evidence, reorder data, history, borrowers or photos. `location` is included on purpose: self-service is unattended, so people need to know which shelf.
+Public, revisioned (the shared `catalog_revision` is the ETag; unchanged → `304`), `no-store`. It carries only `id, name, aliases, category, unit, area, action, available, location, audience` plus the `revision`. Never notes, migration evidence, reorder data, history, borrowers or photos. `location` is included on purpose: self-service is unattended, so people need to know which shelf.
 
 The phone keeps one full snapshot in IndexedDB and refreshes it on launch, every 30 s while visible, after each sync, and when the connection returns. Hundreds of items fit easily, so there is no delta protocol.
 
@@ -194,6 +196,8 @@ The Self-service nav tab counts the records to check.
 - A person could record a take without actually taking anything. Accountability is the name, the phone and network tags, the hourly volume hold and staff counts — not identity verification.
 - A phone can only return what it borrowed itself. If a phone loses its data before returning, or something was borrowed at the desk or on another phone, staff record the return in Loans.
 - The volume hold can be passed by simultaneous requests (see rule 3).
+- Kits (V1.8) are not offered in Self-Service: a kit's readiness is staff knowledge, and a phone has no way to check it.
+- A reference (`SS-XXXX-XXXX`) is derived from the record's id, not stored, so it is about a trillion-to-one rather than guaranteed unique; staff search by reference and also see name, item and time.
 
 ## 14. Tests
 
@@ -213,3 +217,14 @@ Self-Service keeps the Hub's institutional language (crest and mark, oxblood and
 - Part 4.8 brought the campus photograph back behind the top of home (Earl, 2026-09-30), in both themes. `--photo-wash` fades it into the canvas and dims it under the bar and greeting: a night wash in dark, a paper wash in light, measured at AA or better at 320, 390 and 820 px. On home the bar sits on the photograph and scrolls away with it; other screens keep the solid sticky bar. The sun/moon switch matches the sync pill beside it.
 - The only other motion is the sheet opening and closing and the sync spinner, behind `prefers-reduced-motion: no-preference`; hover states are behind `hover: hover`.
 - Accessibility: buttons draw focus as a gold outline that their shadows cannot override; targets are at least 44 px; the tiles reflow to one column for large text; the first invalid field takes focus; low stock is said in words ("Only 2 left"), not only colour.
+
+## 17. Self-Service 2.0 (V1.9)
+
+- **Groups** are derived, not configured: `groupOf()` in `self-service-browse.ts` (Borrow = Equipment; otherwise `area` Pantry = Pantry; otherwise Supplies). A snapshot saved before V1.9 has no `area`, so its non-Borrow items fall into Supplies until it refreshes.
+- **Performance:** home draws at most four cards per group; a group list is plain rows with `content-visibility: auto`; search filters the in-memory snapshot. Measured on a 600-item catalog: home 12 cards, group list of 200 rows, typing a search settles inside one frame.
+- **Identity** is stored by the same `offline-store.ts` details record as before; V1.9 adds no key. **Remember me** is a visible choice and **Forget me on this phone** removes it.
+- **The check** is a view over the same `record()` call: nothing is saved before **Confirm**, so the queue, event ids and sync are unchanged. Enter in a field only moves to the check.
+- **Reference:** `selfServiceReference(eventId)` in `catalog-policy.ts`. Staff filter by `foldReference()`, which ignores case and punctuation.
+- **Navigation:** sheets are routed by `opensSheet`/`viewOf`/`viewKey`; the card-to-item morph uses the View Transitions API and is skipped under `prefers-reduced-motion`. Focus moves to the new screen's heading on a view change.
+- **Help:** `helpTip(label, text)` beside a label (outside it, so the accessible name stays clean) and `bindHelp(root)` once per screen. Do not use it to explain an obvious name (amendment rule C).
+- **Tests:** `tests/self-service-browse.test.ts`, `tests/browser/self-service-v19.spec.ts` (home, 600 items, a full borrow and return, identity, USC, help, offline browsing) and the updated `app.spec.ts`, `locations.spec.ts` and worker `offline-self-service.spec.ts`, `worker-locations.spec.ts`. Evidence: `docs/visual-research/v1.9.md`.

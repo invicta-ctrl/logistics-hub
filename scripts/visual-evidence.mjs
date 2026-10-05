@@ -21,7 +21,7 @@
 // where /staff/catalogue exists) and catalog-pwa (V1.6: offline cataloguing on an Android phone and tablet, an iPhone's Safari tab and a
 // computer, with the service worker on and the connection really cut; runs only where the catalogue snapshot exists) and location-audit (V1.7: a
 // dozen-item shelf checked on a phone, paused, resumed and continued offline, a stock conflict, the summary and the review on a computer;
-// runs only where checks of a place exist) and kits (V1.8: the kit list, a Ready and an incomplete kit, a template, the check and its summary; runs only where /api/staff/kits exists). Its pictures, including the obviously fake
+// runs only where checks of a place exist) and self-service-v19 (V1.9: Self-Service 2.0 on a phone, tablet and computer: home, search, a group, the item page, the borrow/take/use forms, identity, photo, the check, the receipt, My activity, return, the help tip, offline, and a 600-item catalog; runs only where the item page exists) and kits (V1.8: the kit list, a Ready and an incomplete kit, a template, the check and its summary; runs only where /api/staff/kits exists). Its pictures, including the obviously fake
 // sample ID cards, are drawn here in the browser and written only to a throwaway folder, so no image file enters the
 // repository and no real ID is ever used.
 //
@@ -59,7 +59,7 @@ async function serve(dir, port) {
   run(process.execPath, [wrangler, "d1", "migrations", "apply", "DB", "--local", "--persist-to", state], dir);
   runD1("UPDATE system_settings SET value = 'open' WHERE key = 'self_service'", { persistTo: state });
   // public-photos needs items the public lists show: a spread of loanables and supplies, reviewed and active.
-  if (pages.includes("public-photos")) runD1("UPDATE items SET status = 'ACTIVE', needs_review = 0, item_type = CASE WHEN rowid % 4 = 0 THEN 'Consumable' ELSE 'Loanable' END, lending_audience = CASE WHEN rowid % 5 = 0 THEN 'USC_STAFF_ONLY' ELSE 'STUDENTS_AND_USC_STAFF' END WHERE id IN (SELECT id FROM items ORDER BY name COLLATE NOCASE LIMIT 24)", { persistTo: state });
+  if (pages.includes("public-photos") || pages.includes("self-service-v19")) runD1("UPDATE items SET status = 'ACTIVE', needs_review = 0, item_type = CASE WHEN rowid % 4 = 0 THEN 'Consumable' ELSE 'Loanable' END, lending_audience = CASE WHEN rowid % 5 = 0 THEN 'USC_STAFF_ONLY' ELSE 'STUDENTS_AND_USC_STAFF' END WHERE id IN (SELECT id FROM items ORDER BY name COLLATE NOCASE LIMIT 24)", { persistTo: state });
   for (const [role, username, name] of ACCOUNTS) runD1(createAccountSql(username, name, password, role), { persistTo: state });
   if (pages.includes("staff-directory")) runD1(directoryRecordsSql(), { persistTo: state });
   // locations: items the phone is offered, two look-alike places the migration would have kept apart, and typed locations with no place yet.
@@ -513,6 +513,181 @@ async function publicPhotoScenes(browser, url, dir) {
     await page.waitForSelector("dialog[open] .ss-item-photo");
     await page.waitForLoadState("networkidle");
     await shot(page, `public-selfservice-sheet-${size}`);
+    await context.close();
+  }
+  return timings;
+}
+
+/* ---------- Self-Service 2.0 (V1.9), a public phone, no sign-in ---------- */
+
+/** A stand-in camera photo, drawn here: a table-like shape on a floor, so the preview has something to show. */
+const drawCameraPhoto = async (page) => page.evaluate(async () => {
+  const canvas = document.createElement("canvas");
+  canvas.width = 720; canvas.height = 960;
+  const g = canvas.getContext("2d");
+  const wall = g.createLinearGradient(0, 0, 0, 960);
+  wall.addColorStop(0, "#d9d2c3"); wall.addColorStop(0.6, "#bdb4a1"); wall.addColorStop(0.6, "#8a7b66"); wall.addColorStop(1, "#6f6252");
+  g.fillStyle = wall; g.fillRect(0, 0, 720, 960);
+  g.fillStyle = "#3b2f25"; g.fillRect(150, 520, 420, 40);
+  g.fillRect(180, 560, 24, 200); g.fillRect(516, 560, 24, 200);
+  g.fillStyle = "#7a1419"; g.fillRect(250, 430, 220, 90);
+  g.fillStyle = "#e8c9a0"; g.beginPath(); g.arc(360, 250, 90, 0, Math.PI * 2); g.fill();
+  g.fillStyle = "#2c3e50"; g.fillRect(270, 340, 180, 150);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
+  const transfer = new DataTransfer();
+  transfer.items.add(new File([blob], "photo.jpg", { type: "image/jpeg" }));
+  const input = document.querySelector("#ss-photo");
+  input.files = transfer.files;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+});
+
+async function selfServiceScenes(browser, url, dir) {
+  const shot = (page, name) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80 });
+  const probe = await browser.newContext();
+  const catalog = await (await probe.request.get(`${url}/api/self-service/catalog`)).json();
+  await probe.close();
+  const withAction = (action) => catalog.items.find((item) => item.action === action);
+  const borrow = withAction("BORROW"), take = withAction("TAKE"), use = withAction("USE");
+  if (!borrow || !take) { console.log("self-service-v19: this ref's catalog has no borrow and take items, skipped"); return {}; }
+  const timings = {};
+  const sizes = { ...SIZES, narrow: [320, 640, 2] };
+  // A ref from before this slice has no item page: its home and list are captured as the "before" and the rest is skipped.
+  const older = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, reducedMotion: "reduce" });
+  const olderPage = await older.newPage();
+  await olderPage.goto(`${url}/self-service`);
+  await olderPage.waitForLoadState("networkidle");
+  const hasItemPages = await olderPage.locator(".ss-card").count();
+  if (!hasItemPages) {
+    await shot(olderPage, "ss-home-phone");
+    await olderPage.goto(`${url}/self-service?do=get`);
+    await olderPage.waitForLoadState("networkidle");
+    await shot(olderPage, "ss-list-phone");
+    await older.close();
+    console.log("self-service-v19: this ref has no item pages, captured its home and list only");
+    return {};
+  }
+  await older.close();
+  const open = async (viewport, extra = {}) => {
+    const context = await browser.newContext({ viewport: { width: viewport[0], height: viewport[1] }, deviceScaleFactor: viewport[2], reducedMotion: "reduce", ...extra });
+    const page = await context.newPage();
+    return { context, page };
+  };
+  for (const [size, viewport] of Object.entries(sizes)) {
+    const { context, page } = await open(viewport);
+    // Sync is held back so a confirmed record waits on the phone, which is what the receipt and My activity then show.
+    await page.route("**/api/self-service/sync", (route) => route.abort());
+    let start = Date.now();
+    await page.goto(`${url}/self-service`);
+    await page.waitForSelector(".ss-card");
+    await page.waitForLoadState("networkidle");
+    timings[size] = { homeMs: Date.now() - start, homeCards: await page.locator(".ss-card").count() };
+    await shot(page, `ss-home-${size}`);
+    // The same home on the light theme.
+    await page.getByRole("button", { name: /theme/ }).click();
+    await page.waitForTimeout(400);
+    await shot(page, `ss-home-light-${size}`);
+    await page.getByRole("button", { name: /theme/ }).click();
+    await page.waitForTimeout(400);
+    // Search, and the group list.
+    await page.getByRole("searchbox", { name: "Search everything" }).fill(borrow.name.split(" ")[0]);
+    await shot(page, `ss-search-${size}`);
+    await page.getByRole("searchbox", { name: "Search everything" }).fill("");
+    const seeAll = page.getByRole("link", { name: /^See all/ }).first();
+    if (await seeAll.count()) { await seeAll.click(); await page.waitForSelector(".ss-row"); await shot(page, `ss-group-${size}`); }
+    // The item pages: one to borrow, one to take.
+    await page.goto(`${url}/self-service?do=item&item=${borrow.id}`);
+    await page.waitForSelector(".ss-item");
+    await page.waitForLoadState("networkidle");
+    await shot(page, `ss-item-borrow-${size}`);
+    await page.goto(`${url}/self-service?do=item&item=${take.id}`);
+    await page.waitForSelector(".ss-item");
+    await shot(page, `ss-item-take-${size}`);
+    // Where is it?
+    const where = page.getByRole("button", { name: "Where is it?" });
+    if (await where.count()) { await where.click(); await page.waitForSelector("dialog[open]"); await shot(page, `ss-where-${size}`); await page.keyboard.press("Escape"); }
+    // Borrow: who you are, the first problem in words, the photo, the check, the receipt.
+    await page.goto(`${url}/self-service?do=borrow&item=${borrow.id}`);
+    await page.waitForSelector("dialog[open] form");
+    await page.waitForLoadState("networkidle");
+    await shot(page, `ss-borrow-form-${size}`);
+    const sheet = page.getByRole("dialog").first();
+    await sheet.getByRole("button", { name: "Review and borrow" }).click();
+    await shot(page, `ss-borrow-problem-${size}`);
+    await sheet.getByLabel("Your full name").fill("Maria Santos");
+    await sheet.getByLabel("Student ID number").fill("20-1234-567");
+    await drawCameraPhoto(page);
+    await page.waitForSelector("img[alt='Photo to attach']");
+    await page.locator(".ss-photo, #ss-photo").first().scrollIntoViewIfNeeded().catch(() => {});
+    await shot(page, `ss-borrow-photo-${size}`);
+    await sheet.getByRole("button", { name: "Review and borrow" }).click();
+    await page.waitForSelector(".ss-summary");
+    await shot(page, `ss-confirm-${size}`);
+    await sheet.getByRole("button", { name: "Confirm borrow" }).click();
+    await page.waitForSelector(".ss-receipt__ref");
+    await shot(page, `ss-receipt-${size}`);
+    await page.getByRole("button", { name: "Done" }).click();
+    // My activity: on loan, waiting, and the person remembered on this phone.
+    await page.getByRole("link", { name: /^My activity/ }).click();
+    await page.waitForSelector(".ss-loan");
+    await shot(page, `ss-activity-${size}`);
+    // Return it.
+    await page.locator(".ss-loan").first().getByRole("link", { name: /^Return/ }).click();
+    await page.waitForSelector("dialog[open] form");
+    await drawCameraPhoto(page);
+    await page.waitForSelector("img[alt='Photo to attach']");
+    await shot(page, `ss-return-form-${size}`);
+    await page.keyboard.press("Escape");
+    // Take and use, now that the phone knows who this is.
+    await page.goto(`${url}/self-service?do=take&item=${take.id}`);
+    await page.waitForSelector("dialog[open] form");
+    await shot(page, `ss-take-form-${size}`);
+    if (use) {
+      await page.goto(`${url}/self-service?do=use&item=${use.id}`);
+      await page.waitForSelector("dialog[open] form");
+      await shot(page, `ss-use-form-${size}`);
+    }
+    // The help tip, opened by keyboard.
+    await page.goto(`${url}/self-service?do=borrow&item=${borrow.id}`);
+    await page.waitForSelector("dialog[open] .help__trigger", { state: "attached" });
+    await page.locator("dialog[open] .help__trigger:visible").first().focus();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Tab");
+    await page.waitForSelector(".help__note");
+    await shot(page, `ss-help-${size}`);
+    await context.close();
+  }
+
+  // Offline: a phone that saved the catalog keeps browsing and recording; what waits is said on every page.
+  {
+    const { context, page } = await open(SIZES.phone, { serviceWorkers: "allow" });
+    await page.goto(`${url}/self-service`);
+    await page.waitForSelector(".ss-card");
+    await page.waitForLoadState("networkidle");
+    await context.setOffline(true);
+    await page.goto(`${url}/self-service?do=item&item=${take.id}`).catch(() => {});
+    await page.waitForSelector(".ss-item", { timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(600);
+    timings.offlineHeadingColour = await page.evaluate(() => getComputedStyle(document.querySelector(".ss-item h1") ?? document.body).color + " on " + getComputedStyle(document.body).backgroundColor);
+    await shot(page, "ss-offline-item-phone");
+    await context.close();
+  }
+
+  // 600 items: the home draws the same small page, and a group opens as a light list.
+  {
+    const items = Array.from({ length: 600 }, (_, index) => ({ id: `ITM-${String(index + 1).padStart(4, "0")}`, name: `${["Chair", "Marker", "Biscuit"][index % 3]} ${index + 1}`, aliases: null, category: ["FURNITURE", "SCHOOL SUPPLIES", "PANTRY"][index % 3], unit: "piece", area: index % 3 === 2 ? "Pantry" : "Inventory", action: index % 3 === 0 ? "BORROW" : "TAKE", available: 10, location: "Storage › Shelf B", locationId: null, audience: null }));
+    const { context, page } = await open(SIZES.phone);
+    await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ revision: 9, items, places: [] }) }));
+    let start = Date.now();
+    await page.goto(`${url}/self-service`);
+    await page.waitForSelector(".ss-card");
+    timings.catalog600 = { homeMs: Date.now() - start, homeCards: await page.locator(".ss-card").count() };
+    await shot(page, "ss-600-home-phone");
+    start = Date.now();
+    await page.getByRole("link", { name: /^See all/ }).first().click();
+    await page.waitForSelector(".ss-row");
+    timings.catalog600.groupMs = Date.now() - start;
+    timings.catalog600.groupRows = await page.locator(".ss-row").count();
+    await shot(page, "ss-600-group-phone");
     await context.close();
   }
   return timings;
@@ -1389,7 +1564,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits") continue;
+          if (name === "item-photos" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -1423,6 +1598,7 @@ async function capture(url, dir) {
     const timings = { coldLoadToFirstRowMs: median(cold), sectionSwitchMs: median(swap) };
     if (pages.includes("item-photos")) Object.assign(timings, { itemPhotos: await photoScenes(browser, url, dir) });
     if (pages.includes("public-photos")) Object.assign(timings, { publicPhotos: await publicPhotoScenes(browser, url, dir) });
+    if (pages.includes("self-service-v19")) Object.assign(timings, { selfServiceV19: await selfServiceScenes(browser, url, dir) });
     if (pages.includes("locations")) Object.assign(timings, { locations: await locationScenes(browser, url, dir) });
     if (pages.includes("catalogue")) Object.assign(timings, { catalogue: await catalogueScenes(browser, url, dir) });
     if (pages.includes("catalog-visuals")) Object.assign(timings, { catalogVisuals: await catalogVisualScenes(browser, url, dir) });
