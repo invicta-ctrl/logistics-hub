@@ -1,0 +1,85 @@
+/* Kits (V1.8). Tokens only, so light and dark follow the rest of the staff workspace. */
+.kit-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
+.kit-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-4); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); transition: background-color var(--dur-1); }
+.kit-row:last-child { border-bottom: 0; }
+.kit-row:hover { background: var(--hover); }
+.kit-row.is-open { background: var(--brand-tint); box-shadow: inset 3px 0 0 var(--brand); }
+.kit-row.is-inactive .kit-row__name, .kit-row.is-inactive .kit-row__sub { color: var(--text-3); }
+.kit-row__main { display: flex; flex: 1 1 min(18rem, 100%); align-items: center; gap: var(--space-3); min-width: 0; min-height: var(--target); padding: var(--space-1) var(--space-2); border: 0; border-radius: var(--radius); background: none; color: inherit; text-align: left; }
+.kit-row__main:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.kit-row__thumb { display: grid; flex: none; width: 3.25rem; height: 3.25rem; place-items: center; overflow: hidden; border-radius: var(--radius); background: var(--subtle); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-3); }
+.kit-row__thumb img { width: 100%; height: 100%; object-fit: cover; }
+.kit-row__thumb--none .icon { --icon-size: var(--icon-md); color: var(--line-strong); }
+.kit-row__text { display: grid; min-width: 0; }
+.kit-row__name { font-weight: 600; overflow-wrap: anywhere; }
+.kit-row__sub { color: var(--text-2); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.kit-row__meta { display: grid; flex: 0 1 auto; justify-items: end; gap: var(--space-1); max-width: 100%; }
+.kit-row__meta .tag { white-space: normal; }
+.kit-row__progress { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-2); color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+/* One cell per component: filled when ready, so a half-ready kit reads half-ready before any word is read. */
+.kit-strip { display: inline-flex; gap: 2px; }
+.kit-strip__cell { width: .625rem; height: .875rem; border-radius: 2px; background: var(--line-strong); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.kit-strip__cell.is-ready { background: var(--ok); box-shadow: none; }
+@media (max-width: 520px) { .kit-row__meta { justify-items: start; padding-left: calc(var(--space-2) + 3.25rem + var(--space-3)); } .kit-row__progress { justify-content: flex-start; } }
+
+.kit-templates { margin-top: var(--space-7, 2.5rem); }
+.kit-templates__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.kit-templates h2 { margin: 0; font-size: var(--text-lg); }
+.kit-templates > p { margin: var(--space-1) 0 var(--space-3); max-width: 60ch; }
+
+.kit-profile { margin-bottom: var(--space-4); }
+.kit-status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: 0; font-weight: 500; }
+.tag--lg { padding: var(--space-1) var(--space-3); font-size: var(--text-md); }
+.kit-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
+.kit-note { margin-bottom: var(--space-3); }
+.kit-heading { margin: var(--space-5) 0 var(--space-2); font-size: var(--text-md); }
+.kit-parts, .kit-history, .kit-edit-rows, .kit-pick, .kit-check-rows { margin: 0; padding: 0; list-style: none; }
+.kit-parts { display: grid; gap: var(--space-2); }
+.kit-part { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-left-width: 4px; border-radius: var(--radius-lg); background: var(--surface); }
+.kit-part--ok { border-left-color: var(--ok); }
+.kit-part--short, .kit-part--low, .kit-part--expiring { border-left-color: var(--warn-ink); }
+.kit-part--review { border-left-color: var(--bad); }
+.kit-part__text { display: grid; gap: .125rem; min-width: 0; }
+.kit-part__name { font-weight: 600; overflow-wrap: anywhere; }
+.kit-part__facts { color: var(--text-2); font-size: var(--text-sm); }
+.kit-part__why { color: var(--text); font-size: var(--text-sm); font-weight: 500; }
+.kit-part__state { align-self: start; white-space: normal; }
+.kit-part__state .icon { --icon-size: var(--icon-xs); margin-right: var(--space-1); }
+@media (max-width: 420px) { .kit-part { grid-template-columns: auto minmax(0, 1fr); } .kit-part__state { grid-column: 2; justify-self: start; } }
+.kit-history { display: grid; gap: var(--space-1); font-size: var(--text-sm); }
+
+.kit-editor { display: grid; gap: var(--space-3); }
+.kit-edit-rows { display: grid; gap: var(--space-2); }
+.kit-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem auto; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.kit-edit-row__name { overflow-wrap: anywhere; font-weight: 500; }
+.kit-edit-row__qty input { width: 100%; min-height: var(--target); text-align: center; font-variant-numeric: tabular-nums; }
+.kit-pick { display: grid; gap: var(--space-1); }
+.kit-pick__item { display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: var(--target); padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: inherit; text-align: left; }
+.kit-pick__item:hover { background: var(--hover); }
+.kit-pick__item:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+.kit-pick__text { display: grid; flex: 1; min-width: 0; }
+.kit-pick__text span { color: var(--text-2); font-size: var(--text-sm); }
+
+/* Checking: one row per component, big answers, the way out sticky at the bottom of the sheet. */
+.kit-progress { display: grid; gap: var(--space-1); margin-bottom: var(--space-3); }
+.kit-progress__count { margin: 0; font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+.kit-progress progress { width: 100%; height: .5rem; accent-color: var(--brand); }
+.kit-check-tools { margin: var(--space-2) 0; }
+.kit-check-rows { display: grid; gap: var(--space-2); }
+.kit-check-row { display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.kit-check-row.is-ok { background: var(--subtle); border-color: var(--line); }
+.kit-check-row.is-flagged { border-color: var(--line-warn); background: var(--warn-tint); }
+.kit-check-row__head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--space-3); }
+.kit-check-row__choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5rem), 1fr)); gap: var(--space-2); }
+.kit-check-row__choices .button { min-height: 3rem; justify-content: center; padding-inline: var(--space-2); }
+.kit-check-row__note input { width: 100%; }
+.kit-check-note { margin-top: var(--space-4); }
+.kit-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin: 0 0 var(--space-3); }
+.kit-stats div { padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.kit-stats dt { color: var(--text-2); font-size: var(--text-sm); }
+.kit-stats dd { margin: 0; font-family: var(--serif); font-size: var(--text-2xl); font-variant-numeric: tabular-nums; }
+.kit-template-form { margin-top: var(--space-4); }
+/* The item picture is positioned for the Items table's rows; inside a kit's lists it sits in the row's own flow. */
+.kit-part .thumb, .kit-check-row .thumb, .kit-pick .thumb { position: static; left: auto; flex: none; width: 2.5rem; height: 2.5rem; margin: 0; }
+/* A chosen answer also shows an icon: two columns on a phone leave room for "Running low" beside it. */
+@media (max-width: 480px) { .kit-check-row__choices { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

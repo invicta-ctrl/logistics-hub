@@ -197,7 +197,7 @@ export async function capture(db: D1Database, actor: Actor, sessionId: string, i
   if (session.status !== "ACTIVE") throw new InputError(409, FINISHED);
 
   const behaviour = body.behaviour;
-  if (typeof behaviour !== "string" || !(BEHAVIOURS as readonly string[]).includes(behaviour)) throw new InputError(400, "Choose Borrow & return, Consume, Use gradually, or Not sure.");
+  if (typeof behaviour !== "string" || !(BEHAVIOURS as readonly string[]).includes(behaviour)) throw new InputError(400, "Choose Borrow & return, Take, Use gradually, or Not sure.");
   const decided = behaviour as Behaviour;
   const locationId = placeId(body.locationId);
   const later = decided === "REVIEW_LATER";
