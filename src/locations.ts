@@ -11,6 +11,7 @@ import { LOCATION_ID, MAX_DEPTH, type Place, VISIBILITIES, ancestry, cleanName, 
 /** A bound on the whole set, so "load every place" stays a small, fixed read. */
 const MAX_LOCATIONS = 500;
 const STALE = "Someone else changed this place while you were editing. Your changes were not saved; review the latest details and try again.";
+const IN_RECORDS = "Past records name this place (a location report, a cataloguing session or a check), so it can't be deleted. Turn off In use instead: it leaves every list and its history stays.";
 
 export type Photo = { id: string; width: number; height: number };
 type Row = { id: string; name: string; parentId: string | null; directions: string | null; visibility: string; active: number; updatedAt: string; photoId: string | null; photoWidth: number | null; photoHeight: number | null };
@@ -82,6 +83,7 @@ export async function placeGuard<T>(work: Promise<T>): Promise<T> {
     if (message.includes("location_has_active_children")) throw new InputError(409, "Places inside it are still in use. Move or deactivate them first.");
     if (message.includes("location_inactive")) throw new InputError(409, "That place is inactive, so items cannot be kept there. Choose another place.");
     if (/UNIQUE constraint failed: locations/i.test(message)) throw new InputError(409, "A place with that name already exists here.");
+    if (/FOREIGN KEY constraint failed/i.test(message)) throw new InputError(409, IN_RECORDS);
     throw error;
   }
 }
@@ -136,6 +138,36 @@ export async function updateLocation(db: D1Database, actor: Actor, id: string, i
   ]));
   if (!update!.meta.changes) throw new InputError(409, STALE);
   return { changed: changed.length, updatedAt: now };
+}
+
+/**
+ * Deletes a place made by mistake. Only an empty place that nothing names may go: no item kept there, no place inside it,
+ * and no report, cataloguing session or check that recorded it. Anything else is turned off instead, which keeps its history.
+ * The place keeps an entry of its own (with its name, so Activity can still say which place it was). Returns the picture to
+ * remove from storage, if it had one.
+ */
+export async function deleteLocation(db: D1Database, actor: Actor, id: string, expected: unknown) {
+  const current = await db.prepare("SELECT name, parent_id AS parentId, media_id AS photoId, updated_at AS updatedAt FROM locations WHERE id = ?")
+    .bind(id).first<{ name: string; parentId: string | null; photoId: string | null; updatedAt: string }>();
+  if (!current) throw new InputError(404, "Place not found.");
+  if (expected !== current.updatedAt) throw new InputError(409, STALE);
+  const uses = (await db.prepare(`SELECT (SELECT COUNT(*) FROM items WHERE location_id = ?1) AS items, (SELECT COUNT(*) FROM locations WHERE parent_id = ?1) AS places,
+      (SELECT COUNT(*) FROM location_reports WHERE location_id = ?1) + (SELECT COUNT(*) FROM catalogue_sessions WHERE location_id = ?1)
+      + (SELECT COUNT(*) FROM catalogue_captures WHERE location_id = ?1) + (SELECT COUNT(*) FROM location_audits WHERE location_id = ?1)
+      + (SELECT COUNT(*) FROM location_audit_observations WHERE recorded_location_id = ?1 OR seen_location_id = ?1) AS records`)
+    .bind(id).first<{ items: number; places: number; records: number }>())!;
+  if (uses.items) throw new InputError(409, `${uses.items === 1 ? "1 item is" : `${uses.items} items are`} kept here. Move ${uses.items === 1 ? "it" : "them"} to another place first (Move items, below), then delete it.`);
+  if (uses.places) throw new InputError(409, `${uses.places === 1 ? "1 place is" : `${uses.places} places are`} inside it. Move or delete ${uses.places === 1 ? "it" : "them"} first.`);
+  if (uses.records) throw new InputError(409, IN_RECORDS);
+  const path = (await pathsOf(db, [id])).get(id) ?? current.name;
+  // The database refuses the delete if anything came to point at the place since the check above (foreign keys).
+  const [removal] = await placeGuard(db.batch([
+    db.prepare("DELETE FROM locations WHERE id = ? AND updated_at = ?").bind(id, current.updatedAt),
+    audit(db, actor.accountId, "LOCATION_DELETED", "LOCATION", id, { name: current.name, path, parentId: current.parentId }, true),
+    db.prepare(`${BUMP_REVISION} AND changes() > 0`)
+  ]));
+  if (!removal!.meta.changes) throw new InputError(409, STALE);
+  return { deleted: id, photoId: current.photoId };
 }
 
 /**
