@@ -101,7 +101,7 @@ test.describe.serial("smart locations", () => {
     const form = page.getByRole("dialog", { name: "Add an item" });
     await form.getByLabel("Name", { exact: true }).fill("E2E Stapler");
     await form.getByLabel("Category").fill("Office supplies");
-    await form.getByLabel("Borrow or consume").selectOption("Consumable");
+    await form.getByLabel("Borrow or take").selectOption("Consumable");
     await form.getByLabel("Unit").fill("piece");
     await form.getByRole("combobox", { name: /^Place/ }).selectOption({ label: "Storage Area › Cabinet 1 › Shelf 2" });
     await expect(form.locator("#place-preview")).toContainText("Storage Area › Cabinet 1 › Shelf 2");

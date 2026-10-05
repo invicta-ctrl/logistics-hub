@@ -7,7 +7,7 @@ export const VARIANTS = { display: { edge: 1600, bytes: 1_000_000 }, thumb: { ed
 export type Variant = keyof typeof VARIANTS;
 
 /** Item photos and location pictures share the catalog bucket, each under its own prefix. */
-export const key = (mediaId: string, variant: Variant, folder: "items" | "locations" = "items") => `${folder}/${mediaId}/${variant}`;
+export const key = (mediaId: string, variant: Variant, folder: "items" | "locations" | "kits" = "items") => `${folder}/${mediaId}/${variant}`;
 const u16 = (bytes: Uint8Array, at: number) => (bytes[at]! << 8) | bytes[at + 1]!;
 
 /** The EXIF orientation of an APP1 payload, or 1 when it has none or cannot be read. */
@@ -141,7 +141,7 @@ export function photoHash(form: FormData): string | null {
 export const CHANGED = "Someone else changed this photo. Reload to see the latest, then try again.";
 
 /** Removes a photo's objects. D1 no longer points at them, so a failure here only leaves an unused file behind. */
-export async function dropObjects(bucket: R2Bucket, mediaId: string, folder: "items" | "locations" = "items"): Promise<void> {
+export async function dropObjects(bucket: R2Bucket, mediaId: string, folder: "items" | "locations" | "kits" = "items"): Promise<void> {
   await Promise.all((Object.keys(VARIANTS) as Variant[]).map((variant) => bucket.delete(key(mediaId, variant, folder)).catch(() => {
     console.error("media_cleanup_failed", { mediaId, variant });
   })));
