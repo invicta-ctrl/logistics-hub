@@ -129,7 +129,7 @@ test.describe("capturing a mixed shelf", () => {
     await begin(page, server);
     await name(page).fill("whiteboard marker blue");
     // A look-alike suggests, and says why, but nothing is selected.
-    await expect(pick(page, "Consume")).toHaveClass(/is-suggested/);
+    await expect(pick(page, "Take")).toHaveClass(/is-suggested/);
     await expect(page.locator("#cat-why")).toContainText("Like “Whiteboard Marker Black”");
     await expect(page.locator(".cat-choice[aria-pressed=true]")).toHaveCount(0);
     await page.getByRole("button", { name: "Save & next" }).click();
@@ -137,7 +137,7 @@ test.describe("capturing a mixed shelf", () => {
     expect(server.state.captures).toHaveLength(0);
     // One tap takes the suggestions; the person still presses Save.
     await page.getByRole("button", { name: "Use these" }).click();
-    await expect(pick(page, "Consume")).toHaveAttribute("aria-pressed", "true");
+    await expect(pick(page, "Take")).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByLabel("Category")).toHaveValue("OFFICE SUPPLIES");
     await expect(page.getByLabel("Counted in")).toHaveValue("piece");
     await page.getByRole("button", { name: "One more" }).click();
@@ -211,7 +211,7 @@ test.describe("capturing a mixed shelf", () => {
     await expect(page.getByLabel("Category")).toHaveValue("OFFICE SUPPLIES");
     await page.locator("#cat-unit-chips .cat-chip", { hasText: "ream" }).click();
     await expect(page.getByLabel("Counted in")).toHaveValue("ream");
-    await pick(page, "Consume").click();
+    await pick(page, "Take").click();
     await page.getByRole("button", { name: "Save & next" }).click();
     await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
     expect(server.state.captures[0]).toMatchObject({ category: "OFFICE SUPPLIES", unit: "ream" });
@@ -221,7 +221,7 @@ test.describe("capturing a mixed shelf", () => {
     const server = serve(page, { active: true });
     await begin(page, server);
     await name(page).fill("Stamp pad");
-    await pick(page, "Consume").click();
+    await pick(page, "Take").click();
     await page.getByLabel("Category").fill("OFFICE SUPPLIES");
     await page.getByLabel("Counted in").fill("piece");
     await page.evaluate(() => { const form = document.querySelector("#cat-form")!; form.dispatchEvent(new Event("submit", { cancelable: true })); form.dispatchEvent(new Event("submit", { cancelable: true })); });
@@ -292,7 +292,7 @@ test.describe("saving survives a dropped connection", () => {
     await begin(page, server);
     server.state.fail = "lose";
     await name(page).fill("Hole punch");
-    await pick(page, "Consume").click();
+    await pick(page, "Take").click();
     await page.getByLabel("Category").fill("OFFICE SUPPLIES");
     await page.getByLabel("Counted in").fill("piece");
     await page.getByRole("button", { name: "Save & next" }).click();
@@ -330,7 +330,7 @@ test.describe("when the sign-in ends or the session is gone", () => {
     let asked = 0;
     await page.route(`**/api/staff/catalogue/sessions/${SESSION_ID}/captures`, (route) => { asked += 1; return route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "Your staff session has ended. Please sign in again." }) }); });
     await name(page).fill("Ruler");
-    await pick(page, "Consume").click();
+    await pick(page, "Take").click();
     await page.getByLabel("Category").fill("OFFICE SUPPLIES");
     await page.getByLabel("Counted in").fill("piece");
     await page.getByRole("button", { name: "Save & next" }).click();
@@ -344,7 +344,7 @@ test.describe("when the sign-in ends or the session is gone", () => {
     await begin(page, server);
     server.state.fail = "drop";
     await name(page).fill("Whiteboard eraser");
-    await pick(page, "Consume").click();
+    await pick(page, "Take").click();
     await page.getByLabel("Category").fill("OFFICE SUPPLIES");
     await page.getByLabel("Counted in").fill("piece");
     await page.getByRole("button", { name: "Save & next" }).click();
@@ -375,7 +375,7 @@ test.describe("finishing", () => {
   test("finishing shows how it went and offers the one step that makes classified items official", async ({ page }) => {
     const server = serve(page, { active: true });
     await begin(page, server);
-    for (const [title, behaviour] of [["Glue stick", "Consume"], ["Sealed mystery", "Not sure"]] as const) {
+    for (const [title, behaviour] of [["Glue stick", "Take"], ["Sealed mystery", "Not sure"]] as const) {
       await name(page).fill(title);
       await pick(page, behaviour).click();
       if (behaviour !== "Not sure") { await page.getByLabel("Category").fill("OFFICE SUPPLIES"); await page.getByLabel("Counted in").fill("piece"); }
@@ -404,7 +404,7 @@ test.describe("layout", () => {
       const wide = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("body *")].filter((element) => element.getBoundingClientRect().right > document.documentElement.clientWidth + 0.5 && getComputedStyle(element).position !== "fixed" && !element.closest(".visually-hidden, .app-bar, .menu")).slice(0, 6).map((element) => `${element.tagName}.${element.className}#${element.id}`));
       expect(wide, "elements wider than the screen").toEqual([]);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-      for (const control of [pick(page, "Consume"), page.getByRole("button", { name: "Save & next" }), page.getByRole("button", { name: "One more" })]) {
+      for (const control of [pick(page, "Take"), page.getByRole("button", { name: "Save & next" }), page.getByRole("button", { name: "One more" })]) {
         const box = (await control.boundingBox())!;
         expect(box.height).toBeGreaterThanOrEqual(44);
       }
@@ -497,8 +497,8 @@ test.describe("accessibility", () => {
     await name(page).fill("Tape");
     await page.getByRole("button", { name: "Save & next" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Choose how it is used" })).toBeVisible();
-    await pick(page, "Consume").click();
-    await expect(pick(page, "Consume")).toHaveAttribute("aria-pressed", "true");
+    await pick(page, "Take").click();
+    await expect(pick(page, "Take")).toHaveAttribute("aria-pressed", "true");
     await expect(pick(page, "Borrow")).toHaveAttribute("aria-pressed", "false");
   });
 
@@ -543,7 +543,7 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     await name(page).fill("Whiteboard");
     await expect(page.locator("#cat-why")).toContainText("Like “Whiteboard Marker Black”");
     await name(page).fill("Tape dispenser");
-    await pick(page, "Consume").click();
+    await pick(page, "Take").click();
     await page.getByLabel("Category").fill("OFFICE SUPPLIES");
     await page.getByLabel("Counted in").fill("piece");
     await page.getByRole("button", { name: "Save & next" }).click();

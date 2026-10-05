@@ -1,0 +1,90 @@
+{
+  "release": "v1.8",
+  "title": "Kits & Structured Containers",
+  "branch": "road-to-v2/v1.8-kits-containers",
+  "record": "docs/road-to-v2/releases/v1.8.md",
+  "target": {
+    "worker": "logistics-hub",
+    "d1": {
+      "binding": "DB",
+      "name": "logistics-hub",
+      "id": "3ffd8edf-a176-4f63-8b7c-5215d11c98d8"
+    },
+    "r2": {
+      "existing": [
+        {
+          "binding": "EVIDENCE",
+          "name": "logistics-hub-evidence"
+        },
+        {
+          "binding": "CATALOG_MEDIA",
+          "name": "logistics-hub-catalog-media"
+        },
+        {
+          "binding": "STAFF_IDS",
+          "name": "logistics-hub-staff-ids"
+        }
+      ],
+      "create": []
+    },
+    "forbidden": [
+      "hau-usc-logistics-production",
+      "hau-usc-logistics-staging"
+    ]
+  },
+  "migrations": {
+    "pending": [
+      {
+        "name": "0029_kits.sql",
+        "sha256": "53337bad3f116433f8ad23e46b94fbb7da0a2d920d8da3de5c9a8d7eb0f1fdd2"
+      }
+    ]
+  },
+  "expect": {
+    "schemaAdded": [
+      "index:idx_kit_check_observations_item",
+      "index:idx_kit_checks_kit",
+      "index:idx_kit_components_item",
+      "index:idx_kit_templates_name",
+      "index:idx_kits_location",
+      "index:idx_kits_name",
+      "index:sqlite_autoindex_kit_check_observations_1",
+      "index:sqlite_autoindex_kit_checks_1",
+      "index:sqlite_autoindex_kit_components_1",
+      "index:sqlite_autoindex_kit_template_components_1",
+      "index:sqlite_autoindex_kit_templates_1",
+      "index:sqlite_autoindex_kits_1",
+      "index:sqlite_autoindex_kits_2",
+      "table:kit_check_observations",
+      "table:kit_checks",
+      "table:kit_components",
+      "table:kit_template_components",
+      "table:kit_templates",
+      "table:kits",
+      "trigger:kit_check_observations_no_delete",
+      "trigger:kit_check_observations_no_update",
+      "trigger:kit_checks_no_delete",
+      "trigger:kit_checks_no_update",
+      "trigger:kit_templates_kept",
+      "trigger:kits_kept",
+      "trigger:kits_place_active",
+      "trigger:kits_place_active_update"
+    ],
+    "schemaChanged": [],
+    "tableRowsAfter": {
+      "kits": 0,
+      "kit_components": 0,
+      "kit_checks": 0,
+      "kit_check_observations": 0,
+      "kit_templates": 0,
+      "kit_template_components": 0
+    },
+    "unchanged": [
+      "items",
+      "movements",
+      "onHand",
+      "loans",
+      "phoneEvents"
+    ]
+  }
+}
