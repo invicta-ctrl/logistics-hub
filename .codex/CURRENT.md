@@ -4,8 +4,8 @@
 
 SPEC: `docs/specs/accepted/road-to-v2/v1.8-kits-containers.md` (with the amendment's §11 item). BRANCH: `road-to-v2/v1.8-kits-containers` (worked on `claude/project-thread-yc6jd0`, built on it).
 GATE: V1.7 `STATUS: COMPLETE`, `INTEGRATION: MERGED` on `main`; `origin/main` (`48066d3`) is contained in the branch. The open loose end from the V1.9 CI run (`tests/browser/audit.spec.ts:109`, "1 / 4 checked" after a reload) was already fixed on `main` by `48066d3` (the device's waiting marks are read before the server is asked); 40 of 40 repeated local runs pass.
-STATE: COMPLETE, WAITING ON OWNER ACTIONS: `docs/road-to-v2/releases/v1.8.md`. Migration `0029_kits.sql` (additive, 27 objects, pinned in `ops/releases/v1.8.json`) must be applied through the Cloud Operations lane before V1.8 merges. Kits (`src/kits.ts`, `src/kits-workspace.ts`), knowledge base (`src/item-knowledge.ts`), suggestion tiers, evaluation script; evidence `docs/visual-research/v1.8.md`.
-NEXT_EXACT_ACTION: Earl decides whether to push to `road-to-v2/v1.8-kits-containers` and propagate forward (this session only had `claude/project-thread-yc6jd0`), then runs the V1.8 owner actions.
+STATE: COMPLETE, MERGED to `main` (`1f69dfe`), propagated through V1.15: `docs/road-to-v2/releases/v1.8.md`. Migration `0029_kits.sql` (additive, 27 objects, pinned in `ops/releases/v1.8.json`) was applied to production through the Cloud Operations lane (prepare run 37260470325, READY_TO_MERGE) before the merge. Kits (`src/kits.ts`, `src/kits-workspace.ts`), knowledge base (`src/item-knowledge.ts`), suggestion tiers, evaluation script; evidence `docs/visual-research/v1.8.md`.
+NEXT_EXACT_ACTION: V1.9 is the next slice (its predecessor gate now passes on `main`).
 
 ## Road to V2 — V1.7 Physical inventory & location audits — 2026-10-04
 
