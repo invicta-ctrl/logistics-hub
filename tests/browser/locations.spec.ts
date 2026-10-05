@@ -290,8 +290,8 @@ test.describe("Where is it? in Self-Service", () => {
     await page.route("**/api/self-service/location-report", async (route) => { sent = route.request().postDataJSON() as Record<string, unknown>; await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: sent.id, recorded: true }) }); });
     for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 820, height: 1180 }]) {
       await page.setViewportSize(viewport);
-      await page.goto("/self-service?do=take&item=ITM-0043");
-      const sheet = page.getByRole("dialog", { name: "Bottled Water" });
+      await page.goto("/self-service?do=item&item=ITM-0043");
+      const sheet = page.locator(".ss-item");
       await expect(sheet.locator(".ss-where")).toContainText("Storage Area › Cabinet 1");
       await sheet.getByRole("button", { name: "Where is it?" }).click();
       const where = page.getByRole("dialog", { name: "Bottled Water" }).last();
@@ -301,8 +301,8 @@ test.describe("Where is it? in Self-Service", () => {
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), `${viewport.width}px`).toBe(0);
       await where.getByRole("button", { name: "Close" }).click();
     }
-    await page.goto("/self-service?do=take&item=ITM-0043");
-    await page.getByRole("dialog", { name: "Bottled Water" }).getByRole("button", { name: "Where is it?" }).click();
+    await page.goto("/self-service?do=item&item=ITM-0043");
+    await page.getByRole("button", { name: "Where is it?" }).click();
     const where = page.getByRole("dialog", { name: "Bottled Water" }).last();
     await where.getByRole("button", { name: "Location looks wrong" }).click();
     await expect(where.getByLabel("Note")).toHaveCount(0);
@@ -317,16 +317,16 @@ test.describe("Where is it? in Self-Service", () => {
     expect(sent).toMatchObject({ itemId: "ITM-0043", kind: "LOCATION_WRONG", name: "Maya Cruz" });
     expect(Object.keys(sent!).sort()).toEqual(["id", "itemId", "kind", "name"]);
     // The phone remembers the name for the next form.
-    await page.goto("/self-service?do=take&item=ITM-0043");
-    await page.getByRole("dialog", { name: "Bottled Water" }).getByRole("button", { name: "Where is it?" }).click();
+    await page.goto("/self-service?do=item&item=ITM-0043");
+    await page.getByRole("button", { name: "Where is it?" }).click();
     const again = page.getByRole("dialog", { name: "Bottled Water" }).last();
     await again.getByRole("button", { name: "I can’t find it" }).click();
     await expect(again.getByLabel("Your name")).toHaveValue("Maya Cruz");
   });
 
   test("an item staff keep private sends the person to the desk, and offline says reports need a connection", async ({ page, context }) => {
-    await page.goto("/self-service?do=borrow&item=ITM-0262");
-    const sheet = page.getByRole("dialog", { name: "Scissors" });
+    await page.goto("/self-service?do=item&item=ITM-0262");
+    const sheet = page.locator(".ss-item");
     await expect(sheet.locator(".ss-where")).toContainText("Ask DOL staff where this is kept.");
     await sheet.getByRole("button", { name: "Where is it?" }).click();
     const desk = page.getByRole("dialog", { name: "Scissors" }).last();

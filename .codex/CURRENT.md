@@ -1,5 +1,12 @@
 # Current Work Pointer — Logistics Hub
 
+## Road to V2 — V1.9 Self-Service 2.0 — 2026-10-05
+
+SPEC: `docs/specs/accepted/road-to-v2/v1.9-self-service-2.md`. BRANCH: `road-to-v2/v1.9-self-service-2` (a cloud thread built it; the auto-assigned `claude/` branch was not used).
+GATE: V1.8 `STATUS: COMPLETE`, `INTEGRATION: MERGED 1f69dfe` on `main`; contained in the branch.
+STATE: COMPLETE, WAITING ON INTEGRATION (no owner action for data; the merge to `main` deploys and is done from Earl's computer): `docs/road-to-v2/releases/v1.9.md`. No migration. Evidence `docs/visual-research/v1.9.md`.
+NEXT_EXACT_ACTION: With CI green on the branch head, Earl (or an agent on his computer) merges V1.9 to `main`, verifies `main` CI, and propagates forward; then `start` V1.10.
+
 ## Road to V2 — V1.8 Kits & structured containers — 2026-10-05
 
 SPEC: `docs/specs/accepted/road-to-v2/v1.8-kits-containers.md` (with the amendment's §11 item). BRANCH: `road-to-v2/v1.8-kits-containers` (worked on `claude/project-thread-yc6jd0`, built on it).

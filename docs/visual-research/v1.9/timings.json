@@ -1,0 +1,29 @@
+{
+  "coldLoadToFirstRowMs": 294,
+  "sectionSwitchMs": 81,
+  "selfServiceV19": {
+    "desktop": {
+      "homeMs": 819,
+      "homeCards": 8
+    },
+    "tablet": {
+      "homeMs": 804,
+      "homeCards": 8
+    },
+    "phone": {
+      "homeMs": 765,
+      "homeCards": 8
+    },
+    "narrow": {
+      "homeMs": 781,
+      "homeCards": 8
+    },
+    "offlineHeadingColour": "rgb(247, 236, 225) on rgb(20, 6, 9)",
+    "catalog600": {
+      "homeMs": 222,
+      "homeCards": 12,
+      "groupMs": 116,
+      "groupRows": 200
+    }
+  }
+}
