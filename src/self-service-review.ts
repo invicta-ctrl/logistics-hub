@@ -1,5 +1,5 @@
 import "./self-service.css";
-import { REVIEW_REASONS, type ReviewReason } from "./catalog-policy";
+import { REVIEW_REASONS, type ReviewReason, foldReference, selfServiceReference } from "./catalog-policy";
 import { REPORT_LABELS, type ReportKind } from "./location-tree";
 import { loadSession, shell } from "./staff";
 import { type Html, CREST, MARK, api, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, onLeave, plural, preservingFocus, toast, units, writeParams } from "./ui";
@@ -44,6 +44,7 @@ function timing(entry: Entry): Html {
 
 function facts(entry: Entry): Html {
   const rows: Array<[string, Html | string]> = [
+    ["Reference", html`<span class="mono">${selfServiceReference(entry.id)}</span>`],
     ["Who", html`${entry.personName}${entry.studentId ? html` <span class="mono muted">${entry.studentId}</span>` : ""}`],
     ["When", timing(entry)]
   ];
@@ -53,10 +54,15 @@ function facts(entry: Entry): Html {
   return html`<dl class="review-card__facts">${rows.map(([term, value]) => html`<div><dt>${term}</dt><dd>${value}</dd></div>`)}</dl>`;
 }
 
+/** The evidence photo of a borrow or return, for signed-in staff: a held record's own, or the loan's once the borrow was applied. */
+function photoLink(entry: Entry): Html {
+  if ((entry.type !== "BORROW" && entry.type !== "RETURN") || !(entry.hasPhoto || (entry.type === "BORROW" && entry.loanId))) return html``;
+  return html`<a class="text-link" href="${entry.applied && entry.loanId ? `/api/staff/loans/${entry.loanId}/photo` : `/api/staff/self-service/${entry.id}/photo`}" target="_blank" rel="noopener">Photo<span class="visually-hidden"> (opens in a new tab)</span></a>`;
+}
+
 function actions(entry: Entry, candidates: Candidate[]): Html {
   const note = html`<label class="visually-hidden" for="note-${entry.id}">Note</label><input id="note-${entry.id}" name="note" maxlength="300" placeholder="Note (optional)" autocomplete="off" />`;
-  const photo = (entry.type === "BORROW" || entry.type === "RETURN") && (entry.hasPhoto || (entry.type === "BORROW" && entry.loanId))
-    ? html`<a class="text-link" href="${entry.applied && entry.loanId ? `/api/staff/loans/${entry.loanId}/photo` : `/api/staff/self-service/${entry.id}/photo`}" target="_blank" rel="noopener">Photo<span class="visually-hidden"> (opens in a new tab)</span></a>` : "";
+  const photo = photoLink(entry);
   if (entry.applied) {
     return html`${note}<div class="review-card__buttons"><button type="button" class="button button--secondary button--sm" data-act="dismiss">Mark checked</button><a class="text-link" href="/staff/items?item=${entry.itemId}" data-route>Open item</a>${photo}</div>`;
   }
@@ -147,15 +153,18 @@ export async function selfServiceReview(): Promise<void> {
       </div>
     </header>
     <div class="views" id="ss-views" role="group" aria-label="Self-Service views"></div>
+    <div class="ss-staff-find" id="ss-find" hidden><label class="visually-hidden" for="ss-find-input">Find a record</label><div class="search-field">${icon("search")}<input id="ss-find-input" type="search" placeholder="Find a reference, person or item" autocomplete="off" /></div></div>
     <div id="ss-results" aria-busy="true"><div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 4 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></div>`)}</div></div>`);
 
   const query = new URLSearchParams(window.location.search);
   let view: View = (Object.keys(VIEWS) as View[]).find((value) => value === query.get("view")) ?? "attention";
   let data: Review | null = null;
+  let find = "";
   const results = document.querySelector<HTMLElement>("#ss-results")!;
 
   function render(): void {
     writeParams({ view: view === "attention" ? null : view });
+    document.querySelector<HTMLElement>("#ss-find")!.hidden = view !== "activity";
     const attention = data ? data.open.length + data.stockIssues.length + data.locationReports.length : 0;
     mount(document.querySelector("#ss-views")!, html`${(Object.keys(VIEWS) as View[]).map((key) => html`<button type="button" class="view-tab" data-view="${key}" aria-pressed="${key === view}">${VIEWS[key]}${key === "attention" && attention ? html`<span class="view-tab__count">${attention}</span>` : ""}</button>`)}`);
     if (!data) return;
@@ -175,14 +184,26 @@ export async function selfServiceReview(): Promise<void> {
       ${review.open.length ? html`<h2 class="section-label">Records to check</h2><ul class="review-list">${review.open.map((entry) => reviewCard(entry, review.candidates))}</ul>` : ""}`;
   }
 
+  /** A person typing a reference (any case, with or without the dash), a name, a student ID or an item narrows the week. */
+  function found(entries: Entry[]): Entry[] {
+    const typed = find.trim().toLowerCase();
+    if (!typed) return entries;
+    const reference = foldReference(find);
+    return entries.filter((entry) => (reference.length >= 3 && foldReference(selfServiceReference(entry.id)).includes(reference))
+      || [entry.personName, entry.studentId ?? "", entry.itemName].some((text) => text.toLowerCase().includes(typed)));
+  }
+
   function activity(review: Review): Html {
     if (!review.recent.length) return emptyState("No Self-Service activity this week", "Takes, borrows and returns recorded with phones appear here.");
+    const shown = found(review.recent);
+    if (!shown.length) return emptyState("No record matches", "Check the reference, or try a name or an item. This list covers the last 7 days.");
     return html`<div class="data-table-wrap"><table class="data-table data-table--static">
         <caption class="visually-hidden">Self-Service records this week</caption>
         <thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Who</th><th scope="col">State</th></tr></thead>
-        <tbody>${review.recent.map((entry) => html`<tr>
+        <tbody>${shown.map((entry) => html`<tr>
           <td>${timing(entry)}</td>
-          <td>${verb(entry)} · ${quantityText(entry)} · <a href="/staff/items?item=${entry.itemId}" data-route>${entry.itemName}</a></td>
+          <td>${verb(entry)} · ${quantityText(entry)} · <a href="/staff/items?item=${entry.itemId}" data-route>${entry.itemName}</a>
+            <span class="ss-staff-ref"><span class="mono muted">${selfServiceReference(entry.id)}</span>${photoLink(entry)}</span></td>
           <td>${entry.personName}${entry.studentId ? html` <span class="mono muted">${entry.studentId}</span>` : ""}</td>
           <td>${entry.resolvedAt ? html`<span class="tag">Checked${entry.resolvedBy ? ` by ${entry.resolvedBy}` : ""}</span>` : entry.review ? html`<span class="tag ${entry.applied ? "tag--gold" : "tag--warn"}">${entry.applied ? "Recorded · check" : "Waiting for you"}</span>` : html`<span class="tag tag--ok">Recorded</span>`}</td>
         </tr>`)}</tbody></table></div>`;
@@ -199,6 +220,7 @@ export async function selfServiceReview(): Promise<void> {
   });
   render();
 
+  document.querySelector<HTMLInputElement>("#ss-find-input")!.addEventListener("input", (event) => { find = (event.target as HTMLInputElement).value; render(); });
   document.querySelector("#ss-views")!.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-view]");
     if (button) { view = button.dataset.view as View; render(); }

@@ -118,7 +118,7 @@ const selfServiceCatalog = { revision: 3, serverTime: "2026-09-30T01:00:00.000Z"
   { id: "ITM-0300", name: "A4 Bond Paper", aliases: null, category: "SCHOOL SUPPLIES", unit: "ream", action: "USE", available: 8, location: "Office cabinet", audience: null }
 ] };
 
-test("self-service: the item decides Borrow, Take or Use, and a use asks no amount and saves on the phone", async ({ page }) => {
+test("self-service: the item decides Borrow, Take or Use, and a use asks no amount, is checked, and saves on the phone", async ({ page }) => {
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
   // Kept offline, so the record waits on the phone.
   await page.route("**/api/self-service/sync", (route) => route.abort());
@@ -126,6 +126,12 @@ test("self-service: the item decides Borrow, Take or Use, and a use asks no amou
   for (const [name, action] of [["Bottled Water", "Take"], ["Scissors", "Borrow"], ["A4 Bond Paper", "Use"]]) {
     await expect(page.locator(".ss-row", { hasText: name }).locator(".ss-row__sub")).toContainText(action);
   }
+  // The item's page says how it works in a sentence and offers the one action its configuration decides.
+  await page.locator(".ss-row", { hasText: "A4 Bond Paper" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "A4 Bond Paper" })).toBeVisible();
+  await expect(page.locator(".ss-item__how")).toContainText("Just say you used some");
+  await expect(page.getByRole("link", { name: "Use", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Borrow", exact: true })).toHaveCount(0);
   // An old "take" link to an open-unit item still opens Use: the phone never offers the person a choice.
   await page.goto("/self-service?do=take&item=ITM-0300");
   const sheet = page.getByRole("dialog", { name: "A4 Bond Paper" });
@@ -133,14 +139,23 @@ test("self-service: the item decides Borrow, Take or Use, and a use asks no amou
   await expect(sheet.getByLabel("How many?")).toHaveCount(0);
   await expect(sheet.getByRole("radio")).toHaveCount(0);
   await sheet.getByLabel("Your name").fill("Ana Reyes");
-  await sheet.getByRole("button", { name: "Record use" }).click();
+  await sheet.getByRole("button", { name: "Review and use" }).click();
+  // Nothing is saved until the person has seen what will be sent and confirmed it.
+  await expect(sheet.getByRole("heading", { name: "Check before you send" })).toBeFocused();
+  await expect(sheet.locator(".ss-summary")).toContainText("Used by");
+  await expect(sheet.locator(".ss-summary")).toContainText("Ana Reyes");
+  await sheet.getByRole("button", { name: "Edit" }).click();
+  await expect(sheet.getByRole("button", { name: "Review and use" })).toBeVisible();
+  await sheet.getByRole("button", { name: "Review and use" }).click();
+  await sheet.getByRole("button", { name: "Confirm use" }).click();
   const receipt = page.getByRole("dialog", { name: "Use recorded" });
   await expect(receipt).toContainText("Saved on this phone");
+  await expect(receipt.locator(".ss-receipt__ref strong")).toHaveText(/^SS-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
   await expect(receipt.getByRole("button", { name: "Use something else" })).toBeVisible();
   await receipt.getByRole("button", { name: "Done" }).click();
   // The estimate is unchanged: a use takes nothing off the shelf.
   await page.goto("/self-service?do=get");
-  await expect(page.locator(".ss-row", { hasText: "A4 Bond Paper" }).first()).toContainText("1 waiting to sync");
+  await expect(page.locator(".ss-row", { hasText: "A4 Bond Paper" }).first()).toContainText("1 waiting to send");
   await expect(page.locator(".ss-row", { hasText: "A4 Bond Paper" }).first()).toContainText("8 left");
 });
 
@@ -148,10 +163,11 @@ test("self-service fits phones, tablets and desktops, with every screen and shee
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
   for (const viewport of [{ width: 320, height: 640 }, { width: 375, height: 667 }, { width: 412, height: 915 }, { width: 390, height: 844 }, { width: 820, height: 1180 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(viewport);
-    for (const route of ["/self-service", "/self-service?do=take", "/self-service?do=borrow&item=ITM-0262", "/self-service?do=return", "/self-service?do=activity", "/self-service?do=install"]) {
+    for (const route of ["/self-service", "/self-service?do=take", "/self-service?do=get&group=equipment", "/self-service?do=item&item=ITM-0262", "/self-service?do=borrow&item=ITM-0262", "/self-service?do=return", "/self-service?do=activity", "/self-service?do=install"]) {
       await page.goto(route);
       await expect(page.locator("#main-content")).toBeVisible();
-      if (route.includes("item=")) await expect(page.getByRole("dialog", { name: "Scissors" })).toBeVisible();
+      if (route.includes("do=borrow&item=")) await expect(page.getByRole("dialog", { name: "Scissors" })).toBeVisible();
+      if (route.includes("do=item&item=")) await expect(page.getByRole("heading", { level: 1, name: "Scissors" })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${route} at ${viewport.width}`).toBeTruthy();
     }
   }
@@ -169,7 +185,8 @@ test("self-service closed for maintenance: every address sends people to DOL sta
   // A use recorded before the office closed Self-Service waits on the phone.
   await page.goto("/self-service?do=use&item=ITM-0300");
   await page.getByRole("dialog", { name: "A4 Bond Paper" }).getByLabel("Your name").fill("Ana Reyes");
-  await page.getByRole("button", { name: "Record use" }).click();
+  await page.getByRole("button", { name: "Review and use" }).click();
+  await page.getByRole("button", { name: "Confirm use" }).click();
   await page.getByRole("dialog", { name: "Use recorded" }).getByRole("button", { name: "Done" }).click();
   closed = true;
   for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1366, height: 768 }]) {
@@ -210,11 +227,12 @@ test("administration tests a closed Self-Service in its own panel: records are t
   const panel = page.frameLocator("iframe.ss-trial__frame");
   await expect(panel.getByText("Test mode.")).toBeVisible();
   await expect(panel.getByRole("heading", { name: "What do you need?" })).toBeVisible();
-  await panel.getByRole("link", { name: /Get an item/ }).click();
-  await panel.locator(".ss-row", { hasText: "Bottled Water" }).first().click();
+  await panel.locator(".ss-card", { hasText: "Bottled Water" }).first().click();
+  await panel.getByRole("link", { name: "Take", exact: true }).click();
   const sheet = panel.getByRole("dialog", { name: "Bottled Water" });
   await sheet.getByLabel("Your name").fill("Owner One");
-  await sheet.getByRole("button", { name: "Take 1 piece" }).click();
+  await sheet.getByRole("button", { name: "Review and take" }).click();
+  await sheet.getByRole("button", { name: "Confirm take" }).click();
   await expect.poll(() => sent.length).toBe(1);
   expect(sent[0]!.test).toBe("1");
   expect(sent[0]!.body).toContain('"test":true');
@@ -379,7 +397,7 @@ test("the Lending Hub shows an item's photo, keeps names aligned with and withou
   await expect(page.locator(".catalogue--photos").first()).toBeVisible();
 });
 
-test("self-service shows an item's photo in the list and the sheet, and the home screen's campus picture stays off the other screens", async ({ page }) => {
+test("self-service shows an item's photo in the list and on its page, and the home screen's campus picture stays off the other screens", async ({ page }) => {
   await thumbsServed(page);
   const withPhotos = { ...selfServiceCatalog, items: selfServiceCatalog.items.map((item, index) => ({ ...item, photo: index === 1 ? null : `00000000-0000-4000-8000-00000000000${index}` })) };
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r4"' }, body: JSON.stringify(withPhotos) }));
@@ -390,16 +408,16 @@ test("self-service shows an item's photo in the list and the sheet, and the home
     expect(new Set(await nameLeft(page, ".ss-row__name")).size, `names line up at ${width}`).toBe(1);
     // The decorative campus picture belongs to the home screen only (a class this feature once collided with).
     expect(await page.locator(".ss-photo").evaluate((node) => getComputedStyle(node).display), `campus picture hidden at ${width}`).toBe("none");
-    await page.goto("/self-service?do=take&item=ITM-0043");
-    await expect(page.getByRole("dialog", { name: "Bottled Water" })).toBeVisible();
-    await expect(page.locator(".ss-item-photo")).toBeVisible();
-    await expect(page.locator(".ss-item-photo")).toHaveCSS("display", "grid");
+    await page.goto("/self-service?do=item&item=ITM-0043");
+    await expect(page.getByRole("heading", { level: 1, name: "Bottled Water" })).toBeVisible();
+    await expect(page.locator(".ss-item__visual")).toBeVisible();
+    await expect(page.locator(".ss-item__visual")).toHaveCSS("display", "grid");
     expect(await page.locator(".ss-photo").evaluate((node) => getComputedStyle(node).display)).toBe("none");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `no sideways scroll at ${width}`).toBeTruthy();
     // An item without a photo shows the icon in the same frame.
-    await page.goto("/self-service?do=borrow&item=ITM-0262");
-    await expect(page.getByRole("dialog", { name: "Scissors" })).toBeVisible();
-    await expect(page.locator(".ss-item-photo .item-icon")).toBeVisible();
-    await expect(page.locator(".ss-item-photo img")).toHaveCount(0);
+    await page.goto("/self-service?do=item&item=ITM-0262");
+    await expect(page.getByRole("heading", { level: 1, name: "Scissors" })).toBeVisible();
+    await expect(page.locator(".ss-item__visual .item-icon")).toBeVisible();
+    await expect(page.locator(".ss-item__visual img")).toHaveCount(0);
   }
 });
