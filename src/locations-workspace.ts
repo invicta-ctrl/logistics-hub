@@ -186,7 +186,19 @@ export async function locationsWorkspace(): Promise<void> {
         <p class="card__text">Move all ${plural(row.itemCount, "item")} kept here to another place, for example to combine two spellings of one cabinet. Each item’s history records the move.</p>
         <div class="field"><label for="move-to">Move to</label><select id="move-to"><option value="">Choose a place</option>${inOrder(places).filter(({ place }) => place.active && place.id !== row.id).map(({ place }) => html`<option value="${place.id}">${paths.get(place.id)}</option>`)}</select></div>
         <div class="form-alert" id="move-alert" role="alert" hidden></div>
-        <div class="where__buttons"><button type="button" class="button button--secondary" id="move-go">Move ${plural(row.itemCount, "item")}</button></div></section>` : ""}`;
+        <div class="where__buttons"><button type="button" class="button button--secondary" id="move-go">Move ${plural(row.itemCount, "item")}</button></div></section>` : ""}
+      ${row ? deleteCard(row) : ""}`;
+  }
+
+  /** Delete, for a place added by mistake. What blocks it is said up front; the server also refuses a place past records name. */
+  function deleteCard(row: PlaceRow): Html {
+    const inside = [...places.values()].filter((place) => place.parentId === row.id).length;
+    const blocked = row.itemCount ? `Move the ${plural(row.itemCount, "item")} kept here to another place first (Move items, above).`
+      : inside ? `Move or delete the ${plural(inside, "place")} inside it first.` : "";
+    return html`<section class="card" aria-labelledby="delete-title"><div class="card__head"><h3 id="delete-title">Delete place</h3></div>
+      <p class="card__text">${blocked || "For a place added by mistake. A place that past records name (a report, cataloguing or a check) can’t be deleted; turn off In use instead."}</p>
+      ${blocked ? "" : html`<div class="form-alert" id="delete-alert" role="alert" hidden></div>
+        <div class="where__buttons"><button type="button" class="button button--danger" id="delete-go">Delete ${row.name}</button></div>`}</section>`;
   }
 
   function bind(row: PlaceRow | undefined): void {
@@ -233,6 +245,22 @@ export async function locationsWorkspace(): Promise<void> {
       view: (shown) => void openViewer(`/api/staff/location-media/${shown.id}/display`, `Picture of ${row.name}`, () => sheetElement.querySelector<HTMLElement>("#place-photo [data-view] img"), row.name),
       changed: async () => { await poll.refresh(); },
       refresh: async () => { await poll.refresh(); openPlace(row.id); }
+    });
+    const remove = sheetElement.querySelector<HTMLButtonElement>("#delete-go");
+    remove?.addEventListener("click", async () => {
+      const problem = sheetElement.querySelector<HTMLElement>("#delete-alert")!;
+      if (!window.confirm(`Delete ${paths.get(row.id)}? This can't be undone.`)) return;
+      remove.disabled = true;
+      setMessage(problem, "");
+      try {
+        await api(`/api/staff/locations/${row.id}?expected=${encodeURIComponent(row.updatedAt)}`, { method: "DELETE" });
+        panel.close(true);
+        await poll.refresh();
+        toast(`${row.name} deleted.`);
+      } catch (error) {
+        setMessage(problem, failure(error));
+        remove.disabled = false;
+      }
     });
     const go = sheetElement.querySelector<HTMLButtonElement>("#move-go");
     go?.addEventListener("click", async () => {
