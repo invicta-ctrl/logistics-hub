@@ -182,15 +182,15 @@ test.describe.serial("smart locations", () => {
       expect(response.status()).toBe(200);
     };
     const phone = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
-    // A sheet shows the catalog as it was when it opened, so a changed place is read by opening the item from the list once the list has it.
+    // A page shows the catalog as it was when it opened, so a changed place is read by opening the item from the list once the list has it.
     const reopen = async (route: string | null) => {
       await phone.goto("/self-service?do=get");
       const row = phone.locator(".ss-row", { hasText: "E2E Stapler" });
       if (route) await expect(row).toContainText(route); else await expect(row).not.toContainText("Storage Area");
       await row.click();
     };
-    await phone.goto(`/self-service?do=take&item=${stapler.id}`);
-    const sheet = phone.getByRole("dialog", { name: "E2E Stapler" });
+    await phone.goto(`/self-service?do=item&item=${stapler.id}`);
+    const sheet = phone.locator(".ss-item");
     // Shelf 2 was never shared: the phone is pointed to the desk, and can still say it could not find the item.
     await expect(sheet.locator(".ss-where")).toContainText("Ask DOL staff where this is kept.");
     await sheet.getByRole("button", { name: "Where is it?" }).click();
@@ -203,7 +203,7 @@ test.describe.serial("smart locations", () => {
 
     // Sharing the whole route shows it: names, directions and the nearest picture, over the public picture address.
     await share("Shelf 2", "SELF_SERVICE");
-    await reopen("Storage Area › Cabinet 1 › Shelf 2");
+    await reopen("Cabinet 1 › Shelf 2");
     await expect(sheet.locator(".ss-where")).toContainText("Storage Area › Cabinet 1 › Shelf 2");
     await sheet.getByRole("button", { name: "Where is it?" }).click();
     const where = phone.getByRole("dialog", { name: "E2E Stapler" }).last();
