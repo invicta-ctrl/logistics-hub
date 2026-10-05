@@ -311,7 +311,7 @@ test("migrated review: fill the gaps, mark reviewed, and move to the next record
   await expect(page.getByText("Place added.")).toBeVisible();
   await expect(sheet.getByRole("combobox", { name: /^Place/ })).toHaveValue(/^LOC-\d{4}$/);
   await sheet.getByLabel("Other names").fill("e2e alias, E2E ALIAS");
-  await sheet.getByLabel("Borrow or consume").selectOption("Consume (Consumable)");
+  await sheet.getByLabel("Borrow or take").selectOption("Take (Consumable)");
   // Choosing it lists the item, so staff do not set the audience separately.
   await expect(sheet.getByLabel("Shown to")).toHaveValue("STUDENTS_AND_USC_STAFF");
   await page.getByRole("button", { name: /Mark reviewed & next/ }).click();
@@ -343,8 +343,8 @@ test("create, warn on a duplicate name, then deactivate without deleting", async
   await sheet.getByLabel("Category", { exact: true }).fill("office equipment and supplies");
   await sheet.getByLabel("Unit", { exact: true }).fill("piece");
   await expect(sheet.getByLabel("Shown to")).toHaveValue("STUDENTS_AND_USC_STAFF");
-  await expect(sheet.getByLabel("Borrow or consume").locator("option")).toHaveText(["Borrow (Loanable)", "Consume (Consumable)"]);
-  await sheet.getByLabel("Borrow or consume").selectOption("Borrow (Loanable)");
+  await expect(sheet.getByLabel("Borrow or take").locator("option")).toHaveText(["Borrow (Loanable)", "Take (Consumable)"]);
+  await sheet.getByLabel("Borrow or take").selectOption("Borrow (Loanable)");
   await sheet.getByLabel("Opening quantity").fill("3");
   await page.getByRole("button", { name: "Create item" }).click();
   await expect(page.getByText(/Item ITM-\d+ created\./)).toBeVisible();
@@ -678,7 +678,7 @@ test("open units: opt in, open, use, mark low, open another, mark empty, close b
   await sheet.getByLabel("Category", { exact: true }).fill("school supplies");
   await sheet.getByLabel("Unit", { exact: true }).fill("ream");
   await expect(sheet.getByLabel("How is this item normally used?")).toBeHidden();
-  await sheet.getByLabel("Borrow or consume").selectOption("Consume (Consumable)");
+  await sheet.getByLabel("Borrow or take").selectOption("Take (Consumable)");
   await sheet.getByLabel("Shown to").selectOption("NOT_AVAILABLE_FOR_LENDING");
   // Every item starts as Whole unit; staff opt in.
   await expect(sheet.getByLabel("How is this item normally used?")).toHaveValue("WHOLE_UNIT");
