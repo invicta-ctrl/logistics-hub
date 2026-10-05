@@ -48,6 +48,13 @@ Every time a Road-to-V2 branch receives new commits, bring every **succeeding** 
 - A successor's predecessor gate passes when the predecessor's record says `STATUS: COMPLETE` on `main`, or on the predecessor branch with `INTEGRATION: WAITING ON OWNER ACTIONS`. The successor builds on the predecessor branch (already propagated) and records which owner actions are still pending. It must never depend on a pending owner action having happened, for example on production data that has not been imported yet.
 - Once Earl completes the owner actions, integrate the waiting branches to `main` in version order.
 
+## Standing release authority (Earl, 2026-10-05)
+Earl has given standing authority for these, so do not ask first:
+- Run **Production operations** `preflight` and `prepare` for a release (`gh workflow run production-ops.yml --ref main -f release=<vX> -f expected_sha=<full head> -f mode=<preflight|prepare>`; `prepare` also takes `-f "confirm=PREPARE <vX> <sha>"`). A run waits at `waiting` for Earl's required-reviewer approval in GitHub; that approval is his and is never given by an agent. Do not push to the release branch while a prepare is pending, because `expected_sha` must stay its head. Read the run's own log for `PREFLIGHT_OK` / `READY_TO_MERGE`; a verbal "it's done" is not evidence.
+- Merge a release to `main` when it is genuinely OK: CI green on its head, `prepare` reported `READY_TO_MERGE`, predecessors integrated, no owner action pending. Then verify `main`'s CI and deploy, propagate forward through V1.15 and report.
+- Fix problems that come up (conflicts of form, flaky or Windows-only test failures, stale pointers) and carry on. Stop and report only for risk of production data loss, failed integrity gates, or merge conflicts where two sides change the same logic.
+- When a release is finished, tell Earl that it is merged, propagated and verified, and which branches are genuinely safe to delete. Delete only branches verified as integrated, and never a successor that has not merged.
+
 ## Short control phrases
 Earl may send only a short command.
 

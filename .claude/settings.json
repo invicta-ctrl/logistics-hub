@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git push origin main)"
+      "Bash(git push origin main)",
+      "Bash(git push origin HEAD:main)",
+      "Bash(gh workflow run production-ops.yml:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run watch:*)"
     ]
   }
 }
