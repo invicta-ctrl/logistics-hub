@@ -220,10 +220,14 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   const chip = (text: string, kind: "category" | "unit", value: string, suggested = false) => html`<button type="button" class="cat-chip ${suggested ? "is-suggested" : ""}" data-fill="${kind}" data-value="${value}">${text}${suggested ? html`<span class="visually-hidden"> (suggested)</span>` : ""}</button>`;
 
   let suggestions = suggest("", [], []);
+  /** Conflicting fields are shown with both options and their reasons, but never filled in by a tap on "Use these" or highlighted as the answer. */
+  const settled = <T extends { tier: string }>(hint: T | undefined) => hint && hint.tier !== "CONFLICTING" ? hint : undefined;
   const draw = () => {
     const name = value("cat-name");
     const items = everything();
-    suggestions = suggest(name, items, recent());
+    const raw = suggest(name, items, recent());
+    const conflicting = (["behaviour", "category", "unit"] as const).filter((field) => raw[field]?.tier === "CONFLICTING");
+    suggestions = { ...raw, behaviour: settled(raw.behaviour), category: settled(raw.category), unit: settled(raw.unit) };
     // Possible matches, judged as the person types, against what is already known (and what was just added).
     matches = name || value("cat-serial") ? possibleDuplicates({ name, category: value("cat-category"), model: value("cat-model"), serialNumber: value("cat-serial"), photoHash: photo?.hash ?? null }, items as DuplicateKnown[]) : [];
     if (!matches.length) armed = false;
@@ -239,7 +243,16 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const lines = [suggestions.behaviour, suggestions.category, suggestions.unit, stock].filter(Boolean);
     const pending = [suggestions.behaviour && behaviour === null, suggestions.category && !value("cat-category"), suggestions.unit && !value("cat-unit"), stock].filter(Boolean).length;
     // Everything "Use these" would fill is named here first: nothing changes silently, including the stock area behind "More details".
-    mount($("#cat-why"), lines.length && pending ? html`<span>${icon("info")}Suggested: ${[suggestions.behaviour && BEHAVIOUR_LABELS[suggestions.behaviour.value], suggestions.category && categoryName(suggestions.category.value), suggestions.unit?.value, stock && (stock.value === "Pantry" ? "Pantry" : "General stock")].filter(Boolean).join(" · ")}. ${lines[0]!.why}.</span> <button type="button" class="text-link" id="cat-use-all">Use these</button>` : html``);
+    const sure = lines.every((line) => line!.tier === "STRONG");
+    const named = [suggestions.behaviour && BEHAVIOUR_LABELS[suggestions.behaviour.value], suggestions.category && categoryName(suggestions.category.value), suggestions.unit?.value, stock && (stock.value === "Pantry" ? "Pantry" : "General stock")].filter(Boolean).join(" · ");
+    const notSure = conflicting.map((field) => {
+      const hint = raw[field]!;
+      const show = (value: string) => field === "behaviour" ? BEHAVIOUR_LABELS[value as Behaviour] : field === "category" ? categoryName(value) : value;
+      return html`<span class="cat-suggest__split">${show(hint.value)} (${hint.why}) or ${show(hint.other!.value)} (${hint.other!.why}). Choose one.</span>`;
+    });
+    // Everything "Use these" would fill is named here first: nothing changes silently, including the stock area behind "More details".
+    // Strong suggestions say "Suggested", weaker ones say "Maybe"; a split between two answers is shown, never filled.
+    mount($("#cat-why"), html`${lines.length && pending ? html`<span class="cat-suggest__line ${sure ? "" : "is-weak"}">${icon("info")}${sure ? "Suggested" : "Maybe"}: ${named}. ${lines[0]!.why}.</span> <button type="button" class="text-link" id="cat-use-all">Use these</button>` : html``}${notSure}`);
     const categories = [...new Set([suggestions.category?.value, ...recent().map((item) => item.category), ...(catalog?.categories ?? [])].filter((entry): entry is string => Boolean(entry) && entry !== UNSORTED_CATEGORY))];
     mount($("#cat-category-chips"), html`${categories.slice(0, 4).map((category) => chip(categoryName(category), "category", category, category === suggestions.category?.value))}`);
     const common = [suggestions.unit?.value, ...recent().map((item) => item.unit), ...(catalog?.units ?? [])].filter((entry): entry is string => Boolean(entry));

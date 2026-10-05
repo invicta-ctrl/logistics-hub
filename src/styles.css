@@ -1512,3 +1512,5 @@ tr.is-selected { background: var(--brand-tint); }
 }
 /* A hidden file input must not take the width every other input does. */
 input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
+.cat-suggest__split { display: block; }
+.cat-suggest__line.is-weak { color: var(--text-3, var(--text-2)); }
