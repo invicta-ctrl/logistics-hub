@@ -58,7 +58,7 @@
   --focus: 0 0 0 2px var(--canvas), 0 0 0 4px var(--accent);
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
   --shadow-md: 0 10px 30px rgb(0 0 0 / 35%), 0 2px 6px rgb(0 0 0 / 25%);
-  --photo-wash: linear-gradient(180deg, rgb(20 6 9 / 80%) 0%, rgb(20 6 9 / 72%) 9%, rgb(20 6 9 / 28%) 22%, rgb(20 6 9 / 30%) 32%, rgb(20 6 9 / 74%) 44%, rgb(20 6 9 / 88%) 70%, var(--canvas) 100%);
+  --photo-wash: linear-gradient(180deg, rgb(20 6 9 / 80%) 0%, rgb(20 6 9 / 72%) 9%, rgb(20 6 9 / 44%) 22%, rgb(20 6 9 / 46%) 32%, rgb(20 6 9 / 74%) 44%, rgb(20 6 9 / 88%) 70%, var(--canvas) 100%);
   color-scheme: dark;
 }
 .is-self-service #app { position: relative; z-index: 0; min-height: 100dvh; }
@@ -116,24 +116,22 @@
 .ss-screen, .ss-home { display: grid; gap: 1rem; }
 
 /* ---------- Home ---------- */
-.ss-hero { position: relative; display: grid; min-height: clamp(12rem, 34vh, 18rem); align-content: end; gap: .375rem; padding: 1rem .125rem 1rem; }
+.ss-hero { position: relative; display: grid; min-height: clamp(11rem, 30vh, 15rem); align-content: end; gap: .375rem; padding: 1rem .125rem .25rem; }
 .ss-hero h1 { font-family: var(--serif); font-size: clamp(2.25rem, 10vw, 3rem); font-weight: 500; letter-spacing: -.03em; line-height: 1; }
 .ss-hero__hello { color: var(--text-2); font-size: var(--text-base); }
 
-/* Two across on a phone; one across when large text needs the room. */
-.ss-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr)); gap: .75rem; }
-.ss-tile { position: relative; display: flex; min-height: 8.75rem; flex-direction: column; gap: .125rem; padding: 1rem; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2); }
+/* Return and My activity: two compact tiles, side by side where they fit and stacked for large text. */
+.ss-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .75rem; }
+.ss-tile { position: relative; display: flex; min-height: 4.5rem; align-items: center; gap: .875rem; padding: .875rem 1rem; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2); }
 .ss-tile:focus-visible { outline: none; box-shadow: var(--focus); }
-.ss-tile__icon { display: grid; width: 2.75rem; height: 2.75rem; margin-bottom: auto; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--accent); }
+.ss-tile__icon { display: grid; width: 2.75rem; height: 2.75rem; flex: none; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--accent); }
 .ss-tile__icon .icon { --icon-size: var(--icon-lg); }
-.ss-tile__name { margin-top: .75rem; overflow-wrap: break-word; font-size: 1.25rem; font-weight: 600; line-height: 1.15; }
-/* Two lines always, so the names of neighbouring tiles sit level. */
-.ss-tile__detail { min-height: 2lh; color: var(--text-2); font-size: var(--text-sm); line-height: 1.35; }
-.ss-tile__badge { position: absolute; top: 1rem; right: 1rem; min-width: 1.5rem; padding: .125rem .55rem; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: var(--text-sm); font-weight: 700; text-align: center; }
-/* Take and Borrow are the everyday actions, so they carry the brand colour and re-point the tokens inside them. */
-.ss-tile--take, .ss-tile--borrow { --text-2: var(--on-action-2); --accent: var(--on-action); --line-strong: var(--on-action-line); border-color: var(--action); background: var(--action); color: var(--on-action); }
+.ss-tile__text { display: grid; min-width: 0; }
+.ss-tile__name { overflow-wrap: break-word; font-size: var(--text-lg); font-weight: 600; line-height: 1.2; }
+.ss-tile__detail { color: var(--text-2); font-size: var(--text-sm); line-height: 1.35; }
+.ss-tile__badge { position: absolute; top: .625rem; right: .75rem; min-width: 1.5rem; padding: .0625rem .5rem; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: var(--text-sm); font-weight: 700; text-align: center; }
 
-.ss-find { scroll-margin-top: 4.5rem; }
+.ss-find { margin-top: .75rem; scroll-margin-top: 4.5rem; }
 .ss-find .search-field input { min-height: 3.125rem; border-radius: var(--radius-lg); background: var(--surface); font-size: var(--text-md); }
 .ss-find .search-field > .icon, .ss-search > .icon { color: var(--accent-line); }
 .ss-results { display: grid; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); }
@@ -166,6 +164,7 @@
 
 /* ---------- Screens and lists ---------- */
 .ss-head { display: flex; align-items: center; gap: .5rem; margin-left: -.5rem; }
+.ss-head h1:focus { outline: none; }
 .ss-head h1 { font-family: var(--serif); font-size: 2rem; font-weight: 500; letter-spacing: -.025em; }
 .ss-back { display: grid; width: 2.75rem; height: 2.75rem; flex: none; place-items: center; border: 1px solid transparent; border-radius: 50%; background: transparent; color: var(--text); -webkit-tap-highlight-color: transparent; transition: background-color var(--dur-1), border-color var(--dur-1); }
 .ss-back:active { background: var(--subtle); }
@@ -187,7 +186,6 @@
   .item-thumb { inset-inline-start: .625rem; width: 2.5rem; height: 2.5rem; margin-top: -1.25rem; }
   .ss-list--photos .ss-row { padding-inline-start: 3.75rem; }
 }
-.ss-item-photo { display: block; width: 10rem; height: 10rem; margin: 0 auto 1rem; border-radius: var(--radius-lg); background: var(--subtle); object-fit: contain; }
 .ss-row__name { overflow-wrap: anywhere; font-weight: 500; line-height: 1.3; }
 .ss-row__sub { overflow: hidden; color: var(--text-3); font-size: var(--text-sm); text-overflow: ellipsis; white-space: nowrap; }
 .ss-row__go { display: inline-flex; flex: none; align-items: center; gap: .125rem; color: var(--accent); font-size: var(--text-sm); font-weight: 600; }
@@ -294,9 +292,102 @@
 .is-self-service .tag { color: var(--text-2); }
 .is-self-service .tag--ok { color: var(--ok); }
 .is-self-service .tag--gold { color: var(--accent); }
+.is-self-service .tag--pending { color: var(--warn); }
 .is-self-service .tag--bad { color: var(--bad); }
 .ss-housekeeping { display: flex; flex-wrap: wrap; gap: .5rem; }
 .ss-sync .button, .ss-housekeeping .button { min-height: 2.75rem; }
+
+/* ---------- Home groups and cards ---------- */
+.ss-home__body { display: grid; gap: 1.25rem; }
+.ss-groups { display: grid; gap: 1.5rem; }
+.ss-group { display: grid; gap: .625rem; }
+.ss-group__head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.ss-group__head h2 { font-family: var(--serif); font-size: var(--text-xl); font-weight: 500; letter-spacing: -.01em; }
+.ss-group__all { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--accent); font-size: var(--text-sm); font-weight: 600; }
+/* Two across: four per group make two tidy rows, and nothing scrolls sideways. */
+.ss-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .625rem; }
+.ss-card { display: grid; height: 100%; align-content: start; gap: .25rem; padding: .625rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2); }
+.ss-card:focus-visible { outline: none; box-shadow: var(--focus); }
+.ss-card__visual { display: grid; width: 100%; aspect-ratio: 4 / 3; margin-bottom: .25rem; }
+.ss-card__name { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; font-weight: 500; line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.ss-card__cue { overflow: hidden; color: var(--text-3); font-size: var(--text-sm); text-overflow: ellipsis; white-space: nowrap; }
+.ss-card--out .ss-card__name { color: var(--text-2); }
+.ss-card .ss-count strong { font-size: var(--text-base); }
+.ss-chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+.ss-chip { display: inline-flex; min-height: 2.75rem; align-items: center; padding: .375rem 1.05rem; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--field); color: var(--text); font-weight: 500; text-decoration: none; }
+.ss-chip[aria-current="page"] { border-color: var(--accent-line); color: var(--accent); }
+.ss-chip:focus-visible { outline: none; box-shadow: var(--focus); }
+/* A long list draws only what is on screen. */
+.ss-list--photos li { content-visibility: auto; contain-intrinsic-size: auto 3.875rem; }
+
+/* ---------- The item's page ---------- */
+.ss-item__visual { display: grid; width: min(100%, 15rem); aspect-ratio: 1; margin-inline: auto; border-radius: var(--radius-lg); view-transition-name: ss-visual; }
+.ss-item__visual .item-visual__photo { object-fit: contain; }
+.ss-item__type { color: var(--accent-line); font-size: .6875rem; font-weight: 600; letter-spacing: .14em; text-align: center; text-transform: uppercase; }
+.ss-item__how { color: var(--text-2); font-size: var(--text-base); line-height: 1.5; }
+.ss-item .ss-where { margin: 0; }
+.ss-item__action { margin-top: .5rem; }
+
+/* ---------- Who this is for ---------- */
+.ss-identity { display: grid; gap: 1.125rem; }
+.ss-identity__fields { display: grid; gap: 1.125rem; }
+.ss-who { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .75rem; padding: .625rem .75rem .625rem 1rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--field); }
+.ss-who__icon { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--accent); }
+.ss-who__text { display: grid; min-width: 0; line-height: 1.3; }
+.ss-who__text strong { overflow-wrap: anywhere; font-weight: 600; }
+.ss-who__text span { color: var(--text-2); font-size: var(--text-sm); }
+.ss-who__change { min-height: 2.75rem; padding-inline: .25rem; font-weight: 600; text-align: right; }
+.ss-label-row { display: flex; flex-wrap: wrap; align-items: center; gap: .125rem .5rem; }
+.ss-remember { display: flex; align-items: center; gap: .25rem; }
+.ss-remember label { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .625rem; color: var(--text); font-size: var(--text-base); font-weight: 500; }
+.ss-remember input { width: 1.375rem; height: 1.375rem; flex: none; accent-color: var(--accent); }
+
+/* ---------- Check before you send ---------- */
+.ss-confirm { display: grid; gap: 1rem; }
+.ss-confirm__title { font-family: var(--serif); font-size: var(--text-2xl); font-weight: 500; letter-spacing: -.01em; }
+.ss-confirm__title:focus { outline: none; }
+.ss-summary { display: grid; margin: 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--field); }
+.ss-summary > div { display: grid; grid-template-columns: minmax(5.5rem, 8rem) 1fr; gap: .75rem; padding: .75rem 1rem; }
+.ss-summary > div + div { border-top: 1px solid var(--line); }
+.ss-summary dt { color: var(--text-3); font-size: var(--text-sm); }
+.ss-summary dd { margin: 0; overflow-wrap: anywhere; font-weight: 500; }
+.ss-summary__photo img { display: block; max-width: 100%; max-height: 9rem; border-radius: var(--radius); background: var(--canvas); object-fit: contain; }
+@media (max-width: 22.5rem) { .ss-summary > div { grid-template-columns: 1fr; gap: .125rem; } }
+
+/* ---------- The receipt ---------- */
+.ss-receipt__who { color: var(--text-2); font-size: var(--text-sm); }
+.ss-receipt__ref { display: grid; justify-items: center; gap: .125rem; margin-top: .5rem; padding: .625rem 1.5rem; border: 1px dashed var(--line-strong); border-radius: var(--radius-lg); }
+.ss-receipt__ref span { color: var(--text-3); font-size: .6875rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+.ss-receipt__ref strong { font-family: var(--mono); font-size: var(--text-xl); font-weight: 600; letter-spacing: .06em; user-select: all; }
+.ss-ref { font-family: var(--mono); font-size: .92em; letter-spacing: .02em; }
+
+/* ---------- Loans and waiting records ---------- */
+.ss-loans { display: grid; gap: .625rem; }
+.ss-loan { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .875rem 1rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.ss-loan__main { min-width: 0; }
+.ss-loan__name { overflow-wrap: anywhere; font-weight: 600; }
+.ss-loan__meta { color: var(--text-3); font-size: var(--text-sm); }
+.ss-loan__late { display: flex; align-items: center; gap: .375rem; margin-top: .25rem; color: var(--warn); font-size: var(--text-sm); font-weight: 600; }
+.ss-loan__late .icon { --icon-size: var(--icon-sm); }
+.ss-loan .button { min-height: 2.75rem; flex: none; }
+.ss-waiting { display: grid; gap: .75rem; padding: 1rem; border: 1px solid var(--warn-dot); border-radius: var(--radius-lg); background: var(--warn-tint); }
+.ss-waiting__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; }
+.ss-waiting h2 { font-size: var(--text-base); font-weight: 600; }
+.ss-waiting p { color: var(--text-2); font-size: var(--text-sm); }
+.ss-more { display: grid; gap: .75rem; }
+.ss-more summary { display: flex; min-height: 2.75rem; align-items: center; color: var(--text-2); font-weight: 500; cursor: pointer; }
+.ss-more[open] summary { margin-bottom: .25rem; }
+
+/* ---------- Contextual help (contextual-help.ts) ---------- */
+.help { position: relative; display: inline-flex; vertical-align: middle; }
+.help__trigger { position: relative; display: grid; width: 1.5rem; height: 1.5rem; place-items: center; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--text-2); }
+/* The button itself is 24 px (WCAG 2.5.8); the invisible ring around it brings the touch target to 44 px where nothing else is near. */
+.help__trigger::before { position: absolute; inset: -.625rem; content: ""; }
+.help__trigger .icon { --icon-size: 1.125rem; }
+.help__trigger[aria-expanded="true"] { color: var(--accent); }
+.help__trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.help__note { position: fixed; z-index: 100; display: block; max-width: 18rem; padding: .625rem .75rem; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); box-shadow: var(--shadow-md); font-size: var(--text-sm); font-weight: 400; line-height: 1.45; text-align: left; }
+@media (hover: hover) { .help__trigger:hover { color: var(--accent); } }
 
 /* ---------- Install steps ---------- */
 .ss-steps { display: grid; gap: .75rem; counter-reset: step; }
@@ -310,7 +401,7 @@
 /* Hover states only where there is a real pointer, so they never stick after a tap. */
 @media (hover: hover) {
   .ss-pill:hover { border-color: var(--accent-line); }
-  .ss-tile:hover { border-color: var(--accent-line); }
+  .ss-tile:hover, .ss-card:hover, .ss-chip:hover { border-color: var(--accent-line); }
   .ss-back:hover { border-color: var(--line); background: var(--subtle); }
   .ss-theme:hover { border-color: var(--accent-line); }
   .ss-row:hover { background: var(--hover); }
@@ -330,16 +421,22 @@
 /* ---------- Larger screens: the sheet becomes a floating card ---------- */
 @media (min-width: 761px) {
   .ss-sheet { width: min(100% - 2rem, 30rem); height: auto; max-height: min(88dvh, 52rem); margin: auto; border-radius: var(--radius-lg); }
-  .ss-tile { min-height: 9.5rem; }
 }
 @media (max-width: 359px) {
   .ss-bar__title small { display: none; }
   .ss-tiles { gap: .5rem; }
-  .ss-tile { min-height: 7.75rem; padding: .875rem; }
-  .ss-tile__name { font-size: 1.25rem; }
 }
 
 @keyframes ss-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: no-preference) {
+  /* Plays once when a screen is first drawn, on the page itself, so a sync redrawing its contents never replays it. */
+  .ss.is-entering { animation: ss-enter var(--dur-3) var(--ease) both; }
+  @keyframes ss-enter { from { opacity: 0; transform: translateY(.5rem); } }
+  .ss-receipt__mark circle { stroke-dasharray: 152; animation: ss-draw 420ms var(--ease) both; }
+  .ss-receipt__mark path { stroke-dasharray: 40; animation: ss-draw 300ms 220ms var(--ease) both; }
+  @keyframes ss-draw { from { stroke-dashoffset: 152; } }
+  .ss-card:active { transform: scale(.98); }
+}
 @media (prefers-reduced-motion: no-preference) {
   .ss-sheet[open] { animation: ss-rise var(--dur-3) var(--ease); }
   @keyframes ss-rise { from { transform: translateY(1.5rem); opacity: 0; } }
@@ -357,6 +454,8 @@
    Staff: /staff/self-service (review cards, poster)
    ========================================================================== */
 #ss-results { margin-top: 1.25rem; }
+.ss-staff-find { max-width: 28rem; margin-top: 1rem; }
+.ss-staff-ref { display: flex; flex-wrap: wrap; align-items: center; gap: .125rem .75rem; margin-top: .125rem; font-size: var(--text-sm); }
 .review-list { display: grid; gap: .75rem; margin-bottom: 1.5rem; }
 .review-card { padding: 1rem 1.125rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-sm); }
 .review-card--issue { border-color: var(--line-bad); }
@@ -408,3 +507,25 @@
   .printing-poster .poster__sub, .printing-poster .poster__url { font-size: 13pt; }
 }
 
+/* ---------- V1.9 visual review fixes ---------- */
+/* Links on the dark theme use gold: the brand red is under 4.5:1 on the dark canvas. */
+.is-self-service[data-theme="dark"] .text-link { color: var(--gold); }
+.is-self-service[data-theme="dark"] .ss-hero h1, .is-self-service[data-theme="dark"] .ss-hero__hello { text-shadow: 0 1px 14px rgb(0 0 0 / 55%); }
+/* A reference is one token: it never breaks at its hyphens. */
+.ss-ref, .ss-receipt__ref strong { white-space: nowrap; }
+/* Focus moves a field or the check's title to just under the sheet's header with its label still showing. */
+.ss-sheet .sheet__body :is(input, textarea, select, button) { scroll-margin-top: 3.5rem; }
+.ss-confirm__title { scroll-margin-top: 1.5rem; }
+/* The sync pill can say "Offline · 3 waiting"; on a phone the second crest steps aside so the name still fits. */
+@media (max-width: 26rem) {
+  .ss-bar__marks .mark { display: none; }
+  .ss-bar__inner { gap: .5rem; }
+  .ss-pill { gap: .375rem; padding-inline: .625rem; }
+}
+/* Wide screens use the width: four cards across on home and a wider column for the lists. */
+@media (min-width: 48rem) {
+  [data-ss-screen="home"] .ss, [data-ss-screen="home"] .ss-bar__inner { max-width: 62rem; }
+  [data-ss-screen="home"] .ss-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  [data-ss-screen="home"] .ss-hero { min-height: 12rem; }
+  [data-ss-screen="home"] :is(.ss-find, .ss-tiles, .ss-status) { max-width: 36rem; }
+}
