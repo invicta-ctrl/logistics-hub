@@ -137,6 +137,39 @@ test.describe("Locations page", () => {
     await expect(page.locator(".place-row__name", { hasText: "Cabinet Row 4" })).toHaveCount(0);
   });
 
+  test("the Inside list adds a place and removes one in place, keeping what is typed in the form", async ({ page }) => {
+    let listed = [...PLACES];
+    const sent: string[] = [];
+    await page.route("**/api/staff/locations", async (route) => {
+      if (route.request().method() === "POST") {
+        sent.push(`POST ${JSON.stringify(route.request().postDataJSON())}`);
+        listed = [...listed, place("LOC-0097", "Cabinet 3", null)];
+        return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: "LOC-0097", updatedAt: "2026-10-03T00:00:00.000Z" }) });
+      }
+      return route.fulfill({ contentType: "application/json", body: JSON.stringify({ revision: listed.length, locations: listed.map((entry) => ({ ...entry, itemCount: ITEMS.filter((it) => it.locationId === entry.id).length })) }) });
+    });
+    await page.route("**/api/staff/locations/LOC-0097?*", async (route) => {
+      sent.push(route.request().method());
+      listed = listed.filter((entry) => entry.id !== "LOC-0097");
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ deleted: "LOC-0097" }) });
+    });
+    await page.goto("/staff/locations?place=LOC-0004");
+    const sheet = page.getByRole("dialog", { name: "Shelf 2" });
+    await sheet.getByLabel("Name", { exact: true }).fill("Shelf Two");
+    await sheet.getByRole("button", { name: "Add a place to this list" }).click();
+    await sheet.getByLabel("New place", { exact: true }).fill("Cabinet 3");
+    await sheet.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(sheet.getByLabel("Inside", { exact: true })).toHaveValue("LOC-0097");
+    expect(sent[0]).toBe(`POST ${JSON.stringify({ name: "Cabinet 3", parentId: null, directions: "", visibility: "STAFF_ONLY" })}`);
+    page.once("dialog", (dialog) => { expect(dialog.message()).toBe("Remove Cabinet 3 from the list? This deletes the place and can't be undone."); void dialog.accept(); });
+    await sheet.getByRole("button", { name: "Remove Cabinet 3 from this list" }).click();
+    await expect(sheet.getByLabel("Inside", { exact: true })).toHaveValue("");
+    await expect(sheet.getByLabel("Inside", { exact: true }).locator("option", { hasText: "Cabinet 3" })).toHaveCount(0);
+    expect(sent[1]).toBe("DELETE");
+    // The edit in progress is still there.
+    await expect(sheet.getByLabel("Name", { exact: true })).toHaveValue("Shelf Two");
+  });
+
   test("opens a place to edit it: only legal parents are offered, the picture and sharing are shown, and Escape returns focus", async ({ page }) => {
     await page.goto("/staff/locations?place=LOC-0003");
     const sheet = page.getByRole("dialog", { name: "Cabinet 1" });
@@ -146,7 +179,7 @@ test.describe("Locations page", () => {
     await expect(sheet.getByRole("radio", { name: /Staff only/ })).toBeChecked();
     await expect(sheet.getByRole("button", { name: "View picture of Cabinet 1" })).toBeVisible();
     // Not itself, nor anything inside it, and nothing that would push its contents past five levels.
-    const parents = await sheet.getByLabel("Inside").locator("option").allTextContents();
+    const parents = await sheet.getByLabel("Inside", { exact: true }).locator("option").allTextContents();
     const offered = parents.map((text) => text.trim());
     expect(offered.filter((text) => text.includes("Cabinet 1") || text.includes("Shelf 2"))).toEqual([]);
     expect(offered).toContain("Office › Storage Area");

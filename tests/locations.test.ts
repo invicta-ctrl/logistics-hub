@@ -294,7 +294,7 @@ describe("managing places", () => {
 
     const held = await remove(typo);
     expect(held.status).toBe(409);
-    expect(((await held.json()) as { error: string }).error).toBe("1 item is kept here. Move it to another place first (Move items, below), then delete it.");
+    expect(((await held.json()) as { error: string }).error).toBe("1 item is kept here. Move it to another place first with Move items in its sheet, then delete it.");
     expect(((await (await remove(room)).json()) as { error: string }).error).toBe("1 place is inside it. Move or delete it first.");
     // A stale form, and a place that does not exist.
     expect((await staff(`/api/staff/locations/${shelf}?expected=2000-01-01T00:00:00.000Z`, "DELETE")).status).toBe(409);
