@@ -4,10 +4,10 @@ import { auditDetail, auditReview, auditState, finishAudit, itemFreshness, obser
 import { bulkUpdate } from "./bulk";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
-import { itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
+import { dropObjects, itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
 import { locationPicture, publicLocationPicture, putLocationPhoto, removeLocationPhoto } from "./location-media";
 import { reportLocation, resolveReport } from "./location-reports";
-import { createLocation, locationList, moveItems, updateLocation } from "./locations";
+import { createLocation, deleteLocation, locationList, moveItems, updateLocation } from "./locations";
 import { openUnitAction } from "./open-units";
 import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
@@ -336,6 +336,11 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (path === "/api/staff/locations" && method === "POST") return json(await createLocation(env.DB, account, await body()), 201);
   const place = LOCATION_PATH.exec(path);
   if (place && !place[2] && method === "PATCH") return json(await updateLocation(env.DB, account, place[1]!, await body()));
+  if (place && !place[2] && method === "DELETE") {
+    const { deleted, photoId } = await deleteLocation(env.DB, account, place[1]!, url.searchParams.get("expected"));
+    if (photoId) await dropObjects(env.CATALOG_MEDIA, photoId, "locations");
+    return json({ deleted });
+  }
   if (place?.[2] === "/move-items" && method === "POST") return json(await moveItems(env.DB, account, place[1]!, await body()));
   if (place?.[2] === "/photo" && method === "PUT") {
     if (Number(request.headers.get("content-length")) > MAX_PHOTO_BODY) throw new InputError(413, "That photo is too large.");
