@@ -76,7 +76,7 @@ describe("suggestions", () => {
   ];
   it("explains a suggestion by the items it is like", () => {
     const result = suggest("whiteboard mar", catalog, []);
-    expect(result.category).toEqual({ value: "OFFICE SUPPLIES", why: "Like “Whiteboard Marker Black” and 1 more" });
+    expect(result.category).toEqual({ value: "OFFICE SUPPLIES", why: "Like “Whiteboard Marker Black” and 1 more", tier: "WEAK" });
     expect(result.behaviour?.value).toBe("CONSUME");
     expect(result.unit?.value).toBe("piece");
   });

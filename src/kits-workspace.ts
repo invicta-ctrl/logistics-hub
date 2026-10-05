@@ -86,6 +86,8 @@ export async function kitsWorkspace(): Promise<void> {
     placeRows = locations;
     places = placesOf(locations);
   };
+  let recent: PickItem[] | null = null;
+  const loadRecent = async () => { recent ??= (await api<{ items: PickItem[] }>("/api/staff/kit-recent")).items; return recent; };
   const loadItems = async () => { pickable ??= (await api<{ items: PickItem[] }>("/api/staff/inventory")).items; return pickable; };
 
   /* ---------- The list ---------- */
@@ -302,15 +304,15 @@ export async function kitsWorkspace(): Promise<void> {
       : html`<li class="muted">Nothing yet. Search below to add the first item.</li>`);
     const drawPick = async () => {
       const query = input.value.trim().toLowerCase();
-      if (!query) { mount(pick, html``); return; }
-      const items = await loadItems();
       const taken = new Set(draft.map((entry) => entry.itemId));
-      const found = items.filter((entry) => !taken.has(entry.id) && entry.status !== "INACTIVE" && `${entry.name} ${entry.category} ${entry.id}`.toLowerCase().includes(query)).slice(0, 8);
-      mount(pick, found.length ? html`${found.map((entry) => html`<li><button type="button" class="kit-pick__item" data-add="${entry.id}">${rowThumb({ name: entry.name, category: entry.category, itemType: entry.itemType, iconKey: entry.iconKey, visualType: entry.visualType, photoId: entry.photoId })}
+      const items = query ? await loadItems() : await loadRecent();
+      const found = items.filter((entry) => !taken.has(entry.id) && entry.status !== "INACTIVE" && (!query || `${entry.name} ${entry.category} ${entry.id}`.toLowerCase().includes(query))).slice(0, 8);
+      mount(pick, found.length ? html`${query ? "" : html`<li class="kit-pick__label muted">Recently catalogued</li>`}${found.map((entry) => html`<li><button type="button" class="kit-pick__item" data-add="${entry.id}">${rowThumb({ name: entry.name, category: entry.category, itemType: entry.itemType, iconKey: entry.iconKey, visualType: entry.visualType, photoId: entry.photoId })}
           <span class="kit-pick__text"><strong>${entry.name}</strong><span>${behaviourText(entry)} · ${entry.onHand} ${units(entry.onHand, entry.unit)} on hand</span></span>${icon("plus")}</button></li>`)}`
-        : html`<li class="muted">No active item matches “${input.value.trim()}”.</li>`);
+        : query ? html`<li class="muted">No active item matches “${input.value.trim()}”.</li>` : html``);
     };
     drawRows();
+    void drawPick();
     input.addEventListener("input", () => void drawPick());
     host.addEventListener("input", (event) => {
       const qty = (event.target as HTMLElement).closest<HTMLInputElement>("[data-qty]");
@@ -329,7 +331,7 @@ export async function kitsWorkspace(): Promise<void> {
       draft.push({ itemId: entry.id, name: entry.name, unit: entry.unit, required: 1 });
       input.value = "";
       drawRows();
-      mount(pick, html``);
+      void drawPick();
       changed();
       rows.querySelector<HTMLInputElement>(`[data-qty="${draft.length - 1}"]`)?.focus();
     });

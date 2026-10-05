@@ -348,3 +348,15 @@ export async function updateTemplate(db: D1Database, actor: Actor, id: string, i
   if (!update!.meta.changes) throw new InputError(409, STALE);
   return { changed: 1, updatedAt: now };
 }
+
+/**
+ * Items catalogued most recently (Rapid Catalogue), so a kit's editor can offer what was just put on the shelf without a search.
+ * It is a shortlist of existing items; cataloguing itself knows nothing about kits.
+ */
+export async function recentlyCatalogued(db: D1Database) {
+  const { results } = await db.prepare(`SELECT i.id, i.name, i.unit, i.category, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.icon_key AS iconKey, i.visual_type AS visualType,
+      p.media_id AS photoId, COALESCE(b.on_hand, 0) AS onHand, i.status
+    FROM catalogue_captures c JOIN items i ON i.id = c.item_id LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id
+    WHERE i.status <> 'INACTIVE' ORDER BY c.created_at DESC, c.rowid DESC LIMIT 8`).all();
+  return { items: results };
+}

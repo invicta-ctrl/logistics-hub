@@ -5,7 +5,7 @@ import { bulkUpdate } from "./bulk";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
 import { dropObjects, itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
-import { checkKit, createKit, createTemplate, kitDetail, kitList, kitsOfItem, templateDetail, updateKit, updateTemplate } from "./kits";
+import { checkKit, createKit, createTemplate, kitDetail, kitList, kitsOfItem, recentlyCatalogued, templateDetail, updateKit, updateTemplate } from "./kits";
 import { kitPicture, putKitPhoto, removeKitPhoto } from "./kit-media";
 import { locationPicture, publicLocationPicture, putLocationPhoto, removeLocationPhoto } from "./location-media";
 import { reportLocation, resolveReport } from "./location-reports";
@@ -360,6 +360,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (resolving && method === "POST") return json(await resolveReport(env.DB, account, resolving[1]!, await body()));
   if (path === "/api/staff/kits" && method === "GET") return revisioned(request, env.DB, () => kitList(env.DB), new Date().toISOString().slice(0, 10));
   if (path === "/api/staff/kits" && method === "POST") return json(await createKit(env.DB, account, await body()), 201);
+  if (path === "/api/staff/kit-recent" && method === "GET") return json(await recentlyCatalogued(env.DB));
   const kit = KIT_PATH.exec(path);
   if (kit && !kit[2] && method === "GET") return json(await kitDetail(env.DB, kit[1]!));
   if (kit && !kit[2] && method === "PATCH") return json(await updateKit(env.DB, account, kit[1]!, await body()));
@@ -470,7 +471,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!form) throw new InputError(400, "Invalid loan form.");
     return json(await createLoan(env.DB, env.EVIDENCE, account, match[1]!, form), 201);
   }
-  const known = match || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/kits", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 

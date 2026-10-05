@@ -245,6 +245,20 @@ describe("checking a kit", () => {
   });
 });
 
+describe("recently catalogued", () => {
+  it("offers items put on the shelf by Rapid Catalogue, newest first, without involving cataloguing in kits", async () => {
+    const place = (await json<{ id: string }>(as(cookie, "/api/staff/locations", "POST", { name: "Shelf" }))).id;
+    const session = await json<{ id: string }>(as(cookie, "/api/staff/catalogue/sessions", "POST", { locationId: place }));
+    for (const [index, name] of ["Ribbon", "Buttons"].entries()) {
+      const saved = await as(cookie, `/api/staff/catalogue/sessions/${session.id}/captures`, "POST", { id: `00000000-0000-4000-8000-00000000000${index + 1}`, name, behaviour: "CONSUME", category: "CRAFT", unit: "pack", quantity: 2, locationId: place });
+      expect(saved.status, JSON.stringify(await saved.clone().json())).toBe(201);
+    }
+    const { items } = await json<{ items: Array<{ name: string; onHand: number }> }>(as(cookie, "/api/staff/kit-recent"));
+    expect(items.map((entry) => entry.name)).toEqual(["Buttons", "Ribbon"]);
+    expect(items[0]!.onHand).toBe(2);
+  });
+});
+
 describe("access and history", () => {
   it("is for signed-in staff only, and its changes appear in Activity", async () => {
     expect((await call("/api/staff/kits")).status).toBe(401);
