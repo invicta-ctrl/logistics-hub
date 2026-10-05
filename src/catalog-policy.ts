@@ -184,7 +184,7 @@ export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
   CATALOG: { ITEM_CREATED: "Item added", ITEM_UPDATED: "Item edited", ITEM_PHOTO_ADDED: "Photo added", ITEM_PHOTO_REPLACED: "Photo replaced", ITEM_PHOTO_REMOVED: "Photo removed",
     ITEM_VISUAL_CHANGED: "Item visual changed",
     LOCATION_CREATED: "Place added", LOCATION_UPDATED: "Place edited", LOCATION_PHOTO_ADDED: "Place picture added", LOCATION_PHOTO_REPLACED: "Place picture replaced", LOCATION_PHOTO_REMOVED: "Place picture removed",
-    LOCATION_ITEMS_MOVED: "Items moved to another place", LOCATIONS_RECONCILED: "Places made from item locations", LOCATION_REPORTED: "Location reported", LOCATION_REPORT_RESOLVED: "Location report resolved",
+    LOCATION_DELETED: "Place deleted", LOCATION_ITEMS_MOVED: "Items moved to another place", LOCATIONS_RECONCILED: "Places made from item locations", LOCATION_REPORTED: "Location reported", LOCATION_REPORT_RESOLVED: "Location report resolved",
     CATALOGUE_STARTED: "Cataloguing started", CATALOGUE_FINISHED: "Cataloguing finished",
     AUDIT_STARTED: "Place check started", AUDIT_PAUSED: "Place check paused", AUDIT_RESUMED: "Place check resumed", AUDIT_FINISHED: "Place check finished", AUDIT_RESOLVED: "Check finding settled",
     REORDER_OPENED: "Restock requested", REORDER_UPDATED: "Restock updated", REORDER_RESTOCKED: "Restocked" },

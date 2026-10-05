@@ -284,6 +284,50 @@ describe("managing places", () => {
     expect((await staff(`/api/staff/locations/LOC-9999/move-items`, "POST", { toLocationId: two })).status).toBe(404);
     expect(await (await staff(`/api/staff/locations/${one}/move-items`, "POST", { toLocationId: two })).json()).toEqual({ moved: 0 });
   });
+
+  it("deletes a place added by mistake only when nothing is kept in it, nothing is inside it and no record names it", async () => {
+    const remove = async (id: string) => staff(`/api/staff/locations/${id}?expected=${encodeURIComponent((await places()).find((entry) => entry.id === id)!.updatedAt)}`, "DELETE");
+    const room = await addPlace({ name: "Store room" });
+    const shelf = await addPlace({ name: "Shelf A", parentId: room });
+    const typo = await addPlace({ name: "Cabinet Row 4" });
+    const stapler = await addItem({ locationId: typo });
+
+    const held = await remove(typo);
+    expect(held.status).toBe(409);
+    expect(((await held.json()) as { error: string }).error).toBe("1 item is kept here. Move it to another place first (Move items, below), then delete it.");
+    expect(((await (await remove(room)).json()) as { error: string }).error).toBe("1 place is inside it. Move or delete it first.");
+    // A stale form, and a place that does not exist.
+    expect((await staff(`/api/staff/locations/${shelf}?expected=2000-01-01T00:00:00.000Z`, "DELETE")).status).toBe(409);
+    expect((await staff("/api/staff/locations/LOC-9999?expected=x", "DELETE")).status).toBe(404);
+
+    // Emptied by Move items, the place can go; its item and the item's history are untouched.
+    await staff(`/api/staff/locations/${typo}/move-items`, "POST", { toLocationId: shelf });
+    expect((await remove(typo)).status).toBe(200);
+    expect((await places()).map((entry) => entry.id)).not.toContain(typo);
+    expect(locationOf(stapler)).toBe(shelf);
+    expect(sqlite.prepare("SELECT details_json AS details FROM audit_log WHERE action = 'LOCATION_DELETED'").get()).toEqual({ details: JSON.stringify({ name: "Cabinet Row 4", path: "Cabinet Row 4", parentId: null }) });
+    const feed = (await (await staff("/api/staff/activity?limit=50&source=CATALOG")).json()) as { events: Array<{ summary: string }> };
+    expect(feed.events.map((event) => event.summary)).toEqual(expect.arrayContaining(["Staff One added the place Cabinet Row 4.", "Staff One deleted the place Cabinet Row 4."]));
+
+    // A place a record names stays: it can only be turned off.
+    const counted = await addPlace({ name: "Shelf B", parentId: room });
+    sqlite.prepare("INSERT INTO location_reports(id, item_id, location_id, kind, source, reported_by, created_at) VALUES(?, ?, ?, 'CANT_FIND', 'STAFF', 'ACC-1', ?)")
+      .run(crypto.randomUUID(), stapler, counted, new Date().toISOString());
+    expect(((await (await remove(counted)).json()) as { error: string }).error).toMatch(/^Past records name this place .*Turn off In use instead/);
+    // The database itself refuses if a record arrives between the check and the delete.
+    expect(() => sqlite.prepare("DELETE FROM locations WHERE id = ?").run(counted)).toThrow(/FOREIGN KEY/);
+
+    // Its picture goes with it.
+    const form = new FormData();
+    form.set("display", new File([jpeg({ width: 40, height: 30 }) as BlobPart], "display.jpg", { type: "image/jpeg" }));
+    form.set("thumb", new File([jpeg({ width: 16, height: 12 }) as BlobPart], "thumb.jpg", { type: "image/jpeg" }));
+    form.set("expected", "");
+    expect((await call(`/api/staff/locations/${shelf}/photo`, { method: "PUT", headers: { origin, cookie }, body: form })).status).toBe(200);
+    await staff(`/api/staff/locations/${shelf}/move-items`, "POST", { toLocationId: room });
+    expect(media.objects.size).toBe(2);
+    expect((await remove(shelf)).status).toBe(200);
+    expect(media.objects.size).toBe(0);
+  });
 });
 
 describe("an item's place", () => {
