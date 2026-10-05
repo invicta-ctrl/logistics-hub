@@ -218,6 +218,26 @@ export const STUDENT_ID_PATTERN = /^[A-Z0-9][A-Z0-9-]{2,29}$/;
  */
 export const SELF_SERVICE_LIMITS = { quantity: 30, eventsPerSync: 5, photosPerSync: 4, unitsPerItemHour: 30, heldPerNetworkDay: 60, photoBytes: 2 * 1024 * 1024 } as const;
 
+
+const REFERENCE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/**
+ * The short code people read aloud for a phone record, such as SS-7K4Q-9M2X. It is computed from the record's immutable id
+ * (the first 40 random bits, in an alphabet without I, L, O or U), so the phone, the receipt and staff screens always agree
+ * and nothing is stored. The id stays the key everywhere; the reference is only for people.
+ */
+export function selfServiceReference(eventId: string): string {
+  let bits = Number.parseInt(eventId.replace(/-/g, "").slice(0, 10), 16);
+  let code = "";
+  for (let place = 0; place < 8; place += 1) {
+    code = REFERENCE_ALPHABET[bits % 32]! + code;
+    bits = Math.floor(bits / 32);
+  }
+  return `SS-${code.slice(0, 4)}-${code.slice(4)}`;
+}
+
+/** A reference as someone typed it, folded to the form it is stored in: case, spaces, dashes and the look-alike letters O, I and L. */
+export const foldReference = (text: string): string => text.toUpperCase().replace(/[\s-]/g, "").replace(/O/g, "0").replace(/[IL]/g, "1");
+
 /**
  * Why a self-service event needs a person, in the words staff read. Everything else reconciles
  * automatically. A held event changed nothing yet: staff apply (or match) it, or dismiss it.
