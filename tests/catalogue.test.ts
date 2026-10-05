@@ -76,7 +76,7 @@ describe("suggestions", () => {
   ];
   it("explains a suggestion by the items it is like", () => {
     const result = suggest("whiteboard mar", catalog, []);
-    expect(result.category).toEqual({ value: "OFFICE SUPPLIES", why: "Like “Whiteboard Marker Black” and 1 more" });
+    expect(result.category).toEqual({ value: "OFFICE SUPPLIES", why: "Like “Whiteboard Marker Black” and 1 more", tier: "WEAK" });
     expect(result.behaviour?.value).toBe("CONSUME");
     expect(result.unit?.value).toBe("piece");
   });
@@ -434,7 +434,7 @@ describe("bulk edits", () => {
     const later = (await (await save(session, shot(shelf, { name: "Bravo", behaviour: "REVIEW_LATER", category: "" }))).json() as { id: string }).id;
     const list = [good, later].map((id) => ({ id, updatedAt: row(id).updated_at as string }));
     const result = await bulk({ action: "REVIEWED", items: list });
-    expect(result).toMatchObject({ applied: 1, skipped: [{ id: later, reason: "Choose Borrow or Consume for it first." }] });
+    expect(result).toMatchObject({ applied: 1, skipped: [{ id: later, reason: "Choose Borrow or Take for it first." }] });
     expect(row(good).needs_review).toBe(0);
     expect(row(later).needs_review).toBe(1);
     sqlite.prepare("UPDATE items SET item_type = 'Consumable' WHERE id = ?").run(later);

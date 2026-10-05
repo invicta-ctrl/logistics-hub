@@ -22,6 +22,7 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
   "/staff/items": () => import("./staff").then((module) => module.workspace),
   "/staff/catalogue": () => import("./catalogue-workspace").then((module) => module.catalogueWorkspace),
   "/staff/locations": () => import("./locations-workspace").then((module) => module.locationsWorkspace),
+  "/staff/kits": () => import("./kits-workspace").then((module) => module.kitsWorkspace),
   "/staff/stock": () => import("./stock-workspace").then((module) => module.stockWorkspace),
   "/staff/loans": () => import("./loans-workspace").then((module) => module.loansWorkspace),
   "/staff/self-service": () => import("./self-service-review").then((module) => module.selfServiceReview),
