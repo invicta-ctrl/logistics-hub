@@ -21,7 +21,7 @@
 // where /staff/catalogue exists) and catalog-pwa (V1.6: offline cataloguing on an Android phone and tablet, an iPhone's Safari tab and a
 // computer, with the service worker on and the connection really cut; runs only where the catalogue snapshot exists) and location-audit (V1.7: a
 // dozen-item shelf checked on a phone, paused, resumed and continued offline, a stock conflict, the summary and the review on a computer;
-// runs only where checks of a place exist). Its pictures, including the obviously fake
+// runs only where checks of a place exist) and kits (V1.8: the kit list, a Ready and an incomplete kit, a template, the check and its summary; runs only where /api/staff/kits exists). Its pictures, including the obviously fake
 // sample ID cards, are drawn here in the browser and written only to a throwaway folder, so no image file enters the
 // repository and no real ID is ever used.
 //
@@ -1164,6 +1164,76 @@ async function catalogPwaScenes(browser, url, dir) {
  * wrong, something found that belongs elsewhere, and something not in the catalog), paused and resumed, continued offline and sent on
  * reconnecting; stock moved by someone else after a count (the conflict); then the summary and the review, settled on a computer.
  */
+/** V1.8: the kit list and profile, a Ready and an incomplete kit, a template, the check flow and its summary; phone, tablet and computer. */
+async function kitScenes(browser, url, dir) {
+  const shot = (page, name) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80 });
+  const first = await signIn(browser, url, "staff.demo", SIZES.desktop);
+  if ((await first.page.request.get(`${url}/api/staff/kits`)).status() === 404) {
+    console.log("kits: this ref has no kits, skipped");
+    await first.context.close();
+    return {};
+  }
+  const state = await first.context.storageState();
+  const call = async (method, route, data) => (await first.page.request.fetch(`${url}${route}`, { method, headers: { origin: url }, data })).json();
+  const store = (await call("POST", "/api/staff/locations", { name: "Store room", parentId: null })).id;
+  const base = { category: "SCHOOL SUPPLIES", unit: "piece", status: "ACTIVE", reorderThreshold: 0, lendingAudience: "NOT_AVAILABLE_FOR_LENDING", needsReview: false, notes: null };
+  const make = async (name, extra) => (await call("POST", "/api/staff/items", { ...base, name, itemType: "Consumable", ...extra })).id;
+  const thread = await make("Sewing thread", { openingQuantity: 10 });
+  const needles = await make("Sewing needles", { openingQuantity: 1 });
+  const chalk = await make("Tailor's chalk", { consumptionMode: "OPEN_UNIT", openingQuantity: 4 });
+  const scissors = await make("Fabric scissors", { itemType: "Loanable", lendingAudience: "USC_STAFF_ONLY", openingQuantity: 2 });
+  const bandage = await make("Bandages", { category: "MEDICAL SUPPLIES", openingQuantity: 40 });
+  const gloves = await make("Gloves", { category: "MEDICAL SUPPLIES", unit: "pair", openingQuantity: 20 });
+  const parts = (...list) => list.map(([itemId, required]) => ({ itemId, required }));
+  const sewing = (await call("POST", "/api/staff/kits", { name: "Sewing kit", description: "Mending for costumes and banners.", locationId: store, components: parts([thread, 4], [needles, 2], [chalk, 1], [scissors, 1]) })).id;
+  const aid = (await call("POST", "/api/staff/kits", { name: "First-aid kit", description: "Event medical bag.", locationId: store, components: parts([bandage, 20], [gloves, 10]) })).id;
+  await call("POST", "/api/staff/kit-templates", { name: "Event first-aid", description: "Bandages and gloves for an event.", components: parts([bandage, 20], [gloves, 10]) });
+  await first.context.close();
+  const timings = {};
+
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    const { context, page } = await resume(browser, state, viewport);
+    const sheet = page.locator("dialog[open]");
+    await page.goto(`${url}/staff/kits`);
+    await page.waitForSelector(".kit-row");
+    await shot(page, `kits-list-${size}`);
+    await page.goto(`${url}/staff/kits?kit=${aid}`);
+    await sheet.waitFor();
+    await shot(page, `kit-ready-${size}`);
+    await page.goto(`${url}/staff/kits?kit=${sewing}`);
+    await sheet.waitFor();
+    await shot(page, `kit-incomplete-${size}`);
+    if (size !== "tablet") {
+      const start = Date.now();
+      await sheet.getByRole("button", { name: "Check kit" }).click();
+      await sheet.locator(".kit-check-row").first().waitFor();
+      timings[`checkOpens-${size}`] = Date.now() - start;
+      await sheet.locator(".kit-check-row", { hasText: "Sewing thread" }).getByRole("button", { name: "All there" }).click();
+      await sheet.locator(".kit-check-row", { hasText: "Sewing needles" }).getByRole("button", { name: "Running low" }).click();
+      await shot(page, `kit-check-${size}`);
+      await sheet.locator(".kit-check-row", { hasText: "Fabric scissors" }).getByRole("button", { name: "Damaged" }).click();
+      await sheet.locator(".kit-check-row", { hasText: "Fabric scissors" }).getByLabel("Note about Fabric scissors").fill("Loose screw");
+      page.once("dialog", (dialog) => void dialog.accept());
+      await sheet.getByRole("button", { name: "Finish check" }).click();
+      await sheet.getByText("Stock was not changed by this check.").waitFor();
+      await shot(page, `kit-summary-${size}`);
+    }
+    if (size === "desktop") {
+      await page.goto(`${url}/staff/kits`);
+      await page.getByRole("button", { name: "New kit" }).first().click();
+      await sheet.getByLabel("Name", { exact: true }).fill("Spare first-aid kit");
+      await sheet.getByLabel("Start from").selectOption({ index: 1 });
+      await shot(page, "kit-new-from-template-desktop");
+      await page.goto(`${url}/staff/kits`);
+      await page.locator(".kit-list--templates [data-template]").first().click();
+      await sheet.waitFor();
+      await shot(page, "kit-template-desktop");
+    }
+    await context.close();
+  }
+  return timings;
+}
+
 async function locationAuditScenes(browser, url, dir) {
   const shot = (page, name) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80 });
   const first = await signIn(browser, url, "staff.demo", SIZES.desktop);
@@ -1319,7 +1389,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit") continue;
+          if (name === "item-photos" || name === "public-photos" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -1358,6 +1428,7 @@ async function capture(url, dir) {
     if (pages.includes("catalog-visuals")) Object.assign(timings, { catalogVisuals: await catalogVisualScenes(browser, url, dir) });
     if (pages.includes("catalog-pwa")) Object.assign(timings, { catalogPwa: await catalogPwaScenes(browser, url, dir) });
     if (pages.includes("location-audit")) Object.assign(timings, { locationAudit: await locationAuditScenes(browser, url, dir) });
+    if (pages.includes("kits")) Object.assign(timings, { kits: await kitScenes(browser, url, dir) });
     if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
     if (pages.includes("staff-directory")) Object.assign(timings, { staffDirectory: await directoryScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);
