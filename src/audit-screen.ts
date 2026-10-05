@@ -411,7 +411,23 @@ async function checking(root: HTMLElement, who: Signed, start: AuditRecord): Pro
     }
   });
 
-  onLeave(onSyncChange(() => void draw()));
+  // After each send, the check is read again from the server (with what is still waiting here), so the count is the server's
+  // truth plus this device's, never a copy that missed a mark sent in between. One read at a time; a change meanwhile reads again.
+  let reading: Promise<void> | null = null;
+  let again = false;
+  const reread = async (): Promise<void> => {
+    if (reading) { again = true; return; }
+    reading = (async () => {
+      do {
+        again = false;
+        if (navigator.onLine && await refreshCheck(record.id, who.session.id).catch(() => null)) record = (await audits()).find((each) => each.id === record.id) ?? record;
+        // Never under someone's fingers: an open count, reason or note keeps what is typed, and closing it draws the fresh state.
+        if (counting === null && reviewing === null && !editingNote) await draw();
+      } while (again);
+    })();
+    try { await reading; } finally { reading = null; }
+  };
+  onLeave(onSyncChange(() => void reread()));
   await draw();
 }
 
