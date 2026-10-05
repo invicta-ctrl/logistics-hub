@@ -1081,7 +1081,7 @@ async function catalogPwaScenes(browser, url, dir) {
     await page.getByRole("button", { name: /^Start cataloguing/ }).click();
     await page.waitForSelector("#cat-form");
     await save(page, "Extension reel 10 m", "Borrow", "EQUIPMENT", "piece", pictures[0]);
-    await save(page, "Cable ties (pack)", "Consume", "OFFICE SUPPLIES", "pack");
+    await save(page, "Cable ties (pack)", "Take", "OFFICE SUPPLIES", "pack");
     await page.getByLabel("Name", { exact: true }).fill("Whiteboard");
     await page.waitForTimeout(200);
     await shot(page, "catalog-offline-session-tablet");

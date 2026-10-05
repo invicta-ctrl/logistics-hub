@@ -1,5 +1,12 @@
 # Current Work Pointer — Logistics Hub
 
+## Road to V2 — V1.8 Kits & structured containers — 2026-10-05
+
+SPEC: `docs/specs/accepted/road-to-v2/v1.8-kits-containers.md` (with the amendment's §11 item). BRANCH: `road-to-v2/v1.8-kits-containers` (worked on `claude/project-thread-yc6jd0`, built on it).
+GATE: V1.7 `STATUS: COMPLETE`, `INTEGRATION: MERGED` on `main`; `origin/main` (`48066d3`) is contained in the branch. The open loose end from the V1.9 CI run (`tests/browser/audit.spec.ts:109`, "1 / 4 checked" after a reload) was already fixed on `main` by `48066d3` (the device's waiting marks are read before the server is asked); 40 of 40 repeated local runs pass.
+STATE: IN PROGRESS. Done: Take / Taken or used rename; migration `0029_kits.sql` (additive: kits, components, templates, append-only checks); `src/kit-policy.ts` (derived readiness), `src/kits.ts`, `src/kit-media.ts`, Worker routes, Activity wording; `tests/kits.test.ts`. A kit holds no stock: its state is read from the items' own records, and a check writes no movement.
+NEXT_EXACT_ACTION: the Kits page (`/staff/kits`), the check-kit flow, the knowledge base and suggestion tiers, the leave-one-out script, docs and visual evidence, then the release record `docs/road-to-v2/releases/v1.8.md`.
+
 ## Road to V2 — V1.7 Physical inventory & location audits — 2026-10-04
 
 SPEC: `docs/specs/accepted/road-to-v2/v1.7-physical-inventory.md` (with the amendment's §11 item and the vocabulary this slice added). BRANCH: `road-to-v2/v1.7-physical-inventory`.

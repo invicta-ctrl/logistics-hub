@@ -434,7 +434,7 @@ describe("bulk edits", () => {
     const later = (await (await save(session, shot(shelf, { name: "Bravo", behaviour: "REVIEW_LATER", category: "" }))).json() as { id: string }).id;
     const list = [good, later].map((id) => ({ id, updatedAt: row(id).updated_at as string }));
     const result = await bulk({ action: "REVIEWED", items: list });
-    expect(result).toMatchObject({ applied: 1, skipped: [{ id: later, reason: "Choose Borrow or Consume for it first." }] });
+    expect(result).toMatchObject({ applied: 1, skipped: [{ id: later, reason: "Choose Borrow or Take for it first." }] });
     expect(row(good).needs_review).toBe(0);
     expect(row(later).needs_review).toBe(1);
     sqlite.prepare("UPDATE items SET item_type = 'Consumable' WHERE id = ?").run(later);

@@ -5,6 +5,8 @@ import { bulkUpdate } from "./bulk";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
 import { dropObjects, itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
+import { checkKit, createKit, createTemplate, kitDetail, kitList, kitsOfItem, templateDetail, updateKit, updateTemplate } from "./kits";
+import { kitPicture, putKitPhoto, removeKitPhoto } from "./kit-media";
 import { locationPicture, publicLocationPicture, putLocationPhoto, removeLocationPhoto } from "./location-media";
 import { reportLocation, resolveReport } from "./location-reports";
 import { createLocation, deleteLocation, locationList, moveItems, updateLocation } from "./locations";
@@ -58,6 +60,9 @@ const LEASE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const leaseKey = (secret: string) => `catalogue-lease:${secret}`;
 const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/location-report|\/visual)?$/;
 const LOCATION_PATH = /^\/api\/staff\/locations\/(LOC-\d{4,})(\/photo|\/move-items)?$/;
+const KIT_PATH = /^\/api\/staff\/kits\/(KIT-\d{4,})(\/photo|\/checks)?$/;
+const KIT_MEDIA_PATH = /^\/api\/staff\/kit-media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
+const TEMPLATE_PATH = /^\/api\/staff\/kit-templates\/(KTP-\d{4,})$/;
 const LOCATION_MEDIA_PATH = /^\/api\/staff\/location-media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
 const REPORT_PATH = /^\/api\/staff\/location-reports\/([0-9a-f-]{36})\/resolve$/;
 /** Self-Service shows a shared place's picture by id and size. */
@@ -147,9 +152,9 @@ async function activityExport(db: D1Database, account: Account, url: URL): Promi
 }
 
 /** Answers 304 when the client already holds the current catalog revision. */
-async function revisioned(request: Request, db: D1Database, load: () => Promise<object>): Promise<Response> {
+async function revisioned(request: Request, db: D1Database, load: () => Promise<object>, salt = ""): Promise<Response> {
   const revision = await catalogRevision(db);
-  const etag = `"r${revision}"`;
+  const etag = `"r${revision}${salt}"`;
   // Compression at the edge may turn a strong ETag into a weak validator for the same revision.
   if (request.headers.get("If-None-Match")?.replace(/^W\//, "") === etag) return new Response(null, { status: 304, headers: { etag, "cache-control": "no-store" } });
   return json({ revision, ...await load() }, 200, { etag });
@@ -353,6 +358,25 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (picture && method === "GET") return locationPicture(env.CATALOG_MEDIA, picture[1]!, picture[2]!);
   const resolving = REPORT_PATH.exec(path);
   if (resolving && method === "POST") return json(await resolveReport(env.DB, account, resolving[1]!, await body()));
+  if (path === "/api/staff/kits" && method === "GET") return revisioned(request, env.DB, () => kitList(env.DB), new Date().toISOString().slice(0, 10));
+  if (path === "/api/staff/kits" && method === "POST") return json(await createKit(env.DB, account, await body()), 201);
+  const kit = KIT_PATH.exec(path);
+  if (kit && !kit[2] && method === "GET") return json(await kitDetail(env.DB, kit[1]!));
+  if (kit && !kit[2] && method === "PATCH") return json(await updateKit(env.DB, account, kit[1]!, await body()));
+  if (kit?.[2] === "/checks" && method === "POST") { const checked = await checkKit(env.DB, account, kit[1]!, await body()); return json(checked, checked.replayed ? 200 : 201); }
+  if (kit?.[2] === "/photo" && method === "PUT") {
+    if (Number(request.headers.get("content-length")) > MAX_PHOTO_BODY) throw new InputError(413, "That photo is too large.");
+    const form = await request.formData().catch(() => null);
+    if (!form) throw new InputError(400, "Invalid photo form.");
+    return json(await putKitPhoto(env.DB, env.CATALOG_MEDIA, account, kit[1]!, form));
+  }
+  if (kit?.[2] === "/photo" && method === "DELETE") return json(await removeKitPhoto(env.DB, env.CATALOG_MEDIA, account, kit[1]!, url.searchParams.get("expected")));
+  const kitMedia = KIT_MEDIA_PATH.exec(path);
+  if (kitMedia && method === "GET") return kitPicture(env.CATALOG_MEDIA, kitMedia[1]!, kitMedia[2]!);
+  if (path === "/api/staff/kit-templates" && method === "POST") return json(await createTemplate(env.DB, account, await body()), 201);
+  const template = TEMPLATE_PATH.exec(path);
+  if (template && method === "GET") return json(await templateDetail(env.DB, template[1]!));
+  if (template && method === "PATCH") return json(await updateTemplate(env.DB, account, template[1]!, await body()));
   if (path === "/api/staff/catalogue" && method === "GET") {
     const state = await catalogueState(env.DB, account);
     // A lease sees only its member's own open session: who else is cataloguing and what waits for review need a sign-in.
@@ -420,8 +444,8 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (media && method === "GET") return itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!);
   const match = ITEM_PATH.exec(path);
   if (match && !match[2] && method === "GET") {
-    const [detail, freshness] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!)]);
-    return json({ ...detail, freshness });
+    const [detail, freshness, kits] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!)]);
+    return json({ ...detail, freshness, kits });
   }
   if (match && !match[2] && method === "PATCH") {
     const input = await body() as Record<string, unknown> | null;
@@ -446,7 +470,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!form) throw new InputError(400, "Invalid loan form.");
     return json(await createLoan(env.DB, env.EVIDENCE, account, match[1]!, form), 201);
   }
-  const known = match || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/kits", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 
