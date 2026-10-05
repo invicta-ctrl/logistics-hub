@@ -306,8 +306,11 @@ export function withHeld(detail: AuditDetail, held: ObservationEntry[]): AuditDe
 export async function refreshCheck(id: string, owner: string): Promise<AuditDetail | null> {
   const record = (await audits()).find((each) => each.id === id || each.serverId === id);
   try {
+    // What the device holds is read before the server is asked: a mark sent (and dropped here) meanwhile is then in the server's
+    // answer, so the two together never miss one.
+    const held = record ? (await observations()).filter((entry) => entry.auditId === record.id) : [];
     const answer = await api<AuditDetail>(`/api/staff/audits/${record?.serverId ?? id}`, within(20_000));
-    const detail = record ? withHeld(answer, (await observations()).filter((entry) => entry.auditId === record.id)) : answer;
+    const detail = record ? withHeld(answer, held) : answer;
     if (detail.audit.mine && detail.audit.status !== "FINISHED") await keepAudit({ id: record?.id ?? id, owner, serverId: detail.audit.id, pending: record?.pending ?? null, finishing: record?.finishing ?? false, detail });
     else if (record && !record.finishing && detail.audit.status === "FINISHED" && !(await observations()).some((entry) => entry.auditId === record.id)) await dropAudit(record.id);
     return detail;
