@@ -160,7 +160,8 @@ function arms(admin: boolean): Arm[] {
       // Account, recovery and Staff Directory events are refused here, before any search or page limit, unless the reader is ADMIN or OWNER.
       where: `a.action <> 'LOAN_CREATED' AND NOT (a.action = 'LOAN_CLOSED' AND COALESCE(${AUDIT_OUTCOME}, '') = 'RETURNED')${admin ? "" : " AND a.entity_type IN ('ITEM', 'LOCATION', 'CATALOGUE', 'AUDIT')"}`,
       cols: {
-        ...base, sid: "'audit:' || a.id", k: utc("a.created_at"), itemId: "i.id", itemName: "COALESCE(i.name, lo.name)", unit: "i.unit",
+        ...base, sid: "'audit:' || a.id", k: utc("a.created_at"), itemId: "i.id", itemName: `COALESCE(i.name, lo.name, CASE WHEN a.entity_type = 'LOCATION' THEN (SELECT json_extract(d.details_json, '$.path') FROM audit_log d
+          WHERE d.entity_type = 'LOCATION' AND d.entity_id = a.entity_id AND d.action = 'LOCATION_DELETED' LIMIT 1) END)`, unit: "i.unit",
         src: `CASE WHEN a.action = 'LOAN_CLOSED' THEN 'LOAN' WHEN a.action IN (${UNIT_AUDIT}) THEN 'MOVEMENT' WHEN a.entity_type IN ('ITEM', 'LOCATION', 'CATALOGUE', 'AUDIT') THEN 'CATALOG' WHEN a.entity_type = 'STAFF' THEN 'DIRECTORY' ELSE 'ACCOUNT' END`,
         type: `CASE WHEN a.action = 'LOAN_CLOSED' THEN CASE ${AUDIT_OUTCOME} WHEN 'DAMAGED' THEN 'LOAN_DAMAGED' WHEN 'LOST' THEN 'LOAN_LOST' ELSE 'LOAN_CLOSED' END ELSE a.action END`,
         actorId: "a.actor_user_id", actor: actorName("c", "a.actor_user_id"), details: "a.details_json", note: "l.return_note", corr: AUDIT_LOAN
@@ -355,6 +356,7 @@ function toEvent(row: Row): ActivityEvent {
     LOCATION_PHOTO_ADDED: () => `${actor} added a picture to the place ${item}.`,
     LOCATION_PHOTO_REPLACED: () => `${actor} replaced the picture of the place ${item}.`,
     LOCATION_PHOTO_REMOVED: () => `${actor} removed the picture of the place ${item}.`,
+    LOCATION_DELETED: () => `${actor} deleted the place ${item}.`,
     LOCATION_ITEMS_MOVED: () => `${actor} moved the items kept in ${item} to ${typeof details.toPath === "string" ? details.toPath.slice(0, 200) : "another place"}.`,
     LOCATIONS_RECONCILED: () => `${typeof details.locationsCreated === "number" ? details.locationsCreated : "Some"} places were made from the storage locations typed on ${typeof details.itemsLinked === "number" ? details.itemsLinked : "the"} items; nothing typed was changed.`,
     LOCATION_REPORTED: () => `${details.source === "SELF_SERVICE" ? typeof details.reporter === "string" ? `${details.reporter.slice(0, 120)} (from a phone)` : "A phone" : actor} reported ${details.kind === "CANT_FIND" ? `that ${item} could not be found` : `that the place of ${item} looks wrong`}; stock and its place did not change.`,
