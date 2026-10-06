@@ -334,7 +334,10 @@ test.describe("Where is it? in Self-Service", () => {
     await expect(desk.getByRole("button", { name: "Location looks wrong" })).toHaveCount(0);
     await expect(desk.getByRole("button", { name: "I can’t find it" })).toBeVisible();
     await desk.getByRole("button", { name: "Close" }).click();
+    // Let the first dialog finish closing and the page notice it is offline before asking again, or the tap can land on a page that is redrawing.
+    await expect(page.locator("dialog.where")).toHaveCount(0);
     await context.setOffline(true);
+    await expect(page.getByRole("link", { name: /^Offline/ })).toBeVisible();
     await sheet.getByRole("button", { name: "Where is it?" }).click();
     const offline = page.getByRole("dialog", { name: "Scissors" }).last();
     await expect(offline).toContainText("Reports need a connection");
