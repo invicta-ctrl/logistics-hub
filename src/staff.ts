@@ -449,7 +449,7 @@ export async function workspace(): Promise<void> {
       <header class="page-header">
         <div class="page-header__title">
           <h1>Items</h1>
-          <div class="review-meter" id="review-meter" hidden></div>
+          <div class="review-meter" id="review-meter"><span class="skeleton skeleton--text" aria-hidden="true"></span></div>
         </div>
         <div class="page-header__actions">
           <p class="live-status" id="live-status">Connecting…</p>

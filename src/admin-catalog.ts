@@ -21,7 +21,7 @@ export async function catalogSettings(): Promise<void> {
     body: () => html`
     <section class="admin-block admin-block--first" aria-labelledby="coverage-title">
       <h2 id="coverage-title" class="section-title">Classification</h2>
-      <div id="coverage" aria-busy="true"><div class="skeleton skeleton--block" aria-hidden="true"></div></div>
+      <div id="coverage" aria-busy="true"><div class="skeleton skeleton--block skeleton--coverage" aria-hidden="true"></div></div>
     </section>
     <section class="admin-block" aria-labelledby="names-title">
       <h2 id="names-title" class="section-title">Other names</h2>

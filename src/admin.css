@@ -62,3 +62,7 @@
   .alias-row { grid-template-columns: minmax(0, 1fr) auto; }
   .alias-row__names { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* The coverage figures are four cards and a note: two rows of two on a phone, one row wider up. Its placeholder is about that tall. */
+.skeleton--coverage { height: 25rem; }
+@media (min-width: 48rem) { .skeleton--coverage { height: 13rem; } }
