@@ -6,21 +6,21 @@
 - **V1.11 measurement:** run and recorded (aggregates only); negative for category and unit, so no model-chosen classification ships.
 
 ~~~text
-TASK: V1.15 consolidation: Ambient AI Assist (photo name, offline recheck, Possible duplicates, Neuron bands, owner switch) after the deferred V1.11 measurement.
-STATUS: IN PROGRESS. The Ambient Assist slice is committed and pushed; the rest of V1.15 (Codex's Windows ID work, mobile/perceived-performance audit, wording, CodeQL closure, journeys, visual audit, release records) remains.
+TASK: V1.15 consolidation: Ambient AI Assist, then the remaining amendment work (phone audit, perceived performance, Directory linking, long panels, tests, evidence).
+STATUS: IN PROGRESS. Pushed since the gate: Ambient AI Assist; the photo hint style; 320 px bar and tab-strip fixes and the Self-Service rules copy; exact-ID Directory linking with phone uses; Directory usage paging; the Ctrl-click test; first-load placeholder and layout-shift fixes; docs/visual-research/v1.15.md (in progress).
 BASE COMMIT: e919d8d (V1.15 with main 1247274 / V1.14 merged in at 22b8672)
-BRANCH/WORKTREE: road-to-v2/v1.15-v2-consolidation / Claude Cloud (sole V1.15 integrator; Build V1.15 thread pushed Identity needs review c0c1555 and Activity scrolling 3f80112 to the same branch)
-LAST PUSHED COMMIT: the Ambient Assist checkpoint (`git log -1 origin/road-to-v2/v1.15-v2-consolidation`)
-FILES CHANGED: src/ambient-assist.ts (new), src/worker.ts, wrangler.jsonc, src/attention.ts, src/attention-workspace.ts, src/catalogue-capture.ts, src/catalogue-store.ts, src/catalogue-sync.ts, src/admin-system.ts, src/styles.css, tests/ambient-assist.test.ts (new), tests/catalog-ai.test.ts, tests/browser/catalogue.spec.ts, docs/road-to-v2/v1.15-consolidation-plan.md, .codex/*
-CONTRACTS ADDED/CHANGED: Workers AI binding AI; POST /api/staff/catalogue/photo-name; photo PUT recheck=1; POST /api/staff/attention/possible-duplicate/:itemId (Keep both); PATCH /api/staff/admin/assist (owner); Attention reason POSSIBLE_DUPLICATE; system_settings keys ai_neurons:<UTC date>, ambient_assist, assist_photo_match:<itemId>. Table in the plan, "What is built".
+BRANCH/WORKTREE: road-to-v2/v1.15-v2-consolidation / Claude Cloud (sole V1.15 writer and integrator; Build V1.15 stopped at e919d8d, CodeQL thread stopped after 5ac9a7f)
+LAST PUSHED COMMIT: `git log -1 origin/road-to-v2/v1.15-v2-consolidation`
+FILES CHANGED: src/ambient-assist.ts, worker.ts, wrangler.jsonc, attention*.ts, catalogue-capture/store/sync.ts, admin-system.ts, admin-catalog.ts, admin.css, styles.css, catalogue.css, setting-copy.ts, staff-directory.ts, directory-workspace.ts, staff.ts, main.ts; tests (ambient-assist, catalog-ai, staff-directory, browser catalogue/accessibility/card-wall/search/shell); docs (plan, visual research v1.15); .codex/*
+CONTRACTS ADDED/CHANGED: AI binding; POST /api/staff/catalogue/photo-name; photo PUT recheck=1; POST /api/staff/attention/possible-duplicate/:itemId; PATCH /api/staff/admin/assist; Attention POSSIBLE_DUPLICATE; system_settings ai_neurons:<date>, ambient_assist, assist_photo_match:<itemId>. Directory usage: rows are LOAN, TAKE or USE, linked by exact student ID only; the matchedBy field is removed.
 MIGRATIONS: None.
-TESTS RUN: npm run typecheck; npm run build; npm test; npm run verify:privacy; npm run test:browser; npm run test:browser:worker.
-RESULTS: typecheck and build pass; npm test 703 passed, 2 skipped; privacy 0 matches; test:browser 184/184; test:browser:worker 50 passed, 2 failed, 3 not run. Both failures (offline-self-service "works offline…", worker-v16 "installs as its own app" with installability error in-incognito) fail identically on e919d8d without this slice in this container, so they are environmental here; GitHub CI decides.
-UNRUN CHECKS: a real photo through the deployed binding (local wrangler has no Workers AI, so photo-name answers null); signed-in production check; phone-size visual review of the hint.
-KNOWN LIMITATIONS: Gemma names 8 of 12 sample photos usefully; a wrong name is only a prefilled, editable suggestion. The circuit breaker is per Worker isolate. Neuron counting can overshoot a line by one call's cost under concurrency (6-Neuron reserve, 500 below the protected 9,500–10,000 band).
-BLOCKERS: Codex's uncommitted Windows work is not on GitHub yet (Earl asked to push it to wip/v1.15-codex-windows); Catalog/Catalogue wording and the Student ID count check wait on Earl.
-NEXT EXACT ACTION: Merge and review wip/v1.15-codex-windows when it exists; then the mobile-first and perceived-performance audit, the modifier-click new-tab tests, dead exports, CodeQL closure, V2 journey re-run, docs/visual-research/v1.15.md, and the release records.
-MERGE ORDER / DEPENDENCIES: V1.15 merges to main after Earl approves, from his computer, after CI is green. Deploying it adds the AI binding; rollback is the owner switch (Administration > System > Photo suggestions > Turn off) or removing the binding. No production data step.
+TESTS RUN: typecheck; build; npm test (703 passed, 2 skipped); verify:privacy (0); test:browser (185/185); test:browser:worker (50 passed, 2 failed, 3 not run).
+RESULTS: The two real-Worker failures (offline-self-service "works offline…", worker-v16 "installs as its own app", installability error in-incognito) fail identically on e919d8d without these changes in this container and pass in GitHub CI (e919d8d and dbcb039 green).
+UNRUN CHECKS: real photo through the deployed AI binding; signed-in production check; dark mode and reduced motion for the new parts; final V2 journey re-run on the final head.
+KNOWN LIMITATIONS: Gemma names 8 of 12 sample photos usefully (an editable suggestion only). Breaker is per isolate. Neuron count can overshoot a line by one call under concurrency. Kits still measures CLS 0.10 on a slow first load.
+BLOCKERS: Codex's uncommitted Windows work (ID card loading/retry states, its Self-Service and Directory patches) is not on GitHub; Catalog/Catalogue wording and the Student ID count check wait on Earl.
+NEXT EXACT ACTION: Merge wip/v1.15-codex-windows when it exists (keep this branch's exact-ID owned() if both changed it); then dark mode/reduced motion review, final journeys, docs/visual-research/v1.15.md final, docs/road-to-v2/releases/v1.15.md, and v2.0.md only if the V2 gate holds.
+MERGE ORDER / DEPENDENCIES: V1.15 merges to main after Earl approves, from his computer, after CI is green. Deploying adds the AI binding; rollback is Administration > System > Photo suggestions > Turn off, or removing the binding. No production data step. CodeQL alerts close once main is scanned after the merge.
 ~~~
 
 ## Road to V2 — V1.15 Codex Windows checkpoint (superseded above; its uncommitted work is awaited on wip/v1.15-codex-windows)
