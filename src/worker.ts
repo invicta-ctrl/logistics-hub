@@ -160,6 +160,13 @@ async function activityExport(db: D1Database, account: Account, url: URL): Promi
 }
 
 /** Answers 304 when the client already holds the current catalog revision. */
+/**
+ * Attention is derived from everything staff change, so it is answered from the catalog revision like the pages it summarizes; the hour is
+ * added because some of it moves with the clock (a held record becomes urgent, a loan falls due) without anyone writing. Before this, every
+ * open staff page recomputed it, ledger and all, every minute.
+ */
+const hourSalt = () => `-${new Date().toISOString().slice(0, 13)}`;
+
 async function revisioned(request: Request, db: D1Database, load: () => Promise<object>, salt = ""): Promise<Response> {
   const revision = await catalogRevision(db);
   const etag = `"r${revision}${salt}"`;
@@ -450,8 +457,8 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (loan?.[2] === "return" && method === "POST") return json(await closeLoan(env.DB, account, loan[1]!, await body()));
   if (loan?.[2] === "photo" && method === "GET") return loanPhoto(env.DB, env.EVIDENCE, loan[1]!);
   if (loan?.[2] === "review" && method === "POST") return json(await reviewReturn(env.DB, account, loan[1]!));
-  if (path === "/api/staff/attention" && method === "GET") return json(await attention(env.DB));
-  if (path === "/api/staff/attention/summary" && method === "GET") return json(await attentionSummary(env.DB));
+  if (path === "/api/staff/attention" && method === "GET") return revisioned(request, env.DB, () => attention(env.DB), hourSalt());
+  if (path === "/api/staff/attention/summary" && method === "GET") return revisioned(request, env.DB, () => attentionSummary(env.DB), hourSalt());
   if (path === "/api/staff/home" && method === "GET") return json(await resumable(env.DB, account));
   // Insights are practical but never urgent: a person's browser may keep them for two minutes, and nothing else waits on them.
   if (path === "/api/staff/home/insights" && method === "GET") return json(await insights(env.DB), 200, { "cache-control": "private, max-age=120" });

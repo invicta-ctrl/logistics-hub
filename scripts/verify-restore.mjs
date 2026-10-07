@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const VARIANTS = ["display", "thumb"];
 const migrationsDir = fileURLToPath(new URL("../migrations/", import.meta.url));
 
-/** The R2 keys the database's rows name. */
+/** The R2 keys the database's rows name and that must exist. */
 export function referencedKeys(sqlite) {
   const column = (sql) => sqlite.prepare(sql).all().map((row) => Object.values(row)[0]);
   const keys = new Set();
@@ -18,7 +18,15 @@ export function referencedKeys(sqlite) {
     for (const id of column(`SELECT media_id FROM ${table} WHERE media_id IS NOT NULL`)) for (const variant of VARIANTS) keys.add(`${folder}/${id}/${variant}`);
   }
   for (const id of column("SELECT media_id FROM staff_id_cards")) { keys.add(`ids/${id}/front`); keys.add(`ids/${id}/back`); }
-  for (const key of column("SELECT photo_key FROM loans WHERE photo_key IS NOT NULL UNION SELECT photo_key FROM self_service_events WHERE photo_key IS NOT NULL")) keys.add(key);
+  // Retention erases a photo and leaves '' (loans) or NULL (phone records): nothing is named then.
+  for (const key of column("SELECT photo_key FROM loans WHERE photo_key IS NOT NULL AND photo_key <> '' UNION SELECT photo_key FROM self_service_events WHERE photo_key IS NOT NULL AND photo_key <> ''")) keys.add(key);
+  return keys;
+}
+
+/** Keys that may exist beside the required ones: a card's two small images made in the browser (src/staff-directory.ts). Present is fine, absent is fine. */
+export function optionalKeys(sqlite) {
+  const keys = new Set();
+  for (const { media_id: id } of sqlite.prepare("SELECT media_id FROM staff_id_cards").all()) { keys.add(`ids/${id}/thumb`); keys.add(`ids/${id}/face`); }
   return keys;
 }
 
@@ -39,7 +47,8 @@ export function checkRestore(sqlite, { migrations, stored = null }) {
   if (stored) {
     const named = referencedKeys(sqlite);
     const gone = [...named].filter((key) => !stored.has(key));
-    const orphans = [...stored].filter((key) => !named.has(key));
+    const allowed = optionalKeys(sqlite);
+    const orphans = [...stored].filter((key) => !named.has(key) && !allowed.has(key));
     if (gone.length) problems.push(`${gone.length} object(s) the database names are not in R2 (first: ${gone[0]})`);
     if (orphans.length) problems.push(`${orphans.length} object(s) in R2 that no row names (first: ${orphans[0]})`);
   }

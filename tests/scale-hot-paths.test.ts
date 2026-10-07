@@ -23,7 +23,26 @@ import { seedHub, TIERS, type Tier } from "./scale-fixture";
 
 /** Partial indexes that hold only open work, so walking them is bounded by what is open, not by history. */
 const OPEN_ONLY = ["idx_self_service_events_open"];
-const HISTORY = ["inventory_movements", "audit_log", "loans", "self_service_events"];
+const HISTORY = ["inventory_movements", "audit_log", "loans", "self_service_events", "inventory_balances"];
+/** Reads that walk a history table on purpose, with why. Each is in the V1.14 release record. */
+const EXCEPTIONS: Array<[read: string, table: string]> = [
+  // The balance of every item is the sum of its ledger: the movement-derived rule, so a read that needs every item's level passes the ledger once.
+  ["attention", "inventory_balances"],
+  ["attentionSummary", "inventory_balances"],
+  ["selfServiceReview", "inventory_balances"],
+  // The newest 100 movements: the time index is walked in order and stops at the 100th (LIMIT 1 OFFSET 99), not through history.
+  ["recentActivity", "inventory_movements"],
+  ["stockOverview", "inventory_movements"],
+  // The closed-loans list orders by closed_at, which has no index: it reads every loan and sorts. Needs migration 0031 (an index on loans(closed_at)), an owner action; recorded in the V1.14 release record.
+  ["loansOverview", "loans"]
+];
+
+/** A plan names a table by its alias in the query ("SCAN l"); this maps each alias back to its table. */
+function aliases(sql: string): Map<string, string> {
+  const found = new Map<string, string>();
+  for (const [, table, alias] of sql.matchAll(/\b(?:FROM|JOIN)\s+(\w+)(?:\s+INDEXED\s+BY\s+\w+)?(?:\s+(?:AS\s+)?(?!(?:WHERE|ON|JOIN|LEFT|INNER|GROUP|ORDER|LIMIT|USING|WINDOW|UNION)\b)(\w+))?/gi)) if (alias) found.set(alias, table!);
+  return found;
+}
 const tiers = (process.env.SCALE_STRESS ? ["current", "growth", "stress"] : ["current", "growth"]) as Tier[];
 const note = (line: string) => { if (process.env.SCALE_LOG) appendFileSync(process.env.SCALE_LOG, `${line}\n`); };
 
@@ -86,9 +105,12 @@ describe("hot reads at growing scale", () => {
             let plan: Array<{ detail: string }>;
             try { plan = sqlite.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...(args as never[])) as Array<{ detail: string }>; } catch { continue; }
             for (const { detail } of plan) {
-              const scan = /^SCAN (?:TABLE )?(\w+)/.exec(detail)?.[1];
-              if (scan && HISTORY.includes(scan) && !OPEN_ONLY.some((index) => detail.includes(index))) note(`  ${tier} ${name}: ${detail}`);
-              if (scan && HISTORY.includes(scan) && !OPEN_ONLY.some((index) => detail.includes(index))) expect.soft(detail, `${name}: ${sql.slice(0, 80)}`).not.toMatch(/^SCAN/);
+              const target = /^SCAN (?:TABLE )?(\w+)/.exec(detail)?.[1];
+              const scan = target && (aliases(sql).get(target) ?? target);
+              if (scan && HISTORY.includes(scan) && !OPEN_ONLY.some((index) => detail.includes(index)) && !EXCEPTIONS.some(([read, table]) => read === name && table === scan)) {
+                note(`  ${tier} ${name}: ${detail} (${scan})`);
+                expect.soft(detail, `${name} walks ${scan}: ${sql.slice(0, 80)}`).not.toMatch(/^SCAN/);
+              }
             }
           }
         });

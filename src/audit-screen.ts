@@ -1,7 +1,7 @@
 import type { Who } from "./catalogue-offline";
 import { placeOptions, placeList } from "./catalogue-places";
 import { catalogueShell } from "./catalogue-shell";
-import { type AuditDetail, type AuditItem, type AuditRecord, type ObservationEntry, type Snapshot, audits, dropObservation, keepAudit, keepObservation, observations, snapshot } from "./catalogue-store";
+import { type AuditDetail, type AuditItem, type AuditRecord, type ObservationEntry, type Snapshot, audits, dropObservation, durable, keepAudit, keepObservation, observations, snapshot } from "./catalogue-store";
 import { onSyncChange, refreshCheck, syncNow } from "./catalogue-sync";
 import { childrenOf, pathOf, placesOf } from "./location-tree";
 import { whenIdle } from "./pwa";
@@ -207,6 +207,7 @@ async function checking(root: HTMLElement, who: Signed, start: AuditRecord): Pro
         <h1>${detail.audit.place ?? "A place"}</h1>
         ${paused ? html`<p class="ck-paused" role="status">${icon("clock")}<span><strong>Paused.</strong> Pick up where you left off, or resume to carry on.</span> <button type="button" class="button button--secondary button--sm" data-resume>Resume</button></p>` : ""}
       </header>
+      ${!durable() && waiting.length ? html`<p class="callout" role="status">${icon("alert")}<span>This browser cannot keep unsent marks if the page closes. Stay on this page until they are sent.</span></p>` : ""}
       <section class="ck-progress" aria-label="Progress">
         <p class="ck-progress__count"><strong>${checked} / ${items.length}</strong> checked${findings.length ? html` · <span class="ck-progress__findings">${plural(findings.length, "finding")}</span>` : ""}${waiting.length ? html` · <span class="live-status" data-state="waiting">${waiting.length} waiting to send</span>` : ""}</p>
         <progress class="ck-bar" aria-label="Items checked" max="${Math.max(items.length, 1)}" value="${items.length ? checked : 1}">${checked} of ${items.length}</progress>

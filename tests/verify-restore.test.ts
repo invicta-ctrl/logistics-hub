@@ -21,6 +21,20 @@ function hub() {
 }
 
 describe("restore check", () => {
+  it("does not name an erased photo, and accepts a card's small images", () => {
+    const sqlite = hub();
+    const card = "33333333-3333-4333-8333-333333333333";
+    sqlite.exec("PRAGMA foreign_keys = OFF");
+    sqlite.exec(`INSERT INTO staff_directory(id, full_name, department, officer, active, created_at, updated_at) VALUES('PER-1', 'Person One', 'ARTS', 0, 1, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')`);
+    sqlite.exec(`INSERT INTO staff_id_cards(person_id, media_id, front_width, front_height, back_width, back_height, created_at) VALUES('PER-1', '${card}', 100, 100, 100, 100, '2026-01-01T00:00:00.000Z')`);
+    sqlite.exec(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, status) VALUES('M1', '2026-01-01T00:00:00.000Z', 'LOAN_OUT', 'OUT', 'ITM-1', 1, 'piece', 0, 'POSTED')`);
+    // A loan whose photo retention erased leaves '' behind.
+    sqlite.exec(`INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, reason, photo_key, status, movement_id, created_at, created_by) VALUES('LN-000001', 'ITM-1', 1, 'USC', 'x', 'r', '', 'OUT', 'M1', '2026-01-01T00:00:00.000Z', 'ACC-1')`);
+    const stored = new Set([`items/${MEDIA}/display`, `items/${MEDIA}/thumb`, `ids/${card}/front`, `ids/${card}/back`, `ids/${card}/thumb`, `ids/${card}/face`]);
+    expect(referencedKeys(sqlite).has("")).toBe(false);
+    expect(checkRestore(sqlite, { migrations, stored })).toEqual([]);
+  });
+
   it("passes on a sound database whose media all exist", () => {
     const sqlite = hub();
     const stored = new Set([`items/${MEDIA}/display`, `items/${MEDIA}/thumb`]);

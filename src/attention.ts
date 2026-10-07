@@ -189,7 +189,7 @@ const REASONS: readonly Reason[] = [
   },
   {
     id: "PHONE_RECORD", source: "Self-Service", label: "Phone records to check",
-    from: "FROM self_service_events e JOIN items i ON i.id = e.item_id WHERE e.review IS NOT NULL AND e.resolved_at IS NULL",
+    from: "FROM self_service_events e INDEXED BY idx_self_service_events_open JOIN items i ON i.id = e.item_id WHERE e.review IS NOT NULL AND e.resolved_at IS NULL",
     // A record held for more than a day is making someone wait.
     urgency: "CASE WHEN e.received_at < ?1 THEN 'NOW' ELSE 'SOON' END",
     cols: "e.id AS id, i.name AS item, e.quantity AS quantity, e.event_type AS type, e.review AS review, e.received_at AS at",
