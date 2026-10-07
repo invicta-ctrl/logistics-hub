@@ -5,7 +5,7 @@ import { migratedD1 } from "./d1-sqlite";
 
 /*
  * V1.10 performance evidence. Attention is derived on request, so its cost is the cost of its queries. This seeds a hub several times
- * the size of the real one (3,400 items, 62,000 movements, 5,000 loans, 800 audit observations, 600 reports) and times the two
+ * the size of the real one (3,400 items, 65,000 movements, 5,000 loans, 800 audit observations, 600 reports) and times the two
  * endpoints and the Self-Service count the session route now makes. The node:sqlite stand-in measures query work, not the network
  * round trip to D1, so the budgets are generous regression guards and the figures go in docs/road-to-v2/releases/v1.10.md.
  * Set ATTENTION_PERF_LOG to a file to append the figures.

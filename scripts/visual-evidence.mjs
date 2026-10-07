@@ -22,6 +22,7 @@
 // computer, with the service worker on and the connection really cut; runs only where the catalogue snapshot exists) and location-audit (V1.7: a
 // dozen-item shelf checked on a phone, paused, resumed and continued offline, a stock conflict, the summary and the review on a computer;
 // runs only where checks of a place exist) and self-service-v19 (V1.9: Self-Service 2.0 on a phone, tablet and computer: home, search, a group, the item page, the borrow/take/use forms, identity, photo, the check, the receipt, My activity, return, the help tip, offline, and a 600-item catalog; runs only where the item page exists) and kits (V1.8: the kit list, a Ready and an incomplete kit, a template, the check and its summary; runs only where /api/staff/kits exists). Its pictures, including the obviously fake
+// V1.10 (attention: the bell and nav numbers, the inbox with mixed conditions at three sizes, a filtered view, a group opened, marking a return reviewed, a loan focused from a link, an Unclassified item's suggestion, and the calm empty state; runs only where /staff/attention exists)
 // sample ID cards, are drawn here in the browser and written only to a throwaway folder, so no image file enters the
 // repository and no real ID is ever used.
 //
@@ -64,6 +65,7 @@ async function serve(dir, port) {
   if (pages.includes("staff-directory")) runD1(directoryRecordsSql(), { persistTo: state });
   // locations: items the phone is offered, two look-alike places the migration would have kept apart, and typed locations with no place yet.
   if (pages.includes("locations") && fs.existsSync(path.join(dir, "migrations", "0024_locations.sql"))) runD1(locationRecordsSql(), { persistTo: state });
+  if (pages.includes("attention") && fs.existsSync(path.join(dir, "src", "attention.ts"))) runD1(attentionRecordsSql(), { persistTo: state });
   const child = spawn(process.execPath, [wrangler, "dev", "--local", "--port", String(port), "--inspector-port", String(port + 1), "--persist-to", state, "--env-file", path.join(state, ".env")], { cwd: dir, stdio: "ignore", detached: process.platform !== "win32" });
   const url = `http://127.0.0.1:${port}`;
   for (let tries = 0; ; tries++) {
@@ -1553,6 +1555,126 @@ async function locationAuditScenes(browser, url, dir) {
   return timings;
 }
 
+
+/** Mixed conditions for the Attention inbox: overdue loans, a damaged return, low and out stock, a check finding, a repeated report, a phone record and a phone report, all on fictional people. */
+function attentionRecordsSql() {
+  const rows = [];
+  const at = (days) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const day = (days) => at(days).slice(0, 10);
+  const item = (offset) => `(SELECT id FROM items WHERE item_type = 'Loanable' AND status = 'ACTIVE' ORDER BY id LIMIT 1 OFFSET ${offset})`;
+  const staff = "(SELECT id FROM staff_accounts WHERE username = 'staff.demo')";
+  const loan = (n, name, itemSql, days, status, due, note) => {
+    rows.push(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, related_entity_type, related_entity_id, actor_user_id, status)
+      SELECT 'MOV-AT${n}', ${sq(at(days))}, 'LOAN_OUT', 'OUT', id, 1, unit, -1, 'LOAN', 'LN-AT${n}', ${staff}, 'POSTED' FROM items WHERE id = ${itemSql};`);
+    rows.push(`INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, reason, photo_key, return_by, movement_id, created_at, created_by, status, return_note, closed_at, closed_by)
+      SELECT 'LN-AT${n}', id, 1, 'INDIVIDUAL', ${sq(name)}, '20-1111-22${n}', NULL, 'loans/none', ${due ? sq(day(due)) : "NULL"}, 'MOV-AT${n}', ${sq(at(days))}, ${staff}, ${sq(status)}, ${sq(note ?? null)},
+        ${status === "OUT" ? "NULL, NULL" : `${sq(at(3))}, ${staff}`} FROM items WHERE id = ${itemSql};`);
+  };
+  loan(1, "Ana Marie Santos", item(2), 20, "OUT", 9);
+  loan(2, "Ben Lim", item(5), 14, "OUT", 4);
+  loan(3, "Carla Reyes", item(9), 8, "OUT", 1);
+  loan(4, "Dan Cruz", item(12), 6, "OUT", -3);
+  loan(5, "Ella Tan", item(15), 10, "DAMAGED", 6, "The left leg is bent.");
+  loan(6, "Felix Go", item(18), 12, "LOST", 8, "Could not be found after the event.");
+  // Stock: three items below their level, one gone.
+  rows.push(`UPDATE items SET reorder_threshold = 100000 WHERE id IN (SELECT id FROM items WHERE item_type = 'Consumable' AND status = 'ACTIVE' ORDER BY id LIMIT 3 OFFSET 4);`);
+  rows.push(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, reason, status)
+    SELECT 'MOV-ATOUT', ${sq(at(1))}, 'STOCK_OUT', 'OUT', b.id, b.on_hand, b.unit, -b.on_hand, ${staff}, 'CONSUMED', 'POSTED' FROM inventory_balances b
+    WHERE b.id = (SELECT id FROM items WHERE item_type = 'Consumable' AND status = 'ACTIVE' AND reorder_threshold = 0 ORDER BY id LIMIT 1 OFFSET 30) AND b.on_hand > 0;`);
+  // A place checked three weeks ago, with two findings still to settle.
+  const audit = `LA-${"0".repeat(35)}1`;
+  rows.push(`INSERT INTO locations(id, name, visibility, active, created_at, updated_at) VALUES('LOC-0900', 'Store room', 'STAFF_ONLY', 1, ${sq(at(60))}, ${sq(at(60))});`);
+  rows.push(`INSERT INTO location_audits(id, location_id, started_by, status, expected_at_start, started_at, updated_at) VALUES('${audit}', 'LOC-0900', ${staff}, 'OPEN', 12, ${sq(at(21))}, ${sq(at(21))});`);
+  rows.push(`INSERT INTO location_audit_observations(id, audit_id, item_id, outcome, expected_on_hand, counted, on_hand_at_receipt, observed_by, observed_at, received_at)
+    SELECT '${"0".repeat(35)}1', '${audit}', id, 'CANT_FIND', 3, NULL, 3, ${staff}, ${sq(at(21))}, ${sq(at(21))} FROM items WHERE id = (SELECT id FROM items ORDER BY id LIMIT 1 OFFSET 60);`);
+  rows.push(`INSERT INTO location_audit_observations(id, audit_id, item_id, outcome, expected_on_hand, counted, on_hand_at_receipt, observed_by, observed_at, received_at)
+    SELECT '${"0".repeat(35)}2', '${audit}', id, 'MISMATCH', 8, 5, 8, ${staff}, ${sq(at(21))}, ${sq(at(21))} FROM items WHERE id = (SELECT id FROM items ORDER BY id LIMIT 1 OFFSET 61);`);
+  rows.push(`UPDATE location_audits SET status = 'FINISHED', finished_at = ${sq(at(21))}, finished_by = ${staff} WHERE id = '${audit}';`);
+  // One item reported twice by staff, and one phone report.
+  for (const [n, kind] of [[1, "CANT_FIND"], [2, "LOCATION_WRONG"]]) {
+    rows.push(`INSERT INTO location_reports(id, item_id, kind, source, reported_by, created_at) SELECT '${"0".repeat(35)}${n}', id, '${kind}', 'STAFF', ${staff}, ${sq(at(4 - n))} FROM items WHERE id = (SELECT id FROM items ORDER BY id LIMIT 1 OFFSET 80);`);
+  }
+  rows.push(`INSERT INTO location_reports(id, item_id, kind, source, client_tag, created_at) SELECT '${"0".repeat(35)}3', id, 'CANT_FIND', 'SELF_SERVICE', 'evidence', ${sq(at(1))} FROM items WHERE id = (SELECT id FROM items ORDER BY id LIMIT 1 OFFSET 90);`);
+  rows.push(`INSERT INTO self_service_events(id, device_id, seq, event_type, item_id, quantity, person_name, student_id, purpose, device_time, sent_at, occurred_at, received_at, applied, review)
+    SELECT '00000000-0000-4000-8000-0000000a0001', 'evidence', 1, 'TAKE', id, 2, 'Gabe Ong', '20-1111-229', 'INDIVIDUAL', ${sq(at(2))}, ${sq(at(2))}, ${sq(at(2))}, ${sq(at(2))}, 0, 'STOCK_SHORT' FROM items WHERE id = (SELECT id FROM items ORDER BY id LIMIT 1 OFFSET 100);`);
+  // An Unclassified item whose name resembles two confirmed ones, so its Details show a suggestion with its reason.
+  rows.push(`INSERT INTO items(id, name, category, stock_area, item_type, unit, status, needs_review, updated_at) VALUES('ITM-EV01', 'Bond Paper - Short', 'UNSORTED', 'Inventory', 'NEEDS_REVIEW', 'ream', 'ACTIVE', 1, ${sq(at(30))});`);
+  return rows.join("\n");
+}
+
+async function attentionScenes(browser, url, dir) {
+  const shot = (page, name, options = {}) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80, ...options });
+  const first = await signIn(browser, url, "staff.demo", SIZES.desktop);
+  if ((await first.page.request.get(`${url}/api/staff/attention`)).status() === 404) {
+    console.log("attention: this ref has no Attention, skipped");
+    await first.context.close();
+    return {};
+  }
+  const state = await first.context.storageState();
+  const read = async (route) => (await first.page.request.get(`${url}${route}`)).json();
+  const inbox = await read("/api/staff/attention");
+  const summary = await read("/api/staff/attention/summary");
+  const classify = inbox.entries.find((entry) => entry.reason === "CLASSIFY" && entry.title === "Bond Paper - Short")?.href ?? inbox.entries.find((entry) => entry.reason === "CLASSIFY")?.href;
+  await first.context.close();
+  const timings = { entries: inbox.entries.length, needsAction: summary.needsAction, groups: inbox.groups.filter((group) => group.total).length };
+
+  // The calm state is drawn by the same page, with the answer emptied only for this picture (the demo database cannot be cleared).
+  const empty = async (page) => {
+    await page.route("**/api/staff/attention/summary", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ needsAction: 0, bySource: {} }) }));
+    await page.route("**/api/staff/attention", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ today: new Date().toISOString().slice(0, 10), groups: [], entries: [] }) }));
+  };
+
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    const { context, page } = await resume(browser, state, viewport);
+    const started = Date.now();
+    await page.goto(`${url}/staff/attention`);
+    await page.waitForSelector(".attn-row");
+    timings[`inboxFirstRowMs-${size}`] = Date.now() - started;
+    await page.waitForSelector(".app-bell .nav-badge");
+    await shot(page, `attention-inbox-${size}`);
+    await shot(page, `attention-inbox-full-${size}`, { fullPage: true });
+    await page.goto(`${url}/staff/attention?source=Loans`);
+    await page.waitForSelector(".attn-row");
+    await shot(page, `attention-filtered-${size}`);
+    if (size === "phone") {
+      await page.getByRole("button", { name: /^Filters/ }).click();
+      await shot(page, "attention-filters-open-phone");
+    }
+    if (size !== "tablet") {
+      await page.goto(`${url}/staff/attention`);
+      await page.waitForSelector(".attn-row");
+      const more = page.locator(".attn-more").first();
+      if (await more.count()) { await more.click(); await shot(page, `attention-group-open-${size}`); }
+      await page.goto(`${url}/staff/attention`);
+      await page.waitForSelector(".attn-row");
+      const waiting = await page.locator("[data-review]").count();
+      await page.getByRole("button", { name: "Mark reviewed" }).first().click();
+      await page.waitForFunction((count) => document.querySelectorAll("[data-review]").length < count, waiting);
+      await shot(page, `attention-after-review-${size}`);
+      const loanLink = page.locator('a.attn-row__main[href*="/staff/loans?loan="]').first();
+      if (await loanLink.count()) {
+        await loanLink.click();
+        await page.waitForSelector(".loan-row.is-focus");
+        await shot(page, `attention-loan-focus-${size}`);
+      }
+      if (classify) {
+        await page.goto(`${url}${classify}`);
+        await page.waitForSelector("#classify-hint .classify-hint__line, #classify-hint p");
+        await page.locator("#classify-hint").scrollIntoViewIfNeeded();
+        await shot(page, `attention-classify-${size}`);
+      }
+      const blank = await resume(browser, state, viewport);
+      await empty(blank.page);
+      await blank.page.goto(`${url}/staff/attention`);
+      await blank.page.waitForSelector(".empty");
+      await shot(blank.page, `attention-empty-${size}`);
+      await blank.context.close();
+    }
+    await context.close();
+  }
+  return timings;
+}
+
 async function capture(url, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
@@ -1564,7 +1686,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits") continue;
+          if (name === "item-photos" || name === "attention" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -1605,6 +1727,7 @@ async function capture(url, dir) {
     if (pages.includes("catalog-pwa")) Object.assign(timings, { catalogPwa: await catalogPwaScenes(browser, url, dir) });
     if (pages.includes("location-audit")) Object.assign(timings, { locationAudit: await locationAuditScenes(browser, url, dir) });
     if (pages.includes("kits")) Object.assign(timings, { kits: await kitScenes(browser, url, dir) });
+    if (pages.includes("attention")) Object.assign(timings, { attention: await attentionScenes(browser, url, dir) });
     if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
     if (pages.includes("staff-directory")) Object.assign(timings, { staffDirectory: await directoryScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);

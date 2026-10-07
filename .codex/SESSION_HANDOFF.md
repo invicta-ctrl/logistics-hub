@@ -1,5 +1,12 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Road to V2 — V1.10 Attention and operational automation (COMPLETE, WAITING ON INTEGRATION; record `docs/road-to-v2/releases/v1.10.md`; Claude Cloud, 2026-10-07)
+- **Where:** Claude Cloud thread on `road-to-v2/v1.10-attention-automation`; code `46254b6`; no migration.
+- **Built:** `src/attention.ts` (11 SQL reasons plus kits, derived, nothing stored; `/api/staff/attention` and `/summary`; `reviewReturn`), `src/attention-workspace.ts` and `.css` (the inbox), the bell and Loans/Stock numbers in `src/staff.ts` `shell()`, `?loan=` focus in `src/loans-workspace.ts`, `?tab=details` and the classification suggestion in the item Details, `UNSETTLED_FINDING` shared in `src/audits.ts`, `kitsNotReady` in `src/kits.ts`, the V1.9 Close-button fix.
+- **Decisions to know:** the only thing a person records is `LOAN_REVIEWED` (audit_log, idempotent); LATER entries are listed but never counted; urgency is one fixed rule per reason; Out and Low stock are counted in one ledger pass; no catalog-photo reason and no offline-conflict reason (device-local); return problems older than 60 days drop out; the page count comes from server totals by urgency so it matches the bell.
+- **Verified:** build; 555 unit; 140 of 141 browser (the one failure is a V1.9 help-note test that is flaky without this slice too); worker-browser 41 of 44 (two known container-only failures, one flake that passes alone); privacy clean; 20 images, seven visual defects fixed.
+- **Next:** integrate V1.10 to `main` from Earl's computer after CI, propagate through V1.15, then `start` V1.11.
+
 ## Road to V2 — V1.9 Self-Service 2.0 (COMPLETE, WAITING ON INTEGRATION; record `docs/road-to-v2/releases/v1.9.md`; Claude Cloud, 2026-10-05)
 - **Where:** Claude Cloud thread on `road-to-v2/v1.9-self-service-2`; code `d0caad1`; no migration.
 - **Built:** `src/self-service-app.ts` rewritten (home groups, item page, who-you-are, check before sending, receipt reference, My activity, view-transition card morph), `src/self-service-browse.ts` (groups, frequent, matching), `src/contextual-help.ts` (the one toggletip), `selfServiceReference()` in `catalog-policy.ts`, catalog DTO `area`, staff find box and reference in `self-service-review.ts`, CSS in `self-service.css`, a V1.9 scene in `scripts/visual-evidence.mjs`.

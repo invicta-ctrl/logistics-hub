@@ -21,7 +21,13 @@ function answer(entries: Entry[], totals: Record<string, number> = {}) {
   const reasons = Object.keys(GROUP_LABELS);
   return {
     today: new Date().toISOString().slice(0, 10),
-    groups: reasons.map((reason) => ({ reason, source: GROUP_LABELS[reason]![0], label: GROUP_LABELS[reason]![1], total: totals[reason] ?? entries.filter((entry) => entry.reason === reason).length })),
+    groups: reasons.map((reason) => {
+      const mine = entries.filter((entry) => entry.reason === reason);
+      const total = totals[reason] ?? mine.length;
+      const byUrgency = { NOW: mine.filter((entry) => entry.urgency === "NOW").length, SOON: mine.filter((entry) => entry.urgency === "SOON").length, LATER: mine.filter((entry) => entry.urgency === "LATER").length };
+      byUrgency[mine[0]?.urgency ?? "NOW"] += total - mine.length;
+      return { reason, source: GROUP_LABELS[reason]![0], label: GROUP_LABELS[reason]![1], total, byUrgency };
+    }),
     entries
   };
 }
@@ -80,9 +86,9 @@ test.describe("Attention inbox", () => {
   test("filters narrow by source, how soon and age, are kept in the address, and clear again", async ({ page }) => {
     await mock(page, [overdue(1), out, kit, unclassified]);
     await page.goto("/staff/attention");
-    await expect(page.locator("#attn-count")).toHaveText("4 entries");
+    await expect(page.locator("#attn-count")).toHaveText("3 to act on · 1 when there is time");
     await page.getByLabel("From").selectOption("Stock");
-    await expect(page.locator("#attn-count")).toHaveText("1 entry");
+    await expect(page.locator("#attn-count")).toHaveText("1 to act on");
     await expect(page).toHaveURL(/source=Stock/);
     await page.getByLabel("From").selectOption("");
     await page.getByLabel("Age").selectOption("30");
@@ -91,11 +97,11 @@ test.describe("Attention inbox", () => {
     await page.getByLabel("How soon").selectOption("NOW");
     await expect(page.getByRole("heading", { name: "Nothing matches these filters" })).toBeVisible();
     await page.getByRole("button", { name: "Clear filters" }).first().click();
-    await expect(page.locator("#attn-count")).toHaveText("4 entries");
+    await expect(page.locator("#attn-count")).toHaveText("3 to act on · 1 when there is time");
     // A shared link keeps its filters.
     await page.goto("/staff/attention?source=Kits");
     await expect(page.getByLabel("From")).toHaveValue("Kits");
-    await expect(page.locator("#attn-count")).toHaveText("1 entry");
+    await expect(page.locator("#attn-count")).toHaveText("1 to act on");
   });
 
   test("a long group shows five, opens to all, and says when only the oldest are listed", async ({ page }) => {
@@ -103,12 +109,12 @@ test.describe("Attention inbox", () => {
     await page.goto("/staff/attention");
     const list = page.locator(".attn-list").first();
     await expect(list.locator(".attn-row")).toHaveCount(5);
-    const more = page.getByRole("button", { name: "Show all 100" });
+    const more = page.getByRole("button", { name: "Show the first 100" });
     await expect(more).toHaveAttribute("aria-expanded", "false");
     await more.click();
     await expect(list.locator(".attn-row")).toHaveCount(100);
     await expect(page.getByRole("button", { name: "Show fewer" })).toHaveAttribute("aria-expanded", "true");
-    await expect(page.getByText("Showing the oldest 100 of 140.")).toBeVisible();
+    await expect(page.getByText("Showing the first 100 of 140.")).toBeVisible();
   });
 
   test("nothing to do shows a calm empty state and no numbers", async ({ page }) => {
