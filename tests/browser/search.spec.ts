@@ -146,6 +146,20 @@ test("an ID opens its record, a fixed word opens its page, and nothing matched s
   await expect(page.locator("#palette-status")).toHaveText("3 items, 1 kit.");
 });
 
+test("a result marks the starts of the words typed, with a plural's s, and never the middle of a word", async ({ page }) => {
+  await setup(page, { role: "STAFF" });
+  await page.keyboard.press("Control+k");
+  const marks = (name: string) => page.getByRole("option", { name: new RegExp(`^${name}, item`) }).locator("mark").allTextContents();
+  await field(page).fill("staples");
+  await expect.poll(() => marks("Staples - Large")).toEqual(["Staples"]);
+  await field(page).fill("stap bi");
+  await expect.poll(() => marks("Stapler - Big")).toEqual(["Stap", "Bi"]);
+  await field(page).fill("glue sticks");
+  await expect.poll(() => marks("Glue Stick")).toEqual(["Glue", "Stick"]);
+  await field(page).fill("tape");
+  await expect.poll(() => marks("Masking Tape")).toEqual(["Tape"]);
+});
+
 test("staff search never asks for or shows the Staff Directory; an administrator gets the best few and a way to the rest", async ({ page }) => {
   const staff = await setup(page, { role: "STAFF" });
   await page.keyboard.press("Control+k");
