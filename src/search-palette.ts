@@ -13,8 +13,9 @@ import { ApiError, type Html, type IconName, categoryName, html, icon, itemVisua
 
 const INDEX_URL = "/api/staff/search";
 const PEOPLE_URL = "/api/staff/admin/directory/search";
-/** The index is asked again (a 304 while nothing changed) when it was last checked longer ago than this. */
-const FRESH_MS = 60_000;
+/** Each opening checks the index again (a 304 reading one row while nothing changed), so a link or item added a moment ago is
+ *  found; only a check this recent (pointing at the button, then pressing it) is reused. */
+const FRESH_MS = 1_000;
 /** People are asked for once typing pauses this long, never per keystroke. */
 const PEOPLE_DELAY = 220;
 /** The result count is announced once typing pauses this long. */
