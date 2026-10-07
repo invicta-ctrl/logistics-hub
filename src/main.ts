@@ -28,7 +28,11 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
   "/staff/self-service": () => import("./self-service-review").then((module) => module.selfServiceReview),
   "/staff/attention": () => import("./attention-workspace").then((module) => module.attentionWorkspace),
   "/staff/activity": () => import("./activity-workspace").then((module) => module.activityWorkspace),
-  "/staff/admin": () => import("./admin").then((module) => module.administration),
+  "/staff/admin": () => import("./admin-system").then((module) => module.systemStatus),
+  "/staff/admin/self-service": () => import("./admin-self-service").then((module) => module.selfServiceSettings),
+  "/staff/admin/catalog": () => import("./admin-catalog").then((module) => module.catalogSettings),
+  "/staff/admin/staff": () => import("./admin").then((module) => module.staffAccounts),
+  "/staff/admin/accountability": () => import("./admin-accountability").then((module) => module.accountability),
   "/staff/admin/directory": () => import("./directory-workspace").then((module) => module.staffDirectory),
   "/staff/account": () => import("./admin").then((module) => module.myAccount)
 };

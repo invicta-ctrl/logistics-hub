@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readdirSync } from "node:fs";
 import { build, defineConfig, type Plugin, type Rollup } from "vite";
 
 /** The two apps' pages: Self-Service and the staff workspace share index.html; the Catalog has its own, so it installs as itself. */
@@ -66,6 +67,12 @@ function serviceWorker(): Plugin {
         build: { write: false, minify: true, lib: { entry: "src/sw.ts", formats: ["iife"], name: "logisticsServiceWorker", fileName: () => "sw.js" } }
       }) as Rollup.RollupOutput[];
       this.emitFile({ type: "asset", fileName: "sw.js", source: output[0]!.output[0].code });
+      // What this build is, for Administration > System (src/system-status.ts). It travels in the assets of the same deploy as the
+      // Worker, so it can only describe the code that is answering. The commit is whatever the build environment states: Workers
+      // Builds and GitHub Actions both set one; a local build states none and the page says so.
+      const commit = [process.env.WORKERS_CI_COMMIT_SHA, process.env.GITHUB_SHA].find((value) => /^[0-9a-f]{40}$/.test(value ?? "")) ?? null;
+      const migrations = readdirSync("migrations").filter((name) => name.endsWith(".sql")).sort();
+      this.emitFile({ type: "asset", fileName: "build.json", source: JSON.stringify({ version, commit, builtAt: new Date().toISOString(), migrations }) });
     }
   };
 }
