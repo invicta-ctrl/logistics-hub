@@ -493,3 +493,9 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
   void tick();
   return { refresh: tick, stop };
 }
+
+/** What to tell someone whose device refused to keep a record: a full device is fixed by freeing space; anything else by leaving private browsing. Either way nothing typed is lost. */
+export function keepFailure(error: unknown): string {
+  const full = error instanceof DOMException && (error.name === "QuotaExceededError" || error.code === 22);
+  return full ? "This device is out of space, so the record was not saved. Free some space, then save again. What you typed is still here." : "This device could not save the record. Check that you're not in private browsing, then try again. What you typed is still here.";
+}

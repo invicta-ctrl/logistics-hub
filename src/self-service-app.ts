@@ -9,7 +9,7 @@ import { type Readiness, applyUpdate, canPromptInstall, hasUpdate, isStandalone,
 import { ancestry, placesOf, type ReportKind } from "./location-tree";
 import { type GroupId, GROUPS, behaviourLine, conciseLocation, frequentItems, groupName, groupOf, grouped, isGroup, matching } from "./self-service-browse";
 import { type Step, openWhereIsIt } from "./where-is-it";
-import { ApiError, CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, itemVisual, units } from "./ui";
+import { ApiError, CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, keepFailure, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, itemVisual, units } from "./ui";
 
 /*
  * Self-Service (/self-service): what a student or staff member sees after scanning the QR code
@@ -915,9 +915,9 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
         onSaved(saved);
         void requestPersistence();
         void requestBackgroundSync();
-      } catch {
+      } catch (error) {
         save.disabled = false;
-        setMessage(confirmAlert, "This phone could not save the record. Check that you're not in private browsing, then try again.");
+        setMessage(confirmAlert, keepFailure(error));
       }
     });
   };
