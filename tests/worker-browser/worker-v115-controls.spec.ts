@@ -12,11 +12,16 @@ const ROUTES = ["/staff/home", "/staff/items", "/staff/stock", "/staff/loans", "
   "/staff/kits", "/staff/locations", "/staff/account", "/staff/admin", "/staff/admin/self-service", "/staff/admin/catalog",
   "/staff/admin/staff", "/staff/admin/directory", "/staff/admin/accountability"];
 
+// The owner administration tests in worker-live replace the owner's password with a recovery key; either one may be current.
 async function signIn(page: Page) {
   await page.goto("/staff");
-  await page.getByRole("textbox", { name: "Username" }).fill(process.env.E2E_OWNER_USERNAME!);
-  await page.getByLabel("Password", { exact: true }).fill(process.env.E2E_OWNER_PASSWORD!);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  const origin = new URL(page.url()).origin;
+  let signedIn = false;
+  for (const secret of [process.env.E2E_OWNER_PASSWORD!, "recovered owner pass"]) {
+    signedIn ||= (await page.request.post("/api/staff/login", { headers: { origin }, data: { username: process.env.E2E_OWNER_USERNAME, password: secret } })).ok();
+  }
+  expect(signedIn).toBe(true);
+  await page.goto("/staff/home");
   await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
 }
 
