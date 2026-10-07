@@ -8,7 +8,9 @@ import { words } from "./duplicates";
  *
  * Version 1 is seeded from the vocabulary of the real catalog: its counting words (roll, sheet, ream, sachet, gallon…) and the words in
  * its item names (ribbon, cartolina, detergent, gauze…), grouped by the categories that catalog uses. Change it in a pull request,
- * bump KNOWLEDGE_VERSION, and rerun `npm run evaluate:suggestions`; there is no admin screen and no database table.
+ * bump KNOWLEDGE_VERSION, and rerun `npm run evaluate:suggestions`; there is no admin screen and no database table. Version 2 (V1.11)
+ * adds a `label` where a product entry's note is a sentence, because global search also reads product entries as kinds of thing
+ * (search.ts); suggestions are unchanged.
  *
  * Two kinds of entry answer two questions (§6.2). Packaging words mostly decide behaviour and unit ("sachet" is taken one at a time;
  * a "ream" is opened and used gradually). Product words mostly decide category and sometimes unit, and rarely behaviour, because a
@@ -22,7 +24,7 @@ import { words } from "./duplicates";
  * derives from the other; the shared words are the catalog's own vocabulary.
  */
 
-export const KNOWLEDGE_VERSION = 1;
+export const KNOWLEDGE_VERSION = 2;
 
 export type KnowledgeEntry = {
   key: string;
@@ -36,6 +38,8 @@ export type KnowledgeEntry = {
   category?: string;
   /** Why the hint is offered, in the sentence a person reads. */
   note: string;
+  /** What this kind of thing is called, where the note says something else (version 2: global search shows it as a reason, search.ts). */
+  label?: string;
 };
 
 const CRAFT = "SCHOOL SUPPLIES";
@@ -53,11 +57,11 @@ export const KNOWLEDGE: readonly KnowledgeEntry[] = [
   { key: "ream", kind: "packaging", keywords: ["ream"], behaviour: "GRADUAL", unit: "ream", note: "A ream is opened and used a sheet at a time" },
   { key: "refill", kind: "packaging", keywords: ["refill"], behaviour: "GRADUAL", note: "Refills are used up gradually" },
   { key: "aerosol", kind: "packaging", keywords: ["aerosol", "spray paint"], behaviour: "GRADUAL", unit: "can", note: "Aerosol cans are used gradually" },
-  { key: "battery", kind: "product", keywords: ["battery", "aa", "aaa"], behaviour: "CONSUME", unit: "piece", note: "Batteries are used up" },
-  { key: "gloves", kind: "product", keywords: ["gloves"], behaviour: "CONSUME", unit: "pair", note: "Disposable gloves are taken by the pair" },
-  { key: "mask", kind: "product", keywords: ["facemask", "face mask", "mask"], behaviour: "CONSUME", unit: "piece", category: MEDICAL, note: "Masks are taken one at a time" },
+  { key: "battery", kind: "product", keywords: ["battery", "aa", "aaa"], behaviour: "CONSUME", unit: "piece", note: "Batteries are used up", label: "Batteries" },
+  { key: "gloves", kind: "product", keywords: ["gloves"], behaviour: "CONSUME", unit: "pair", note: "Disposable gloves are taken by the pair", label: "Gloves" },
+  { key: "mask", kind: "product", keywords: ["facemask", "face mask", "mask"], behaviour: "CONSUME", unit: "piece", category: MEDICAL, note: "Masks are taken one at a time", label: "Masks" },
   { key: "roll", kind: "packaging", keywords: ["roll"], unit: "roll", note: "Counted by the roll" },
-  { key: "tissue", kind: "product", keywords: ["tissue", "paper towel"], unit: "roll", note: "Usually counted by the roll" },
+  { key: "tissue", kind: "product", keywords: ["tissue", "paper towel"], unit: "roll", note: "Usually counted by the roll", label: "Tissue and paper towels" },
   { key: "sheet", kind: "packaging", keywords: ["sheet", "sticker"], unit: "sheet", note: "Counted by the sheet" },
   { key: "pack", kind: "packaging", keywords: ["pack", "sequin", "assorted"], unit: "pack", note: "Usually bought and counted in packs" },
   { key: "gallon", kind: "packaging", keywords: ["gallon"], unit: "gallon", note: "Counted by the gallon" },
@@ -65,8 +69,8 @@ export const KNOWLEDGE: readonly KnowledgeEntry[] = [
   { key: "tube", kind: "packaging", keywords: ["tube"], unit: "tube", note: "Counted by the tube" },
   { key: "pair", kind: "packaging", keywords: ["pair"], unit: "pair", note: "Counted by the pair" },
   // Product words: category (and a unit where the catalog's own items agree).
-  { key: "ribbon", kind: "product", keywords: ["ribbon", "yarn", "twine", "rope"], unit: "roll", category: CRAFT, note: "Ribbon and yarn are counted by the roll" },
-  { key: "tape", kind: "product", keywords: ["tape"], unit: "roll", note: "Tape is counted by the roll" },
+  { key: "ribbon", kind: "product", keywords: ["ribbon", "yarn", "twine", "rope"], unit: "roll", category: CRAFT, note: "Ribbon and yarn are counted by the roll", label: "Ribbon and yarn" },
+  { key: "tape", kind: "product", keywords: ["tape"], unit: "roll", note: "Tape is counted by the roll", label: "Tape" },
   { key: "foil", kind: "product", keywords: ["foil", "crepe", "vellum", "cartolina", "construction paper"], category: CRAFT, note: "Craft paper" },
   { key: "paint", kind: "product", keywords: ["paint", "acrylic", "watercolor", "poster color"], category: CRAFT, note: "Art supplies" },
   { key: "glue", kind: "product", keywords: ["glue", "glitter", "marker", "chalk", "crayon", "pastel"], category: CRAFT, note: "Art and school supplies" },
