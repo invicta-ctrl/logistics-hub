@@ -244,9 +244,10 @@ export async function loansOverview(db: D1Database) {
       WHERE rank <= 8 ORDER BY period, rank`)),
     bind(db.prepare(`${periods} SELECT p.period, l.purpose, COUNT(*) AS loans, SUM(l.quantity) AS units, COUNT(DISTINCT CASE WHEN l.borrower_name = '${ERASED}' THEN NULL ELSE ${who} END) AS borrowers,
         SUM(l.status IN ('DAMAGED', 'LOST')) AS problems FROM periods p JOIN loans l ON l.created_at >= p.since GROUP BY p.period, l.purpose`)),
-    // Earlier borrowers, newest spelling first, so a returning student is filled in from their ID.
+    // Borrowers of the last year, newest spelling first, so a returning student is filled in from their ID. Older ones are typed again.
+    // The time bound keeps this off the whole loans history.
     db.prepare(`SELECT borrower_name AS name, student_id AS studentId, MAX(created_at) AS lastAt FROM loans
-      WHERE student_id IS NOT NULL AND borrower_name <> '${ERASED}' GROUP BY student_id ORDER BY lastAt DESC LIMIT 500`)
+      WHERE created_at >= ?1 AND student_id IS NOT NULL AND borrower_name <> '${ERASED}' GROUP BY student_id ORDER BY lastAt DESC LIMIT 500`).bind(new Date(now - 365 * DAY_MS).toISOString())
   ]);
   return { today: officeDay(), open: open.results, closed: closed.results, borrowers: borrowers.results, items: items.results, totals: totals.results, known: known.results };
 }

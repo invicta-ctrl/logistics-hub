@@ -162,6 +162,8 @@ describe("observing", () => {
     expect((await detail(one, id)).audit.status).toBe("OPEN");
     expect((await as(one, `/api/staff/audits/${id}`, "PATCH", { placeNote: "The picture shows the old cabinet." })).status).toBe(200);
     expect((await finish(one, id)).status).toBe(200);
+    // The phone resends a finish whose answer it lost: it succeeds again and records nothing more.
+    expect((await finish(one, id)).status).toBe(200);
     expect((await observe(one, id, { itemId: tape, outcome: "CONFIRMED", expectedOnHand: 5 })).status).toBe(409);
     expect((await as(one, `/api/staff/audits/${id}`, "PATCH", { status: "OPEN" })).status).toBe(409);
     const actions = (sqlite.prepare("SELECT action FROM audit_log WHERE entity_id = ? ORDER BY rowid").all(id) as Array<{ action: string }>).map((row) => row.action);

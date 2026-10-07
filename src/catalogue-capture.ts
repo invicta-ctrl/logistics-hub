@@ -8,7 +8,7 @@ import { type Known as DuplicateKnown, type Match, possibleDuplicates } from "./
 import { preparePhoto, photoUrl } from "./item-photo";
 import { whenIdle } from "./pwa";
 import { catalogueShell } from "./catalogue-shell";
-import { ApiError, type Html, api, categoryName, dataUrl, emptyState, failure, html, icon, leave, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, toast, units } from "./ui";
+import { ApiError, type Html, api, categoryName, dataUrl, emptyState, failure, html, icon, keepFailure, leave, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, toast, units } from "./ui";
 
 /*
  * The capture screen of a cataloguing session (/staff/catalogue?session=…): one form, kept on screen, that turns a thing on a shelf
@@ -391,6 +391,10 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       await keep(entry);
       local.set(id, known(entry));
       waiting = await here();
+    } catch (error) {
+      // The form still holds everything, so a full device or a blocked store loses nothing.
+      setMessage($("#cat-alert"), keepFailure(error));
+      return;
     } finally {
       submitting = false;
     }
