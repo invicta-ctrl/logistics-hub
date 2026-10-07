@@ -1,5 +1,12 @@
 # Current Work Pointer — Logistics Hub
 
+## Road to V2 — V1.11 Intelligent search and relationships — 2026-10-07
+
+SPEC: `docs/specs/accepted/road-to-v2/v1.11-intelligent-search.md` (with the amendment's §11 item and §13). BRANCH: `road-to-v2/v1.11-intelligent-search` (a cloud thread built it; the auto-assigned `claude/` branch was not used).
+GATE: V1.10 `STATUS: COMPLETE` and merged to `main` (PR 15, `32cbed4`); contained in the branch (`5770d43`).
+STATE: COMPLETE, WAITING ON OWNER ACTIONS: `docs/road-to-v2/releases/v1.11.md`. Migration `0030_item_relationships.sql` (additive, 4 objects, pinned in `ops/releases/v1.11.json`) must be applied through the Cloud Operations lane before V1.11 merges. Global search (`src/search.ts`, `src/search-index.ts`, `src/search-palette.ts`), people search for administrators (`findPeople`), item links (`src/item-relations.ts`, `src/item-links-panel.ts`); design `docs/GLOBAL_SEARCH.md`; evidence `docs/visual-research/v1.11.md`. Workers AI: boundary and fixture measurement only (`src/catalog-ai.ts`), on Earl's "Measure first" (2026-10-07); no binding.
+NEXT_EXACT_ACTION: Earl runs the V1.11 owner actions (manifest on `main`, preflight, prepare; optionally the `--ai` measurement before the merge), then V1.11 integrates to `main` and propagates through V1.15. V1.12 may start on its branch (its predecessor gate passes with V1.11 waiting on owner actions) but must not depend on `0030` being in production.
+
 ## Road to V2 — V1.10 Attention and operational automation — 2026-10-07
 
 SPEC: `docs/specs/accepted/road-to-v2/v1.10-attention-automation.md`. BRANCH: `road-to-v2/v1.10-attention-automation` (a cloud thread built it; the auto-assigned `road-to-v2/v1.10-dhv1ut` was not used, on Earl's answer).
