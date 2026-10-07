@@ -1,5 +1,5 @@
 import { bulkUpdate } from "./bulk";
-import { type Actor, InputError, audit, pathsOf, recordMovement, text, usablePlace } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, audit, pathsOf, recordMovement, text, usablePlace } from "./inventory";
 import { reportLocation } from "./location-reports";
 import { LOCATION_ID } from "./location-tree";
 
@@ -243,6 +243,7 @@ export async function finishAudit(db: D1Database, actor: Actor, id: string) {
     .reduce<Record<string, number>>((out, outcome) => outcome ? { ...out, [outcome]: (out[outcome] ?? 0) + 1 } : out, {});
   await db.batch([
     db.prepare("UPDATE location_audits SET status = 'FINISHED', finished_at = ?1, finished_by = ?2, updated_at = ?1 WHERE id = ?3 AND status <> 'FINISHED'").bind(now, actor.accountId, id),
+    db.prepare(`${BUMP_REVISION} AND changes() > 0`),
     audit(db, actor.accountId, "AUDIT_FINISHED", "AUDIT", id, { place: row.place, expected: detail.items.length, checked: detail.checked, outcomes }, true)
   ]);
   return { finishedAt: now };
@@ -342,6 +343,7 @@ export async function resolveObservation(db: D1Database, actor: Actor, observati
   await db.batch([
     db.prepare(`INSERT OR IGNORE INTO location_audit_resolutions(observation_id, action, movement_id, report_id, note, resolved_by, resolved_at) VALUES(?, ?, ?, ?, ?, ?, ?)`)
       .bind(found.id, chosen, movementId, reportId, note, actor.accountId, now),
+    db.prepare(`${BUMP_REVISION} AND changes() > 0`),
     audit(db, actor.accountId, "AUDIT_RESOLVED", "AUDIT", found.auditId, { observation: found.id, item: found.itemId, outcome: found.outcome, action: chosen, ...movementId ? { movement: movementId } : {} }, true)
   ]);
   return { action: chosen, replayed: false, movementId };
