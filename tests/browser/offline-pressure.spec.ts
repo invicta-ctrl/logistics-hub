@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { identify } from "../self-service-browser";
 
 /* V1.14: a phone with no room left says so, loses nothing, and saves the same record once there is room. */
 
@@ -9,7 +10,7 @@ test("a full phone says it is out of space, keeps what was typed, and saves it o
   await page.route("**/api/self-service/sync", (route) => route.abort());
   await page.goto("/self-service?do=take&item=ITM-0002");
   const sheet = page.getByRole("dialog", { name: "Bottled Water" });
-  await sheet.getByLabel(/name/i).first().fill("Maria Santos");
+  await identify(sheet, "Maria Santos");
   await sheet.getByRole("button", { name: /^Review/ }).click();
   const confirm = sheet.getByRole("button", { name: /^Confirm/ });
   await expect(confirm).toBeVisible();
