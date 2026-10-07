@@ -42,10 +42,11 @@ export async function catalogueWorkspace(): Promise<void> {
   // From here this member's work is sent whenever it can be, on this page and the capture screen alike.
   startSending({ owner: who.session.id, legacy: who.mode === "signed-in" });
   const query = new URLSearchParams(window.location.search);
+  // Ids from the address become API paths: anything but the shape this app issues is ignored.
   const open = query.get("session");
-  if (open) return captureScreen(who, open);
+  if (open && /^CS-[A-Za-z0-9-]+$/.test(open)) return captureScreen(who, open);
   const check = query.get("audit");
-  if (check) return checkScreen(who, check);
+  if (check && /^LA-[A-Za-z0-9-]+$/.test(check)) return checkScreen(who, check);
   document.title = "Catalogue · Catalog";
   whenIdle(() => true);
   onLeave(() => whenIdle(() => false));

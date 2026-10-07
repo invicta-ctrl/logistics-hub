@@ -689,7 +689,8 @@ export async function staffDirectory(): Promise<void> {
   let shownPerson: string | null = null;
   async function render(): Promise<void> {
     const params = new URLSearchParams(window.location.search);
-    const id = params.get("person");
+    // The id becomes an API path: anything but a directory id opens the list instead.
+    const id = params.get("person")?.match(/^PER-[A-Za-z0-9-]+$/)?.[0] ?? null;
     // A person's scans stay in memory only while their own profile is open.
     if (id !== shownPerson) forgetScans();
     shownPerson = id;

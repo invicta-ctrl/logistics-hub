@@ -132,8 +132,12 @@ async function status() {
   }
   const record = lastDeployment();
   if (record) {
-    const health = await Promise.resolve().then(() => fetch(`${siteOrigin(record.url)}/api/public/catalog`)).then((response) => response.status, () => 0);
-    (health === 200 ? pass : fail)("Live site", `${record.url} (commit ${record.commit}) → HTTP ${health || "unreachable"}`);
+    let origin = null;
+    try { origin = siteOrigin(record.url); } catch (error) { fail("Live site", error.message); }
+    if (origin) {
+      const health = await fetch(`${origin}/api/public/catalog`).then((response) => response.status, () => 0);
+      (health === 200 ? pass : fail)("Live site", `${record.url} (commit ${record.commit}) → HTTP ${health || "unreachable"}`);
+    }
   }
   return true;
 }

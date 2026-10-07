@@ -82,6 +82,11 @@ async function loan(name: string, fields: Record<string, string> = {}): Promise<
   return { id: (await json<{ id: string }>(response)).id, itemId };
 }
 const close = (id: string, body: Record<string, unknown>) => as(one, `/api/staff/loans/${id}/return`, "POST", body);
+const officeDaysAgo = (count: number) => {
+  const date = new Date(`${officeDay()}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - count);
+  return date.toISOString().slice(0, 10);
+};
 
 describe("who may read it", () => {
   it("needs a staff sign-in for every route, and only Logistics staff pass", async () => {
@@ -107,7 +112,7 @@ describe("loans", () => {
   it("asks about an overdue loan, says who and how late, and stops when it is returned", async () => {
     const { id } = await loan("Overdue table", { borrowerName: "Ben Reyes", quantity: "2" });
     expect(await entriesFor("LOAN_OVERDUE", "Overdue table")).toEqual([]);
-    sqlite.prepare("UPDATE loans SET return_by = ? WHERE id = ?").run(officeDay(new Date(Date.now() - 3 * 86_400_000)), id);
+    sqlite.prepare("UPDATE loans SET return_by = ? WHERE id = ?").run(officeDaysAgo(3), id);
     const [entry] = await entriesFor("LOAN_OVERDUE", "Overdue table");
     expect(entry).toMatchObject({ title: "A-Overdue table × 2", source: "Loans", urgency: "NOW", href: `/staff/loans?loan=${id}`, action: "Open the loan" });
     expect(entry!.why).toContain("Ben Reyes");
