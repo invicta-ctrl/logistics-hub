@@ -117,7 +117,7 @@ test("a browser that cannot keep marks says so, keeps working, and loses nothing
   });
   await row(page, "White glue").getByRole("button", { name: /^Here/ }).click();
   await expect(page.locator(".ck-progress__count")).toContainText("1 / 4 checked");
-  await expect(page.getByText(/cannot keep unsent marks/)).toBeVisible();
+  await expect(page.getByText(/cannot keep this check/)).toBeVisible();
 });
 
 
