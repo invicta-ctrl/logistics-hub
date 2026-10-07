@@ -259,6 +259,21 @@ describe("Part 3 — stock and pantry", () => {
     expect((await staff(cookie, "/api/staff/items/ITM-0004/movements", "POST", body)).status).toBe(409);
   });
 
+  it("answers the Attention numbers from the catalog revision: a repeat costs a 304 until something is written", async () => {
+    const cookie = await signIn();
+    for (const path of ["/api/staff/attention/summary", "/api/staff/attention"]) {
+      const first = await staff(cookie, path);
+      const etag = first.headers.get("etag")!;
+      expect(first.status).toBe(200);
+      expect(etag).toMatch(/^"r\d+-/);
+      const again = await call(path, { headers: { cookie, "if-none-match": etag } });
+      expect(again.status).toBe(304);
+      await move(cookie, "ITM-0003", { kind: "IN", quantity: 1, reason: "RETURNED" });
+      const after = await call(path, { headers: { cookie, "if-none-match": etag } });
+      expect(after.status).toBe(200);
+    }
+  });
+
   it("calls an item low only against its reorder level, and asks for counts where the legacy quantity is doubtful", async () => {
     const cookie = await signIn();
     const find = async (id: string) => (await stock(cookie)).items.find((item) => item.id === id)!;

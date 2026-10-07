@@ -237,6 +237,7 @@ export type AttentionSummary = { needsAction: number; bySource: Record<string, n
 const SUMMARY_TTL = 30_000;
 let summary: { at: number; data: AttentionSummary } | null = null;
 let summaryRequest: Promise<void> | null = null;
+let summaryTag = "";
 
 const countText = (count: number) => count > 99 ? "99+" : String(count);
 
@@ -263,8 +264,14 @@ export const ATTENTION_PAINTED = "attention:painted";
 /** Asks again now (after something was fixed here) or when the kept answer is older than 30 seconds. */
 export function refreshAttention(force = false): Promise<void> {
   if (!force && summary && Date.now() - summary.at < SUMMARY_TTL) { paintAttention(); return Promise.resolve(); }
-  summaryRequest ??= api<AttentionSummary>("/api/staff/attention/summary")
-    .then((data) => { summary = { at: Date.now(), data }; })
+  // Asked with the tag of the last answer: nothing changed (a 304) costs one row instead of the whole summary.
+  summaryRequest ??= fetch("/api/staff/attention/summary", { credentials: "same-origin", headers: { accept: "application/json", ...(summaryTag ? { "if-none-match": summaryTag } : {}) } })
+    .then(async (response) => {
+      if (response.status === 304 && summary) { summary = { at: Date.now(), data: summary.data }; return; }
+      if (!response.ok) return;
+      summaryTag = response.headers.get("etag") ?? "";
+      summary = { at: Date.now(), data: await response.json() as AttentionSummary };
+    })
     .catch(() => { /* the numbers are a convenience; the next page tries again */ })
     .finally(() => { summaryRequest = null; paintAttention(); });
   return summaryRequest;

@@ -106,6 +106,21 @@ test("each answer is sent as staff gave it, progress counts it, and anything not
   await expect(page.locator(".ck-list").last()).toContainText("Label printer");
 });
 
+test("a browser that cannot keep marks says so, keeps working, and loses nothing while the page stays", async ({ page }) => {
+  const server = serve(page);
+  await server.ready;
+  await startCheck(page);
+  await expect(page.getByRole("heading", { level: 1, name: "Store room › Shelf B" })).toBeVisible();
+  await page.evaluate(() => {
+    IDBObjectStore.prototype.put = function () { throw new DOMException("full", "QuotaExceededError"); };
+    Object.defineProperty(IDBTransaction.prototype, "error", { configurable: true, get: () => new DOMException("full", "QuotaExceededError") });
+  });
+  await row(page, "White glue").getByRole("button", { name: /^Here/ }).click();
+  await expect(page.locator(".ck-progress__count")).toContainText("1 / 4 checked");
+  await expect(page.getByText(/cannot keep this check/)).toBeVisible();
+});
+
+
 test("offline, what is marked waits on the device, survives a reload, and is sent once when the connection is back", async ({ page }) => {
   const server = serve(page);
   await server.ready;
