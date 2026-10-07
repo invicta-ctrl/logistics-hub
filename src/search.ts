@@ -307,6 +307,7 @@ export function rankPeople(rows: readonly PersonRow[], query: string): { people:
  */
 export type Shortcut = { id: string; title: string; detail: string; href: string; terms: readonly string[]; admin?: true; start?: true };
 export const SHORTCUTS: readonly Shortcut[] = [
+  { id: "home", title: "Home", detail: "Page, what to do next", href: "/staff/home", terms: ["home", "start", "today", "next", "what next", "continue", "insights", "dashboard"] },
   { id: "overdue", title: "Overdue loans", detail: "Attention, loans past their return date", href: "/staff/attention?source=Loans&urgency=NOW", terms: ["overdue", "overdue loans", "late", "late loans", "late returns", "not returned"], start: true },
   { id: "low", title: "Low stock", detail: "Stock, at or under the reorder level", href: "/staff/stock?show=low", terms: ["low stock", "running low", "reorder", "restock"], start: true },
   { id: "out", title: "Out of stock", detail: "Stock, none left", href: "/staff/stock?show=out", terms: ["out of stock", "none left", "no stock", "empty"] },
