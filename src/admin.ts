@@ -268,7 +268,7 @@ export async function myAccount(): Promise<void> {
     try {
       await api("/api/staff/me/password", { method: "POST", body: JSON.stringify({ currentPassword: values.get("currentPassword"), newPassword: values.get("newPassword") }) });
       toast("Password changed. Your other devices were signed out.");
-      if (session.mustChangePassword) navigate("/staff/items", true);
+      if (session.mustChangePassword) navigate("/staff/home", true);
       else { passwordForm.reset(); setMessage(alert, ""); }
     } catch (error) { setMessage(alert, failure(error)); }
   });

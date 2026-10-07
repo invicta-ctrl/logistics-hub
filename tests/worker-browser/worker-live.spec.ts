@@ -9,7 +9,7 @@ async function signIn(page: Page) {
   await page.getByRole("textbox", { name: "Username" }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Items" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
 }
 
 test("public Lending Hub fails closed on freshly migrated data", async ({ page, request }) => {
@@ -137,7 +137,7 @@ test.describe("owner administration", () => {
     await staff.getByLabel("New password", { exact: true }).fill("maria chose this one");
     await staff.getByLabel("Repeat new password").fill("maria chose this one");
     await staff.getByRole("button", { name: "Change password" }).click();
-    await expect(staff.getByRole("heading", { name: "Items" })).toBeVisible();
+    await expect(staff.getByRole("heading", { name: "Home" })).toBeVisible();
     await expect(staff.getByRole("link", { name: "Administration" })).toHaveCount(0);
     expect((await staff.request.get("/api/staff/admin/accounts")).status()).toBe(403);
     await staff.goto("/staff/admin");
@@ -243,7 +243,7 @@ test.describe("owner administration", () => {
     const staff = await (await browser.newContext()).newPage();
     expect((await staff.request.get(response.url())).status()).toBe(401);
     await signInAs(staff, username, password);
-    await expect(staff.getByRole("heading", { name: "Items" })).toBeVisible();
+    await expect(staff.getByRole("heading", { name: "Home" })).toBeVisible();
     expect((await staff.request.get(response.url())).status()).toBe(403);
     await staff.goto("/staff/admin/directory");
     await expect(staff).toHaveURL(/\/staff\/items$/);
@@ -296,7 +296,7 @@ test.describe("owner administration", () => {
     await page.reload();
     await expect(page).toHaveURL(/\/staff$/);
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, "recovered owner pass");
-    await expect(page.getByRole("heading", { name: "Items" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   });
 });
 

@@ -23,6 +23,7 @@
 // dozen-item shelf checked on a phone, paused, resumed and continued offline, a stock conflict, the summary and the review on a computer;
 // runs only where checks of a place exist) and self-service-v19 (V1.9: Self-Service 2.0 on a phone, tablet and computer: home, search, a group, the item page, the borrow/take/use forms, identity, photo, the check, the receipt, My activity, return, the help tip, offline, and a 600-item catalog; runs only where the item page exists) and kits (V1.8: the kit list, a Ready and an incomplete kit, a template, the check and its summary; runs only where /api/staff/kits exists). Its pictures, including the obviously fake
 // V1.10 (attention: the bell and nav numbers, the inbox with mixed conditions at three sizes, a filtered view, a group opened, marking a return reviewed, a loan focused from a link, an Unclassified item's suggestion, and the calm empty state; runs only where /staff/attention exists)
+// V1.12 (home: the operations home for staff and for an owner at three sizes with a busy hub, a cataloguing session and a paused place check to continue, quick actions by role, the insights (borrowed, used, short, reports, kits, corrections, completeness), a calm hub, insights that failed, and the timings of Home's reads; runs only where /api/staff/home exists)
 // V1.11 (search: global search over 500+ items with places, kits, links and a fictional Staff Directory, for an administrator and for staff at three sizes:
 // empty, mixed, item-heavy, place, kit, a link's reason, a shortcut, an ID, long names, a long group shown in full, no matches, people (and their absence
 // for staff), the keyboard, opening a result, loading, a session that has ended, and an item's Linked items card; runs only where /api/staff/search exists)
@@ -71,7 +72,8 @@ async function serve(dir, port) {
   if (pages.includes("staff-directory")) runD1(directoryRecordsSql(), { persistTo: state });
   // locations: items the phone is offered, two look-alike places the migration would have kept apart, and typed locations with no place yet.
   if (pages.includes("locations") && fs.existsSync(path.join(dir, "migrations", "0024_locations.sql"))) runD1(locationRecordsSql(), { persistTo: state });
-  if (pages.includes("attention") && fs.existsSync(path.join(dir, "src", "attention.ts"))) runD1(attentionRecordsSql(), { persistTo: state });
+  if ((pages.includes("attention") || pages.includes("home")) && fs.existsSync(path.join(dir, "src", "attention.ts"))) runD1(attentionRecordsSql(), { persistTo: state });
+  if (pages.includes("home") && fs.existsSync(path.join(dir, "src", "home.ts"))) runD1(homeRecordsSql(), { persistTo: state });
   if (pages.includes("search") && fs.existsSync(path.join(dir, "src", "search-palette.ts"))) runD1(searchRecordsSql(), { persistTo: state });
   const child = spawn(process.execPath, [wrangler, "dev", "--local", "--port", String(port), "--inspector-port", String(port + 1), "--persist-to", state, "--env-file", path.join(state, ".env")], { cwd: dir, stdio: "ignore", detached: process.platform !== "win32" });
   const url = `http://127.0.0.1:${port}`;
@@ -1904,6 +1906,101 @@ async function searchScenes(browser, url, dir) {
   return timings;
 }
 
+
+/** Repeating patterns for the insights, and unfinished work for staff.demo to continue; it builds on attentionRecordsSql (the Store room and its loans). */
+function homeRecordsSql() {
+  const rows = [];
+  const at = (days) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const staff = "(SELECT id FROM staff_accounts WHERE username = 'staff.demo')";
+  const supply = (offset) => `(SELECT i.id FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.item_type = 'Consumable' AND i.status = 'ACTIVE' AND b.on_hand >= 20 ORDER BY i.id LIMIT 1 OFFSET ${offset})`;
+  // Three supplies taken out again and again in the last month.
+  [[40, 6, 3], [41, 4, 2], [42, 3, 2]].forEach(([offset, times, quantity]) => {
+    for (let k = 0; k < times; k++) rows.push(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, reason, status)
+      SELECT 'MOV-HM${offset}${k}', ${sq(at(1 + k * 4))}, 'STOCK_OUT', 'OUT', id, ${quantity}, unit, -${quantity}, ${staff}, 'CONSUMED', 'POSTED' FROM items WHERE id = ${supply(offset)};`);
+  });
+  // A projector lent four times in two months, a second item three times.
+  [[25, 4], [28, 3]].forEach(([offset, times]) => {
+    for (let k = 0; k < times; k++) {
+      const id = `LN-HM${offset}${k}`;
+      rows.push(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, status)
+        SELECT 'MOV-${id}', ${sq(at(5 + k * 15))}, 'LOAN_OUT', 'OUT', id, 1, unit, 0, ${staff}, 'POSTED' FROM items WHERE id = (SELECT id FROM items WHERE item_type = 'Loanable' AND status = 'ACTIVE' ORDER BY id LIMIT 1 OFFSET ${offset});`);
+      rows.push(`INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, photo_key, return_by, movement_id, created_at, created_by, status, closed_at, closed_by)
+        SELECT '${id}', id, 1, 'INDIVIDUAL', 'Evidence Borrower', '20-1111-3${k}0', 'loans/none', ${sq(at(2 + k * 15).slice(0, 10))}, 'MOV-${id}', ${sq(at(5 + k * 15))}, ${staff}, 'RETURNED', ${sq(at(4 + k * 15))}, ${staff}
+        FROM items WHERE id = (SELECT id FROM items WHERE item_type = 'Loanable' AND status = 'ACTIVE' ORDER BY id LIMIT 1 OFFSET ${offset});`);
+    }
+  });
+  // Restocked twice in three months.
+  [[50, "RESTOCKED"], [12, "NEEDS_RESTOCK"]].forEach(([days, status], k) => rows.push(`INSERT INTO reorders(id, item_id, status, created_at, updated_at, created_by) SELECT 'RO-HM${k}', id, '${status}', ${sq(at(days))}, ${sq(at(days))}, ${staff} FROM items WHERE id = ${supply(43)};`));
+  // The Store room keeps being reported.
+  [[1, "CANT_FIND", 140], [2, "CANT_FIND", 141], [3, "LOCATION_WRONG", 142]].forEach(([n, kind, offset]) => rows.push(`INSERT INTO location_reports(id, item_id, location_id, kind, source, reported_by, created_at)
+    SELECT '${"1".repeat(35)}${n}', id, 'LOC-0900', '${kind}', 'STAFF', ${staff}, ${sq(at(8 + n))} FROM items WHERE id = (SELECT id FROM items ORDER BY id LIMIT 1 OFFSET ${offset});`));
+  // A kit found short twice.
+  rows.push(`INSERT INTO kits(id, name, location_id, active, created_at, updated_at) VALUES('KIT-0900', 'Sewing kit', 'LOC-0900', 1, ${sq(at(80))}, ${sq(at(80))});`);
+  [10, 30].forEach((days, k) => {
+    rows.push(`INSERT INTO kit_checks(id, kit_id, checked_by, checked_at, ok_count, flagged_count, unchecked_count) VALUES('KC-${String(k + 1).padStart(36, "0")}', 'KIT-0900', ${staff}, ${sq(at(days))}, 0, 1, 0);`);
+    rows.push(`INSERT INTO kit_check_observations(check_id, item_id, outcome, required, on_hand) SELECT 'KC-${String(k + 1).padStart(36, "0")}', id, 'LOW', 4, 1 FROM items WHERE id = ${supply(44)};`);
+  });
+  // An item whose use was changed three times.
+  [20, 14, 6].forEach((days, k) => rows.push(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
+    SELECT 'AU-HM${k}', ${sq(at(days))}, ${staff}, 'ITEM_UPDATED', 'ITEM', id, '{"itemType":{"from":"${k % 2 ? "Consumable" : "Loanable"}","to":"${k % 2 ? "Loanable" : "Consumable"}"}}' FROM items WHERE id = ${supply(45)};`));
+  // staff.demo has a cataloguing session to continue (three items added) and a paused check of another place.
+  rows.push(`INSERT INTO catalogue_sessions(id, started_by, location_id, status, started_at, updated_at) VALUES('CS-${"0".repeat(35)}1', ${staff}, 'LOC-0900', 'ACTIVE', ${sq(at(1))}, ${sq(at(0))});`);
+  [210, 211, 212].forEach((offset, k) => rows.push(`INSERT INTO catalogue_captures(id, session_id, item_id, location_id, behaviour, created_at)
+    SELECT '${"2".repeat(35)}${k}', 'CS-${"0".repeat(35)}1', id, 'LOC-0900', 'CONSUME', ${sq(at(0))} FROM items WHERE id = (SELECT id FROM items ORDER BY id LIMIT 1 OFFSET ${offset});`));
+  rows.push(`INSERT INTO locations(id, name, visibility, active, created_at, updated_at) VALUES('LOC-0901', 'Supply cabinet', 'STAFF_ONLY', 1, ${sq(at(60))}, ${sq(at(60))});`);
+  rows.push(`INSERT INTO location_audits(id, location_id, started_by, status, expected_at_start, started_at, updated_at) VALUES('LA-${"0".repeat(35)}2', 'LOC-0901', ${staff}, 'PAUSED', 38, ${sq(at(3))}, ${sq(at(2))});`);
+  return rows.join("\n");
+}
+
+async function homeScenes(browser, url, dir) {
+  const shot = (page, name, options = {}) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80, ...options });
+  const timings = {};
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    for (const [label, username] of [["staff", "staff.demo"], ["owner", "owner.demo"]]) {
+      if (label === "owner" && size === "tablet") continue;
+      const { context, page } = await signIn(browser, url, username, viewport);
+      if ((await page.request.get(`${url}/api/staff/home`)).status() === 404) {
+        console.log("home: this ref has no Home, skipped");
+        await context.close();
+        return {};
+      }
+      const started = Date.now();
+      await page.goto(`${url}/staff/home`);
+      await page.waitForSelector("#home-attention .home-row");
+      timings[`${label}-attentionMs-${size}`] = Date.now() - started;
+      await page.waitForSelector("#home-insights .home-card");
+      timings[`${label}-insightsMs-${size}`] = Date.now() - started;
+      await shot(page, `home-${label}-${size}`);
+      await shot(page, `home-${label}-full-${size}`, { fullPage: true });
+      if (label === "staff") {
+        // The same page with the answers changed only for these pictures: a calm hub, and insights that failed.
+        const calm = await context.newPage();
+        await calm.setViewportSize({ width: viewport[0], height: viewport[1] });
+        await calm.route("**/api/staff/attention/summary", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ needsAction: 0, bySource: {}, groups: [] }) }));
+        await calm.route("**/api/staff/home", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ catalogue: null, checks: [] }) }));
+        await calm.goto(`${url}/staff/home`);
+        await calm.waitForSelector(".home-clear");
+        await calm.waitForSelector("#home-insights .home-card");
+        await shot(calm, `home-calm-${size}`, { fullPage: true });
+        const failed = await context.newPage();
+        await failed.setViewportSize({ width: viewport[0], height: viewport[1] });
+        await failed.route("**/api/staff/home/insights", (route) => route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "Something went wrong." }) }));
+        await failed.goto(`${url}/staff/home`);
+        await failed.waitForSelector(".home-failed");
+        await shot(failed, `home-insights-failed-${size}`, { fullPage: true });
+        // A reason's own page in Attention.
+        if (size !== "tablet") {
+          await page.goto(`${url}/staff/attention?reason=LOAN_OVERDUE`);
+          await page.waitForSelector(".attn-row");
+          await shot(page, `home-attention-reason-${size}`);
+        }
+      }
+      await context.close();
+    }
+  }
+  return timings;
+}
+
 async function capture(url, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
@@ -1915,7 +2012,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "attention" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits" || name === "search" || name === "admin-control") continue;
+          if (name === "item-photos" || name === "attention" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits" || name === "search" || name === "admin-control" || name === "home") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -1935,7 +2032,7 @@ async function capture(url, dir) {
     for (let run = 0; run < 7; run++) {
       await (await context.newCDPSession(page)).send("Network.clearBrowserCache");
       let start = Date.now();
-      await page.goto(`${url}/staff`);
+      await page.goto(`${url}/staff/items`);
       await page.waitForSelector("tbody tr");
       cold.push(Date.now() - start);
       const link = page.locator('a[href="/staff/stock"]').first();
@@ -1957,6 +2054,7 @@ async function capture(url, dir) {
     if (pages.includes("location-audit")) Object.assign(timings, { locationAudit: await locationAuditScenes(browser, url, dir) });
     if (pages.includes("kits")) Object.assign(timings, { kits: await kitScenes(browser, url, dir) });
     if (pages.includes("attention")) Object.assign(timings, { attention: await attentionScenes(browser, url, dir) });
+    if (pages.includes("home")) Object.assign(timings, { home: await homeScenes(browser, url, dir) });
     if (pages.includes("search")) Object.assign(timings, { search: await searchScenes(browser, url, dir) });
     if (pages.includes("admin-control")) Object.assign(timings, { adminControl: await adminScenes(browser, url, dir, { SIZES, signIn, resume, median }) });
     if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
