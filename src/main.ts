@@ -26,6 +26,7 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
   "/staff/stock": () => import("./stock-workspace").then((module) => module.stockWorkspace),
   "/staff/loans": () => import("./loans-workspace").then((module) => module.loansWorkspace),
   "/staff/self-service": () => import("./self-service-review").then((module) => module.selfServiceReview),
+  "/staff/attention": () => import("./attention-workspace").then((module) => module.attentionWorkspace),
   "/staff/activity": () => import("./activity-workspace").then((module) => module.activityWorkspace),
   "/staff/admin": () => import("./admin").then((module) => module.administration),
   "/staff/admin/directory": () => import("./directory-workspace").then((module) => module.staffDirectory),

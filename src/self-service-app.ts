@@ -971,8 +971,12 @@ export async function selfService(): Promise<void> {
     onClose: () => {
       dirty = false;
       receiptFor = null;
-      // Closing with X, Escape or the backdrop also steps the address back.
-      if (opensSheet(params()) && !steering) window.history.back();
+      // Closing with X, Escape or the backdrop also steps the address back; a direct link has nothing behind it, so the page underneath replaces it.
+      if (opensSheet(params()) && !steering) {
+        const depth = (window.history.state as { ssDepth?: number } | null)?.ssDepth ?? 0;
+        if (depth > 0) window.history.back();
+        else go(FORM_SCREENS.has(params().screen) ? { screen: "item" } : { loan: null }, true);
+      }
       steering = false;
     }
   });

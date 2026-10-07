@@ -1,5 +1,5 @@
 import { type Actor, BUMP_REVISION, InputError, audit, pathsOf, text, usablePlace } from "./inventory";
-import { CHECK_OUTCOMES, type CheckOutcome, type ComponentState, readComponent, readKit } from "./kit-policy";
+import { CHECK_OUTCOMES, COMPONENT_STATE_LABELS, type CheckOutcome, type ComponentState, readComponent, readKit } from "./kit-policy";
 import { LOCATION_ID } from "./location-tree";
 
 /*
@@ -143,6 +143,18 @@ export async function kitList(db: D1Database) {
     kits: kits.results.map((row) => shape(row, byKit.get(row.id) ?? [], places)),
     templates: templates.results.map(({ active, ...row }) => ({ ...row, active: active === 1 }))
   };
+}
+
+/** Active kits that are not Ready, each with what holds it back: what the Attention inbox reads. Derived like the list, never stored. */
+export async function kitsNotReady(db: D1Database) {
+  const [kits, byKit] = await Promise.all([
+    db.prepare(`SELECT k.id, k.name FROM kits k WHERE k.active = 1 ORDER BY k.name COLLATE NOCASE, k.id LIMIT ${MAX_KITS}`).all<{ id: string; name: string }>(),
+    components(db)
+  ]);
+  return kits.results.flatMap((kit) => {
+    const { state, rows } = derive(byKit.get(kit.id) ?? []);
+    return state === "READY" ? [] : [{ id: kit.id, name: kit.name, state, holding: rows.filter((entry) => entry.state !== "OK").map((entry) => `${entry.fact.name}: ${entry.reason ?? COMPONENT_STATE_LABELS[entry.state]}`) }];
+  });
 }
 
 /** One kit: its components with their states and the plain reason for each, and its recent checks (the latest in full). */

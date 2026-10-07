@@ -345,6 +345,15 @@ export async function resolveObservation(db: D1Database, actor: Actor, observati
 }
 
 /**
+ * A finding of a finished check that nothing has settled: no resolution, no later look at the same item, no later count. `o` is the
+ * observation and `a` its check. An item's freshness and the Attention inbox both read it, so they always say the same thing.
+ */
+export const UNSETTLED_FINDING = `a.status = 'FINISHED' AND o.outcome IN (${DISCREPANCIES.map((outcome) => `'${outcome}'`).join(",")})
+  AND NOT EXISTS (SELECT 1 FROM location_audit_resolutions r WHERE r.observation_id = o.id)
+  AND NOT EXISTS (SELECT 1 FROM location_audit_observations later WHERE later.item_id = o.item_id AND later.rowid > o.rowid)
+  AND NOT EXISTS (SELECT 1 FROM inventory_movements m WHERE m.item_id = o.item_id AND m.movement_type = 'COUNT_ADJUSTMENT' AND m.created_at > o.received_at)`;
+
+/**
  * Derived freshness for an item, never stored: when it was last seen at its recorded place, when it was last counted, and the latest
  * discrepancy that nothing has settled since (no resolution, no later count, no later confirmation).
  */
@@ -355,11 +364,7 @@ export async function itemFreshness(db: D1Database, itemId: string) {
     // Counts recorded in the Hub only: a migrated row is not a physical count anyone made here.
     db.prepare("SELECT MAX(created_at) AS at FROM inventory_movements WHERE item_id = ? AND movement_type = 'COUNT_ADJUSTMENT' AND imported_from IS NULL").bind(itemId),
     db.prepare(`SELECT o.outcome, o.received_at AS at, o.audit_id AS auditId FROM location_audit_observations o JOIN location_audits a ON a.id = o.audit_id
-      WHERE o.item_id = ?1 AND a.status = 'FINISHED' AND o.outcome IN (${DISCREPANCIES.map((outcome) => `'${outcome}'`).join(",")})
-        AND NOT EXISTS (SELECT 1 FROM location_audit_resolutions r WHERE r.observation_id = o.id)
-        AND NOT EXISTS (SELECT 1 FROM location_audit_observations later WHERE later.item_id = o.item_id AND later.rowid > o.rowid)
-        AND NOT EXISTS (SELECT 1 FROM inventory_movements m WHERE m.item_id = o.item_id AND m.movement_type = 'COUNT_ADJUSTMENT' AND m.created_at > o.received_at)
-      ORDER BY o.rowid DESC LIMIT 1`).bind(itemId)
+      WHERE o.item_id = ?1 AND ${UNSETTLED_FINDING} ORDER BY o.rowid DESC LIMIT 1`).bind(itemId)
   ]);
   return {
     lastVerifiedAt: (verified!.results[0] as { at: string | null } | undefined)?.at ?? null,
