@@ -28,7 +28,7 @@ const privateDirectory = path.resolve("data/private");
 const rosterValues = new Set();
 const addRosterValues = (value, key = "") => {
   if (typeof value === "string") {
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || /^(display_)?name|full_name|email$/i.test(key)) rosterValues.add(value);
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) || /^((display_)?name|full_name|email)$/i.test(key)) rosterValues.add(value);
     return;
   }
   if (Array.isArray(value)) value.forEach((entry) => addRosterValues(entry));

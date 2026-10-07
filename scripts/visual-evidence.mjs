@@ -33,7 +33,7 @@
 //
 // Screenshots are JPEG so they are small enough to commit; inspect them before you do.
 import { spawn, spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -2067,7 +2067,7 @@ async function capture(url, dir) {
   }
 }
 
-const port = 20_000 + (randomBytes(2).readUInt16BE(0) % 20_000);
+const port = randomInt(20_000, 40_000);
 const targets = [["after", root]];
 let worktree = "";
 if (args.base) {
