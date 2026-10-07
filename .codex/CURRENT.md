@@ -1,5 +1,12 @@
 # Current Work Pointer — Logistics Hub
 
+## Road to V2 — V1.13 Administration and system control — 2026-10-07
+
+SPEC: `docs/specs/accepted/road-to-v2/v1.13-admin-control.md` (with the amendment's §11 item and §13). BRANCH: `road-to-v2/v1.13-admin-control` (a cloud thread built it in parallel with V1.12 on Earl's instruction; the auto-assigned `claude/project-thread-2cbngw` was not used).
+GATE: V1.12 `STATUS: COMPLETE`, `INTEGRATION: WAITING ON OWNER ACTIONS` on `road-to-v2/v1.12-operations-home`; contained in the branch.
+STATE: COMPLETE, WAITING ON INTEGRATION (no migration and no data step; integrates after V1.12, from Earl's computer after he approves): `docs/road-to-v2/releases/v1.13.md`. Administration is five sections (System, Self-Service, Catalog, Staff, Accountability); System reads D1, the three R2 buckets, Self-Service, the build (`dist/build.json`) and the migration level with bounded checks and shows no backup evidence it cannot verify; Catalog has other names per item, the read-only knowledge base, classification coverage and the AI status ("Not connected"); no editable knowledge overlay (decision in the record). Evidence `docs/visual-research/v1.13.md`.
+NEXT_EXACT_ACTION: Merge V1.12, then V1.13, to `main` in that order from Earl's computer once CI is green and he approves, verify `main`'s CI and `npm run admin -- verify`, and propagate forward through V1.14 and V1.15; then `start` V1.14.
+
 ## Road to V2 — V1.12 Operations home and practical insights — 2026-10-07
 
 SPEC: `docs/specs/accepted/road-to-v2/v1.12-operations-home.md` (with the amendment's §11 item). BRANCH: `road-to-v2/v1.12-operations-home` (a cloud thread built it; the auto-assigned `claude/project-thread-60pt56` was not used).
