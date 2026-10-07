@@ -1,5 +1,6 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
+import { attention, attentionSummary, reviewReturn, selfServiceToCheck } from "./attention";
 import { auditDetail, auditReview, auditState, finishAudit, itemFreshness, observe, resolveObservation, startAudit, updateAudit } from "./audits";
 import { bulkUpdate } from "./bulk";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
@@ -74,7 +75,7 @@ const ITEM_ID = /^ITM-[A-Za-z0-9-]{1,24}$/;
 const MEDIA_PATH = /^\/api\/staff\/media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
 /** The only public image address: a thumbnail, by id. The 1280 px size has no public address. */
 const PUBLIC_THUMB_PATH = /^\/api\/public\/media\/([0-9a-f-]{36})\/thumb$/;
-const LOAN_PATH = /^\/api\/staff\/loans\/(LN-[A-Za-z0-9-]{1,60})\/(return|photo)$/;
+const LOAN_PATH = /^\/api\/staff\/loans\/(LN-[A-Za-z0-9-]{1,60})\/(return|photo|review)$/;
 const REORDER_PATH = /^\/api\/staff\/reorders\/(RO-[A-Za-z0-9-]{1,60})$/;
 const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|photo)$/;
 /** A sync carries at most a few compressed photos; anything larger is not from the app. */
@@ -306,9 +307,8 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
 
   if (path === "/api/staff/session" && method === "GET") {
     const { accountId, sessionId, group, expiresAt, ...profile } = account;
-    const reviews = await env.DB.prepare(`SELECT (SELECT COUNT(*) FROM self_service_events WHERE review IS NOT NULL AND resolved_at IS NULL)
-      + (SELECT COUNT(*) FROM location_reports WHERE source = 'SELF_SERVICE' AND resolved_at IS NULL) AS total`).first<number>("total");
-    return json({ authenticated: true, id: accountId, ...profile, access: accessOf(account.role, group), hub: hubAccess(account), recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews ?? 0, selfServiceClosed: await selfServiceState(env.DB) === "paused", directory: await linkedPerson(env.DB, accountId) });
+    const reviews = await selfServiceToCheck(env.DB);
+    return json({ authenticated: true, id: accountId, ...profile, access: accessOf(account.role, group), hub: hubAccess(account), recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews, selfServiceClosed: await selfServiceState(env.DB) === "paused", directory: await linkedPerson(env.DB, accountId) });
   }
   if (path === "/api/staff/me" && method === "PATCH") return json(await updateSelf(env.DB, account, await body()));
   if (path === "/api/staff/me/password" && method === "POST") return json(await changeOwnPassword(env.DB, account, await body()));
@@ -433,6 +433,9 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   const loan = LOAN_PATH.exec(path);
   if (loan?.[2] === "return" && method === "POST") return json(await closeLoan(env.DB, account, loan[1]!, await body()));
   if (loan?.[2] === "photo" && method === "GET") return loanPhoto(env.DB, env.EVIDENCE, loan[1]!);
+  if (loan?.[2] === "review" && method === "POST") return json(await reviewReturn(env.DB, account, loan[1]!));
+  if (path === "/api/staff/attention" && method === "GET") return json(await attention(env.DB));
+  if (path === "/api/staff/attention/summary" && method === "GET") return json(await attentionSummary(env.DB));
   const reorder = REORDER_PATH.exec(path);
   if (reorder && method === "PATCH") return json(await updateReorder(env.DB, account, reorder[1]!, await body()));
   if (path === "/api/staff/items" && method === "POST") {
@@ -471,7 +474,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!form) throw new InputError(400, "Invalid loan form.");
     return json(await createLoan(env.DB, env.EVIDENCE, account, match[1]!, form), 201);
   }
-  const known = match || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/attention", "/api/staff/attention/summary", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 
