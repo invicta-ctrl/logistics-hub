@@ -95,41 +95,45 @@ function parse(text: string | null): Record<string, unknown> {
 }
 
 /**
- * Whose records are these: a loan or phone record belongs to a person when both carry a student ID and the IDs are equal,
- * or, when either has none, when its name is exactly the person's full name (letter case aside). A one-word name, such as a
- * surname an import started from, never matches by name. Nothing is matched by surname, photo or face.
+ * Whose records are these (amendment G, 2026-10-07): a loan or phone record belongs to a person only when its student ID is the one
+ * on their directory profile (unique in the directory; letter case and outer spaces aside). The name typed with a record is not a
+ * key: "Juan" with Juan Dela Cruz's ID is his (Attention asks staff to look at the name), and no name moves a record that carries
+ * his ID to someone else. A person with no student ID on file has no linked records. Nothing is matched by name, photo or face.
  */
-const ME = "me AS (SELECT student_id AS sid, lower(full_name) AS name, instr(full_name, ' ') > 0 AS byName FROM staff_directory WHERE id = ?1)";
-const owned = (sid: string, name: string) => `CASE WHEN ${sid} IS NOT NULL AND me.sid IS NOT NULL THEN ${sid} = me.sid ELSE me.byName AND lower(${name}) = me.name END`;
-const matchedBy = (sid: string) => `CASE WHEN ${sid} IS NOT NULL AND me.sid IS NOT NULL THEN 'STUDENT_ID' ELSE 'NAME' END`;
+const ME = "me AS (SELECT student_id AS sid FROM staff_directory WHERE id = ?1 AND student_id IS NOT NULL)";
+const owned = (sid: string) => `upper(trim(${sid})) = me.sid`;
 
 /**
- * What left stock for this person: every take recorded on a phone and every loan, read from the movement ledger (one row
- * per movement, never a copy), newest first. Dates are office (Manila) days; item, category and area are narrowed in the browser.
+ * What this person took, used and borrowed: every phone take and every loan from the movement ledger (one row per movement, never a
+ * copy), and every phone use (which moves no stock) from the phone's own record, newest first. Dates are office (Manila) days; item,
+ * category and area are narrowed in the browser.
  */
 export async function personUsage(db: D1Database, id: string, params: URLSearchParams) {
   await personRow(db, id);
   const from = isoDate(params.get("from") || null, "Start date");
   const to = isoDate(params.get("to") || null, "End date");
   if (from && to && from > to) throw new InputError(400, "The start date must not be after the end date.");
-  const sid = "COALESCE(l.student_id, e.student_id)";
+  const within = (at: string) => `(?2 IS NULL OR julianday(${at}) >= julianday(?2 || 'T00:00:00+08:00')) AND (?3 IS NULL OR julianday(${at}) < julianday(?3 || 'T00:00:00+08:00', '+1 day'))`;
   const { results } = await db.prepare(`WITH ${ME}
-    SELECT m.id, m.created_at AS at, i.id AS itemId, i.name AS itemName, i.category, COALESCE(i.stock_area, 'Inventory') AS stockArea, i.unit, m.quantity,
-      CASE WHEN l.id IS NOT NULL THEN 'LOAN' ELSE 'TAKE' END AS kind, COALESCE(l.purpose, e.purpose) AS purpose, CASE WHEN e.id IS NOT NULL THEN 1 ELSE 0 END AS phone,
-      ${matchedBy(sid)} AS matchedBy
-    FROM inventory_movements m JOIN items i ON i.id = m.item_id CROSS JOIN me
-    LEFT JOIN loans l ON m.movement_type = 'LOAN_OUT' AND m.related_entity_type = 'LOAN' AND l.id = m.related_entity_id
-    LEFT JOIN self_service_events e ON m.related_entity_type = 'SELF_SERVICE' AND e.id = m.related_entity_id AND e.event_type = 'TAKE'
-    WHERE (l.id IS NOT NULL OR e.id IS NOT NULL) AND ${owned(sid, "COALESCE(l.borrower_name, e.person_name)")}
-      AND (?2 IS NULL OR julianday(m.created_at) >= julianday(?2 || 'T00:00:00+08:00')) AND (?3 IS NULL OR julianday(m.created_at) < julianday(?3 || 'T00:00:00+08:00', '+1 day'))
-    ORDER BY julianday(m.created_at) DESC LIMIT 1000`).bind(id, from, to).all();
+    SELECT * FROM (
+      SELECT m.id, m.created_at AS at, i.id AS itemId, i.name AS itemName, i.category, COALESCE(i.stock_area, 'Inventory') AS stockArea, i.unit, m.quantity,
+        CASE WHEN l.id IS NOT NULL THEN 'LOAN' ELSE 'TAKE' END AS kind, COALESCE(l.purpose, e.purpose) AS purpose, CASE WHEN e.id IS NOT NULL THEN 1 ELSE 0 END AS phone
+      FROM inventory_movements m JOIN items i ON i.id = m.item_id CROSS JOIN me
+      LEFT JOIN loans l ON m.movement_type = 'LOAN_OUT' AND m.related_entity_type = 'LOAN' AND l.id = m.related_entity_id
+      LEFT JOIN self_service_events e ON m.related_entity_type = 'SELF_SERVICE' AND e.id = m.related_entity_id AND e.event_type = 'TAKE'
+      WHERE (l.id IS NOT NULL OR e.id IS NOT NULL) AND ${owned("COALESCE(l.student_id, e.student_id)")} AND ${within("m.created_at")}
+      UNION ALL
+      SELECT e.id, e.occurred_at, i.id, i.name, i.category, COALESCE(i.stock_area, 'Inventory'), i.unit, e.quantity, 'USE', e.purpose, 1
+      FROM self_service_events e JOIN items i ON i.id = e.item_id CROSS JOIN me
+      WHERE e.event_type = 'USE' AND e.applied = 1 AND ${owned("e.student_id")} AND ${within("e.occurred_at")}
+    ) ORDER BY julianday(at) DESC LIMIT 1000`).bind(id, from, to).all();
   return { usage: results, truncated: results.length === 1000 };
 }
 
 /** Loans this person borrowed, by the same matching as usage: what is out now first, then the history. */
 export async function personLoans(db: D1Database, id: string) {
   await personRow(db, id);
-  const { results } = await db.prepare(`WITH ${ME} ${LOAN_COLUMNS} CROSS JOIN me WHERE ${owned("l.student_id", "l.borrower_name")}
+  const { results } = await db.prepare(`WITH ${ME} ${LOAN_COLUMNS} CROSS JOIN me WHERE ${owned("l.student_id")}
     ORDER BY l.status = 'OUT' DESC, l.created_at DESC LIMIT 200`).bind(id).all();
   return { loans: results };
 }

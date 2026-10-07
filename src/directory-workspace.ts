@@ -27,7 +27,7 @@ type AccessInfo = { account: null; suggestedUsername: string } | {
 };
 type Entry = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
 type Detail = { person: Person; card: Card | null; history: Entry[] };
-type Usage = { id: string; at: string; itemId: string; itemName: string; category: string; stockArea: string; unit: string; quantity: number; kind: "LOAN" | "TAKE"; purpose: string | null; phone: number; matchedBy: "STUDENT_ID" | "NAME" };
+type Usage = { id: string; at: string; itemId: string; itemName: string; category: string; stockArea: string; unit: string; quantity: number; kind: "LOAN" | "TAKE" | "USE"; purpose: string | null; phone: number };
 type ActivityEvent = { id: string; at: string | null; title: string; summary: string };
 type Linkable = { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; personId: string | null; personName: string | null };
 type Tab = "profile" | "id" | "usage" | "loans" | "activity";
@@ -573,9 +573,8 @@ export async function staffDirectory(): Promise<void> {
   /* ---------- Usage ---------- */
 
   const matchNote = (person: Person): Html => {
-    const ways = [person.studentId ? html`student ID <span class="mono">${person.studentId}</span>` : "", person.name.includes(" ") ? html`the exact name “${person.name}”` : ""].filter(Boolean);
-    if (!ways.length) return html`<p class="callout">${icon("info")}<span>Add ${person.name}'s full name or student ID number (Edit profile) to find their loans and phone records. A single name never matches, so no one else's records appear here.</span></p>`;
-    return html`<p class="field__hint">Found in the existing loan and phone records by ${ways.length === 2 ? html`${ways[0]} or ${ways[1]}` : ways[0]}. Records written another way are not included.</p>`;
+    if (!person.studentId) return html`<p class="callout">${icon("info")}<span>Add ${person.name}'s student ID number (Edit profile) to find their loans and phone records. Records are found by student ID only, never by name.</span></p>`;
+    return html`<p class="field__hint">Loans and phone records with student ID <span class="mono">${person.studentId}</span>, whatever name was typed with them.</p>`;
   };
 
   async function usagePanel(host: HTMLElement, person: Person): Promise<void> {
@@ -599,21 +598,21 @@ export async function staffDirectory(): Promise<void> {
       const term = fold(String(values.get("item") ?? "").trim());
       const shown = rows.filter((row) => (!values.get("area") || row.stockArea === values.get("area")) && (!values.get("category") || row.category === values.get("category")) && (!term || fold(row.itemName).includes(term)));
       const taken = shown.filter((row) => row.kind === "TAKE");
+      const used = shown.filter((row) => row.kind === "USE");
       const loans = shown.filter((row) => row.kind === "LOAN");
       const byCategory = [...shown.reduce((map, row) => map.set(row.category, (map.get(row.category) ?? 0) + row.quantity), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
-      mount(host.querySelector("[data-usage]")!, rows.length === 0 ? emptyState("Nothing found in these dates", "No loan or phone take in these dates matches this person.", "", "", 3) : html`
+      mount(host.querySelector("[data-usage]")!, rows.length === 0 ? emptyState("Nothing found in these dates", "No loan, phone take or phone use in these dates has this person's student ID.", "", "", 3) : html`
         <dl class="stat-strip">
-          <div class="stat"><dt>Units taken</dt><dd><span class="stat__value">${taken.reduce((sum, row) => sum + row.quantity, 0)}</span><span class="stat__note">${plural(taken.length, "phone take")}</span></dd></div>
+          <div class="stat"><dt>Units taken</dt><dd><span class="stat__value">${taken.reduce((sum, row) => sum + row.quantity, 0)}</span><span class="stat__note">${plural(taken.length, "phone take")}${used.length ? `, ${plural(used.length, "use")}` : ""}</span></dd></div>
           <div class="stat"><dt>Borrowed</dt><dd><span class="stat__value">${loans.reduce((sum, row) => sum + row.quantity, 0)}</span><span class="stat__note">${plural(loans.length, "loan")}</span></dd></div>
           <div class="stat"><dt>Items</dt><dd><span class="stat__value">${new Set(shown.map((row) => row.itemId)).size}</span><span class="stat__note">different</span></dd></div>
           <div class="stat"><dt>Most used</dt><dd><span class="stat__value stat__value--text">${byCategory[0] ? categoryName(byCategory[0][0]) : "—"}</span><span class="stat__note">${byCategory[0] ? `${byCategory[0][1]} units` : ""}</span></dd></div>
         </dl>
         ${shown.length ? html`<div class="data-table-wrap"><table class="data-table data-table--static">
           <caption class="visually-hidden">What left stock for ${person.name}</caption>
-          <thead><tr><th scope="col">Date</th><th scope="col">Item</th><th scope="col" class="col-hide-phone">Category</th><th scope="col" class="col-qty">Qty</th><th scope="col">How</th><th scope="col" class="col-hide-phone">Matched by</th></tr></thead>
+          <thead><tr><th scope="col">Date</th><th scope="col">Item</th><th scope="col" class="col-hide-phone">Category</th><th scope="col" class="col-qty">Qty</th><th scope="col">How</th></tr></thead>
           <tbody>${shown.map((row) => html`<tr><td>${formatDate(officeDay(row.at))}</td><td><a class="row-link" href="/staff/items?item=${row.itemId}" data-route>${row.itemName}</a></td><td class="col-hide-phone">${categoryName(row.category)}</td>
-            <td class="col-qty">${row.quantity} <span class="muted">${units(row.quantity, row.unit)}</span></td><td>${row.kind === "LOAN" ? html`Borrowed${row.purpose ? ` · ${label(row.purpose)}` : ""}` : "Taken"}${row.phone ? html` <span class="muted">(phone)</span>` : ""}</td>
-            <td class="col-hide-phone">${row.matchedBy === "STUDENT_ID" ? "Student ID" : "Name"}</td></tr>`)}</tbody></table></div>` : html`<p class="muted">Nothing matches these filters.</p>`}
+            <td class="col-qty">${row.quantity} <span class="muted">${units(row.quantity, row.unit)}</span></td><td>${row.kind === "LOAN" ? html`Borrowed${row.purpose ? ` · ${label(row.purpose)}` : ""}` : row.kind === "USE" ? "Used" : "Taken"}${row.phone ? html` <span class="muted">(phone)</span>` : ""}</td></tr>`)}</tbody></table></div>` : html`<p class="muted">Nothing matches these filters.</p>`}
         ${truncated ? html`<p class="field__hint">Only the newest 1,000 entries are shown; narrow the dates to see older ones.</p>` : ""}`);
     };
     const fetchRows = async () => {

@@ -89,7 +89,7 @@ test.describe("Staff Directory", () => {
       if (url.pathname.endsWith("/accounts")) return json({ accounts: [] });
       if (url.pathname.endsWith("/derived")) return json({ missing: [] });
       if (url.pathname.endsWith("/access")) return json({ account: null, suggestedUsername: "ana.santos" });
-      if (url.pathname.endsWith("/usage")) return json({ usage: [{ id: "MOV-1", at: "2026-09-30T02:00:00.000Z", itemId: "ITM-0001", itemName: "Sample Item", category: "SCHOOL SUPPLIES", stockArea: "Inventory", unit: "piece", quantity: 2, kind: "TAKE", purpose: "INDIVIDUAL", phone: 1, matchedBy: "STUDENT_ID" }], truncated: false });
+      if (url.pathname.endsWith("/usage")) return json({ usage: [{ id: "MOV-1", at: "2026-09-30T02:00:00.000Z", itemId: "ITM-0001", itemName: "Sample Item", category: "SCHOOL SUPPLIES", stockArea: "Inventory", unit: "piece", quantity: 2, kind: "TAKE", purpose: "INDIVIDUAL", phone: 1 }], truncated: false });
       if (url.pathname.endsWith("/loans")) return json({ loans: [] });
       if (url.pathname.endsWith("/activity")) return json({ linked: false, events: [], nextCursor: null });
       if (/\/id\/(front|back|thumb|face)$/.test(url.pathname)) return route.fulfill({ contentType: "image/png", body: pixel });
