@@ -484,8 +484,10 @@ export const balanceCtes = (touched: string) => `touched AS (${touched}),
  * zero: something was recorded that the shelf could not have held. Derived on every read, so
  * it clears itself when a late return fills the gap or a new count is recorded.
  */
+// The index is named because, left to choose, the planner walks the whole (item, time) index to get the distinct items without a sort: work that
+// grows with every event ever received. The time index reads only the window.
 function stockIssues(db: D1Database, since: string): D1PreparedStatement {
-  return db.prepare(`WITH ${balanceCtes("SELECT DISTINCT item_id FROM self_service_events WHERE received_at >= ?1 AND applied = 1")}
+  return db.prepare(`WITH ${balanceCtes("SELECT DISTINCT item_id FROM self_service_events INDEXED BY idx_self_service_events_received WHERE received_at >= ?1 AND applied = 1")}
     SELECT r.itemId, i.name AS itemName, i.unit, MIN(r.balance) AS lowest, MIN(CASE WHEN r.balance < 0 THEN r.at END) AS since,
       (SELECT on_hand FROM inventory_balances WHERE id = r.itemId) AS onHand,
       (SELECT COUNT(*) FROM loans WHERE item_id = r.itemId AND status = 'OUT') AS openLoans
@@ -501,7 +503,7 @@ export async function selfServiceReview(db: D1Database) {
     stockIssues(db, new Date(Date.now() - 30 * 24 * 60 * MINUTE).toISOString()),
     db.prepare(`${EVENT_COLUMNS} WHERE e.received_at >= ? ORDER BY e.occurred_at DESC LIMIT 200`).bind(since),
     db.prepare(`SELECT l.id, l.item_id AS itemId, l.quantity, l.purpose, l.borrower_name AS borrowerName, l.student_id AS studentId, l.created_at AS createdAt
-      FROM loans l WHERE l.status = 'OUT' AND l.item_id IN (SELECT item_id FROM self_service_events WHERE review IN ('RETURN_CHECK', 'UNMATCHED_RETURN', 'RETURN_CONFLICT', 'CLOCK') AND event_type = 'RETURN' AND resolved_at IS NULL)
+      FROM loans l WHERE l.status = 'OUT' AND l.item_id IN (SELECT item_id FROM self_service_events INDEXED BY idx_self_service_events_open WHERE ${OPEN_REVIEW} AND review IN ('RETURN_CHECK', 'UNMATCHED_RETURN', 'RETURN_CONFLICT', 'CLOCK') AND event_type = 'RETURN')
       ORDER BY l.created_at`),
     // Phone reports that nobody has looked at yet ("I can’t find it", "Location looks wrong"); each is resolved from the item or here.
     db.prepare(`SELECT r.id, r.item_id AS itemId, i.name AS itemName, r.kind, r.reporter_name AS reporterName, r.created_at AS createdAt, lp.path AS location
