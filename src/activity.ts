@@ -298,6 +298,9 @@ function toEvent(row: Row): ActivityEvent {
   // An open unit is named by its counting word ("an open ream"); a count of open units is never a stock amount.
   const one = unit ?? "unit";
   const closed = typeof details.closed === "number" ? details.closed : 0;
+  // An item link reads from the audited item's side ("Glue Gun: Used with Glue Sticks"); the words are the fixed vocabulary's own.
+  const linkWords = typeof details.words === "string" ? details.words.slice(0, 40) : "linked to";
+  const other = typeof details.otherName === "string" ? details.otherName.slice(0, 200) : "another item";
   const alreadyOpen = typeof details.alreadyOpen === "number" ? details.alreadyOpen : 0;
   const condition = details.condition && typeof details.condition === "object" ? LABELS[String((details.condition as { to?: unknown }).to)] : undefined;
   const sentence: Record<string, () => string> = {
@@ -373,6 +376,8 @@ function toEvent(row: Row): ActivityEvent {
     ITEM_PHOTO_ADDED: () => `${actor} added a photo to ${item}.`,
     ITEM_PHOTO_REPLACED: () => `${actor} replaced the photo of ${item}.`,
     ITEM_PHOTO_REMOVED: () => `${actor} removed the photo of ${item}.`,
+    ITEM_LINKED: () => `${actor} linked ${item}: ${linkWords} ${other}.`,
+    ITEM_UNLINKED: () => `${actor} removed the link ${item}: ${linkWords} ${other}.`,
     ITEM_VISUAL_CHANGED: () => `${actor} selected ${((details.visualType as { to?: string } | undefined)?.to === "PHOTO") ? "a real photo" : "a system icon"} for ${item}.`,
     REORDER_OPENED: () => `${actor} put ${item} on the restock list.`,
     REORDER_UPDATED: () => `${actor} updated the restock entry for ${item}${fields.length ? `: ${fields.join(", ")}` : ""}.`,

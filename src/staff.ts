@@ -371,6 +371,8 @@ function eventTitle(event: CatalogEvent): string {
   if (event.action === "ITEM_PHOTO_REPLACED") return "Photo replaced";
   if (event.action === "ITEM_VISUAL_CHANGED") return "Item visual changed";
   if (event.action === "ITEM_PHOTO_REMOVED") return "Photo removed";
+  if (event.action === "ITEM_LINKED") return `Linked: ${String(event.details.words ?? "")} ${String(event.details.otherName ?? "another item")}`;
+  if (event.action === "ITEM_UNLINKED") return `Link removed: ${String(event.details.words ?? "")} ${String(event.details.otherName ?? "another item")}`;
   if (event.action === "LOCATION_REPORTED") return `Reported: ${REPORT_LABELS[event.details.kind as ReportKind] ?? "location"}${event.details.source === "SELF_SERVICE" ? ` (from a phone${typeof event.details.reporter === "string" ? `, ${event.details.reporter}` : ""})` : ""}`;
   if (event.action === "LOCATION_REPORT_RESOLVED") return `Report resolved: ${REPORT_LABELS[event.details.kind as ReportKind] ?? "location"}`;
   if (event.action === "REORDER_OPENED") return "Added to the restock list";
