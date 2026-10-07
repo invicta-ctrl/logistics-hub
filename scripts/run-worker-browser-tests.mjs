@@ -1,13 +1,13 @@
 // Runs the browser suite against a real local Worker + D1 in a throwaway state
 // directory, so tests never touch the live preview database or .dev.vars.
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomInt } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createAccountSql, runD1 } from "./staff-account.mjs";
 
 const stateDir = `.wrangler/e2e-${process.pid}`;
-const e2ePort = 20_000 + (randomBytes(2).readUInt16BE(0) % 20_000);
+const e2ePort = randomInt(20_000, 40_000);
 const wrangler = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
 const cli = fileURLToPath(new URL("../node_modules/@playwright/test/cli.js", import.meta.url));
 
