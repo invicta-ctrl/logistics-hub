@@ -1,0 +1,62 @@
+{
+  "release": "v1.11",
+  "title": "Intelligent Search & Relationships",
+  "branch": "road-to-v2/v1.11-intelligent-search",
+  "record": "docs/road-to-v2/releases/v1.11.md",
+  "target": {
+    "worker": "logistics-hub",
+    "d1": {
+      "binding": "DB",
+      "name": "logistics-hub",
+      "id": "3ffd8edf-a176-4f63-8b7c-5215d11c98d8"
+    },
+    "r2": {
+      "existing": [
+        {
+          "binding": "EVIDENCE",
+          "name": "logistics-hub-evidence"
+        },
+        {
+          "binding": "CATALOG_MEDIA",
+          "name": "logistics-hub-catalog-media"
+        },
+        {
+          "binding": "STAFF_IDS",
+          "name": "logistics-hub-staff-ids"
+        }
+      ],
+      "create": []
+    },
+    "forbidden": [
+      "hau-usc-logistics-production",
+      "hau-usc-logistics-staging"
+    ]
+  },
+  "migrations": {
+    "pending": [
+      {
+        "name": "0030_item_relationships.sql",
+        "sha256": "f9d95ea3552ca1429b3dc5aab69fe2723359f5e0085762066490369aff5b6f1f"
+      }
+    ]
+  },
+  "expect": {
+    "schemaAdded": [
+      "index:idx_item_relationships_pair",
+      "index:idx_item_relationships_related",
+      "index:sqlite_autoindex_item_relationships_1",
+      "table:item_relationships"
+    ],
+    "schemaChanged": [],
+    "tableRowsAfter": {
+      "item_relationships": 0
+    },
+    "unchanged": [
+      "items",
+      "movements",
+      "onHand",
+      "loans",
+      "phoneEvents"
+    ]
+  }
+}
