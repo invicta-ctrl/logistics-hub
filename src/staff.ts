@@ -1172,7 +1172,7 @@ export async function workspace(): Promise<void> {
         return;
       }
       const sure = way.tier === "STRONG";
-      mount(element, html`<p class="classify-hint__line ${sure ? "" : "is-weak"}">${icon("info")}<span>${sure ? "Suggested" : "Maybe"}: ${named(way)}${place ? html` in ${categoryName(place.value)}` : ""}. ${way.why}.</span>
+      mount(element, html`<p class="classify-hint__line ${sure ? "" : "is-weak"}">${icon("info")}<span>${sure ? "Suggested" : "Maybe"}: ${named(way)}${place ? html`, category ${categoryName(place.value)}` : ""}. ${way.why}.</span>
         <button type="button" class="text-link" data-use-suggestion data-behaviour="${way.value}" data-category="${place?.value ?? ""}">Use suggestion</button></p>`);
     };
     form.addEventListener("click", (event) => {

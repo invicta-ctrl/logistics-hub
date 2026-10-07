@@ -156,6 +156,33 @@ A **kit** is a named list of existing items with how many of each it should hold
 
 **A box with things in it is two linked records, not a new kind of item.** A container (a toolbox, a cabinet, a bag) is an item or a kit like any other, and what is inside it is its own items with their own counts, placed with the Locations page (a place inside a place) or listed as a kit's components. Nothing in the item model says "this holds that": there is no behaviour column for containers, no nested stock and no contents count on the container. If someone needs "what is in the red toolbox?", they make a kit named for it; if they need "where is the red toolbox?", it is an item with a place. Keeping the two records separate is what lets each follow its own rules (a toolbox is borrowed and returned, the screws inside it are taken).
 
+## Attention (V1.10)
+
+**Attention** (`/staff/attention`, the bell in the staff bar) lists what needs a person, and nothing else. It is **derived, never stored**: each entry exists exactly while its cause is true, so there is no status to keep in step, no "dismiss", and fixing the cause (returning the loan, restocking, settling the finding, classifying the item) is what clears it. Passive history stays in Activity. Staff who may use the Logistics workspace can read it; other departments and officers cannot (`/api/staff/attention`, `/api/staff/attention/summary`).
+
+Each reason is a SQL condition over records that already exist, used for both the (bounded, 100 per reason) list and its true count, so the two cannot disagree. Urgency is one fixed rule per reason, never a score:
+
+| Reason (group heading) | Source | Condition | Urgency | Next action |
+|---|---|---|---|---|
+| Overdue loans | Loans | an `OUT` loan whose return date has passed | Today | the loan, marked in its list |
+| Damaged or lost returns | Loans | a `DAMAGED` or `LOST` loan closed in the last 60 days, not yet marked reviewed | This week | the return in the loan history, or **Mark reviewed** in place |
+| Phone records to check | Self-Service | an unresolved Self-Service record held for review | Today when held over a day, else this week | Self-Service review |
+| Reports from phones | Self-Service | an unresolved "can't find it" or "place looks wrong" report from a phone | This week | the item |
+| Out of stock | Stock | an item that is not inactive and has none left (the Stock page's rule) | Today when it has a reorder level, else this week; routine once a restock is requested | the item |
+| Low stock | Stock | on hand above 0 and at or under the item's level | This week; routine once a restock is requested | the item |
+| Check findings to settle | Locations | a finished check's mismatch, can't-find, found-elsewhere or unlisted finding with no resolution, no later look and no later count | This week | the check |
+| Reported more than once | Locations | an item with two or more unresolved location reports | This week | the item |
+| Kits to replenish / review | Kits | an active kit that is Needs replenishment (this week) or Needs review (routine) | as stated | the kit |
+| Records that look wrong | Catalog | a check marked the record as wrong and the item has not been edited since | Routine | the item's Details |
+| Items to classify | Catalog | an active Unclassified item | Routine | the item's Details, which shows the top suggestion with how sure it is and why |
+| Items without a place | Catalog | an active, classified item with no place | Routine | the item's Details |
+
+**Counts.** The bell and the Loans and Stock numbers count only Today and This week; routine entries are listed but never counted. The page says the split ("21 to act on · 394 when there is time"). The shell asks for the numbers once after a page is drawn, keeps the answer for 30 seconds, and fails quietly. The Self-Service number in the bar is the same definition as the inbox's Self-Service groups.
+
+**What a person records.** Only **Mark reviewed** on a damaged or lost return: one `LOAN_REVIEWED` audit entry per loan (idempotent), shown in Activity as "X reviewed the damaged return of Y". It changes no stock and no loan. Nothing else in Attention writes anything, and no rule approves evidence, changes stock, or judges a person.
+
+**Not included.** Catalog photos (not required, so not a reason), offline cataloguing conflicts (they exist only on the device that made them), a damaged-or-lost return older than 60 days (it stays in the loan history), external email or push, risk scores, search across everything, an operations dashboard.
+
 ## Roles
 | Role | Can |
 | --- | --- |
