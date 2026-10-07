@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
+import { officeDay } from "../src/loans";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
 
 /* V1.10 Attention: every reason is derived from the records that already exist, clears when its cause is fixed, never changes a record by itself, and stays quiet for everything else. */
@@ -81,6 +82,11 @@ async function loan(name: string, fields: Record<string, string> = {}): Promise<
   return { id: (await json<{ id: string }>(response)).id, itemId };
 }
 const close = (id: string, body: Record<string, unknown>) => as(one, `/api/staff/loans/${id}/return`, "POST", body);
+const officeDaysAgo = (count: number) => {
+  const date = new Date(`${officeDay()}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - count);
+  return date.toISOString().slice(0, 10);
+};
 
 describe("who may read it", () => {
   it("needs a staff sign-in for every route, and only Logistics staff pass", async () => {
@@ -106,7 +112,7 @@ describe("loans", () => {
   it("asks about an overdue loan, says who and how late, and stops when it is returned", async () => {
     const { id } = await loan("Overdue table", { borrowerName: "Ben Reyes", quantity: "2" });
     expect(await entriesFor("LOAN_OVERDUE", "Overdue table")).toEqual([]);
-    sqlite.prepare("UPDATE loans SET return_by = ? WHERE id = ?").run(new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10), id);
+    sqlite.prepare("UPDATE loans SET return_by = ? WHERE id = ?").run(officeDaysAgo(3), id);
     const [entry] = await entriesFor("LOAN_OVERDUE", "Overdue table");
     expect(entry).toMatchObject({ title: "A-Overdue table × 2", source: "Loans", urgency: "NOW", href: `/staff/loans?loan=${id}`, action: "Open the loan" });
     expect(entry!.why).toContain("Ben Reyes");
