@@ -1,3 +1,4 @@
+import "./activity.css";
 import { ACTIVITY_SOURCES, ACTIVITY_TITLES, ACTIVITY_TYPES, STOCK_AREAS, type ActivitySource } from "./catalog-policy";
 import { type Place, inOrder, pathOf, placesOf } from "./location-tree";
 import { signed } from "./movement-form";
@@ -8,6 +9,9 @@ import { type Html, ApiError, api, emptyState, expired, failure, formatDate, for
  * Activity (/staff/activity): one newest-first list of who did what, read from GET /api/staff/activity.
  * Every filter lives in the URL and is applied by the Worker before it cuts a page, so "Load older"
  * continues the same question. The first page refreshes live; older pages stay below it.
+ *
+ * The page is one viewport tall (V1.15): the title, source tabs, search and filters stay where they are and only the feed scrolls,
+ * loading older pages as it nears its end. The newest MAX_SHOWN entries are ever drawn, so a long history never grows the page.
  */
 
 type Entry = {
@@ -26,6 +30,9 @@ type Key = typeof KEYS[number];
 type Filters = Partial<Record<Key, string>>;
 const CHANGED: Record<string, string> = { yes: "Changed stock", no: "Did not change stock" };
 
+/** Most entries drawn at once; past it the person narrows the filters or exports, as the Worker's own export cap already asks. */
+const MAX_SHOWN = 300;
+
 const entryCount = (count: number) => `${count.toLocaleString()} ${count === 1 ? "entry" : "entries"}`;
 
 export async function activityWorkspace(): Promise<void> {
@@ -37,22 +44,28 @@ export async function activityWorkspace(): Promise<void> {
   const sources = (Object.keys(ACTIVITY_SOURCES) as ActivitySource[]).filter((source) => (source !== "ACCOUNT" && source !== "DIRECTORY") || session.role !== "STAFF");
   document.title = "Activity · Staff workspace";
   shell(session, "activity", html`
-    <header class="page-header">
-      <div class="page-header__title"><h1>Activity</h1><p>Who did what, to which item, and whether stock changed.</p></div>
-      <div class="page-header__actions">
-        <p class="live-status" id="live-status">Connecting…</p>
-        <button class="button button--secondary" type="button" id="activity-export" title="Download this filtered list as a CSV file. Typed loan and phone notes are left out of files.">${icon("install")}Export CSV</button>
+    <div class="activity-workspace">
+      <div class="activity-workspace__top">
+        <header class="page-header">
+          <div class="page-header__title"><h1>Activity</h1><p>Who did what, to which item, and whether stock changed.</p></div>
+          <div class="page-header__actions">
+            <p class="live-status" id="live-status">Connecting…</p>
+            <button class="button button--secondary" type="button" id="activity-export" title="Download this filtered list as a CSV file. Typed loan and phone notes are left out of files.">${icon("install")}Export CSV</button>
+          </div>
+        </header>
+        <div class="views" id="activity-sources" role="group" aria-label="Source"></div>
+        <div class="table-toolbar">
+          <label class="search-field">${icon("search")}<span class="visually-hidden">Search activity</span><input id="activity-search" type="search" maxlength="80" autocomplete="off" spellcheck="false" placeholder="Search item, ID, staff or note" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="activity-clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
+          <button class="button button--secondary" type="button" id="activity-filters" aria-haspopup="dialog">${icon("filter")}<span>Filters</span></button>
+          <p class="table-toolbar__count" id="activity-count" aria-live="polite"></p>
+        </div>
+        <div class="chips chips--flush" id="activity-chips" role="group" aria-label="Filters in use" hidden></div>
       </div>
-    </header>
-    <div class="views" id="activity-sources" role="group" aria-label="Source"></div>
-    <div class="table-toolbar">
-      <label class="search-field">${icon("search")}<span class="visually-hidden">Search activity</span><input id="activity-search" type="search" maxlength="80" autocomplete="off" spellcheck="false" placeholder="Search item, ID, staff or note" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="activity-clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
-      <button class="button button--secondary" type="button" id="activity-filters" aria-haspopup="dialog">${icon("filter")}<span>Filters</span></button>
-      <p class="table-toolbar__count" id="activity-count" aria-live="polite"></p>
+      <div class="activity-feed" id="activity-feed" role="region" aria-label="Activity feed" tabindex="0">
+        <div id="activity-results" aria-busy="true"></div>
+        <div class="activity-more" id="activity-more" hidden><button class="button button--secondary" type="button" id="activity-older">Load older</button><p class="muted" id="activity-end"></p></div>
+      </div>
     </div>
-    <div class="chips chips--flush" id="activity-chips" role="group" aria-label="Filters in use" hidden></div>
-    <div id="activity-results" aria-busy="true"></div>
-    <div class="activity-more" id="activity-more" hidden><button class="button button--secondary" type="button" id="activity-older">Load older</button><p class="muted" id="activity-end"></p></div>
     <dialog class="sheet" id="activity-sheet" aria-labelledby="sheet-title"></dialog>`);
 
   let filters: Filters = Object.fromEntries(KEYS.map((key) => [key, params.get(key) ?? ""]).filter(([, value]) => value));
@@ -132,10 +145,12 @@ export async function activityWorkspace(): Promise<void> {
     preservingFocus(results, () => mount(results, entries.length ? html`<ol class="activity-list" aria-label="Activity, newest first">${entries.map(row)}</ol>` : filtered()
       ? emptyState("Nothing matches", "Try another search or filter, or clear them to see everything.", html`<button class="button button--secondary" type="button" data-remove="everything">Clear search and filters</button>`)
       : emptyState("No activity yet", "Stock changes, loans, phone records and catalog edits appear here as they happen.")), "a");
+    const capped = Boolean(nextCursor) && entries.length >= MAX_SHOWN;
     more.hidden = !entries.length;
-    older.hidden = !nextCursor;
-    end.hidden = Boolean(nextCursor);
-    end.textContent = filtered() ? "No older entries match." : "That is the beginning of the records.";
+    older.hidden = !nextCursor || capped;
+    if (nextCursor && !capped) watchEnd();
+    end.hidden = Boolean(nextCursor) && !capped;
+    end.textContent = capped ? `Showing the newest ${entryCount(MAX_SHOWN)}. Narrow the filters or export the list to see more.` : filtered() ? "No older entries match." : "That is the beginning of the records.";
     renderControls();
   }
 
@@ -214,7 +229,7 @@ export async function activityWorkspace(): Promise<void> {
   }
 
   async function loadOlder(): Promise<void> {
-    if (!nextCursor || fetchingOlder) return;
+    if (!nextCursor || fetchingOlder || entries.length >= MAX_SHOWN) return;
     const current = run;
     // Not disabled: the button keeps keyboard focus while the next page loads.
     fetchingOlder = true;
@@ -234,6 +249,13 @@ export async function activityWorkspace(): Promise<void> {
       older.removeAttribute("aria-busy");
     }
   }
+
+  /** Loads the next page when the feed nears its end, so scrolling just continues; the button stays for keyboards and older browsers. */
+  const watcher = "IntersectionObserver" in window
+    ? new IntersectionObserver((seen) => { if (seen.some((entry) => entry.isIntersecting)) void loadOlder(); }, { root: document.querySelector("#activity-feed"), rootMargin: "0px 0px 240px 0px" }) : null;
+  /** Observing again reports the end afresh, so a page that did not fill the feed still asks for the next one. A failed request is not retried this way: the button stays. */
+  const watchEnd = () => { watcher?.unobserve(more); watcher?.observe(more); };
+  onLeave(() => watcher?.disconnect());
 
   let exporting = false;
   /** The Worker builds the file from the same filters (and audits it); the browser only saves it. */

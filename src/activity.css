@@ -1,0 +1,24 @@
+/*
+ * Activity (V1.15): one viewport tall. The shell, title, source tabs, search and filters stay put and only the feed scrolls, so a long
+ * history never grows the page. On a phone the bottom bar and the safe area are taken off the height; a short window (a phone on its
+ * side, or large text, which the rem unit follows) lets the page scroll as before, because a feed a few lines tall helps nobody.
+ */
+.app-main:has(> .activity-workspace) { display: flex; flex: none; height: calc(100dvh - var(--app-bar) - 1px); flex-direction: column; padding-bottom: 0; overflow: hidden; }
+.activity-workspace { display: flex; flex: 1 1 auto; min-height: 0; flex-direction: column; }
+.activity-workspace__top { flex: none; }
+.activity-feed { flex: 1 1 auto; min-height: 0; padding-bottom: var(--space-8); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.activity-feed:focus-visible { outline-offset: -2px; }
+@media (max-width: 760px) {
+  #app:has(.app-nav) .app-main:has(> .activity-workspace) { height: calc(100dvh - var(--app-bar) - 1px - var(--bottom-bar) - var(--safe-bottom)); padding-bottom: 0; }
+  /* The title and Export share one line; "Updated at" waits until something is wrong, so the feed gets the height. */
+  .activity-workspace .page-header { flex-wrap: nowrap; gap: var(--space-3); padding-block: var(--space-3) var(--space-2); }
+  .activity-workspace .page-header__title p { display: none; }
+  .activity-workspace .page-header__actions { flex: none; flex-wrap: nowrap; width: auto; }
+  .activity-workspace .live-status:not([data-state="offline"]) { display: none; }
+  .activity-workspace .table-toolbar { padding-block: var(--space-2); }
+  .activity-feed { padding-bottom: var(--space-4); }
+}
+@media (max-height: 32.5rem) {
+  .app-main:has(> .activity-workspace), #app:has(.app-nav) .app-main:has(> .activity-workspace) { flex: 1 1 0%; height: auto; overflow: visible; padding-bottom: var(--space-16); }
+  .activity-feed { min-height: 12rem; overflow-y: visible; }
+}
