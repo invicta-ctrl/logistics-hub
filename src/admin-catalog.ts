@@ -42,6 +42,10 @@ export async function catalogSettings(): Promise<void> {
       <p><span class="tag tag--pending">Not connected</span></p>
       <p>Nothing sends item names to an AI model. This release only measured the idea on sample data, and suggestions come entirely from the built-in hints and the catalog itself. If it is ever connected, this section will show whether it is on, today's calls against the daily limit and whether it has paused itself, and show nothing it has not read.</p>
     </section>
+    <section class="admin-block" aria-labelledby="elsewhere-title">
+      <h2 id="elsewhere-title" class="section-title">Looked after elsewhere</h2>
+      <p>Places, kits and cataloguing sessions are looked after on their own pages: <a href="/staff/locations" data-route>Places</a>, <a href="/staff/kits" data-route>Kits</a> and <a href="/staff/catalogue" data-route>Cataloguing</a>.</p>
+    </section>
     <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>`
   });
   if (!session) return;
