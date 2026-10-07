@@ -102,7 +102,6 @@ export type Session = {
 };
 type Section = "home" | "items" | "stock" | "loans" | "self-service" | "activity" | "attention" | "admin" | "account";
 
-export const ROLE_LABELS: Record<Role, string> = { STAFF: "Staff", ADMIN: "Administrator", OWNER: "Owner" };
 
 /** The staff sections in working order. On phones the first four sit in the bottom bar; `more` ones move under More. */
 const SECTIONS: ReadonlyArray<{ id: Section; href: string; text: string; icon: IconName; more?: true }> = [

@@ -54,7 +54,6 @@ export const MOVEMENT_REASONS = {
 export const LOAN_PURPOSES = ["INDIVIDUAL", "USC"] as const;
 /** How a loan ends. Only a good return puts the quantity back on the shelf. */
 export const LOAN_OUTCOMES = ["RETURNED", "DAMAGED", "LOST"] as const;
-export const REORDER_STATUSES = ["NEEDS_RESTOCK", "PLANNED", "RESTOCKED", "DISMISSED"] as const;
 export const OPEN_REORDER_STATUSES = new Set<string>(["NEEDS_RESTOCK", "PLANNED"]);
 
 export const LABELS: Record<string, string> = {
