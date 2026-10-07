@@ -245,7 +245,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       }
     }
     const hint = $("#cat-name-hint");
-    hint.textContent = nameFromPhoto ? "Suggested from the photo. Check it, or type over it." : "A temporary name is fine if you are not sure.";
+    mount(hint, nameFromPhoto ? html`${icon("camera")}Suggested from the photo. Check it, or type over it.` : html`A temporary name is fine if you are not sure.`);
     hint.classList.toggle("cat-name-hint--photo", nameFromPhoto);
     if (!matches.length) armed = false;
     drawMatches();
