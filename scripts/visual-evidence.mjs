@@ -1911,7 +1911,7 @@ function homeRecordsSql() {
   const staff = "(SELECT id FROM staff_accounts WHERE username = 'staff.demo')";
   const supply = (offset) => `(SELECT i.id FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.item_type = 'Consumable' AND i.status = 'ACTIVE' AND b.on_hand >= 20 ORDER BY i.id LIMIT 1 OFFSET ${offset})`;
   // Three supplies taken out again and again in the last month.
-  [[40, 6, 3], [41, 4, 2], [42, 3, 2]].forEach(([offset, times, quantity]) => {
+  [[0, 6, 3], [1, 4, 2], [2, 3, 2]].forEach(([offset, times, quantity]) => {
     for (let k = 0; k < times; k++) rows.push(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, reason, status)
       SELECT 'MOV-HM${offset}${k}', ${sq(at(1 + k * 4))}, 'STOCK_OUT', 'OUT', id, ${quantity}, unit, -${quantity}, ${staff}, 'CONSUMED', 'POSTED' FROM items WHERE id = ${supply(offset)};`);
   });
@@ -1927,7 +1927,7 @@ function homeRecordsSql() {
     }
   });
   // Restocked twice in three months.
-  [[50, "RESTOCKED"], [12, "NEEDS_RESTOCK"]].forEach(([days, status], k) => rows.push(`INSERT INTO reorders(id, item_id, status, created_at, updated_at, created_by) SELECT 'RO-HM${k}', id, '${status}', ${sq(at(days))}, ${sq(at(days))}, ${staff} FROM items WHERE id = ${supply(43)};`));
+  [[50, "RESTOCKED"], [12, "NEEDS_RESTOCK"]].forEach(([days, status], k) => rows.push(`INSERT INTO reorders(id, item_id, status, created_at, updated_at, created_by) SELECT 'RO-HM${k}', id, '${status}', ${sq(at(days))}, ${sq(at(days))}, ${staff} FROM items WHERE id = ${supply(3)};`));
   // The Store room keeps being reported.
   [[1, "CANT_FIND", 140], [2, "CANT_FIND", 141], [3, "LOCATION_WRONG", 142]].forEach(([n, kind, offset]) => rows.push(`INSERT INTO location_reports(id, item_id, location_id, kind, source, reported_by, created_at)
     SELECT '${"1".repeat(35)}${n}', id, 'LOC-0900', '${kind}', 'STAFF', ${staff}, ${sq(at(8 + n))} FROM items WHERE id = (SELECT id FROM items ORDER BY id LIMIT 1 OFFSET ${offset});`));
@@ -1935,11 +1935,11 @@ function homeRecordsSql() {
   rows.push(`INSERT INTO kits(id, name, location_id, active, created_at, updated_at) VALUES('KIT-0900', 'Sewing kit', 'LOC-0900', 1, ${sq(at(80))}, ${sq(at(80))});`);
   [10, 30].forEach((days, k) => {
     rows.push(`INSERT INTO kit_checks(id, kit_id, checked_by, checked_at, ok_count, flagged_count, unchecked_count) VALUES('KC-${String(k + 1).padStart(36, "0")}', 'KIT-0900', ${staff}, ${sq(at(days))}, 0, 1, 0);`);
-    rows.push(`INSERT INTO kit_check_observations(check_id, item_id, outcome, required, on_hand) SELECT 'KC-${String(k + 1).padStart(36, "0")}', id, 'LOW', 4, 1 FROM items WHERE id = ${supply(44)};`);
+    rows.push(`INSERT INTO kit_check_observations(check_id, item_id, outcome, required, on_hand) SELECT 'KC-${String(k + 1).padStart(36, "0")}', id, 'LOW', 4, 1 FROM items WHERE id = ${supply(4)};`);
   });
   // An item whose use was changed three times.
   [20, 14, 6].forEach((days, k) => rows.push(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
-    SELECT 'AU-HM${k}', ${sq(at(days))}, ${staff}, 'ITEM_UPDATED', 'ITEM', id, '{"itemType":{"from":"${k % 2 ? "Consumable" : "Loanable"}","to":"${k % 2 ? "Loanable" : "Consumable"}"}}' FROM items WHERE id = ${supply(45)};`));
+    SELECT 'AU-HM${k}', ${sq(at(days))}, ${staff}, 'ITEM_UPDATED', 'ITEM', id, '{"itemType":{"from":"${k % 2 ? "Consumable" : "Loanable"}","to":"${k % 2 ? "Loanable" : "Consumable"}"}}' FROM items WHERE id = ${supply(5)};`));
   // staff.demo has a cataloguing session to continue (three items added) and a paused check of another place.
   rows.push(`INSERT INTO catalogue_sessions(id, started_by, location_id, status, started_at, updated_at) VALUES('CS-${"0".repeat(35)}1', ${staff}, 'LOC-0900', 'ACTIVE', ${sq(at(1))}, ${sq(at(0))});`);
   [210, 211, 212].forEach((offset, k) => rows.push(`INSERT INTO catalogue_captures(id, session_id, item_id, location_id, behaviour, created_at)
