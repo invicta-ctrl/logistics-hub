@@ -183,6 +183,20 @@ Each reason is a SQL condition over records that already exist, used for both th
 
 **Not included.** Catalog photos (not required, so not a reason), offline cataloguing conflicts (they exist only on the device that made them), a damaged-or-lost return older than 60 days (it stays in the loan history), external email or push, risk scores, search across everything, an operations dashboard.
 
+## Global search (V1.11)
+
+**Search** in the staff top bar (on phones, the magnifier in the top bar; the bottom bar is unchanged), or **Ctrl+K** (**⌘K** on a Mac), opens one search for the whole workspace. `/` still focuses the search field of the page you are on. Before typing it offers a few pages (Overdue loans, Low stock, Attention, Add items, Places, Kits).
+
+- **What it finds.** Items, places and kits for every Logistics staff member; for administrators and the Owner also people in the Staff Directory. Each kind is its own group, best first, with how many there are; a group shows a few and **Show all** the rest (at most 50, then "Add a word to narrow them"). Every row says what it is and why it is there: "Kept in Logistics Office › Cabinet 1 › Shelf B", "Also called “hot glue gun”", "In the kit Arts & Crafts Kit", "Used with Stapler - Big", "Goes in Sewing Kit", "Includes Sewing Kit", "Inside Storage Room · 9 items kept here".
+- **How it matches.** Every word typed must match the record: its name, other names, the kit it is in, the place it is kept (or any place above it), its category, or a built-in kind ("ribbon" finds yarn). A word may be the start of a longer one. Names count most, and the same words always give the same order. A place or kit named what was typed comes before the items kept in it. Linked items and the kits that include a clearly meant item come along one step. An item, kit or place ID (typed or scanned) opens that record. Nothing is guessed and no score is shown.
+- **Fixed words.** "overdue", "low stock", "out of stock", "needs count", "expiring", "unclassified" and page names open the existing page or filter; a loan reference opens the loan. There is no chat and nothing is changed from search.
+- **People.** Administrators see up to eight people (name, position, department) and **See all N in the Staff Directory**, which opens the directory's own search. Staff never see people and their search never asks for them. No student ID, ID card or sign-in is ever in a result.
+- **Keyboard.** Arrows move through the results (focus stays in the field), Enter opens, Escape clears and then closes; the number of results is announced once typing pauses.
+
+**Linked items** on an item's record (below its details) say how items go together: **Used with**, **Alternative to**, **Replaced by** / **Replaces**, **Holds** / **Goes in**. Each reads from the item you are on, and the other item shows the same link from its side. **Link an item** picks the kind and the other item by name or ID; at most 20 links an item. A link changes nothing about either item and is recorded in Activity. Kits stay lists of components; use **Holds** when the container is itself an item (a sewing box and its threads).
+
+Design, permissions and measurements: `docs/GLOBAL_SEARCH.md`.
+
 ## Roles
 | Role | Can |
 | --- | --- |
