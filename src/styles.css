@@ -958,6 +958,14 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .app-nav__link > .icon { --icon-size: var(--icon-lg); display: block; }
   .app-nav__text { display: block; max-width: 100%; overflow: hidden; line-height: 1.25; text-align: center; text-overflow: ellipsis; text-wrap: balance; white-space: normal; }
   @container (max-width: 15em) { .app-nav__text { white-space: nowrap; } }
+  /* Large text on a narrow phone (from about 140% text on 320 px; the bar measured in its own ems): the mark gives way (Items
+     is in the bottom bar) and search keeps a 44 px target rather than growing with the text, so search, the bell and the
+     account all stay on screen without overlapping. */
+  @container (max-width: 15em) {
+    .app-bar__inner { gap: var(--space-2); }
+    .app-bar__brand { display: none; }
+    .app-search { width: 44px; height: 44px; }
+  }
   /* The active section gets a pill behind its icon instead of the desktop underline. */
   .app-nav__link::after { top: .4375rem; right: max(var(--space-1), calc(50% - 1.75rem)); bottom: auto; left: max(var(--space-1), calc(50% - 1.75rem)); z-index: -1; height: 1.75rem; border-radius: var(--radius-pill); background: rgb(232 185 60 / 20%); }
   .app-nav__link[aria-current="page"] > .icon, .app-nav__more.is-current > .icon { color: var(--gold-action); }
