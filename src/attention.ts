@@ -212,7 +212,8 @@ const REASONS: readonly Reason[] = [
 /** A kit is not Ready because something is short (replenish) or because something needs a person to look (review). */
 const KIT_LABELS = { REPLENISH: "Kits to replenish", REVIEW: "Kits to review" } as const;
 
-export type Group = { reason: string; source: Source; label: string; total: number };
+export type Group = { reason: string; source: Source; label: string; total: number; /** The true totals by urgency, however many entries are listed. */ byUrgency: Record<Urgency, number> };
+const byUrgency = (rows: Array<{ urgency: Urgency; n: number }>): Record<Urgency, number> => { const out = { NOW: 0, SOON: 0, LATER: 0 }; for (const row of rows) out[row.urgency] += row.n; return out; };
 
 const bindFor = (reason: Reason, today: string, now: number) => reason.bind?.(today, now) ?? [];
 
@@ -251,14 +252,14 @@ export async function attention(db: D1Database) {
   const entries: Entry[] = [];
   REASONS.forEach((reason, at) => {
     const total = counts.get(reason.id)!.reduce((sum, row) => sum + row.n, 0);
-    groups.push({ reason: reason.id, source: reason.source, label: reason.label, total });
+    groups.push({ reason: reason.id, source: reason.source, label: reason.label, total, byUrgency: byUrgency(counts.get(reason.id)!) });
     for (const row of lists[at]!.results as Row[]) {
       entries.push({ key: `${reason.id}:${row.id}`, reason: reason.id, source: reason.source, urgency: row.urgency as Urgency, ...reason.entry(row, now) });
     }
   });
   for (const state of ["REPLENISH", "REVIEW"] as const) {
     const mine = kits.filter((entry) => entry.reason === `KIT_${state}`);
-    groups.push({ reason: `KIT_${state}`, source: "Kits", label: KIT_LABELS[state], total: mine.length });
+    groups.push({ reason: `KIT_${state}`, source: "Kits", label: KIT_LABELS[state], total: mine.length, byUrgency: byUrgency(mine.map((entry) => ({ urgency: entry.urgency, n: 1 }))) });
     entries.push(...mine);
   }
   return { today, groups, entries };
