@@ -40,10 +40,13 @@ async function ownSession(db: D1Database, actor: Actor, id: string): Promise<Ses
 /** A session as the browser sees it; `mine` says whether the reader may add to it. */
 const shown = ({ startedBy, ...row }: SessionRow, me: string) => ({ ...row, mine: startedBy === me });
 
+/** This person's open cataloguing session: what Catalogue resumes and what Home offers to continue. */
+export const openSession = (db: D1Database, actor: Actor) => db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.status = 'ACTIVE' AND s.started_by = ?`).bind(actor.accountId);
+
 /** What the Catalogue page opens with: your open session (if any), who else is cataloguing, and the items waiting for a decision. */
 export async function catalogueState(db: D1Database, actor: Actor) {
   const [mine, others, review, total] = await db.batch([
-    db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.status = 'ACTIVE' AND s.started_by = ?`).bind(actor.accountId),
+    openSession(db, actor),
     db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.status = 'ACTIVE' AND s.started_by <> ? ORDER BY s.started_at LIMIT 10`).bind(actor.accountId),
     db.prepare(`SELECT i.id, i.name, c.created_at AS capturedAt, lp.path AS place, p.media_id AS photoId, b.on_hand AS onHand, i.unit FROM catalogue_captures c JOIN items i ON i.id = c.item_id
       LEFT JOIN location_paths lp ON lp.id = i.location_id LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN inventory_balances b ON b.id = i.id
