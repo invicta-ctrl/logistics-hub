@@ -1,5 +1,12 @@
 # Current Work Pointer — Logistics Hub
 
+## Road to V2 — V1.12 Operations home and practical insights — 2026-10-07
+
+SPEC: `docs/specs/accepted/road-to-v2/v1.12-operations-home.md` (with the amendment's §11 item). BRANCH: `road-to-v2/v1.12-operations-home` (a cloud thread built it; the auto-assigned `claude/project-thread-60pt56` was not used).
+GATE: V1.11 `STATUS: COMPLETE`, `INTEGRATION: MERGED 28a757c` on `main`; `main` is merged into the branch.
+STATE: COMPLETE, WAITING ON INTEGRATION (no migration and no data step; the merge to `main` deploys and is done from Earl's computer after he approves): `docs/road-to-v2/releases/v1.12.md`. Home (`/staff/home`, `src/home-workspace.ts`, `src/home.ts`), the Attention reason filter, six insights plus catalog completeness; evidence `docs/visual-research/v1.12.md`. V1.13 runs in parallel in its own thread, which pulls this branch itself; V1.14 and V1.15 are merged forward after V1.12 and V1.13 are integrated.
+NEXT_EXACT_ACTION: With CI green on the branch head and Earl's approval, merge V1.12 to `main` from his computer, verify `main`'s CI and `npm run admin -- verify`, and propagate forward through V1.13 (running in parallel in its own thread, which pulls this branch itself), V1.14 and V1.15.
+
 ## Road to V2 — V1.11 Intelligent search and relationships — 2026-10-07
 
 SPEC: `docs/specs/accepted/road-to-v2/v1.11-intelligent-search.md` (with the amendment's §11 item and §13). BRANCH: `road-to-v2/v1.11-intelligent-search` (a cloud thread built it; the auto-assigned `claude/` branch was not used).

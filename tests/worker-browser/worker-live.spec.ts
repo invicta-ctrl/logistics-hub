@@ -10,6 +10,8 @@ async function signIn(page: Page) {
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await page.goto("/staff/items");
+  await expect(page.getByRole("heading", { name: "Items" })).toBeVisible();
 }
 
 test("public Lending Hub fails closed on freshly migrated data", async ({ page, request }) => {
