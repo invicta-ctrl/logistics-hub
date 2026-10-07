@@ -1,4 +1,5 @@
 import { appendFileSync } from "node:fs";
+import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { attention, attentionSummary } from "../src/attention";
 import { insights } from "../src/home";
@@ -80,7 +81,7 @@ describe("hot reads at growing scale", () => {
           const body = await read(d1);
           const ms = performance.now() - started;
           results.set(`${tier}/${name}`, { bytes: JSON.stringify(body).length, ms });
-          note(`${tier} ${name}: ${ms.toFixed(1)} ms, ${JSON.stringify(body).length.toLocaleString()} bytes, ${log.length} statements`);
+          note(`${tier} ${name}: ${ms.toFixed(1)} ms, ${JSON.stringify(body).length.toLocaleString()} bytes (${gzipSync(JSON.stringify(body)).length.toLocaleString()} gzipped), ${log.length} statements`);
           for (const { sql, args } of log) {
             let plan: Array<{ detail: string }>;
             try { plan = sqlite.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...(args as never[])) as Array<{ detail: string }>; } catch { continue; }

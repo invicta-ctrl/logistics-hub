@@ -1,5 +1,12 @@
 # Current Work Pointer — Logistics Hub
 
+## Road to V2 — V1.14 Offline, performance and reliability hardening — 2026-10-07
+
+SPEC: `docs/specs/accepted/road-to-v2/v1.14-offline-performance.md` (with the amendment's §11 item). BRANCH: `road-to-v2/v1.14-offline-performance` (a cloud thread built it, in parallel with V1.15 on its own branch; the auto-assigned `claude/project-thread-a2x6ai` was not used).
+GATE: V1.11, V1.12 and V1.13 are merged to `main` (PRs 15 to 18); `main` is merged into the branch.
+STATE: COMPLETE, WAITING ON INTEGRATION (no migration, no data step; the merge to `main` deploys and is done from Earl's computer after he approves): `docs/road-to-v2/releases/v1.14.md`. Scale fixtures and a query-plan harness (`tests/scale-fixture.ts`, `tests/scale-hot-paths.test.ts`), the items table drawn 100 rows at a time, quieter polling, two history scans removed, a full-device message, `scripts/verify-restore.mjs`. Known limits (no main-thread or memory measurement, no real-device install check, resource model is an estimate to check against Cloudflare analytics) are in the record.
+NEXT_EXACT_ACTION: With CI green on the head and Earl's approval, merge V1.14 to `main` from his computer, verify `main`'s CI and `npm run admin -- verify`, then propagate to V1.15 (its own thread). Before the Hub's ledger passes a few thousand rows, read D1 rows-read per day from Cloudflare's analytics (record, "Cloudflare resource envelope").
+
 ## Road to V2 — V1.13 Administration and system control — 2026-10-07
 
 SPEC: `docs/specs/accepted/road-to-v2/v1.13-admin-control.md` (with the amendment's §11 item and §13). BRANCH: `road-to-v2/v1.13-admin-control` (a cloud thread built it in parallel with V1.12 on Earl's instruction; the auto-assigned `claude/project-thread-2cbngw` was not used).
