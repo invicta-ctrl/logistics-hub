@@ -4,6 +4,7 @@ import { attention, attentionSummary, reviewReturn, selfServiceToCheck } from ".
 import { auditDetail, auditReview, auditState, finishAudit, itemFreshness, observe, resolveObservation, startAudit, updateAudit } from "./audits";
 import { bulkUpdate } from "./bulk";
 import { aliasItems, catalogCoverage } from "./catalog-admin";
+import { insights, resumable } from "./home";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
 import { dropObjects, itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
@@ -451,6 +452,9 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (loan?.[2] === "review" && method === "POST") return json(await reviewReturn(env.DB, account, loan[1]!));
   if (path === "/api/staff/attention" && method === "GET") return json(await attention(env.DB));
   if (path === "/api/staff/attention/summary" && method === "GET") return json(await attentionSummary(env.DB));
+  if (path === "/api/staff/home" && method === "GET") return json(await resumable(env.DB, account));
+  // Insights are practical but never urgent: a person's browser may keep them for two minutes, and nothing else waits on them.
+  if (path === "/api/staff/home/insights" && method === "GET") return json(await insights(env.DB), 200, { "cache-control": "private, max-age=120" });
   const reorder = REORDER_PATH.exec(path);
   if (reorder && method === "PATCH") return json(await updateReorder(env.DB, account, reorder[1]!, await body()));
   if (path === "/api/staff/items" && method === "POST") {
@@ -492,7 +496,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   const relation = RELATION_PATH.exec(path);
   if (relation && !relation[2] && method === "POST") return json(await linkItems(env.DB, account, relation[1]!, await body()), 201);
   if (relation?.[2] && method === "DELETE") return json(await unlinkItems(env.DB, account, relation[1]!, relation[2]));
-  const known = match || relation || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/attention", "/api/staff/attention/summary", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/search", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || relation || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/attention", "/api/staff/attention/summary", "/api/staff/home", "/api/staff/home/insights", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/search", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 

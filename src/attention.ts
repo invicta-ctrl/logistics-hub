@@ -54,9 +54,9 @@ const STOCK_COUNT = `SELECT CASE WHEN ${IS_OUT} THEN 'STOCK_OUT' ELSE 'STOCK_LOW
 const STOCK_REASONS = new Set(["STOCK_OUT", "STOCK_LOW"]);
 
 const day = new Intl.DateTimeFormat("en-PH", { day: "numeric", month: "short", timeZone: "Asia/Manila" });
-const dayOf = (value: string) => day.format(new Date(value.length === 10 ? `${value}T00:00:00+08:00` : value));
+export const dayOf = (value: string) => day.format(new Date(value.length === 10 ? `${value}T00:00:00+08:00` : value));
 const daysAgo = (value: string, now: number) => Math.max(0, Math.floor((now - Date.parse(value.length === 10 ? `${value}T00:00:00+08:00` : value)) / DAY_MS));
-const times = (count: number) => (count === 1 ? "once" : `${count} times`);
+export const times = (count: number) => (count === 1 ? "once" : `${count} times`);
 const days = (count: number) => `${count} ${count === 1 ? "day" : "days"}`;
 const borrower = (name: string) => (name === ERASED ? "A borrower whose record was removed" : name);
 
@@ -75,6 +75,10 @@ type Reason = {
   bind?: (today: string, now: number) => Array<string | number>;
   entry: (row: Row, now: number) => Omit<Entry, "key" | "reason" | "source" | "urgency">;
 };
+
+/** The two catalog gaps, defined once: Attention lists them and Home counts them against the whole catalog. */
+export const GAP_UNCLASSIFIED = "i.status = 'ACTIVE' AND i.item_type = 'NEEDS_REVIEW'";
+export const GAP_NO_PLACE = "i.status = 'ACTIVE' AND i.item_type <> 'NEEDS_REVIEW' AND i.location_id IS NULL";
 
 const REASONS: readonly Reason[] = [
   {
@@ -173,13 +177,13 @@ const REASONS: readonly Reason[] = [
   },
   {
     id: "CLASSIFY", source: "Catalog", label: "Items to classify",
-    from: "FROM items i WHERE i.status = 'ACTIVE' AND i.item_type = 'NEEDS_REVIEW'",
+    from: `FROM items i WHERE ${GAP_UNCLASSIFIED}`,
     urgency: "'LATER'", cols: "i.id AS id, i.name AS item", order: "i.name COLLATE NOCASE, i.id",
     entry: (row) => ({ title: String(row.item), why: "Not classified yet, so it stays out of every public list.", since: null, href: `/staff/items?item=${row.id}&tab=details`, action: "Classify it" })
   },
   {
     id: "NO_PLACE", source: "Catalog", label: "Items without a place",
-    from: "FROM items i WHERE i.status = 'ACTIVE' AND i.item_type <> 'NEEDS_REVIEW' AND i.location_id IS NULL",
+    from: `FROM items i WHERE ${GAP_NO_PLACE}`,
     urgency: "'LATER'", cols: "i.id AS id, i.name AS item", order: "i.name COLLATE NOCASE, i.id",
     entry: (row) => ({ title: String(row.item), why: "No place is recorded, so nobody can be told where to find it.", since: null, href: `/staff/items?item=${row.id}&tab=details`, action: "Choose a place" })
   },
@@ -239,6 +243,19 @@ async function countAll(db: D1Database, today: string, now: number): Promise<Cou
   return counts;
 }
 
+/** The groups, one per reason, each with its true total and the totals by urgency: the one definition the inbox, the bell and Home share. */
+function groupsOf(counts: Counts, kits: Array<{ reason: string; urgency: Urgency }>): Group[] {
+  const groups: Group[] = REASONS.map((reason) => {
+    const rows = counts.get(reason.id)!;
+    return { reason: reason.id, source: reason.source, label: reason.label, total: rows.reduce((sum, row) => sum + row.n, 0), byUrgency: byUrgency(rows) };
+  });
+  for (const state of ["REPLENISH", "REVIEW"] as const) {
+    const mine = kits.filter((entry) => entry.reason === `KIT_${state}`);
+    groups.push({ reason: `KIT_${state}`, source: "Kits", label: KIT_LABELS[state], total: mine.length, byUrgency: byUrgency(mine.map((entry) => ({ urgency: entry.urgency, n: 1 }))) });
+  }
+  return groups;
+}
+
 /** Everything that needs a person, grouped by reason, each reason bounded; `groups` carries the true totals. */
 export async function attention(db: D1Database) {
   const now = Date.now();
@@ -248,34 +265,28 @@ export async function attention(db: D1Database) {
     countAll(db, today, now),
     kitEntries(db)
   ]);
-  const groups: Group[] = [];
   const entries: Entry[] = [];
   REASONS.forEach((reason, at) => {
-    const total = counts.get(reason.id)!.reduce((sum, row) => sum + row.n, 0);
-    groups.push({ reason: reason.id, source: reason.source, label: reason.label, total, byUrgency: byUrgency(counts.get(reason.id)!) });
     for (const row of lists[at]!.results as Row[]) {
       entries.push({ key: `${reason.id}:${row.id}`, reason: reason.id, source: reason.source, urgency: row.urgency as Urgency, ...reason.entry(row, now) });
     }
   });
-  for (const state of ["REPLENISH", "REVIEW"] as const) {
-    const mine = kits.filter((entry) => entry.reason === `KIT_${state}`);
-    groups.push({ reason: `KIT_${state}`, source: "Kits", label: KIT_LABELS[state], total: mine.length, byUrgency: byUrgency(mine.map((entry) => ({ urgency: entry.urgency, n: 1 }))) });
-    entries.push(...mine);
-  }
-  return { today, groups, entries };
+  entries.push(...kits);
+  return { today, groups: groupsOf(counts, kits), entries };
 }
 
-/** The numbers for the staff shell: how many need a person now or soon, in total and by where they are handled. Counts only. */
+/**
+ * The numbers for the staff shell and Home: how many need a person now or soon, in total and by where they are handled, and the
+ * groups they come from (counts only, no entries). One definition, so the bell, Home and the inbox cannot disagree.
+ */
 export async function attentionSummary(db: D1Database) {
   const now = Date.now();
   const today = officeDay(new Date(now));
-  const [counts, kits] = await Promise.all([countAll(db, today, now), kitsNotReady(db)]);
+  const [counts, kits] = await Promise.all([countAll(db, today, now), kitEntries(db)]);
+  const groups = groupsOf(counts, kits);
   const bySource: Record<string, number> = Object.fromEntries(SOURCES.map((source) => [source, 0]));
-  for (const reason of REASONS) {
-    for (const row of counts.get(reason.id)!) if (row.urgency !== "LATER") bySource[reason.source]! += row.n;
-  }
-  bySource.Kits! += kits.filter((kit) => kit.state === "REPLENISH").length;
-  return { needsAction: Object.values(bySource).reduce((sum, count) => sum + count, 0), bySource };
+  for (const group of groups) bySource[group.source]! += group.byUrgency.NOW + group.byUrgency.SOON;
+  return { needsAction: Object.values(bySource).reduce((sum, count) => sum + count, 0), bySource, groups };
 }
 
 /**

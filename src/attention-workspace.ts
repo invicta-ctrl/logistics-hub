@@ -39,6 +39,7 @@ export async function attentionWorkspace(): Promise<void> {
       <button class="button button--ghost button--sm" type="button" id="clear-filters" hidden>Clear filters</button>
       <p class="table-toolbar__count" id="attn-count" aria-live="polite"></p>
     </div>
+    <p class="attn-only" id="attn-only" hidden></p>
     <div id="attn-results" aria-busy="true"><div class="skeleton skeleton--block"></div></div>`);
 
   const params = new URLSearchParams(window.location.search);
@@ -52,6 +53,8 @@ export async function attentionWorkspace(): Promise<void> {
   pick(urgency, params.get("urgency"));
   pick(age, params.get("age"));
 
+  // Home links here with one reason (?reason=LOAN_OVERDUE) so its count and this page's list are the same set; "Show everything" lifts it.
+  let only = params.get("reason");
   let data: Answer | null = null;
   const expanded = new Set<string>();
 
@@ -87,14 +90,18 @@ export async function attentionWorkspace(): Promise<void> {
   const render = () => {
     if (!data) return;
     results.removeAttribute("aria-busy");
-    writeParams({ source: source.value || null, urgency: urgency.value || null, age: age.value || null });
+    if (only && !data.groups.some((group) => group.reason === only)) only = null;
+    writeParams({ source: source.value || null, urgency: urgency.value || null, age: age.value || null, reason: only });
+    const narrowed = document.querySelector<HTMLElement>("#attn-only")!;
+    narrowed.hidden = !only;
+    if (only) mount(narrowed, html`Showing only <strong>${data.groups.find((group) => group.reason === only)!.label}</strong>. <button class="text-link" type="button" id="show-everything">Show everything</button>`);
     clear.hidden = !filtered();
     const active = [source, urgency, age].filter((select) => select.value).length;
     document.querySelector("#filters-toggle span")!.textContent = active ? `Filters (${active})` : "Filters";
     const minDays = age.value ? Number(age.value) : 0;
     const byReason = new Map<string, Entry[]>();
     for (const entry of data.entries) {
-      if ((source.value && entry.source !== source.value) || (urgency.value && entry.urgency !== urgency.value) || (minDays && !old(entry, minDays))) continue;
+      if ((only && entry.reason !== only) || (source.value && entry.source !== source.value) || (urgency.value && entry.urgency !== urgency.value) || (minDays && !old(entry, minDays))) continue;
       byReason.set(entry.reason, [...(byReason.get(entry.reason) ?? []), entry]);
     }
     const sections = data.groups.filter((group) => byReason.has(group.reason));
@@ -105,7 +112,9 @@ export async function attentionWorkspace(): Promise<void> {
     const later = sections.reduce((sum, group) => sum + shownCount(group, byReason.get(group.reason)!, false), 0);
     document.querySelector("#attn-count")!.textContent = soon + later ? [soon ? `${soon.toLocaleString()} to act on` : "", later ? `${later.toLocaleString()} when there is time` : ""].filter(Boolean).join(" · ") : "";
     if (!sections.length) {
-      preservingFocus(results, () => mount(results, data!.entries.length
+      preservingFocus(results, () => mount(results, only && !filtered()
+        ? emptyState("Nothing left here", "Everything of this kind has been dealt with. It disappears from this page by itself.", html`<button class="button button--secondary" type="button" id="clear-all">Show everything</button>`)
+        : data!.entries.length
         ? emptyState("Nothing matches these filters", "Clear the filters to see everything that needs a person.", html`<button class="button button--secondary" type="button" id="clear-all">Clear filters</button>`)
         : emptyState("Nothing needs attention", "Loans are on time, stock is in hand, and no record is waiting for a person. This page fills in by itself when something needs a look.")));
       return;
@@ -137,8 +146,9 @@ export async function attentionWorkspace(): Promise<void> {
     document.querySelector("#table-filters")!.classList.toggle("is-open", open);
     if (open) source.focus();
   });
-  const clearFilters = () => { source.value = ""; urgency.value = ""; age.value = ""; render(); };
+  const clearFilters = () => { source.value = ""; urgency.value = ""; age.value = ""; only = null; render(); };
   clear.addEventListener("click", clearFilters);
+  document.querySelector("#attn-only")!.addEventListener("click", (event) => { if ((event.target as HTMLElement).closest("#show-everything")) { only = null; render(); document.querySelector<HTMLElement>("#main-content")?.focus(); } });
   results.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
     if (target.closest("#clear-all")) return clearFilters();

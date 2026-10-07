@@ -98,7 +98,7 @@ export type Session = {
   /** The Staff Directory entry linked to this sign-in, if an administrator linked one. */
   directory: { name: string; department: string; position: string | null } | null;
 };
-type Section = "items" | "stock" | "loans" | "self-service" | "activity" | "attention" | "admin" | "account";
+type Section = "home" | "items" | "stock" | "loans" | "self-service" | "activity" | "attention" | "admin" | "account";
 
 export const ROLE_LABELS: Record<Role, string> = { STAFF: "Staff", ADMIN: "Administrator", OWNER: "Owner" };
 
@@ -148,12 +148,12 @@ export function shell(session: Session, section: Section, main: Html): void {
   mount(app, html`
     <header class="app-bar">
       <div class="app-bar__inner">
-        <a class="app-bar__brand" href="/staff/items" data-route><span aria-hidden="true">${MARK}</span><span class="app-bar__title">Logistics Hub <small>Staff workspace</small></span></a>
+        <a class="app-bar__brand" href="/staff/home" data-route ${current("home")}><span aria-hidden="true">${MARK}</span><span class="app-bar__title">Logistics Hub <small>Staff workspace</small></span></a>
         ${sections.length ? html`<nav class="app-nav" aria-label="Sections">
           ${sections.map((entry) => html`<a class="app-nav__link ${entry.more ? "app-nav__link--more" : ""}" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}<span class="app-nav__text">${entry.text}${badge(entry.id)}</span></a>`)}
           <button class="app-nav__link app-nav__more ${overflow.some((entry) => entry.id === section) || section === "account" ? "is-current" : ""}" type="button" popovertarget="staff-menu">${icon("dots")}<span class="app-nav__text">More</span></button>
         </nav>` : ""}
-        ${sections.length ? html`<button class="app-search" type="button" data-palette data-admin="${session.role === "STAFF" ? "0" : "1"}" aria-haspopup="dialog" aria-keyshortcuts="${MAC ? "Meta+K" : "Control+K"}">${icon("search")}<span class="app-search__text">Search</span><kbd class="app-search__keys" aria-hidden="true">${MAC ? "⌘K" : "Ctrl K"}</kbd></button>` : ""}
+        ${sections.length ? html`<button class="app-search" type="button" data-palette data-admin="${session.role === "STAFF" ? "0" : "1"}" aria-haspopup="dialog" aria-keyshortcuts="${MAC ? "Meta+K" : "Control+K"}">${icon("search")}<span class="app-search__text">Search</span><kbd class="app-search__keys" aria-hidden="true">${SEARCH_KEYS}</kbd></button>` : ""}
         ${sections.length ? html`<a class="app-bell" href="/staff/attention" data-route ${current("attention")}>${icon("bell")}<span class="visually-hidden">Attention</span><span class="attn-slot" data-attention="all"></span></a>` : ""}
         <button class="account" type="button" popovertarget="staff-menu">${avatar}<span class="account__name"><span class="visually-hidden">Account: </span>${session.displayName}<small>${accessLabel(sessionAccess(session))}</small></span></button>
       </div>
@@ -162,6 +162,7 @@ export function shell(session: Session, section: Section, main: Html): void {
       <div class="menu__identity">${avatar}<p><strong>${session.displayName}</strong><span>${accessLabel(sessionAccess(session))} · <span class="mono">${session.username}</span></span></p></div>
       ${overflow.length ? html`<ul class="menu__list menu__list--more" aria-label="More sections">${overflow.map((entry) => html`<li><a class="menu__item" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}${entry.text}</a></li>`)}</ul>` : ""}
       <ul class="menu__list">
+        ${sections.length ? html`<li><a class="menu__item" href="/staff/home" data-route ${current("home")}>${icon("home")}Home</a></li>` : ""}
         <li><a class="menu__item" href="/staff/account" data-route ${current("account")}>${icon("user")}My account</a></li>
         <li><a class="menu__item" href="/lending" target="_blank" rel="noopener">${icon("globe")}Public Lending Hub<span class="visually-hidden"> (opens in a new tab)</span><span class="menu__aside">${icon("external")}</span></a></li>
         <li><button class="menu__item" type="button" id="staff-logout">${icon("signOut")}Sign out</button></li>
@@ -202,6 +203,7 @@ export function shell(session: Session, section: Section, main: Html): void {
 /* ---------- Global search (V1.11): the button above and Ctrl+K / ⌘K open search-palette.ts, loaded on first use. ---------- */
 
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+export const SEARCH_KEYS = MAC ? "⌘K" : "Ctrl K";
 
 function openSearch(button: HTMLElement): void {
   void import("./search-palette").then((module) => module.togglePalette(button.dataset.admin === "1"))
@@ -229,7 +231,8 @@ function listenForSearchKey(): void {
  * The attention count in the shell: a bell with the total, and a number on Loans and Stock. It is one small request after the page is
  * drawn, kept for 30 seconds so moving between pages never waits on it, and it fails quietly: the shell works without it.
  */
-type AttentionSummary = { needsAction: number; bySource: Record<string, number> };
+export type AttentionGroup = { reason: string; source: string; label: string; total: number; byUrgency: { NOW: number; SOON: number; LATER: number } };
+export type AttentionSummary = { needsAction: number; bySource: Record<string, number>; groups?: AttentionGroup[] };
 const SUMMARY_TTL = 30_000;
 let summary: { at: number; data: AttentionSummary } | null = null;
 let summaryRequest: Promise<void> | null = null;
@@ -238,6 +241,7 @@ const countText = (count: number) => count > 99 ? "99+" : String(count);
 
 function paintAttention(): void {
   if (!summary) return;
+  document.dispatchEvent(new Event(ATTENTION_PAINTED));
   const needsAction = summary.data.needsAction ?? 0;
   const bySource = summary.data.bySource ?? {};
   document.querySelectorAll<HTMLElement>("[data-attention]").forEach((slot) => {
@@ -249,6 +253,11 @@ function paintAttention(): void {
       : "";
   });
 }
+
+/** The numbers the bar holds now, which Home reads instead of asking again; `null` until the first answer. */
+export const attentionNow = (): AttentionSummary | null => summary?.data ?? null;
+/** Fired on the document each time the bar's numbers are painted, so a page that shows them (Home) stays in step with the bell. */
+export const ATTENTION_PAINTED = "attention:painted";
 
 /** Asks again now (after something was fixed here) or when the kept answer is older than 30 seconds. */
 export function refreshAttention(force = false): Promise<void> {
@@ -339,7 +348,7 @@ export function staffLogin(): void {
       const result = await api<{ mustChangePassword: boolean }>("/api/staff/login", { method: "POST", body: JSON.stringify({ username: values.get("username"), password: values.get("password") }) });
       // The installed Catalog signs in here and goes back to the Catalogue; nothing else is accepted as a destination.
       const next = new URLSearchParams(window.location.search).get("next");
-      navigate(result.mustChangePassword ? "/staff/account" : next && /^\/staff\/catalogue(\?session=CS-[0-9a-f-]{36})?$/.test(next) ? next : "/staff/items");
+      navigate(result.mustChangePassword ? "/staff/account" : next && /^\/staff\/catalogue(\?session=CS-[0-9a-f-]{36})?$/.test(next) ? next : "/staff/home");
     } catch (error) {
       setMessage(alert, error instanceof Error ? error.message : "Sign-in failed.");
       button.disabled = false;
