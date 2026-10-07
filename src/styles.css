@@ -1524,7 +1524,8 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
 .cat-suggest__line.is-weak { color: var(--text-3, var(--text-2)); }
 /* A suggestion beside an Unclassified item's details: a reason and one button, never a change by itself. */
 .classify-hint { margin-bottom: var(--space-3); }
-.classify-hint p { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); margin: 0; color: var(--text); font-size: var(--text-sm); }
-.classify-hint .icon { align-self: center; color: var(--brand); }
+.classify-hint p { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--space-1) var(--space-2); margin: 0; color: var(--text); font-size: var(--text-sm); }
+.classify-hint .icon { margin-top: .125rem; color: var(--brand); }
+.classify-hint .text-link { grid-column: 2; justify-self: start; }
 .classify-hint__line.is-weak .icon { color: var(--text-3); }
-.loan-row.is-focus { box-shadow: inset 3px 0 0 var(--brand); background: var(--brand-tint); }
+.loan-row.is-focus, .loan-row.is-focus.is-overdue { background: var(--brand-tint); box-shadow: inset 0 0 0 2px var(--brand); }
