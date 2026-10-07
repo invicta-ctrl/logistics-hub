@@ -41,7 +41,8 @@ export type Why =
 export type ItemHit = { kind: "item"; score: number; why: Why | null; item: IndexItem; place: string | null };
 export type KitHit = { kind: "kit"; score: number; why: Why | null; kit: IndexKit; place: string | null };
 export type PlaceHit = { kind: "place"; score: number; why: Why | null; place: IndexPlace; parent: string | null; items: number };
-export type Found = { items: ItemHit[]; kits: KitHit[]; places: PlaceHit[] };
+/** Each kind best first, at most MAX_PER_KIND; `total` counts every match, so "show all" can say how many there are. */
+export type Found = { items: ItemHit[]; kits: KitHit[]; places: PlaceHit[]; total: { items: number; kits: number; places: number } };
 
 /** Results kept per kind; the palette shows the first few and can show the rest. */
 export const MAX_PER_KIND = 50;
@@ -184,7 +185,12 @@ function scoreWords(tokens: string[], name: string[], above: Labelled[] = []): {
     score += WEIGHT.place[wordMatch(token, parent.words) === 2 ? 0 : 1];
     via ??= parent.text;
   }
-  if (inName === tokens.length) score += 20 - Math.min(10, (name.length - tokens.length) * 0.5) + (tokens.every((token) => name.includes(token)) && name.length === tokens.length ? 100 : 0);
+  // The same bonuses as an item's name, so a place or kit named what was typed ranks level with an item named the same.
+  if (inName === tokens.length) {
+    score += 20 - Math.min(10, (name.length - tokens.length) * 0.5);
+    if (tokens.every((token) => name.includes(token)) && name.length === tokens.length) score += 100;
+    else if (wordMatch(tokens[0]!, name.slice(0, 1))) score += 5;
+  }
   return { score, via };
 }
 
@@ -193,7 +199,7 @@ const byScore = <T extends { score: number }>(name: (hit: T) => string) => (a: T
 /** Items, kits and places for a query, best first in each kind. */
 export function searchCatalog(prepared: Prepared, query: string): Found {
   const tokens = queryWords(query);
-  if (!tokens.length) return { items: [], kits: [], places: [] };
+  if (!tokens.length) return { items: [], kits: [], places: [], total: { items: 0, kits: 0, places: 0 } };
   const idQuery = compact(query);
   const items = new Map<string, ItemHit>();
   const strong: ItemHit[] = [];
@@ -247,7 +253,8 @@ export function searchCatalog(prepared: Prepared, query: string): Found {
   return {
     items: [...items.values()].sort(byScore((hit) => hit.item.name)).slice(0, MAX_PER_KIND),
     kits: [...kits.values()].sort(byScore((hit) => hit.kit.name)).slice(0, MAX_PER_KIND),
-    places: places.sort(byScore((hit) => hit.place.name)).slice(0, MAX_PER_KIND)
+    places: places.sort(byScore((hit) => hit.place.name)).slice(0, MAX_PER_KIND),
+    total: { items: items.size, kits: kits.size, places: places.length }
   };
 }
 
@@ -259,10 +266,10 @@ export type PersonRow = { id: string; name: string; department: string; departme
 /** People returned for one query: enough to recognise the one meant. */
 export const MAX_PEOPLE = 8;
 
-/** Directory people for a query: by name first, then position, then department. */
-export function rankPeople(rows: readonly PersonRow[], query: string): PersonHit[] {
+/** Directory people for a query: by name first, then position, then department; the best few, and how many matched in all. */
+export function rankPeople(rows: readonly PersonRow[], query: string): { people: PersonHit[]; total: number } {
   const tokens = queryWords(query);
-  if (!tokens.length) return [];
+  if (!tokens.length) return { people: [], total: 0 };
   const found: PersonHit[] = [];
   for (const row of rows) {
     const name = words(row.name);
@@ -287,7 +294,7 @@ export function rankPeople(rows: readonly PersonRow[], query: string): PersonHit
     if (!row.active) score -= 40;
     found.push({ id: row.id, name: row.name, department: row.department, position: row.position, officer: row.officer, active: row.active, score, why: inName === tokens.length ? null : via });
   }
-  return found.sort(byScore((hit) => hit.name)).slice(0, MAX_PEOPLE);
+  return { people: found.sort(byScore((hit) => hit.name)).slice(0, MAX_PEOPLE), total: found.length };
 }
 
 /* ---------- Go to: pages and a few fixed shortcuts ---------- */
@@ -301,11 +308,13 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "overdue", title: "Overdue loans", detail: "Attention, loans past their return date", href: "/staff/attention?source=Loans&urgency=NOW", terms: ["overdue", "overdue loans", "late", "late loans", "late returns", "not returned"], start: true },
   { id: "low", title: "Low stock", detail: "Stock, at or under the reorder level", href: "/staff/stock?show=low", terms: ["low stock", "running low", "reorder", "restock"], start: true },
   { id: "out", title: "Out of stock", detail: "Stock, none left", href: "/staff/stock?show=out", terms: ["out of stock", "none left", "no stock", "empty"] },
+  { id: "count", title: "Needs count", detail: "Stock, quantities to confirm by counting", href: "/staff/stock?show=count", terms: ["needs count", "needs counting", "to count", "recount", "count"] },
+  { id: "expiring", title: "Expiring", detail: "Stock, expiring soon or expired", href: "/staff/stock?show=expiring", terms: ["expiring", "expiry", "expired", "expires"] },
   { id: "classify", title: "Items to classify", detail: "Items, Unclassified", href: "/staff/items?type=NEEDS_REVIEW", terms: ["unclassified", "classify", "to classify", "not sorted"] },
   { id: "attention", title: "Attention", detail: "What needs a person now", href: "/staff/attention", terms: ["attention", "needs attention", "inbox", "bell"], start: true },
   { id: "items", title: "Items", detail: "Page", href: "/staff/items", terms: ["items", "catalog items", "inventory"] },
   { id: "catalogue", title: "Add items", detail: "Catalogue, rapid capture", href: "/staff/catalogue", terms: ["add items", "add item", "new item", "catalogue", "catalog", "capture"], start: true },
-  { id: "stock", title: "Stock", detail: "Page", href: "/staff/stock", terms: ["stock", "stock in", "stock out", "count", "pantry"] },
+  { id: "stock", title: "Stock", detail: "Page", href: "/staff/stock", terms: ["stock", "stock in", "stock out", "pantry"] },
   { id: "loans", title: "Loans", detail: "Page", href: "/staff/loans", terms: ["loans", "lend", "lending", "borrowed", "returns"] },
   { id: "places", title: "Places", detail: "Page, where things are kept", href: "/staff/locations", terms: ["places", "locations", "where", "shelves"], start: true },
   { id: "kits", title: "Kits", detail: "Page", href: "/staff/kits", terms: ["kits", "kit templates", "containers"], start: true },
