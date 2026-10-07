@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/worker";
+import { officeDay } from "../src/loans";
 import { hashPassword } from "../src/session";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
 
@@ -75,7 +76,7 @@ function lend(itemId: string, fields: Record<string, string>) {
 }
 async function loan(name: string, fields: Record<string, string> = {}): Promise<{ id: string; itemId: string }> {
   const itemId = await item(name, 5, { itemType: "Loanable", lendingAudience: "STUDENTS_AND_USC_STAFF" });
-  const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+  const tomorrow = officeDay(new Date(Date.now() + 86_400_000));
   const response = await lend(itemId, { borrowerName: "Ana Cruz", returnBy: tomorrow, ...fields });
   expect(response.status, JSON.stringify(await response.clone().json())).toBe(201);
   return { id: (await json<{ id: string }>(response)).id, itemId };
@@ -106,7 +107,7 @@ describe("loans", () => {
   it("asks about an overdue loan, says who and how late, and stops when it is returned", async () => {
     const { id } = await loan("Overdue table", { borrowerName: "Ben Reyes", quantity: "2" });
     expect(await entriesFor("LOAN_OVERDUE", "Overdue table")).toEqual([]);
-    sqlite.prepare("UPDATE loans SET return_by = ? WHERE id = ?").run(new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10), id);
+    sqlite.prepare("UPDATE loans SET return_by = ? WHERE id = ?").run(officeDay(new Date(Date.now() - 3 * 86_400_000)), id);
     const [entry] = await entriesFor("LOAN_OVERDUE", "Overdue table");
     expect(entry).toMatchObject({ title: "A-Overdue table × 2", source: "Loans", urgency: "NOW", href: `/staff/loans?loan=${id}`, action: "Open the loan" });
     expect(entry!.why).toContain("Ben Reyes");
@@ -391,5 +392,132 @@ describe("the inbox as a whole", () => {
       expect(entry.href, entry.key).toMatch(/^\/staff\//);
       expect(entry.action, entry.key).not.toBe("");
     }
+  });
+});
+
+/*
+ * V1.15 Identity needs review: a phone record whose person cannot be told from the record alone. Only records received since
+ * the identity rule began are asked about; a person's decision is audited, written once, and never rewrites what was submitted.
+ */
+describe("Identity needs review", () => {
+  const REASON = "IDENTITY_REVIEW";
+  const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+  const rule = (at: string) => sqlite.prepare("INSERT OR REPLACE INTO system_settings(key, value, updated_at) VALUES('identity_rule_from', ?, ?)").run(at, at);
+  let target: string;
+  let seq = 0;
+  /** A phone record as the Worker stores it; only the person fields and when it arrived vary. */
+  const record = (name: string, studentId: string | null, fields: { at?: string; review?: string | null; type?: string } = {}) => {
+    const id = uuid();
+    const at = fields.at ?? ago(5);
+    sqlite.prepare(`INSERT INTO self_service_events(id, device_id, seq, event_type, item_id, quantity, person_name, student_id, device_time, sent_at, occurred_at, received_at, applied, review)
+      VALUES(?, 'dev-1', ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, 1, ?)`).run(id, ++seq, fields.type ?? "TAKE", target, name, studentId, at, at, at, at, fields.review ?? null);
+    return id;
+  };
+  const listed = async () => (await inbox()).entries.filter((entry) => entry.reason === REASON);
+  const decide = (id: string, body: unknown, cookie = one) => as(cookie, `/api/staff/self-service/${id}/identity`, "POST", body);
+  const person = (name: string, studentId: string | null) => sqlite.prepare("INSERT INTO staff_directory(id, full_name, department, student_id, created_at, updated_at) VALUES(?, ?, 'USC', ?, ?, ?)").run(`PER-${uuid()}`, name, studentId, ago(1000), ago(1000));
+
+  beforeEach(async () => { target = await item("Identity item", 5); });
+
+  it("asks about nothing before the identity rule has begun, and about older records never", async () => {
+    record("Juan", null);
+    expect(await listed()).toEqual([]);
+    rule(ago(60));
+    expect(await listed()).toHaveLength(1);
+    record("Pat", null, { at: ago(120) });
+    expect(await listed()).toHaveLength(1);
+  });
+
+  it("lists a missing, malformed or incomplete identity with the reason in words, and leaves a complete one alone", async () => {
+    rule(ago(60));
+    person("Juan Dela Cruz", "12345678");
+    record("Ana Reyes", "21000115");
+    record("Juan", "99999999");
+    record("Ben Lim", null);
+    record("Cora Diaz", "20-1234-567");
+    record("Maria Santos", "12345678");
+    record("Juan Cruz", "12345678");
+    record("Dela Cruz Juan", "12345678");
+    const why = (await listed()).map((entry) => entry.why).sort();
+    expect(why).toEqual([
+      "Ben Lim gave no student ID number.",
+      "Cora Diaz gave a student ID number that is not 8 digits.",
+      'The name "Juan" has no last name, so it cannot be told from other people.',
+      `The student ID number belongs to Juan Dela Cruz in the Staff Directory, but the name given was "Maria Santos".`
+    ].sort());
+    const [first] = await listed();
+    expect(first).toMatchObject({ source: "Self-Service", urgency: "SOON", href: "/staff/self-service", action: "Open Self-Service", identity: { eventId: expect.any(String) } });
+  });
+
+  it("raises a directory ID given with only a first name, so the usage still links but the name is reviewed", async () => {
+    rule(ago(60));
+    person("Juan Dela Cruz", "12345678");
+    record("Juan", "12345678");
+    expect((await listed()).map((entry) => entry.why)).toEqual(['The name "Juan" has no last name, so it cannot be told from other people.']);
+  });
+
+  it("leaves out tests, erased records and anything past the review window", async () => {
+    rule(ago(60 * 24 * 90));
+    record("Juan", null, { review: "TEST" });
+    record("[removed]", null);
+    record("Pat", null, { at: ago(61 * 24 * 60) });
+    expect(await listed()).toEqual([]);
+  });
+
+  it("confirms or ignores once, audits who and what, keeps what was submitted, and raises nothing twice", async () => {
+    rule(ago(60));
+    const confirmed = record("Juan", null);
+    const ignored = record("Maria", "123");
+    expect(await total(REASON)).toBe(2);
+    const before = sqlite.prepare("SELECT * FROM self_service_events WHERE id = ?").get(confirmed);
+    const revision = () => (sqlite.prepare("SELECT value FROM catalog_revision WHERE id = 1").get() as { value: number }).value;
+    const start = revision();
+    expect((await decide(confirmed, { outcome: "CONFIRMED", note: "  Known student  " })).status).toBe(200);
+    expect(revision()).toBe(start + 1);
+    expect((await decide(ignored, { outcome: "IGNORED" }, two)).status).toBe(200);
+    expect(await listed()).toEqual([]);
+    expect(await total(REASON)).toBe(0);
+    // A second decision answers with the first: no second audit row and no second revision.
+    expect((await decide(confirmed, { outcome: "IGNORED" }, two)).status).toBe(200);
+    expect(revision()).toBe(start + 2);
+    const audits = sqlite.prepare("SELECT actor_user_id AS actor, entity_type AS entity, entity_id AS item, details_json AS details FROM audit_log WHERE action = 'IDENTITY_REVIEWED' ORDER BY created_at, rowid").all() as Array<{ actor: string; entity: string; item: string; details: string }>;
+    expect(audits.map((audit) => [audit.actor, audit.entity, audit.item, JSON.parse(audit.details)])).toEqual([
+      ["ACC-1", "ITEM", target, { eventId: confirmed, type: "TAKE", outcome: "CONFIRMED", note: "Known student" }],
+      ["ACC-2", "ITEM", target, { eventId: ignored, type: "TAKE", outcome: "IGNORED" }]
+    ]);
+    // The record itself is exactly as the phone sent it.
+    expect(sqlite.prepare("SELECT * FROM self_service_events WHERE id = ?").get(confirmed)).toEqual(before);
+    const feed = await json<{ events: Array<{ type: string; summary: string }> }>(as(one, "/api/staff/activity?limit=20&source=PHONE"));
+    expect(feed.events.map((event) => event.summary).sort()).toEqual([
+      "Staff One confirmed the identity on a phone take of A-Identity item.",
+      "Staff Two ignored the identity on a phone take of A-Identity item."
+    ]);
+  });
+
+  it("refuses a decision that is not one, a record that does not need it, an unknown record, and a request from another site or nobody", async () => {
+    rule(ago(60));
+    const open = record("Juan", null);
+    const fine = record("Ana Reyes", "21000115");
+    expect((await decide(open, { outcome: "DELETE" })).status).toBe(400);
+    expect((await decide(open, {})).status).toBe(400);
+    expect((await decide(fine, { outcome: "CONFIRMED" })).status).toBe(409);
+    expect((await decide(uuid(), { outcome: "CONFIRMED" })).status).toBe(404);
+    expect((await decide("not-an-id-not-an-id-not-an-id-not-an", { outcome: "CONFIRMED" })).status).toBe(404);
+    expect((await call(`/api/staff/self-service/${open}/identity`, { method: "POST", headers: { origin: "https://evil.example", cookie: one, "content-type": "application/json" }, body: JSON.stringify({ outcome: "CONFIRMED" }) })).status).toBe(403);
+    expect((await call(`/api/staff/self-service/${open}/identity`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ outcome: "CONFIRMED" }) })).status).toBe(401);
+    expect(await listed()).toHaveLength(1);
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'IDENTITY_REVIEWED'").get()).toEqual({ n: 0 });
+  });
+
+  it("counts toward Attention's bell but not the Self-Service badge, which counts what that page can settle", async () => {
+    rule(ago(60));
+    record("Juan", null);
+    record("Pat Lee", null, { review: "ERROR" });
+    const stats = await summary();
+    const session = await json<{ selfServiceReviews: number }>(as(one, "/api/staff/session"));
+    expect(session.selfServiceReviews).toBe(1);
+    const group = (await inbox()).groups.find((entry) => entry.reason === REASON)!;
+    expect([group.total, group.byUrgency.SOON]).toEqual([2, 2]);
+    expect(stats.bySource["Self-Service"]).toBeGreaterThanOrEqual(2);
   });
 });

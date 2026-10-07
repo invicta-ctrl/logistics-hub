@@ -807,5 +807,27 @@ describe("Self-Service identity (record version 2)", () => {
     const garbage = { ...a.take(water, 1), person: { name: "Juan Dela Cruz", studentId: "not an id!" } };
     expect((await results(await a.sync([garbage])))[0]).toMatchObject({ outcome: "rejected" });
   });
+
+  it("notes when the rule began with the first record saved under it, once, so Attention asks only about records after it", async () => {
+    const water = await consumable("Bottled Water", 50);
+    const a = phone();
+    const marker = () => (sqlite.prepare("SELECT value FROM system_settings WHERE key = 'identity_rule_from'").get() as { value: string } | undefined)?.value;
+    const flagged = async () => ((await (await staff("/api/staff/attention")).json()) as { entries: Array<{ reason: string; why: string }> }).entries.filter((entry) => entry.reason === "IDENTITY_REVIEW");
+    // A record an older phone saved before the rule changes nothing: there is no rule yet to hold it to.
+    const early = { ...a.take(water, 1), person: { name: "Juan" } };
+    expect((await results(await a.sync([early])))[0]!.outcome).toBe("accepted");
+    expect(marker()).toBeUndefined();
+    expect(await flagged()).toEqual([]);
+    const first = a.current("TAKE", water);
+    await a.sync([first]);
+    const began = stored(first.id)!.received_at as string;
+    expect(marker()).toBe(began);
+    await a.sync([a.current("TAKE", water)]);
+    expect(marker()).toBe(began);
+    // From then on an older phone's record without the identity is asked about; a new one is not.
+    const late = { ...a.take(water, 1), person: { name: "Juan" } };
+    expect((await results(await a.sync([late])))[0]!.outcome).toBe("accepted");
+    expect((await flagged()).map((entry) => entry.why)).toEqual(["Juan gave no student ID number."]);
+  });
 });
 

@@ -121,6 +121,36 @@ test.describe.serial("V2 journeys", () => {
     expect(closed.filter((loan) => loan.itemId === projector)).toEqual([expect.objectContaining({ status: "RETURNED", createdBy: "Self-Service" })]);
   });
 
+  test("a record an older phone saved without an ID is asked about in Attention, and staff confirm it there", async ({ browser }) => {
+    // The borrow above was the first record saved under the identity rule. A phone still holding the older kind arrives afterwards.
+    const created = await staff.request.post("/api/staff/items", {
+      headers: { origin: BASE },
+      data: { name: "E2E V115 Markers", category: "E2E V115 SUPPLIES", itemType: "Consumable", unit: "piece", status: "ACTIVE", reorderThreshold: 0,
+        lendingAudience: "NOT_AVAILABLE_FOR_LENDING", needsReview: false, notes: null, openingQuantity: 5 }
+    });
+    expect(created.status()).toBe(201);
+    const itemId = (await created.json() as { id: string }).id;
+    const now = new Date().toISOString();
+    const old = await browser.newContext({ baseURL: BASE });
+    const sent = await old.request.post("/api/self-service/sync", {
+      headers: { origin: BASE },
+      multipart: { batch: JSON.stringify({ deviceId: crypto.randomUUID(), sentAt: now, events: [{ v: 1, id: crypto.randomUUID(), seq: 1, type: "TAKE", itemId, quantity: 1, occurredAt: now, catalogRevision: 1, person: { name: "Juan" } }] }) }
+    });
+    expect(sent.status()).toBe(200);
+    expect(((await sent.json()) as { results: Array<{ outcome: string }> }).results.map((result) => result.outcome)).toEqual(["accepted"]);
+    await old.close();
+
+    await staff.goto("/staff/attention?reason=IDENTITY_REVIEW");
+    const entry = staff.locator("li").filter({ hasText: "Phone take of E2E V115 Markers" });
+    await expect(entry).toContainText("Juan gave no student ID number.");
+    await entry.getByRole("button", { name: "Confirm identity" }).click();
+    await expect(staff.getByText("Identity confirmed.")).toBeVisible();
+    await expect(entry).toHaveCount(0);
+    // Decided once: the record keeps what the phone sent, and Attention does not ask again after a reload.
+    await staff.reload();
+    await expect(staff.locator("li").filter({ hasText: "Phone take of E2E V115 Markers" })).toHaveCount(0);
+  });
+
   test("the owner reads Administration > System: everything answers and the migration level is shown", async ({ browser }) => {
     const ownerPassword = process.env.E2E_OWNER_PASSWORD!;
     // worker-live may have replaced the owner's password earlier in the same run.

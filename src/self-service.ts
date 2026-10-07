@@ -1,5 +1,5 @@
 import { resolveItemIcon } from "./item-icons";
-import { LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, SELF_SERVICE_RECORD_VERSION, SELF_SERVICE_STUDENT_ID, STUDENT_ID_PATTERN, selfServiceAction } from "./catalog-policy";
+import { IDENTITY_RULE_KEY, LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, SELF_SERVICE_RECORD_VERSION, SELF_SERVICE_STUDENT_ID, STUDENT_ID_PATTERN, selfServiceAction } from "./catalog-policy";
 import { throttled } from "./accounts";
 import { ancestry, pathOf, placesOf } from "./location-tree";
 import { sharedPlaces } from "./locations";
@@ -231,7 +231,10 @@ function eventRow(db: D1Database, event: SelfServiceEvent, batch: Batch, effect:
 async function write(db: D1Database, event: SelfServiceEvent, statements: D1PreparedStatement[], review: ReviewReason | null,
   decide?: (results: D1Result[]) => ReviewReason | null): Promise<SyncResult> {
   try {
-    const results = await db.batch([...statements, db.prepare(BUMP_REVISION)]);
+    // The first record saved under the identity rule marks when Attention starts asking about identity; nothing earlier is reopened.
+    const marker = event.current
+      ? [db.prepare(`INSERT OR IGNORE INTO system_settings(key, value, updated_at) SELECT '${IDENTITY_RULE_KEY}', e.received_at, e.received_at FROM self_service_events e WHERE e.id = ?`).bind(event.id)] : [];
+    const results = await db.batch([...statements, ...marker, db.prepare(BUMP_REVISION)]);
     return answer(event.id, decide ? decide(results) : review);
   } catch (error) {
     const twin = await db.prepare("SELECT review FROM self_service_events WHERE id = ?").bind(event.id).first<{ review: ReviewReason | null }>();

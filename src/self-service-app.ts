@@ -506,7 +506,7 @@ function quantityField(max: number): Html {
 
 const nameField = (label: string) => html`<div class="field"><label for="ss-name">${label}</label><input id="ss-name" name="name" autocomplete="name" autocapitalize="words" maxlength="120" required value="${profile.name}" enterkeyhint="done" /></div>`;
 const STUDENT_ID_HELP = "Logistics keeps a record of who has each item. Only Logistics staff see it.";
-const studentIdField = () => html`<div class="field" data-student-id><div class="ss-label-row"><label for="ss-student">Student ID number</label>${helpTip("the student ID", STUDENT_ID_HELP)}</div><input id="ss-student" name="studentId" type="text" inputmode="numeric" pattern="[0-9]{8}" autocomplete="off" spellcheck="false" required aria-describedby="ss-student-hint" value="${rememberedId() ? profile.studentId : ""}" /><p class="field__hint" id="ss-student-hint">8 digits</p></div>`;
+const studentIdField = () => html`<div class="field" data-student-id><div class="ss-label-row"><label for="ss-student">Student ID number</label>${helpTip("the student ID", STUDENT_ID_HELP)}</div><input id="ss-student" name="studentId" type="text" inputmode="numeric" pattern="[0-9]{8}" minlength="8" maxlength="8" autocomplete="off" spellcheck="false" required aria-describedby="ss-student-hint" value="${rememberedId() ? profile.studentId : ""}" /><p class="field__hint" id="ss-student-hint">8 digits</p></div>`;
 /** Whether the remembered student ID still meets the rule: an older phone may remember one that does not. */
 const rememberedId = () => SELF_SERVICE_STUDENT_ID.test(profile.studentId);
 
@@ -810,6 +810,16 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     form.querySelector<HTMLElement>("[data-identity-fields]")?.removeAttribute("hidden");
   };
 
+  // A pasted "21-000115" must not be cut at eight characters before its dash is dropped.
+  form.addEventListener("paste", (event) => {
+    const field = event.target as HTMLInputElement;
+    if (field.id !== "ss-student") return;
+    event.preventDefault();
+    const digits = (event.clipboardData?.getData("text") ?? "").replace(/\D/g, "");
+    const before = field.value.slice(0, field.selectionStart ?? 0) + digits + field.value.slice(field.selectionEnd ?? 0);
+    field.value = before.slice(0, 8);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
   form.addEventListener("input", (event) => {
     // The student ID is eight digits: letters, spaces and dashes are dropped as they are typed or pasted.
     const typed = event.target as HTMLInputElement;

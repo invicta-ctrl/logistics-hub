@@ -153,7 +153,7 @@ function arms(admin: boolean): Arm[] {
       }
     },
     {
-      prefix: "audit:", id: "a.id", sources: admin ? ["MOVEMENT", "CATALOG", "LOAN", "ACCOUNT", "DIRECTORY"] : ["MOVEMENT", "CATALOG", "LOAN"], moves: false, owns: (type) => !movementType.includes(type) && !PHONE_TYPES.includes(type) && type !== "REVIEW_RESOLVED",
+      prefix: "audit:", id: "a.id", sources: admin ? ["MOVEMENT", "CATALOG", "LOAN", "PHONE", "ACCOUNT", "DIRECTORY"] : ["MOVEMENT", "CATALOG", "LOAN", "PHONE"], moves: false, owns: (type) => !movementType.includes(type) && !PHONE_TYPES.includes(type) && type !== "REVIEW_RESOLVED",
       // A closing entry's loan is its own (`loans.id` is the key): the join adds no row and supplies the typed return note.
       from: `audit_log a LEFT JOIN items i ON a.entity_type = 'ITEM' AND i.id = a.entity_id LEFT JOIN staff_accounts c ON c.id = a.actor_user_id
         LEFT JOIN loans l ON a.action = 'LOAN_CLOSED' AND l.id = ${AUDIT_LOAN} LEFT JOIN locations lo ON a.entity_type = 'LOCATION' AND lo.id = a.entity_id LEFT JOIN kits ki ON a.entity_type = 'KIT' AND ki.id = a.entity_id`,
@@ -162,7 +162,7 @@ function arms(admin: boolean): Arm[] {
       cols: {
         ...base, sid: "'audit:' || a.id", k: utc("a.created_at"), itemId: "i.id", itemName: `COALESCE(i.name, lo.name, ki.name, CASE WHEN a.entity_type = 'LOCATION' THEN (SELECT json_extract(d.details_json, '$.path') FROM audit_log d
           WHERE d.entity_type = 'LOCATION' AND d.entity_id = a.entity_id AND d.action = 'LOCATION_DELETED' LIMIT 1) END)`, unit: "i.unit",
-        src: `CASE WHEN a.action IN ('LOAN_CLOSED', 'LOAN_REVIEWED') THEN 'LOAN' WHEN a.action IN (${UNIT_AUDIT}) THEN 'MOVEMENT' WHEN a.entity_type IN ('ITEM', 'LOCATION', 'CATALOGUE', 'AUDIT', 'KIT') THEN 'CATALOG' WHEN a.entity_type = 'STAFF' THEN 'DIRECTORY' ELSE 'ACCOUNT' END`,
+        src: `CASE WHEN a.action IN ('LOAN_CLOSED', 'LOAN_REVIEWED') THEN 'LOAN' WHEN a.action = 'IDENTITY_REVIEWED' THEN 'PHONE' WHEN a.action IN (${UNIT_AUDIT}) THEN 'MOVEMENT' WHEN a.entity_type IN ('ITEM', 'LOCATION', 'CATALOGUE', 'AUDIT', 'KIT') THEN 'CATALOG' WHEN a.entity_type = 'STAFF' THEN 'DIRECTORY' ELSE 'ACCOUNT' END`,
         type: `CASE WHEN a.action = 'LOAN_CLOSED' THEN CASE ${AUDIT_OUTCOME} WHEN 'DAMAGED' THEN 'LOAN_DAMAGED' WHEN 'LOST' THEN 'LOAN_LOST' ELSE 'LOAN_CLOSED' END ELSE a.action END`,
         actorId: "a.actor_user_id", actor: actorName("c", "a.actor_user_id"), details: "a.details_json", note: "l.return_note", corr: AUDIT_LOAN
       }
@@ -321,6 +321,7 @@ function toEvent(row: Row): ActivityEvent {
     LOAN_LOST: () => `${actor} closed a loan of ${item} as lost; nothing went back to stock.`,
     LOAN_CLOSED: () => `${actor} closed a loan of ${item}.`,
     LOAN_REVIEWED: () => `${actor} reviewed the ${details.outcome === "LOST" ? "lost" : "damaged"} return of ${item}.`,
+    IDENTITY_REVIEWED: () => `${actor} ${details.outcome === "IGNORED" ? "ignored" : "confirmed"} the identity on a phone ${typeof details.type === "string" ? details.type.slice(0, 10).toLowerCase() : "record"} of ${item}.`,
     REVIEW_RESOLVED: () => {
       const [kind, decision] = String(row.outcome).split(":");
       const what = `a phone ${String(kind).toLowerCase()} of ${kind === "USE" ? "" : amount}${item}`;

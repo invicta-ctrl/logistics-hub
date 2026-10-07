@@ -109,7 +109,15 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Please enter your student ID number.");
   // Only digits are kept, and no more than eight: dashes, spaces and letters never reach the field.
-  await sheet.getByLabel("Student ID number").fill("21-0001 15ab9");
+  await sheet.getByLabel("Student ID number").pressSequentially("21-0001 15ab9");
+  await expect(sheet.getByLabel("Student ID number")).toHaveValue("21000115");
+  await sheet.getByLabel("Student ID number").fill("");
+  await sheet.getByLabel("Student ID number").evaluate((field: HTMLInputElement) => {
+    const data = new DataTransfer();
+    data.setData("text", "21-000115");
+    field.focus();
+    field.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  });
   await expect(sheet.getByLabel("Student ID number")).toHaveValue("21000115");
   await sheet.getByLabel("Student ID number").fill("2100011");
   await sheet.getByRole("button", { name: "Review and borrow" }).click();

@@ -1,6 +1,6 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
-import { attention, attentionSummary, reviewReturn, selfServiceToCheck } from "./attention";
+import { attention, attentionSummary, reviewIdentity, reviewReturn, selfServiceToCheck } from "./attention";
 import { auditDetail, auditReview, auditState, finishAudit, itemFreshness, observe, resolveObservation, startAudit, updateAudit } from "./audits";
 import { bulkUpdate } from "./bulk";
 import { aliasItems, catalogCoverage } from "./catalog-admin";
@@ -83,7 +83,7 @@ const MEDIA_PATH = /^\/api\/staff\/media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
 const PUBLIC_THUMB_PATH = /^\/api\/public\/media\/([0-9a-f-]{36})\/thumb$/;
 const LOAN_PATH = /^\/api\/staff\/loans\/(LN-[A-Za-z0-9-]{1,60})\/(return|photo|review)$/;
 const REORDER_PATH = /^\/api\/staff\/reorders\/(RO-[A-Za-z0-9-]{1,60})$/;
-const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|photo)$/;
+const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|photo|identity)$/;
 /** A sync carries at most a few compressed photos; anything larger is not from the app. */
 const MAX_SYNC_BYTES = 12 * 1024 * 1024;
 /** An item photo upload is a 1 MB and a 150 KB JPEG plus form framing. */
@@ -453,6 +453,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   const review = REVIEW_PATH.exec(path);
   if (review?.[2] === "resolve" && method === "POST") return json(await resolveReview(env.DB, env.EVIDENCE, account, review[1]!, await body()));
   if (review?.[2] === "photo" && method === "GET") return heldPhoto(env.DB, env.EVIDENCE, review[1]!);
+  if (review?.[2] === "identity" && method === "POST") return json(await reviewIdentity(env.DB, account, review[1]!, await body()));
   const loan = LOAN_PATH.exec(path);
   if (loan?.[2] === "return" && method === "POST") return json(await closeLoan(env.DB, account, loan[1]!, await body()));
   if (loan?.[2] === "photo" && method === "GET") return loanPhoto(env.DB, env.EVIDENCE, loan[1]!);
