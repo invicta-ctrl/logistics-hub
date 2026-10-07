@@ -1,7 +1,8 @@
 import { ITEM_ICONS, itemIconSvg, resolveItemIcon, suggestItemIcon } from "./item-icons";
 import { itemVisualControl } from "./item-visual-control";
 import type { DepartmentCode } from "./directory-policy";
-import { CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, listingGaps, stockState } from "./catalog-policy";
+import { suggest, type Suggestion } from "./catalogue-suggest";
+import { BEHAVIOUR_LABELS, type Behaviour, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, behaviourFields, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type Photo, type PhotoPanel, openViewer, photoPanel, photoUrl, rowThumb } from "./item-photo";
@@ -96,7 +97,7 @@ export type Session = {
   /** The Staff Directory entry linked to this sign-in, if an administrator linked one. */
   directory: { name: string; department: string; position: string | null } | null;
 };
-type Section = "items" | "stock" | "loans" | "self-service" | "activity" | "admin" | "account";
+type Section = "items" | "stock" | "loans" | "self-service" | "activity" | "attention" | "admin" | "account";
 
 export const ROLE_LABELS: Record<Role, string> = { STAFF: "Staff", ADMIN: "Administrator", OWNER: "Owner" };
 
@@ -145,7 +146,8 @@ export function shell(session: Session, section: Section, main: Html): void {
   const sections = session.mustChangePassword || session.hub === false ? [] : SECTIONS.filter((entry) => entry.id !== "admin" || session.role !== "STAFF");
   const reviews = session.selfServiceReviews;
   const badge = (id: Section) => id === "self-service" && reviews
-    ? html`<span class="nav-badge" aria-hidden="true">${reviews}</span><span class="visually-hidden">, ${reviews} ${reviews === 1 ? "record" : "records"} to check</span>` : "";
+    ? html`<span class="nav-badge" aria-hidden="true">${reviews}</span><span class="visually-hidden">, ${reviews} ${reviews === 1 ? "record" : "records"} to check</span>`
+    : id === "loans" || id === "stock" ? html`<span class="attn-slot" data-attention="${id === "loans" ? "Loans" : "Stock"}"></span>` : "";
   const overflow = sections.filter((entry) => entry.more);
   const avatar = html`<span class="avatar" aria-hidden="true">${initials(session.displayName)}</span>`;
   mount(app, html`
@@ -156,6 +158,7 @@ export function shell(session: Session, section: Section, main: Html): void {
           ${sections.map((entry) => html`<a class="app-nav__link ${entry.more ? "app-nav__link--more" : ""}" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}<span class="app-nav__text">${entry.text}${badge(entry.id)}</span></a>`)}
           <button class="app-nav__link app-nav__more ${overflow.some((entry) => entry.id === section) || section === "account" ? "is-current" : ""}" type="button" popovertarget="staff-menu">${icon("dots")}<span class="app-nav__text">More</span></button>
         </nav>` : ""}
+        ${sections.length ? html`<a class="app-bell" href="/staff/attention" data-route ${current("attention")}>${icon("bell")}<span class="visually-hidden">Attention</span><span class="attn-slot" data-attention="all"></span></a>` : ""}
         <button class="account" type="button" popovertarget="staff-menu">${avatar}<span class="account__name"><span class="visually-hidden">Account: </span>${session.displayName}<small>${accessLabel(sessionAccess(session))}</small></span></button>
       </div>
     </header>
@@ -188,6 +191,48 @@ export function shell(session: Session, section: Section, main: Html): void {
     else { menu.hidden = true; expanded(false); }
   });
   document.querySelector("#staff-logout")!.addEventListener("click", signOut);
+  if (sections.length) watchAttention();
+}
+
+/*
+ * The attention count in the shell: a bell with the total, and a number on Loans and Stock. It is one small request after the page is
+ * drawn, kept for 30 seconds so moving between pages never waits on it, and it fails quietly: the shell works without it.
+ */
+type AttentionSummary = { needsAction: number; bySource: Record<string, number> };
+const SUMMARY_TTL = 30_000;
+let summary: { at: number; data: AttentionSummary } | null = null;
+let summaryRequest: Promise<void> | null = null;
+
+const countText = (count: number) => count > 99 ? "99+" : String(count);
+
+function paintAttention(): void {
+  if (!summary) return;
+  const needsAction = summary.data.needsAction ?? 0;
+  const bySource = summary.data.bySource ?? {};
+  document.querySelectorAll<HTMLElement>("[data-attention]").forEach((slot) => {
+    const key = slot.dataset.attention!;
+    const count = key === "all" ? needsAction : bySource[key] ?? 0;
+    const bell = key === "all";
+    slot.innerHTML = count
+      ? `<span class="nav-badge" aria-hidden="true">${countText(count)}</span><span class="visually-hidden">${bell ? ", " : ", "}${count} ${bell ? (count === 1 ? "thing needs" : "things need") + " attention" : count === 1 ? "needs attention" : "need attention"}</span>`
+      : "";
+  });
+}
+
+/** Asks again now (after something was fixed here) or when the kept answer is older than 30 seconds. */
+export function refreshAttention(force = false): Promise<void> {
+  if (!force && summary && Date.now() - summary.at < SUMMARY_TTL) { paintAttention(); return Promise.resolve(); }
+  summaryRequest ??= api<AttentionSummary>("/api/staff/attention/summary")
+    .then((data) => { summary = { at: Date.now(), data }; })
+    .catch(() => { /* the numbers are a convenience; the next page tries again */ })
+    .finally(() => { summaryRequest = null; paintAttention(); });
+  return summaryRequest;
+}
+
+function watchAttention(): void {
+  void refreshAttention();
+  const timer = window.setInterval(() => { if (!document.hidden) void refreshAttention(); }, 60_000);
+  onLeave(() => window.clearInterval(timer));
 }
 
 /** Signs out here, in the staff workspace or the Catalog. */
@@ -398,6 +443,7 @@ export async function workspace(): Promise<void> {
   let detail: Detail | null = null;
   let dirty = false;
   let pendingItem = params.get("item");
+  const pendingTab = (["overview", "loan", "details", "history"] as const).find((value) => value === params.get("tab")) ?? "overview";
   let shownIds: string[] = [];
   /** Select mode: a checkbox on every row, and one change applied to all the ticked items at once (src/bulk-select.ts). */
   let selecting = false;
@@ -538,7 +584,7 @@ export async function workspace(): Promise<void> {
       // Refresh the open sheet when another staff member changes its quantity or open units.
       const shown = data.items.find((item) => item.id === openId);
       if (openId && detail && shown && (openChanged || (shown.photoId ?? null) !== (detail.item.photo?.id ?? null) || shown.iconKey !== detail.item.iconKey || shown.visualType !== detail.item.visualType || shown.openReports !== detail.reports.filter((report) => !report.resolvedAt).length || stockSignature(shown.onHand, shown.openUnits, shown.openCondition) !== stockSignature(detail.item.onHand, detail.openUnits.length, worstCondition(detail.openUnits)))) void refreshStock(openId);
-      if (pendingItem) { openItem(pendingItem); pendingItem = null; }
+      if (pendingItem) { openItem(pendingItem, pendingTab); pendingItem = null; writeParams({ tab: null }); }
     },
     onError: (error) => {
       if (error.status === 401) expired();
@@ -1015,6 +1061,7 @@ export async function workspace(): Promise<void> {
         ${creating ? html`<div class="field"><label for="f-iconKey">System Icon</label><select id="f-iconKey" name="iconKey"><option value="">Use suggested icon</option>${ITEM_ICONS.map((entry) => html`<option value="tabler:${entry.key}">${entry.label}</option>`)}</select><p class="field__hint">Optional. A suggestion is already selected; you can upload a real photo after creating the item.</p></div>` : ""}
         <p class="field__hint field__hint--warn" id="duplicate-hint" hidden></p>
         ${text("aliases", "Other names", item.aliases, html`maxlength="300" autocomplete="off"`, "Names people also use for it, separated by commas. Search finds these too.", true)}
+        ${!creating && item.itemType === "NEEDS_REVIEW" ? html`<div class="classify-hint" id="classify-hint" aria-live="polite"></div>` : ""}
         <div class="field-grid">
           ${text("category", "Category", item.category?.toUpperCase() === "UNSORTED" ? "" : item.category, html`required maxlength="100" autocomplete="off"`, "Letter case does not matter; an existing category is reused.")}
           <div class="field"><label for="f-itemType">Borrow or take</label><select id="f-itemType" name="itemType" aria-describedby="f-itemType-hint">${types.map((type) => html`<option value="${type}" ${type === (item.itemType ?? "Loanable") ? html`selected` : ""}>${TYPE_CHOICES[type] ?? label(type)}</option>`)}</select><p class="field__hint" id="f-itemType-hint">Your choice sets everything else: Borrow is lent and comes back; Take is used up and never returned. Both appear on the Lending Hub and on phones.</p></div>
@@ -1104,6 +1151,42 @@ export async function workspace(): Promise<void> {
     const alert = form.querySelector<HTMLDivElement>("#details-alert")!;
     const creating = !item.id;
     let intent = "save";
+    /*
+     * An Unclassified item opened from Attention (or the list) shows the top suggestion for how it is used, with how sure it is and why.
+     * It is only a button: nothing changes in the form until it is pressed, and nothing is saved until the form is.
+     */
+    let hintKey = "";
+    const showClassification = (values: ReturnType<typeof readDetails>) => {
+      const element = form.querySelector<HTMLElement>("#classify-hint");
+      if (!element || !inventory) return;
+      const found = suggest(values.name, inventory.items.filter((entry) => entry.id !== item.id), []);
+      const way = found.behaviour && found.behaviour.value !== "REVIEW_LATER" ? found.behaviour : undefined;
+      const place = found.category && !values.category.trim() ? found.category : undefined;
+      const key = JSON.stringify([way, place]);
+      if (key === hintKey) return;
+      hintKey = key;
+      const named = (hint: Suggestion<Behaviour>) => BEHAVIOUR_LABELS[hint.value];
+      if (!way) { mount(element, html`<p class="muted">${icon("info")}<span>No suggestion yet. Choose how it is used from what you see.</span></p>`); return; }
+      if (way.tier === "CONFLICTING") {
+        mount(element, html`<p class="classify-hint__line is-weak">${icon("info")}<span>It could be ${named(way)} (${way.why}) or ${BEHAVIOUR_LABELS[way.other!.value as Behaviour]} (${way.other!.why}). Choose one.</span></p>`);
+        return;
+      }
+      const sure = way.tier === "STRONG";
+      mount(element, html`<p class="classify-hint__line ${sure ? "" : "is-weak"}">${icon("info")}<span>${sure ? "Suggested" : "Maybe"}: ${named(way)}${place ? html`, category ${categoryName(place.value)}` : ""}. ${way.why}.</span>
+        <button type="button" class="text-link" data-use-suggestion data-behaviour="${way.value}" data-category="${place?.value ?? ""}">Use suggestion</button></p>`);
+    };
+    form.addEventListener("click", (event) => {
+      const use = (event.target as HTMLElement).closest<HTMLElement>("[data-use-suggestion]");
+      if (!use) return;
+      const fields = behaviourFields(use.dataset.behaviour as Behaviour);
+      const type = form.querySelector<HTMLSelectElement>("#f-itemType")!;
+      type.value = fields.itemType;
+      form.querySelector<HTMLSelectElement>("#f-consumptionMode")!.value = fields.consumptionMode;
+      const category = form.querySelector<HTMLInputElement>("#f-category")!;
+      if (use.dataset.category && !category.value.trim()) category.value = use.dataset.category;
+      type.dispatchEvent(new Event("input", { bubbles: true }));
+      type.focus();
+    });
     const preview = () => {
       const values = readDetails(form);
       const suggested = suggestItemIcon(values).key;
@@ -1118,6 +1201,7 @@ export async function workspace(): Promise<void> {
       if (review) mount(review, checklist(reviewChecklist(values)));
       form.querySelector<HTMLElement>("[data-expiry]")!.hidden = values.stockArea !== "Pantry";
       form.querySelector<HTMLElement>("[data-consumption]")!.hidden = values.itemType !== "Consumable";
+      showClassification(values);
       const duplicate = form.querySelector<HTMLElement>("#duplicate-hint")!;
       const name = values.name.trim().toLowerCase();
       const twin = name ? inventory?.items.find((entry) => entry.id !== item.id && entry.name.toLowerCase() === name) : undefined;

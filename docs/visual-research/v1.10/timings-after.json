@@ -1,0 +1,12 @@
+{
+  "coldLoadToFirstRowMs": 433,
+  "sectionSwitchMs": 89,
+  "attention": {
+    "entries": 223,
+    "needsAction": 23,
+    "groups": 10,
+    "inboxFirstRowMs-desktop": 281,
+    "inboxFirstRowMs-tablet": 301,
+    "inboxFirstRowMs-phone": 279
+  }
+}

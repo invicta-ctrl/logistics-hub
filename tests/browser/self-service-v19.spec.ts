@@ -81,7 +81,8 @@ test("a catalog of 600 items draws the same small home, and a group opens as a l
   await page.getByRole("link", { name: "See all 200 in Equipment" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Equipment" })).toBeVisible();
   await expect(page.locator(".ss-row")).toHaveCount(200);
-  expect(await page.locator(".ss-list--photos li").first().evaluate((node) => getComputedStyle(node).contentVisibility)).toBe("auto");
+  // Read it in one step from whatever row is there now: the list can redraw between finding a row and asking it.
+  await expect.poll(() => page.evaluate(() => { const row = document.querySelector(".ss-list--photos li"); return row ? getComputedStyle(row).contentVisibility : null; })).toBe("auto");
   // The group's chips move between groups without leaving the list.
   await page.getByRole("link", { name: "Pantry", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Pantry" })).toBeFocused();
@@ -221,6 +222,21 @@ test("a USC-only item asks for a reason and no student ID, and a remembered name
   await attachPhoto(page);
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.locator(".ss-summary")).toContainText("USC use: Stage setup");
+});
+
+test("closing a form opened from a direct link shows the item's page and stays in Self-Service", async ({ page }) => {
+  await serve(page, small);
+  await page.goto("/self-service?do=borrow&item=ITM-0001");
+  const sheet = page.getByRole("dialog", { name: "Folding Table" });
+  await sheet.getByRole("button", { name: "Close" }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page).toHaveURL(/\/self-service\?do=item&item=ITM-0001$/);
+  await expect(page.getByRole("heading", { name: "Folding Table", level: 1 })).toBeVisible();
+  // Escape and the backdrop end up in the same place.
+  await page.getByRole("link", { name: /^Borrow/ }).click();
+  await page.keyboard.press("Escape");
+  await expect(page).toHaveURL(/\/self-service\?do=item&item=ITM-0001$/);
+  await expect(page.getByRole("heading", { name: "Folding Table", level: 1 })).toBeVisible();
 });
 
 test.describe("contextual help", () => {

@@ -1,0 +1,21 @@
+/* Attention (V1.10). Tokens only, so light and dark follow the rest of the staff workspace. Calm by design: one accent, no alarm colours on rows. */
+.attn-filters { align-items: end; }
+.attn-filters .field { min-width: 11rem; }
+.attn-band { margin-bottom: var(--space-6); }
+.attn-band__title { margin: 0 0 var(--space-2); color: var(--text-2); font-size: var(--text-sm); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.attn-group { margin-bottom: var(--space-4); }
+.attn-group__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-3); margin-bottom: var(--space-2); }
+.attn-group__head h2 { margin: 0; font-size: var(--text-lg); }
+.attn-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
+.attn-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-4); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); }
+.attn-row:last-child { border-bottom: 0; }
+.attn-row:hover { background: var(--hover); }
+.attn-row__main { display: grid; flex: 1 1 min(20rem, 100%); min-width: 0; min-height: var(--target); align-content: center; padding: var(--space-1) 0; color: inherit; text-decoration: none; }
+.attn-row__main:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: var(--radius); }
+.attn-row__title { font-weight: 600; overflow-wrap: anywhere; }
+.attn-row__why { color: var(--text-2); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.attn-row__since { color: var(--text-3); font-size: var(--text-sm); }
+.attn-row__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.attn-more { margin-top: var(--space-2); }
+.attn-note { margin: var(--space-2) 0 0; font-size: var(--text-sm); }
+@media (max-width: 640px) { .attn-row__actions { width: 100%; } .attn-row__actions .button--ghost { padding-inline-start: 0; } .attn-filters .table-filters .field { min-width: 0; } }
