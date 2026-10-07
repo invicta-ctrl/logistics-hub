@@ -13,6 +13,8 @@ async function signIn(page: Page): Promise<void> {
   await page.getByRole("textbox", { name: "Username" }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await page.goto("/staff/items");
   await expect(page.locator("tbody tr").first()).toBeVisible();
 }
 
@@ -23,7 +25,7 @@ async function signInOwner(page: Page, origin: string): Promise<void> {
     signedIn ||= (await page.request.post("/api/staff/login", { headers: { origin }, data: { username: process.env.E2E_OWNER_USERNAME, password: secret } })).ok();
   }
   expect(signedIn).toBe(true);
-  await page.goto("/staff");
+  await page.goto("/staff/items");
   await expect(page.locator("tbody tr").first()).toBeVisible();
 }
 

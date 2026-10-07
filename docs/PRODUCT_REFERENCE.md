@@ -197,6 +197,27 @@ Each reason is a SQL condition over records that already exist, used for both th
 
 Design, permissions and measurements: `docs/GLOBAL_SEARCH.md`.
 
+## Home (V1.12)
+
+**Home** (`/staff/home`) is where staff land after signing in, and where the logo and **Home** in the account menu lead. It answers "what should I do next?" and is not a seventh section in the bar (six already fill a phone with More); search finds it too ("Home"). One sentence greets the person with the count to act on. Under it:
+
+- **Needs attention.** Attention's own groups, most urgent first, at most six rows, each a count, the reason, its source and "N today · N this week". A row opens Attention showing only that reason (`/staff/attention?reason=…`), so the count and the list are the same set; **Show everything** lifts it. Routine entries (counted nowhere) are one line, "When there is time". Nothing to do reads "Nothing needs a person right now". The numbers are the answer the bell already loaded (`/api/staff/attention/summary`), so Home and the bell cannot disagree.
+- **Continue.** Only work that is open for this person and still valid: their open cataloguing session (and its place) and their paused or in-progress place checks, each with **Resume** into that work (`/api/staff/home`, `src/home.ts` `resumable`, using the same open-work queries as the Catalogue and Checks pages). A finished or abandoned one never appears.
+- **Quick actions.** By role, never by inferred habit: Add items, Lend or return, Stock in or out, Find a place, Check a kit; administrators and the Owner also get Staff Directory and Accounts and settings. Nothing is remembered in the browser.
+- **Insights.** Loaded after the rest, separately (`/api/staff/home/insights`, `private, max-age=120`), each a question, its window, its rule and the evidence in a sentence. None is a score, none orders or changes anything, and none names a borrower or an account. If they fail, Home says so and offers **Try again**; navigation and the rest of Home are untouched.
+
+| Question | Source | Window | Rule | Shown |
+|---|---|---|---|---|
+| What equipment is borrowed most? | loans | 90 days | items lent at least twice, most first | up to 5, "Lent N times; the latest on …" |
+| Which consumables go fastest? | posted stock-outs of consumables, not imports | 30 days | taken out at least twice, most units first | up to 5 with what is left and the reorder level; advice only |
+| What keeps running short? | restock requests (not dismissed) | 90 days | requested at least twice | up to 5, advice only |
+| Where do people keep failing to find things? | location reports | 90 days | places with at least two reports | up to 5, split into "could not find" and "place looks wrong" |
+| Which kits keep needing a refill? | kit checks with a Low or Missing observation (Damaged is a repair) | 90 days | at least two checks, active kits | up to 5, "N of M checks" |
+| What keeps being reclassified? | item edits that changed how an item is used (not the first sort out of "not sure") | 90 days | changed at least twice | up to 5, its current behaviour |
+| How complete is the catalog? | active items | today | unclassified; sorted without a place | counts of the whole, each gap linking to Attention's reason |
+
+A card with nothing that meets its rule is left out. The two supply questions are advice: nothing is ordered, restocked or changed from Home. Time windows end now and are explicit on every card. Measurements and design: `docs/road-to-v2/releases/v1.12.md`.
+
 ## Roles
 | Role | Can |
 | --- | --- |
