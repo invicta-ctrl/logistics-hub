@@ -159,7 +159,6 @@ function goOption(hit: GoHit, tokens: string[]): Option {
 }
 
 /* ---------- The dialog ---------- */
-/** The shortcut as people read it on this device. */
 
 let dialog: HTMLDialogElement | null = null;
 let admin = false;
