@@ -54,9 +54,9 @@ function facts(entry: Entry): Html {
   return html`<dl class="review-card__facts">${rows.map(([term, value]) => html`<div><dt>${term}</dt><dd>${value}</dd></div>`)}</dl>`;
 }
 
-/** The evidence photo of a borrow or return, for signed-in staff: a held record's own, or the loan's once the borrow was applied. */
+/** The evidence photo of any phone record, for signed-in staff: a held record's own, or the loan's once the borrow was applied. */
 function photoLink(entry: Entry): Html {
-  if ((entry.type !== "BORROW" && entry.type !== "RETURN") || !(entry.hasPhoto || (entry.type === "BORROW" && entry.loanId))) return html``;
+  if (!(entry.hasPhoto || (entry.type === "BORROW" && entry.loanId))) return html``;
   return html`<a class="text-link" href="${entry.applied && entry.loanId ? `/api/staff/loans/${entry.loanId}/photo` : `/api/staff/self-service/${entry.id}/photo`}" target="_blank" rel="noopener">Photo<span class="visually-hidden"> (opens in a new tab)</span></a>`;
 }
 

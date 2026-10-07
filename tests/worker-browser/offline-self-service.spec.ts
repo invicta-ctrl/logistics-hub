@@ -1,4 +1,5 @@
 import { expect, test, devices, type Browser, type Page } from "@playwright/test";
+import { attachPhoto, identify } from "../self-service-browser";
 import { selfServiceReference } from "../../src/catalog-policy";
 
 /*
@@ -56,25 +57,6 @@ async function phone(browser: Browser) {
   return { context, page };
 }
 
-/** A camera photo, made in the page, handed to the file input as a person would. */
-async function attachPhoto(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 480;
-    canvas.height = 640;
-    const context = canvas.getContext("2d")!;
-    context.fillStyle = "#7a1419";
-    context.fillRect(0, 0, 480, 640);
-    const blob = await new Promise<Blob>((resolve) => canvas.toBlob((value) => resolve(value!), "image/jpeg", 0.8));
-    const transfer = new DataTransfer();
-    transfer.items.add(new File([blob], "photo.jpg", { type: "image/jpeg" }));
-    const input = document.querySelector<HTMLInputElement>("#ss-photo")!;
-    input.files = transfer.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await expect(page.getByAltText("Photo to attach")).toBeVisible();
-}
-
 /** What the phone's own storage holds, straight from IndexedDB. */
 async function localState(page: Page) {
   return page.evaluate(() => new Promise<{ states: string[]; photos: number }>((resolve, reject) => {
@@ -112,17 +94,17 @@ async function openItem(page: Page, name: string, action: "Take" | "Borrow" | "U
   await page.getByRole("link", { name: action, exact: true }).click();
 }
 
-/** A remembered person shows as a card; the fields are one tap away. */
-async function asSomeone(page: Page, label: string, person: string): Promise<void> {
+/** A remembered person shows as a card; the fields are one tap away. Everyone gives a full name, an 8-digit ID and a photo. */
+async function asSomeone(page: Page, person: string): Promise<void> {
   const change = page.getByRole("button", { name: "Not you? Change" });
   if (await change.isVisible()) await change.click();
-  await page.getByLabel(label).fill(person);
+  await identify(page, person);
 }
 
 async function take(page: Page, name: string, count: number, person: string): Promise<void> {
   await openItem(page, name, "Take");
   for (let step = 1; step < count; step += 1) await page.getByRole("button", { name: "One more" }).click();
-  await asSomeone(page, "Your name", person);
+  await asSomeone(page, person);
   await page.getByRole("button", { name: "Review and take" }).click();
   await page.getByRole("button", { name: "Confirm take" }).click();
   await expect(page.getByRole("heading", { name: "Taken" })).toBeVisible();
@@ -186,12 +168,12 @@ test.describe.serial("offline self-service", () => {
     await expect(page.getByRole("link", { name: /Offline · 1 waiting/ })).toBeVisible();
 
     await openItem(page, "Cotton - roll", "Borrow");
-    // The phone remembered the name from the take; without an ID on file the fields stay in view.
-    await expect(page.getByLabel("Your full name")).toHaveValue("Juan Dela Cruz");
-    await page.getByLabel("Student ID number").fill("20-1234-567");
+    // The phone remembered who took the water, so the borrow only asks for its photo.
+    await expect(page.locator(".ss-who")).toContainText("Juan Dela Cruz");
+    await expect(page.locator(".ss-who")).toContainText("ID 21000115");
     await attachPhoto(page);
     await page.getByRole("button", { name: "Review and borrow" }).click();
-    await expect(page.locator(".ss-summary")).toContainText("20-1234-567");
+    await expect(page.locator(".ss-summary")).toContainText("21000115");
     await expect(page.locator(".ss-summary img")).toBeVisible();
     await page.getByRole("button", { name: "Confirm borrow" }).click();
     await expect(page.getByText("Saved on this phone. It will send when you're back online.")).toBeVisible();
@@ -202,7 +184,7 @@ test.describe.serial("offline self-service", () => {
     await page.reload();
     await expect(page.getByRole("heading", { name: "What do you need?" })).toBeVisible();
     await expect(page.getByRole("link", { name: /Offline · 2 waiting/ })).toBeVisible();
-    expect(await localState(page)).toEqual({ states: ["pending", "pending"], photos: 1 });
+    expect(await localState(page)).toEqual({ states: ["pending", "pending"], photos: 2 });
 
     await page.getByRole("link", { name: /^Return/ }).click();
     await page.getByRole("link", { name: /Cotton - roll/ }).first().click();
@@ -223,7 +205,7 @@ test.describe.serial("offline self-service", () => {
 
     // Cache deletion leaves saved actions intact; fresh offline navigation needs the cached shell.
     await page.evaluate(async () => { for (const key of await caches.keys()) await caches.delete(key); });
-    expect(await localState(page)).toEqual({ states: ["pending", "pending", "pending"], photos: 2 });
+    expect(await localState(page)).toEqual({ states: ["pending", "pending", "pending"], photos: 3 });
 
     await context.setOffline(false);
     // The take and the borrow apply; the return (with its photo) waits for DOL staff.
@@ -243,7 +225,7 @@ test.describe.serial("offline self-service", () => {
 
     const loans = await (await staff.request.get("/api/staff/loans")).json() as { closed: Array<{ id: string; itemId: string; status: string; createdBy: string; studentId: string }> };
     const loan = loans.closed.find((entry) => entry.itemId === COTTON && entry.createdBy === "Self-Service");
-    expect(loan).toMatchObject({ status: "RETURNED", studentId: "20-1234-567" });
+    expect(loan).toMatchObject({ status: "RETURNED", studentId: "21000115" });
     const photo = await staff.request.get(`/api/staff/loans/${loan!.id}/photo`);
     expect(photo.status()).toBe(200);
     expect(photo.headers()["content-type"]).toBe("image/jpeg");
@@ -267,8 +249,8 @@ test.describe.serial("offline self-service", () => {
     const [a, b] = [await phone(browser), await phone(browser)];
     await a.context.setOffline(true);
     await b.context.setOffline(true);
-    await take(a.page, "Bottled Water", 1, "Ana");
-    await take(b.page, "Bottled Water", 3, "Ben");
+    await take(a.page, "Bottled Water", 1, "Ana Reyes");
+    await take(b.page, "Bottled Water", 3, "Ben Cruz");
     await b.context.setOffline(false);
     await expect(b.page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });
     await a.context.setOffline(false);
@@ -291,12 +273,12 @@ test.describe.serial("offline self-service", () => {
     await expect(page.getByRole("link", { name: /E2E Printer Paper/ })).toContainText("Use");
     await openItem(page, "E2E Printer Paper", "Use");
     await expect(page.getByLabel("How many?")).toHaveCount(0);
-    await asSomeone(page, "Your name", "Ana Reyes");
+    await asSomeone(page, "Ana Reyes");
     await page.getByRole("button", { name: "Review and use" }).click();
     await page.getByRole("button", { name: "Confirm use" }).dblclick();
     await expect(page.getByRole("heading", { name: "Use recorded" })).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
-    expect(await localState(page)).toEqual({ states: ["pending"], photos: 0 });
+    expect(await localState(page)).toEqual({ states: ["pending"], photos: 1 });
 
     await context.setOffline(false);
     await expect(page.getByRole("link", { name: /Synced/ })).toBeVisible({ timeout: 20_000 });

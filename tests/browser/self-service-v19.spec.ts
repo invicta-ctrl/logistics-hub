@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { attachPhoto, identify } from "../self-service-browser";
 
 /*
  * V1.9 Self-Service 2.0: browse by group, the item's page, who you are, the check before sending, the receipt's
@@ -20,25 +21,6 @@ const many = Array.from({ length: 600 }, (_, index) => ({
 async function serve(page: Page, items: unknown[]) {
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r7"' }, body: JSON.stringify(catalog(items)) }));
   await page.route("**/api/self-service/sync", (route) => route.abort());
-}
-
-/** A camera photo, made in the page, handed to the file input as a person would. */
-async function attachPhoto(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 480;
-    canvas.height = 640;
-    const context = canvas.getContext("2d")!;
-    context.fillStyle = "#7a1419";
-    context.fillRect(0, 0, 480, 640);
-    const blob = await new Promise<Blob>((resolve) => canvas.toBlob((value) => resolve(value!), "image/jpeg", 0.8));
-    const transfer = new DataTransfer();
-    transfer.items.add(new File([blob], "photo.jpg", { type: "image/jpeg" }));
-    const input = document.querySelector<HTMLInputElement>("#ss-photo")!;
-    input.files = transfer.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await expect(page.getByAltText("Photo to attach")).toBeVisible();
 }
 
 const noSideways = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -118,12 +100,21 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   await expect(sheet.getByLabel("Remember me on this phone")).toBeChecked();
   // The first problem is said in words and the field to fix it is focused. Nothing is sent or saved.
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
-  await expect(sheet.getByRole("alert")).toContainText("Please enter a name.");
+  await expect(sheet.getByRole("alert")).toContainText("Please enter your full name.");
   await expect(sheet.getByLabel("Your full name")).toBeFocused();
+  await sheet.getByLabel("Your full name").fill("Maria");
+  await sheet.getByRole("button", { name: "Review and borrow" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("first and last");
   await sheet.getByLabel("Your full name").fill("Maria Santos");
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
-  await expect(sheet.getByRole("alert")).toContainText("student ID number is needed");
-  await sheet.getByLabel("Student ID number").fill("20-1234-567");
+  await expect(sheet.getByRole("alert")).toContainText("Please enter your student ID number.");
+  // Only digits are kept, and no more than eight: dashes, spaces and letters never reach the field.
+  await sheet.getByLabel("Student ID number").fill("21-0001 15ab9");
+  await expect(sheet.getByLabel("Student ID number")).toHaveValue("21000115");
+  await sheet.getByLabel("Student ID number").fill("2100011");
+  await sheet.getByRole("button", { name: "Review and borrow" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("must be exactly 8 digits");
+  await sheet.getByLabel("Student ID number").fill("21000115");
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Take a photo holding the item.");
   await attachPhoto(page);
@@ -133,7 +124,8 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   const summary = sheet.locator(".ss-summary");
   await expect(sheet.getByRole("heading", { name: "Check before you send" })).toBeFocused();
   await expect(summary).toContainText("1 × Folding Table");
-  await expect(summary).toContainText("Maria Santos · ID 20-1234-567");
+  await expect(summary).toContainText("Maria Santos");
+  await expect(summary).toContainText("21000115");
   await expect(summary).toContainText("Individual use");
   await expect(summary).toContainText("Tomorrow");
   await expect(summary.getByRole("img", { name: "The photo you are sending" })).toBeVisible();
@@ -141,7 +133,7 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   await sheet.getByRole("button", { name: "Confirm borrow" }).click();
   const receipt = page.getByRole("dialog", { name: "Borrowed" });
   await expect(receipt.locator(".ss-receipt__ref strong")).toHaveText(/^SS-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
-  await expect(receipt).toContainText("Maria Santos · ID 20-1234-567");
+  await expect(receipt).toContainText("Maria Santos · ID 21000115");
   await expect(receipt).toContainText("Return it by Tomorrow");
   await expect(receipt).toContainText("Saved on this phone");
   const reference = (await receipt.locator(".ss-receipt__ref strong").textContent())!;
@@ -177,7 +169,7 @@ test("a remembered person shows as a card with Not you? Change, a different pers
   await serve(page, small);
   await page.goto("/self-service?do=take&item=ITM-0002");
   let sheet = page.getByRole("dialog", { name: "Bottled Water" });
-  await sheet.getByLabel("Your name").fill("Maria Santos");
+  await identify(sheet, "Maria Santos", "21000115");
   await sheet.getByRole("button", { name: "Review and take" }).click();
   await sheet.getByRole("button", { name: "Confirm take" }).click();
   await page.getByRole("button", { name: "Done" }).click();
@@ -187,14 +179,19 @@ test("a remembered person shows as a card with Not you? Change, a different pers
   await page.goto("/self-service?do=take&item=ITM-0002");
   sheet = page.getByRole("dialog", { name: "Bottled Water" });
   await expect(sheet.locator(".ss-who")).toContainText("Maria Santos");
-  await expect(sheet.getByLabel("Your name")).toBeHidden();
+  await expect(sheet.locator(".ss-who")).toContainText("ID 21000115");
+  await expect(sheet.getByLabel("Your full name")).toBeHidden();
+  // A remembered person still shows a photo every time: the card is who, the photo is the proof.
+  await sheet.getByRole("button", { name: "Review and take" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("Take a photo holding the item.");
   // Not you? The fields come back; this person is not remembered when they say so.
   await sheet.getByRole("button", { name: "Not you? Change" }).click();
-  await expect(sheet.getByLabel("Your name")).toBeFocused();
-  await sheet.getByLabel("Your name").fill("Pedro Reyes");
+  await expect(sheet.getByLabel("Your full name")).toBeFocused();
+  await identify(sheet, "Pedro Reyes", "22000222");
   await sheet.getByLabel("Remember me on this phone").uncheck();
   await sheet.getByRole("button", { name: "Review and take" }).click();
   await expect(sheet.locator(".ss-summary")).toContainText("Pedro Reyes");
+  await expect(sheet.locator(".ss-summary")).toContainText("22000222");
   await sheet.getByRole("button", { name: "Confirm take" }).click();
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByText(/, Maria\.$/)).toBeVisible();
@@ -207,21 +204,27 @@ test("a remembered person shows as a card with Not you? Change, a different pers
   await page.getByRole("button", { name: "Forget me on this phone" }).click();
   await expect(page.locator(".ss-more")).toContainText("Nobody is remembered on this phone");
   await page.goto("/self-service?do=take&item=ITM-0002");
-  await expect(page.getByRole("dialog", { name: "Bottled Water" }).getByLabel("Your name")).toHaveValue("");
+  await expect(page.getByRole("dialog", { name: "Bottled Water" }).getByLabel("Your full name")).toHaveValue("");
 });
 
-test("a USC-only item asks for a reason and no student ID, and a remembered name is enough", async ({ page }) => {
+test("a USC-only item asks for a reason and the same identity and photo as every other action", async ({ page }) => {
   await serve(page, [{ ...small[0], audience: "USC_STAFF_ONLY" }]);
   await page.goto("/self-service?do=borrow&item=ITM-0001");
   const sheet = page.getByRole("dialog", { name: "Folding Table" });
-  await expect(sheet.getByLabel("Student ID number")).not.toHaveAttribute("required", "");
-  await sheet.getByLabel("Name of the person using it").fill("Jose Ramos");
+  await expect(sheet.getByLabel("Student ID number")).toHaveAttribute("required", "");
+  await sheet.getByLabel("Full name of the person using it").fill("Jose Ramos");
+  await sheet.getByRole("button", { name: "Review and borrow" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("Please enter your student ID number.");
+  await sheet.getByLabel("Student ID number").fill("21000115");
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Say what it's for.");
   await sheet.getByLabel("Specific reason").fill("Stage setup");
-  await attachPhoto(page);
+  await sheet.getByRole("button", { name: "Review and borrow" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("Take a photo holding the item.");
+  await attachPhoto(sheet);
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.locator(".ss-summary")).toContainText("USC use: Stage setup");
+  await expect(sheet.locator(".ss-summary")).toContainText("21000115");
 });
 
 test("closing a form opened from a direct link shows the item's page and stays in Self-Service", async ({ page }) => {
@@ -296,7 +299,7 @@ test.describe("contextual help", () => {
     expect(hit[1]).toBeGreaterThanOrEqual(44);
     await trigger.click();
     const note = sheet.locator(".help__note");
-    await expect(note).toContainText("Individual borrowing needs your ID");
+    await expect(note).toContainText("Logistics keeps a record of who has each item");
     // The note stays inside the screen, even from a field near the edge.
     const place = (await note.boundingBox())!;
     expect(place.x).toBeGreaterThanOrEqual(0);
@@ -319,7 +322,7 @@ test.describe("contextual help", () => {
     await student.scrollIntoViewIfNeeded();
     await settled();
     await student.click();
-    await expect(sheet.locator(".help__note")).toContainText("Individual borrowing");
+    await expect(sheet.locator(".help__note")).toContainText("Logistics keeps a record");
     await photo.click();
     await expect(sheet.locator(".help__note")).toHaveCount(1);
     await expect(sheet.locator(".help__note")).toContainText("Only Logistics staff can see it");

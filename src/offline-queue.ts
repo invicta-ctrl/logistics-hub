@@ -28,7 +28,7 @@ export type Outcome = "RETURNED" | "DAMAGED" | "LOST";
 
 /** What the phone sends. Immutable once saved: a retry sends exactly the same record. */
 export type WireEvent = {
-  v: 1; id: string; seq: number; type: EventType; itemId: string; quantity: number; occurredAt: string; catalogRevision: number | null;
+  v: 1 | 2; id: string; seq: number; type: EventType; itemId: string; quantity: number; occurredAt: string; catalogRevision: number | null;
   person: { name: string; studentId?: string };
   purpose?: "INDIVIDUAL" | "USC"; reason?: string; returnBy?: string | null;
   loanEventId?: string | null; outcome?: Outcome; note?: string;

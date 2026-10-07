@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { identify } from "../self-service-browser";
 
 const catalog = { revision: 1, categories: ["FURNITURE", "SCHOOL SUPPLIES"], items: [
   { id: "ITM-0005", name: "Folding Table", category: "FURNITURE", unit: "piece", available: 3, audience: "STUDENTS_AND_USC_STAFF" },
@@ -138,12 +139,12 @@ test("self-service: the item decides Borrow, Take or Use, and a use asks no amou
   await expect(sheet).toContainText("Use · School Supplies");
   await expect(sheet.getByLabel("How many?")).toHaveCount(0);
   await expect(sheet.getByRole("radio")).toHaveCount(0);
-  await sheet.getByLabel("Your name").fill("Ana Reyes");
+  await identify(sheet, "Ana Reyes");
   await sheet.getByRole("button", { name: "Review and use" }).click();
   // Nothing is saved until the person has seen what will be sent and confirmed it.
   await expect(sheet.getByRole("heading", { name: "Check before you send" })).toBeFocused();
-  await expect(sheet.locator(".ss-summary")).toContainText("Used by");
   await expect(sheet.locator(".ss-summary")).toContainText("Ana Reyes");
+  await expect(sheet.locator(".ss-summary")).toContainText("21000115");
   await sheet.getByRole("button", { name: "Edit" }).click();
   await expect(sheet.getByRole("button", { name: "Review and use" })).toBeVisible();
   await sheet.getByRole("button", { name: "Review and use" }).click();
@@ -184,7 +185,7 @@ test("self-service closed for maintenance: every address sends people to DOL sta
   await page.route("**/api/self-service/sync", (route) => route.abort());
   // A use recorded before the office closed Self-Service waits on the phone.
   await page.goto("/self-service?do=use&item=ITM-0300");
-  await page.getByRole("dialog", { name: "A4 Bond Paper" }).getByLabel("Your name").fill("Ana Reyes");
+  await identify(page.getByRole("dialog", { name: "A4 Bond Paper" }), "Ana Reyes");
   await page.getByRole("button", { name: "Review and use" }).click();
   await page.getByRole("button", { name: "Confirm use" }).click();
   await page.getByRole("dialog", { name: "Use recorded" }).getByRole("button", { name: "Done" }).click();
@@ -220,7 +221,7 @@ test("administration tests a closed Self-Service in its own panel: records are t
   await page.route("**/api/self-service/sync", (route) => {
     const body = route.request().postData() ?? "";
     sent.push({ test: route.request().headers()["x-self-service-test"], body });
-    const id = /"v":1,"id":"([^"]+)"/.exec(body)![1];
+    const id = /"v":2,"id":"([^"]+)"/.exec(body)![1];
     return route.fulfill({ contentType: "application/json", body: JSON.stringify({ revision: 4, results: [{ id, outcome: "review", message: "Test saved. It waits for staff and changes nothing." }] }) });
   });
   await page.goto("/staff/admin/self-service");
@@ -230,7 +231,7 @@ test("administration tests a closed Self-Service in its own panel: records are t
   await panel.locator(".ss-card", { hasText: "Bottled Water" }).first().click();
   await panel.getByRole("link", { name: "Take", exact: true }).click();
   const sheet = panel.getByRole("dialog", { name: "Bottled Water" });
-  await sheet.getByLabel("Your name").fill("Owner One");
+  await identify(sheet, "Owner One");
   await sheet.getByRole("button", { name: "Review and take" }).click();
   await sheet.getByRole("button", { name: "Confirm take" }).click();
   await expect.poll(() => sent.length).toBe(1);
@@ -238,7 +239,7 @@ test("administration tests a closed Self-Service in its own panel: records are t
   expect(sent[0]!.body).toContain('"test":true');
   await expect(panel.getByRole("link", { name: /1 needs review/ })).toBeVisible();
   // Once staff accept it, the panel learns so on its next check and no longer waits.
-  const takeId = /"v":1,"id":"([^"]+)"/.exec(sent[0]!.body)![1];
+  const takeId = /"v":2,"id":"([^"]+)"/.exec(sent[0]!.body)![1];
   await page.route("**/api/self-service/decisions?*", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ results: [{ id: takeId, outcome: "accepted" }] }) }));
   await page.reload();
   await panel.getByRole("link", { name: /Synced/ }).click();

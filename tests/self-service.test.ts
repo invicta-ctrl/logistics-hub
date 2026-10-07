@@ -61,12 +61,15 @@ function phone() {
   return {
     deviceId,
     take: (itemId: string, quantity: number, minutesAgo = 0) => event("TAKE", itemId, { quantity }, minutesAgo),
+    /** A record from a phone that holds the identity rule (version 2): name, an 8-digit Student ID and a photo on every action. */
+    current: (type: "TAKE" | "USE" | "BORROW" | "RETURN", itemId: string, fields: Record<string, unknown> = {}, minutesAgo = 0) =>
+      event(type, itemId, { v: 2, person: { name: "Maria Santos", studentId: "21000115" }, ...(type === "TAKE" ? { quantity: 1 } : {}), ...(type === "BORROW" ? { purpose: "INDIVIDUAL" } : {}), ...(type === "RETURN" ? { loanEventId: null, outcome: "RETURNED" } : {}), ...fields }, minutesAgo),
     borrow: (itemId: string, minutesAgo = 0, fields: Record<string, unknown> = {}) => event("BORROW", itemId, { purpose: "INDIVIDUAL", ...fields }, minutesAgo),
     giveBack: (itemId: string, loanEventId: string | null, minutesAgo = 0, fields: Record<string, unknown> = {}) => event("RETURN", itemId, { loanEventId, outcome: "RETURNED", ...fields }, minutesAgo),
     sync: async (events: Array<Record<string, unknown>>, options: { photoFor?: string[]; photo?: Uint8Array<ArrayBuffer>; origin?: string; sentAt?: string; headers?: Record<string, string> } = {}) => {
       const form = new FormData();
       form.set("batch", JSON.stringify({ deviceId, sentAt: options.sentAt ?? new Date().toISOString(), events }));
-      const withPhoto = options.photoFor ?? events.filter((entry) => entry.type === "BORROW" || entry.type === "RETURN").map((entry) => entry.id as string);
+      const withPhoto = options.photoFor ?? events.filter((entry) => entry.type === "BORROW" || entry.type === "RETURN" || entry.v === 2).map((entry) => entry.id as string);
       for (const id of withPhoto) form.set(`photo:${id}`, new File([options.photo ?? JPEG], "photo.jpg", { type: "image/jpeg" }));
       // Serialised like a browser would, so the Worker sees a real Content-Length.
       const request = new Request(`${origin}/api/self-service/sync`, { method: "POST", headers: { origin: options.origin ?? origin }, body: form });
@@ -300,7 +303,7 @@ describe("Use (open-unit Consumables)", () => {
     expect(await results(await device.sync([use]))).toEqual([{ id: use.id, outcome: "accepted" }]);
     expect(await results(await device.sync([use]))).toEqual([{ id: use.id, outcome: "accepted", duplicate: true }]);
     expect(onHand(paper)).toBe(8);
-    expect(stored(use.id)).toMatchObject({ event_type: "USE", quantity: 1, applied: 1, movement_id: null, review: null, student_id: null });
+    expect(stored(use.id)).toMatchObject({ event_type: "USE", quantity: 1, applied: 1, movement_id: null, review: null, student_id: "20-1234-567" });
     // No amount is ever asked or accepted.
     const amount = { ...device.take(paper, 2), type: "USE" };
     expect(await results(await device.sync([amount]))).toEqual([{ id: amount.id, outcome: "rejected", message: "A use has no amount." }]);
@@ -727,3 +730,82 @@ describe("self-service security", () => {
     expect((await call("/api/staff/self-service")).status).toBe(401);
   });
 });
+
+describe("Self-Service identity (record version 2)", () => {
+  it("holds every new record to a name, an exactly eight-digit Student ID and a photo, whatever the phone checked", async () => {
+    const water = await consumable("Bottled Water", 50);
+    const paper = await consumable("A4 Bond Paper", 8, { consumptionMode: "OPEN_UNIT" });
+    const scissors = await loanable("Scissors", 5);
+    const a = phone();
+    const bad = ["1234567", "123456789", "12-345678", "ABC12345", "12A45678", "1234 5678", "２１０００１１５"];
+    for (const studentId of bad) {
+      const events = [a.current("TAKE", water, { person: { name: "Maria Santos", studentId } }), a.current("USE", paper, { person: { name: "Maria Santos", studentId } }), a.current("BORROW", scissors, { person: { name: "Maria Santos", studentId } })];
+      const sent = await results(await a.sync(events));
+      expect(sent.map((result) => result.outcome), studentId).toEqual(["rejected", "rejected", "rejected"]);
+      expect(sent.map((result) => result.message), studentId).toEqual(Array(3).fill("Student ID number must be exactly 8 digits."));
+    }
+    // A missing ID or name is refused the same way; nothing was recorded.
+    const missing = [a.current("TAKE", water, { person: { name: "Maria Santos" } }), a.current("TAKE", water, { person: { studentId: "21000115" } }), a.current("BORROW", scissors, { purpose: "USC", person: { name: "Maria Santos" } })];
+    expect((await results(await a.sync(missing))).map((result) => result.outcome)).toEqual(["rejected", "rejected", "rejected"]);
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM self_service_events").get()).toEqual({ n: 0 });
+    expect(onHand(water)).toBe(50);
+    expect(photos.size).toBe(0);
+  });
+
+  it("records a Take, a Use and a Borrow with the Student ID and a private photo, and replays them without a second copy", async () => {
+    const water = await consumable("Bottled Water", 50);
+    const paper = await consumable("A4 Bond Paper", 8, { consumptionMode: "OPEN_UNIT" });
+    const scissors = await loanable("Scissors", 5);
+    const a = phone();
+    const take = a.current("TAKE", water, { quantity: 2 });
+    const use = a.current("USE", paper);
+    const borrow = a.current("BORROW", scissors);
+    expect((await results(await a.sync([take, use, borrow]))).map((result) => result.outcome)).toEqual(["accepted", "accepted", "accepted"]);
+    expect([take, use, borrow].map((entry) => stored(entry.id)!.student_id)).toEqual(["21000115", "21000115", "21000115"]);
+    expect(onHand(water)).toBe(48);
+    expect(onHand(paper)).toBe(8);
+    expect(onHand(scissors)).toBe(4);
+    const keys = [take, use].map((entry) => stored(entry.id)!.photo_key as string);
+    expect(keys).toEqual([expect.stringMatching(new RegExp(`^phone/${take.id}-[0-9a-f]{8}$`)), expect.stringMatching(new RegExp(`^phone/${use.id}-[0-9a-f]{8}$`))]);
+    expect(keys.every((key) => photos.has(key))).toBe(true);
+    expect(photos.size).toBe(3);
+    // Staff can open the photo; the open Self-Service pages cannot.
+    expect((await call(`/api/staff/self-service/${take.id}/photo`)).status).toBe(401);
+    const opened = await staff(`/api/staff/self-service/${take.id}/photo`);
+    expect(opened.status).toBe(200);
+    expect(opened.headers.get("cache-control")).toBe("private, no-store");
+    // The phone resends the same batch: nothing is applied or stored a second time.
+    expect((await results(await a.sync([take, use, borrow]))).map((result) => result.duplicate)).toEqual([true, true, true]);
+    expect(onHand(water)).toBe(48);
+    expect(photos.size).toBe(3);
+  });
+
+  it("refuses a Take, a Use or a Borrow that arrives without its photo, and a return without one is never closed", async () => {
+    const water = await consumable("Bottled Water", 50);
+    const paper = await consumable("A4 Bond Paper", 8, { consumptionMode: "OPEN_UNIT" });
+    const scissors = await loanable("Scissors", 5);
+    const a = phone();
+    const events = [a.current("TAKE", water), a.current("USE", paper), a.current("BORROW", scissors)];
+    const sent = await results(await a.sync(events, { photoFor: [] }));
+    expect(sent.map((result) => result.outcome)).toEqual(["rejected", "rejected", "rejected"]);
+    expect(sent.every((result) => /photo/i.test(result.message ?? ""))).toBe(true);
+    expect(onHand(water)).toBe(50);
+    expect(onHand(scissors)).toBe(5);
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM self_service_events").get()).toEqual({ n: 0 });
+  });
+
+  it("still accepts what an older phone saved before the rule, without a photo for a Take, and keeps the wider ID pattern for it", async () => {
+    const water = await consumable("Bottled Water", 50);
+    const a = phone();
+    const old = a.take(water, 1);
+    const odd = { ...a.take(water, 1), person: { name: "Juan Dela Cruz", studentId: "20-1234-567" } };
+    expect((await results(await a.sync([old, odd]))).map((result) => result.outcome)).toEqual(["accepted", "accepted"]);
+    expect(stored(old.id)).toMatchObject({ student_id: "20-1234-567", photo_key: null });
+    expect(onHand(water)).toBe(48);
+    expect(photos.size).toBe(0);
+    // The wider pattern still refuses what is not an ID at all.
+    const garbage = { ...a.take(water, 1), person: { name: "Juan Dela Cruz", studentId: "not an id!" } };
+    expect((await results(await a.sync([garbage])))[0]).toMatchObject({ outcome: "rejected" });
+  });
+});
+

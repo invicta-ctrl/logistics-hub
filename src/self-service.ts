@@ -1,5 +1,5 @@
 import { resolveItemIcon } from "./item-icons";
-import { LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, STUDENT_ID_PATTERN, selfServiceAction } from "./catalog-policy";
+import { LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, SELF_SERVICE_RECORD_VERSION, SELF_SERVICE_STUDENT_ID, STUDENT_ID_PATTERN, selfServiceAction } from "./catalog-policy";
 import { throttled } from "./accounts";
 import { ancestry, pathOf, placesOf } from "./location-tree";
 import { sharedPlaces } from "./locations";
@@ -35,6 +35,8 @@ export type SyncResult = { id: string; outcome: SyncOutcome; message?: string; d
 type SelfServiceEvent = {
   id: string; seq: number; type: EventType; itemId: string; quantity: number; catalogRevision: number | null;
   personName: string; studentId: string | null;
+  /** Saved by a phone that holds the identity rule: its Take and Use arrive with a photo, and its ID is eight digits. */
+  current: boolean;
   deviceTime: string;
   /** Business time: the device clock corrected by (arrival − send time), never later than arrival. */
   occurredAt: string; live: boolean; clockIssue: boolean;
@@ -138,7 +140,9 @@ export function networkOf(request: Request): string {
 export function parseEvent(raw: unknown, batch: Pick<Batch, "sentAt" | "offsetMs" | "receivedAt">): SelfServiceEvent {
   if (!raw || typeof raw !== "object") throw bad("Malformed record.");
   const record = raw as Record<string, unknown>;
-  if (record.v !== 1) throw bad("This version of the app is out of date. Please update it.");
+  // Version 1 is a record an older phone saved before the identity rule: it is kept, and Attention lists what it lacks.
+  if (record.v !== 1 && record.v !== SELF_SERVICE_RECORD_VERSION) throw bad("This version of the app is out of date. Please update it.");
+  const current = record.v === SELF_SERVICE_RECORD_VERSION;
   const id = uuid(record.id, "Malformed record id.");
   const seq = whole(record.seq, 1, 2 ** 31, "Malformed record sequence.");
   const type = record.type as EventType;
@@ -150,8 +154,11 @@ export function parseEvent(raw: unknown, batch: Pick<Batch, "sentAt" | "offsetMs
   const catalogRevision = record.catalogRevision === null || record.catalogRevision === undefined ? null : whole(record.catalogRevision, 0, 2 ** 31, "Malformed catalog revision.");
   const person = (record.person && typeof record.person === "object" ? record.person : {}) as Record<string, unknown>;
   const personName = cleanText(person.name, "Your name", 120, true)!;
-  const studentId = type === "TAKE" || type === "USE" ? null : cleanText(person.studentId, "Student ID number", 30, false)?.toUpperCase() ?? null;
-  if (studentId && !STUDENT_ID_PATTERN.test(studentId)) throw bad("Student ID number may use only letters, digits and dashes.");
+  const studentId = cleanText(person.studentId, "Student ID number", 30, current)?.toUpperCase() ?? null;
+  // The Worker holds a new record to the rule whatever the phone checked; an older one only to the office's wider pattern.
+  if (studentId && !(current ? SELF_SERVICE_STUDENT_ID : STUDENT_ID_PATTERN).test(studentId)) {
+    throw bad(current ? "Student ID number must be exactly 8 digits." : "Student ID number may use only letters, digits and dashes.");
+  }
 
   const deviceMs = isoTime(record.occurredAt, "Malformed time.");
   const sentMs = Date.parse(batch.sentAt);
@@ -160,7 +167,7 @@ export function parseEvent(raw: unknown, batch: Pick<Batch, "sentAt" | "offsetMs
   const clockIssue = deviceMs > sentMs + CLOCK_SLACK_MS || sentMs - deviceMs > MAX_AGE_MS;
   const occurred = clockIssue ? receivedMs : Math.min(deviceMs + batch.offsetMs, receivedMs);
   const event: SelfServiceEvent = {
-    id, seq, type, itemId: record.itemId, quantity, catalogRevision, personName, studentId, deviceTime: new Date(deviceMs).toISOString(),
+    id, seq, type, itemId: record.itemId, quantity, catalogRevision, personName, studentId, current, deviceTime: new Date(deviceMs).toISOString(),
     occurredAt: new Date(occurred).toISOString(), live: !clockIssue && sentMs - deviceMs <= LIVE_MS, clockIssue,
     loan: null, loanEventId: null, outcome: null, note: null, test: record.test === true
   };
@@ -309,9 +316,10 @@ async function applyOut(db: D1Database, bucket: R2Bucket, event: SelfServiceEven
   const eligible = selfServiceAction(item) === event.type && !uscOnly;
   if (!eligible && event.live) return rejected(event.id, uscOnly ? "This item is lent for USC use only." : "This item is not available for self-service right now. Please ask Logistics staff.");
   let photoKey: string | null = null;
-  if (event.type === "BORROW") {
-    // Saved with its photo in one step on the phone, so a missing photo is never a real borrow.
-    const stored = await uploadPhoto(bucket, event, photoPart, "borrow once more", `loans/${loanIdFor(event.id)}`);
+  if (event.type === "BORROW" || event.current) {
+    // Saved with its photo in one step on the phone, so a missing photo is never a real record.
+    const again = event.type === "BORROW" ? "borrow once more" : event.type === "TAKE" ? "take it once more" : "record the use once more";
+    const stored = await uploadPhoto(bucket, event, photoPart, again, event.type === "BORROW" ? `loans/${loanIdFor(event.id)}` : `phone/${event.id}`);
     if ("outcome" in stored) return stored;
     photoKey = stored.key;
   }
@@ -319,7 +327,9 @@ async function applyOut(db: D1Database, bucket: R2Bucket, event: SelfServiceEven
   try {
     if (event.type === "USE") {
       const held: ReviewReason | null = event.test ? "TEST" : event.clockIssue ? "CLOCK" : !eligible ? "NOT_ELIGIBLE" : null;
-      return held ? await hold(db, event, batch, held) : await write(db, event, [eventRow(db, event, batch, { applied: 1, review: null })], null);
+      result = held ? await hold(db, event, batch, held, { photoKey }) : await write(db, event, [eventRow(db, event, batch, { applied: 1, review: null, photoKey })], null);
+      if (photoKey && (result.duplicate || result.outcome === "rejected")) await dropUnusedPhoto(db, bucket, photoKey);
+      return result;
     }
     const facts = await context(db, event.itemId, event.occurredAt, batch.receivedAt);
     const held: ReviewReason | null = event.test ? "TEST" : event.clockIssue ? "CLOCK" : uscOnly ? "USC_ONLY" : !eligible ? "NOT_ELIGIBLE"
@@ -330,7 +340,7 @@ async function applyOut(db: D1Database, bucket: R2Bucket, event: SelfServiceEven
     else if (event.type === "TAKE") {
       result = await write(db, event, [
         takeStatement(db, movementId, event.id, event.itemId, event.quantity, event.occurredAt),
-        eventRow(db, event, batch, { applied: 1, review, movementId })
+        eventRow(db, event, batch, { applied: 1, review, movementId, photoKey })
       ], review);
     } else {
       const loanId = loanIdFor(event.id);

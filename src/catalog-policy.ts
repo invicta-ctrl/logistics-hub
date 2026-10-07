@@ -206,6 +206,15 @@ export const ACTIVITY_TITLES: Record<string, string> = Object.assign({}, ...Obje
 export const STUDENT_ID_PATTERN = /^[A-Z0-9][A-Z0-9-]{2,29}$/;
 
 /**
+ * A new Self-Service record names its person by exactly eight digits. Only the format is checked: the number is not
+ * confirmed against any student source, though an exact match to a Staff Directory person links to that person.
+ * Older records and staff-entered loans keep the wider pattern above, so no history is invalid.
+ */
+export const SELF_SERVICE_STUDENT_ID = /^\d{8}$/;
+/** Records made before the identity rule are version 1 and are still accepted, then listed in Attention; version 2 is held to the rule. */
+export const SELF_SERVICE_RECORD_VERSION = 2;
+
+/**
  * Limits shared by the phone and the Worker, so the form never offers what the server refuses.
  * - Five events per sync keeps one request inside D1's per-invocation budget (about 25 round
  *   trips at worst).

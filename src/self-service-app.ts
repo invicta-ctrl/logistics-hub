@@ -1,6 +1,6 @@
 import "@fontsource/newsreader/latin-400-italic.css";
 import "./self-service.css";
-import { SELF_SERVICE_LIMITS, STUDENT_ID_PATTERN, type SelfServiceAction, selfServiceReference } from "./catalog-policy";
+import { SELF_SERVICE_LIMITS, SELF_SERVICE_STUDENT_ID, type SelfServiceAction, selfServiceReference } from "./catalog-policy";
 import { bindHelp, helpTip } from "./contextual-help";
 import { type CatalogItem, type LocalEvent, type Snapshot, estimate, openLoans, pendingByItem, summary } from "./offline-queue";
 import * as store from "./offline-store";
@@ -505,25 +505,26 @@ function quantityField(max: number): Html {
 }
 
 const nameField = (label: string) => html`<div class="field"><label for="ss-name">${label}</label><input id="ss-name" name="name" autocomplete="name" autocapitalize="words" maxlength="120" required value="${profile.name}" enterkeyhint="done" /></div>`;
-const STUDENT_ID_HELP = "Individual borrowing needs your ID so Logistics knows who has the item. Only Logistics staff see it.";
-const studentIdLabel = (required: boolean) => html`Student ID number ${required ? "" : html`<span class="field__optional">optional</span>`}`;
-const studentIdField = (required: boolean) => html`<div class="field" data-student-id><div class="ss-label-row"><label for="ss-student" data-student-label>${studentIdLabel(required)}</label>${helpTip("the student ID", STUDENT_ID_HELP)}</div><input id="ss-student" name="studentId" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="30" inputmode="text" value="${profile.studentId}" ${required ? "required" : ""} /></div>`;
+const STUDENT_ID_HELP = "Logistics keeps a record of who has each item. Only Logistics staff see it.";
+const studentIdField = () => html`<div class="field" data-student-id><div class="ss-label-row"><label for="ss-student">Student ID number</label>${helpTip("the student ID", STUDENT_ID_HELP)}</div><input id="ss-student" name="studentId" type="text" inputmode="numeric" pattern="[0-9]{8}" autocomplete="off" spellcheck="false" required aria-describedby="ss-student-hint" value="${rememberedId() ? profile.studentId : ""}" /><p class="field__hint" id="ss-student-hint">8 digits</p></div>`;
+/** Whether the remembered student ID still meets the rule: an older phone may remember one that does not. */
+const rememberedId = () => SELF_SERVICE_STUDENT_ID.test(profile.studentId);
 
 /**
  * Who this is for. A phone that knows the person shows them with "Not you? Change"; otherwise the fields, and a choice to remember them.
  * The details live in this phone's own storage only; nothing here is shared or looked up.
  */
-function identityBlock(kind: "name" | "borrow", nameLabel: string, uscOnly = false): Html {
-  const known = Boolean(profile.name) && (kind === "name" || uscOnly || Boolean(profile.studentId));
+function identityBlock(nameLabel: string): Html {
+  const known = Boolean(profile.name) && rememberedId();
   return html`<div class="ss-identity" data-identity>
       ${known ? html`<div class="ss-who" data-who>
           <span class="ss-who__icon" aria-hidden="true">${icon("user")}</span>
-          <p class="ss-who__text"><strong>${profile.name}</strong>${kind === "borrow" && profile.studentId ? html`<span>ID ${profile.studentId}</span>` : ""}</p>
+          <p class="ss-who__text"><strong>${profile.name}</strong><span>ID ${profile.studentId}</span></p>
           <button type="button" class="text-link ss-who__change" data-change-identity>Not you? Change</button>
         </div>` : ""}
       <div class="ss-identity__fields" data-identity-fields ${known ? "hidden" : ""}>
         ${nameField(nameLabel)}
-        ${kind === "borrow" ? studentIdField(!uscOnly) : ""}
+        ${studentIdField()}
         <div class="ss-remember"><label><input type="checkbox" name="remember" checked /><span>Remember me on this phone</span></label>${helpTip("remembering you", "Your name and student ID stay on this phone only, so you do not type them again. Forget them any time in My activity.")}</div>
       </div>
     </div>`;
@@ -536,27 +537,40 @@ function sheetFrame(kicker: string, title: string, body: Html): Html {
 
 const submitButton = (text: string) => html`<button class="button button--primary button--lg button--block" type="submit" data-submit>${text}</button>`;
 
+const photoPick = (text: string) => html`<button type="button" class="photo-field__pick" data-pick aria-describedby="ss-photo-label ss-photo-hint">${icon("camera")}<span>${text}</span></button>`;
+
+/** The photo proof every Self-Service record carries. Only Logistics staff see it. */
+const photoField = (tip: string, hint: string, capture: "user" | "environment", pick: string) => html`<div class="field">
+        <div class="ss-label-row"><span class="field-label" id="ss-photo-label">Photo proof</span>${helpTip("the photo", tip)}</div>
+        <input id="ss-photo" type="file" accept="image/jpeg,image/png,image/webp" capture="${capture}" hidden />
+        <div class="photo-field" data-photo>${photoPick(pick)}</div>
+        <p class="field__hint" id="ss-photo-hint">${hint}</p>
+      </div>`;
+const HOLD_TIP = "Only Logistics staff can see it. It shows what left and who has it. It is deleted from this phone once it is sent, and Logistics keeps it for about a year after the record is settled.";
+const holdingPhoto = () => photoField(HOLD_TIP, "Hold the item so your face and the item are both in view.", "user", "Take a photo holding it");
+
 function takeSheet(item: CatalogItem): Html {
   return sheetFrame(`Take · ${categoryName(item.category)}`, item.name, html`
     <form class="form ss-form" data-form="TAKE" novalidate>
       ${quantityField(SELF_SERVICE_LIMITS.quantity)}
-      ${identityBlock("name", "Your name")}
+      ${identityBlock("Your full name")}
+      ${holdingPhoto()}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and take")}
     </form>`);
 }
 
-/** An open-unit item: the person only says who used it. No amount, and stock does not change. */
+/** An open-unit item: the person says who used it and shows the item. No amount, and stock does not change. */
 function useSheet(item: CatalogItem): Html {
   return sheetFrame(`Use · ${categoryName(item.category)}`, item.name, html`
     <form class="form ss-form" data-form="USE" novalidate>
-      ${identityBlock("name", "Your name")}
+      ${identityBlock("Your full name")}
+      ${holdingPhoto()}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and use")}
     </form>`);
 }
 
-const photoPick = (text: string) => html`<button type="button" class="photo-field__pick" data-pick aria-describedby="ss-photo-label ss-photo-hint">${icon("camera")}<span>${text}</span></button>`;
 
 function borrowSheet(item: CatalogItem): Html {
   const uscOnly = item.audience === "USC_STAFF_ONLY";
@@ -568,7 +582,7 @@ function borrowSheet(item: CatalogItem): Html {
       ${uscOnly ? html`<input type="hidden" name="purpose" value="USC" /><p class="callout">${icon("info")}<span>Lent for USC use only. Say what it's for.</span></p>`
         : html`<fieldset class="ss-question"><legend class="ss-legend">What is it for?</legend><div class="segmented segmented--2">
           <label><input type="radio" name="purpose" value="INDIVIDUAL" checked /><span>Individual use</span></label><label><input type="radio" name="purpose" value="USC" /><span>USC use</span></label></div></fieldset>`}
-      ${identityBlock("borrow", uscOnly ? "Name of the person using it" : "Your full name", uscOnly)}
+      ${identityBlock(uscOnly ? "Full name of the person using it" : "Your full name")}
       <div class="field" data-reason ${uscOnly ? "" : "hidden"}><label for="ss-reason">Specific reason</label><textarea id="ss-reason" name="reason" rows="2" maxlength="300" placeholder="e.g. stage setup for the general assembly"></textarea></div>
       ${quantityField(SELF_SERVICE_LIMITS.quantity)}
       <fieldset class="ss-choices"><legend>Return by <span class="field__optional">optional</span></legend>
@@ -576,18 +590,16 @@ function borrowSheet(item: CatalogItem): Html {
         <label><input type="radio" name="returnBy" value="${day(tomorrow)}" /><span>Tomorrow</span></label>
         <label><input type="radio" name="returnBy" value="" checked /><span>No date</span></label>
       </fieldset>
-      <div class="field">
-        <div class="ss-label-row"><span class="field-label" id="ss-photo-label">Photo of you with the item <span class="field__optional">required</span></span>${helpTip("the photo", "Only Logistics staff can see it. It shows what left and who has it. It is deleted from this phone once it is sent, and Logistics keeps it for about a year after the record is settled.")}</div>
-        <input id="ss-photo" type="file" accept="image/jpeg,image/png,image/webp" capture="user" hidden />
-        <div class="photo-field" data-photo>${photoPick("Take a photo holding it")}</div>
-        <p class="field__hint" id="ss-photo-hint">Hold the item so your face and the item are both in view.</p>
-      </div>
+      ${holdingPhoto()}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and borrow")}
     </form>`);
 }
 
 /** Only a borrow made on this phone can be returned, so the loan is always known. */
+/** A return carries the identity its borrow was made with. A borrow an older phone saved without a valid ID has to say who is returning. */
+const loanKnown = (loan: LocalEvent) => Boolean(loan.person.name) && SELF_SERVICE_STUDENT_ID.test(loan.person.studentId ?? "");
+
 function returnSheet(loan: LocalEvent): Html {
   return sheetFrame(`Borrowed ${when(loan.occurredAt)}`, `Return ${loan.itemName}${loan.quantity > 1 ? ` ×${loan.quantity}` : ""}`, html`
     <form class="form ss-form" data-form="RETURN" novalidate>
@@ -595,12 +607,8 @@ function returnSheet(loan: LocalEvent): Html {
         <label><input type="radio" name="outcome" value="RETURNED" checked /><span>Good</span></label><label><input type="radio" name="outcome" value="DAMAGED" /><span>Damaged</span></label><label><input type="radio" name="outcome" value="LOST" /><span>Lost</span></label>
       </div></fieldset>
       <div class="field" data-note hidden><label for="ss-note" data-note-label>What's damaged?</label><textarea id="ss-note" name="note" rows="2" maxlength="300"></textarea></div>
-      <div class="field">
-        <div class="ss-label-row"><span class="field-label" id="ss-photo-label">Photo of the item <span class="field__optional">required</span></span>${helpTip("the photo", "Logistics staff check it before the stock is updated. Only staff can see it, and it is deleted from this phone once it is sent.")}</div>
-        <input id="ss-photo" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden />
-        <div class="photo-field" data-photo>${photoPick("Take a photo of the item")}</div>
-        <p class="field__hint" id="ss-photo-hint">Show the item as you hand it back.</p>
-      </div>
+      ${loanKnown(loan) ? "" : identityBlock("Your full name")}
+      ${photoField("Logistics staff check it before the stock is updated. Only staff can see it, and it is deleted from this phone once it is sent.", "Show the item as you hand it back.", "environment", "Take a photo of the item")}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and return")}
     </form>`);
@@ -613,18 +621,17 @@ const OUTCOME_WORD = { RETURNED: "Good", DAMAGED: "Damaged", LOST: "Lost" } as c
 /** What is about to be sent, in the person's own terms: the last look before the record is saved. */
 function summaryRows(draft: Draft, photoUrl: string | null, loan: LocalEvent | undefined): Html {
   const what = `${draft.type === "USE" ? "" : `${draft.quantity} × `}${draft.itemName}`;
-  const rows: Array<[string, Html | string]> = [["Item", what]];
-  const who = draft.person.name + (draft.person.studentId ? ` · ID ${draft.person.studentId}` : "");
-  if (draft.type === "TAKE") rows.push(["Taken by", who], ["After this", "Nothing to return."]);
-  else if (draft.type === "USE") rows.push(["Used by", who], ["After this", "Nothing is counted or returned."]);
+  const rows: Array<[string, Html | string]> = [["Item", what], ["Name", draft.person.name], ["Student ID number", draft.person.studentId ?? ""]];
+  if (draft.type === "TAKE") rows.push(["After this", "Nothing to return."]);
+  else if (draft.type === "USE") rows.push(["After this", "Nothing is counted or returned."]);
   else if (draft.type === "BORROW") {
-    rows.push(["Borrowed by", who], ["For", draft.purpose === "USC" ? `USC use: ${draft.reason}` : "Individual use"],
+    rows.push(["For", draft.purpose === "USC" ? `USC use: ${draft.reason}` : "Individual use"],
       ["Return by", draft.returnBy ? dayLabel(draft.returnBy) : "No date set. Return it from Return on this phone."]);
   } else {
-    rows.push(["Returned by", who], ["Borrowed", loan ? when(loan.occurredAt) : ""], ["Condition", draft.outcome === "RETURNED" ? "Good" : `${OUTCOME_WORD[draft.outcome!]}: ${draft.note}`]);
+    rows.push(["Borrowed", loan ? when(loan.occurredAt) : ""], ["Condition", draft.outcome === "RETURNED" ? "Good" : `${OUTCOME_WORD[draft.outcome!]}: ${draft.note}`]);
   }
   return html`<dl class="ss-summary">${rows.filter(([, value]) => value !== "").map(([term, value]) => html`<div><dt>${term}</dt><dd>${value}</dd></div>`)}
-      ${photoUrl ? html`<div class="ss-summary__photo"><dt>Photo</dt><dd><img src="${photoUrl}" alt="The photo you are sending" /></dd></div>` : ""}</dl>`;
+      ${photoUrl ? html`<div class="ss-summary__photo"><dt>Photo proof</dt><dd><img src="${photoUrl}" alt="The photo you are sending" /></dd></div>` : ""}</dl>`;
 }
 
 /** Shown in the sheet after saving: calm, specific, and it updates itself when the record syncs. */
@@ -789,12 +796,6 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     const purpose = form.querySelector<HTMLInputElement>("input[name=purpose]:checked, input[type=hidden][name=purpose]")?.value;
     const reason = form.querySelector<HTMLElement>("[data-reason]");
     if (reason) reason.hidden = purpose !== "USC";
-    const idField = form.querySelector<HTMLElement>("[data-student-id]");
-    if (idField && type === "BORROW") {
-      const required = purpose !== "USC";
-      idField.querySelector("input")!.required = required;
-      mount(idField.querySelector("[data-student-label]")!, studentIdLabel(required));
-    }
     const outcome = form.querySelector<HTMLInputElement>("input[name=outcome]:checked")?.value;
     const note = form.querySelector<HTMLElement>("[data-note]");
     if (note) {
@@ -809,7 +810,10 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     form.querySelector<HTMLElement>("[data-identity-fields]")?.removeAttribute("hidden");
   };
 
-  form.addEventListener("input", () => {
+  form.addEventListener("input", (event) => {
+    // The student ID is eight digits: letters, spaces and dashes are dropped as they are typed or pasted.
+    const typed = event.target as HTMLInputElement;
+    if (typed.id === "ss-student") typed.value = typed.value.replace(/\D/g, "").slice(0, 8);
     dirty = true;
     setMessage(alert, "");
     form.querySelectorAll("[aria-invalid]").forEach((field) => field.removeAttribute("aria-invalid"));
@@ -860,7 +864,7 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     const data = new FormData(form);
     return {
       name: String(data.get("name") ?? "").trim().replace(/\s+/g, " "),
-      studentId: String(data.get("studentId") ?? "").trim().toUpperCase(),
+      studentId: String(data.get("studentId") ?? "").trim(),
       purpose: String(data.get("purpose") ?? "INDIVIDUAL") as "INDIVIDUAL" | "USC",
       reason: String(data.get("reason") ?? "").trim(),
       outcome: String(data.get("outcome") ?? "RETURNED") as "RETURNED" | "DAMAGED" | "LOST",
@@ -874,12 +878,12 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
   /** The first problem, with the field to fix it in, or null when the form is ready to check. */
   const validate = (values: ReturnType<typeof read>): [string, string] | null => {
     const { name, studentId, purpose, reason, outcome, note, count } = values;
-    const problem = !loan && !name ? ["Please enter a name.", "#ss-name"]
-      : type === "BORROW" && purpose === "INDIVIDUAL" && !studentId ? ["Your student ID number is needed for individual use.", "#ss-student"]
-      : studentId && !STUDENT_ID_PATTERN.test(studentId) ? ["The student ID may use only letters, digits and dashes.", "#ss-student"]
+    const needsIdentity = !loan || !loanKnown(loan);
+    const problem = needsIdentity && !name ? ["Please enter your full name.", "#ss-name"]
+      : needsIdentity && name.split(" ").length < 2 ? ["Please enter your full name, first and last.", "#ss-name"]
+      : needsIdentity && !SELF_SERVICE_STUDENT_ID.test(studentId) ? [studentId ? "The student ID number must be exactly 8 digits." : "Please enter your student ID number.", "#ss-student"]
       : type === "BORROW" && purpose === "USC" && !reason ? ["Say what it's for.", "#ss-reason"]
-      : type === "BORROW" && !photo ? ["Take a photo holding the item.", "[data-pick]"]
-      : type === "RETURN" && !photo ? ["Take a photo of the item you are returning.", "[data-pick]"]
+      : !photo ? [type === "RETURN" ? "Take a photo of the item you are returning." : "Take a photo holding the item.", "[data-pick]"]
       : type === "RETURN" && outcome !== "RETURNED" && !note ? [outcome === "LOST" ? "Say what happened." : "Say what's damaged.", "#ss-note"]
       : !Number.isInteger(count) || count < 1 || count > SELF_SERVICE_LIMITS.quantity ? [`Choose a quantity from 1 to ${SELF_SERVICE_LIMITS.quantity}.`, "#ss-qty"] : null;
     return problem as [string, string] | null;
@@ -908,8 +912,8 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
       save.disabled = true;
       try {
         const saved = await record(draft, photo ?? undefined);
-        if (type !== "RETURN" && draft.person.name && remember) {
-          profile = { name: draft.person.name, studentId: type === "BORROW" ? draft.person.studentId ?? profile.studentId : profile.studentId };
+        if (draft.person.name && remember) {
+          profile = { name: draft.person.name, studentId: draft.person.studentId ?? profile.studentId };
           void store.setMeta("profile", profile);
         }
         dirty = false;
@@ -942,8 +946,8 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     }
     const { name, studentId, purpose, reason, outcome, note, count, returnBy, remember } = values;
     const target = loan ? { itemId: loan.itemId, itemName: loan.itemName, unit: loan.unit } : { itemId: item!.id, itemName: item!.name, unit: item!.unit };
-    const person = loan ? loan.person : { name, ...(studentId && type === "BORROW" ? { studentId } : {}) };
-    const draft: Draft = type === "TAKE" || type === "USE" ? { type, ...target, quantity: type === "USE" ? 1 : count, person: { name } }
+    const person = loan && loanKnown(loan) ? loan.person : { name, studentId };
+    const draft: Draft = type === "TAKE" || type === "USE" ? { type, ...target, quantity: type === "USE" ? 1 : count, person }
       : type === "BORROW" ? { type, ...target, quantity: count, person, purpose, ...(purpose === "USC" ? { reason } : {}), returnBy }
       : { type, ...target, quantity: loan?.quantity ?? count, person, loanEventId: loan?.id ?? null, outcome, ...(outcome === "RETURNED" ? {} : { note }) };
     check(draft, remember);

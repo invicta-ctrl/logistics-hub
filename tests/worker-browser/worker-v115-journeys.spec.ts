@@ -1,4 +1,5 @@
 import { expect, test, devices, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { attachPhoto, identify } from "../self-service-browser";
 
 /*
  * V1.15 (V2 consolidation) journeys across surfaces, on the real Worker + D1 and the production build. Each V1.x suite
@@ -33,25 +34,6 @@ async function signIn(browser: Browser, user: string, secret: string): Promise<{
 
 const onHand = async () => (await (await staff.request.get(`/api/staff/items/${projector}`)).json() as { item: { onHand: number } }).item.onHand;
 
-/** A camera photo, made in the page, handed to the file input as a person would. */
-async function attachPhoto(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 480;
-    canvas.height = 640;
-    const context = canvas.getContext("2d")!;
-    context.fillStyle = "#7a1419";
-    context.fillRect(0, 0, 480, 640);
-    const blob = await new Promise<Blob>((resolve) => canvas.toBlob((value) => resolve(value!), "image/jpeg", 0.8));
-    const transfer = new DataTransfer();
-    transfer.items.add(new File([blob], "photo.jpg", { type: "image/jpeg" }));
-    const input = document.querySelector<HTMLInputElement>("#ss-photo")!;
-    input.files = transfer.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await expect(page.getByAltText("Photo to attach")).toBeVisible();
-}
-
 const noSideways = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 
 test.describe.serial("V2 journeys", () => {
@@ -79,9 +61,7 @@ test.describe.serial("V2 journeys", () => {
     await page.getByRole("searchbox", { name: "Search everything" }).fill(PROJECTOR);
     await page.getByRole("link", { name: new RegExp(PROJECTOR) }).first().click();
     await page.getByRole("link", { name: "Borrow", exact: true }).click();
-    await page.getByLabel("Your full name").fill("Maria Santos");
-    await page.getByLabel("Student ID number").fill("21-0001-115");
-    await attachPhoto(page);
+    await identify(page, "Maria Santos", "21000115");
     await page.getByRole("button", { name: "Review and borrow" }).click();
     await page.getByRole("button", { name: "Confirm borrow" }).click();
     await expect(page.locator(".ss-receipt__ref strong")).toHaveText(/^SS-/);
