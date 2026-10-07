@@ -1,5 +1,6 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
+import { type AiRunner, MAX_PHOTO_BYTES, assistStatus, keepBoth, photoName, recheckCapturedPhoto, setAssist } from "./ambient-assist";
 import { attention, attentionSummary, reviewIdentity, reviewReturn, selfServiceToCheck } from "./attention";
 import { auditDetail, auditReview, auditState, finishAudit, itemFreshness, observe, resolveObservation, startAudit, updateAudit } from "./audits";
 import { bulkUpdate } from "./bulk";
@@ -35,6 +36,8 @@ export type Env = {
   /** Official USC ID scans (V1.3): their own bucket, reached only through the Staff Directory's Administration routes. */
   STAFF_IDS: R2Bucket;
   SESSION_SECRET?: string;
+  /** Workers AI (ambient-assist.ts). Absent in local development and tests: every assist then stays silent. */
+  AI?: AiRunner;
 };
 
 /** Phones keep anything waiting and show the maintenance screen on this answer (offline-sync.ts). */
@@ -64,6 +67,8 @@ const LEASE_NAME = "lh_catalogue_lease";
 const LEASE_PREFIX = "CL-";
 const LEASE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const leaseKey = (secret: string) => `catalogue-lease:${secret}`;
+/** Attention: "Keep both" on a possible duplicate found from a synced photo (ambient-assist.ts). */
+const KEEP_BOTH_PATH = /^\/api\/staff\/attention\/possible-duplicate\/(ITM-[A-Za-z0-9-]{1,24})$/;
 const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/location-report|\/visual)?$/;
 const LOCATION_PATH = /^\/api\/staff\/locations\/(LOC-\d{4,})(\/photo|\/move-items)?$/;
 const RELATION_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})\/links(?:\/(ITM-[A-Za-z0-9-]{1,24}))?$/;
@@ -202,6 +207,7 @@ function leaseMayUse(method: string, path: string): boolean {
   if (path === "/api/staff/catalogue/offline") return method === "GET" || method === "DELETE";
   if (path === "/api/staff/catalogue/snapshot") return method === "GET";
   if (path === "/api/staff/catalogue/sessions") return method === "POST";
+  if (path === "/api/staff/catalogue/photo-name") return method === "POST";
   const session = CATALOGUE_PATH.exec(path);
   if (session) return session[2] === undefined ? method === "GET" || method === "PATCH" : (session[2] === "/captures" || session[2] === "/finish") && method === "POST";
   // Checking a place (V1.7): its own checks, observed and finished offline alike. Settling what a check found changes stock or a
@@ -304,7 +310,7 @@ async function logout(request: Request, env: Env, url: URL): Promise<Response> {
   return response;
 }
 
-async function staffApi(request: Request, env: Env, url: URL): Promise<Response> {
+async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionContext): Promise<Response> {
   const mutating = request.method !== "GET";
   if (mutating && !sameOrigin(request, url)) return json({ error: "Invalid request origin." }, 403);
   const path = url.pathname;
@@ -315,6 +321,8 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   /** Signed in only by this device's offline cataloguing lease, not a full session. */
   const leased = !full;
   const body = () => request.json().catch(() => null);
+  /** Work nobody waits for: after the response where the runtime allows it, inline in tests. Its failure is never the request's. */
+  const afterwards = async (work: Promise<unknown>) => { const quiet = work.catch(() => undefined); if (ctx) ctx.waitUntil(quiet); else await quiet; };
   if (account.mustChangePassword && !PASSWORD_CHANGE_ALLOWED.has(path)) return json({ error: "Set a new password before continuing.", code: "PASSWORD_CHANGE_REQUIRED" }, 403);
   // Staff of other departments and officers sign in to their own account only (Earl, 2026-10-03).
   if (!hubAccess(account) && !OWN_ACCOUNT_PATHS.has(path)) return json({ error: "The Logistics Hub is for the Department of Logistics. Your sign-in opens your account only.", code: "NO_HUB_ACCESS" }, 403);
@@ -336,7 +344,14 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (path === "/api/staff/admin/accounts" && method === "POST") return json(await createAccount(env.DB, account, await body()), 201);
     if (path === "/api/staff/admin/activity" && method === "GET") return json(await securityActivity(env.DB));
     if (path === "/api/staff/admin/self-service" && method === "PATCH") return json(await setSelfService(env.DB, account, await body()));
-    if (path === "/api/staff/admin/system" && method === "GET") return json(await systemStatus(env, url.origin), 200, { "cache-control": "private, no-store" });
+    if (path === "/api/staff/admin/system" && method === "GET") {
+      const [system, assist] = await Promise.all([systemStatus(env, url.origin), assistStatus(env.DB, env.AI)]);
+      return json({ ...system, assist }, 200, { "cache-control": "private, no-store" });
+    }
+    if (path === "/api/staff/admin/assist" && method === "PATCH") {
+      if (account.role !== "OWNER") return json({ error: "Photo suggestions are turned on or off by the owner." }, 403);
+      return json(await setAssist(env.DB, account, await body()));
+    }
     if (path === "/api/staff/admin/catalog" && method === "GET") return json(await catalogCoverage(env.DB));
     if (path === "/api/staff/admin/catalog/aliases" && method === "GET") return json(await aliasItems(env.DB, url.searchParams.get("q") ?? ""));
     const names = ALIAS_PATH.exec(path);
@@ -410,6 +425,14 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (path === "/api/staff/catalogue/offline" && method === "POST") return enableOffline(request, env, url, account);
   if (path === "/api/staff/catalogue/offline" && method === "DELETE") return disableOffline(request, env, url, account, leased);
   if (path === "/api/staff/catalogue/snapshot" && method === "GET") return revisioned(request, env.DB, () => catalogueSnapshot(env.DB));
+  if (path === "/api/staff/catalogue/photo-name" && method === "POST") {
+    // One catalogue photo, as the device prepared it: refuse anything larger before reading it.
+    const size = Number(request.headers.get("content-length"));
+    if (!size) throw new InputError(411, "Missing content length.");
+    if (size > MAX_PHOTO_BYTES) throw new InputError(413, "That photo is too large.");
+    const { name } = await photoName(env.DB, env.AI, new Uint8Array(await request.arrayBuffer()), "USER");
+    return json({ name }, 200, { "cache-control": "private, no-store" });
+  }
   if (path === "/api/staff/catalogue/sessions" && method === "POST") { const started = await startSession(env.DB, account, await body()); return json(started, started.resumed ? 200 : 201); }
   const session = CATALOGUE_PATH.exec(path);
   if (session && !session[2] && method === "GET") {
@@ -459,6 +482,8 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (loan?.[2] === "photo" && method === "GET") return loanPhoto(env.DB, env.EVIDENCE, loan[1]!);
   if (loan?.[2] === "review" && method === "POST") return json(await reviewReturn(env.DB, account, loan[1]!));
   if (path === "/api/staff/attention" && method === "GET") return revisioned(request, env.DB, () => attention(env.DB), hourSalt());
+  const keeping = KEEP_BOTH_PATH.exec(path);
+  if (keeping && method === "POST") return json(await keepBoth(env.DB, account, keeping[1]!));
   if (path === "/api/staff/attention/summary" && method === "GET") return revisioned(request, env.DB, () => attentionSummary(env.DB), hourSalt());
   if (path === "/api/staff/home" && method === "GET") return json(await resumable(env.DB, account));
   // Insights are practical but never urgent: a person's browser may keep them for two minutes, and nothing else waits on them.
@@ -492,7 +517,11 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!form) throw new InputError(400, "Invalid photo form.");
     // On a lease, only the first photo of an item this account catalogued.
     if (leased && (form.get("expected") !== "" || !await capturedBy(env.DB, account.accountId, match[1]!))) throw new InputError(403, "Sign in again to change this item's photo.");
-    return json(await putItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, form));
+    const saved = await putItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, form);
+    // A capture whose photo was not checked when it was taken (offline, or the check failed) is checked once, now that its record and
+    // first photo are saved. The save above has already answered; this cannot change it.
+    if (form.get("recheck") === "1" && form.get("expected") === "") await afterwards(recheckCapturedPhoto(env.DB, env.AI, env.CATALOG_MEDIA, match[1]!));
+    return json(saved);
   }
   if (match?.[2] === "/photo" && method === "DELETE") return json(await removeItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
   if (match?.[2] === "/open-units" && method === "POST") return json(await openUnitAction(env.DB, account, match[1]!, await body()));
@@ -504,7 +533,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   const relation = RELATION_PATH.exec(path);
   if (relation && !relation[2] && method === "POST") return json(await linkItems(env.DB, account, relation[1]!, await body()), 201);
   if (relation?.[2] && method === "DELETE") return json(await unlinkItems(env.DB, account, relation[1]!, relation[2]));
-  const known = match || relation || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/attention", "/api/staff/attention/summary", "/api/staff/home", "/api/staff/home/insights", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/search", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || keeping || relation || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/attention", "/api/staff/attention/summary", "/api/staff/home", "/api/staff/home/insights", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/catalogue/photo-name", "/api/staff/locations", "/api/staff/search", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 
@@ -613,7 +642,7 @@ async function recovery(request: Request, env: Env, url: URL): Promise<Response>
   return json(await recoverOwner(env.DB, await request.json().catch(() => null)));
 }
 
-async function route(request: Request, env: Env, url: URL): Promise<Response> {
+async function route(request: Request, env: Env, url: URL, ctx?: ExecutionContext): Promise<Response> {
   const path = url.pathname;
   if (path === "/api/public/catalog") {
     return request.method === "GET" ? revisioned(request, env.DB, () => publicCatalog(env.DB)) : json({ error: "Method not allowed." }, 405, { allow: "GET" });
@@ -640,7 +669,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   if (path === "/api/self-service/decisions") {
     return request.method === "GET" ? json(await reviewDecisions(env.DB, url.searchParams.get("ids"))) : json({ error: "Method not allowed." }, 405, { allow: "GET" });
   }
-  if (path.startsWith("/api/staff/")) return staffApi(request, env, url);
+  if (path.startsWith("/api/staff/")) return staffApi(request, env, url, ctx);
   if (path.startsWith("/api/")) return json({ error: "Not found." }, 404);
   // Items lived at /staff/inventory until V1.1; keep saved links and bookmarks working.
   // The build's record is for Administration's System page, read inside the Worker; the public has no use for it.
@@ -673,10 +702,10 @@ function assetCaching(response: Response, path: string): Response {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     try {
-      return secureHeaders(await route(request, env, url), url);
+      return secureHeaders(await route(request, env, url, ctx), url);
     } catch (error) {
       if (error instanceof InputError) return secureHeaders(json({ error: error.message }, error.status), url);
       console.error("request_failed", { path: url.pathname, message: error instanceof Error ? error.message : "unknown" });

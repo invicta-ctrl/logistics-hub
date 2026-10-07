@@ -180,6 +180,8 @@ async function send(entry: Entry): Promise<void> {
     form.set("thumb", entry.photo.thumb, "thumb.jpg");
     form.set("expected", "");
     form.set("hash", entry.photo.hash);
+    // Not checked when it was taken (offline, or the check failed): the server checks it once, after this first photo is saved.
+    if (entry.recheck) form.set("recheck", "1");
     try {
       await api(`/api/staff/items/${entry.itemId}/photo`, { method: "PUT", body: form, ...within(90_000) });
     } catch (error) {

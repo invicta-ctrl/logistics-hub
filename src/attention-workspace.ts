@@ -9,7 +9,7 @@ import { ApiError, type Html, api, emptyState, expired, failure, html, icon, liv
  */
 
 type Urgency = "NOW" | "SOON" | "LATER";
-type Entry = { key: string; reason: string; source: string; urgency: Urgency; title: string; why: string; since: string | null; href: string; action: string; review?: { loanId: string }; identity?: { eventId: string } };
+type Entry = { key: string; reason: string; source: string; urgency: Urgency; title: string; why: string; since: string | null; href: string; action: string; review?: { loanId: string }; identity?: { eventId: string }; keepBoth?: { itemId: string } };
 type Group = { reason: string; source: string; label: string; total: number; byUrgency: Record<Urgency, number> };
 type Answer = { today: string; groups: Group[]; entries: Entry[] };
 
@@ -72,6 +72,7 @@ export async function attentionWorkspace(): Promise<void> {
         ${entry.review ? html`<button class="button button--secondary button--sm" type="button" data-review="${entry.review.loanId}">${icon("check")}Mark reviewed</button>` : ""}
         ${entry.identity ? html`<button class="button button--secondary button--sm" type="button" data-identity="${entry.identity.eventId}" data-outcome="CONFIRMED">${icon("check")}Confirm identity</button>
           <button class="button button--ghost button--sm" type="button" data-identity="${entry.identity.eventId}" data-outcome="IGNORED">Ignore</button>` : ""}
+        ${entry.keepBoth ? html`<button class="button button--ghost button--sm" type="button" data-keep-both="${entry.keepBoth.itemId}">Keep both</button>` : ""}
         <a class="button button--ghost button--sm" href="${entry.href}" data-route>${entry.action}${icon("next")}</a>
       </span></li>`;
   }
@@ -163,6 +164,14 @@ export async function attentionWorkspace(): Promise<void> {
       api(`/api/staff/self-service/${identity.dataset.identity}/identity`, { method: "POST", body: JSON.stringify({ outcome: identity.dataset.outcome }) })
         .then(() => { toast(identity.dataset.outcome === "CONFIRMED" ? "Identity confirmed." : "Ignored. The record keeps what the person gave."); return poll.refresh(); })
         .catch((error) => { buttons.forEach((button) => { button.disabled = false; }); toast(failure(error), "error"); });
+      return;
+    }
+    const keep = target.closest<HTMLButtonElement>("[data-keep-both]");
+    if (keep) {
+      keep.disabled = true;
+      api(`/api/staff/attention/possible-duplicate/${encodeURIComponent(keep.dataset.keepBoth!)}`, { method: "POST" })
+        .then(() => { toast("Kept as two separate items."); return poll.refresh(); })
+        .catch((error) => { keep.disabled = false; toast(failure(error), "error"); });
       return;
     }
     const review = target.closest<HTMLButtonElement>("[data-review]");

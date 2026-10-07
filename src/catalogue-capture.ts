@@ -90,6 +90,14 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   /** True once Save has shown the possible matches: the next Save is the person saying "a different one". */
   let armed = false;
   let preparing = false;
+  /*
+   * Photo suggestions (ambient assist): online, a new photo is named by the server's model. The name fills an empty name field for the
+   * person to check, and is compared with the catalog by the same duplicate rule as typed names. A photo that could not be checked
+   * (offline, or the check failed) is marked on its capture, and the server checks it once after it syncs.
+   */
+  let photoName: string | null = null;
+  let photoChecked = false;
+  let nameFromPhoto = false;
   const thumbs = new Map<string, string>();
   const canAddPlace = who.mode === "signed-in";
 
@@ -230,6 +238,15 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     suggestions = { ...raw, behaviour: settled(raw.behaviour), category: settled(raw.category), unit: settled(raw.unit) };
     // Possible matches, judged as the person types, against what is already known (and what was just added).
     matches = name || value("cat-serial") ? possibleDuplicates({ name, category: value("cat-category"), model: value("cat-model"), serialNumber: value("cat-serial"), photoHash: photo?.hash ?? null }, items as DuplicateKnown[]) : [];
+    // What the photo looks like, when that differs from the typed name: the same rule, said as the photo's.
+    if (photoName && photoName.toLowerCase() !== name.toLowerCase()) {
+      for (const match of possibleDuplicates({ name: photoName }, items as DuplicateKnown[])) {
+        if (matches.length < 3 && !matches.some((each) => each.id === match.id)) matches.push({ ...match, reason: "Looks like it in the photo" });
+      }
+    }
+    const hint = $("#cat-name-hint");
+    hint.textContent = nameFromPhoto ? "Suggested from the photo. Check it, or type over it." : "A temporary name is fine if you are not sure.";
+    hint.classList.toggle("cat-name-hint--photo", nameFromPhoto);
     if (!matches.length) armed = false;
     drawMatches();
     for (const button of root.querySelectorAll<HTMLButtonElement>("[data-behaviour]")) {
@@ -311,10 +328,30 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     try { photo = await preparePhoto(chosen); setMessage($("#cat-alert"), ""); } catch (error) { setMessage($("#cat-alert"), error instanceof Error ? error.message : "This photo could not be used."); }
     preparing = false;
     armed = false;
+    photoName = null;
+    photoChecked = false;
+    if (nameFromPhoto) { field("cat-name").value = ""; nameFromPhoto = false; }
     drawPhoto();
     draw();
     field("cat-name").focus();
+    if (photo && online) void checkPhoto(photo);
   });
+  /** Never in the way: the person keeps typing while it runs, and a failure leaves the photo to be checked after it syncs. */
+  const checkPhoto = async (taken: NonNullable<typeof photo>) => {
+    try {
+      const answer = await api<{ name: string | null }>("/api/staff/catalogue/photo-name", { method: "POST", body: taken.thumb, headers: { "content-type": "image/jpeg" }, ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(15_000) } : {}) });
+      if (photo !== taken) return;
+      photoChecked = true;
+      photoName = answer.name;
+      if (answer.name && !value("cat-name")) {
+        field("cat-name").value = answer.name;
+        nameFromPhoto = true;
+        announce(`Suggested name from the photo: ${answer.name}.`);
+      }
+      draw();
+    } catch { /* checked after sync instead */ }
+  };
+  field("cat-name").addEventListener("input", () => { if (nameFromPhoto) { nameFromPhoto = false; draw(); } });
 
   /* ---------- Saving ---------- */
 
@@ -332,6 +369,9 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const kept = keepShared ? { name: value("cat-name"), category: value("cat-category"), unit: value("cat-unit"), model: value("cat-model"), stock: $<HTMLSelectElement>("#cat-stock").value } : null;
     form.reset();
     photo = null;
+    photoName = null;
+    photoChecked = false;
+    nameFromPhoto = false;
     armed = false;
     if (kept) {
       field("cat-name").value = kept.name;
@@ -383,6 +423,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     };
     const entry: Entry = {
       id, sessionId, owner: session.id, body, photo: photo ? { display: photo.display, thumb: photo.thumb, hash: photo.hash } : null, itemId: null, state: "waiting", message: null, matches: null,
+      ...(photo && !photoChecked ? { recheck: true } : {}),
       at: new Date().toISOString(), after: matches.filter((match) => match.id.startsWith("pending:")).map((match) => match.id.slice(8))
     };
     if (photo) thumbs.set(id, photo.preview);
@@ -531,6 +572,9 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       $<HTMLSelectElement>("#cat-stock").value = String(body.stockArea ?? "Inventory");
       photo = entry.photo ? { ...entry.photo, preview: thumbs.get(entry.id) ?? "" } : null;
       if (photo && !photo.preview) photo.preview = await dataUrl(photo.display);
+      photoName = null;
+      photoChecked = Boolean(photo) && !entry.recheck;
+      nameFromPhoto = false;
       await drop(entry.id);
       waiting = waiting.filter((each) => each.id !== entry.id);
       drawPhoto();

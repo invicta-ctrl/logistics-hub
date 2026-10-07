@@ -10,6 +10,8 @@ type Status = {
   database: Probe & { migrations: { applied: number; latest: string | null; latestAppliedAt: string | null; pending: string[] | null } | null };
   storage: Array<Probe & { id: string; label: string; holds: string }>;
   selfService: "open" | "paused" | null;
+  /** Photo suggestions in Catalogue (ambient-assist.ts): the owner's switch and today's Workers AI use against the daily stop. */
+  assist: { on: boolean; available: boolean; neuronsToday: number; band: "NORMAL" | "CONSERVE" | "RESERVE" | "CRITICAL" | "STOPPED"; stopAt: number };
 };
 
 /** What the runbook (docs/DEPLOYMENT.md, Backups and restore) says protects what. The page adds nothing the runbook does not say. */
@@ -37,7 +39,17 @@ function row(name: string, state: Html, detail: Html | string): Html {
   return html`<li class="status-row"><span class="status-row__name">${name}</span><span class="status-row__state">${state}</span><span class="status-row__detail">${detail}</span></li>`;
 }
 
-function render(status: Status): Html {
+const BAND_WORDS: Record<Status["assist"]["band"], string> = {
+  NORMAL: "", CONSERVE: "Using less: checks after sync still run.", RESERVE: "Using the reserve.", CRITICAL: "Only while someone is cataloguing; checks after sync wait for tomorrow.", STOPPED: "Stopped for today. Cataloguing works as usual without suggestions."
+};
+function assistRow(assist: Status["assist"], owner: boolean): Html {
+  const state = !assist.available ? tag("warn", "Not available here") : !assist.on ? tag("warn", "Off") : assist.band === "STOPPED" ? tag("warn", "Paused for today") : tag("ok", "On");
+  const used = html`${assist.neuronsToday.toLocaleString("en-PH")} of ${assist.stopAt.toLocaleString("en-PH")} Workers AI Neurons used today (UTC). ${BAND_WORDS[assist.band]}`;
+  const detail = assist.available ? used : html`This copy of the application has no Workers AI. Cataloguing works as usual without suggestions.`;
+  return row("Photo suggestions", state, html`${detail}${owner ? html` <button type="button" class="text-link" id="assist-toggle" data-on="${String(!assist.on)}">${assist.on ? "Turn off" : "Turn on"}</button>` : ""}`);
+}
+
+function render(status: Status, owner: boolean): Html {
   const issues = problems(status);
   const level = status.database.migrations;
   const { build } = status;
@@ -50,6 +62,7 @@ function render(status: Status): Html {
         ${row("Database", status.database.ok ? tag("ok", "Answering") : tag("bad", "Not answering"), status.database.ok ? quick(status.database) : "It did not answer within two seconds.")}
         ${status.storage.map((bucket) => row(bucket.label, bucket.ok ? tag("ok", "Answering") : tag("bad", "Not answering"), bucket.ok ? html`${bucket.holds} <span class="muted">${quick(bucket)}</span>` : "It did not answer within two seconds."))}
         ${row("Self-Service", status.selfService === "open" ? tag("ok", "Open") : status.selfService === "paused" ? tag("warn", "Closed for maintenance") : tag("warn", "Unknown"), html`<a class="text-link" href="/staff/admin/self-service" data-route>${status.selfService === null ? "Open the Self-Service settings" : "Change it in Self-Service"}</a>`)}
+        ${assistRow(status.assist, owner)}
       </ul>
       <div class="form-actions form-actions--start admin-actions"><button type="button" class="button button--secondary" id="check-again">Check again</button></div>
     </section>
@@ -84,8 +97,14 @@ export async function systemStatus(): Promise<void> {
   async function check(): Promise<void> {
     target.setAttribute("aria-busy", "true");
     try {
-      mount(target, render(await api<Status>("/api/staff/admin/system")));
+      mount(target, render(await api<Status>("/api/staff/admin/system"), session!.role === "OWNER"));
       document.querySelector("#check-again")!.addEventListener("click", () => { void check(); });
+      document.querySelector<HTMLButtonElement>("#assist-toggle")?.addEventListener("click", (event) => {
+        const button = event.currentTarget as HTMLButtonElement;
+        button.disabled = true;
+        api("/api/staff/admin/assist", { method: "PATCH", body: JSON.stringify({ on: button.dataset.on === "true" }) })
+          .then(() => check(), (error) => { button.disabled = false; mount(target.querySelector("#system-summary")!, html`<p>${failure(error)}</p>`); });
+      });
     } catch (error) {
       // Navigation and every other page stay available; only this report is missing.
       mount(target, emptyState("System status could not be loaded", failure(error), html`<button type="button" class="button button--secondary" id="check-again">Try again</button>`, "error", 3));

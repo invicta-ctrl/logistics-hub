@@ -1,4 +1,14 @@
-# Current Bounded Task — none active (Part 6 complete on main; awaiting Earl's acceptance)
+# Current Bounded Task — V1.15 V2 consolidation (Claude Cloud, sole integrator)
+INTENT: finish V1.15 under its spec, the 2026-10-07 amendments and the 2026-10-08 Ambient AI Assist amendment, then write the release records.
+BRANCH: `road-to-v2/v1.15-v2-consolidation`; derive the head with `git rev-parse HEAD`.
+AUTHORITY: `docs/specs/accepted/road-to-v2/v1.15-v2-consolidation.md` and its accepted amendments; Earl's 2026-10-07 continuation prompt.
+EXCLUDED: merge or push to `main`, production D1/R2 writes, provider configuration beyond the reviewed `AI` binding, reopening Self-Service, anything sent to AI other than intentional catalog photos.
+STATUS: IN PROGRESS. Ambient AI Assist is pushed; see `.codex/SESSION_HANDOFF.md` (top) for the full handoff block.
+NEXT ACTION: merge `wip/v1.15-codex-windows` when it exists, then the remaining V1.15 acceptance work.
+
+---
+
+# Previous task — none active (Part 6 complete on main; awaiting Earl's acceptance)
 INTENT: Part 6 is on main and its migrations are applied; wait for Earl's signed-in acceptance and decision D1.
 OBJECTIVE: deliver the proposed Admin + Hardening plan (per-username login limit and session sweep, backup runbook, accessibility fixes, Self-Service setting, Owner-only retention) as one branch that another local or cloud writer can resume without chat history.
 BRANCH: `slice/part-06-plan`, started at `c0c6e9963a9f846adf362a4ddeae683fc1eff375`; derive the current documentation checkpoint with `git rev-parse HEAD` rather than copying a self-referential SHA here.

@@ -1,3 +1,4 @@
+import { PHOTO_MATCH_FROM } from "./ambient-assist";
 import { UNSETTLED_FINDING } from "./audits";
 import { IDENTITY_RULE_KEY, OPEN_REORDER_STATUSES, REVIEW_REASONS, type ReviewReason } from "./catalog-policy";
 import { type Actor, BUMP_REVISION, InputError } from "./inventory";
@@ -33,6 +34,8 @@ export type Entry = {
   review?: { loanId: string };
   /** Set when a person can confirm or ignore a phone record's identity here. */
   identity?: { eventId: string };
+  /** Set when a person can say two items that look alike in a photo are different things here. */
+  keepBoth?: { itemId: string };
 };
 
 /** Past this many days an unreviewed damaged or lost return is left to the loan history instead of asking again. */
@@ -206,6 +209,16 @@ const REASONS: readonly Reason[] = [
     from: `FROM items i WHERE ${GAP_UNCLASSIFIED}`,
     urgency: "'LATER'", cols: "i.id AS id, i.name AS item", order: "i.name COLLATE NOCASE, i.id",
     entry: (row) => ({ title: String(row.item), why: "Not classified yet, so it stays out of every public list.", since: null, href: `/staff/items?item=${row.id}&tab=details`, action: "Classify it" })
+  },
+  {
+    // Found once, after an offline capture's photo synced (ambient-assist.ts): never on a page load.
+    id: "POSSIBLE_DUPLICATE", source: "Catalog", label: "Possible duplicates",
+    from: PHOTO_MATCH_FROM,
+    urgency: "'LATER'", cols: "i.id AS id, i.name AS item, o.id AS other, o.name AS otherName, s.updated_at AS at", order: "s.updated_at, i.id",
+    entry: (row) => ({
+      title: String(row.item), why: `Its photo looks like ${row.otherName}, which is already in the catalog. If it is the same thing, make one of them inactive.`,
+      since: String(row.at), href: `/staff/items?item=${row.id}`, action: "Compare", keepBoth: { itemId: String(row.id) }
+    })
   },
   {
     id: "NO_PLACE", source: "Catalog", label: "Items without a place",

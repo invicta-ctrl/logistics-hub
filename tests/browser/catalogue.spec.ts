@@ -22,7 +22,10 @@ function serve(page: Page, options: { items?: Item[]; active?: boolean } = {}) {
     items: options.items ?? [base("ITM-0001", "Whiteboard Marker Black"), base("ITM-0002", "Stapler", { itemType: "Loanable", category: "EQUIPMENT", onHand: 3 }), base("ITM-0003", "Bond Paper A4", { category: "PAPER", unit: "ream", consumptionMode: "OPEN_UNIT" })],
     started: Boolean(options.active), placeId: "LOC-0003",
     captures: [] as Array<Record<string, unknown>>,
-    photos: [] as Array<{ item: string; hash: string | null }>,
+    photos: [] as Array<{ item: string; hash: string | null; recheck: boolean }>,
+    /** Ambient assist: what the photo check answers, and how often it was asked. */
+    photoName: null as string | null,
+    photoAsks: 0,
     bulk: [] as Array<{ action: string; value?: string; count: number }>,
     /** "drop": the request never arrives; "lose": the server saves it but the answer is lost; "photo": the first photo upload fails. */
     fail: "" as "" | "drop" | "lose" | "photo",
@@ -71,8 +74,14 @@ function serve(page: Page, options: { items?: Item[]; active?: boolean } = {}) {
     await page.route("**/api/staff/items/ITM-*/photo", async (route) => {
       if (state.fail === "photo") { state.fail = ""; await route.abort("connectionrefused"); return; }
       const hash = /name="hash"\r\n\r\n([0-9a-f]{16})/.exec(route.request().postDataBuffer()?.toString("latin1") ?? "")?.[1] ?? null;
-      state.photos.push({ item: /items\/(ITM-\d+)\/photo/.exec(route.request().url())![1]!, hash });
+      const form = route.request().postDataBuffer()?.toString("latin1") ?? "";
+      state.photos.push({ item: /items\/(ITM-\d+)\/photo/.exec(route.request().url())![1]!, hash, recheck: /name="recheck"\r\n\r\n1/.test(form) });
       await json(route, { photo: { id: "00000000-0000-4000-8000-0000000000aa", width: 1, height: 1 } });
+    });
+    await page.route("**/api/staff/catalogue/photo-name", async (route) => {
+      state.photoAsks += 1;
+      expect(route.request().headers()["content-type"]).toBe("image/jpeg");
+      await json(route, { name: state.photoName }, 200, { "cache-control": "private, no-store" });
     });
     await page.route("**/api/staff/items/bulk", async (route) => {
       const body = route.request().postDataJSON() as { action: string; value?: string; items: Array<{ id: string }> };
@@ -323,6 +332,60 @@ test.describe("saving survives a dropped connection", () => {
   });
 });
 
+test.describe("photo suggestions (ambient assist)", () => {
+  test("online, a photo names the thing in an empty name field for the person to check, and finds what is already in the catalog", async ({ page }) => {
+    const server = serve(page, { active: true });
+    server.state.photoName = "Stapler";
+    await begin(page, server);
+    await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
+    await expect(name(page)).toHaveValue("Stapler");
+    await expect(page.locator("#cat-name-hint")).toHaveText("Suggested from the photo. Check it, or type over it.");
+    await expect(page.locator("#cat-dup")).toContainText("This may already be in the catalog.");
+    await expect(page.locator("#cat-dup")).toContainText("Same name");
+    // The person's own words win, and the hint goes with the suggestion.
+    await name(page).fill("Long-reach stapler");
+    await expect(page.locator("#cat-name-hint")).toHaveText("A temporary name is fine if you are not sure.");
+    await expect(page.locator("#cat-dup")).toContainText("Looks like it in the photo");
+    await pick(page, "Borrow").click();
+    await page.getByLabel("Category").fill("EQUIPMENT");
+    await page.getByLabel("Counted in").fill("piece");
+    await page.getByRole("button", { name: "Save & next" }).click();
+    await page.getByRole("button", { name: "Save as a separate item" }).click();
+    await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
+    expect(server.state.captures[0]).toMatchObject({ name: "Long-reach stapler", acknowledged: ["ITM-0002"] });
+    // Checked while it was taken: nothing is left to check after sync.
+    expect(server.state.photos).toEqual([expect.objectContaining({ recheck: false })]);
+    expect(server.state.photoAsks).toBe(1);
+  });
+
+  test("a typed name is never replaced, and a photo that names nothing changes nothing on screen", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await begin(page, server);
+    await name(page).fill("Mystery adapter");
+    await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
+    await expect.poll(() => server.state.photoAsks).toBe(1);
+    await expect(name(page)).toHaveValue("Mystery adapter");
+    await expect(page.locator("#cat-name-hint")).toHaveText("A temporary name is fine if you are not sure.");
+    await expect(page.locator("#cat-dup")).toBeEmpty();
+  });
+
+  test("when the check fails, the capture still saves at once and asks for one check after it syncs", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    await page.route("**/api/staff/catalogue/photo-name", (route) => route.abort("connectionrefused"));
+    await begin(page, server);
+    await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.locator("#cat-photo img")).toBeVisible();
+    await name(page).fill("Black converter");
+    await pick(page, "Take").click();
+    await page.getByLabel("Category").fill("OFFICE SUPPLIES");
+    await page.getByLabel("Counted in").fill("piece");
+    await page.getByRole("button", { name: "Save & next" }).click();
+    await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
+    expect(server.state.photos).toEqual([expect.objectContaining({ recheck: true })]);
+  });
+});
+
 test.describe("when the sign-in ends or the session is gone", () => {
   test("an ended sign-in stops sending instead of asking again and again", async ({ page }) => {
     const server = serve(page, { active: true });
@@ -542,6 +605,9 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     // The saved catalog answers the same suggestion as online.
     await name(page).fill("Whiteboard");
     await expect(page.locator("#cat-why")).toContainText("Like “Whiteboard Marker Black”");
+    // Offline, a photo is kept with the capture and no model is asked; it is checked once after it syncs.
+    await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.locator("#cat-photo img")).toBeVisible();
     await name(page).fill("Tape dispenser");
     await pick(page, "Take").click();
     await page.getByLabel("Category").fill("OFFICE SUPPLIES");
@@ -554,6 +620,8 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
     await expect.poll(() => server.state.captures.length).toBe(1);
     await expect(bar(page)).toHaveText("All saved");
+    expect(server.state.photoAsks).toBe(0);
+    expect(server.state.photos).toEqual([expect.objectContaining({ recheck: true })]);
     // The session the device started was proposed under its own id; the server answered where the captures go.
     expect(server.state.starts).toEqual([{ id: proposed, locationId: "LOC-0003" }]);
   });

@@ -35,6 +35,11 @@ export type Entry = {
   /** The matches the server found, for a stopped entry. */
   matches: Array<{ id: string; reason: string; strong: boolean }> | null;
   at: string;
+  /**
+   * Its photo was not checked when it was taken (offline, or the check failed): the server checks it once after the photo is saved
+   * (ambient-assist.ts). A reconsideration, never a command: the server re-reads the catalog as it is then, and may say nothing.
+   */
+  recheck?: boolean;
 };
 
 /** A saved capture as the server lists it in a session. */

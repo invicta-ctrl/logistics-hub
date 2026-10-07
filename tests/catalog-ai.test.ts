@@ -86,10 +86,16 @@ describe("what may come back", () => {
   });
 });
 
-describe("V1.11 calls no model", () => {
-  it("has no Workers AI binding and no route or page that reaches the second opinion", () => {
-    expect(readFileSync("wrangler.jsonc", "utf8")).not.toMatch(/"ai"\s*:/);
+describe("the V1.11 second opinion stays a measurement", () => {
+  it("is reached by no route or page: measured on 2026-10-07 and left off (V1.15 plan, Ambient AI Assist amendment)", () => {
     const users = readdirSync("src").filter((file) => /\.ts$/.test(file) && readFileSync(`src/${file}`, "utf8").includes("./catalog-ai"));
     expect(users).toEqual(["suggest-evaluation.ts"]);
+  });
+
+  it("the Workers AI binding is used by ambient assist alone, which the Worker alone calls", () => {
+    expect(readFileSync("wrangler.jsonc", "utf8")).toMatch(/"ai"\s*:\s*\{\s*"binding"\s*:\s*"AI"\s*\}/);
+    const sources = readdirSync("src").filter((file) => /\.ts$/.test(file));
+    expect(sources.filter((file) => /\bai\.run\(|\.AI\.run\(/.test(readFileSync(`src/${file}`, "utf8")))).toEqual(["ambient-assist.ts"]);
+    expect(sources.filter((file) => /env\.AI\b/.test(readFileSync(`src/${file}`, "utf8")))).toEqual(["worker.ts"]);
   });
 });
