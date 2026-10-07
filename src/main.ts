@@ -19,6 +19,7 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
   "/lending": () => lending,
   "/self-service": () => import("./self-service-app").then((module) => module.selfService),
   "/staff": () => import("./staff").then((module) => module.staffLogin),
+  "/staff/home": () => import("./home-workspace").then((module) => module.homeWorkspace),
   "/staff/items": () => import("./staff").then((module) => module.workspace),
   "/staff/catalogue": () => import("./catalogue-workspace").then((module) => module.catalogueWorkspace),
   "/staff/locations": () => import("./locations-workspace").then((module) => module.locationsWorkspace),
@@ -28,7 +29,11 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
   "/staff/self-service": () => import("./self-service-review").then((module) => module.selfServiceReview),
   "/staff/attention": () => import("./attention-workspace").then((module) => module.attentionWorkspace),
   "/staff/activity": () => import("./activity-workspace").then((module) => module.activityWorkspace),
-  "/staff/admin": () => import("./admin").then((module) => module.administration),
+  "/staff/admin": () => import("./admin-system").then((module) => module.systemStatus),
+  "/staff/admin/self-service": () => import("./admin-self-service").then((module) => module.selfServiceSettings),
+  "/staff/admin/catalog": () => import("./admin-catalog").then((module) => module.catalogSettings),
+  "/staff/admin/staff": () => import("./admin").then((module) => module.staffAccounts),
+  "/staff/admin/accountability": () => import("./admin-accountability").then((module) => module.accountability),
   "/staff/admin/directory": () => import("./directory-workspace").then((module) => module.staffDirectory),
   "/staff/account": () => import("./admin").then((module) => module.myAccount)
 };
@@ -53,7 +58,7 @@ async function render(): Promise<void> {
   loaded = true;
   shown.address = window.location.pathname + window.location.search;
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
-  if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/items", true);
+  if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/home", true);
   // Offline the server cannot hand over the other page; the router renders what it can (the offline page) instead.
   if (catalogRoute(path) !== CATALOG_PAGE && navigator.onLine && sessionStorage.getItem("reloaded-for-page") !== path) {
     sessionStorage.setItem("reloaded-for-page", path);

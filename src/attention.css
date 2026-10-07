@@ -16,6 +16,7 @@
 .attn-row__why { color: var(--text-2); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .attn-row__since { color: var(--text-3); font-size: var(--text-sm); }
 .attn-row__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.attn-only { margin: 0 0 var(--space-4); color: var(--text-2); font-size: var(--text-sm); }
 .attn-more { margin-top: var(--space-2); }
 .attn-note { margin: var(--space-2) 0 0; font-size: var(--text-sm); }
 @media (max-width: 640px) { .attn-row__actions { width: 100%; } .attn-row__actions .button--ghost { padding-inline-start: 0; } .attn-filters .table-filters .field { min-width: 0; } }

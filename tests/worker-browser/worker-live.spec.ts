@@ -9,7 +9,7 @@ async function signIn(page: Page) {
   await page.getByRole("textbox", { name: "Username" }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Items" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
 }
 
 test("public Lending Hub fails closed on freshly migrated data", async ({ page, request }) => {
@@ -137,7 +137,7 @@ test.describe("owner administration", () => {
     await staff.getByLabel("New password", { exact: true }).fill("maria chose this one");
     await staff.getByLabel("Repeat new password").fill("maria chose this one");
     await staff.getByRole("button", { name: "Change password" }).click();
-    await expect(staff.getByRole("heading", { name: "Items" })).toBeVisible();
+    await expect(staff.getByRole("heading", { name: "Home" })).toBeVisible();
     await expect(staff.getByRole("link", { name: "Administration" })).toHaveCount(0);
     expect((await staff.request.get("/api/staff/admin/accounts")).status()).toBe(403);
     await staff.goto("/staff/admin");
@@ -147,21 +147,28 @@ test.describe("owner administration", () => {
   test("owner closes and reopens Self-Service from Administration, and phones see it at once", async ({ page, request }) => {
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("link", { name: "Administration" }).click();
+    // System opens first and reads the real database, storage and build: a fresh local one is all answering, and says what it is.
+    await expect(page.getByRole("heading", { name: "Right now" })).toBeVisible();
+    await expect(page.locator("#system-summary")).toContainText("Everything checked is working.");
+    await expect(page.locator(".status-row", { hasText: "Database" })).toContainText("Answering");
+    await page.getByRole("link", { name: "Accountability" }).click();
     // The owner's retention check answers from the real database: a fresh one has nothing due.
     await expect(page.getByRole("region", { name: "Old personal details" }).getByText("Nothing is old enough to remove yet.")).toBeVisible();
+    await page.getByRole("link", { name: "Self-Service", exact: true }).and(page.locator(".subnav__link")).click();
     const section = page.getByRole("region", { name: "Self-Service on phones" });
     await expect(section.getByText("Open", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Test Self-Service" })).toHaveCount(0);
     expect((await request.get("/api/self-service/catalog")).status()).toBe(200);
-    page.once("dialog", (dialog) => dialog.accept());
     await section.getByRole("button", { name: "Close for maintenance" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close for maintenance" }).click();
     await expect(section.getByText("Closed for maintenance")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Test Self-Service" })).toBeVisible();
     expect((await request.get("/api/self-service/catalog")).status()).toBe(503);
-    page.once("dialog", (dialog) => dialog.accept());
     await section.getByRole("button", { name: "Reopen Self-Service" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Reopen Self-Service" }).click();
     await expect(section.getByText("Open", { exact: true })).toBeVisible();
     expect((await request.get("/api/self-service/catalog")).status()).toBe(200);
+    await page.getByRole("link", { name: "Accountability" }).click();
     await expect(page.locator("#activity")).toContainText("closed Self-Service for maintenance");
     await expect(page.locator("#activity")).toContainText("reopened Self-Service");
   });
@@ -172,7 +179,8 @@ test.describe("owner administration", () => {
     page.on("console", (message) => { if (/Content Security Policy/i.test(message.text())) violations.push(message.text()); });
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("link", { name: "Administration" }).click();
-    await page.getByRole("link", { name: "Staff Directory" }).click();
+    await page.getByRole("link", { name: "Staff", exact: true }).and(page.locator(".subnav__link")).click();
+    await page.getByRole("link", { name: "Open the Staff Directory" }).click();
     await expect(page.getByRole("heading", { name: "Staff Directory" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "The directory is empty" })).toBeVisible();
     // A fictional card drawn on a canvas: no real ID is ever used in tests. Portrait, so its shape must reach the page.
@@ -235,7 +243,7 @@ test.describe("owner administration", () => {
     const staff = await (await browser.newContext()).newPage();
     expect((await staff.request.get(response.url())).status()).toBe(401);
     await signInAs(staff, username, password);
-    await expect(staff.getByRole("heading", { name: "Items" })).toBeVisible();
+    await expect(staff.getByRole("heading", { name: "Home" })).toBeVisible();
     expect((await staff.request.get(response.url())).status()).toBe(403);
     await staff.goto("/staff/admin/directory");
     await expect(staff).toHaveURL(/\/staff\/items$/);
@@ -288,7 +296,7 @@ test.describe("owner administration", () => {
     await page.reload();
     await expect(page).toHaveURL(/\/staff$/);
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, "recovered owner pass");
-    await expect(page.getByRole("heading", { name: "Items" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
   });
 });
 

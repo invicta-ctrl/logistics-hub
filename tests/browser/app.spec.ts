@@ -223,7 +223,7 @@ test("administration tests a closed Self-Service in its own panel: records are t
     const id = /"v":1,"id":"([^"]+)"/.exec(body)![1];
     return route.fulfill({ contentType: "application/json", body: JSON.stringify({ revision: 4, results: [{ id, outcome: "review", message: "Test saved. It waits for staff and changes nothing." }] }) });
   });
-  await page.goto("/staff/admin");
+  await page.goto("/staff/admin/self-service");
   const panel = page.frameLocator("iframe.ss-trial__frame");
   await expect(panel.getByText("Test mode.")).toBeVisible();
   await expect(panel.getByRole("heading", { name: "What do you need?" })).toBeVisible();
@@ -249,17 +249,16 @@ test("administration tests a closed Self-Service in its own panel: records are t
   await expect(page.getByText("Test mode.")).toHaveCount(0);
   // Open again, Administration has no test panel.
   session.selfServiceClosed = false;
-  await page.goto("/staff/admin");
+  await page.goto("/staff/admin/self-service");
   await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();
   await expect(page.locator("iframe.ss-trial__frame")).toHaveCount(0);
 });
 
-test("administration: the owner switches Self-Service and removes old personal details after seeing what is due; an administrator has no retention section", async ({ page }) => {
-  const session = { authenticated: true, id: "ACC-1", username: "owner.one", displayName: "Owner One", role: "OWNER", mustChangePassword: false, recovery: { configured: true, createdAt: null }, selfServiceReviews: 0, selfServiceClosed: false };
+test("administration: the owner switches Self-Service after reading what it changes, and removes old personal details after seeing what is due; an administrator has no retention section", async ({ page }) => {
+  const session = { authenticated: true, id: "ACC-1", username: "owner.one", displayName: "Owner One", role: "OWNER", mustChangePassword: false, recovery: { configured: true, createdAt: null }, selfServiceReviews: 2, selfServiceClosed: false };
   const reply = (body: unknown) => ({ contentType: "application/json", body: JSON.stringify(body) });
   await page.route("**/api/staff/session", (route) => route.fulfill(reply(session)));
-  await page.route("**/api/staff/admin/accounts", (route) => route.fulfill(reply({ accounts: [] })));
-  await page.route("**/api/staff/admin/activity", (route) => route.fulfill(reply({ events: [] })));
+  await page.route("**/api/staff/admin/activity", (route) => route.fulfill(reply({ events: [{ at: "2026-10-07T01:00:00.000Z", action: "SETTING_CHANGED", actor: "Owner One", details: { to: "paused" } }] })));
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ status: 503, ...reply({ maintenance: true }) }));
   let due = { loans: 2, phoneRecords: 1, photos: 3 };
   let erased = 0;
@@ -277,21 +276,37 @@ test("administration: the owner switches Self-Service and removes old personal d
     session.selfServiceClosed = state === "paused";
     return route.fulfill(reply({ state }));
   });
-  page.on("dialog", (dialog) => dialog.accept());
-  await page.goto("/staff/admin");
+  // Old personal details: what is due is shown first, and the removal says what it does before it runs.
+  await page.goto("/staff/admin/accountability");
   const retention = page.getByRole("region", { name: "Old personal details" });
   await expect(retention.getByText("Ready to remove: 2 loans, 1 phone record and 3 photos.")).toBeVisible();
+  await expect(page.locator("#activity")).toContainText("closed Self-Service for maintenance");
   await retention.getByRole("button", { name: "Remove old personal details" }).click();
+  const removal = page.getByRole("dialog", { name: "Remove the names, student IDs and photos listed here?" });
+  await expect(removal).toContainText("This cannot be undone");
+  await removal.getByRole("button", { name: "Cancel" }).click();
+  expect(erased).toBe(0);
+  await retention.getByRole("button", { name: "Remove old personal details" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Remove old personal details" }).click();
   await expect(retention.getByText("Nothing is old enough to remove yet.")).toBeVisible();
   await expect(retention.getByRole("button", { name: "Remove old personal details" })).toBeDisabled();
   expect(erased).toBe(1);
+  // Self-Service: the switch states its effect, and closing it says what happens to what is waiting.
+  await page.getByRole("link", { name: "Self-Service", exact: true }).and(page.locator(".subnav__link")).click();
   const switcher = page.getByRole("region", { name: "Self-Service on phones" });
   await expect(switcher.getByText("Open", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Test Self-Service" })).toHaveCount(0);
   await switcher.getByRole("button", { name: "Close for maintenance" }).click();
+  const closing = page.getByRole("dialog", { name: "Close Self-Service for maintenance?" });
+  await expect(closing).toContainText("2 records already waiting for a check stay in Self-Service.");
+  await closing.getByRole("button", { name: "Cancel" }).click();
+  expect(changes).toEqual([]);
+  await switcher.getByRole("button", { name: "Close for maintenance" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Close for maintenance" }).click();
   await expect(switcher.getByText("Closed for maintenance")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Test Self-Service" })).toBeVisible();
   await switcher.getByRole("button", { name: "Reopen Self-Service" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Reopen Self-Service" }).click();
   await expect(switcher.getByText("Open", { exact: true })).toBeVisible();
   expect(changes).toEqual(["paused", "open"]);
   // An administrator can switch Self-Service but has no retention section (the owner alone removes details).
@@ -299,7 +314,9 @@ test("administration: the owner switches Self-Service and removes old personal d
   await page.reload();
   await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Self-Service on phones" })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Old personal details" })).toHaveCount(0);
+  await page.goto("/staff/admin/accountability");
+  await expect(page.getByRole("region", { name: "Old personal details" }).getByText("Only the owner can remove them.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Remove old personal details" })).toHaveCount(0);
 });
 
 test("self-service starts dark over the campus photo, switches to light, and remembers the choice on this phone", async ({ page }) => {

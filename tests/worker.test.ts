@@ -101,7 +101,7 @@ describe("staff boundary", () => {
     const cookie = await signIn();
     const response = await call("/staff", { headers: { cookie } });
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(`${origin}/staff/items`);
+    expect(response.headers.get("location")).toBe(`${origin}/staff/home`);
     expect((await call("/staff")).status).toBe(200);
   });
 
