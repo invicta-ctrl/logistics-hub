@@ -112,12 +112,6 @@ const SECTIONS: ReadonlyArray<{ id: Section; href: string; text: string; icon: I
   { id: "admin", href: "/staff/admin", text: "Administration", icon: "shield", more: true }
 ];
 
-/** The two pages of Administration, one link each; both belong to the Administration section of the shell. */
-export function adminTabs(current: "accounts" | "directory"): Html {
-  const link = (id: typeof current, href: string, text: string) => html`<a class="subnav__link" href="${href}" data-route ${id === current ? html`aria-current="page"` : ""}>${text}</a>`;
-  return html`<nav class="subnav" aria-label="Administration">${link("accounts", "/staff/admin", "Accounts & settings")}${link("directory", "/staff/admin/directory", "Staff Directory")}</nav>`;
-}
-
 /** Loads the signed-in account, or routes to sign-in / the forced password change. */
 export async function loadSession(section: Section): Promise<Session | null> {
   try {

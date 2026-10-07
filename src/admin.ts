@@ -1,51 +1,57 @@
+import "./admin.css";
 import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
-import { ACCESS_HINT, type AccountEvent, accessChoices, accessTag, bindCopy, canManage, eventText, oneTime } from "./account-ui";
-import { type Access, type Role, type Session, accessLabel, adminTabs, loadSession, sessionAccess, shell } from "./staff";
+import { ACCESS_HINT, accessChoices, accessTag, bindCopy, canManage, oneTime } from "./account-ui";
+import { adminPage, confirmImpact } from "./admin-frame";
+import { type Access, type Role, accessLabel, loadSession, sessionAccess, shell } from "./staff";
 import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, plural, setMessage, sheet as createSheet, sheetContent, toast } from "./ui";
 
 type Row = { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number };
 
-/* ---------- Administration ---------- */
+/* ---------- Administration > Staff ---------- */
 
-export async function administration(): Promise<void> {
-  const session = await loadSession("admin");
-  if (!session) return;
-  if (session.role === "STAFF") { navigate("/staff/items", true); return; }
-  document.title = "Administration · Staff workspace";
-  shell(session, "admin", html`
-    <header class="page-header">
-      <div><h1>Administration</h1><p>${session.role === "OWNER" ? "Owners manage every account, role and recovery setting." : "Administrators manage staff accounts. Owner and administrator accounts are managed by an owner."}</p></div>
-      <div class="page-header__actions"><button class="button button--primary" type="button" id="new-account">${icon("plus")}New account</button></div>
-    </header>
-    ${adminTabs("accounts")}
+/** What each choice of role lets a person do, in the order the role menu offers them (the server decides; this only explains). */
+const ROLE_GUIDE: ReadonlyArray<{ role: string; can: string }> = [
+  { role: "DoL Staff", can: "Use the Logistics Hub: items, stock, loans, Self-Service review and activity." },
+  { role: "Other department staff and officers", can: "Sign in to their own account only. The Logistics Hub stays closed to them." },
+  { role: "Owner", can: "Everything, including Administration, other owners' accounts, recovery and removing old personal details." }
+];
+
+/** What changing an account's role does to that person, before it is saved. */
+function roleImpact(from: Access, to: Access): string {
+  if (from === to) return "";
+  const hub = (access: Access) => access === "DoL" || access === "ADMIN" || access === "OWNER";
+  const admin = (access: Access) => access === "ADMIN" || access === "OWNER";
+  const effects = [
+    hub(from) && !hub(to) ? "They lose access to the Logistics Hub's items, stock and loans." : "",
+    !hub(from) && hub(to) ? "They gain access to the Logistics Hub's items, stock and loans." : "",
+    admin(from) && !admin(to) ? "They lose Administration." : "",
+    !admin(from) && admin(to) ? "They gain Administration, including every account." : ""
+  ].filter(Boolean);
+  return [`${accessLabel(from)} → ${accessLabel(to)}. They are signed out everywhere and sign in again with the new role.`, ...effects].join(" ");
+}
+
+export async function staffAccounts(): Promise<void> {
+  const session = await adminPage("staff", {
+    title: "Staff",
+    lede: (session) => session.role === "OWNER" ? "Owners manage every account and role. People's Staff Directory records are kept in the Staff Directory." : "Administrators manage staff accounts. Owner and administrator accounts are managed by an owner.",
+    actions: html`<button class="button button--primary" type="button" id="new-account">${icon("plus")}New account</button>`,
+    body: () => html`
     <section aria-labelledby="accounts-title">
-      <h2 id="accounts-title" class="visually-hidden">Accounts</h2>
+      <h2 id="accounts-title" class="section-title">Accounts</h2>
       <div id="accounts"><div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 4 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span></div>`)}</div></div>
     </section>
-    <section class="admin-block" aria-labelledby="ss-switch-title">
-      <h2 id="ss-switch-title" class="section-title">Self-Service on phones</h2>
-      <p><span class="tag ${session.selfServiceClosed ? "tag--warn" : "tag--ok"}">${session.selfServiceClosed ? "Closed for maintenance" : "Open"}</span></p>
-      <p>${session.selfServiceClosed ? "Phones show the maintenance screen and record nothing, and people are sent to DOL staff in person. Records already waiting on a phone are kept and sent once it reopens." : "People can take, borrow, use and return with their own phones."}</p>
-      <div class="form-alert" id="ss-alert" role="alert" hidden></div>
-      <button type="button" class="button ${session.selfServiceClosed ? "button--primary" : "button--secondary"}" id="ss-toggle">${session.selfServiceClosed ? "Reopen Self-Service" : "Close for maintenance"}</button>
+    <section class="admin-block" aria-labelledby="roles-title">
+      <h2 id="roles-title" class="section-title">What each role can do</h2>
+      <dl class="guide">${ROLE_GUIDE.map((entry) => html`<div><dt>${entry.role}</dt><dd>${entry.can}</dd></div>`)}</dl>
     </section>
-    ${session.role === "OWNER" ? html`<section class="admin-block" aria-labelledby="ret-title">
-      <h2 id="ret-title" class="section-title">Old personal details</h2>
-      <p>Who borrowed or took something is kept for accountability: two years after a loan closes and one year after a phone record is settled. After that you can remove the borrower's name, student ID and photo. The record itself (the item, quantity, dates and stock) stays, and free text people typed is not touched. This cannot be undone, so take a backup first (Deployment runbook, Backups and restore).</p>
-      <p id="ret-status" role="status">Checking…</p>
-      <div class="form-alert" id="ret-alert" role="alert" hidden></div>
-      <button type="button" class="button button--danger" id="ret-run" disabled>Remove old personal details</button>
-    </section>` : ""}
-    ${session.selfServiceClosed ? html`<section class="ss-trial" aria-labelledby="ss-trial-title">
-      <h2 id="ss-trial-title" class="section-title">Test Self-Service</h2>
-      <p>Self-Service is closed for maintenance, and everyone else sees the maintenance page. Here it works as it would on a phone, but every record you make is held in <a href="/staff/self-service" data-route>Self-Service</a> as a test and changes nothing unless someone applies it. Dismiss your tests there when you are done.</p>
-      <iframe class="ss-trial__frame" src="/self-service" title="Self-Service in test mode" loading="lazy"></iframe>
-    </section>` : ""}
-    <section class="activity" aria-labelledby="activity-title">
-      <h2 id="activity-title" class="section-title">Security activity</h2>
-      <ol class="history" id="activity"></ol>
+    <section class="admin-block" aria-labelledby="directory-title">
+      <h2 id="directory-title" class="section-title">Staff Directory</h2>
+      <p>The directory holds who works in each department, their positions and their official ID cards. An account is linked to a person there, and a sign-in can be created or linked from a person's page.</p>
+      <a class="button button--secondary" href="/staff/admin/directory" data-route>Open the Staff Directory</a>
     </section>
-    <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>`);
+    <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>`
+  });
+  if (!session) return;
 
   const sheet = document.querySelector<HTMLDialogElement>("#sheet")!;
   let rows: Row[] = [];
@@ -55,7 +61,7 @@ export async function administration(): Promise<void> {
 
   async function load(): Promise<void> {
     try {
-      const [{ accounts }, { events }] = await Promise.all([api<{ accounts: Row[] }>("/api/staff/admin/accounts"), api<{ events: AccountEvent[] }>("/api/staff/admin/activity")]);
+      const { accounts } = await api<{ accounts: Row[] }>("/api/staff/admin/accounts");
       rows = accounts;
       mount(document.querySelector("#accounts")!, html`<div class="data-table-wrap"><table class="data-table data-table--static">
         <caption class="visually-hidden">Accounts that can sign in to the staff workspace</caption>
@@ -68,9 +74,6 @@ export async function administration(): Promise<void> {
           <td class="col-qty">${row.openSessions}</td>
           <td class="col-actions">${canManage(session!, row) && row.id !== session!.id ? html`<button type="button" class="button button--secondary button--sm" data-manage="${row.id}">Manage</button>` : row.id === session!.id ? html`<a class="text-link" href="/staff/account" data-route>My account</a>` : html`<span class="muted">Owner only</span>`}</td>
         </tr>`)}</tbody></table></div>`);
-      mount(document.querySelector("#activity")!, events.length
-        ? html`${events.map((event) => html`<li class="history__item"><div><p class="history__title">${eventText(event)}</p><p class="history__meta"><time datetime="${event.at}">${formatDateTime(event.at)}</time></p></div></li>`)}`
-        : html`<li class="history__empty">No account changes yet.</li>`);
     } catch (error) {
       mount(document.querySelector("#accounts")!, emptyState("Accounts could not be loaded", failure(error), "", "error", 3));
     }
@@ -127,6 +130,7 @@ export async function administration(): Promise<void> {
         <div class="field"><label for="m-username">Username</label><input id="m-username" name="username" value="${row.username}" maxlength="64" autocapitalize="none" spellcheck="false" /></div></div>
         <div class="field"><label for="m-role">Role</label><select id="m-role" name="access" aria-describedby="m-role-hint">${choices.map((access) => html`<option value="${access}" ${access === row.access ? html`selected` : ""}>${accessLabel(access)}</option>`)}</select><p class="field__hint" id="m-role-hint">${ACCESS_HINT}</p></div>
         <p class="field__hint">Changing the username or role signs them out everywhere.</p>
+        <p class="impact-note" id="m-impact" role="status" hidden></p>
         <div class="form-alert" id="profile-alert" role="alert" hidden></div>
         <div class="form-actions"><button class="button button--primary" type="submit">Save</button></div>
       </form>
@@ -148,9 +152,20 @@ export async function administration(): Promise<void> {
         </div>
       </div>`);
     const profile = sheet.querySelector<HTMLFormElement>("#profile-form")!;
+    // The consequence of a different role, in words, before it is saved.
+    const impact = sheet.querySelector<HTMLElement>("#m-impact")!;
+    sheet.querySelector<HTMLSelectElement>("#m-role")!.addEventListener("change", (event) => {
+      const text = roleImpact(row.access, (event.target as HTMLSelectElement).value as Access);
+      impact.textContent = text;
+      impact.hidden = !text;
+    });
     profile.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = new FormData(profile);
+      if (values.get("access") !== row.access) {
+        const confirmed = await confirmImpact({ kicker: `${accessLabel(row.access)} · ${row.username}`, title: `Change the role of ${row.displayName}?`, impact: html`<p>${roleImpact(row.access, values.get("access") as Access)}</p>`, confirm: "Change role" });
+        if (!confirmed) return;
+      }
       try {
         const result = await api<{ changed: number; sessionsRevoked?: boolean }>(`/api/staff/admin/accounts/${encodeURIComponent(row.id)}`, { method: "PATCH", body: JSON.stringify({ displayName: values.get("displayName"), username: values.get("username"), access: values.get("access") }) });
         toast(result.changed ? `Saved${result.sessionsRevoked ? "; they were signed out" : ""}.` : "No changes to save.");
@@ -172,60 +187,25 @@ export async function administration(): Promise<void> {
       } catch (error) { setMessage(sheet.querySelector("#password-alert")!, failure(error)); }
     });
     sheet.querySelector("#revoke")!.addEventListener("click", async () => {
+      const confirmed = await confirmImpact({ kicker: `${accessLabel(row.access)} · ${row.username}`, title: `Sign ${row.displayName} out everywhere?`, impact: html`<p>${row.openSessions ? `${plural(row.openSessions, "open session")} end now.` : "They have no open sessions."} They can sign in again with their password.</p>`, confirm: "Sign out everywhere" });
+      if (!confirmed) return;
       try { await api(`/api/staff/admin/accounts/${encodeURIComponent(row.id)}/sessions/revoke`, { method: "POST" }); toast(`${row.username} was signed out everywhere.`); close(); await load(); }
       catch (error) { setMessage(sheet.querySelector("#access-alert")!, failure(error)); }
     });
     sheet.querySelector("#toggle-active")!.addEventListener("click", async () => {
-      if (row.active && !window.confirm(`Disable ${row.username}? They are signed out and cannot sign in until re-enabled.`)) return;
+      if (row.active && !await confirmImpact({ kicker: `${accessLabel(row.access)} · ${row.username}`, title: `Disable ${row.displayName}?`, impact: html`<p>They are signed out now and cannot sign in until the account is enabled again. Their loans, history and Staff Directory record stay as they are.</p>`, confirm: "Disable account", danger: true })) return;
       try { await api(`/api/staff/admin/accounts/${encodeURIComponent(row.id)}`, { method: "PATCH", body: JSON.stringify({ active: !row.active }) }); toast(`${row.username} ${row.active ? "disabled" : "enabled"}.`); close(); await load(); }
       catch (error) { setMessage(sheet.querySelector("#access-alert")!, failure(error)); }
     });
   }
 
-  const retention = document.querySelector<HTMLElement>("#ret-status");
-  const retentionAlert = document.querySelector<HTMLElement>("#ret-alert");
-  async function checkRetention(): Promise<void> {
-    if (!retention) return;
-    try {
-      const due = await api<{ loans: number; phoneRecords: number; photos: number }>("/api/staff/admin/retention");
-      const none = !due.loans && !due.phoneRecords;
-      retention.textContent = none ? "Nothing is old enough to remove yet." : `Ready to remove: ${plural(due.loans, "loan")}, ${plural(due.phoneRecords, "phone record")} and ${plural(due.photos, "photo")}.`;
-      document.querySelector<HTMLButtonElement>("#ret-run")!.disabled = none;
-    } catch (error) { retention.textContent = ""; setMessage(retentionAlert!, failure(error)); }
-  }
-  document.querySelector("#ret-run")?.addEventListener("click", async () => {
-    if (!window.confirm("Remove the names, student IDs and photos listed above? This cannot be undone.")) return;
-    const total = { loans: 0, phoneRecords: 0 };
-    try {
-      // One request erases a bounded number of rows; ask again while more are due.
-      for (let more = true; more;) {
-        const batch = await api<{ loans: number; phoneRecords: number; more: boolean }>("/api/staff/admin/retention", { method: "POST" });
-        total.loans += batch.loans;
-        total.phoneRecords += batch.phoneRecords;
-        more = batch.more && batch.loans + batch.phoneRecords > 0;
-      }
-      setMessage(retentionAlert!, "");
-      toast(`Removed details from ${plural(total.loans, "loan")} and ${plural(total.phoneRecords, "phone record")}.`);
-    } catch (error) { setMessage(retentionAlert!, failure(error)); }
-    await Promise.all([checkRetention(), load()]);
-  });
-  document.querySelector("#ss-toggle")!.addEventListener("click", async () => {
-    const closing = !session.selfServiceClosed;
-    if (!window.confirm(closing ? "Close Self-Service for maintenance? Phones will show the maintenance screen and record nothing until you reopen it." : "Reopen Self-Service? Phones can take, borrow, use and return again.")) return;
-    try {
-      await api("/api/staff/admin/self-service", { method: "PATCH", body: JSON.stringify({ state: closing ? "paused" : "open" }) });
-      // The page depends on the setting (the test panel), and a same-address navigation does not re-render: run the view again.
-      await administration();
-      toast(closing ? "Self-Service is closed for maintenance." : "Self-Service is open.");
-    } catch (error) { setMessage(document.querySelector("#ss-alert")!, failure(error)); }
-  });
   document.querySelector("#new-account")!.addEventListener("click", openCreate);
   document.querySelector("#accounts")!.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-manage]");
     const row = rows.find((entry) => entry.id === button?.dataset.manage);
     if (row) openManage(row);
   });
-  await Promise.all([load(), checkRetention()]);
+  await load();
 }
 
 /* ---------- My account ---------- */

@@ -3,6 +3,7 @@ import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount
 import { attention, attentionSummary, reviewReturn, selfServiceToCheck } from "./attention";
 import { auditDetail, auditReview, auditState, finishAudit, itemFreshness, observe, resolveObservation, startAudit, updateAudit } from "./audits";
 import { bulkUpdate } from "./bulk";
+import { aliasItems, catalogCoverage } from "./catalog-admin";
 import { insights, resumable } from "./home";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
@@ -15,11 +16,12 @@ import { locationPicture, publicLocationPicture, putLocationPhoto, removeLocatio
 import { reportLocation, resolveReport } from "./location-reports";
 import { createLocation, deleteLocation, locationList, moveItems, updateLocation } from "./locations";
 import { openUnitAction } from "./open-units";
-import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, staffInventory, updateItem } from "./inventory";
+import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, setAliases, staffInventory, updateItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { eraseOldDetails, retentionPreview } from "./retention";
 import { selfServiceState, setSelfService } from "./settings";
+import { systemStatus } from "./system-status";
 import { MAX_SCAN_BODY, createLinkedAccount, idDerived, missingDerived, putDerived, createPerson, directory, findPeople, idScan, importPair, linkAccount, linkableAccounts, linkedPerson, personAccess, personActivity, personDetail, personLoans, personUsage, putIdCard, removeIdCard, unlinkAccount, updatePerson } from "./staff-directory";
 import { openReorder, stockOverview, updateReorder } from "./stock";
 import { heldPhoto, networkOf, readBatch, resolveReview, reviewDecisions, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
@@ -87,6 +89,7 @@ const MAX_SYNC_BYTES = 12 * 1024 * 1024;
 /** An item photo upload is a 1 MB and a 150 KB JPEG plus form framing. */
 const MAX_PHOTO_BODY = 1_300_000;
 const PERSON_PATH = /^\/api\/staff\/admin\/directory\/(PER-[0-9a-f-]{36})(\/account|\/account\/new|\/access|\/usage|\/loans|\/activity|\/id|\/id\/front|\/id\/back|\/id\/thumb|\/id\/face|\/id\/derived)?$/;
+const ALIAS_PATH = /^\/api\/staff\/admin\/catalog\/aliases\/(ITM-[A-Za-z0-9-]{1,24})$/;
 const ACCOUNT_PATH = /^\/api\/staff\/admin\/accounts\/(ACC-[A-Za-z0-9-]{1,60})(\/password|\/sessions\/revoke)?$/;
 // Paths still usable while an account must replace a password someone else set.
 const PASSWORD_CHANGE_ALLOWED = new Set(["/api/staff/session", "/api/staff/me/password"]);
@@ -326,6 +329,14 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (path === "/api/staff/admin/accounts" && method === "POST") return json(await createAccount(env.DB, account, await body()), 201);
     if (path === "/api/staff/admin/activity" && method === "GET") return json(await securityActivity(env.DB));
     if (path === "/api/staff/admin/self-service" && method === "PATCH") return json(await setSelfService(env.DB, account, await body()));
+    if (path === "/api/staff/admin/system" && method === "GET") return json(await systemStatus(env, url.origin), 200, { "cache-control": "private, no-store" });
+    if (path === "/api/staff/admin/catalog" && method === "GET") return json(await catalogCoverage(env.DB));
+    if (path === "/api/staff/admin/catalog/aliases" && method === "GET") return json(await aliasItems(env.DB, url.searchParams.get("q") ?? ""));
+    const names = ALIAS_PATH.exec(path);
+    if (names && method === "PATCH") {
+      const input = await body() as { aliases?: unknown; updatedAt?: unknown } | null;
+      return json(await setAliases(env.DB, account, names[1]!, input?.aliases, input?.updatedAt ?? null));
+    }
     if (path === "/api/staff/admin/retention") {
       if (account.role !== "OWNER") return json({ error: "Removing old personal details is for the owner." }, 403);
       if (method === "GET") return json(await retentionPreview(env.DB));
@@ -624,6 +635,8 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   if (path.startsWith("/api/staff/")) return staffApi(request, env, url);
   if (path.startsWith("/api/")) return json({ error: "Not found." }, 404);
   // Items lived at /staff/inventory until V1.1; keep saved links and bookmarks working.
+  // The build's record is for Administration's System page, read inside the Worker; the public has no use for it.
+  if (path === "/build.json") return json({ error: "Not found." }, 404);
   if (path === "/staff/inventory") return Response.redirect(new URL(`/staff/items${url.search}`, url), 301);
   // Every staff page below /staff requires a live session before any HTML is served, except the Catalogue: it also opens on a
   // device's offline cataloguing lease (and offline, from the service worker), so the page itself decides. A signed-in visit to

@@ -121,6 +121,7 @@ test.describe("owner administration", () => {
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("link", { name: "Administration" }).click();
     await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();
+    await page.getByRole("link", { name: "Staff", exact: true }).and(page.locator(".subnav__link")).click();
     await page.getByRole("button", { name: "New account" }).click();
     await page.getByLabel("Display name").fill("Maria Santos");
     await page.getByLabel("Username").fill("msantos");
@@ -149,21 +150,28 @@ test.describe("owner administration", () => {
   test("owner closes and reopens Self-Service from Administration, and phones see it at once", async ({ page, request }) => {
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("link", { name: "Administration" }).click();
+    // System opens first and reads the real database, storage and build: a fresh local one is all answering, and says what it is.
+    await expect(page.getByRole("heading", { name: "Right now" })).toBeVisible();
+    await expect(page.locator("#system-summary")).toContainText("Everything checked is working.");
+    await expect(page.locator(".status-row", { hasText: "Database" })).toContainText("Answering");
+    await page.getByRole("link", { name: "Accountability" }).click();
     // The owner's retention check answers from the real database: a fresh one has nothing due.
     await expect(page.getByRole("region", { name: "Old personal details" }).getByText("Nothing is old enough to remove yet.")).toBeVisible();
+    await page.getByRole("link", { name: "Self-Service", exact: true }).and(page.locator(".subnav__link")).click();
     const section = page.getByRole("region", { name: "Self-Service on phones" });
     await expect(section.getByText("Open", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Test Self-Service" })).toHaveCount(0);
     expect((await request.get("/api/self-service/catalog")).status()).toBe(200);
-    page.once("dialog", (dialog) => dialog.accept());
     await section.getByRole("button", { name: "Close for maintenance" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Close for maintenance" }).click();
     await expect(section.getByText("Closed for maintenance")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Test Self-Service" })).toBeVisible();
     expect((await request.get("/api/self-service/catalog")).status()).toBe(503);
-    page.once("dialog", (dialog) => dialog.accept());
     await section.getByRole("button", { name: "Reopen Self-Service" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Reopen Self-Service" }).click();
     await expect(section.getByText("Open", { exact: true })).toBeVisible();
     expect((await request.get("/api/self-service/catalog")).status()).toBe(200);
+    await page.getByRole("link", { name: "Accountability" }).click();
     await expect(page.locator("#activity")).toContainText("closed Self-Service for maintenance");
     await expect(page.locator("#activity")).toContainText("reopened Self-Service");
   });
@@ -174,7 +182,8 @@ test.describe("owner administration", () => {
     page.on("console", (message) => { if (/Content Security Policy/i.test(message.text())) violations.push(message.text()); });
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("link", { name: "Administration" }).click();
-    await page.getByRole("link", { name: "Staff Directory" }).click();
+    await page.getByRole("link", { name: "Staff", exact: true }).and(page.locator(".subnav__link")).click();
+    await page.getByRole("link", { name: "Open the Staff Directory" }).click();
     await expect(page.getByRole("heading", { name: "Staff Directory" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "The directory is empty" })).toBeVisible();
     // A fictional card drawn on a canvas: no real ID is ever used in tests. Portrait, so its shape must reach the page.
@@ -246,7 +255,8 @@ test.describe("owner administration", () => {
   test("owner makes a sign-in from a directory profile and watches it being used", async ({ page, browser }) => {
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("link", { name: "Administration" }).click();
-    await page.getByRole("link", { name: "Staff Directory" }).click();
+    await page.getByRole("link", { name: "Staff", exact: true }).and(page.locator(".subnav__link")).click();
+    await page.getByRole("link", { name: "Open the Staff Directory" }).click();
     await page.getByRole("button", { name: "Add person" }).first().click();
     await page.getByLabel("Full name").fill("Lia Ventura");
     await page.getByRole("combobox", { name: "Department", exact: true }).selectOption("DoL");

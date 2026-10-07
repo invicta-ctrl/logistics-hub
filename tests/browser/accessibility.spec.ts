@@ -131,3 +131,66 @@ test.describe("Staff Directory", () => {
     await expect(page.getByRole("tabpanel", { name: "USC ID" })).toBeVisible();
   });
 });
+
+/* ---------- Administration sections (V1.13), signed in as an owner, on fictional data ---------- */
+
+test.describe("Administration", () => {
+  const json = (body: unknown) => ({ contentType: "application/json", body: JSON.stringify(body) });
+  const accounts = [
+    { id: "ACC-owner", username: "owner.sample", displayName: "Owner Sample", role: "OWNER", access: "OWNER", active: true, lastLoginAt: "2026-10-07T01:00:00.000Z", sessions: 1, directory: null },
+    { id: "ACC-staff", username: "staff.sample", displayName: "Staff Sample", role: "STAFF", access: "DOL_STAFF", active: true, lastLoginAt: null, sessions: 0, directory: null }
+  ];
+  const status = {
+    checkedAt: "2026-10-07T02:00:00.000Z",
+    build: { version: "0123456789ab", commit: null, builtAt: "2026-10-07T01:00:00.000Z", migrations: ["0001_init.sql"] },
+    database: { ok: true, ms: 4, migrations: { applied: 1, latest: "0001_init.sql", latestAppliedAt: "2026-10-07T01:30:00.000Z", pending: [] } },
+    storage: [{ id: "EVIDENCE", label: "Loan photos", holds: "Photos taken when something is lent.", ok: true, ms: 3 }, { id: "CATALOG_MEDIA", label: "Catalog pictures", holds: "Item and place pictures.", ok: false, ms: 2000 }],
+    selfService: "open"
+  };
+  const SECTIONS = ["/staff/admin", "/staff/admin/self-service", "/staff/admin/catalog", "/staff/admin/staff", "/staff/admin/accountability"];
+
+  test.beforeEach(async ({ page }) => {
+    await page.route("**/api/staff/session", (route) => route.fulfill(json({ authenticated: true, id: "ACC-owner", username: "owner.sample", displayName: "Owner Sample", role: "OWNER", mustChangePassword: false, recovery: { configured: true, createdAt: null }, selfServiceReviews: 0, selfServiceClosed: false, directory: null })));
+    await page.route("**/api/staff/admin/system", (route) => route.fulfill(json(status)));
+    await page.route("**/api/staff/admin/accounts", (route) => route.fulfill(json({ accounts })));
+    await page.route("**/api/staff/admin/activity", (route) => route.fulfill(json({ events: [] })));
+    await page.route("**/api/staff/admin/retention", (route) => route.fulfill(json({ loans: 0, phoneRecords: 0, photos: 0 })));
+    await page.route("**/api/staff/admin/catalog", (route) => route.fulfill(json({ active: 10, unclassified: 4, captured: 0, capturedClassified: 0 })));
+    await page.route("**/api/staff/admin/catalog/aliases**", (route) => route.fulfill(json({ items: [{ id: "ITM-0001", name: "Sample Item", category: "SCHOOL SUPPLIES", aliases: "sample, test item", updatedAt: "2026-10-01T02:00:00.000Z" }], more: false })));
+  });
+
+  for (const address of SECTIONS) {
+    test(`${address}: one heading, labelled fields, named controls, no sideways scroll, and room for 200% text`, async ({ page }) => {
+      for (const width of WIDTHS) {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto(address);
+        await expect(page.locator("main h1")).toHaveCount(1);
+        await page.waitForLoadState("networkidle");
+        const problems = await page.evaluate(() => {
+          const unlabelled = [...document.querySelectorAll("main input:not([type=hidden]), main select, main textarea")].filter((field) =>
+            !field.getAttribute("aria-label") && !field.getAttribute("aria-labelledby") && !field.closest("label") && !(field.id && document.querySelector(`label[for="${CSS.escape(field.id)}"]`)));
+          const unnamed = [...document.querySelectorAll("main button, main a[href]")].filter((control) => !(control.textContent ?? "").trim() && !control.getAttribute("aria-label") && !control.getAttribute("title"));
+          return { unlabelled: unlabelled.length, unnamed: unnamed.length };
+        });
+        expect(problems, `${address} at ${width}px`).toEqual({ unlabelled: 0, unnamed: 0 });
+        expect(await sidewaysScroll(page), `${address} at ${width}px`).toBe(0);
+      }
+      await page.setViewportSize({ width: 320, height: 800 });
+      await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
+      expect(await sidewaysScroll(page), `${address} at 200%`).toBe(0);
+    });
+  }
+
+  test("the sections are one navigation with the current one marked, and a confirmation sheet names its title and focuses the safe choice", async ({ page }) => {
+    await page.goto("/staff/admin/self-service");
+    const nav = page.getByRole("navigation", { name: "Administration" });
+    await expect(nav.getByRole("link")).toHaveText(["System", "Self-Service", "Catalog", "Staff", "Accountability"]);
+    await expect(nav.locator("[aria-current]")).toHaveText("Self-Service");
+    await page.getByRole("button", { name: "Close for maintenance" }).click();
+    const dialog = page.getByRole("dialog", { name: "Close Self-Service for maintenance?" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+});
