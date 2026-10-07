@@ -47,6 +47,8 @@ const matchable = (person: Pick<Person, "name" | "studentId">) => Boolean(person
 /** First and last name's initials, as on a badge: "Ana Marie Santos" is AS. */
 const cardInitials = (name: string) => { const words = name.split(/\s+/).filter(Boolean); return words.length > 1 ? `${words[0]![0]}${words.at(-1)![0]}`.toUpperCase() : initials(name); };
 const toElement = (markup: Html): HTMLElement => { const host = document.createElement("div"); mount(host, markup); return host.firstElementChild as HTMLElement; };
+/** Usage rows drawn at first, and added by each "Show more". */
+const USAGE_PAGE = 100;
 const picture = (person: Pick<Person, "id">, kind: "thumb" | "face") => `/api/staff/admin/directory/${person.id}/id/${kind}`;
 // A card imported before thumbnails were made has none yet: its picture is dropped and the drawn card or the initials show.
 document.addEventListener("error", (event) => {
@@ -593,6 +595,8 @@ export async function staffDirectory(): Promise<void> {
     const form = host.querySelector<HTMLFormElement>(".usage-filters")!;
     let rows: Usage[] = [];
     let truncated = false;
+    /** Rows drawn: the table grows by a page on request, so the profile does not grow with a year of history (amendment J). */
+    let limit = USAGE_PAGE;
     const draw = () => {
       const values = new FormData(form);
       const term = fold(String(values.get("item") ?? "").trim());
@@ -611,8 +615,9 @@ export async function staffDirectory(): Promise<void> {
         ${shown.length ? html`<div class="data-table-wrap"><table class="data-table data-table--static">
           <caption class="visually-hidden">What left stock for ${person.name}</caption>
           <thead><tr><th scope="col">Date</th><th scope="col">Item</th><th scope="col" class="col-hide-phone">Category</th><th scope="col" class="col-qty">Qty</th><th scope="col">How</th></tr></thead>
-          <tbody>${shown.map((row) => html`<tr><td>${formatDate(officeDay(row.at))}</td><td><a class="row-link" href="/staff/items?item=${row.itemId}" data-route>${row.itemName}</a></td><td class="col-hide-phone">${categoryName(row.category)}</td>
-            <td class="col-qty">${row.quantity} <span class="muted">${units(row.quantity, row.unit)}</span></td><td>${row.kind === "LOAN" ? html`Borrowed${row.purpose ? ` · ${label(row.purpose)}` : ""}` : row.kind === "USE" ? "Used" : "Taken"}${row.phone ? html` <span class="muted">(phone)</span>` : ""}</td></tr>`)}</tbody></table></div>` : html`<p class="muted">Nothing matches these filters.</p>`}
+          <tbody>${shown.slice(0, limit).map((row) => html`<tr><td>${formatDate(officeDay(row.at))}</td><td><a class="row-link" href="/staff/items?item=${row.itemId}" data-route>${row.itemName}</a></td><td class="col-hide-phone">${categoryName(row.category)}</td>
+            <td class="col-qty">${row.quantity} <span class="muted">${units(row.quantity, row.unit)}</span></td><td>${row.kind === "LOAN" ? html`Borrowed${row.purpose ? ` · ${label(row.purpose)}` : ""}` : row.kind === "USE" ? "Used" : "Taken"}${row.phone ? html` <span class="muted">(phone)</span>` : ""}</td></tr>`)}</tbody></table></div>
+        ${shown.length > limit ? html`<p class="table-more"><button type="button" class="button button--secondary" data-usage-more>Show ${Math.min(USAGE_PAGE, shown.length - limit)} more <span class="muted">(${limit} of ${shown.length.toLocaleString()} shown)</span></button></p>` : ""}` : html`<p class="muted">Nothing matches these filters.</p>`}
         ${truncated ? html`<p class="field__hint">Only the newest 1,000 entries are shown; narrow the dates to see older ones.</p>` : ""}`);
     };
     const fetchRows = async () => {
@@ -625,8 +630,15 @@ export async function staffDirectory(): Promise<void> {
         draw();
       } catch (error) { mount(host.querySelector("[data-usage]")!, emptyState("Usage could not be loaded", failure(error), "", "error", 3)); }
     };
-    form.addEventListener("change", (event) => { if ((event.target as HTMLElement).matches("[type=date]")) void fetchRows(); else draw(); });
-    form.addEventListener("input", (event) => { if ((event.target as HTMLElement).id === "u-item") draw(); });
+    form.addEventListener("change", (event) => { limit = USAGE_PAGE; if ((event.target as HTMLElement).matches("[type=date]")) void fetchRows(); else draw(); });
+    form.addEventListener("input", (event) => { if ((event.target as HTMLElement).id === "u-item") { limit = USAGE_PAGE; draw(); } });
+    host.addEventListener("click", (event) => {
+      if (!(event.target as HTMLElement).closest("[data-usage-more]")) return;
+      const first = limit;
+      limit += USAGE_PAGE;
+      draw();
+      host.querySelectorAll<HTMLElement>("tbody .row-link")[first]?.focus({ preventScroll: true });
+    });
     await fetchRows();
   }
 

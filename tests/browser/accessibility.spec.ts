@@ -119,6 +119,26 @@ test.describe("Staff Directory", () => {
     });
   }
 
+  test("a year of usage is drawn 100 rows at a time; the totals count every row, and a phone use reads Used", async ({ page }) => {
+    const rows = Array.from({ length: 230 }, (_, index) => ({ id: `MOV-${index}`, at: new Date(Date.UTC(2026, 8, 30, 2) - index * 3_600_000).toISOString(), itemId: "ITM-0001",
+      itemName: `Sample Item ${index}`, category: "SCHOOL SUPPLIES", stockArea: "Inventory", unit: "piece", quantity: 1, kind: index === 0 ? "USE" : "TAKE", purpose: "INDIVIDUAL", phone: 1 }));
+    await page.route("**/api/staff/admin/directory/*/usage**", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ usage: rows, truncated: false }) }));
+    await page.goto(`/staff/admin/directory?person=${ID}&tab=usage`);
+    const table = page.getByRole("table", { name: "What left stock for Ana Marie Santos" });
+    await expect(table.locator("tbody tr")).toHaveCount(100);
+    await expect(table.locator("tbody tr").first()).toContainText("Used (phone)");
+    await expect(page.locator(".stat").first()).toContainText("229 phone takes, 1 use");
+    await page.getByRole("button", { name: /Show 100 more/ }).click();
+    await expect(table.locator("tbody tr")).toHaveCount(200);
+    await expect(table.locator("tbody .row-link").nth(100)).toBeFocused();
+    await page.getByRole("button", { name: /Show 30 more/ }).click();
+    await expect(table.locator("tbody tr")).toHaveCount(230);
+    await expect(page.getByRole("button", { name: /more/ })).toHaveCount(0);
+    // A new filter starts from the first page again.
+    await page.getByLabel("Item").fill("Sample Item 1");
+    await expect(table.locator("tbody tr")).toHaveCount(100);
+  });
+
   test("profile tabs follow the APG pattern: arrows move, Enter opens, the URL remembers", async ({ page }) => {
     await page.goto(`/staff/admin/directory?person=${ID}`);
     await page.getByRole("tab", { name: "Profile" }).focus();
