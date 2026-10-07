@@ -39,6 +39,8 @@ test.describe.serial("kits", () => {
     await page.getByRole("textbox", { name: "Username" }).fill(username);
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+    await page.goto("/staff/items");
     await expect(page.getByRole("heading", { name: "Items" })).toBeVisible();
     const base = { category: "E2E V18 SEWING", unit: "piece", status: "ACTIVE", reorderThreshold: 0, lendingAudience: "NOT_AVAILABLE_FOR_LENDING", needsReview: false, notes: null };
     const { post } = api(page);
