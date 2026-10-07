@@ -1,7 +1,7 @@
 import { PUBLIC_LENDING_ITEM_TYPE } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, isOverdue, loanFields, loanRow, openReturn } from "./loan-form";
 import { loadSession, shell } from "./staff";
-import { type Html, api, emptyState, expired, html, icon, label, live, mount, onLeave, plural, preservingFocus, sheet as createSheet, sheetContent, units, writeParams } from "./ui";
+import { type Html, api, emptyState, expired, html, icon, label, live, mount, onLeave, plural, preservingFocus, reducedMotion, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Period = "30d" | "12m" | "all";
 type Purpose = "INDIVIDUAL" | "USC";
@@ -47,6 +47,8 @@ export async function loansWorkspace(): Promise<void> {
   const results = document.querySelector<HTMLElement>("#loan-results")!;
   const search = document.querySelector<HTMLInputElement>("#loan-search")!;
   search.value = params.get("q") ?? "";
+  /** A link from Attention names one loan: it is scrolled to and marked once the list first draws. */
+  let focusLoan = params.get("loan");
 
   const matches = (loan: Loan) => {
     const query = search.value.trim().toLowerCase();
@@ -126,6 +128,16 @@ export async function loansWorkspace(): Promise<void> {
     document.querySelector<HTMLElement>("#loan-toolbar")!.hidden = view === "people";
     preservingFocus(results, () => mount(results, view === "out" ? outMarkup(data!) : view === "people" ? peopleMarkup(data!) : historyMarkup(data!)));
     sizeBars(results);
+    if (focusLoan) {
+      const row = results.querySelector<HTMLElement>(`[data-key="${CSS.escape(focusLoan)}"]`);
+      row?.classList.add("is-focus");
+      row?.setAttribute("tabindex", "-1");
+      row?.scrollIntoView({ block: "center", behavior: reducedMotion() ? "auto" : "smooth" });
+      row?.focus({ preventScroll: true });
+      if (!row) toast("That loan is not in this list. Try searching for the borrower or item.");
+      focusLoan = null;
+      writeParams({ loan: null });
+    }
   };
 
   const poll = live<Overview>("/api/staff/loans", {
