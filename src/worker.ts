@@ -6,7 +6,9 @@ import { bulkUpdate } from "./bulk";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
 import { dropObjects, itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
+import { linkItems, linksOf, unlinkItems } from "./item-relations";
 import { checkKit, createKit, createTemplate, kitDetail, kitList, kitsOfItem, recentlyCatalogued, templateDetail, updateKit, updateTemplate } from "./kits";
+import { searchIndex } from "./search-index";
 import { kitPicture, putKitPhoto, removeKitPhoto } from "./kit-media";
 import { locationPicture, publicLocationPicture, putLocationPhoto, removeLocationPhoto } from "./location-media";
 import { reportLocation, resolveReport } from "./location-reports";
@@ -17,7 +19,7 @@ import { createSession, hashPassword, readCookie, verifyPassword, verifySession 
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { eraseOldDetails, retentionPreview } from "./retention";
 import { selfServiceState, setSelfService } from "./settings";
-import { MAX_SCAN_BODY, createLinkedAccount, idDerived, missingDerived, putDerived, createPerson, directory, idScan, importPair, linkAccount, linkableAccounts, linkedPerson, personAccess, personActivity, personDetail, personLoans, personUsage, putIdCard, removeIdCard, unlinkAccount, updatePerson } from "./staff-directory";
+import { MAX_SCAN_BODY, createLinkedAccount, idDerived, missingDerived, putDerived, createPerson, directory, findPeople, idScan, importPair, linkAccount, linkableAccounts, linkedPerson, personAccess, personActivity, personDetail, personLoans, personUsage, putIdCard, removeIdCard, unlinkAccount, updatePerson } from "./staff-directory";
 import { openReorder, stockOverview, updateReorder } from "./stock";
 import { heldPhoto, networkOf, readBatch, resolveReview, reviewDecisions, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
 
@@ -61,6 +63,7 @@ const LEASE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const leaseKey = (secret: string) => `catalogue-lease:${secret}`;
 const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/location-report|\/visual)?$/;
 const LOCATION_PATH = /^\/api\/staff\/locations\/(LOC-\d{4,})(\/photo|\/move-items)?$/;
+const RELATION_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})\/links(?:\/(ITM-[A-Za-z0-9-]{1,24}))?$/;
 const KIT_PATH = /^\/api\/staff\/kits\/(KIT-\d{4,})(\/photo|\/checks)?$/;
 const KIT_MEDIA_PATH = /^\/api\/staff\/kit-media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
 const TEMPLATE_PATH = /^\/api\/staff\/kit-templates\/(KTP-\d{4,})$/;
@@ -338,6 +341,7 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
 
   if (path === "/api/staff/inventory" && method === "GET") return revisioned(request, env.DB, async () => ({ ...await staffInventory(env.DB), locations: await locationList(env.DB) }));
   if (path === "/api/staff/locations" && method === "GET") return revisioned(request, env.DB, async () => ({ locations: await locationList(env.DB) }));
+  if (path === "/api/staff/search" && method === "GET") return revisioned(request, env.DB, () => searchIndex(env.DB));
   if (path === "/api/staff/locations" && method === "POST") return json(await createLocation(env.DB, account, await body()), 201);
   const place = LOCATION_PATH.exec(path);
   if (place && !place[2] && method === "PATCH") return json(await updateLocation(env.DB, account, place[1]!, await body()));
@@ -448,8 +452,8 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
   if (media && method === "GET") return itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!);
   const match = ITEM_PATH.exec(path);
   if (match && !match[2] && method === "GET") {
-    const [detail, freshness, kits] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!)]);
-    return json({ ...detail, freshness, kits });
+    const [detail, freshness, kits, links] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!), linksOf(env.DB, match[1]!)]);
+    return json({ ...detail, freshness, kits, links });
   }
   if (match && !match[2] && method === "PATCH") {
     const input = await body() as Record<string, unknown> | null;
@@ -474,7 +478,10 @@ async function staffApi(request: Request, env: Env, url: URL): Promise<Response>
     if (!form) throw new InputError(400, "Invalid loan form.");
     return json(await createLoan(env.DB, env.EVIDENCE, account, match[1]!, form), 201);
   }
-  const known = match || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/attention", "/api/staff/attention/summary", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const relation = RELATION_PATH.exec(path);
+  if (relation && !relation[2] && method === "POST") return json(await linkItems(env.DB, account, relation[1]!, await body()), 201);
+  if (relation?.[2] && method === "DELETE") return json(await unlinkItems(env.DB, account, relation[1]!, relation[2]));
+  const known = match || relation || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/attention", "/api/staff/attention/summary", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/locations", "/api/staff/search", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 
@@ -493,6 +500,7 @@ async function staffDirectory(request: Request, env: Env, account: Account, url:
     return form;
   };
   if (path === "/api/staff/admin/directory" && method === "GET") return json(await directory(env.DB));
+  if (path === "/api/staff/admin/directory/search" && method === "GET") return json(await findPeople(env.DB, url.searchParams.get("q") ?? ""), 200, { "cache-control": "private, no-store" });
   if (path === "/api/staff/admin/directory" && method === "POST") return json(await createPerson(env.DB, account, await body()), 201);
   if (path === "/api/staff/admin/directory/accounts" && method === "GET") return json(await linkableAccounts(env.DB, account));
   if (path === "/api/staff/admin/directory/derived" && method === "GET") return json(await missingDerived(env.DB, env.STAFF_IDS, account));
@@ -513,7 +521,7 @@ async function staffDirectory(request: Request, env: Env, account: Account, url:
   if ((part === "/id/front" || part === "/id/back") && method === "GET") return idScan(env.DB, env.STAFF_IDS, account, id!, part.slice(4), url.searchParams.get("derive") === "1");
   if ((part === "/id/thumb" || part === "/id/face") && method === "GET") return idDerived(env.DB, env.STAFF_IDS, account, id!, part.slice(4));
   if (part === "/id/derived" && method === "PUT") return json(await putDerived(env.DB, env.STAFF_IDS, account, id!, await scans()));
-  const known = match || ["/api/staff/admin/directory", "/api/staff/admin/directory/accounts", "/api/staff/admin/directory/derived", "/api/staff/admin/directory/import"].includes(path);
+  const known = match || ["/api/staff/admin/directory", "/api/staff/admin/directory/search", "/api/staff/admin/directory/accounts", "/api/staff/admin/directory/derived", "/api/staff/admin/directory/import"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 
