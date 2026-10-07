@@ -26,7 +26,12 @@ export function bindItemLinks(host: HTMLElement, options: Options): { render: ()
     const id = compact(query);
     if (!tokens.length) return [];
     const linked = new Set([options.itemId(), ...options.links().map((link) => link.id)]);
-    return options.candidates().filter((candidate) => !linked.has(candidate.id) && (compact(candidate.id) === id || tokens.every((token) => words(candidate.name).some((word) => word.startsWith(token))))).slice(0, PICKS);
+    // Whole words before the starts of words ("staples small" offers Staples - Small before Stapler - Small); otherwise A to Z.
+    return options.candidates().map((candidate) => ({ candidate, name: words(candidate.name) }))
+      .filter(({ candidate, name }) => !linked.has(candidate.id) && (compact(candidate.id) === id || tokens.every((token) => name.some((word) => word.startsWith(token)))))
+      .map((each) => ({ ...each, whole: compact(each.candidate.id) === id ? tokens.length + 1 : tokens.filter((token) => each.name.includes(token)).length }))
+      .sort((a, b) => b.whole - a.whole)
+      .slice(0, PICKS).map(({ candidate }) => candidate);
   };
 
   const listMarkup = (links: ItemLink[]): Html => links.length

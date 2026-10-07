@@ -263,6 +263,17 @@ V1.7 **needs migration `0028_location_audits.sql` before its code reaches `main`
 
 Rollback before the merge: the migration only adds objects, so the Time Travel bookmark in the report restores the previous state, or drop the three empty tables and their triggers; the live code ignores them. After the merge, checks and their observations and resolutions are kept (append-only); a count posted at a review is corrected by a new count.
 
+## V1.11 Intelligent search & relationships: production preparation
+
+V1.11 **needs migration `0030_item_relationships.sql` before its code reaches `main`**, and no new bucket, secret or binding (no Workers AI binding: see the release record). The migration only adds one empty table, `item_relationships`, and its two indexes. No existing table, item, movement, quantity or place changes. The code live before it never reads the table; the V1.11 code reads it on every item record and in the search index, so the migration comes first.
+
+1. **Put the manifest on `main`**: `git fetch origin && git switch main && git pull && git checkout origin/road-to-v2/v1.11-intelligent-search -- ops/releases/v1.11.json && git commit -m "ops: V1.11 release manifest" && git push`. The manifest pins `0030` by SHA-256 (`f9d95ea3…ff5b6f1f`).
+2. **Preflight, then prepare** (Cloud Operations, below): `release` = `v1.11`, `expected_sha` = the head of `road-to-v2/v1.11-intelligent-search`, `mode` = `preflight`; then `prepare` with `confirm` = `PREPARE v1.11 <that sha>`. Expected: exactly `0030` pending; after it, 4 schema objects added (`table:item_relationships`, `index:idx_item_relationships_pair`, `index:idx_item_relationships_related`, `index:sqlite_autoindex_item_relationships_1`), no table changed, `item_relationships` empty, and items, movements, on hand, loans and phone events equal before and after. Do not push to the branch while a prepare is pending.
+3. **Integrate** V1.11 to `main` by the normal protocol (CI green on the head, prepare reported `READY_TO_MERGE`); Workers Builds deploys it.
+4. **Check signed in** (optional): press Ctrl+K (or Search in the top bar on a phone), type part of an item's name, a cabinet's name and a kit's name, and open a result. On an item, **Link an item** to another, search the other's name and see "Used with …" under the first; remove the link and read both entries in Activity. As an administrator, type a surname and see people; as staff, see none.
+
+Rollback before the merge: the migration only adds objects, so the Time Travel bookmark in the report restores the previous state, or drop the empty table (its indexes go with it); the live code ignores it. After the merge, links are kept like any record; removing one is audited.
+
 ## Cloud Operations (production preparation from GitHub, not from a PC)
 
 From V1.2 on, preparing production for a release (an R2 bucket, a D1 migration) is done by the workflow **Production operations** (`.github/workflows/production-ops.yml`), driven by a manifest in `ops/releases/<release>.json`. Authority and the full list of safety rules: `docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`. The older manual runbooks above (Parts 5B and 6) stay as the emergency fallback and as history.
