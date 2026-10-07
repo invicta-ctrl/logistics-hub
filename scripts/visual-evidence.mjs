@@ -26,6 +26,7 @@
 // V1.11 (search: global search over 500+ items with places, kits, links and a fictional Staff Directory, for an administrator and for staff at three sizes:
 // empty, mixed, item-heavy, place, kit, a link's reason, a shortcut, an ID, long names, a long group shown in full, no matches, people (and their absence
 // for staff), the keyboard, opening a result, loading, a session that has ended, and an item's Linked items card; runs only where /api/staff/search exists)
+// V1.13 (Administration: scripts/admin-evidence.mjs; its five sections at three sizes, System healthy and degraded, confirmations and impact text; runs only where /api/staff/admin/system exists)
 // sample ID cards, are drawn here in the browser and written only to a throwaway folder, so no image file enters the
 // repository and no real ID is ever used.
 //
@@ -37,6 +38,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { gzipSync } from "node:zlib";
 import { chromium, devices } from "@playwright/test";
+import { adminScenes } from "./admin-evidence.mjs";
 import { createAccountSql, runD1, wrangler } from "./staff-account.mjs";
 
 const { values: args } = parseArgs({ options: { out: { type: "string" }, base: { type: "string" }, pages: { type: "string" } } });
@@ -94,7 +96,8 @@ async function signIn(browser, url, username, [width, height, scale]) {
   await page.getByRole("textbox", { name: "Username" }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForSelector("tbody tr");
+  // Signed in is the staff bar; the page after sign-in differs by version (Items, then Home).
+  await page.waitForSelector(".app-bar");
   return { context, page };
 }
 
@@ -1912,7 +1915,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "attention" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits" || name === "search") continue;
+          if (name === "item-photos" || name === "attention" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits" || name === "search" || name === "admin-control") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -1955,6 +1958,7 @@ async function capture(url, dir) {
     if (pages.includes("kits")) Object.assign(timings, { kits: await kitScenes(browser, url, dir) });
     if (pages.includes("attention")) Object.assign(timings, { attention: await attentionScenes(browser, url, dir) });
     if (pages.includes("search")) Object.assign(timings, { search: await searchScenes(browser, url, dir) });
+    if (pages.includes("admin-control")) Object.assign(timings, { adminControl: await adminScenes(browser, url, dir, { SIZES, signIn, resume, median }) });
     if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
     if (pages.includes("staff-directory")) Object.assign(timings, { staffDirectory: await directoryScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);

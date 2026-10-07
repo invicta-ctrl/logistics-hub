@@ -32,15 +32,10 @@ export async function catalogSettings(): Promise<void> {
     <section class="admin-block" aria-labelledby="kb-title">
       <h2 id="kb-title" class="section-title">Built-in hints</h2>
       <p>When a name contains one of these words, cataloguing suggests what the hint says and shows why. The list ships with the app (version ${KNOWLEDGE_VERSION}, ${plural(KNOWLEDGE.length, "hint")}) and is read-only here; it changes with the app.</p>
-      <div class="data-table-wrap"><table class="data-table data-table--static">
-        <caption class="visually-hidden">Built-in hints for naming and classifying items</caption>
-        <thead><tr><th scope="col">When the name has</th><th scope="col">Kind</th><th scope="col">It suggests</th><th scope="col">Why</th></tr></thead>
-        <tbody>${KNOWLEDGE.map((entry) => html`<tr>
-          <td><span class="cell-strong">${entry.keywords.join(", ")}</span></td>
-          <td>${kindLabel[entry.kind]}</td>
-          <td>${[entry.behaviour && BEHAVIOUR_LABELS[entry.behaviour], entry.unit && `counted by the ${entry.unit}`, entry.category && categoryName(entry.category)].filter(Boolean).join(" · ") || html`<span class="muted">Nothing on its own</span>`}</td>
-          <td>${entry.note}</td></tr>`)}</tbody>
-      </table></div>
+      <details class="hint-details"><summary>Show all ${plural(KNOWLEDGE.length, "hint")}</summary>
+      <ul class="hint-list">${KNOWLEDGE.map((entry) => html`<li class="hint-row">
+        <p class="hint-row__words"><span class="cell-strong">${entry.keywords.join(", ")}</span> <span class="muted">${kindLabel[entry.kind]}</span></p>
+        <p class="hint-row__says">${[entry.behaviour && BEHAVIOUR_LABELS[entry.behaviour], entry.unit && `counted by the ${entry.unit}`, entry.category && categoryName(entry.category)].filter(Boolean).join(" · ") || "Nothing on its own"}<span class="muted"> · ${entry.note}</span></p></li>`)}</ul></details>
     </section>
     <section class="admin-block" aria-labelledby="ai-title">
       <h2 id="ai-title" class="section-title">AI second opinion</h2>

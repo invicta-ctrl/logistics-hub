@@ -42,6 +42,8 @@ export async function adminPage(section: AdminSection, page: { title: string; le
     </header>
     ${adminTabs(section)}
     ${page.body(session)}`);
+  // On a phone the links scroll sideways: bring the current one into view rather than leave it cut off.
+  document.querySelector<HTMLElement>('.subnav [aria-current]')?.scrollIntoView({ block: "nearest", inline: "center" });
   return session;
 }
 

@@ -1,3 +1,4 @@
+import "./admin.css";
 import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
 import { ACCESS_HINT, accessChoices, accessTag, bindCopy, canManage, oneTime } from "./account-ui";
 import { adminPage, confirmImpact } from "./admin-frame";
@@ -41,11 +42,7 @@ export async function staffAccounts(): Promise<void> {
     </section>
     <section class="admin-block" aria-labelledby="roles-title">
       <h2 id="roles-title" class="section-title">What each role can do</h2>
-      <div class="data-table-wrap"><table class="data-table data-table--static">
-        <caption class="visually-hidden">What each role can do</caption>
-        <thead><tr><th scope="col">Role</th><th scope="col">Can</th></tr></thead>
-        <tbody>${ROLE_GUIDE.map((entry) => html`<tr><th scope="row">${entry.role}</th><td>${entry.can}</td></tr>`)}</tbody>
-      </table></div>
+      <dl class="guide">${ROLE_GUIDE.map((entry) => html`<div><dt>${entry.role}</dt><dd>${entry.can}</dd></div>`)}</dl>
     </section>
     <section class="admin-block" aria-labelledby="directory-title">
       <h2 id="directory-title" class="section-title">Staff Directory</h2>

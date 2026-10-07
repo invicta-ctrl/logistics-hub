@@ -1,0 +1,8 @@
+{
+  "coldLoadToFirstRowMs": 285,
+  "sectionSwitchMs": 69,
+  "adminControl": {
+    "systemApiMedianMs": 15,
+    "systemPageToStatusMs": 115
+  }
+}

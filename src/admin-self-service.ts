@@ -1,3 +1,4 @@
+import "./admin.css";
 import { adminPage, confirmImpact } from "./admin-frame";
 import { SELF_SERVICE_COPY as COPY, SELF_SERVICE_RULES } from "./setting-copy";
 import { api, failure, html, plural, setMessage, toast } from "./ui";
@@ -21,11 +22,7 @@ export async function selfServiceSettings(): Promise<void> {
     <section class="admin-block" aria-labelledby="ss-rules-title">
       <h2 id="ss-rules-title" class="section-title">What phones ask for</h2>
       <p>These rules are the same on every phone and cannot be switched off here.</p>
-      <div class="data-table-wrap"><table class="data-table data-table--static">
-        <caption class="visually-hidden">What a phone asks for, by action</caption>
-        <thead><tr><th scope="col">Action</th><th scope="col">Asks for</th></tr></thead>
-        <tbody>${SELF_SERVICE_RULES.map((rule) => html`<tr><th scope="row">${rule.action}</th><td>${rule.asks}</td></tr>`)}</tbody>
-      </table></div>
+      <dl class="guide">${SELF_SERVICE_RULES.map((rule) => html`<div><dt>${rule.action}</dt><dd>${rule.asks}</dd></div>`)}</dl>
     </section>
     ${closed ? html`<section class="ss-trial" aria-labelledby="ss-trial-title">
       <h2 id="ss-trial-title" class="section-title">Test Self-Service</h2>
