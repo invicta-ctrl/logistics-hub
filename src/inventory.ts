@@ -340,6 +340,27 @@ export async function updateItem(db: D1Database, actor: Actor, id: string, parse
   return { changed: changed.length, updatedAt: now };
 }
 
+/**
+ * Administration > Catalog changes one item's other names alone. They are cleaned as the edit form's are, the change is recorded like
+ * any edit, and the version check is the same, so two people cannot overwrite each other.
+ */
+export async function setAliases(db: D1Database, actor: Actor, id: string, aliases: unknown, expectedUpdatedAt: unknown) {
+  if (expectedUpdatedAt !== null && typeof expectedUpdatedAt !== "string") throw new InputError(400, "Missing item version. Reload the item and try again.");
+  const current = await db.prepare("SELECT name, aliases, updated_at AS updatedAt FROM items WHERE id = ?").bind(id).first<{ name: string; aliases: string | null; updatedAt: string | null }>();
+  if (!current) throw new InputError(404, "Item not found.");
+  if (current.updatedAt !== expectedUpdatedAt) throw new InputError(409, STALE);
+  const next = aliasList({ aliases }, current.name);
+  if (next === current.aliases) return { changed: 0, aliases: next, updatedAt: current.updatedAt };
+  const now = new Date().toISOString();
+  const [update] = await guarded(db.batch([
+    db.prepare("UPDATE items SET aliases = ?, updated_at = ? WHERE id = ? AND updated_at IS ?").bind(next, now, id, expectedUpdatedAt),
+    audit(db, actor.accountId, "ITEM_UPDATED", "ITEM", id, { aliases: { from: current.aliases, to: next } }, true),
+    db.prepare(`${BUMP_REVISION} AND changes() > 0`)
+  ]));
+  if (!update!.meta.changes) throw new InputError(409, STALE);
+  return { changed: 1, aliases: next, updatedAt: now };
+}
+
 /** What a caller adds to the creation of an item: audit details, and statements that must succeed or fail with it (a capture row). */
 export type Creation = { audit?: Record<string, unknown>; also?: (itemId: string) => D1PreparedStatement[] };
 

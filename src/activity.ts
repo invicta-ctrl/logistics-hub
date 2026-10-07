@@ -193,7 +193,7 @@ function arms(admin: boolean): Arm[] {
   ];
 }
 
-const like = (text: string) => `%${text.replace(/[\\%_]/g, "\\$&")}%`;
+export const like = (text: string) => `%${text.replace(/[\\%_]/g, "\\$&")}%`;
 
 /** The predicate that keeps only rows strictly after the cursor in (time, id) descending order, valid inside one arm. */
 function afterCursor(arm: Arm, cursor: string, bind: (value: unknown) => string): string {

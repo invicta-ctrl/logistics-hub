@@ -3,7 +3,8 @@ import { DEPARTMENTS, DEPARTMENT_CODES, type DepartmentCode } from "./directory-
 import { type Loan, loanRow, openReturn } from "./loan-form";
 import { tiltTile } from "./card-motion";
 import { type Card, type View, cardForm, cardSource, forgetScans, importArchive, makeMissingImages, openCard, scan } from "./staff-ids";
-import { type Access, type Role, type Session, accessLabel, adminTabs, initials, loadSession, shell } from "./staff";
+import { type Access, type Role, type Session, accessLabel, initials, loadSession, shell } from "./staff";
+import { adminTabs } from "./admin-frame";
 import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 /*
@@ -112,7 +113,7 @@ export async function staffDirectory(): Promise<void> {
           <button class="button button--primary" type="button" data-add>${icon("plus")}Add person</button>
         </div>
       </header>
-      ${adminTabs("directory")}
+      ${adminTabs("staff", false)}
       <div class="dir-toolbar">
         <div class="search-field">${icon("search")}<input type="search" data-search id="dir-search" value="${params.get("q") ?? ""}" placeholder="Search names, positions or sign-ins" aria-label="Search the Staff Directory" autocomplete="off" /><kbd>/</kbd></div>
         <div class="chips" role="group" aria-label="Show">${(Object.keys(SHOWS) as Show[]).map((key) => html`<button type="button" class="chip" data-show="${key}" aria-pressed="${key === show}">${SHOWS[key]}<span class="chip__count" data-count="${key}"></span></button>`)}</div>

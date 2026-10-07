@@ -57,10 +57,13 @@ async function ownAudit(db: D1Database, actor: Actor, id: string): Promise<Audit
 const expectedCount = (db: D1Database, locationId: string) =>
   db.prepare(`${INSIDE} SELECT COUNT(*) AS n FROM items i WHERE i.location_id IN (SELECT id FROM inside) AND i.status <> 'INACTIVE'`).bind(locationId).first<number>("n");
 
+/** The checks this person has open or paused: what Catalogue resumes and what Home offers to continue. */
+export const openChecks = (db: D1Database, actor: Actor) => db.prepare(`SELECT ${AUDIT_COLUMNS} WHERE a.status <> 'FINISHED' AND a.started_by = ? ORDER BY a.updated_at DESC LIMIT 20`).bind(actor.accountId);
+
 /** The checks this person has open or paused, who else is checking where, and the latest finished checks. */
 export async function auditState(db: D1Database, actor: Actor) {
   const [mine, others, finished] = await db.batch([
-    db.prepare(`SELECT ${AUDIT_COLUMNS} WHERE a.status <> 'FINISHED' AND a.started_by = ? ORDER BY a.updated_at DESC LIMIT 20`).bind(actor.accountId),
+    openChecks(db, actor),
     db.prepare(`SELECT ${AUDIT_COLUMNS} WHERE a.status <> 'FINISHED' AND a.started_by <> ? ORDER BY a.started_at LIMIT 20`).bind(actor.accountId),
     db.prepare(`SELECT ${AUDIT_COLUMNS} WHERE a.status = 'FINISHED' ORDER BY a.finished_at DESC LIMIT 10`)
   ]);
