@@ -42,7 +42,7 @@ export function bindItemLinks(host: HTMLElement, options: Options): { render: ()
     const found = matches();
     if (!query.trim()) return html``;
     if (!found.length) return html`<p class="field__hint">No other item matches “${query}”.</p>`;
-    return html`<div class="item-links__picks" role="group" aria-label="Matching items">${found.map((candidate) => html`<button type="button" class="item-links__pick" data-pick="${candidate.id}" aria-pressed="${picked?.id === candidate.id}">
+    return html`<div class="item-links__picks" role="group" aria-label="Matching items">${found.map((candidate) => html`<button type="button" class="item-links__pick" data-link-pick="${candidate.id}" aria-pressed="${picked?.id === candidate.id}">
       <span class="item-links__name">${candidate.name}</span><span class="cell-sub">${[candidate.status === "INACTIVE" ? "Inactive" : null, candidate.place ?? "No place set", candidate.id].filter(Boolean).join(" · ")}</span>${picked?.id === candidate.id ? icon("check") : ""}</button>`)}</div>`;
   };
 
@@ -83,14 +83,14 @@ export function bindItemLinks(host: HTMLElement, options: Options): { render: ()
       return;
     }
     if (target.closest("[data-link-cancel]")) { close(); return; }
-    const pick = target.closest<HTMLElement>("[data-pick]");
+    const pick = target.closest<HTMLElement>("[data-link-pick]");
     if (pick) {
-      picked = matches().find((candidate) => candidate.id === pick.dataset.pick) ?? null;
+      picked = matches().find((candidate) => candidate.id === pick.dataset.linkPick) ?? null;
       mount(host.querySelector("#link-picks")!, picksMarkup());
       const submit = host.querySelector<HTMLButtonElement>("#link-form button[type=submit]")!;
       submit.disabled = !picked;
       submit.textContent = picked ? `Link to ${picked.name}` : "Link";
-      host.querySelector<HTMLElement>(`[data-pick="${CSS.escape(pick.dataset.pick!)}"]`)?.focus();
+      host.querySelector<HTMLElement>(`[data-link-pick="${CSS.escape(pick.dataset.linkPick!)}"]`)?.focus();
       return;
     }
     const remove = target.closest<HTMLButtonElement>("[data-link-remove]");
