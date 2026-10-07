@@ -387,6 +387,9 @@ type LiveOptions<T> = { interval: number; onData: (data: T) => void; onError?: (
 
 /** A poll that has not answered in this long counts as offline; the next one tries again. */
 const LIVE_TIMEOUT = 15_000;
+/** After this many checks in a row that found nothing new, an open view asks a third as often until something changes or the person acts. */
+const QUIET_AFTER = 6;
+const QUIET_SLOWDOWN = 3;
 
 /**
  * Keeps a view current by polling an ETag'd endpoint. Unchanged data costs one
@@ -405,6 +408,8 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
   let accepted = 0;
   let running: Promise<void> | null = null;
   let again = false;
+  let quiet = 0;
+  let scheduled = false;
   let inFlight: AbortController | null = null;
   // The status names when this view last received changed data, not when it last asked.
   let changedAt = "";
@@ -433,12 +438,15 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
         const data = await response.json() as T;
         if (stopped || id <= accepted) return !stopped;
         accepted = id;
+        quiet = 0;
         etag = response.headers.get("etag") ?? "";
         changedAt = formatTime(new Date().toISOString());
         options.onData(data);
         if (loaded) setStatus("updated");
         loaded = true;
-      } else if (response.status !== 304) {
+      } else if (response.status === 304) {
+        quiet += 1;
+      } else {
         const body = await response.json().catch(() => ({})) as { error?: string };
         throw new ApiError(response.status, body.error ?? "Could not refresh.");
       }
@@ -458,6 +466,9 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
   };
   const tick = (): Promise<void> => {
     window.clearTimeout(timer);
+    // Only the clock keeps the slow pace: a refresh the person or a save asked for, or coming back to the tab, asks at the normal pace again.
+    if (!scheduled) quiet = 0;
+    scheduled = false;
     if (stopped) return Promise.resolve();
     if (running) { again = true; return running; }
     running = (async () => {
@@ -465,7 +476,7 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
       do { again = false; polling = await request(); } while (again && polling && !stopped);
       running = null;
       window.clearTimeout(timer);
-      if (polling && !stopped && document.visibilityState === "visible") timer = window.setTimeout(tick, options.interval);
+      if (polling && !stopped && document.visibilityState === "visible") timer = window.setTimeout(() => { scheduled = true; void tick(); }, quiet >= QUIET_AFTER ? options.interval * QUIET_SLOWDOWN : options.interval);
     })();
     return running;
   };
