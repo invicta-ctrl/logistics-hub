@@ -59,6 +59,13 @@ describe("what may come back", () => {
     expect(readAiAnswer({ response: { category: "UNSORTED" } }, payload)).toEqual({});
   });
 
+  it("reads the chat-completion shape Workers AI returns today (the V1.11 harness missed it until 2026-10-07)", () => {
+    const reply = { object: "chat.completion", choices: [{ index: 0, message: { role: "assistant", content: '{"category":"Medical Supplies","unit":"box","behaviour":"CONSUME"}' } }], usage: { neurons: 0.54 } };
+    expect(readAiAnswer(reply, payload)).toEqual({ category: "Medical Supplies", unit: "box", behaviour: "CONSUME" });
+    expect(readAiAnswer({ choices: [] }, payload)).toEqual({});
+    expect(readAiAnswer({ choices: [{ message: { content: null } }] }, payload)).toEqual({});
+  });
+
   it("an unreadable or empty answer is no suggestion, never an error", () => {
     for (const reply of [null, undefined, "", "not json", "[1,2]", { response: 42 }, { response: ["Medical Supplies"] }, { response: "{\"category\": " }]) expect(readAiAnswer(reply, payload)).toEqual({});
   });
