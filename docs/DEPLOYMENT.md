@@ -185,6 +185,19 @@ Then compare it with what you expect (`SELECT COUNT(*)` on `items`, `inventory_m
 
 **Rehearsed on 2026-10-02 (Claude Cloud, local only):** a local D1 migrated through 0017 with an owner account was exported with `wrangler d1 export DB --local` and restored into an empty local database with `wrangler d1 execute --file`. Result: all 49 schema objects (tables, indexes, 8 triggers, 1 view) identical; 16 tables with 922 rows, equal table by table (397 items, 393 movements, 17 `d1_migrations`); `PRAGMA foreign_key_check` clean. **Not rehearsed:** any remote restore or Time Travel restore. That needs a throwaway remote database or Earl's own run; until then both remote paths are documented but unproven here.
 
+
+### Checking a restored database (V1.14)
+
+A dump is only as good as what it restores. Before pointing anything at a restored database, check the dump itself, locally and read-only:
+
+```
+node scripts/verify-restore.mjs data/private/backup-YYYYMMDD.sql [--keys data/private/r2-keys.txt]
+```
+
+It loads the dump into a private in-memory database (nothing is sent anywhere) and reports: SQLite's own integrity check, rows that point at rows that are not there, migrations the code carries that the dump lacks (or the reverse), posted movements with no quantity, and the counts of items, movements, loans, accounts and Self-Service records to compare with what you expect. With `--keys`, a text file of R2 object keys (one per line, from the three buckets together; the Cloudflare dashboard or any S3-compatible listing gives them), it also names media the database refers to that R2 no longer holds, and media R2 holds that no row refers to. It prints `RESTORE_OK` only when nothing is wrong. Run it on the dump taken before a change and again on the dump taken after a Time Travel restore; a difference is the thing to look at. The dump holds personal data: keep it under `data/private/`.
+
+Limits: it cannot see R2 itself (no listing without credentials), and an object that exists in R2 but is unreadable is not detected. Loan photos are evidence that retention erases on schedule, so a "named but missing" loan photo after its erase date is expected.
+
 ## Operating notes
 
 - **Staff Directory** (V1.3): Administration → Staff → Open the Staff Directory, for administrators and owners only (STAFF never reaches it, on the page or the API). Administrators keep profiles and link sign-ins (an administrator only for STAFF accounts and their own; the profile of someone linked to an administrator or owner is the owner's to edit) and open ID scans; only the owner imports, adds, replaces or removes scans. Scans live only in the private `logistics-hub-staff-ids` bucket, are served `private, no-store` and same-origin only, are never cached by the service worker, and have no public, Self-Service or catalog address. Each opening is an Activity entry (once per viewer and card in ten minutes) and a viewer may fetch at most 120 scans in ten minutes. Remove the scans of people who have left once they are no longer needed (the profile says so for an inactive person with scans).
