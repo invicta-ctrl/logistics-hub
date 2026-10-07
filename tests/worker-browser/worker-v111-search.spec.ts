@@ -7,14 +7,23 @@ import { expect, test, type Page } from "@playwright/test";
 
 const username = process.env.E2E_USERNAME!;
 const password = process.env.E2E_PASSWORD!;
-const ownerUsername = process.env.E2E_OWNER_USERNAME!;
-const ownerPassword = process.env.E2E_OWNER_PASSWORD!;
 
-async function signIn(page: Page, user = username, secret = password): Promise<void> {
+async function signIn(page: Page): Promise<void> {
   await page.goto("/staff");
-  await page.getByRole("textbox", { name: "Username" }).fill(user);
-  await page.getByLabel("Password", { exact: true }).fill(secret);
+  await page.getByRole("textbox", { name: "Username" }).fill(username);
+  await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.locator("tbody tr").first()).toBeVisible();
+}
+
+// The owner administration tests in worker-live replace the owner's password with a recovery key; either one may be current.
+async function signInOwner(page: Page, origin: string): Promise<void> {
+  let signedIn = false;
+  for (const secret of [process.env.E2E_OWNER_PASSWORD!, "recovered owner pass"]) {
+    signedIn ||= (await page.request.post("/api/staff/login", { headers: { origin }, data: { username: process.env.E2E_OWNER_USERNAME, password: secret } })).ok();
+  }
+  expect(signedIn).toBe(true);
+  await page.goto("/staff");
   await expect(page.locator("tbody tr").first()).toBeVisible();
 }
 
@@ -65,8 +74,8 @@ test("search opens an item, and a link made on its record is found from the othe
   await expect(other.locator(".item-links__row")).toHaveCount(0);
 });
 
-test("an administrator finds people by name; a staff account is refused by the Worker", async ({ page, browser }) => {
-  await signIn(page, ownerUsername, ownerPassword);
+test("an administrator finds people by name; a staff account is refused by the Worker", async ({ page, browser, baseURL }) => {
+  await signInOwner(page, baseURL!);
   await page.keyboard.press("Control+k");
   await field(page).fill("zzzz nobody");
   await expect(page.getByText("No matches for “zzzz nobody”")).toBeVisible();

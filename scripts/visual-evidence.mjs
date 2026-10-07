@@ -23,6 +23,9 @@
 // dozen-item shelf checked on a phone, paused, resumed and continued offline, a stock conflict, the summary and the review on a computer;
 // runs only where checks of a place exist) and self-service-v19 (V1.9: Self-Service 2.0 on a phone, tablet and computer: home, search, a group, the item page, the borrow/take/use forms, identity, photo, the check, the receipt, My activity, return, the help tip, offline, and a 600-item catalog; runs only where the item page exists) and kits (V1.8: the kit list, a Ready and an incomplete kit, a template, the check and its summary; runs only where /api/staff/kits exists). Its pictures, including the obviously fake
 // V1.10 (attention: the bell and nav numbers, the inbox with mixed conditions at three sizes, a filtered view, a group opened, marking a return reviewed, a loan focused from a link, an Unclassified item's suggestion, and the calm empty state; runs only where /staff/attention exists)
+// V1.11 (search: global search over 500+ items with places, kits, links and a fictional Staff Directory, for an administrator and for staff at three sizes:
+// empty, mixed, item-heavy, place, kit, a link's reason, a shortcut, an ID, long names, a long group shown in full, no matches, people (and their absence
+// for staff), the keyboard, opening a result, loading, a session that has ended, and an item's Linked items card; runs only where /api/staff/search exists)
 // sample ID cards, are drawn here in the browser and written only to a throwaway folder, so no image file enters the
 // repository and no real ID is ever used.
 //
@@ -32,6 +35,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { gzipSync } from "node:zlib";
 import { chromium, devices } from "@playwright/test";
 import { createAccountSql, runD1, wrangler } from "./staff-account.mjs";
 
@@ -66,6 +70,7 @@ async function serve(dir, port) {
   // locations: items the phone is offered, two look-alike places the migration would have kept apart, and typed locations with no place yet.
   if (pages.includes("locations") && fs.existsSync(path.join(dir, "migrations", "0024_locations.sql"))) runD1(locationRecordsSql(), { persistTo: state });
   if (pages.includes("attention") && fs.existsSync(path.join(dir, "src", "attention.ts"))) runD1(attentionRecordsSql(), { persistTo: state });
+  if (pages.includes("search") && fs.existsSync(path.join(dir, "src", "search-palette.ts"))) runD1(searchRecordsSql(), { persistTo: state });
   const child = spawn(process.execPath, [wrangler, "dev", "--local", "--port", String(port), "--inspector-port", String(port + 1), "--persist-to", state, "--env-file", path.join(state, ".env")], { cwd: dir, stdio: "ignore", detached: process.platform !== "win32" });
   const url = `http://127.0.0.1:${port}`;
   for (let tries = 0; ; tries++) {
@@ -1675,6 +1680,227 @@ async function attentionScenes(browser, url, dir) {
   return timings;
 }
 
+/**
+ * V1.11 global search over a realistic store: the seeded catalog plus a hundred and ten archive boxes (over 500 items), nested places,
+ * kits (one with a long name), item links of every kind, and sixty-four fictional Staff Directory people with sample numbers.
+ */
+function searchRecordsSql() {
+  const at = "2026-10-06T00:00:00.000Z";
+  const rows = [];
+  const place = (id, name, parent, active = 1) => rows.push(`INSERT INTO locations(id, name, parent_id, active, created_at, updated_at) VALUES('${id}', ${sq(name)}, ${parent ? `'${parent}'` : "NULL"}, ${active}, '${at}', '${at}');`);
+  place("LOC-9101", "Logistics Office", null);
+  place("LOC-9102", "Cabinet 1", "LOC-9101");
+  place("LOC-9103", "Shelf A", "LOC-9102");
+  place("LOC-9104", "Shelf B", "LOC-9102");
+  place("LOC-9105", "Cabinet 2", "LOC-9101");
+  place("LOC-9106", "Storage Room", null);
+  place("LOC-9107", "First-aid Shelf", "LOC-9106");
+  place("LOC-9108", "Old Event Bins", "LOC-9106", 0);
+  place("LOC-9109", "General Assembly Hall Backstage Storage Cabinet (Left, top shelves)", "LOC-9106");
+  place("LOC-9110", "Archive Room", null);
+  const put = (where, location) => rows.push(`UPDATE items SET location_id = '${location}' WHERE ${where};`);
+  put("name LIKE '%tape%' OR name LIKE '%glue%'", "LOC-9103");
+  put("name LIKE '%stapl%' OR name LIKE '%ballpen%' OR name LIKE '%marker%'", "LOC-9104");
+  put("name LIKE '%folder%'", "LOC-9105");
+  put("id IN ('ITM-0058','ITM-0061','ITM-0062','ITM-0063','ITM-0064','ITM-0065','ITM-0066','ITM-0067')", "LOC-9107");
+  put("id IN ('ITM-0100','ITM-0103')", "LOC-9106");
+  // Realistic volume: numbered archive boxes, as a council keeps its records, so the catalog passes 500 items.
+  const files = ["Minutes", "Receipts", "Liquidation Reports", "Event Files", "Election Records"];
+  for (let n = 1; n <= 110; n++) {
+    rows.push(`INSERT INTO items(id, name, aliases, category, item_type, unit, location_id) VALUES('ITM-${String(900 + n).padStart(4, "0")}', 'Archive Box ${String(n).padStart(3, "0")} - ${files[n % 5]} ${2016 + (n % 10)}', 'records box', 'OTHERS', 'Loanable', 'box', 'LOC-9110');`);
+  }
+  rows.push(`INSERT INTO items(id, name, aliases, category, item_type, unit, location_id) VALUES('ITM-0900', 'General Assembly Heavy-duty Extension Cord with Surge Protector - 4 gang, 10 metre, orange', 'power strip; extension wire', 'OFFICE EQUIPMENT AND SUPPLIES', 'Loanable', 'piece', 'LOC-9109');`);
+  const kit = (id, name, location, items) => {
+    rows.push(`INSERT INTO kits(id, name, location_id, active, created_at, updated_at) VALUES('${id}', ${sq(name)}, '${location}', 1, '${at}', '${at}');`);
+    items.forEach((item, position) => rows.push(`INSERT INTO kit_components(kit_id, item_id, required, position) VALUES('${id}', '${item}', 2, ${position});`));
+  };
+  kit("KIT-9001", "Event First-aid Kit", "LOC-9107", ["ITM-0058", "ITM-0061", "ITM-0066", "ITM-0064"]);
+  kit("KIT-9002", "Arts & Crafts Kit", "LOC-9103", ["ITM-0205", "ITM-0308", "ITM-0263", "ITM-0216"]);
+  kit("KIT-9003", "Costume Repair Kit", "LOC-9106", ["ITM-0103", "ITM-0100"]);
+  kit("KIT-9004", "General Assembly Registration Table Kit - pens, markers and folders", "LOC-9109", ["ITM-0127", "ITM-0242", "ITM-0165", "ITM-0900"]);
+  const link = (from, to, kind) => rows.push(`INSERT INTO item_relationships(item_id, related_id, kind, created_at) VALUES('${from}', '${to}', '${kind}', '${at}');`);
+  link("ITM-0204", "ITM-0205", "USED_WITH");
+  link("ITM-0292", "ITM-0205", "ALTERNATIVE");
+  link("ITM-0285", "ITM-0289", "USED_WITH");
+  link("ITM-0287", "ITM-0290", "USED_WITH");
+  link("ITM-0286", "ITM-0288", "USED_WITH");
+  link("ITM-0285", "ITM-0286", "REPLACEMENT");
+  link("ITM-0100", "ITM-0103", "CONTENTS");
+  link("ITM-0062", "ITM-0066", "ALTERNATIVE");
+  const first = ["Maria", "Jose", "Andrea", "Paolo", "Bea", "Carlo", "Dana", "Enzo", "Faye", "Gino", "Hana", "Ivan", "Jia", "Kiko", "Lara", "Migs"];
+  const last = ["Santos", "Dela Cruz", "Villanueva", "Reyes"];
+  const departments = ["DoL", "DEM", "DoF", "DPC", "DHR", "DCES", "OfP", "SEC"];
+  const positions = ["Logistics Head", "Events Officer", "Finance Officer", "Member", null, "Committee Head", "Secretary"];
+  let n = 1;
+  for (const given of first) for (const family of last) {
+    rows.push(`INSERT INTO staff_directory(id, full_name, department, position, officer, student_id, active, created_at, updated_at) VALUES('PER-00000000-0000-4000-8000-${String(n).padStart(12, "0")}', ${sq(`${given} ${family}`)}, '${departments[n % departments.length]}', ${sq(positions[n % positions.length])}, ${n % 5 === 0 ? 1 : 0}, '00-SAMPLE-${String(n).padStart(3, "0")}', ${n % 11 === 0 ? 0 : 1}, '${at}', '${at}');`);
+    n++;
+  }
+  rows.push("UPDATE catalog_revision SET value = value + 1 WHERE id = 1;");
+  return rows.join("\n");
+}
+
+async function searchScenes(browser, url, dir) {
+  const shot = (page, name, options = {}) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80, ...options });
+  const owner = await signIn(browser, url, "owner.demo", SIZES.desktop);
+  if ((await owner.page.request.get(`${url}/api/staff/search`)).status() === 404) {
+    console.log("search: this ref has no global search, skipped");
+    await owner.context.close();
+    return {};
+  }
+  const states = { OWNER: await owner.context.storageState() };
+  await owner.context.close();
+  const staff = await signIn(browser, url, "staff.demo", SIZES.desktop);
+  states.STAFF = await staff.context.storageState();
+  await staff.context.close();
+
+  // Phones are touch screens here (no hover), as the keyboard hints are for keyboards only.
+  const enter = async (state, size) => {
+    const [width, height, scale] = SIZES[size];
+    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, reducedMotion: "reduce", storageState: state, hasTouch: size === "phone", isMobile: size === "phone" });
+    return { context, page: await context.newPage() };
+  };
+  const open = async (page, size) => {
+    if (size === "desktop") await page.keyboard.press("Control+k");
+    else await page.locator(".app-search").click();
+    await page.locator("dialog.palette[open]").waitFor();
+  };
+  // A result count is announced once the answer is complete (for an administrator, once the directory has answered too).
+  const ask = async (page, query) => {
+    await page.evaluate(() => { document.querySelector("#palette-status").textContent = ""; });
+    await page.locator("#palette-input").fill(query);
+    if (query.trim().length >= 2) await page.waitForFunction(() => document.querySelector("#palette-status")?.textContent);
+    await page.waitForTimeout(150);
+  };
+  const scenes = [
+    ["mixed", "sewing"], ["items", "tape"], ["place", "cabinet"], ["kit", "first aid"], ["relation", "stapler big"], ["shortcut", "overdue"],
+    ["id", "KIT-9001"], ["long-names", "general assembly"], ["volume", "archive box"], ["none", "zzqx"], ["people", "santos"]
+  ];
+  const timings = { directoryCallsByStaff: 0 };
+
+  for (const [role, state] of Object.entries(states)) {
+    for (const [size, viewport] of Object.entries(SIZES)) {
+      if (role === "STAFF" && size === "tablet") continue;
+      const who = role.toLowerCase();
+      const { context, page } = await enter(state, size);
+      if (role === "STAFF") page.on("request", (request) => { if (request.url().includes("/api/staff/admin/directory")) timings.directoryCallsByStaff++; });
+      await page.goto(`${url}/staff/items`);
+      await page.waitForSelector("tbody tr");
+      await shot(page, `search-${who}-bar-${size}`);
+      await open(page, size);
+      await page.waitForLoadState("networkidle");
+      await shot(page, `search-${who}-empty-${size}`);
+      for (const [name, query] of scenes) {
+        if (role === "STAFF" && !["mixed", "people", "relation"].includes(name)) continue;
+        if (size === "tablet" && !["mixed", "long-names", "people", "none"].includes(name)) continue;
+        await ask(page, query);
+        await shot(page, `search-${who}-${name}-${size}`);
+        if (name === "volume" && size !== "tablet") {
+          await page.locator("#palette-more-items").click();
+          await page.waitForTimeout(150);
+          await page.locator(".palette__capped").scrollIntoViewIfNeeded().catch(() => {});
+          await shot(page, `search-${who}-volume-all-${size}`);
+          await page.locator("#palette-input").focus();
+        }
+      }
+      if (role === "OWNER") {
+        await ask(page, "tape");
+        if (size === "phone") await page.locator("[id^='palette-item-']").nth(2).tap();
+        else {
+          await page.keyboard.press("ArrowDown");
+          await page.keyboard.press("ArrowDown");
+          await page.waitForTimeout(150);
+          timings[`keyboardActive-${size}`] = await page.locator("#palette-input").getAttribute("aria-activedescendant");
+          await shot(page, `search-owner-keyboard-${size}`);
+          await page.keyboard.press("Enter");
+        }
+        await page.locator("dialog[open]:not(.palette)").waitFor();
+        await page.waitForTimeout(300);
+        timings[`focusAfterOpen-${size}`] = await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.textContent?.trim().slice(0, 40));
+        await shot(page, `search-owner-opened-${size}`);
+      }
+      await context.close();
+    }
+  }
+
+  // Loading (the index still on its way) and a session that has ended, each with the answer held back only for this picture.
+  for (const size of ["desktop", "phone"]) {
+    const { context, page } = await enter(states.OWNER, size);
+    let release;
+    const held = new Promise((resolve) => { release = resolve; });
+    await page.route("**/api/staff/search", async (route) => { await held; await route.continue(); });
+    await page.goto(`${url}/staff/items`);
+    await page.waitForSelector("tbody tr");
+    await open(page, size);
+    await page.locator("#palette-input").fill("tape");
+    await page.locator(".palette__loading").waitFor();
+    await shot(page, `search-owner-loading-${size}`);
+    release();
+    await page.locator("#palette-item-ITM-0216, [id^='palette-item-']").first().waitFor();
+    await context.close();
+    const ended = await enter(states.OWNER, size);
+    await ended.page.route("**/api/staff/search", (route) => route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "Sign in again." }) }));
+    await ended.page.goto(`${url}/staff/items`);
+    await ended.page.waitForSelector("tbody tr");
+    await open(ended.page, size);
+    await ended.page.locator("#palette-input").fill("tape");
+    await ended.page.locator(".palette__error").waitFor();
+    await shot(ended.page, `search-owner-session-ended-${size}`);
+    await ended.context.close();
+  }
+
+  // Relationship discovery: an item's Linked items card, and adding a link from it.
+  for (const size of ["desktop", "phone"]) {
+    const { context, page } = await enter(states.STAFF, size);
+    await page.goto(`${url}/staff/items?item=ITM-0285`);
+    await page.waitForSelector("#links-title");
+    const card = page.locator(".item-links");
+    await card.scrollIntoViewIfNeeded();
+    await shot(page, `search-links-${size}`);
+    await page.getByRole("button", { name: "Link an item" }).click();
+    await page.locator("#link-kind").selectOption({ index: 1 });
+    await page.locator("#link-find").fill("staples small");
+    await page.locator("[data-link-pick]").first().waitFor();
+    await page.locator("[data-link-pick]").first().click();
+    await card.scrollIntoViewIfNeeded();
+    await shot(page, `search-links-form-${size}`);
+    await context.close();
+  }
+
+  // Timings at 508 items: the first search after sign-in (the palette's code and the index both fetched) and a later one (a 304).
+  const first = [], again = [];
+  let indexBytes = 0;
+  for (let run = 0; run < 5; run++) {
+    const { context, page } = await resume(browser, states.OWNER, SIZES.desktop);
+    page.on("response", async (response) => { if (response.url().endsWith("/api/staff/search") && response.status() === 200) indexBytes = (await response.body()).length; });
+    await page.goto(`${url}/staff/items`);
+    await page.waitForSelector("tbody tr");
+    await page.waitForLoadState("networkidle");
+    let start = Date.now();
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("tape");
+    await page.locator("[id^='palette-item-']").first().waitFor();
+    first.push(Date.now() - start);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(1_200);
+    start = Date.now();
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("glue");
+    await page.locator("[id^='palette-item-']").first().waitFor();
+    again.push(Date.now() - start);
+    await context.close();
+  }
+  const counted = await (await browser.newContext({ storageState: states.OWNER })).request.get(`${url}/api/staff/search`);
+  const index = await counted.json();
+  Object.assign(timings, {
+    items: index.items.length, places: index.places.length, kits: index.kits.length, links: index.links?.length ?? 0,
+    indexBytes, indexGzipBytes: gzipSync(Buffer.from(JSON.stringify(index))).length,
+    firstSearchMs: median(first), laterSearchMs: median(again)
+  });
+  return timings;
+}
+
 async function capture(url, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
@@ -1686,7 +1912,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "attention" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits") continue;
+          if (name === "item-photos" || name === "attention" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits" || name === "search") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -1728,6 +1954,7 @@ async function capture(url, dir) {
     if (pages.includes("location-audit")) Object.assign(timings, { locationAudit: await locationAuditScenes(browser, url, dir) });
     if (pages.includes("kits")) Object.assign(timings, { kits: await kitScenes(browser, url, dir) });
     if (pages.includes("attention")) Object.assign(timings, { attention: await attentionScenes(browser, url, dir) });
+    if (pages.includes("search")) Object.assign(timings, { search: await searchScenes(browser, url, dir) });
     if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
     if (pages.includes("staff-directory")) Object.assign(timings, { staffDirectory: await directoryScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);
