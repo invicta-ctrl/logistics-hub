@@ -184,7 +184,7 @@ export async function kitsWorkspace(): Promise<void> {
     writeParams({ kit: id });
     try {
       await loadPlaces();
-      detail = await api<Detail>(`/api/staff/kits/${id}`);
+      detail = await api<Detail>(`/api/staff/kits/${encodeURIComponent(id)}`);
     } catch (error) {
       toast(failure(error), "error");
       return;

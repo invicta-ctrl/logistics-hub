@@ -72,6 +72,8 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("message", (event) => {
+  // Only this site's own pages may ask the worker to activate or save screens.
+  if (event.origin !== self.location.origin) return;
   const type = (event.data as { type?: string } | null)?.type;
   if (type === "SKIP_WAITING") void self.skipWaiting();
   // The Catalogue asks for its screens to be saved when offline cataloguing is turned on, and whether they are (catalogue-offline.ts).

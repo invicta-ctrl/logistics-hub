@@ -53,7 +53,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   let detail: Detail;
   try {
     if (record && (!online || !record.serverId)) detail = record.detail;
-    else detail = await api<Detail>(`/api/staff/catalogue/sessions/${record?.serverId ?? sessionId}`);
+    else detail = await api<Detail>(`/api/staff/catalogue/sessions/${encodeURIComponent(record?.serverId ?? sessionId)}`);
   } catch (error) {
     if (!(record && error instanceof ApiError && error.status === 0)) {
       mount(root, emptyState("This cataloguing session could not be opened", record || online ? failure(error) : "It isn't saved on this device, so it opens only with a connection.", html`<a class="button button--secondary" href="/staff/catalogue" data-route>Back to Catalogue</a>`, "error", 1));

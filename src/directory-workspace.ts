@@ -308,7 +308,7 @@ export async function staffDirectory(): Promise<void> {
   async function profile(id: string, tab: Tab): Promise<void> {
     mount(root, html`<a class="back-link" href="${DIRECTORY}" data-route>${icon("back")}Staff Directory</a><div data-profile><div class="skeleton skeleton--block"></div></div>`);
     let detail: Detail;
-    try { detail = await api<Detail>(`/api/staff/admin/directory/${id}`); } catch (error) {
+    try { detail = await api<Detail>(`/api/staff/admin/directory/${encodeURIComponent(id)}`); } catch (error) {
       mount(root.querySelector("[data-profile]")!, emptyState("This profile could not be opened", failure(error), html`<a class="button button--secondary" href="${DIRECTORY}" data-route>Back to the directory</a>`, "error", 1));
       return;
     }
