@@ -1,3 +1,4 @@
+import "./admin.css";
 import { type AccountEvent, eventText } from "./account-ui";
 import { adminPage, confirmImpact } from "./admin-frame";
 import { api, emptyState, failure, formatDateTime, html, mount, plural, setMessage, toast } from "./ui";

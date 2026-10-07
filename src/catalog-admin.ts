@@ -1,14 +1,15 @@
 // Administration > Catalog (V1.13): how far the catalog is classified, and the other names of items. Reads are bounded; the one write
 // (an item's other names) is inventory.ts's setAliases.
 import { like } from "./activity";
+import { GAP_UNCLASSIFIED } from "./attention";
 
 /** Items shown at once. A search narrows them; nothing here pages through the whole catalog. */
 export const ALIAS_PAGE = 50;
 
 export async function catalogCoverage(db: D1Database) {
   const [items, captures] = await db.batch([
-    // "Unclassified" is the one definition Attention's "Items to classify" uses (attention.ts): active, and type NEEDS_REVIEW.
-    db.prepare("SELECT COUNT(*) AS active, COALESCE(SUM(item_type = 'NEEDS_REVIEW'), 0) AS unclassified FROM items WHERE status = 'ACTIVE'"),
+    // "Unclassified" is Attention's own definition (GAP_UNCLASSIFIED), so this page and "Items to classify" always agree.
+    db.prepare(`SELECT (SELECT COUNT(*) FROM items i WHERE i.status = 'ACTIVE') AS active, (SELECT COUNT(*) FROM items i WHERE ${GAP_UNCLASSIFIED}) AS unclassified`),
     db.prepare("SELECT COUNT(*) AS total, COALESCE(SUM(behaviour <> 'REVIEW_LATER'), 0) AS classified FROM catalogue_captures")
   ]);
   const item = items!.results[0] as { active: number; unclassified: number };
