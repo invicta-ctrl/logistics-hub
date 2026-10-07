@@ -78,6 +78,8 @@ const VIEWS = {
 } satisfies Record<string, { label: string; test: (item: Item) => boolean; quiet?: true }>;
 type View = keyof typeof VIEWS;
 const NO_LOCATION = "__none";
+/** Rows drawn at first, and added by each "Show more". */
+const ROW_PAGE = 100;
 /** How staff see the type: their choice between lending an item out and using it up. */
 const TYPE_CHOICES: Record<string, string> = { Loanable: "Borrow (Loanable)", Consumable: "Take (Consumable)" };
 const FIELD_LABELS: Record<string, string> = {
@@ -487,6 +489,9 @@ export async function workspace(): Promise<void> {
   let pendingItem = params.get("item");
   const pendingTab = (["overview", "loan", "details", "history"] as const).find((value) => value === params.get("tab")) ?? "overview";
   let shownIds: string[] = [];
+  /** How many rows are drawn: the table grows by a page on request, so the page's size does not follow the catalog's (docs/PERFORMANCE_RELIABILITY_DOCTRINE.md). */
+  let rowLimit = ROW_PAGE;
+  let question = "";
   /** Select mode: a checkbox on every row, and one change applied to all the ticked items at once (src/bulk-select.ts). */
   let selecting = false;
   const selected = new Set<string>();
@@ -575,13 +580,18 @@ export async function workspace(): Promise<void> {
       && (!filters.type || item.itemType === filters.type)
       && matches(item, query)).sort(compare);
     shownIds = shown.map((item) => item.id);
+    const asked = JSON.stringify([view, query, filters, sortKey, sortDir]);
+    if (asked !== question) { question = asked; rowLimit = ROW_PAGE; }
+    // The open item stays drawn, wherever it falls.
+    if (openId) rowLimit = Math.max(rowLimit, shownIds.indexOf(openId) + 1);
+    const drawn = shown.slice(0, rowLimit);
     document.querySelector("#inventory-count")!.textContent = shown.length === items.length ? plural(items.length, "item") : `${shown.length.toLocaleString()} of ${plural(items.length, "item")}`;
     const hint = view === "gradual" ? html`<p class="hint-line">${icon("info")}<span>Consumables counted in reams, rolls, packs, bottles and similar units are often opened and used a little at a time. Nothing changes here: to track open units for one, choose “Open and use gradually” in its Edit details.</span></p>` : "";
     preservingFocus(results, () => mount(results, shown.length
       ? html`${hint}<div class="data-table-wrap"><table class="data-table data-table--items">
           <caption class="visually-hidden">Items. Select an item to see, review or edit it.</caption>
           <thead><tr>${selecting ? html`<th scope="col" class="col-select"><input type="checkbox" class="select-box" id="select-all" aria-label="Select all ${shown.length.toLocaleString()} shown items" ${shown.every((item) => selected.has(item.id)) ? html`checked` : ""} /></th>` : ""}${sortHeader("id", "ID", "col-id")}${sortHeader("name", "Item", "col-item")}${sortHeader("category", "Category", "col-category")}${sortHeader("location", "Place", "col-location")}${sortHeader("onHand", "On hand", "col-qty")}<th scope="col" class="col-status">Status</th></tr></thead>
-          <tbody>${shown.map(row)}</tbody></table></div>`
+          <tbody>${drawn.map(row)}</tbody></table></div>${shown.length > drawn.length ? html`<p class="table-more"><button type="button" class="button button--secondary" data-more>Show ${Math.min(ROW_PAGE, shown.length - drawn.length).toLocaleString()} more <span class="muted">(${drawn.length.toLocaleString()} of ${shown.length.toLocaleString()} shown)</span></button></p>` : ""}`
       : view === "gradual" && !query && !Object.values(filters).some(Boolean) ? emptyState("No likely items left", "No active Consumable counted in reams, rolls, packs, bottles or similar units is still used as a whole unit.")
       : emptyState(view === "review" && !query ? "Every record is reviewed" : "No items match", view === "review" && !query ? "Nothing is waiting for review with these filters." : "Try another search, filter, or view.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
     for (const [id, was] of changed) {
@@ -681,6 +691,13 @@ export async function workspace(): Promise<void> {
       void openViewer(photoUrl(thumb.dataset.photo!, "display"), `Photo of ${name}`, () => results.querySelector<HTMLElement>(`tr[data-key="${CSS.escape(id)}"] img[data-photo]`), name, resolveItemIcon(item ?? { name }).key);
       return;
     }
+    if (target.closest("[data-more]")) {
+      const first = rowLimit;
+      rowLimit += ROW_PAGE;
+      render();
+      results.querySelectorAll<HTMLElement>("tbody .row-link")[first]?.focus({ preventScroll: true });
+      return;
+    }
     const sort = target.closest<HTMLButtonElement>("[data-sort]");
     if (sort) {
       const key = sort.dataset.sort as SortKey;
@@ -758,6 +775,8 @@ export async function workspace(): Promise<void> {
     document.querySelector(`tr[data-key="${CSS.escape(id)}"]`)?.classList.add("is-open");
     openId = id;
     detail = null;
+    // A link or the search can open an item the table has not drawn yet; render() draws it.
+    if (shownIds.indexOf(id) >= rowLimit) render();
     writeParams({ item: id });
     const item = inventory?.items.find((entry) => entry.id === id);
     sheetShell(id, item?.name ?? "Loading…", html`<div class="skeleton skeleton--block"></div>`);
