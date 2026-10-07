@@ -1,0 +1,20 @@
+{
+  "coldLoadToFirstRowMs": 438,
+  "sectionSwitchMs": 84,
+  "search": {
+    "directoryCallsByStaff": 0,
+    "keyboardActive-desktop": "palette-item-ITM-0263",
+    "focusAfterOpen-desktop": "Close",
+    "keyboardActive-tablet": "palette-item-ITM-0263",
+    "focusAfterOpen-tablet": "Close",
+    "focusAfterOpen-phone": "Close",
+    "items": 508,
+    "places": 10,
+    "kits": 4,
+    "links": 8,
+    "indexBytes": 104117,
+    "indexGzipBytes": 7005,
+    "firstSearchMs": 211,
+    "laterSearchMs": 148
+  }
+}

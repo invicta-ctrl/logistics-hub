@@ -4,10 +4,11 @@
 import { type Account, accessOf, accountAccess, canManage, newAccount, suggestUsername, throttled } from "./accounts";
 import { activityPage, parseActivityQuery } from "./activity";
 import { STUDENT_ID_PATTERN } from "./catalog-policy";
-import { type DepartmentCode, departmentCode, sourceKey } from "./directory-policy";
+import { DEPARTMENTS, type DepartmentCode, departmentCode, sourceKey } from "./directory-policy";
 import { MEDIA_ID, checkJpeg } from "./item-media";
 import { InputError, LOAN_COLUMNS, actorName, audit, isoDate } from "./inventory";
 import { cleanText } from "./loans";
+import { type PersonRow as SearchPerson, queryWords, rankPeople } from "./search";
 
 export const PERSON_ID = /^PER-[0-9a-f-]{36}$/;
 const SIDES = ["front", "back"] as const;
@@ -48,6 +49,19 @@ const person = (row: PersonRow) => ({
 export async function directory(db: D1Database) {
   const { results } = await db.prepare(`${PERSON_COLUMNS} ORDER BY p.full_name COLLATE NOCASE`).all<PersonRow>();
   return { people: results.map(person) };
+}
+
+/**
+ * Global search's people (V1.11): ranked here, in the Worker, and only the few that match leave it, with their name, department and
+ * position. The route sits under Administration, so only an administrator or owner reaches it; a student ID, an ID scan, a linked
+ * sign-in or what someone borrowed is never part of the answer, and the directory is never sent whole to be searched in the browser.
+ */
+export async function findPeople(db: D1Database, query: string) {
+  if (!queryWords(query).length) return { people: [], total: 0 };
+  const { results } = await db.prepare("SELECT id, full_name AS name, department, position, officer, active FROM staff_directory")
+    .all<{ id: string; name: string; department: DepartmentCode; position: string | null; officer: number; active: number }>();
+  const rows: SearchPerson[] = results.map((row) => ({ ...row, departmentName: DEPARTMENTS[row.department] ?? row.department, officer: row.officer === 1, active: row.active === 1 }));
+  return rankPeople(rows, query.slice(0, 120));
 }
 
 async function personRow(db: D1Database, id: string): Promise<PersonRow> {
