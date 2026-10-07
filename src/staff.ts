@@ -8,6 +8,7 @@ import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./mov
 import { type Photo, type PhotoPanel, openViewer, photoPanel, photoUrl, rowThumb } from "./item-photo";
 import { MAX_DEPTH, PATH_SEPARATOR, REPORT_LABELS, type ReportKind, VISIBILITY_LABELS, ancestry, inOrder, pathOf, placesOf, withinPlace } from "./location-tree";
 import { type Step, openWhereIsIt } from "./where-is-it";
+import { type ItemLink, bindItemLinks } from "./item-links-panel";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { bulkBar } from "./bulk-select";
 import { placeList } from "./catalogue-places";
@@ -52,7 +53,7 @@ export function ageOf(iso: string): string {
   if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
   return `on ${formatDate(iso.slice(0, 10))}`;
 }
-type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness; kits?: Array<{ id: string; name: string; active: boolean; required: number }> };
+type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness; kits?: Array<{ id: string; name: string; active: boolean; required: number }>; links?: ItemLink[] };
 type SortKey = "id" | "name" | "category" | "location" | "onHand";
 type Tab = "overview" | "loan" | "details" | "history";
 
@@ -158,6 +159,7 @@ export function shell(session: Session, section: Section, main: Html): void {
           ${sections.map((entry) => html`<a class="app-nav__link ${entry.more ? "app-nav__link--more" : ""}" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}<span class="app-nav__text">${entry.text}${badge(entry.id)}</span></a>`)}
           <button class="app-nav__link app-nav__more ${overflow.some((entry) => entry.id === section) || section === "account" ? "is-current" : ""}" type="button" popovertarget="staff-menu">${icon("dots")}<span class="app-nav__text">More</span></button>
         </nav>` : ""}
+        ${sections.length ? html`<button class="app-search" type="button" data-palette data-admin="${session.role === "STAFF" ? "0" : "1"}" aria-haspopup="dialog" aria-keyshortcuts="${MAC ? "Meta+K" : "Control+K"}">${icon("search")}<span class="app-search__text">Search</span><kbd class="app-search__keys" aria-hidden="true">${MAC ? "⌘K" : "Ctrl K"}</kbd></button>` : ""}
         ${sections.length ? html`<a class="app-bell" href="/staff/attention" data-route ${current("attention")}>${icon("bell")}<span class="visually-hidden">Attention</span><span class="attn-slot" data-attention="all"></span></a>` : ""}
         <button class="account" type="button" popovertarget="staff-menu">${avatar}<span class="account__name"><span class="visually-hidden">Account: </span>${session.displayName}<small>${accessLabel(sessionAccess(session))}</small></span></button>
       </div>
@@ -192,6 +194,41 @@ export function shell(session: Session, section: Section, main: Html): void {
   });
   document.querySelector("#staff-logout")!.addEventListener("click", signOut);
   if (sections.length) watchAttention();
+  const search = document.querySelector<HTMLElement>("[data-palette]");
+  if (search) {
+    search.addEventListener("click", () => openSearch(search));
+    // Pointing at or tabbing to it starts loading the search code and index, so opening rarely waits.
+    const warm = () => { void import("./search-palette").then((module) => module.warmPalette()).catch(() => { /* opening reports it */ }); };
+    search.addEventListener("pointerenter", warm, { once: true });
+    search.addEventListener("focus", warm, { once: true });
+  }
+  listenForSearchKey();
+}
+
+/* ---------- Global search (V1.11): the button above and Ctrl+K / ⌘K open search-palette.ts, loaded on first use. ---------- */
+
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
+
+function openSearch(button: HTMLElement): void {
+  void import("./search-palette").then((module) => module.togglePalette(button.dataset.admin === "1"))
+    .catch(() => toast("Search could not load. Check your connection and try again.", "error"));
+}
+
+let searchKey = false;
+/** Ctrl+K (⌘K on a Mac; Control-K there stays the text-editing key) opens and closes search wherever the shell shows its button. */
+function listenForSearchKey(): void {
+  if (searchKey) return;
+  searchKey = true;
+  document.addEventListener("keydown", (event) => {
+    if (event.key.toLowerCase() !== "k" || event.altKey || event.shiftKey || event.isComposing || !(MAC ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey)) return;
+    const button = document.querySelector<HTMLElement>("[data-palette]");
+    if (!button) return;
+    // Another dialog (an item, a form) keeps the keyboard: search never opens over it.
+    const open = document.querySelector("dialog[open]");
+    if (open && !open.classList.contains("palette")) return;
+    event.preventDefault();
+    openSearch(button);
+  });
 }
 
 /*
@@ -705,7 +742,10 @@ export async function workspace(): Promise<void> {
   onLeave(() => { dirty = false; });
 
   function sheetShell(kicker: Html | string, title: string, body: Html): void {
+    // Replacing the sheet's content (the loaded record after its placeholder) would drop keyboard focus onto the page behind.
+    const holding = sheet.open && sheet.contains(document.activeElement);
     mount(sheet, sheetContent(kicker, title, body));
+    if (holding && !sheet.contains(document.activeElement)) sheet.querySelector<HTMLElement>("[data-close]")?.focus({ preventScroll: true });
   }
 
   function openItem(id: string, tab: Tab = "overview"): void {
@@ -743,8 +783,9 @@ export async function workspace(): Promise<void> {
       if (!loaded || !detail) return;
       const { onHand, photo: loadedPhoto, openReports, location, legacyLocation, iconKey, visualType, updatedAt } = loaded.item;
       detail = { ...detail, item: { ...detail.item, onHand, photo: loadedPhoto, openReports, location, legacyLocation, iconKey, visualType, updatedAt }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
-        openUnits: loaded.openUnits, reports: loaded.reports, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied, freshness: loaded.freshness, kits: loaded.kits };
+        openUnits: loaded.openUnits, reports: loaded.reports, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied, freshness: loaded.freshness, kits: loaded.kits, links: loaded.links };
       photo?.render(loaded.item.photo);
+      linksPanel?.render();
       visualControl?.render();
       mount(sheet.querySelector("#reports-card")!, reportsCard(detail));
       mount(sheet.querySelector("#profile-info")!, profileInfo(detail));
@@ -875,6 +916,7 @@ export async function workspace(): Promise<void> {
         <div><dt>Other names</dt><dd>${item.aliases ?? html`<span class="muted">None</span>`}</dd></div>
       </dl>
       <div id="reports-card">${reportsCard(detail)}</div>
+      <div id="item-links"></div>
       <section class="card ${gaps.length ? "" : "card--ok"}" aria-labelledby="lending-title">
         <div class="card__head"><h3 id="lending-title">${gaps.length ? "Not on the Lending Hub" : "Listed on the Lending Hub"}</h3>${gaps.length ? "" : html`<a class="text-link" href="/lending?q=${encodeURIComponent(item.name)}" target="_blank" rel="noopener">View ${icon("external")}<span class="visually-hidden">(opens in a new tab)</span></a>`}</div>
         ${gaps.length
@@ -886,6 +928,7 @@ export async function workspace(): Promise<void> {
 
   let stockForm: ReturnType<typeof bindQuantityEditor> | null = null;
   let openPanel: ReturnType<typeof bindOpenUnits> | null = null;
+  let linksPanel: ReturnType<typeof bindItemLinks> | null = null;
   let photo: PhotoPanel | null = null;
   let visualControl: ReturnType<typeof itemVisualControl> | null = null;
   let loanForm: ReturnType<typeof bindLoanForm> | null = null;
@@ -1004,6 +1047,12 @@ export async function workspace(): Promise<void> {
     openPanel = openHost ? bindOpenUnits(openHost, () => detail && { ...detail.item, openUnits: detail.openUnits, usesRecorded: detail.usesRecorded, unitsEmptied: detail.unitsEmptied },
       async () => { await refreshStock(item.id); await poll.refresh(); }) : null;
     openPanel?.render();
+    linksPanel = bindItemLinks(sheet.querySelector<HTMLElement>("#item-links")!, {
+      itemId: () => item.id, links: () => detail?.links ?? [],
+      candidates: () => (inventory?.items ?? []).map((entry) => ({ id: entry.id, name: entry.name, status: entry.status, place: placeText(entry) })),
+      changed: (links) => { if (detail?.item.id === item.id) { detail = { ...detail, links }; linksPanel?.render(); } }
+    });
+    linksPanel.render();
     stockForm = bindQuantityEditor(sheet.querySelector<HTMLFormElement>("#stock-form")!, {
       target,
       onRecorded: async (recorded) => { await refreshStock(recorded.id); await poll.refresh(); }

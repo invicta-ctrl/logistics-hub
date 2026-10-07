@@ -312,10 +312,15 @@ test.describe("contextual help", () => {
     const sheet = await open(page);
     // A tall screen keeps both in view: scrolling a sheet closes an open note on purpose.
     await page.setViewportSize({ width: 820, height: 1600 });
-    await page.waitForTimeout(150);
-    await sheet.getByRole("button", { name: "About the student ID" }).click();
+    // The resize and any scroll reach the page on its next frames; a note opened before them would close again.
+    const settled = () => page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    const student = sheet.getByRole("button", { name: "About the student ID" });
+    const photo = sheet.getByRole("button", { name: "About the photo" });
+    await student.scrollIntoViewIfNeeded();
+    await settled();
+    await student.click();
     await expect(sheet.locator(".help__note")).toContainText("Individual borrowing");
-    await sheet.getByRole("button", { name: "About the photo" }).click();
+    await photo.click();
     await expect(sheet.locator(".help__note")).toHaveCount(1);
     await expect(sheet.locator(".help__note")).toContainText("Only Logistics staff can see it");
   });

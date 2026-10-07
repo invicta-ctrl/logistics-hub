@@ -167,8 +167,9 @@ describe("people search", () => {
 
   it("returns a handful, never the directory", async () => {
     for (let n = 10; n < 40; n += 1) person(PER(n), `Juan Dela Cruz ${n}`, "DoL", null);
-    const { people } = await json(as(cookies.admin!, "/api/staff/admin/directory/search?q=juan"));
+    const { people, total } = await json(as(cookies.admin!, "/api/staff/admin/directory/search?q=juan"));
     expect(people).toHaveLength(MAX_PEOPLE);
+    expect(total).toBe(30);
   });
 });
 
