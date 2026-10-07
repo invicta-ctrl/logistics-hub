@@ -194,7 +194,9 @@ function scoreWords(tokens: string[], name: string[], above: Labelled[] = []): {
   return { score, via };
 }
 
-const byScore = <T extends { score: number }>(name: (hit: T) => string) => (a: T, b: T) => b.score - a.score || name(a).localeCompare(name(b), undefined, { numeric: true, sensitivity: "base" });
+/** One collator for every comparison: `localeCompare` with options builds a new one per call, the slowest part of a sort. */
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+const byScore = <T extends { score: number }>(name: (hit: T) => string) => (a: T, b: T) => b.score - a.score || collator.compare(name(a), name(b));
 
 /** Items, kits and places for a query, best first in each kind. */
 export function searchCatalog(prepared: Prepared, query: string): Found {
