@@ -10,7 +10,7 @@ import { ApiError, type Html, api, emptyState, expired, failure, html, icon, liv
 
 type Urgency = "NOW" | "SOON" | "LATER";
 type Entry = { key: string; reason: string; source: string; urgency: Urgency; title: string; why: string; since: string | null; href: string; action: string; review?: { loanId: string } };
-type Group = { reason: string; source: string; label: string; total: number };
+type Group = { reason: string; source: string; label: string; total: number; byUrgency: Record<Urgency, number> };
 type Answer = { today: string; groups: Group[]; entries: Entry[] };
 
 const SOURCES = ["Loans", "Stock", "Locations", "Kits", "Catalog", "Self-Service"] as const;
@@ -30,9 +30,12 @@ export async function attentionWorkspace(): Promise<void> {
       <div class="page-header__actions"><p class="live-status" id="live-status">Connecting…</p></div>
     </header>
     <div class="table-toolbar attn-filters" role="group" aria-label="Filter attention">
-      <div class="field"><label for="filter-source">From</label><select id="filter-source"><option value="">Everywhere</option>${SOURCES.map((source) => html`<option value="${source}">${source}</option>`)}</select></div>
-      <div class="field"><label for="filter-urgency">How soon</label><select id="filter-urgency"><option value="">Any</option>${URGENCY_ORDER.map((urgency) => html`<option value="${urgency}">${URGENCY_LABELS[urgency]}</option>`)}</select></div>
-      <div class="field"><label for="filter-age">Age</label><select id="filter-age">${AGES.map((age) => html`<option value="${age.id}">${age.text}</option>`)}</select></div>
+      <button class="button button--secondary filters-toggle" type="button" id="filters-toggle" aria-expanded="false" aria-controls="table-filters">${icon("filter")}<span>Filters</span></button>
+      <div class="table-filters" id="table-filters">
+        <div class="field"><label for="filter-source">From</label><select id="filter-source"><option value="">Everywhere</option>${SOURCES.map((source) => html`<option value="${source}">${source}</option>`)}</select></div>
+        <div class="field"><label for="filter-urgency">How soon</label><select id="filter-urgency"><option value="">Any</option>${URGENCY_ORDER.map((urgency) => html`<option value="${urgency}">${URGENCY_LABELS[urgency]}</option>`)}</select></div>
+        <div class="field"><label for="filter-age">Age</label><select id="filter-age">${AGES.map((age) => html`<option value="${age.id}">${age.text}</option>`)}</select></div>
+      </div>
       <button class="button button--ghost button--sm" type="button" id="clear-filters" hidden>Clear filters</button>
       <p class="table-toolbar__count" id="attn-count" aria-live="polite"></p>
     </div>
@@ -76,8 +79,8 @@ export async function attentionWorkspace(): Promise<void> {
     return html`<section class="attn-group" aria-labelledby="${id}">
       <div class="attn-group__head"><h2 id="${id}">${group.label}</h2><span class="tag ${URGENCY_TAG[level]}">${group.source} · ${filtered() ? entries.length : group.total}</span></div>
       <ul class="attn-list" aria-labelledby="${id}">${shown.map(rowMarkup)}</ul>
-      ${entries.length > SHOWN ? html`<button class="button button--ghost button--sm attn-more" type="button" data-more="${group.reason}" aria-expanded="${open}">${open ? "Show fewer" : `Show all ${entries.length}`}</button>` : ""}
-      ${bounded && open ? html`<p class="muted attn-note">Showing the oldest ${entries.length} of ${group.total}. The rest appear as these are cleared.</p>` : ""}
+      ${entries.length > SHOWN ? html`<button class="button button--ghost button--sm attn-more" type="button" data-more="${group.reason}" aria-expanded="${open}">${open ? "Show fewer" : bounded ? `Show the first ${entries.length}` : `Show all ${entries.length}`}</button>` : ""}
+      ${bounded && open ? html`<p class="muted attn-note">Showing the first ${entries.length} of ${group.total}. The rest appear as these are cleared.</p>` : ""}
     </section>`;
   }
 
@@ -86,6 +89,8 @@ export async function attentionWorkspace(): Promise<void> {
     results.removeAttribute("aria-busy");
     writeParams({ source: source.value || null, urgency: urgency.value || null, age: age.value || null });
     clear.hidden = !filtered();
+    const active = [source, urgency, age].filter((select) => select.value).length;
+    document.querySelector("#filters-toggle span")!.textContent = active ? `Filters (${active})` : "Filters";
     const minDays = age.value ? Number(age.value) : 0;
     const byReason = new Map<string, Entry[]>();
     for (const entry of data.entries) {
@@ -93,8 +98,12 @@ export async function attentionWorkspace(): Promise<void> {
       byReason.set(entry.reason, [...(byReason.get(entry.reason) ?? []), entry]);
     }
     const sections = data.groups.filter((group) => byReason.has(group.reason));
-    const total = sections.reduce((sum, group) => sum + (filtered() ? byReason.get(group.reason)!.length : group.total), 0);
-    document.querySelector("#attn-count")!.textContent = total ? `${total.toLocaleString()} ${total === 1 ? "entry" : "entries"}` : "";
+    // The same split as the bell: what needs a person now or this week, and what can wait. The bell counts only the first.
+    const shownCount = (group: Group, entries: Entry[], urgent: boolean) => filtered() ? entries.filter((entry) => (entry.urgency !== "LATER") === urgent).length
+      : urgent ? group.byUrgency.NOW + group.byUrgency.SOON : group.byUrgency.LATER;
+    const soon = sections.reduce((sum, group) => sum + shownCount(group, byReason.get(group.reason)!, true), 0);
+    const later = sections.reduce((sum, group) => sum + shownCount(group, byReason.get(group.reason)!, false), 0);
+    document.querySelector("#attn-count")!.textContent = soon + later ? [soon ? `${soon.toLocaleString()} to act on` : "", later ? `${later.toLocaleString()} when there is time` : ""].filter(Boolean).join(" · ") : "";
     if (!sections.length) {
       preservingFocus(results, () => mount(results, data!.entries.length
         ? emptyState("Nothing matches these filters", "Clear the filters to see everything that needs a person.", html`<button class="button button--secondary" type="button" id="clear-all">Clear filters</button>`)
@@ -120,6 +129,14 @@ export async function attentionWorkspace(): Promise<void> {
   });
 
   for (const select of [source, urgency, age]) select.addEventListener("change", render);
+  // On phones the three filters fold behind one button instead of stacking above the list.
+  const toggle = document.querySelector<HTMLButtonElement>("#filters-toggle")!;
+  toggle.addEventListener("click", () => {
+    const open = toggle.getAttribute("aria-expanded") !== "true";
+    toggle.setAttribute("aria-expanded", String(open));
+    document.querySelector("#table-filters")!.classList.toggle("is-open", open);
+    if (open) source.focus();
+  });
   const clearFilters = () => { source.value = ""; urgency.value = ""; age.value = ""; render(); };
   clear.addEventListener("click", clearFilters);
   results.addEventListener("click", (event) => {

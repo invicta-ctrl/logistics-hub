@@ -17,7 +17,7 @@ const as = (cookie: string, path: string, method = "GET", body?: unknown) =>
 const json = async <T = Record<string, any>>(response: Response | Promise<Response>) => (await (await response).json()) as T;
 
 type Entry = { key: string; reason: string; source: string; urgency: "NOW" | "SOON" | "LATER"; title: string; why: string; since: string | null; href: string; action: string; review?: { loanId: string } };
-type Inbox = { today: string; groups: Array<{ reason: string; source: string; label: string; total: number }>; entries: Entry[] };
+type Inbox = { today: string; groups: Array<{ reason: string; source: string; label: string; total: number; byUrgency: { NOW: number; SOON: number; LATER: number } }>; entries: Entry[] };
 type Summary = { needsAction: number; bySource: Record<string, number> };
 const inbox = (cookie = one) => json<Inbox>(as(cookie, "/api/staff/attention"));
 const summary = (cookie = one) => json<Summary>(as(cookie, "/api/staff/attention/summary"));
@@ -28,7 +28,7 @@ const total = async (reason: string) => (await inbox()).groups.find((group) => g
 beforeEach(async () => {
   const database = migratedD1();
   sqlite = database.sqlite;
-  env = { DB: database.d1, EVIDENCE: memoryR2().bucket, CATALOG_MEDIA: memoryR2().bucket, STAFF_IDS: memoryR2().bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret-test-secret-test-secret-1234", SELF_SERVICE: "open" } as unknown as Env;
+  env = { DB: database.d1, EVIDENCE: memoryR2().bucket, CATALOG_MEDIA: memoryR2().bucket, STAFF_IDS: memoryR2().bucket, ASSETS: { fetch: async () => new Response("asset") } as unknown as Fetcher, SESSION_SECRET: "test-secret", SELF_SERVICE: "open" } as unknown as Env;
   const hash = await hashPassword("correct horse battery");
   sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash) VALUES('ACC-1', 'staff.one', 'Staff One', ?)").run(hash);
   sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash) VALUES('ACC-2', 'staff.two', 'Staff Two', ?)").run(hash);
@@ -364,6 +364,9 @@ describe("the inbox as a whole", () => {
     expect(stats.needsAction).toBe(urgent.length);
     for (const [source, count] of Object.entries(stats.bySource)) expect(urgent.filter((entry) => entry.source === source).length, source).toBe(count);
     expect(urgent.some((entry) => entry.title === "A-Counted routine")).toBe(false);
+    // The groups carry the true totals by urgency, which are what the page shows next to the bell: they add up to the total and to the summary.
+    for (const group of all.groups) expect(group.byUrgency.NOW + group.byUrgency.SOON + group.byUrgency.LATER, group.reason).toBe(group.total);
+    expect(all.groups.reduce((sum, group) => sum + group.byUrgency.NOW + group.byUrgency.SOON, 0)).toBe(stats.needsAction);
   });
 
   it("reads and never writes: opening it changes no record", async () => {

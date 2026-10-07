@@ -18,4 +18,4 @@
 .attn-row__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .attn-more { margin-top: var(--space-2); }
 .attn-note { margin: var(--space-2) 0 0; font-size: var(--text-sm); }
-@media (max-width: 640px) { .attn-row__actions { width: 100%; } .attn-filters .field { flex: 1 1 8rem; } }
+@media (max-width: 640px) { .attn-row__actions { width: 100%; } .attn-row__actions .button--ghost { padding-inline-start: 0; } .attn-filters .table-filters .field { min-width: 0; } }
