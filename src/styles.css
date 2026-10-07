@@ -420,8 +420,8 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .app-bar__brand > :first-child { flex: none; }
 .app-bar__title { display: grid; min-width: 0; overflow: hidden; font-family: var(--serif); font-size: var(--text-md); line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .app-bar__title small { color: var(--on-dark-2); font-family: var(--sans); font-size: var(--text-sm); }
-/* When large text leaves no room beside the avatar, the mark alone stands for the name. */
-@container (max-width: 19rem) { .app-bar__title { display: none; } }
+/* On a 320 px phone, or when large text leaves no room beside the avatar, the mark alone stands for the name (the page title says where you are). */
+@container (max-width: 21rem) { .app-bar__title { display: none; } }
 /* Sections: text links with a gold underline on desktop; the same links become the phone bottom bar. */
 .app-nav { display: flex; align-self: stretch; }
 .app-nav__link { position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: var(--space-2); padding-inline: var(--space-3); border: 0; background: none; color: var(--on-dark-2); font-size: var(--text-base); font-weight: 500; text-decoration: none; white-space: nowrap; transition: color var(--dur-1); }
@@ -488,6 +488,22 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .review-meter progress::-moz-progress-bar { border-radius: var(--radius-pill); background: var(--ok-dot); }
 .review-meter .text-link { font-size: var(--text-sm); }
 .views { display: flex; gap: var(--space-1); overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+/* A strip of views or tabs that does not fit (a 320 px phone) fades at the side that has more, so a cut label reads as "scroll
+   for more", not as clipped text. Driven by the strip's own scroll: a strip that fits has no timeline, so no fade. */
+@property --strip-fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --strip-fade-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@keyframes strip-edges {
+  0% { --strip-fade-start: 0px; --strip-fade-end: 2.5rem; }
+  10%, 90% { --strip-fade-start: 2.5rem; --strip-fade-end: 2.5rem; }
+  100% { --strip-fade-start: 2.5rem; --strip-fade-end: 0px; }
+}
+@supports (animation-timeline: scroll()) {
+  .views, .tabs, .subnav {
+    animation: strip-edges linear both;
+    animation-timeline: scroll(self inline);
+    mask-image: linear-gradient(to right, transparent, #000 var(--strip-fade-start), #000 calc(100% - var(--strip-fade-end)), transparent);
+  }
+}
 .view-tab { display: inline-flex; flex: none; align-items: center; gap: var(--space-2); margin-bottom: -1px; padding: var(--space-3) var(--space-3); border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-2); font-size: var(--text-base); font-weight: 500; white-space: nowrap; }
 .view-tab:hover { color: var(--text); }
 .view-tab[aria-pressed="true"] { border-bottom-color: var(--brand); color: var(--text); }
