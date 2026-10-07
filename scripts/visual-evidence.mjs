@@ -27,6 +27,7 @@
 // V1.11 (search: global search over 500+ items with places, kits, links and a fictional Staff Directory, for an administrator and for staff at three sizes:
 // empty, mixed, item-heavy, place, kit, a link's reason, a shortcut, an ID, long names, a long group shown in full, no matches, people (and their absence
 // for staff), the keyboard, opening a result, loading, a session that has ended, and an item's Linked items card; runs only where /api/staff/search exists)
+// V1.13 (Administration: scripts/admin-evidence.mjs; its five sections at three sizes, System healthy and degraded, confirmations and impact text; runs only where /api/staff/admin/system exists)
 // sample ID cards, are drawn here in the browser and written only to a throwaway folder, so no image file enters the
 // repository and no real ID is ever used.
 //
@@ -38,6 +39,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { gzipSync } from "node:zlib";
 import { chromium, devices } from "@playwright/test";
+import { adminScenes } from "./admin-evidence.mjs";
 import { createAccountSql, runD1, wrangler } from "./staff-account.mjs";
 
 const { values: args } = parseArgs({ options: { out: { type: "string" }, base: { type: "string" }, pages: { type: "string" } } });
@@ -96,6 +98,7 @@ async function signIn(browser, url, username, [width, height, scale]) {
   await page.getByRole("textbox", { name: "Username" }).fill(username);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
+  // Signed in is the staff bar; the page after sign-in differs by version (Items, then Home).
   await page.waitForSelector(".app-bar");
   return { context, page };
 }
@@ -1911,7 +1914,7 @@ function homeRecordsSql() {
   const staff = "(SELECT id FROM staff_accounts WHERE username = 'staff.demo')";
   const supply = (offset) => `(SELECT i.id FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.item_type = 'Consumable' AND i.status = 'ACTIVE' AND b.on_hand >= 20 ORDER BY i.id LIMIT 1 OFFSET ${offset})`;
   // Three supplies taken out again and again in the last month.
-  [[40, 6, 3], [41, 4, 2], [42, 3, 2]].forEach(([offset, times, quantity]) => {
+  [[0, 6, 3], [1, 4, 2], [2, 3, 2]].forEach(([offset, times, quantity]) => {
     for (let k = 0; k < times; k++) rows.push(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, reason, status)
       SELECT 'MOV-HM${offset}${k}', ${sq(at(1 + k * 4))}, 'STOCK_OUT', 'OUT', id, ${quantity}, unit, -${quantity}, ${staff}, 'CONSUMED', 'POSTED' FROM items WHERE id = ${supply(offset)};`);
   });
@@ -1927,7 +1930,7 @@ function homeRecordsSql() {
     }
   });
   // Restocked twice in three months.
-  [[50, "RESTOCKED"], [12, "NEEDS_RESTOCK"]].forEach(([days, status], k) => rows.push(`INSERT INTO reorders(id, item_id, status, created_at, updated_at, created_by) SELECT 'RO-HM${k}', id, '${status}', ${sq(at(days))}, ${sq(at(days))}, ${staff} FROM items WHERE id = ${supply(43)};`));
+  [[50, "RESTOCKED"], [12, "NEEDS_RESTOCK"]].forEach(([days, status], k) => rows.push(`INSERT INTO reorders(id, item_id, status, created_at, updated_at, created_by) SELECT 'RO-HM${k}', id, '${status}', ${sq(at(days))}, ${sq(at(days))}, ${staff} FROM items WHERE id = ${supply(3)};`));
   // The Store room keeps being reported.
   [[1, "CANT_FIND", 140], [2, "CANT_FIND", 141], [3, "LOCATION_WRONG", 142]].forEach(([n, kind, offset]) => rows.push(`INSERT INTO location_reports(id, item_id, location_id, kind, source, reported_by, created_at)
     SELECT '${"1".repeat(35)}${n}', id, 'LOC-0900', '${kind}', 'STAFF', ${staff}, ${sq(at(8 + n))} FROM items WHERE id = (SELECT id FROM items ORDER BY id LIMIT 1 OFFSET ${offset});`));
@@ -1935,11 +1938,11 @@ function homeRecordsSql() {
   rows.push(`INSERT INTO kits(id, name, location_id, active, created_at, updated_at) VALUES('KIT-0900', 'Sewing kit', 'LOC-0900', 1, ${sq(at(80))}, ${sq(at(80))});`);
   [10, 30].forEach((days, k) => {
     rows.push(`INSERT INTO kit_checks(id, kit_id, checked_by, checked_at, ok_count, flagged_count, unchecked_count) VALUES('KC-${String(k + 1).padStart(36, "0")}', 'KIT-0900', ${staff}, ${sq(at(days))}, 0, 1, 0);`);
-    rows.push(`INSERT INTO kit_check_observations(check_id, item_id, outcome, required, on_hand) SELECT 'KC-${String(k + 1).padStart(36, "0")}', id, 'LOW', 4, 1 FROM items WHERE id = ${supply(44)};`);
+    rows.push(`INSERT INTO kit_check_observations(check_id, item_id, outcome, required, on_hand) SELECT 'KC-${String(k + 1).padStart(36, "0")}', id, 'LOW', 4, 1 FROM items WHERE id = ${supply(4)};`);
   });
   // An item whose use was changed three times.
   [20, 14, 6].forEach((days, k) => rows.push(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
-    SELECT 'AU-HM${k}', ${sq(at(days))}, ${staff}, 'ITEM_UPDATED', 'ITEM', id, '{"itemType":{"from":"${k % 2 ? "Consumable" : "Loanable"}","to":"${k % 2 ? "Loanable" : "Consumable"}"}}' FROM items WHERE id = ${supply(45)};`));
+    SELECT 'AU-HM${k}', ${sq(at(days))}, ${staff}, 'ITEM_UPDATED', 'ITEM', id, '{"itemType":{"from":"${k % 2 ? "Consumable" : "Loanable"}","to":"${k % 2 ? "Loanable" : "Consumable"}"}}' FROM items WHERE id = ${supply(5)};`));
   // staff.demo has a cataloguing session to continue (three items added) and a paused check of another place.
   rows.push(`INSERT INTO catalogue_sessions(id, started_by, location_id, status, started_at, updated_at) VALUES('CS-${"0".repeat(35)}1', ${staff}, 'LOC-0900', 'ACTIVE', ${sq(at(1))}, ${sq(at(0))});`);
   [210, 211, 212].forEach((offset, k) => rows.push(`INSERT INTO catalogue_captures(id, session_id, item_id, location_id, behaviour, created_at)
@@ -2009,7 +2012,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "attention" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits" || name === "search" || name === "home") continue;
+          if (name === "item-photos" || name === "attention" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits" || name === "search" || name === "admin-control" || name === "home") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -2053,6 +2056,7 @@ async function capture(url, dir) {
     if (pages.includes("attention")) Object.assign(timings, { attention: await attentionScenes(browser, url, dir) });
     if (pages.includes("home")) Object.assign(timings, { home: await homeScenes(browser, url, dir) });
     if (pages.includes("search")) Object.assign(timings, { search: await searchScenes(browser, url, dir) });
+    if (pages.includes("admin-control")) Object.assign(timings, { adminControl: await adminScenes(browser, url, dir, { SIZES, signIn, resume, median }) });
     if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
     if (pages.includes("staff-directory")) Object.assign(timings, { staffDirectory: await directoryScenes(browser, url, dir) });
     fs.writeFileSync(path.join(dir, "timings.json"), `${JSON.stringify(timings, null, 2)}\n`);

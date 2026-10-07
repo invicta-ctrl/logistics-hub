@@ -10,6 +10,8 @@ async function signIn(page: Page) {
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+  await page.goto("/staff/items");
+  await expect(page.getByRole("heading", { name: "Items" })).toBeVisible();
 }
 
 test("public Lending Hub fails closed on freshly migrated data", async ({ page, request }) => {
@@ -119,6 +121,7 @@ test.describe("owner administration", () => {
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("link", { name: "Administration" }).click();
     await expect(page.getByRole("heading", { name: "Administration" })).toBeVisible();
+    await page.getByRole("link", { name: "Staff", exact: true }).and(page.locator(".subnav__link")).click();
     await page.getByRole("button", { name: "New account" }).click();
     await page.getByLabel("Display name").fill("Maria Santos");
     await page.getByLabel("Username").fill("msantos");
@@ -252,7 +255,8 @@ test.describe("owner administration", () => {
   test("owner makes a sign-in from a directory profile and watches it being used", async ({ page, browser }) => {
     await signInAs(page, process.env.E2E_OWNER_USERNAME!, process.env.E2E_OWNER_PASSWORD!);
     await page.getByRole("link", { name: "Administration" }).click();
-    await page.getByRole("link", { name: "Staff Directory" }).click();
+    await page.getByRole("link", { name: "Staff", exact: true }).and(page.locator(".subnav__link")).click();
+    await page.getByRole("link", { name: "Open the Staff Directory" }).click();
     await page.getByRole("button", { name: "Add person" }).first().click();
     await page.getByLabel("Full name").fill("Lia Ventura");
     await page.getByRole("combobox", { name: "Department", exact: true }).selectOption("DoL");

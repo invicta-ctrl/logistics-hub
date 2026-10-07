@@ -1,0 +1,16 @@
+{
+  "coldLoadToFirstRowMs": 301,
+  "sectionSwitchMs": 67,
+  "home": {
+    "staff-attentionMs-desktop": 159,
+    "staff-insightsMs-desktop": 178,
+    "owner-attentionMs-desktop": 162,
+    "owner-insightsMs-desktop": 181,
+    "staff-attentionMs-tablet": 113,
+    "staff-insightsMs-tablet": 133,
+    "staff-attentionMs-phone": 157,
+    "staff-insightsMs-phone": 177,
+    "owner-attentionMs-phone": 171,
+    "owner-insightsMs-phone": 192
+  }
+}
