@@ -72,9 +72,20 @@ export function aiMessages(payload: AiPayload): Array<{ role: "system" | "user";
   ];
 }
 
+/**
+ * The text a model answered with: Workers AI's chat-completion shape (`choices[0].message.content`, what the REST API and binding
+ * return for these models since 2026), its older `response`, or the reply itself.
+ */
+export function aiReplyText(reply: unknown): unknown {
+  if (!reply || typeof reply !== "object") return reply;
+  const choices = (reply as { choices?: unknown }).choices;
+  if (Array.isArray(choices)) return (choices[0] as { message?: { content?: unknown } } | undefined)?.message?.content;
+  return "response" in reply ? (reply as { response: unknown }).response : reply;
+}
+
 /** The model's reply (a parsed object or the text of one), reduced to values that are exactly options; anything else is dropped. */
 export function readAiAnswer(reply: unknown, payload: AiPayload): AiAnswer {
-  let value: unknown = reply && typeof reply === "object" && "response" in reply ? (reply as { response: unknown }).response : reply;
+  let value: unknown = aiReplyText(reply);
   if (typeof value === "string") {
     const text = value.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
     try { value = JSON.parse(text); } catch { return {}; }

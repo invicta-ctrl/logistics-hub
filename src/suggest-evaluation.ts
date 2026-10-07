@@ -104,6 +104,9 @@ export function reportAi(label: string, evaluation: AiEvaluation): string {
       const cell = evaluation.fields[field][tier];
       lines.push(`    ${tier.padEnd(11)} ${String(cell.n).padStart(4)} items; built-in right ${pct(cell.builtInRight, cell.n)}; AI answered ${pct(cell.answered, cell.n)}, right ${pct(cell.aiRight, cell.n)}; either right ${pct(cell.eitherRight, cell.n)}`);
     }
+    const cells = SOFT.map((tier) => evaluation.fields[field][tier]);
+    const answered = cells.reduce((sum, cell) => sum + cell.answered, 0);
+    lines.push(`    AI precision: right ${pct(cells.reduce((sum, cell) => sum + cell.aiRight, 0), answered)} of ${answered} answers; recovered ${evaluation.fields[field].NONE.aiRight} of ${evaluation.fields[field].NONE.n} items with no built-in suggestion`);
   }
   return lines.join("\n");
 }
