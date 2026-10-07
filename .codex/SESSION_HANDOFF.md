@@ -1,5 +1,12 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Road to V2 — V1.11 Intelligent search and relationships (COMPLETE, WAITING ON OWNER ACTIONS; record `docs/road-to-v2/releases/v1.11.md`; Claude Cloud, 2026-10-07)
+- **Where:** Claude Cloud thread on `road-to-v2/v1.11-intelligent-search`; every pushed checkpoint merged forward through V1.15 (no conflicts).
+- **Built:** migration `0030` (`item_relationships`); `src/search.ts` (ranking shared by browser and Worker), `src/search-index.ts` (`GET /api/staff/search`, revisioned), `findPeople` + `GET /api/staff/admin/directory/search` (admin only, 8 at most, `private, no-store`), `src/search-palette.ts` + `.css` (lazy `<dialog>` APG combobox), the top-bar button and Ctrl/⌘K in `src/staff.ts`, `src/item-relations.ts` + `src/relation-policy.ts` + `src/item-links-panel.ts` (Linked items), Activity wording, a `search` scene in `scripts/visual-evidence.mjs`, `src/catalog-ai.ts` + `--ai` in `scripts/evaluate-suggestions.mjs`.
+- **Decisions to know:** ranking in the browser over a lean index, people ranked in the Worker (never the whole directory to the client); every result has one stated reason, no scores; links followed one hop from a strong match only; no recents or learned ranking; `/` stays page search; Workers AI not built ("Measure first", Earl, 2026-10-07; the feature, if the measurement helps, must land on V1.11 before it merges).
+- **Verified:** typecheck and build; 602 unit; mocked browser and real-Worker suites (record); privacy clean; 62 images, eleven defects fixed (`docs/visual-research/v1.11.md`).
+- **Next:** Earl: V1.11 owner actions (record). Agent: `start` V1.12 when asked.
+
 ## Road to V2 — V1.10 Attention and operational automation (COMPLETE, WAITING ON INTEGRATION; record `docs/road-to-v2/releases/v1.10.md`; Claude Cloud, 2026-10-07)
 - **Where:** Claude Cloud thread on `road-to-v2/v1.10-attention-automation`; code `46254b6`; no migration.
 - **Built:** `src/attention.ts` (11 SQL reasons plus kits, derived, nothing stored; `/api/staff/attention` and `/summary`; `reviewReturn`), `src/attention-workspace.ts` and `.css` (the inbox), the bell and Loans/Stock numbers in `src/staff.ts` `shell()`, `?loan=` focus in `src/loans-workspace.ts`, `?tab=details` and the classification suggestion in the item Details, `UNSETTLED_FINDING` shared in `src/audits.ts`, `kitsNotReady` in `src/kits.ts`, the V1.9 Close-button fix.
