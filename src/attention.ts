@@ -1,6 +1,6 @@
 import { UNSETTLED_FINDING } from "./audits";
 import { OPEN_REORDER_STATUSES, REVIEW_REASONS, type ReviewReason } from "./catalog-policy";
-import { type Actor, InputError } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError } from "./inventory";
 import { kitsNotReady } from "./kits";
 import { LOAN_ID, officeDay } from "./loans";
 import { ERASED } from "./retention";
@@ -298,10 +298,11 @@ export async function reviewReturn(db: D1Database, actor: Actor, loanId: string)
   const loan = await db.prepare("SELECT l.id, l.item_id AS itemId, l.status FROM loans l WHERE l.id = ?").bind(loanId).first<{ id: string; itemId: string; status: string }>();
   if (!loan) throw new InputError(404, "Not found.");
   if (loan.status !== "DAMAGED" && loan.status !== "LOST") throw new InputError(409, "Only a damaged or lost return needs a review.");
-  await db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
+  await db.batch([db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
       SELECT ?1, ?2, ?3, 'LOAN_REVIEWED', 'ITEM', ?4, ?5
       WHERE NOT EXISTS (SELECT 1 FROM audit_log a WHERE a.entity_type = 'ITEM' AND a.entity_id = ?4 AND a.action = 'LOAN_REVIEWED' AND json_extract(a.details_json, '$.loanId') = ?6)`)
-    .bind(crypto.randomUUID(), new Date().toISOString(), actor.accountId, loan.itemId, JSON.stringify({ loanId: loan.id, outcome: loan.status }), loan.id).run();
+    .bind(crypto.randomUUID(), new Date().toISOString(), actor.accountId, loan.itemId, JSON.stringify({ loanId: loan.id, outcome: loan.status }), loan.id),
+    db.prepare(`${BUMP_REVISION} AND changes() > 0`)]);
   return { reviewed: true };
 }
 
