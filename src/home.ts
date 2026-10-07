@@ -47,7 +47,7 @@ type Row = Record<string, string | number | null>;
 export async function insights(db: D1Database, now = Date.now()) {
   const day = (days: number) => since(days, now);
   const [borrowed, used, short, reports, kits, corrections, catalog] = await db.batch([
-    db.prepare(`SELECT i.id AS id, i.name AS name, COUNT(*) AS n, MAX(l.created_at) AS last FROM loans l JOIN items i ON i.id = l.item_id
+    db.prepare(`SELECT i.id AS id, i.name AS name, COUNT(*) AS n, MAX(l.created_at) AS last FROM loans l INDEXED BY idx_loans_created JOIN items i ON i.id = l.item_id
       WHERE l.created_at >= ?1 GROUP BY l.item_id HAVING COUNT(*) >= ?2 ORDER BY n DESC, last DESC, i.name COLLATE NOCASE LIMIT ${ROWS}`).bind(day(WINDOWS.borrowed), AT_LEAST),
     // The window's own index: left to itself the planner walks the item index and so the whole ledger. On hand is read for the few rows kept.
     db.prepare(`SELECT t.*, (SELECT b.on_hand FROM inventory_balances b WHERE b.id = t.id) AS onHand FROM (

@@ -22,6 +22,7 @@
     "verify:migration": "node scripts/verify-migration-data.mjs",
     "verify:catalog": "node scripts/report-public-catalog.mjs",
     "verify:privacy": "node scripts/privacy-scan.mjs",
+    "verify:restore": "node scripts/verify-restore.mjs",
     "evidence": "node scripts/visual-evidence.mjs",
     "ops:release": "node scripts/ops/production-release.mjs",
     "evaluate:suggestions": "node scripts/evaluate-suggestions.mjs"

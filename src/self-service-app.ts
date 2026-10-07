@@ -9,7 +9,7 @@ import { type Readiness, applyUpdate, canPromptInstall, hasUpdate, isStandalone,
 import { ancestry, placesOf, type ReportKind } from "./location-tree";
 import { type GroupId, GROUPS, behaviourLine, conciseLocation, frequentItems, groupName, groupOf, grouped, isGroup, matching } from "./self-service-browse";
 import { type Step, openWhereIsIt } from "./where-is-it";
-import { ApiError, CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, itemVisual, units } from "./ui";
+import { ApiError, CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, keepFailure, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, itemVisual, units } from "./ui";
 
 /*
  * Self-Service (/self-service): what a student or staff member sees after scanning the QR code
@@ -30,6 +30,8 @@ const SCREEN_FOR: Record<SelfServiceAction, Screen> = { TAKE: "take", BORROW: "b
 const ACTION_WORD: Record<SelfServiceAction, string> = { TAKE: "Take", BORROW: "Borrow", USE: "Use" };
 const FRESH_MS = 2 * 60_000;
 const CATALOG_POLL_MS = 30_000;
+/** After this many checks in a row that found the catalog unchanged, a phone left open asks a third as often; any change or return to the app restores the pace. */
+const QUIET_CHECKS = 6;
 /** Home shows a few items per group and a link to the rest, so a catalog of any size draws the same small page. */
 const GROUP_PREVIEW = 4;
 const SEARCH_RESULTS = 12;
@@ -915,9 +917,9 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
         onSaved(saved);
         void requestPersistence();
         void requestBackgroundSync();
-      } catch {
+      } catch (error) {
         save.disabled = false;
-        setMessage(confirmAlert, "This phone could not save the record. Check that you're not in private browsing, then try again.");
+        setMessage(confirmAlert, keepFailure(error));
       }
     });
   };
@@ -1148,6 +1150,7 @@ export async function selfService(): Promise<void> {
     await reload();
     return report;
   }
+  let quietChecks = 0;
   async function poll() {
     window.clearTimeout(pollTimer);
     if (document.visibilityState !== "visible") return;
@@ -1165,16 +1168,18 @@ export async function selfService(): Promise<void> {
     if (result !== "updated") refreshRegions();
     // Records waiting for staff learn their decision (the "changed" message redraws them).
     if (result === "updated" || result === "unchanged") await checkDecisions();
-    pollTimer = window.setTimeout(() => void poll(), CATALOG_POLL_MS);
+    quietChecks = result === "unchanged" ? quietChecks + 1 : 0;
+    pollTimer = window.setTimeout(() => void poll(), quietChecks >= QUIET_CHECKS ? CATALOG_POLL_MS * 3 : CATALOG_POLL_MS);
   }
   const wake = () => {
     if (document.visibilityState !== "visible") return;
+    quietChecks = 0;
     void runSync();
     void poll();
     void refreshReadiness();
   };
   const goneOffline = () => { offline = true; refreshRegions(); updateReceipt(); };
-  const backOnline = () => { offline = false; refreshRegions(); void runSync(true); void poll(); };
+  const backOnline = () => { quietChecks = 0; offline = false; refreshRegions(); void runSync(true); void poll(); };
 
   const unsubscribe = onSyncMessage((message) => {
     if (message.type === "syncing") { syncing = true; refreshRegions(); return; }

@@ -101,6 +101,26 @@ describe("starting a check", () => {
   });
 });
 
+describe("attention freshness", () => {
+  it("a finished check and a resolved finding change the Attention tag, so open pages refetch", async () => {
+    const room = await place("Tag room");
+    const pens = await item("Tag pens", room, 4);
+    const tag = async () => (await as(one, "/api/staff/attention/summary")).headers.get("etag") ?? "";
+    const stale = async (etag: string) => (await call("/api/staff/attention/summary", { headers: { origin, cookie: one, "if-none-match": etag } })).status;
+    const id = await start(one, room);
+    expect((await observe(one, id, { itemId: pens, outcome: "CANT_FIND", expectedOnHand: 4 })).status).toBe(201);
+    const open = await tag();
+    expect(open).not.toBe("");
+    expect(await stale(open)).toBe(304);
+    expect((await finish(one, id)).status).toBe(200);
+    expect(await stale(open)).toBe(200);
+    const finished = await tag();
+    const found = (await review(one, id)).discrepancies[0]!;
+    expect((await resolve(one, found.id, { action: "NO_CHANGE", note: "Counted again, it is gone." })).status).toBe(200);
+    expect(await stale(finished)).toBe(200);
+  });
+});
+
 describe("observing", () => {
   it("records each outcome as seen and never changes stock, a place or an item", async () => {
     const room = await place("Audit room");
@@ -161,6 +181,8 @@ describe("observing", () => {
     await observe(one, id, { itemId: tape, outcome: "CONFIRMED", expectedOnHand: 5 });
     expect((await detail(one, id)).audit.status).toBe("OPEN");
     expect((await as(one, `/api/staff/audits/${id}`, "PATCH", { placeNote: "The picture shows the old cabinet." })).status).toBe(200);
+    expect((await finish(one, id)).status).toBe(200);
+    // The phone resends a finish whose answer it lost: it succeeds again and records nothing more.
     expect((await finish(one, id)).status).toBe(200);
     expect((await observe(one, id, { itemId: tape, outcome: "CONFIRMED", expectedOnHand: 5 })).status).toBe(409);
     expect((await as(one, `/api/staff/audits/${id}`, "PATCH", { status: "OPEN" })).status).toBe(409);
