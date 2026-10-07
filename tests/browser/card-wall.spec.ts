@@ -185,3 +185,16 @@ test("a sign-in for another department's staff opens their account only, with no
   await page.goto("/staff/admin/directory");
   await expect(page).toHaveURL(/\/staff\/account$/);
 });
+
+test("an address whose person is not a directory id opens the wall and asks the API for nothing else", async ({ page }) => {
+  await mock(page);
+  const asked: string[] = [];
+  page.on("request", (request) => { const url = new URL(request.url()); if (url.pathname.startsWith("/api/")) asked.push(url.pathname); });
+  for (const forged of ["..", "../../items", "PER-1/../../../items"]) {
+    asked.length = 0;
+    await page.goto(`/staff/admin/directory?person=${encodeURIComponent(forged)}`);
+    await expect(page.getByRole("link", { name: /Ana Marie Santos/ })).toBeVisible();
+    // Only the wall's own reads; before the check, ".." fetched /api/staff/admin/ and the others a profile that is no one's.
+    expect(asked.filter((path) => !["/api/staff/session", "/api/staff/attention/summary", "/api/staff/admin/directory", "/api/staff/admin/directory/derived"].includes(path) && !/^\/api\/staff\/admin\/directory\/PER-[0-9a-f-]+\/id\/thumb$/.test(path))).toEqual([]);
+  }
+});
