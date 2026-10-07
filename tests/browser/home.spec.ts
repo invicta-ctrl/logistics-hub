@@ -182,6 +182,41 @@ test.describe("Home", () => {
   }
 });
 
+test.describe("Home accessibility", () => {
+  test("one heading, named controls and links, a list for every set of rows, no sideways scroll and room for 200% text", async ({ page }) => {
+    await setup(page, { work: WORK, role: "OWNER" });
+    for (const width of [320, 390, 768, 1366]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/staff/home");
+      await expect(page.getByRole("article", { name: "What equipment is borrowed most?" })).toBeVisible();
+      await expect(page.locator("main h1")).toHaveCount(1);
+      const problems = await page.evaluate(() => ({
+        unnamed: [...document.querySelectorAll("main button, main a[href]")].filter((control) => !(control.textContent ?? "").trim() && !control.getAttribute("aria-label")).length,
+        loose: [...document.querySelectorAll("main .home-row")].filter((row) => !row.closest("li")).length
+      }));
+      expect(problems, `${width}px`).toEqual({ unnamed: 0, loose: 0 });
+      expect(await sideways(page), `${width}px`).toBe(0);
+    }
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
+    expect(await sideways(page)).toBe(0);
+  });
+
+  test("the keyboard reaches search, then each row in reading order, and a row opens with Enter", async ({ page }) => {
+    await setup(page);
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.goto("/staff/home");
+    await expect(page.locator("#home-attention .home-row")).toHaveCount(5);
+    await page.locator("#home-search").focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Open Attention" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#home-attention .home-row").first()).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/\/staff\/attention\?reason=LOAN_OVERDUE/);
+  });
+});
+
 test.describe("Attention, from Home", () => {
   const entry = (reason: string, source: string, title: string) => ({ key: `${reason}:${title}`, reason, source, urgency: "NOW", title, why: "Why.", since: null, href: "/staff/items", action: "Open" });
   test("opens one kind alone, says so, and lifts it with Show everything", async ({ page }) => {

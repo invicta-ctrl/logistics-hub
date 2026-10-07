@@ -633,7 +633,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
     if (!account) return Response.redirect(new URL("/staff", url), 302);
     if (path.startsWith("/staff/admin") && !isAdmin(account)) return Response.redirect(new URL("/staff/items", url), 302);
   }
-  if (path === "/staff" && request.method === "GET" && await accountFor(request, env)) return Response.redirect(new URL("/staff/items", url), 302);
+  if (path === "/staff" && request.method === "GET" && await accountFor(request, env)) return Response.redirect(new URL("/staff/home", url), 302);
   return assetCaching(await env.ASSETS.fetch(request), path);
 }
 
