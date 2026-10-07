@@ -27,7 +27,7 @@ const ALONE = 12;
 type GroupKey = keyof typeof ROWS;
 type Option = { id: string; label: string; body: Html; href?: string; expand?: GroupKey };
 /** `more` follows the rows once they are all shown: where to see every match when the group holds only the best few. */
-type Group = { key: GroupKey; title: string; total: number; best: number; rows: Option[]; more?: Option; busy?: boolean };
+type Group = { key: GroupKey; title: string; total: number; best: number; rows: Option[]; more?: Option };
 
 let held: { etag: string; prepared: Prepared; checkedAt: number } | null = null;
 let fetching: Promise<void> | null = null;
@@ -87,11 +87,13 @@ export function highlight(name: string, tokens: readonly string[]): Html {
   for (let start = 0; start < characters.length; start += 1) {
     if (start > 0 && /[\p{L}\p{N}]/u.test(folded[start - 1]!)) continue;
     for (const token of tokens) {
-      // A plural in the name ("Markers") still matches its singular query word ("marker").
+      // A plural in the name ("Markers") still matches its singular query word ("marker"), and its "s" is marked with the word.
       let index = start;
       let matched = 0;
       while (index < characters.length && matched < token.length && folded[index] === token[matched]) { index += 1; matched += folded[index - 1]!.length; }
-      if (matched >= token.length) for (let each = start; each < index; each += 1) marked[each] = true;
+      if (matched < token.length) continue;
+      if (folded[index] === "s" && !/[\p{L}\p{N}]/u.test(folded[index + 1] ?? "")) index += 1;
+      for (let each = start; each < index; each += 1) marked[each] = true;
     }
   }
   const parts: Html[] = [];
