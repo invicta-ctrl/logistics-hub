@@ -128,9 +128,9 @@ describe("people", () => {
   const row = (name: string, fields: Partial<Parameters<typeof rankPeople>[0][number]> = {}) => ({ id: `PER-${name}`, name, department: "DoL", departmentName: "Department of Logistics", position: null, officer: false, active: true, ...fields });
   it("ranks by name first, then position, then department", () => {
     const rows = [row("Ana Reyes", { position: "Logistics Head" }), row("Logan Cruz"), row("Ben Uy", { department: "DoF", departmentName: "Department of Finance" })];
-    expect(rankPeople(rows, "log").map((hit) => hit.name)).toEqual(["Logan Cruz", "Ana Reyes"]);
-    expect(rankPeople(rows, "finance")).toMatchObject([{ name: "Ben Uy", why: { by: "department", text: "Department of Finance" } }]);
-    expect(rankPeople(rows, "head")).toMatchObject([{ name: "Ana Reyes", why: { by: "position", text: "Logistics Head" } }]);
+    expect(rankPeople(rows, "log").people.map((hit) => hit.name)).toEqual(["Logan Cruz", "Ana Reyes"]);
+    expect(rankPeople(rows, "finance").people).toMatchObject([{ name: "Ben Uy", why: { by: "department", text: "Department of Finance" } }]);
+    expect(rankPeople(rows, "head").people).toMatchObject([{ name: "Ana Reyes", why: { by: "position", text: "Logistics Head" } }]);
   });
 });
 

@@ -57,11 +57,11 @@ export async function directory(db: D1Database) {
  * sign-in or what someone borrowed is never part of the answer, and the directory is never sent whole to be searched in the browser.
  */
 export async function findPeople(db: D1Database, query: string) {
-  if (!queryWords(query).length) return { people: [] };
+  if (!queryWords(query).length) return { people: [], total: 0 };
   const { results } = await db.prepare("SELECT id, full_name AS name, department, position, officer, active FROM staff_directory")
     .all<{ id: string; name: string; department: DepartmentCode; position: string | null; officer: number; active: number }>();
   const rows: SearchPerson[] = results.map((row) => ({ ...row, departmentName: DEPARTMENTS[row.department] ?? row.department, officer: row.officer === 1, active: row.active === 1 }));
-  return { people: rankPeople(rows, query.slice(0, 120)) };
+  return rankPeople(rows, query.slice(0, 120));
 }
 
 async function personRow(db: D1Database, id: string): Promise<PersonRow> {
