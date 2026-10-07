@@ -500,6 +500,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 
 .data-table-wrap { overflow: clip; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .table-more { display: flex; justify-content: center; margin: var(--space-3) 0 0; }
+.table-more .button { height: auto; min-height: 2.75rem; max-width: 100%; white-space: normal; text-align: center; }
 .data-table { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
 .data-table th { position: sticky; top: var(--app-bar); z-index: 1; height: 2.5rem; padding: 0 var(--space-4); border-bottom: 1px solid var(--line); background: var(--subtle); color: var(--text-2); font-size: var(--text-sm); font-weight: 600; text-align: left; white-space: nowrap; }
 .data-table td { height: 3rem; padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -932,7 +933,8 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .data-table .col-id, .data-table .col-category, .data-table .col-location { display: none; }
   .data-table--items td.col-item { width: auto; min-height: 2.5rem; padding-left: 3.25rem; }
   .thumb { left: 0; }
-  .data-table .col-qty { grid-row: 1; grid-column: 2; width: auto; }
+  /* The amount may wrap beneath its number when text is enlarged, so it never sits on top of the name. */
+  .data-table .col-qty { grid-row: 1; grid-column: 2; width: auto; max-width: 8rem; white-space: normal; }
   .data-table .col-status { grid-column: 1 / -1; width: auto; }
   .data-table .col-actions { grid-column: 1 / -1; width: auto; text-align: left; }
   .data-table .col-actions .row-actions { flex-direction: row; justify-content: flex-start; }
