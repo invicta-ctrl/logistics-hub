@@ -107,7 +107,8 @@ async function take(page: Page, name: string, count: number, person: string): Pr
   await asSomeone(page, person);
   await page.getByRole("button", { name: "Review and take" }).click();
   await page.getByRole("button", { name: "Confirm take" }).click();
-  await expect(page.getByRole("heading", { name: "Taken" })).toBeVisible();
+  // Offline it is "saved"; online it becomes "Taken" once Logistics has it. Either way the receipt is up.
+  await expect(page.locator(".ss-receipt")).toBeVisible();
   await page.getByRole("button", { name: "Done" }).click();
 }
 
@@ -193,7 +194,8 @@ test.describe.serial("offline self-service", () => {
     await attachPhoto(page);
     await page.getByRole("button", { name: "Review and return" }).click();
     await page.getByRole("button", { name: "Confirm return" }).click();
-    await expect(page.getByRole("heading", { name: "Return sent" })).toBeVisible();
+    // Offline, nothing has been sent: the receipt says the return is saved on the phone.
+    await expect(page.getByRole("heading", { name: "Saved on this phone" })).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
     expect((await localState(page)).states).toEqual(["pending", "pending", "pending"]);
     expect((await item(WATER)).onHand).toBe(waterBefore);
@@ -276,7 +278,7 @@ test.describe.serial("offline self-service", () => {
     await asSomeone(page, "Ana Reyes");
     await page.getByRole("button", { name: "Review and use" }).click();
     await page.getByRole("button", { name: "Confirm use" }).dblclick();
-    await expect(page.getByRole("heading", { name: "Use recorded" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Saved on this phone" })).toBeVisible();
     await page.getByRole("button", { name: "Done" }).click();
     expect(await localState(page)).toEqual({ states: ["pending"], photos: 1 });
 

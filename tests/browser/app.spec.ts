@@ -149,7 +149,7 @@ test("self-service: the item decides Borrow, Take or Use, and a use asks no amou
   await expect(sheet.getByRole("button", { name: "Review and use" })).toBeVisible();
   await sheet.getByRole("button", { name: "Review and use" }).click();
   await sheet.getByRole("button", { name: "Confirm use" }).click();
-  const receipt = page.getByRole("dialog", { name: "Use recorded" });
+  const receipt = page.getByRole("dialog", { name: "Saved on this phone" });
   await expect(receipt).toContainText("Saved on this phone");
   await expect(receipt.locator(".ss-receipt__ref strong")).toHaveText(/^SS-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
   await expect(receipt.getByRole("button", { name: "Use something else" })).toBeVisible();
@@ -188,7 +188,7 @@ test("self-service closed for maintenance: every address sends people to DOL sta
   await identify(page.getByRole("dialog", { name: "A4 Bond Paper" }), "Ana Reyes");
   await page.getByRole("button", { name: "Review and use" }).click();
   await page.getByRole("button", { name: "Confirm use" }).click();
-  await page.getByRole("dialog", { name: "Use recorded" }).getByRole("button", { name: "Done" }).click();
+  await page.getByRole("dialog", { name: "Saved on this phone" }).getByRole("button", { name: "Done" }).click();
   closed = true;
   for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1366, height: 768 }]) {
     await page.setViewportSize(viewport);

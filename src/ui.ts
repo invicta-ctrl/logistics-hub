@@ -376,6 +376,16 @@ export function failure(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong. Please try again.";
 }
 
+/**
+ * Acknowledges a save the moment it is pressed: the form's submit buttons (or the one button given) go off and are marked busy until the write settles, so a
+ * second tap cannot send it twice. The returned function puts them back, on success and on failure alike.
+ */
+export function working(scope: ParentNode): () => void {
+  const buttons = scope instanceof HTMLButtonElement ? (scope.disabled ? [] : [scope]) : [...scope.querySelectorAll<HTMLButtonElement>("button[type=submit]:not(:disabled)")];
+  for (const button of buttons) { button.disabled = true; button.setAttribute("aria-busy", "true"); }
+  return () => { for (const button of buttons) { button.disabled = false; button.removeAttribute("aria-busy"); } };
+}
+
 export function setMessage(element: HTMLElement, message: string | Html, tone: "error" | "ok" | "" = "error"): void {
   element.className = `form-alert ${tone ? `form-alert--${tone}` : ""}`;
   element.hidden = !message;

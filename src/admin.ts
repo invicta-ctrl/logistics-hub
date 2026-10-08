@@ -3,7 +3,7 @@ import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
 import { ACCESS_HINT, accessChoices, accessTag, bindCopy, canManage, oneTime } from "./account-ui";
 import { adminPage, confirmImpact } from "./admin-frame";
 import { type Access, type Role, accessLabel, loadSession, sessionAccess, shell } from "./staff";
-import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, plural, setMessage, sheet as createSheet, sheetContent, toast } from "./ui";
+import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
 
 type Row = { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number };
 
@@ -109,6 +109,7 @@ export async function staffAccounts(): Promise<void> {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = new FormData(form);
+      const settle = working(form);
       try {
         const result = await api<{ username: string; generatedPassword: string | null }>("/api/staff/admin/accounts", { method: "POST", body: JSON.stringify({ displayName: values.get("displayName"), username: values.get("username"), access: values.get("access"), ...passwordPayload(form, "c") }) });
         form.hidden = true;
@@ -116,7 +117,7 @@ export async function staffAccounts(): Promise<void> {
           <div class="form-actions"><button type="button" class="button button--secondary" data-close>Done</button></div>`);
         toast(`Account ${result.username} created.`);
         await load();
-      } catch (error) { setMessage(sheet.querySelector("#create-alert")!, failure(error)); }
+      } catch (error) { setMessage(sheet.querySelector("#create-alert")!, failure(error)); } finally { settle(); }
     });
   }
 
@@ -166,17 +167,19 @@ export async function staffAccounts(): Promise<void> {
         const confirmed = await confirmImpact({ kicker: `${accessLabel(row.access)} · ${row.username}`, title: `Change the role of ${row.displayName}?`, impact: html`<p>${roleImpact(row.access, values.get("access") as Access)}</p>`, confirm: "Change role" });
         if (!confirmed) return;
       }
+      const settle = working(profile);
       try {
         const result = await api<{ changed: number; sessionsRevoked?: boolean }>(`/api/staff/admin/accounts/${encodeURIComponent(row.id)}`, { method: "PATCH", body: JSON.stringify({ displayName: values.get("displayName"), username: values.get("username"), access: values.get("access") }) });
         toast(result.changed ? `Saved${result.sessionsRevoked ? "; they were signed out" : ""}.` : "No changes to save.");
         close();
         await load();
-      } catch (error) { setMessage(sheet.querySelector("#profile-alert")!, failure(error)); }
+      } catch (error) { setMessage(sheet.querySelector("#profile-alert")!, failure(error)); } finally { settle(); }
     });
     const reset = sheet.querySelector<HTMLFormElement>("#password-form")!;
     bindPasswordFields(reset, "p");
     reset.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const settle = working(reset);
       try {
         const result = await api<{ generatedPassword: string | null }>(`/api/staff/admin/accounts/${encodeURIComponent(row.id)}/password`, { method: "POST", body: JSON.stringify(passwordPayload(reset, "p")) });
         mount(sheet.querySelector("#password-result")!, result.generatedPassword
@@ -184,18 +187,24 @@ export async function staffAccounts(): Promise<void> {
           : html`<p class="callout">${icon("check")}<span>Password reset. They must choose their own at next sign-in.</span></p>`);
         toast(`Password reset for ${row.username}.`);
         void load();
-      } catch (error) { setMessage(sheet.querySelector("#password-alert")!, failure(error)); }
+      } catch (error) { setMessage(sheet.querySelector("#password-alert")!, failure(error)); } finally { settle(); }
     });
-    sheet.querySelector("#revoke")!.addEventListener("click", async () => {
+    sheet.querySelector("#revoke")!.addEventListener("click", async (event) => {
+      const button = event.currentTarget as HTMLButtonElement;
       const confirmed = await confirmImpact({ kicker: `${accessLabel(row.access)} · ${row.username}`, title: `Sign ${row.displayName} out everywhere?`, impact: html`<p>${row.openSessions ? `${plural(row.openSessions, "open session")} end now.` : "They have no open sessions."} They can sign in again with their password.</p>`, confirm: "Sign out everywhere" });
       if (!confirmed) return;
+      const settle = working(button);
       try { await api(`/api/staff/admin/accounts/${encodeURIComponent(row.id)}/sessions/revoke`, { method: "POST" }); toast(`${row.username} was signed out everywhere.`); close(); await load(); }
       catch (error) { setMessage(sheet.querySelector("#access-alert")!, failure(error)); }
+      finally { settle(); }
     });
-    sheet.querySelector("#toggle-active")!.addEventListener("click", async () => {
+    sheet.querySelector("#toggle-active")!.addEventListener("click", async (event) => {
+      const button = event.currentTarget as HTMLButtonElement;
       if (row.active && !await confirmImpact({ kicker: `${accessLabel(row.access)} · ${row.username}`, title: `Disable ${row.displayName}?`, impact: html`<p>They are signed out now and cannot sign in until the account is enabled again. Their loans, history and Staff Directory record stay as they are.</p>`, confirm: "Disable account", danger: true })) return;
+      const settle = working(button);
       try { await api(`/api/staff/admin/accounts/${encodeURIComponent(row.id)}`, { method: "PATCH", body: JSON.stringify({ active: !row.active }) }); toast(`${row.username} ${row.active ? "disabled" : "enabled"}.`); close(); await load(); }
       catch (error) { setMessage(sheet.querySelector("#access-alert")!, failure(error)); }
+      finally { settle(); }
     });
   }
 
@@ -265,23 +274,25 @@ export async function myAccount(): Promise<void> {
     const values = new FormData(passwordForm);
     const alert = passwordForm.querySelector<HTMLElement>("#password-alert")!;
     if (values.get("newPassword") !== values.get("repeat")) { setMessage(alert, "The new passwords do not match."); passwordForm.querySelector<HTMLInputElement>("#repeat")!.focus(); return; }
+    const settle = working(passwordForm);
     try {
       await api("/api/staff/me/password", { method: "POST", body: JSON.stringify({ currentPassword: values.get("currentPassword"), newPassword: values.get("newPassword") }) });
       toast("Password changed. Your other devices were signed out.");
       if (session.mustChangePassword) navigate("/staff/home", true);
       else { passwordForm.reset(); setMessage(alert, ""); }
-    } catch (error) { setMessage(alert, failure(error)); }
+    } catch (error) { setMessage(alert, failure(error)); } finally { settle(); }
   });
 
   document.querySelector<HTMLFormElement>("#profile-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget as HTMLFormElement;
     const values = new FormData(form);
+    const settle = working(form);
     try {
       const result = await api<{ changed: number }>("/api/staff/me", { method: "PATCH", body: JSON.stringify({ displayName: values.get("displayName"), username: values.get("username") }) });
       toast(result.changed ? "Profile saved." : "No changes to save.");
       if (result.changed) navigate("/staff/account", true);
-    } catch (error) { setMessage(form.querySelector("#profile-alert")!, failure(error)); }
+    } catch (error) { setMessage(form.querySelector("#profile-alert")!, failure(error)); } finally { settle(); }
   });
 
   document.querySelector("#revoke-others")?.addEventListener("click", async () => {

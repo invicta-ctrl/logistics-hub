@@ -87,7 +87,7 @@
 .ss-bar__end { display: flex; flex: none; align-items: center; gap: .5rem; }
 /* The switch shows the current theme (the sun turns away as the moon turns in) and matches the sync pill beside it. */
 .ss-theme { position: relative; display: grid; width: 2.125rem; height: 2.125rem; flex: none; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface); color: var(--text); -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2); }
-.ss-theme::before { position: absolute; inset: -.3125rem; content: ""; }
+.ss-theme::before { position: absolute; inset: -.375rem; content: ""; }
 .ss-theme .icon { grid-area: 1 / 1; transition: transform var(--dur-3) var(--ease), opacity var(--dur-2); }
 .ss-theme[aria-pressed="true"] .icon:first-child, .ss-theme[aria-pressed="false"] .icon:last-child { opacity: 0; transform: rotate(-90deg) scale(.5); }
 .ss-theme:focus-visible { outline: none; box-shadow: var(--focus); }
@@ -98,7 +98,7 @@
 /* The sync pill: a small light. Quiet when all is well, specific when something waits. */
 .ss-pill { position: relative; display: inline-flex; flex: none; min-height: 2.125rem; align-items: center; gap: .5rem; padding: .25rem .8rem; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--text); font-size: var(--text-sm); font-weight: 500; text-decoration: none; white-space: nowrap; transition: background-color var(--dur-2), border-color var(--dur-2); }
 /* A finger-sized target around the small pill. */
-.ss-pill::before { position: absolute; inset: -.3125rem 0; content: ""; }
+.ss-pill::before { position: absolute; inset: -.375rem 0; content: ""; }
 .ss-pill__dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--ok-dot); }
 .ss-pill--waiting .ss-pill__dot, .ss-pill--offline .ss-pill__dot { background: var(--warn-dot); }
 .ss-pill--offline { border-color: var(--warn-dot); }
@@ -257,7 +257,11 @@
 /* The receipt: a check, what was recorded, then the sync state as it happens. */
 .ss-receipt { display: grid; justify-items: center; gap: .5rem; padding: 2.5rem 1.5rem calc(1.5rem + env(safe-area-inset-bottom)); text-align: center; }
 .ss-receipt__mark { width: 4rem; height: 4rem; margin-bottom: .75rem; }
+.ss-receipt__head { display: contents; }
 .ss-receipt__mark circle { fill: none; stroke: var(--ok); stroke-width: 2.2; }
+.ss-receipt__mark--wait circle { stroke: var(--text-3); }
+.ss-receipt__mark--review circle { stroke: var(--warn); }
+.ss-receipt__mark--bad circle { stroke: var(--bad); }
 .ss-receipt__mark path { fill: none; stroke: var(--text); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
 .ss-receipt h2 { font-size: var(--text-2xl); }
 .ss-receipt__what { color: var(--text); font-size: var(--text-lg); font-weight: 500; }

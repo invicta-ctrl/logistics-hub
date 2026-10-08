@@ -634,11 +634,33 @@ function summaryRows(draft: Draft, photoUrl: string | null, loan: LocalEvent | u
       ${photoUrl ? html`<div class="ss-summary__photo"><dt>Photo proof</dt><dd><img src="${photoUrl}" alt="The photo you are sending" /></dd></div>` : ""}</dl>`;
 }
 
+/**
+ * The receipt's heading and mark say only what is true now. A record still on the phone is "saved", not "taken" or "sent": the word
+ * for the action comes once Logistics has the record, and one it did not accept says so instead of keeping its tick.
+ */
+function receiptHeading(event: LocalEvent): string {
+  if (event.state === "synced") return verb(event);
+  if (event.state === "review") return event.type === "RETURN" ? verb(event) : "Staff will check it";
+  return event.state === "rejected" ? "Not recorded" : "Saved on this phone";
+}
+
+const RECEIPT_MARKS = {
+  done: html`<path d="m15 27 7 7 15-16" />`,
+  wait: html`<path d="M26 15v11l7 5" />`,
+  review: html`<path d="M26 24v12M26 16v.5" />`,
+  bad: html`<path d="M26 15v14M26 36v.5" />`
+} as const;
+
+function receiptHead(event: LocalEvent): Html {
+  const tone = event.state === "synced" || (event.state === "review" && event.type === "RETURN") ? "done" : event.state === "pending" ? "wait" : event.state === "review" ? "review" : "bad";
+  return html`<svg class="ss-receipt__mark ss-receipt__mark--${tone}" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24" />${RECEIPT_MARKS[tone]}</svg>
+      <h2 id="sheet-title">${receiptHeading(event)}</h2>`;
+}
+
 /** Shown in the sheet after saving: calm, specific, and it updates itself when the record syncs. */
 function receipt(event: LocalEvent): Html {
   return html`<div class="ss-receipt" role="status">
-      <svg class="ss-receipt__mark" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="24" /><path d="m15 27 7 7 15-16" /></svg>
-      <h2 id="sheet-title">${verb(event)}</h2>
+      <div class="ss-receipt__head" data-receipt-head="${event.id}">${receiptHead(event)}</div>
       <p class="ss-receipt__what">${event.type === "USE" ? "" : event.quantity > 1 ? `${event.quantity} × ` : ""}${event.itemName}</p>
       <p class="ss-receipt__who">${event.person.name}${event.person.studentId ? ` · ID ${event.person.studentId}` : ""} · ${when(event.occurredAt)}</p>
       <p class="ss-receipt__ref"><span>Reference</span><strong>${selfServiceReference(event.id)}</strong></p>
@@ -1144,7 +1166,11 @@ export async function selfService(): Promise<void> {
   const updateReceipt = () => {
     const spot = receiptFor ? dialog.querySelector<HTMLElement>(`[data-receipt="${CSS.escape(receiptFor)}"]`) : null;
     const event = spot ? events.find((entry) => entry.id === receiptFor) : undefined;
-    if (spot && event) mount(spot, receiptState(event));
+    if (!spot || !event) return;
+    mount(spot, receiptState(event));
+    const head = dialog.querySelector<HTMLElement>("[data-receipt-head]");
+    // Redrawn only when the words change, so the mark's animation does not replay on every refresh.
+    if (head && head.querySelector("h2")?.textContent !== receiptHeading(event)) mount(head, receiptHead(event));
   };
 
   let syncTimer = 0;
