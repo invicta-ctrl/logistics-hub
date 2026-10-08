@@ -359,7 +359,8 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .filterbar__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .sort-toggle { display: inline-flex; padding: .1875rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--subtle); }
 .sort-toggle button { white-space: nowrap; min-height: 2rem; padding: var(--space-1) var(--space-3); border: 0; border-radius: var(--radius); background: none; color: var(--text-2); font-size: var(--text-sm); font-weight: 500; transition: background-color var(--dur-2), color var(--dur-2), box-shadow var(--dur-2); }
-.sort-toggle button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm), 0 0 0 1px var(--line); }
+.sort-toggle button:hover { color: var(--text); }
+.sort-toggle button[aria-pressed="true"] { background: var(--brand-tint); color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
 .chips { display: flex; gap: var(--space-2); margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); overflow-x: auto; scrollbar-width: thin; }
 .chip { display: inline-flex; flex: none; align-items: center; gap: var(--space-2); min-height: 2.25rem; padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4); border: 1px solid var(--line-strong); border-radius: var(--radius-pill); background: var(--surface); color: var(--text-2); font-size: var(--text-sm); font-weight: 500; transition: background-color var(--dur-2), border-color var(--dur-2), color var(--dur-2); }
 .chip:hover { border-color: var(--text-3); color: var(--text); }
@@ -508,9 +509,17 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
     mask-image: linear-gradient(to right, transparent, #000 var(--strip-fade-start), #000 calc(100% - var(--strip-fade-end)), transparent);
   }
 }
-.view-tab { display: inline-flex; flex: none; align-items: center; gap: var(--space-2); margin-bottom: -1px; padding: var(--space-3) var(--space-3); border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-2); font-size: var(--text-base); font-weight: 500; white-space: nowrap; }
-.view-tab:hover { color: var(--text); }
-.view-tab[aria-pressed="true"] { border-bottom-color: var(--brand); color: var(--text); }
+/*
+ * One tab style (V1.15), shared by the views of a list, the sections of a profile and the sub-navigation: quiet and neutral when
+ * inactive, a faint wash on hover and press, the product's accent (text and underline) only on the one that is open, and a ring
+ * drawn inside the tab so a scrolling strip never clips it. Counts stay smaller than the label.
+ */
+.view-tab, .tabs [role=tab], .subnav__link { margin-bottom: -1px; padding: var(--space-3); border: 0; border-bottom: 2px solid transparent; border-radius: var(--radius) var(--radius) 0 0; background: none; color: var(--text-2); font-size: var(--text-base); font-weight: 500; text-decoration: none; white-space: nowrap; transition: background-color var(--dur-1), color var(--dur-1); }
+.view-tab { display: inline-flex; flex: none; align-items: center; gap: var(--space-2); }
+.view-tab:hover, .tabs [role=tab]:hover, .subnav__link:hover { background: var(--subtle); color: var(--text); }
+.view-tab:active, .tabs [role=tab]:active, .subnav__link:active { background: var(--line); }
+.view-tab[aria-pressed="true"], .tabs [role=tab][aria-selected="true"], .subnav__link[aria-current] { border-bottom-color: var(--brand); color: var(--brand); }
+.view-tab:focus-visible, .tabs [role=tab]:focus-visible, .subnav__link:focus-visible { outline-offset: -2px; }
 .view-tab__count { min-width: 1.5rem; padding: .0625rem var(--space-2); border-radius: var(--radius-pill); background: var(--subtle); color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-align: center; }
 .view-tab[aria-pressed="true"] .view-tab__count { background: var(--brand-tint); color: var(--brand); }
 .table-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-block: var(--space-4); }
@@ -632,16 +641,20 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .stock { padding-top: var(--space-1); }
 .provenance { color: var(--text-3); font-size: var(--text-sm); }
 .tabs { display: flex; flex: none; min-height: 2.625rem; gap: var(--space-1); overflow-x: auto; overflow-y: hidden; border-bottom: 1px solid var(--line); scrollbar-width: none; }
-.tabs [role=tab] { margin-bottom: -1px; padding: var(--space-3) var(--space-3); border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-2); font-size: var(--text-base); font-weight: 500; white-space: nowrap; }
-.tabs [role=tab]:hover { color: var(--text); }
-.tabs [role=tab][aria-selected="true"] { border-bottom-color: var(--brand); color: var(--text); }
 [role=tabpanel]:focus-visible { outline-offset: 4px; }
 .segmented { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; padding: .1875rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--subtle); }
 .segmented label { position: relative; display: grid; min-height: 2.25rem; place-items: center; border-radius: var(--radius); color: var(--text-2); font-size: var(--text-base); font-weight: 500; cursor: pointer; transition: background-color var(--dur-1), color var(--dur-1); }
 .segmented input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.segmented label:has(input:checked) { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm), 0 0 0 1px var(--line); }
-.segmented label:has(input:focus-visible) { box-shadow: var(--focus); }
+.segmented label:has(input:checked) { background: var(--brand-tint); color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+.segmented label:hover { color: var(--text); }
+.segmented label:has(input:focus-visible) { box-shadow: inset 0 0 0 1px var(--brand), var(--focus); }
 .segmented--2 { grid-template-columns: repeat(2, 1fr); }
+/* A segmented control made of buttons (the audit filter) looks and reads the same as one made of radios. */
+.segmented > button { display: inline-flex; min-height: 2.25rem; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 var(--space-2); padding: var(--space-1) var(--space-2); line-height: 1.25; text-align: center; border: 0; border-radius: var(--radius); background: none; color: var(--text-2); font-size: var(--text-base); font-weight: 500; transition: background-color var(--dur-1), color var(--dur-1); }
+.segmented > button:hover { color: var(--text); }
+.segmented > button[aria-selected="true"], .segmented > button[aria-pressed="true"] { background: var(--brand-tint); color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+.segmented > button:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--brand), var(--focus); }
+.segmented > button[aria-selected="true"] .view-tab__count { background: var(--surface); color: var(--brand); }
 .listing-status { display: flex; align-items: flex-start; gap: var(--space-2); color: var(--text-2); font-size: var(--text-sm); }
 .listing-status > .icon { --icon-size: var(--icon-sm); }
 .listing-status .checklist { margin-top: var(--space-2); }
@@ -1191,9 +1204,6 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .dept-dot { display: inline-block; width: .625rem; height: .625rem; flex: none; border-radius: 50%; background: var(--dept, var(--line-strong)); }
 
 .subnav { display: flex; gap: var(--space-1); margin-bottom: var(--space-6); overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: none; }
-.subnav__link { margin-bottom: -1px; padding: var(--space-3); border-bottom: 2px solid transparent; color: var(--text-2); font-size: var(--text-base); font-weight: 500; text-decoration: none; white-space: nowrap; }
-.subnav__link:hover { color: var(--text); }
-.subnav__link[aria-current] { border-bottom-color: var(--brand); color: var(--text); }
 
 .dir-toolbar { display: grid; gap: var(--space-3); margin-bottom: var(--space-6); }
 .dir-toolbar .search-field { max-width: 36rem; }
