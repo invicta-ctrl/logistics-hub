@@ -79,6 +79,16 @@ test("a stalled tile scan ends in a message instead of a spinner", async ({ page
   await expect(front(page)).not.toHaveClass(/is-loading/);
 });
 
+test("a stalled tile scan says it took too long on Safari too, whose timed-out fetch rejects with AbortError", async ({ page }) => {
+  // WebKit 26 rejects a fetch whose AbortSignal.timeout fired with an AbortError, not Chromium's TimeoutError.
+  await page.addInitScript(() => { AbortSignal.timeout = () => { const controller = new AbortController(); setTimeout(() => controller.abort(), 600); return controller.signal; }; });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const scans = await mock(page);
+  scans.stall.add("front");
+  await page.goto(idTab);
+  await expect(page.locator(".id-tile__failed")).toContainText("This scan is taking too long to open.");
+});
+
 test("the large card shows a failed side with its own Try again, and the back follows the front", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   const scans = await mock(page);
