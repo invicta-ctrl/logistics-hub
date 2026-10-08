@@ -1,6 +1,6 @@
 # Current Work Pointer — Logistics Hub
 
-## V1.15 Final Pass — four-model Ambient Intelligence — IN PROGRESS (FP-A reconciled; FP-B checkpoint) — 2026-10-08
+## V1.15 Final Pass — four-model Ambient Intelligence — IN PROGRESS (FP-A baseline reconciled; provider gates pending; FP-B checkpoint) — 2026-10-08
 
 ORDER: Runs before Road to V3. Scope is additional V1.15 work only.
 SPEC: docs/specs/accepted/road-to-v2/2026-10-08-v1.15-final-pass-ai-intelligence-amendment.md.

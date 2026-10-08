@@ -1,40 +1,22 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-## V1.15 Final Pass — FP-A reconciled; FP-B photo-result safety checkpoint (Codex, 2026-10-08)
+## V1.15 Final Pass — FP-A baseline reconciled; FP-B photo-result safety checkpoint (Codex, 2026-10-08)
 
 ~~~text
 TASK: First V1.15 Final-Pass runtime-integrated safety checkpoint.
-STATUS: CHECKPOINT READY FOR HANDOFF; not a provider or quality acceptance.
-BASE: 8068b0effd5b3aebde9bea0c5f61193b23ef4371.
-BRANCH/WORKTREE: slice/v1.15-catalog-intelligence / D:\\Documents\\HAU-USC Logistics Hub\\workspace\\logistics-hub.
+STATUS: CHECKPOINT PUSHED; reconciliation is complete, but FP-A provider/quality acceptance is not.
+BASE / UPSTREAM MAIN: 8068b0effd5b3aebde9bea0c5f61193b23ef4371.
+CHECKPOINT: 08883cb3849253630d2160ea78d2a8795c77ee98 (local and origin/slice equal before this documentation-only repair).
+BRANCH / WORKTREE: slice/v1.15-catalog-intelligence / D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub.
+RECOVERY: classified pre-reconciliation records are preserved at C:\Users\adria\.codex\private-recovery\v1.15-final-pass-20261008T115837Z; untracked NUL is untouched.
 FILES: src/catalogue-capture.ts; tests/browser/catalogue.spec.ts; .codex/CURRENT.md; .codex/SESSION_HANDOFF.md; docs/SHARED_AGENT_WORKFLOW.md.
 CONTRACT: every name input owns the field even when cleared; photo preparation/model results carry a revision and cannot update a retaken, reset, or left form.
-VERIFIED: focused Playwright delayed-response tests pass (2); negative control without ownership guard fails by returning Stapler; npm run build passes; npm run verify:privacy reports 0 matches.
-UNRUN: held-out photo-quality evaluation; provider smoke/availability; full suite; provider/production checks.
-PROVIDER: no inference, binding/configuration, deployment, migration, or production write. Do not claim provider or quality verification.
-DIRTY: NUL remains untracked and preserved; verify status before claim.
-NEXT: manual receiver verifies pushed HEAD/status, claims named lock, and starts typed CatalogDraft provenance/unknown-state/deterministic-grounding work only.
-MANUAL TAKEOVER: Codex commits/pushes this same slice, updates this block, then yields. Claude reads this block, verifies origin/slice HEAD and clean status, claims npm run agent:claim -- claude, pushes the same slice, updates this block, and yields. Cloud sync mirrors pushed commits only; it does not launch or authorize a writer.
+VERIFIED: npm run test:browser -- tests/browser/catalogue.spec.ts --grep 'delayed|retake' (2 passed); negative control without ownership guard failed by returning Stapler; npm run build passed; npm run verify:privacy reported 0 matches.
+UNRUN: full suite; held-out 100-photo licensed dataset/ground truth and photo-quality evaluation; provider smoke/availability; provider/production checks.
+PROVIDER: read-only evidence says Workers Free 45.93/10k UTC-today and hausc.org Transformations DISABLED with 0 usage. Images segmentation entitlement, private-source security, live model/cutout behavior, and photo accuracy remain unverified. No inference, binding/configuration, deployment, migration, or production write occurred.
+NEXT: manual receiver verifies the pushed same-branch HEAD/status, claims its named lock, then implements only typed CatalogDraft provenance/unknown states, grounded matching, and evaluation preparation. Do not restart, create another branch, run provider inference, or treat cloud sync as authorization.
+READY CLAUDE MESSAGE: In D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub, run git fetch origin --prune; verify origin/slice/v1.15-catalog-intelligence and local HEAD equal this checkpoint; verify status preserves only NUL; then npm run agent:claim -- claude. Continue on this same slice with typed CatalogDraft field provenance/unknown states plus deterministic grounded matching/evaluation preparation. Do not create a branch, restart FP-A, run provider calls, deploy, migrate, or infer live quality. Commit/push one coherent checkpoint, update this handoff, and yield manually.
 ~~~
-
-
-## V1.15 Final Pass — FP-A reconciled; FP-B photo-result safety checkpoint (Codex, 2026-10-08)
-
-~~~text
-TASK: First V1.15 Final-Pass runtime-integrated safety checkpoint.
-STATUS: CHECKPOINT READY FOR HANDOFF; not a provider or quality acceptance.
-BASE: 8068b0effd5b3aebde9bea0c5f61193b23ef4371.
-BRANCH/WORKTREE: slice/v1.15-catalog-intelligence / D:\\Documents\\HAU-USC Logistics Hub\\workspace\\logistics-hub.
-FILES: src/catalogue-capture.ts; tests/browser/catalogue.spec.ts; .codex/CURRENT.md; .codex/SESSION_HANDOFF.md; docs/SHARED_AGENT_WORKFLOW.md.
-CONTRACT: every name input owns the field even when cleared; photo preparation/model results carry a revision and cannot update a retaken, reset, or left form.
-VERIFIED: focused Playwright delayed-response tests pass (2); negative control without ownership guard fails by returning Stapler; npm run build passes; npm run verify:privacy reports 0 matches.
-UNRUN: held-out photo-quality evaluation; provider smoke/availability; full suite; provider/production checks.
-PROVIDER: no inference, binding/configuration, deployment, migration, or production write. Do not claim provider or quality verification.
-DIRTY: NUL remains untracked and preserved; verify status before claim.
-NEXT: manual receiver verifies pushed HEAD/status, claims named lock, and starts typed CatalogDraft provenance/unknown-state/deterministic-grounding work only.
-MANUAL TAKEOVER: Codex commits/pushes this same slice, updates this block, then yields. Claude reads this block, verifies origin/slice HEAD and clean status, claims npm run agent:claim -- claude, pushes the same slice, updates this block, and yields. Cloud sync mirrors pushed commits only; it does not launch or authorize a writer.
-~~~
-
 
 ## V2.0 closed, Road to V3 prepared (NOT STARTED; Claude on Earl's workstation, 2026-10-08)
 
