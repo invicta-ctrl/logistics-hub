@@ -4,7 +4,7 @@
 
 | Identifier | Milestone | Standalone outcome |
 |---|---|---|
-| **V2.0** | Product baseline | current Logistics Hub + Ambient Assist; handoff records actual acceptance/deployment/verification status |
+| **V2.0** | Product baseline | current Logistics Hub + Ambient Assist; **COMPLETE**, truthful handoff recorded 2026-10-08 in `docs/road-to-v2/releases/v2.0.md` ("Handoff to Road to V3") |
 | **RTV3-01** | Foundation & Operability | measured, observable, recoverable, secure platform ready for new domains |
 | **RTV3-02** | Event & Demand Orchestration | complete new event/requirement/request workflow independent of Promise |
 | **RTV3-03** | Resource Promise & Fulfillment | time-aware availability, sourcing, reservation/promise planning |

@@ -1,4 +1,9 @@
-# Current Bounded Task — V1.15 V2 consolidation (Claude Cloud, sole integrator)
+# Current Bounded Task — none active (2026-10-08)
+STATUS: V2.0 COMPLETE. Road to V3 prepared on `main` (`docs/road-to-v3/`), NOT STARTED.
+NEXT ACTION: Earl accepts an RTV3-01 spec under `docs/specs/accepted/road-to-v3/`, then `start`. See `.codex/CURRENT.md` (top).
+---
+
+# Previous task — V1.15 V2 consolidation (Claude Cloud, sole integrator)
 INTENT: finish V1.15 under its spec, the 2026-10-07 amendments and the 2026-10-08 Ambient AI Assist amendment, then write the release records.
 BRANCH: `road-to-v2/v1.15-v2-consolidation`; derive the head with `git rev-parse HEAD`.
 AUTHORITY: `docs/specs/accepted/road-to-v2/v1.15-v2-consolidation.md` and its accepted amendments; Earl's 2026-10-07 continuation prompt.

@@ -11,7 +11,7 @@
 Product versions and roadmap milestones are intentionally separate:
 
 ```text
-V2.0        = current product baseline pending truthful handoff/verification status
+V2.0        = product baseline: COMPLETE and verified on 2026-10-08 (handoff: docs/road-to-v2/releases/v2.0.md, "Handoff to Road to V3")
 RTV3-01     = Road-to-V3 Foundation & Operability milestone
 RTV3-02     = Event & Demand Orchestration
 RTV3-03     = Resource Promise & Fulfillment

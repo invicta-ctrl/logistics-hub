@@ -38,6 +38,8 @@ Status values: `OPEN`, `IN_PROGRESS`, `CLOSED`, `ACCEPTED_RISK`, `SUPERSEDED`.
 | R-030 | AI quota policy was inherited but not re-derived | RTV3-01 F7 explicitly re-derives quota policy from measurement | AI owner | CLOSED | 2026-10-08 |
 | R-031 | Claude model names were pinned without re-check rule | Added verification date + role-based fallback rule | Coordinator | CLOSED | 2026-10-08 |
 | R-032 | RTV3-01 DoD/packets lacked dependency ordering | Added execution DAG | RTV3-01 coordinator | CLOSED | 2026-10-08 |
+| R-033 | V2.0 status was "pending truthful handoff/verification" | Handoff recorded against `03` §1: `docs/road-to-v2/releases/v2.0.md`, "Handoff to Road to V3"; evidence `docs/road-to-v2/evidence/v2.0-production-readiness.md` | Roadmap owner (Earl) | CLOSED | 2026-10-08 |
+| R-034 | `02` §2 lists Granite, Gemma, Qwen and GLM as the "current V2 role set", and §6 says "normal target around 8,000". V2.0 ships one model, `@cf/google/gemma-4-26b-a4b-it`, for two tasks (PHOTO_NAME, PHOTO_RECHECK); Granite, Qwen and GLM were not built (V1.15 record). The code's daily bands are conserve 6,500, reserve 8,000, critical 9,000, stop 9,500 (`src/ambient-assist.ts`). Impact: none on V2; a thread reading `02` alone would assume roles that do not exist. | Repository truth wins. RTV3-01 F7 reconciles `02` with the shipped router and re-derives the quota from measurement (`03` §8). Next action: F7 task packet | RTV3-01 coordinator | OPEN | 2026-10-08 |
 
 ## Status evidence rules
 

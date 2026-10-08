@@ -1,5 +1,13 @@
 # Current Work Pointer — Logistics Hub
 
+## Road to V3 — prepared on `main`, NOT STARTED — 2026-10-08
+
+V2.0: COMPLETE and verified (Earl, 2026-10-08). Handoff: `docs/road-to-v2/releases/v2.0.md`, "Handoff to Road to V3"; readiness evidence `docs/road-to-v2/evidence/v2.0-production-readiness.md`.
+PACKAGE: `docs/road-to-v3/` (Earl's frozen Road to V3 package, SHA-256 of the zip `ef50a1b3…f2aa80`). Milestones RTV3-01 to RTV3-09, then V3.0; boot sequence `docs/road-to-v3/00_COORDINATOR_CARD.md`. Repository authority outranks the package; known differences are rows in `docs/road-to-v3/08_RECONCILIATION_REGISTER.md` (R-034 open: the AI role list).
+STATE: nothing started. No RTV3 branch, accepted spec, task packet or code exists. Only `main` exists. No active writer.
+GATES: RTV3-01 starts only when Earl accepts an RTV3-01 spec (`docs/road-to-v3/templates/ACCEPTED_SPEC_TEMPLATE.md`, scope `03_V2_HANDOFF_AND_RTV3_01_FOUNDATION.md` §2–§9) under `docs/specs/accepted/road-to-v3/` and then says `start`. RTV3-02 and later also need the accepted Product Direction Amendment (`07_PRODUCT_DIRECTION_AMENDMENT_DRAFT.md`, pre-drafted in RTV3-01 F8). Branches follow `AGENTS.md`: one slice branch, merged and deleted when green.
+NEXT_EXACT_ACTION: Earl decides the RTV3-01 spec (and the uncommitted V1.6-era edits in his local `.claude/worktrees/v1.6-catalog-pwa`). No agent action is pending.
+
 ## Road to V2 — V1.15 V2 product consolidation — 2026-10-08
 
 SPEC: `docs/specs/accepted/road-to-v2/v1.15-v2-consolidation.md` with the 2026-10-07 mobile/perceived-performance and identity/semantic/Activity amendments and the accepted `2026-10-08-v1.15-ambient-ai-assist-reconciliation-amendment.md`. BRANCH: `road-to-v2/v1.15-v2-consolidation`.
