@@ -1,14 +1,14 @@
 # Current Work Pointer — Logistics Hub
 
-## Data-Surface UI — UX-1 container-aware Stock and Items cards — VERIFIED, STAGED, NOT COMMITTED OR PUSHED — 2026-10-09
+## Data-Surface UI — UX-1 container-aware Stock and Items cards — COMMITTED, NOT YET PUSHED — 2026-10-09
 
-SPEC: `docs/specs/accepted/2026-10-08-data-surface-ui-amendment.md` (accepted). BRANCH: `slice/ux-data-surface`; `HEAD` and `origin/main` are `05b83cb4f42f1e3d0a9c75df174e75273c87b101`; no upstream is configured. Sole writer lock: Codex pending safe yield.
+SPEC: `docs/specs/accepted/2026-10-08-data-surface-ui-amendment.md` (accepted). BRANCH: `slice/ux-data-surface`; UX-1 commit `333b73081ecc86e9af05dd5bdc5392cc39d78b6a`; `origin/main` is `05b83cb4f42f1e3d0a9c75df174e75273c87b101`; no upstream is configured and the slice is not pushed. Sole writer: Codex.
 
-STATE: UX-1 reproduced the absent UX-0 mocked-fixture baseline, then fixed the Stock action clipping with a 44rem responsive-wrapper container query. Ten UX-1 paths are staged; the permanent lean-ctx commit block means none is committed or pushed. Baseline, screenshots and final metrics are in `docs/visual-research/data-surface-ui.md`. The V1.15 Final Pass remains PARTIAL with its owner actions preserved below; it is excluded from this slice.
+STATE: UX-1 reproduced the absent UX-0 mocked-fixture baseline, then fixed the Stock action clipping with a 44rem responsive-wrapper container query. The reviewed ten-path checkpoint committed after owner-approved narrow lean-ctx allowance; it is not pushed. Baseline, screenshots and final metrics are in `docs/visual-research/data-surface-ui.md`. The V1.15 Final Pass remains PARTIAL with its owner actions preserved below; it is excluded from this slice.
 
 SCOPE: container-aware card conversion for Items and Stock at 44rem, with the existing card anatomy and no data/API/action change. UX-2 menus, UX-3 number/sort semantics, UX-4 Directory Usage and the final legacy-rule cleanup are not started.
 
-NEXT: owner approval of a safe commit route is pending; then root reviews UX-1. UX-2, UX-3 and UX-4 remain bounded next tasks; V3 is frozen. The later Granite/Qwen/GLM review-and-correction extension requires a registered accepted amendment and is not started.
+NEXT: commit this continuity correction and push the same slice branch, then begin only UX-2 after its focused authority check. UX-3 and UX-4 follow separate root review packets; V3 is frozen. The later Granite/Qwen/GLM review-and-correction extension requires a registered accepted amendment and is not started.
 
 
 ## V1.15 Final Pass — four-model Ambient Intelligence — MERGED (PARTIAL), owner actions open — 2026-10-08
