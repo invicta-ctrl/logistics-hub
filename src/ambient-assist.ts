@@ -33,10 +33,9 @@ export type Band = "NORMAL" | "CONSERVE" | "RESERVE" | "CRITICAL" | "STOPPED";
 export type Urgency = "USER" | "BACKGROUND";
 /**
  * The most one photo call may cost, counted before the call so two calls cannot both squeeze under a line. Measured 2026-10-07:
- * 3.6 Neurons for a 320 px photo at 40 output tokens. The Final Pass reply is up to 64 tokens with a longer instruction, so the reserve is
- * raised to 10 until a short approved live smoke re-measures it; the reply's own `usage.neurons` replaces it once it answers, and a failed call keeps it.
+ * 3.6 Neurons for a 320 px photo at 40 output tokens, and 3.94 for the Final Pass call (64 tokens allowed, 28 used) on 2026-10-08; the reply's own `usage.neurons` replaces it once it answers, and a failed call keeps it.
  */
-export const PHOTO_RESERVE = 10;
+export const PHOTO_RESERVE = 6;
 /** A call this slow is abandoned (one of 24 measured calls took 28 s); the person keeps typing meanwhile. */
 export const CALL_TIMEOUT_MS = 10_000;
 /** Consecutive failures that open the breaker, and how long it stays open. Per Worker instance: a restart simply tries again. */

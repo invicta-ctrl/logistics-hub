@@ -27,9 +27,9 @@ export const ROLE_MODELS: Record<ModelRole, string> = {
  * live smoke measures them (nothing has run yet); a reply's own `usage.neurons` replaces the reserve when it reports one.
  */
 export const ROLE_LIMITS: Record<Exclude<ModelRole, "VISION_EXTRACT">, { reserve: number; maxTokens: number; /** Sent only to models that reason before answering; Granite is not one. Unconfirmed until the live smoke. */ thinkingOption: boolean }> = {
-  TEXT_NORMALIZE: { reserve: 4, maxTokens: 40, thinkingOption: false },
-  CANDIDATE_ARBITRATE: { reserve: 8, maxTokens: 60, thinkingOption: true },
-  RARE_SECOND_OPINION: { reserve: 8, maxTokens: 80, thinkingOption: true }
+  TEXT_NORMALIZE: { reserve: 1, maxTokens: 40, thinkingOption: false },
+  CANDIDATE_ARBITRATE: { reserve: 2, maxTokens: 60, thinkingOption: true },
+  RARE_SECOND_OPINION: { reserve: 3, maxTokens: 80, thinkingOption: true }
 };
 /**
  * All three start in shadow: Granite failed its first classification test (13% and 24%), and Qwen and GLM have no held-out result at
@@ -105,6 +105,11 @@ export function secondOpinionTask(facts: readonly FactCode[]): Task {
 /** A reply reduced to one allowed value, or null. A value that is not exactly in the allowed list is dropped. */
 export function readChoice(reply: unknown, task: Pick<Task, "allowed" | "field">): string | null {
   let value: unknown = aiReplyText(reply);
+  // Measured 2026-10-08: with thinking off, Qwen returns its JSON in `reasoning_content` and leaves `content` null.
+  if (value === null || value === undefined) {
+    const message = (reply as { choices?: Array<{ message?: { reasoning_content?: unknown; reasoning?: unknown } }> } | null)?.choices?.[0]?.message;
+    value = message?.reasoning_content ?? message?.reasoning;
+  }
   if (typeof value === "string") {
     try { value = JSON.parse(value.trim().replace(/^```(?:json)?\s*|\s*```$/g, "")); } catch { return null; }
   }

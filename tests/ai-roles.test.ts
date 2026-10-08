@@ -34,6 +34,13 @@ describe("reading a reply", () => {
     expect(readChoice(null, task)).toBeNull();
   });
 
+  it("reads the answer where the real models put it, including Qwen's reasoning_content with a null content", () => {
+    const task = arbitrateTask("x", [{ id: "a1", name: "A" }, { id: "b2", name: "B" }]);
+    const qwen = { choices: [{ message: { content: null, reasoning: '{"id":"a1"}', reasoning_content: '{"id":"a1"}' } }] };
+    expect(readChoice(qwen, task)).toBe("a1");
+    expect(readChoice({ choices: [{ message: { content: null, reasoning_content: '{"id":"zz"}' } }] }, task)).toBeNull();
+  });
+
   it("limits what is sent: allowed values, short text, bounded lists", () => {
     const task = arbitrateTask("x".repeat(500), Array.from({ length: 9 }, (_, index) => ({ id: `i${index}`, name: "n".repeat(300) })));
     expect(task.allowed).toHaveLength(5);
