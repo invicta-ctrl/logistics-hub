@@ -129,7 +129,9 @@ test("a modifier press follows the card's link to the profile, and the profile's
   await mock(context);
   await page.goto("/staff/admin/directory");
   const [tab] = await Promise.all([context.waitForEvent("page"), page.getByRole("link", { name: /Ana Marie Santos/ }).click({ modifiers: ["ControlOrMeta"] })]);
-  // A new tab loads the whole application cold, so it gets longer than the default 5 s (it timed out once in CI under load).
+  // A modifier press opens the tab in the background, and a background tab may hold its drawing until it is shown (twice in CI
+  // it never drew its page within 15 s). A person switches to the tab to read it, so the test does too.
+  await tab.bringToFront();
   await expect(tab).toHaveURL(new RegExp(`person=${id(1)}`), { timeout: 15_000 });
   await expect(tab.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 15_000 });
   await expect(tab).toHaveURL(new RegExp(`person=${id(1)}`));
