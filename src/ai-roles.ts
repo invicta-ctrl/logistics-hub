@@ -23,14 +23,14 @@ export const ROLE_MODELS: Record<ModelRole, string> = {
 };
 
 /**
- * What each text role may cost and say. Reserves are counted before the call. They rest on ONE small call per model on 2026-10-08
- * (0.22, 0.63, 0.82 Neurons; docs/road-to-v2/evidence/v1.15-final-pass-provider-smoke-2026-10-08.md), not on maximum-size inputs or the
- * Worker binding, so they are provisional. A reply's own `usage.neurons` replaces the reserve when it reports one. The thinking option
+ * What each text role may cost and say. Reserves are counted before the call. They rest on live calls of 2026-10-08, including
+ * one maximum-size call per role (Granite 0.98 with 40 terms, Qwen 1.57 with 5 candidates, GLM 1.00; docs/road-to-v2/evidence/
+ * v1.15-final-pass-provider-smoke-2026-10-08.md), and the Worker binding reports `usage.neurons` too. One sample per role: provisional. A reply's own `usage.neurons` replaces the reserve when it reports one. The thinking option
  * was accepted by Qwen and GLM, but Qwen still answered in `reasoning_content`, so it is unproven for Qwen.
  */
 export const ROLE_LIMITS: Record<Exclude<ModelRole, "VISION_EXTRACT">, { reserve: number; maxTokens: number; /** Sent only to models that reason before answering; Granite is not one. Unconfirmed until the live smoke. */ thinkingOption: boolean }> = {
-  TEXT_NORMALIZE: { reserve: 1, maxTokens: 40, thinkingOption: false },
-  CANDIDATE_ARBITRATE: { reserve: 2, maxTokens: 60, thinkingOption: true },
+  TEXT_NORMALIZE: { reserve: 2, maxTokens: 40, thinkingOption: false },
+  CANDIDATE_ARBITRATE: { reserve: 3, maxTokens: 60, thinkingOption: true },
   RARE_SECOND_OPINION: { reserve: 3, maxTokens: 80, thinkingOption: true }
 };
 /**
