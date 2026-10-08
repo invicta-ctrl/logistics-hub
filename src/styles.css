@@ -123,7 +123,7 @@
 html, body { overflow-x: clip; }
 /* Keyboard focus and in-page jumps never land under the sticky top bar (WCAG 2.4.11). */
 html { scroll-padding-top: calc(var(--app-bar) + var(--space-4)); }
-body { margin: 0; min-width: 320px; background: var(--bg); font-size: var(--text-md); }
+body { margin: 0; background: var(--bg); font-size: var(--text-md); }
 #app { display: flex; min-height: 100vh; min-height: 100dvh; flex-direction: column; }
 main { flex: 1; }
 main:focus { outline: none; }
@@ -357,6 +357,8 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .filterbar { display: block; position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--line); background: var(--bg); }
 .filterbar__inner { display: grid; gap: var(--space-3); padding-block: var(--space-4); }
 .filterbar__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
+/* On a phone the search takes its own row; beside the switch it cut its placeholder short. */
+@media (max-width: 40rem) { .filterbar__row .search-field { flex-basis: 100%; } }
 .sort-toggle { display: inline-flex; padding: .1875rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--subtle); }
 .sort-toggle button { white-space: nowrap; min-height: 2rem; padding: var(--space-1) var(--space-3); border: 0; border-radius: var(--radius); background: none; color: var(--text-2); font-size: var(--text-sm); font-weight: 500; transition: background-color var(--dur-2), color var(--dur-2), box-shadow var(--dur-2); }
 .sort-toggle button:hover { color: var(--text); }

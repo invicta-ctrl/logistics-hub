@@ -1,3 +1,4 @@
+# The index is LF. Check out LF everywhere too (Windows autocrlf would not): tests pin bytes, such as migration and
+# fixture hashes (tests/migration-history.test.ts, ops/releases), script shebangs and workflow text.
+* text=auto eol=lf
 *.cmd text eol=crlf
-# Migrations are pinned by hash (tests/migration-history.test.ts, ops/releases); keep their bytes identical on every checkout.
-migrations/*.sql text eol=lf

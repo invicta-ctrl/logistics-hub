@@ -350,6 +350,24 @@ test("public routes fit every required viewport class", async ({ page }) => {
   }
 });
 
+test("the Lending Hub search shows its whole placeholder on phones", async ({ page }) => {
+  for (const width of [320, 375, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/lending");
+    const search = page.getByRole("searchbox", { name: "Search the Lending Hub" });
+    await expect(search).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    // Room left in the text box once the placeholder is drawn in the field's own font ("Searcl" at 320 px before).
+    const room = await search.evaluate((input: HTMLInputElement) => {
+      const style = getComputedStyle(input);
+      const context = document.createElement("canvas").getContext("2d")!;
+      context.font = style.font;
+      return input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - context.measureText(input.placeholder).width;
+    });
+    expect(room, `${width}px`).toBeGreaterThanOrEqual(0);
+  }
+});
+
 test("activity: a live refresh also refreshes the older pages on screen, so an entry that stopped matching leaves", async ({ page }) => {
   const entry = (id: string, minute: number) => ({ id: `phone:${id}`, correlationId: id, at: `2026-10-01T02:${String(minute).padStart(2, "0")}:00.000Z`, source: "PHONE", type: "PHONE_RETURN",
     summary: `A phone return of 1 piece of Item ${id} was held for staff.`, actor: "Self-Service", actorId: "SELF_SERVICE", itemId: `ITM-${id}`, itemName: `Item ${id}`, unit: "piece",

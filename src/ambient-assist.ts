@@ -18,7 +18,8 @@ import { key } from "./item-media";
  * What a model receives is fixed here: a catalogue photo (the item's own 320 px thumbnail, never evidence, ID, directory or
  * Self-Service media) and a fixed instruction. What comes back is a short name or nothing; a model never writes a record. Calls stop
  * at the owner's daily Neuron bands, after repeated failures (a breaker), when an owner turns photo suggestions off, or when the
- * Worker has no AI binding (local development and tests). In every one of those cases the Hub works exactly as it did without AI.
+ * Worker has no usable AI binding (unit tests have none; `wrangler dev --local` refuses every call, so the browser suites never reach
+ * a model). In every one of those cases the Hub works exactly as it did without AI.
  */
 
 /** The vision model chosen in the amendment, re-verified on the account's model list on 2026-10-07. */

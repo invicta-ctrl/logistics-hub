@@ -26,9 +26,12 @@ const KEEP_MS = 5 * 60_000;
 /** A scan still not here after this long is given up on, so a stalled connection ends in a message and a retry, not a spinner. */
 const SCAN_TIMEOUT_MS = 20_000;
 const scans = new Map<string, { at: number; url: Promise<string> }>();
-/** What a person reads when a scan cannot be opened: the Worker's own words, or a plain line for a network that did not answer. */
+/**
+ * What a person reads when a scan cannot be opened: the Worker's own words, or a plain line for a network that did not answer.
+ * The fetch's only signal is its timeout, so an abort means it timed out: Chromium names that TimeoutError, WebKit (Safari) AbortError.
+ */
 const scanFailure = (error: unknown): Error => error instanceof ApiError ? error
-  : error instanceof DOMException && error.name === "TimeoutError" ? new Error("This scan is taking too long to open. Check your connection and try again.")
+  : error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError") ? new Error("This scan is taking too long to open. Check your connection and try again.")
   : new Error("This scan could not be opened. Check your connection and try again.");
 export function scan(personId: string, mediaId: string, side: Side): Promise<string> {
   const key = `${personId}/${mediaId}/${side}`;

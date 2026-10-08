@@ -86,6 +86,33 @@ test.describe("Items by place", () => {
     await expect(page.locator("tbody tr").first()).toContainText("Location reported");
   });
 
+  test("New item pressed before the list has answered waits for it, so the form still offers every place", async ({ page }) => {
+    // The page draws at once; a slow first answer used to leave the form with no place to choose, even after it arrived.
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => { answer = resolve; });
+    await page.route("**/api/staff/inventory", async (route) => { await held; await route.fallback(); });
+    await page.goto("/staff/items");
+    await page.getByRole("button", { name: "New item" }).click();
+    answer();
+    const form = page.getByRole("dialog", { name: "Add an item" });
+    await expect(form.getByRole("combobox", { name: /^Place/ }).getByRole("option", { name: "Office › Storage Area › Cabinet 1 › Shelf 2" })).toHaveCount(1);
+    await expect(form.getByLabel("Name", { exact: true })).toBeFocused();
+  });
+
+  test("an item that opens while New item waits for the list keeps its sheet (review on PR 24)", async ({ page }) => {
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => { answer = resolve; });
+    await page.route("**/api/staff/inventory", async (route) => { await held; await route.fallback(); });
+    // The address names an item, which opens as soon as the list answers: the New item pressed before it is then stale.
+    await page.goto("/staff/items?item=ITM-0002");
+    await page.getByRole("button", { name: "New item" }).click();
+    answer();
+    await expect(page.getByRole("dialog", { name: "Sample Item 2" })).toBeVisible();
+    await page.waitForTimeout(500);
+    await expect(page.getByRole("dialog", { name: "Sample Item 2" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Add an item" })).toHaveCount(0);
+  });
+
   test("on a phone and a tablet the place sits under the item name and nothing scrolls sideways", async ({ page }) => {
     for (const width of [320, 390, 768]) {
       await page.setViewportSize({ width, height: 800 });

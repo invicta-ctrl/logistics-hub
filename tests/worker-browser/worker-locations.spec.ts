@@ -30,26 +30,30 @@ async function closeSheet(page: Page) {
   await expect(page.locator("dialog[open]")).toHaveCount(0);
 }
 
+/**
+ * The confirmation an action produces. Toasts already on screen are marked first, so one still fading from an earlier
+ * action never counts, however long the save takes (counting them raced the fade on a slow machine).
+ */
+async function expectNewToast(page: Page, text: string, act: () => Promise<void>) {
+  await page.locator("#toasts .toast").evaluateAll((toasts) => { for (const toast of toasts) toast.setAttribute("data-seen", ""); });
+  await act();
+  await expect(page.locator("#toasts .toast:not([data-seen])", { hasText: text })).toHaveCount(1);
+}
+
 /** Adds a place through the sheet; the sheet then stays open on the new place, ready for directions. */
 async function addPlace(page: Page, name: string, inside: string | null, options: { directions?: string; shared?: boolean } = {}) {
   await page.getByRole("button", { name: "New place" }).first().click();
   const sheet = page.getByRole("dialog", { name: "Add a place" });
   await sheet.getByLabel("Name", { exact: true }).fill(name);
   if (inside) await sheet.getByLabel("Inside", { exact: true }).selectOption({ label: inside });
-  const added = page.getByText("Place added.");
-  const before = await added.count();
-  await sheet.getByRole("button", { name: "Add place" }).click();
-  await expect(added).toHaveCount(before + 1);
+  await expectNewToast(page, "Place added.", () => sheet.getByRole("button", { name: "Add place" }).click());
   const edit = page.getByRole("dialog", { name });
   await expect(edit).toBeVisible();
   if (options.directions || options.shared) {
     if (options.directions) await edit.getByRole("textbox", { name: /^Directions/ }).fill(options.directions);
     if (options.shared) await edit.getByRole("radio", { name: /Shown in Self-Service/ }).check();
-    // The confirmation comes after the sheet is redrawn from the saved place; an earlier one may still be fading, so count them.
-    const saved = page.getByText("Changes saved.");
-    const earlier = await saved.count();
-    await edit.getByRole("button", { name: "Save changes" }).click();
-    await expect(saved).toHaveCount(earlier + 1);
+    // The confirmation comes after the sheet is redrawn from the saved place.
+    await expectNewToast(page, "Changes saved.", () => edit.getByRole("button", { name: "Save changes" }).click());
   }
   return edit;
 }
@@ -127,7 +131,10 @@ test.describe.serial("smart locations", () => {
     await page.getByLabel("Place", { exact: true }).selectOption("");
     await page.getByRole("searchbox", { name: "Search items" }).fill("cabinet 1");
     await expect(row).toBeVisible();
-    await page.getByRole("searchbox", { name: "Search items" }).fill("");
+    // The list draws 100 rows at a time and the stapler sorts after the first 100, so it is found by name. (Clearing the
+    // search instead only passed while the click beat the search's redraw.)
+    await page.getByRole("searchbox", { name: "Search items" }).fill("E2E Stapler");
+    await expect(page.locator("#inventory-count")).toHaveText(/^1 of \d+ items$/);
 
     // Where is it? shows the route, directions and the nearest picture; a report says nothing is changed and changes nothing.
     const before = await (await page.request.get("/api/staff/inventory")).json() as { items: Array<{ id: string; name: string; onHand: number; locationId: string | null }> };

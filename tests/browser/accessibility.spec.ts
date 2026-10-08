@@ -3,7 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 // The basics assistive technology and large text depend on, checked on every page a visitor can open without signing in.
 // Added in Part 6.5 from a rendered baseline; no accessibility dependency is used (decision D6).
 const ROUTES = ["/", "/lending", "/staff", "/self-service"];
-const WIDTHS = [320, 390, 768, 1366];
+// 305: what a 320 px window leaves beside a desktop scrollbar (WCAG reflow: 1280 px at 400% zoom on Windows). Playwright hides
+// scrollbars, so the page is given that width directly.
+const WIDTHS = [305, 320, 390, 768, 1366];
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/public/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify({ revision: 1, categories: [], items: [] }) }));
