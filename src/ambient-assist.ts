@@ -1,6 +1,7 @@
 import type { Account } from "./accounts";
 import { possibleDuplicates, type Known as DuplicateKnown } from "./duplicates";
 import { type Actor, InputError, audit } from "./inventory";
+import type { PhotoReading } from "./catalog-draft";
 import { key } from "./item-media";
 
 /*
@@ -167,8 +168,6 @@ function readPrinted(raw: unknown, limit: number, wordLimit: number): string | n
   return text;
 }
 
-/** What a catalogue photo shows, reduced to checkable text. Each part is null unless it passed its own checks. */
-export type PhotoReading = { name: string | null; brand: string | null; model: string | null; packaging: string | null };
 export function readPhotoReading(reply: unknown): PhotoReading {
   const answer = replyObject(reply);
   return { name: readPhotoName(reply), brand: readPrinted(answer?.brand, 40, 4), model: readPrinted(answer?.model, 40, 3), packaging: readPrinted(answer?.packaging, 24, 2) };

@@ -430,6 +430,19 @@ test.describe("photo suggestions (ambient assist)", () => {
     await expect(page.locator("#cat-model")).toHaveValue("HD-10N");
   });
 
+  test("a photo says what it cannot settle: the real count", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    await page.route("**/api/staff/catalogue/photo-name", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "Stapler", model: null }) }));
+    await begin(page, server);
+    await expect(page.locator("#cat-draft")).toBeEmpty();
+    await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.locator("#cat-draft")).toContainText("a photo cannot show the real amount");
+    // Changing the count makes it the person's: the reminder about the count goes away.
+    await page.locator("#cat-qty").fill("12");
+    await expect(page.locator("#cat-draft")).not.toContainText("a photo cannot show the real amount");
+  });
+
   test("an older retake finishing late does not hide Preparing while a newer one is still running", async ({ page }) => {
     const server = serve(page, { active: true });
     await server.ready;

@@ -1,5 +1,4 @@
 import { type Behaviour } from "./catalog-policy";
-import type { PhotoReading } from "./ambient-assist";
 import { type Basis, type Suggestion, type Suggestions } from "./catalogue-suggest";
 
 /*
@@ -28,6 +27,9 @@ export type DraftField<T> = {
   /** The other side of a conflict, shown but never filled. */
   other?: { value: T; reason: string };
 };
+
+/** What a catalogue photo shows, reduced to checkable text. Each part is null unless it passed its own checks (ambient-assist.ts). Defined here so the screen never imports server code. */
+export type PhotoReading = { name: string | null; brand: string | null; model: string | null; packaging: string | null };
 
 export const DRAFT_FIELDS = ["name", "aliases", "category", "behaviour", "unit", "quantity", "place", "stockArea", "brand", "model", "serial", "expiry", "description", "reorder"] as const;
 export type DraftFieldName = typeof DRAFT_FIELDS[number];

@@ -1,4 +1,5 @@
 import type { Who } from "./catalogue-offline";
+import { type DraftFieldName, composeDraft, needsAttention } from "./catalog-draft";
 import { suggest } from "./catalogue-suggest";
 import { type Detail, type Entry, type SessionRecord, type Snapshot, type SnapshotItem, drop, dropSession, durable, entries, keep, keepSession, sessions, setAccess, setSnapshot, snapshot } from "./catalogue-store";
 import { type PlaceList, bindNewPlace, newPlaceForm, placeList, placeOptions, refreshParents } from "./catalogue-places";
@@ -104,6 +105,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   let nameEdited = false;
   /** The same ownership rule for the Model field: a keystroke makes it the person's, and a retake or reset takes back only what the photo wrote. */
   let modelEdited = false;
+  /** The count is the person's once they change it; the starting 1 is only a default (amendment §4). */
+  let quantityEdited = false;
   let modelFromPhoto = false;
   onLeave(() => { photoRevision += 1; });
   const thumbs = new Map<string, string>();
@@ -139,6 +142,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         </fieldset>
         <div class="cat-qty field"><label for="cat-qty">How many are here?</label>
           <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One fewer">${icon("minus")}</button><input id="cat-qty" type="number" inputmode="numeric" min="0" max="100000" step="1" value="1" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div></div>
+        <p class="cat-suggest" id="cat-draft"></p>
         <div class="field-grid">
           <div class="field"><label for="cat-category">Category <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-category" list="cat-categories" maxlength="100" autocomplete="off" /><datalist id="cat-categories"></datalist><div class="cat-chips" id="cat-category-chips"></div></div>
           <div class="field"><label for="cat-unit">Counted in <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-unit" list="cat-units" maxlength="30" autocomplete="off" placeholder="piece, box, ream" /><datalist id="cat-units"></datalist><div class="cat-chips" id="cat-unit-chips"></div></div>
@@ -252,6 +256,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         if (matches.length < 3 && !matches.some((each) => each.id === match.id)) matches.push({ ...match, reason: "Looks like it in the photo" });
       }
     }
+    drawDraft(raw);
     const hint = $("#cat-name-hint");
     mount(hint, nameFromPhoto ? html`${icon("camera")}Suggested from the photo. Check it, or type over it.` : html`A temporary name is fine if you are not sure.`);
     hint.classList.toggle("cat-name-hint--photo", nameFromPhoto);
@@ -290,10 +295,31 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     $("#cat-save").firstChild!.textContent = matches.length && armed ? "Save as a separate item " : "Save & next ";
   };
 
+  /** What a photo cannot settle, said once in plain words: the CatalogDraft decides which fields still need a person. */
+  const DRAFT_LABELS: Partial<Record<DraftFieldName, string>> = { category: "the category", unit: "what it is counted in", behaviour: "how it is handed out" };
+  const drawDraft = (raw: ReturnType<typeof suggest>) => {
+    if (!photo) { mount($("#cat-draft"), html``); return; }
+    const edited = new Set<DraftFieldName>();
+    const typed: Partial<Record<DraftFieldName, string>> = {};
+    const own = (name: DraftFieldName, text: string) => { if (text) { edited.add(name); typed[name] = text; } };
+    if (nameEdited) { edited.add("name"); typed.name = value("cat-name"); }
+    if (modelEdited) own("model", value("cat-model"));
+    if (quantityEdited) own("quantity", field("cat-qty").value);
+    own("category", value("cat-category"));
+    own("unit", value("cat-unit"));
+    if (behaviour) own("behaviour", behaviour);
+    const draft = composeDraft({ revision: photoRevision, typed, edited, suggestions: raw, photo: { name: photoName, model: modelFromPhoto ? value("cat-model") : null }, session: {}, defaultQuantity: 1 });
+    const still = needsAttention(draft).filter((name) => DRAFT_LABELS[name]).map((name) => DRAFT_LABELS[name]!);
+    const count = draft.quantity.state === "needs-confirmation" ? "Count what is on the shelf; a photo cannot show the real amount." : "";
+    const choose = still.length ? `Still to choose: ${still.join(", ")}.` : "";
+    mount($("#cat-draft"), count || choose ? html`${icon("info")}${[count, choose].filter(Boolean).join(" ")}` : html``);
+  };
+
   let drawTimer = 0;
   const later = () => { window.clearTimeout(drawTimer); drawTimer = window.setTimeout(draw, 70); };
   onLeave(() => window.clearTimeout(drawTimer));
   form.addEventListener("input", () => { armed = false; later(); });
+  field("cat-qty").addEventListener("input", () => { quantityEdited = true; });
 
   const choose = (next: Behaviour) => { behaviour = next; armed = false; setMessage($("#cat-alert"), ""); $("#cat-behaviour").classList.remove("is-invalid"); draw(); };
   root.addEventListener("click", (event) => {
@@ -309,6 +335,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     else if (button.dataset.step) {
       const quantity = field("cat-qty");
       quantity.value = String(Math.min(100_000, Math.max(0, (Number(quantity.value) || 0) + Number(button.dataset.step))));
+      quantityEdited = true;
+      later();
     } else if (button.id === "cat-use-all") {
       if (suggestions.behaviour) behaviour = suggestions.behaviour.value;
       if (suggestions.category && !value("cat-category")) field("cat-category").value = suggestions.category.value;
@@ -403,6 +431,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     photoRevision += 1;
     nameEdited = false;
     modelEdited = false;
+    quantityEdited = false;
     modelFromPhoto = false;
     preparing = false;
     photo = null;
