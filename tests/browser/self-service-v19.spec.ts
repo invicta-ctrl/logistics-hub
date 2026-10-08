@@ -215,6 +215,56 @@ test("a remembered person shows as a card with Not you? Change, a different pers
   await expect(page.getByRole("dialog", { name: "Bottled Water" }).getByLabel("Your full name")).toHaveValue("");
 });
 
+for (const [action, item, title] of [["take", "ITM-0002", "Bottled Water"], ["use", "ITM-0003", "A4 Bond Paper"]] as const) {
+  test(`${action}: a full name, an eight-digit student ID number and a photo are each asked for, in that order, before the check`, async ({ page }) => {
+    await serve(page, small);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/self-service?do=${action}&item=${item}`);
+    const sheet = page.getByRole("dialog", { name: title });
+    const review = sheet.getByRole("button", { name: `Review and ${action}` });
+    await expect(sheet.getByLabel("Student ID number")).toHaveAttribute("pattern", "[0-9]{8}");
+    await expect(sheet.getByLabel("Student ID number")).toHaveAttribute("inputmode", "numeric");
+    await review.click();
+    await expect(sheet.getByRole("alert")).toContainText("Please enter your full name.");
+    await sheet.getByLabel("Your full name").fill("Maria Santos");
+    await review.click();
+    await expect(sheet.getByRole("alert")).toContainText("Please enter your student ID number.");
+    // Seven digits can be typed and are refused; a ninth digit cannot be typed at all (the field holds eight; the Worker refuses nine anyway).
+    await sheet.getByLabel("Student ID number").fill("1234567");
+    await review.click();
+    await expect(sheet.getByRole("alert")).toContainText("must be exactly 8 digits");
+    await sheet.getByLabel("Student ID number").fill("21000115");
+    await review.click();
+    await expect(sheet.getByRole("alert")).toContainText("Take a photo holding the item.");
+    // Nothing is saved until the check is confirmed.
+    expect(await page.evaluate(() => new Promise<number>((resolve) => { const open = indexedDB.open("logistics-hub"); open.onsuccess = () => { const count = open.result.transaction("events").objectStore("events").count(); count.onsuccess = () => resolve(count.result); }; }))).toBe(0);
+    await attachPhoto(sheet);
+    await review.click();
+    await expect(sheet.locator(".ss-summary")).toContainText("Maria Santos");
+    await expect(sheet.locator(".ss-summary")).toContainText("21000115");
+    await expect(sheet.getByRole("img", { name: "The photo you are sending" })).toBeVisible();
+  });
+}
+
+test("a phone that remembers an ID that is not eight digits asks again instead of trusting it", async ({ page }) => {
+  await serve(page, small);
+  await page.goto("/self-service");
+  await expect(page.locator(".ss-card").first()).toBeVisible();
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    const open = indexedDB.open("logistics-hub");
+    open.onsuccess = () => { const put = open.result.transaction("meta", "readwrite").objectStore("meta").put({ name: "Maria Santos", studentId: "21-0001" }, "profile"); put.onsuccess = () => resolve(); };
+  }));
+  await page.goto("/self-service?do=take&item=ITM-0002");
+  const sheet = page.getByRole("dialog", { name: "Bottled Water" });
+  // The name is kept for typing less; the old ID is not offered as if it were valid.
+  await expect(sheet.getByLabel("Student ID number")).toBeVisible();
+  await expect(sheet.getByLabel("Student ID number")).toHaveValue("");
+  await expect(sheet.getByLabel("Your full name")).toHaveValue("Maria Santos");
+  await attachPhoto(sheet);
+  await sheet.getByRole("button", { name: "Review and take" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("Please enter your student ID number.");
+});
+
 test("a USC-only item asks for a reason and the same identity and photo as every other action", async ({ page }) => {
   await serve(page, [{ ...small[0], audience: "USC_STAFF_ONLY" }]);
   await page.goto("/self-service?do=borrow&item=ITM-0001");

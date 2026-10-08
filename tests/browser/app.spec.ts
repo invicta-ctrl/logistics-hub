@@ -453,6 +453,24 @@ test("activity: a short window, such as a phone on its side, lets the page scrol
   await expect(page.locator(".activity-row").last()).toBeInViewport();
 });
 
+test("activity: on a phone the freshness line stays out of the way until the list stops updating", async ({ page }) => {
+  let online = true;
+  await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", mustChangePassword: false, recovery: null, selfServiceReviews: 0 }) }));
+  await page.route("**/api/staff/activity*", (route) => online ? route.fulfill({ contentType: "application/json", headers: { etag: '"a"' }, body: JSON.stringify({ events: [], nextCursor: null }) }) : route.abort("connectionrefused"));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/staff/activity");
+  await expect(page.getByText("No activity yet")).toBeVisible();
+  await expect(page.locator("#live-status")).toBeHidden();
+  online = false;
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(page.locator("#live-status")).toBeVisible();
+  await expect(page.locator("#live-status")).toHaveText("Offline, retrying");
+  // The title and the export button still share one line, and the page does not scroll sideways.
+  const [title, exportButton] = await Promise.all([page.getByRole("heading", { name: "Activity", level: 1 }).boundingBox(), page.getByRole("button", { name: "Export CSV" }).boundingBox()]);
+  expect(Math.abs((title!.y + title!.height / 2) - (exportButton!.y + exportButton!.height / 2))).toBeLessThan(24);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
 test("activity: without scroll observation the button still loads older entries, and the feed is a focusable region", async ({ page }) => {
   await page.addInitScript(() => { delete (window as { IntersectionObserver?: unknown }).IntersectionObserver; });
   const entry = (n: number) => ({ id: `phone:K${n}`, correlationId: `K${n}`, at: new Date(Date.UTC(2026, 9, 1, 2, 0) - n * 60_000).toISOString(), source: "PHONE", type: "PHONE_RETURN",

@@ -808,6 +808,34 @@ describe("Self-Service identity (record version 2)", () => {
     expect((await results(await a.sync([garbage])))[0]).toMatchObject({ outcome: "rejected" });
   });
 
+  it("holds a Return to the same rule: name, an exactly eight-digit Student ID and a photo, and keeps the ID it was given", async () => {
+    const scissors = await loanable("Scissors", 5);
+    const a = phone();
+    const borrow = a.current("BORROW", scissors);
+    expect((await results(await a.sync([borrow])))[0]!.outcome).toBe("accepted");
+    const giveBack = (fields: Record<string, unknown> = {}) => a.current("RETURN", scissors, { loanEventId: borrow.id, ...fields });
+    for (const studentId of ["1234567", "123456789", "12-345678", "ABC12345", "12A45678", "1234 5678"]) {
+      const sent = await results(await a.sync([giveBack({ person: { name: "Maria Santos", studentId } })]));
+      expect(sent[0], studentId).toMatchObject({ outcome: "rejected", message: "Student ID number must be exactly 8 digits." });
+    }
+    const noName = giveBack({ person: { studentId: "21000115" } });
+    const noId = giveBack({ person: { name: "Maria Santos" } });
+    const noPhoto = giveBack();
+    expect((await results(await a.sync([noName, noId]))).map((result) => result.outcome)).toEqual(["rejected", "rejected"]);
+    const withoutPhoto = (await results(await a.sync([noPhoto], { photoFor: [] })))[0]!;
+    expect(withoutPhoto.outcome).toBe("rejected");
+    expect(withoutPhoto.message).toMatch(/photo/i);
+    // Nothing was closed or stored by the refused ones.
+    expect(loan(borrow.id)!.status).toBe("OUT");
+    expect(onHand(scissors)).toBe(4);
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM self_service_events WHERE event_type = 'RETURN'").get()).toEqual({ n: 0 });
+    // A complete return is held for staff to check, with the ID and the photo it came with.
+    const good = giveBack();
+    expect((await results(await a.sync([good])))[0]!.outcome).toBe("review");
+    expect(stored(good.id)).toMatchObject({ student_id: "21000115", review: "RETURN_CHECK" });
+    expect(photos.has(stored(good.id)!.photo_key as string)).toBe(true);
+  });
+
   it("notes when the rule began with the first record saved under it, once, so Attention asks only about records after it", async () => {
     const water = await consumable("Bottled Water", 50);
     const a = phone();
