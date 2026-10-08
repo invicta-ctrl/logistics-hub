@@ -102,6 +102,9 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   let photoRevision = 0;
   /** A typed empty name is still an explicit staff choice until this capture is reset. */
   let nameEdited = false;
+  /** The same ownership rule for the Model field: a keystroke makes it the person's, and a retake or reset takes back only what the photo wrote. */
+  let modelEdited = false;
+  let modelFromPhoto = false;
   onLeave(() => { photoRevision += 1; });
   const thumbs = new Map<string, string>();
   const canAddPlace = who.mode === "signed-in";
@@ -345,6 +348,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     photoName = null;
     photoChecked = false;
     if (nameFromPhoto) { field("cat-name").value = ""; nameFromPhoto = false; }
+    if (modelFromPhoto) { field("cat-model").value = ""; modelFromPhoto = false; }
     if (prepared) photo = prepared;
     drawPhoto();
     draw();
@@ -354,7 +358,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   /** Never in the way: the person keeps typing while it runs, and a failure leaves the photo to be checked after it syncs. */
   const checkPhoto = async (taken: NonNullable<typeof photo>, revision: number) => {
     try {
-      const answer = await api<{ name: string | null }>("/api/staff/catalogue/photo-name", { method: "POST", body: taken.thumb, headers: { "content-type": "image/jpeg" }, ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(15_000) } : {}) });
+      const answer = await api<{ name: string | null; model?: string | null }>("/api/staff/catalogue/photo-name", { method: "POST", body: taken.thumb, headers: { "content-type": "image/jpeg" }, ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(15_000) } : {}) });
       if (revision !== photoRevision || photo !== taken) return;
       photoChecked = true;
       photoName = answer.name;
@@ -363,9 +367,12 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         nameFromPhoto = true;
         announce(`Suggested name from the photo: ${answer.name}.`);
       }
+      // The model printed on the item, only into an empty Model field the person has not touched; they check it like the name.
+      if (answer.name && answer.model && !modelEdited && !value("cat-model")) { field("cat-model").value = answer.model; modelFromPhoto = true; }
       draw();
     } catch { /* checked after sync instead */ }
   };
+  field("cat-model").addEventListener("input", () => { modelEdited = true; modelFromPhoto = false; });
   field("cat-name").addEventListener("input", () => { nameEdited = true; if (nameFromPhoto) { nameFromPhoto = false; draw(); } });
 
   /* ---------- Saving ---------- */
@@ -385,6 +392,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     form.reset();
     photoRevision += 1;
     nameEdited = false;
+    modelEdited = false;
+    modelFromPhoto = false;
     photo = null;
     photoName = null;
     photoChecked = false;

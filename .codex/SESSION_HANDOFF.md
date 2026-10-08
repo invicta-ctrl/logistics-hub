@@ -1,5 +1,16 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## V1.15 Final Pass — FP-C step 1: structured photo reading (Claude Cloud, 2026-10-08)
+
+~~~text
+STATUS: CHECKPOINT PUSHED (Codex confirmed stopped; Claude Cloud is the sole writer on slice/v1.15-final-pass-qbqr20).
+CHANGED: src/ambient-assist.ts (Gemma now asked for name, brand, model, packaging in one call; readPhotoReading keeps each only as short printed text, drops command-like or people words; reading returned only beside a name); src/worker.ts photo-name route returns name/brand/model/packaging; src/catalogue-capture.ts fills an empty, untouched Model field from the photo with the same ownership rule as the name (retake/reset undo only what the photo wrote).
+VERIFIED: vitest ambient-assist + catalog-draft (26); tsc app; browser catalogue.spec photo group (8) and full file earlier (45) with PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium.
+UNRUN: full suite; any live Gemma call (the prompt change is mocked only; max_tokens 40->90, PHOTO_RESERVE 6 unchanged and must be re-measured on the first approved live call).
+NOT YET: brand/packaging are returned but unused by the screen; composeDraft is not yet wired into draw().
+NEXT: wire composeDraft; FP-D adapters (Granite, Qwen, GLM) with the typed router on mocks; live smoke needs Earl's approval.
+~~~
+
 ## V1.15 Final Pass — FP-B CatalogDraft contract (Claude Cloud, 2026-10-08)
 
 ~~~text

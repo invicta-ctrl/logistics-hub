@@ -430,8 +430,8 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     const size = Number(request.headers.get("content-length"));
     if (!size) throw new InputError(411, "Missing content length.");
     if (size > MAX_PHOTO_BYTES) throw new InputError(413, "That photo is too large.");
-    const { name } = await photoName(env.DB, env.AI, new Uint8Array(await request.arrayBuffer()), "USER");
-    return json({ name }, 200, { "cache-control": "private, no-store" });
+    const { name, reading } = await photoName(env.DB, env.AI, new Uint8Array(await request.arrayBuffer()), "USER");
+    return json({ name, brand: reading?.brand ?? null, model: reading?.model ?? null, packaging: reading?.packaging ?? null }, 200, { "cache-control": "private, no-store" });
   }
   if (path === "/api/staff/catalogue/sessions" && method === "POST") { const started = await startSession(env.DB, account, await body()); return json(started, started.resumed ? 200 : 201); }
   const session = CATALOGUE_PATH.exec(path);

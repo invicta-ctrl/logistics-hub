@@ -408,6 +408,25 @@ test.describe("photo suggestions (ambient assist)", () => {
     await expect(page.locator("#cat-name-hint")).toHaveText("A temporary name is fine if you are not sure.");
   });
 
+  test("the model read from the photo fills an empty Model field, and typing there keeps it the person's", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    let requests = 0;
+    await page.route("**/api/staff/catalogue/photo-name", async (route) => {
+      requests += 1;
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "Stapler", brand: "Max", model: requests === 1 ? "HD-10" : "HD-50", packaging: null }) });
+    });
+    await begin(page, server);
+    await page.locator("#cat-more").evaluate((element) => element.setAttribute("open", ""));
+    await page.locator("#cat-file").setInputFiles({ name: "first.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.locator("#cat-model")).toHaveValue("HD-10");
+    await page.locator("#cat-model").fill("HD-10N");
+    await page.locator("#cat-file").setInputFiles({ name: "second.png", mimeType: "image/png", buffer: PNG });
+    await expect.poll(() => requests).toBe(2);
+    await expect(name(page)).toHaveValue("Stapler");
+    await expect(page.locator("#cat-model")).toHaveValue("HD-10N");
+  });
+
   test("a retake ignores an older photo response that finishes last", async ({ page }) => {
     const server = serve(page, { active: true });
     await server.ready;
