@@ -1,5 +1,14 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## V1.15 Final Pass merged, PARTIAL (Claude Cloud, 2026-10-08)
+
+~~~text
+STATUS: PR 29 merged to main as 51c2383 by Earl (15:25 UTC). No active writer. Branch slice/v1.15-final-pass-qbqr20 is merged; Earl deletes it. slice/v1.15-catalog-intelligence is already deleted.
+RECORD: docs/road-to-v2/releases/v1.15-final-pass.md (PARTIAL by Earl's decision; real-photo accuracy is gathered as cataloguing starts). No migration.
+OWNER ACTIONS: see the record and .codex/CURRENT.md (Images binding check, Picture cleanup switch and first real-photo check, Free-plan proof, branch delete).
+NEXT EXACT ACTION: slice/ux-data-surface (docs/specs/accepted/2026-10-08-data-surface-ui-amendment.md) when Earl says go; it needs a writer thread. Road to V3 stays read-only planning until its own gates pass.
+~~~
+
 ## Writer transfer Codex -> Claude Cloud (Earl, 2026-10-08 12:48 UTC)
 
 ~~~text

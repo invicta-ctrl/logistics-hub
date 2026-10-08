@@ -1,17 +1,17 @@
 # Current Work Pointer — Logistics Hub
 
-## V1.15 Final Pass — four-model Ambient Intelligence — PARTIAL, PR READY FOR EARL TO MERGE — 2026-10-08
+## V1.15 Final Pass — four-model Ambient Intelligence — MERGED (PARTIAL), owner actions open — 2026-10-08
 
-ORDER: Runs before Road to V3. Scope is additional V1.15 work only.
+ORDER: Runs before Road to V3. Scope was additional V1.15 work only (not V2.1, not V3).
 SPEC: docs/specs/accepted/road-to-v2/2026-10-08-v1.15-final-pass-ai-intelligence-amendment.md.
-BRANCH: slice/v1.15-final-pass-qbqr20 (Claude Cloud), from verified main 8068b0e, contains Codex's slice/v1.15-catalog-intelligence checkpoint 3176c74; one writer only.
-RECORD: `docs/road-to-v2/releases/v1.15-final-pass.md` (STATUS: PARTIAL, with each gap and its next step). Evidence: `docs/road-to-v2/evidence/v1.15-final-pass-provider-smoke-2026-10-08.md` and `...-role-benchmark-2026-10-08.md`.
-DONE: typed CatalogDraft in Add items; Gemma reads name, brand, model and packaging; Granite, Qwen and GLM adapters with budgets and breakers (live smokes, binding reports Neurons), all three in SHADOW_EVALUATION because none passes its gate and none abstains; Cloudflare Images cutout code with the owner's switch (off), a 500 a month cap and browser-side judging, one real `segment=foreground` call succeeded on a synthetic fixture.
-NOT PROVEN: Gemma accuracy on real photos (needs Earl's photo-set decision); a cutout of real catalogue photos and its Neuron cost; the Free plan beyond Earl's statement; active use of any text role.
-OWNER ACTIONS (in the record): merge the PR, turn "Picture cleanup" on in Administration > System when ready (the `IMAGES` binding is in `wrangler.jsonc`; Earl's dashboard binding `IMAGES_BINDING` is replaced by it on deploy), delete merged branches. `slice/v1.15-catalog-intelligence` only after Earl confirms Codex has no local-only work (Codex's Windows state is UNKNOWN; it may resume only through a formal writer-lock handoff).
-NEXT: after the merge, refresh the V2.0 handoff's AI line (done in this PR as a dated addendum, history not rewritten), then `slice/ux-data-surface`.
+STATE: PR 29 merged to `main` by Earl as `51c2383` (2026-10-08 15:25 UTC). STATUS stays PARTIAL by Earl's decision (14:44 UTC): real-photo accuracy is gathered as image cataloguing starts, not from a fixed 100-photo set. No migration. No active writer; the Final Pass branch is merged.
+RECORD: `docs/road-to-v2/releases/v1.15-final-pass.md` (each gap and its next step). Evidence: `docs/road-to-v2/evidence/v1.15-final-pass-provider-smoke-2026-10-08.md` and `...-role-benchmark-2026-10-08.md`.
+DONE: typed CatalogDraft in Add items; Gemma reads name, brand, model and packaging; Granite, Qwen and GLM adapters with budgets and breakers, all three in SHADOW_EVALUATION because none passes its gate and none abstains; Cloudflare Images cutout code behind the owner's switch (off), a 500 a month cap and browser-side judging.
+NOT PROVEN: Gemma accuracy on real photos; a cutout of real catalogue photos and its Neuron cost; the Free plan beyond Earl's statement; active use of any text role.
+OWNER ACTIONS (Earl): confirm the Bindings page shows one Images binding `IMAGES` and no `IMAGES_BINDING`; turn "Picture cleanup" on in Administration > System when ready, then clean one real 1280 px photo and read the Workers AI and Images usage pages before and after; add Free-plan proof to the evidence file; delete the merged branch `slice/v1.15-final-pass-qbqr20` (`slice/v1.15-catalog-intelligence` is already gone).
+NEXT: `slice/ux-data-surface` (Data-Surface UI amendment) starts only when Earl says go; then Road to V3 under its own gates.
 
-UI AMENDMENT (separate workstream): `docs/specs/accepted/2026-10-08-data-surface-ui-amendment.md` is ACCEPTED (Earl, 2026-10-08). It is scheduled as its own `slice/ux-data-surface` after the V1.15 Final Pass merges and before RTV3-01. Not started; it does not change Final Pass scope.
+UI AMENDMENT (separate workstream): `docs/specs/accepted/2026-10-08-data-surface-ui-amendment.md` is ACCEPTED (Earl, 2026-10-08). It is scheduled as its own `slice/ux-data-surface` after the V1.15 Final Pass (merged) and before RTV3-01. Waiting on Earl's go. Not started; it does not change Final Pass scope.
 
 ## Road to V3 — prepared on `main`, NOT STARTED — 2026-10-08
 
