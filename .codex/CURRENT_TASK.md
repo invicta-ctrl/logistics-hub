@@ -1,6 +1,6 @@
 # Current Bounded Task — none active (2026-10-08)
-STATUS: V2.0 COMPLETE. Road to V3 prepared on `main` (`docs/road-to-v3/`), NOT STARTED.
-NEXT ACTION: Earl accepts an RTV3-01 spec under `docs/specs/accepted/road-to-v3/`, then `start`. See `.codex/CURRENT.md` (top).
+STATUS: V2.0 COMPLETE. Queued, not started: first the V1.15 Final Pass (four-model Ambient Intelligence), then Road to V3 (`docs/road-to-v3/`).
+NEXT ACTION: Earl supplies the V1.15 Final-Pass amendment file and says `start`. See `.codex/CURRENT.md` (top).
 ---
 
 # Previous task — V1.15 V2 consolidation (Claude Cloud, sole integrator)

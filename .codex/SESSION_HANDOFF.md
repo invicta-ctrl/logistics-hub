@@ -20,8 +20,8 @@ PERFORMANCE NOTES: no runtime change.
 SECURITY / PRIVACY NOTES: Dependabot alert 12 (sharp) fixed by override; remove the override once wrangler's miniflare pins sharp 0.35.5 or later. Workers Builds pull-request deploy command is `npx wrangler deploy --dry-run` (Cloudflare setting, Earl's decision; rollback: set it back to `npx wrangler preview`).
 KNOWN LIMITATIONS: v2.0.md, "Handoff to Road to V3".
 BLOCKERS: none.
-NEXT EXACT ACTION: none for an agent. Earl accepts an RTV3-01 spec, then `start`.
-MERGE ORDER / DEPENDENCIES: RTV3-01 first; RTV3-02+ also need the accepted Product Direction Amendment.
+NEXT EXACT ACTION: none for an agent until Earl supplies LOGISTICS_HUB_V1_15_FINAL_PASS_AI_INTELLIGENCE_AMENDMENT_REVISED.md and says `start` for the V1.15 Final Pass (prompt and SHA-256 in .codex/CURRENT.md). Its first action: register the amendment under docs/specs/accepted/road-to-v2/, then one slice/<part>-<scope> branch from verified main.
+MERGE ORDER / DEPENDENCIES: V1.15 Final Pass first (it changes the AI baseline), then refresh the V2.0 handoff's AI line, then RTV3-01; RTV3-02+ also need the accepted Product Direction Amendment.
 ~~~
 
 ## Road to V2 — V1.15 V2 consolidation (COMPLETE AND MERGED TO MAIN `575a2f8`; V2.0 COMPLETE; Claude Cloud integrator, 2026-10-08)

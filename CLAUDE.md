@@ -32,6 +32,8 @@ Road to V2 is closed: V2.0 is complete (`docs/road-to-v2/releases/v2.0.md`) and 
 ## Road to V3 (prepared 2026-10-08, not started)
 The planning package is `docs/road-to-v3/` (milestones RTV3-01 to RTV3-09, then V3.0). Its boot sequence is `docs/road-to-v3/00_COORDINATOR_CARD.md`; repository authority outranks the package, and differences are recorded in its `08_RECONCILIATION_REGISTER.md`. Nothing may start until Earl accepts the milestone's spec under `docs/specs/accepted/road-to-v3/`; RTV3-02 and later also need the accepted Product Direction Amendment. Branches follow `AGENTS.md` (one slice branch at a time, merged and deleted when green). Current state: `.codex/CURRENT.md`.
 
+Before Road to V3: the V1.15 Final Pass (four-model Ambient Intelligence in Add items, Earl's accepted amendment, slices FP-A to FP-F) runs first. It is additional V1.15 work on `main`, not V2.1 and not V3; its authority and blocker are in `.codex/CURRENT.md`.
+
 ## Road-to-V2 branch runner
 When the current branch starts with `road-to-v2/v1.`, it is an owner-authorized Road-to-V2 implementation branch. The other Road-to-V2 branches were pre-created by Earl and are exempt from the old one-active-branch *count* rule. Never delete, prune or rewrite them. Only the branch currently being implemented has an active writer; the only other change any branch receives is forward propagation.
 
