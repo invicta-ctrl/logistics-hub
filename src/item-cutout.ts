@@ -1,3 +1,4 @@
+import type { Account } from "./accounts";
 import { type Actor, InputError, audit } from "./inventory";
 import { MEDIA_ID, expectedPhoto, key } from "./item-media";
 
@@ -6,6 +7,11 @@ import { MEDIA_ID, expectedPhoto, key } from "./item-media";
  * display photo (`segment=foreground`, BiRefNet) and the result is kept beside the original as a transparent PNG. The original is never
  * changed or removed by this; "Use original" simply deletes the cutout. Nothing here runs unless the Worker has an `IMAGES` binding,
  * and no more than CUTOUT_MONTHLY_CAP photos a month are sent, a small fraction of the Free plan's 5,000 unique transformations.
+ *
+ * The Worker only checks the shape of what comes back (a PNG with transparency, the photo's proportions, a sane size). Whether the cut is
+ * a real cutout is judged in the browser from the picture's alpha channel (src/cutout-share.ts): decoding a 1280 px PNG here took 50 to
+ * 120 ms of CPU against the 10 ms a Workers Free request gets, which would kill the request after the provider call was already counted.
+ * A cut the browser rejects is deleted at once ("Use original"), so the original stays the picture in use.
  */
 
 /** The part of the Cloudflare Images binding this file uses (https://developers.cloudflare.com/images/optimization/binding/). */
@@ -23,9 +29,34 @@ export const CUTOUT_BREAKER_MS = 10 * 60_000;
 /** A cutout of a 1600 px photo is bigger than the JPEG it came from; this is the most one may take. */
 const MAX_CUTOUT_BYTES = 4_000_000;
 const MAX_EDGE = 1600;
-/** The share of the picture that has to be removed, and the share that has to stay, for the cut to count as a real cutout. */
-const MIN_REMOVED = 0.03;
-const MIN_KEPT = 0.03;
+/** A cleaned picture keeps the photo's proportions (to within this share), because the Images call does not resize. */
+const ASPECT_TOLERANCE = 0.02;
+
+/** The owner's switch. Absent means off: a deployment that gains the `IMAGES` binding still cleans nothing until the owner turns this on. */
+export const CLEANUP_KEY = "picture_cleanup";
+export async function cleanupOn(db: D1Database): Promise<boolean> {
+  return await db.prepare("SELECT value FROM system_settings WHERE key = ?").bind(CLEANUP_KEY).first<string>("value") === "on";
+}
+
+export type CleanupStatus = { on: boolean; available: boolean; sentThisMonth: number; monthlyCap: number };
+export async function cleanupStatus(db: D1Database, images: ImagesRunner | undefined, now = Date.now()): Promise<CleanupStatus> {
+  return { on: await cleanupOn(db), available: Boolean(images), sentThisMonth: await cutoutsThisMonth(db, now), monthlyCap: CUTOUT_MONTHLY_CAP };
+}
+
+/** Owner only (checked by the caller). Setting it to its current value changes nothing and writes no audit entry. */
+export async function setCleanup(db: D1Database, actor: Account, input: unknown): Promise<{ on: boolean }> {
+  const on = (input as { on?: unknown } | null)?.on;
+  if (typeof on !== "boolean") throw new InputError(400, "Choose on or off.");
+  if (on !== await cleanupOn(db)) {
+    const now = new Date().toISOString();
+    await db.batch([
+      db.prepare(`INSERT INTO system_settings(key, value, updated_at, updated_by) VALUES(?1, ?2, ?3, ?4)
+        ON CONFLICT(key) DO UPDATE SET value = ?2, updated_at = ?3, updated_by = ?4`).bind(CLEANUP_KEY, on ? "on" : "off", now, actor.accountId),
+      audit(db, actor.accountId, "SETTING_CHANGED", "SETTING", CLEANUP_KEY, { setting: CLEANUP_KEY, from: on ? "off" : "on", to: on ? "on" : "off" }, true)
+    ]);
+  }
+  return { on: await cleanupOn(db) };
+}
 
 export const cutoutKey = (mediaId: string) => `items/${mediaId}/cutout`;
 const monthKey = (now: number) => `image_cutouts:${new Date(now).toISOString().slice(0, 7)}`;
@@ -54,92 +85,35 @@ export async function reserveCutout(db: D1Database, now: number): Promise<boolea
 const u32 = (bytes: Uint8Array, at: number) => ((bytes[at]! << 24) | (bytes[at + 1]! << 16) | (bytes[at + 2]! << 8) | bytes[at + 3]!) >>> 0;
 const SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
-async function inflate(parts: Uint8Array[], expected: number): Promise<Uint8Array> {
-  const stream = new Blob(parts as BlobPart[]).stream().pipeThrough(new DecompressionStream("deflate"));
-  const reader = stream.getReader();
-  const out = new Uint8Array(expected);
-  let used = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (used + value.length > expected) { await reader.cancel(); throw new Error("too much picture data"); }
-    out.set(value, used);
-    used += value.length;
-  }
-  if (used !== expected) throw new Error("picture data is cut short");
-  return out;
-}
-
-export type CutoutCheck = { width: number; height: number; removed: number; kept: number };
-
 /**
- * Reads a PNG's own bytes and says what the cut did: an 8-bit RGBA picture, not interlaced, of a sane size, in which part of the picture
- * is fully transparent (the removed background) and part is opaque (the kept subject). A picture with no transparency is the original
- * passed through, one that is nearly all transparent has lost the product, and either is refused instead of replacing the photo.
+ * The shape of a cleaned picture, read from the chunk headers alone (no pixel is decoded, so it costs next to nothing): a PNG of 8-bit
+ * RGBA, not interlaced, no larger than the photo's own limit, with the photo's proportions, carrying picture data and an end marker.
  */
-export async function inspectCutout(bytes: Uint8Array): Promise<CutoutCheck> {
+export function checkCutoutShape(bytes: Uint8Array, source: { width: number; height: number }): { width: number; height: number } {
   const refuse = (why: string): never => { throw new InputError(502, `The cleaned picture was not used: ${why}.`); };
   if (bytes.length > MAX_CUTOUT_BYTES) refuse("it is too large");
   if (bytes.length < 33 || SIGNATURE.some((value, index) => bytes[index] !== value)) refuse("it is not a PNG");
   let width = 0;
   let height = 0;
-  const data: Uint8Array[] = [];
+  let data = false;
   let ended = false;
   for (let at = 8; at + 12 <= bytes.length && !ended;) {
     const length = u32(bytes, at);
     const type = String.fromCharCode(...bytes.subarray(at + 4, at + 8));
     if (at + 12 + length > bytes.length) refuse("it is cut short");
-    const body = bytes.subarray(at + 8, at + 8 + length);
     if (type === "IHDR") {
       if (at !== 8 || length !== 13) refuse("it is not a valid PNG");
-      width = u32(body, 0);
-      height = u32(body, 4);
-      if (body[8] !== 8 || body[9] !== 6 || body[12] !== 0) refuse("it is not an ordinary 8-bit PNG with transparency");
-    } else if (type === "IDAT") data.push(body);
+      width = u32(bytes, at + 8);
+      height = u32(bytes, at + 12);
+      if (bytes[at + 16] !== 8 || bytes[at + 17] !== 6 || bytes[at + 20] !== 0) refuse("it is not an ordinary 8-bit PNG with transparency");
+    } else if (type === "IDAT") data = true;
     else if (type === "IEND") ended = true;
     at += 12 + length;
   }
-  if (!ended || !width || !height || !data.length) refuse("it is not a valid PNG");
+  if (!ended || !data || !width || !height) refuse("it is not a valid PNG");
   if (Math.max(width, height) > MAX_EDGE) refuse("it is larger than the photo it came from");
-  const stride = width * 4;
-  let raw: Uint8Array;
-  try { raw = await inflate(data, (stride + 1) * height); } catch { return refuse("its picture data is not valid"); }
-  let previous = new Uint8Array(stride);
-  let current = new Uint8Array(stride);
-  let clear = 0;
-  let solid = 0;
-  for (let row = 0; row < height; row += 1) {
-    const filter = raw[row * (stride + 1)]!;
-    const line = raw.subarray(row * (stride + 1) + 1, (row + 1) * (stride + 1));
-    if (filter > 4) refuse("its picture data is not valid");
-    for (let index = 0; index < stride; index += 1) {
-      const left = index >= 4 ? current[index - 4]! : 0;
-      const up = previous[index]!;
-      const upLeft = index >= 4 ? previous[index - 4]! : 0;
-      let predicted = 0;
-      if (filter === 1) predicted = left;
-      else if (filter === 2) predicted = up;
-      else if (filter === 3) predicted = (left + up) >> 1;
-      else if (filter === 4) {
-        const estimate = left + up - upLeft;
-        const toLeft = Math.abs(estimate - left);
-        const toUp = Math.abs(estimate - up);
-        const toUpLeft = Math.abs(estimate - upLeft);
-        predicted = toLeft <= toUp && toLeft <= toUpLeft ? left : toUp <= toUpLeft ? up : upLeft;
-      }
-      current[index] = (line[index]! + predicted) & 255;
-    }
-    for (let index = 3; index < stride; index += 4) {
-      if (current[index]! < 16) clear += 1;
-      else if (current[index]! > 240) solid += 1;
-    }
-    [previous, current] = [current, previous];
-  }
-  const total = width * height;
-  const result = { width, height, removed: clear / total, kept: solid / total };
-  if (result.removed < MIN_REMOVED) refuse("no background was found to remove");
-  if (result.kept < MIN_KEPT) refuse("too little of the item was kept");
-  return result;
+  if (Math.abs(width / height - source.width / source.height) > ASPECT_TOLERANCE * (source.width / source.height)) refuse("it does not have the photo's proportions");
+  return { width, height };
 }
 
 /**
@@ -150,13 +124,17 @@ export async function inspectCutout(bytes: Uint8Array): Promise<CutoutCheck> {
 export async function makeCutout(db: D1Database, bucket: R2Bucket, images: ImagesRunner | undefined, actor: Actor, itemId: string, expected: unknown, now = Date.now()) {
   const mediaId = expectedPhoto(expected);
   if (!mediaId) throw new InputError(400, "Reload the item and try again.");
-  if (!images) throw new InputError(503, "Picture cleanup is not switched on.");
-  const current = await db.prepare("SELECT media_id AS mediaId FROM item_media WHERE item_id = ?").bind(itemId).first<{ mediaId: string }>();
+  if (!images || !await cleanupOn(db)) throw new InputError(503, "Picture cleanup is turned off.");
+  const current = await db.prepare("SELECT media_id AS mediaId, width, height FROM item_media WHERE item_id = ?").bind(itemId).first<{ mediaId: string; width: number; height: number }>();
   if (!current || current.mediaId !== mediaId) throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again.");
+  // Already cleaned (a second tap, or another tab): nothing is sent and no allowance is spent.
+  if (await hasCutout(bucket, mediaId)) return { cutout: true };
   if (now < breaker.openUntil) throw new InputError(503, "Picture cleanup is resting after errors. Try again in a few minutes.");
   const source = await bucket.get(key(mediaId, "display"));
   if (!source) throw new InputError(404, "Photo not found.");
   if (!await reserveCutout(db, now)) throw new InputError(503, "This month's picture cleanup allowance is used. The original photo is still in use.");
+  // The timeout below stops waiting, not the provider: a call that finishes late may still count as a transformation, which is why the
+  // reservation above is never given back.
   const fail = (): never => {
     breaker.failures += 1;
     if (breaker.failures >= CUTOUT_BREAKER_FAILURES) breaker.openUntil = now + CUTOUT_BREAKER_MS;
@@ -175,15 +153,15 @@ export async function makeCutout(db: D1Database, bucket: R2Bucket, images: Image
     console.error("cutout_failed", { mediaId, error: error instanceof Error ? error.message : "error" });
     return fail();
   }
-  // A bad result is the provider's fault, not the person's: it counts toward the breaker like any other failed call.
-  const check = await inspectCutout(bytes).catch((error: unknown) => { console.error("cutout_rejected", { mediaId, why: error instanceof InputError ? error.message : "error" }); return fail(); });
+  // A malformed result is the provider's fault, not the person's: it counts toward the breaker like any other failed call.
+  try { checkCutoutShape(bytes, current); } catch (error) { console.error("cutout_rejected", { mediaId, why: error instanceof InputError ? error.message : "error" }); return fail(); }
   breaker.failures = 0;
   await bucket.put(cutoutKey(mediaId), bytes, { httpMetadata: { contentType: "image/png" } });
   // The photo may have been replaced while the provider worked: keep the cutout only if it is still the item's photo.
   const still = await db.prepare("SELECT 1 FROM item_media WHERE item_id = ? AND media_id = ?").bind(itemId, mediaId).first();
   if (!still) { await bucket.delete(cutoutKey(mediaId)).catch(() => undefined); throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again."); }
-  await db.batch([audit(db, actor.accountId, "ITEM_CUTOUT_ADDED", "ITEM", itemId, { mediaId, removed: Math.round(check.removed * 100), kept: Math.round(check.kept * 100) })]);
-  return { cutout: true, removed: check.removed, kept: check.kept };
+  await db.batch([audit(db, actor.accountId, "ITEM_CUTOUT_ADDED", "ITEM", itemId, { mediaId })]);
+  return { cutout: true };
 }
 
 /** Goes back to the original photo: deletes the cleaned picture only. Safe to repeat. */
@@ -204,10 +182,13 @@ export async function hasCutout(bucket: R2Bucket, mediaId: string): Promise<bool
   return MEDIA_ID.test(mediaId) && Boolean(await bucket.head(cutoutKey(mediaId)).catch(() => null));
 }
 
-/** Streams the cleaned picture to a signed-in staff member, with the same private caching as the photo itself. */
+/**
+ * Streams the cleaned picture to a signed-in staff member. Unlike the photo (whose id changes with every replacement), a cleaned picture
+ * can be made again under the same id after "Use original", so a browser must ask again each time rather than keep a day-old copy.
+ */
 export async function cutoutPicture(bucket: R2Bucket, mediaId: string): Promise<Response> {
   if (!MEDIA_ID.test(mediaId)) throw new InputError(404, "Not found.");
   const object = await bucket.get(cutoutKey(mediaId));
   if (!object) throw new InputError(404, "Not found.");
-  return new Response(object.body, { headers: { "content-type": "image/png", "cache-control": "private, max-age=86400" } });
+  return new Response(object.body, { headers: { "content-type": "image/png", "cache-control": "private, no-cache" } });
 }

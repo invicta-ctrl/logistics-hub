@@ -1,7 +1,8 @@
 import { deflateSync } from "node:zlib";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/worker";
-import { CUTOUT_MONTHLY_CAP, type ImagesRunner, cutoutsThisMonth, inspectCutout, resetCutoutBreaker } from "../src/item-cutout";
+import { CUTOUT_MONTHLY_CAP, type ImagesRunner, checkCutoutShape, cleanupOn, cleanupStatus, cutoutsThisMonth, resetCutoutBreaker, setCleanup } from "../src/item-cutout";
+import { cutoutProblem, cutoutShares } from "../src/cutout-share";
 import { hashPassword } from "../src/session";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
 import { jpeg } from "./jpeg";
@@ -57,35 +58,48 @@ function png(width: number, height: number, alpha: (x: number, y: number) => num
 const subject = (x: number) => (x < 16 ? 255 : 0);
 const GOOD = png(40, 30, subject);
 
-describe("inspectCutout", () => {
-  it("reads the transparent share through every PNG row filter", async () => {
-    for (const filter of [0, 1, 2, 3, 4]) {
-      const check = await inspectCutout(png(40, 30, subject, { filter }));
-      expect({ filter, removed: check.removed, kept: check.kept }).toEqual({ filter, removed: 0.6, kept: 0.4 });
-    }
+const SOURCE = { width: 40, height: 30 };
+
+describe("checkCutoutShape", () => {
+  it("accepts an 8-bit RGBA PNG with the photo's proportions, whatever its row filter", () => {
+    for (const filter of [0, 1, 2, 3, 4]) expect(checkCutoutShape(png(40, 30, subject, { filter }), SOURCE)).toEqual({ width: 40, height: 30 });
+    // A cutout the same shape at another size (the provider may scale) is fine.
+    expect(checkCutoutShape(png(80, 60, subject), SOURCE)).toEqual({ width: 80, height: 60 });
   });
 
-  it("refuses a picture that is not a cutout", async () => {
+  it("reads only the chunk headers, so it is cheap enough for a Workers Free request", () => {
+    const big = png(1280, 960, subject);
+    const started = performance.now();
+    for (let run = 0; run < 20; run += 1) checkCutoutShape(big, { width: 1280, height: 960 });
+    // A pixel decode of this picture took 50 to 120 ms; the header walk is far under one.
+    expect((performance.now() - started) / 20).toBeLessThan(1);
+  });
+
+  it("refuses what is not a usable cleaned picture", () => {
     const cases: Array<[string, Uint8Array, RegExp]> = [
-      ["no background removed", png(40, 30, () => 255), /no background/],
-      ["the item lost", png(40, 30, () => 0), /too little/],
       ["no transparency channel", png(40, 30, subject, { colour: 2 }), /8-bit PNG with transparency/],
       ["16-bit", png(40, 30, subject, { depth: 16 }), /8-bit PNG with transparency/],
       ["not a PNG", Uint8Array.from(jpeg()), /not a PNG/],
       ["cut short", GOOD.subarray(0, GOOD.length - 20), /cut short|not a valid/],
-      ["larger than the photo it came from", png(1601, 2, subject), /larger/]
+      ["no end marker", GOOD.subarray(0, GOOD.length - 12), /not a valid/],
+      ["larger than the photo it came from", png(1601, 2, subject), /larger/],
+      ["another shape", png(30, 40, subject), /proportions/],
+      ["too many bytes", new Uint8Array(4_000_001), /too large/]
     ];
-    for (const [name, bytes, why] of cases) await expect(inspectCutout(bytes), name).rejects.toThrow(why);
+    for (const [name, bytes, why] of cases) expect(() => checkCutoutShape(bytes, SOURCE), name).toThrow(why);
   });
+});
 
-  it("refuses data that inflates to more or less than its header says", async () => {
-    // IHDR height sits at byte 20: claim 30 rows but carry 31, then 32 rows but carry 31.
-    for (const claimed of [30, 32]) {
-      const forged = Uint8Array.from(png(40, 31, subject));
-      new DataView(forged.buffer).setUint32(20, claimed);
-      await expect(inspectCutout(forged), `${claimed}`).rejects.toThrow(/picture data/);
-    }
-    await expect(inspectCutout(png(40, 30, subject).subarray(0, 33))).rejects.toThrow();
+describe("cutoutShares", () => {
+  const pixels = (alphas: number[]) => Uint8ClampedArray.from(alphas.flatMap((alpha) => [10, 20, 30, alpha]));
+  it("counts removed and kept pixels, and leaves the soft edge as neither", () => {
+    expect(cutoutShares(pixels([0, 0, 0, 255, 255, 128, 15, 241]))).toEqual({ removed: 4 / 8, kept: 3 / 8 });
+    expect(cutoutShares([])).toEqual({ removed: 0, kept: 0 });
+  });
+  it("says why a cut is not a cutout", () => {
+    expect(cutoutProblem(cutoutShares(pixels(Array(100).fill(255))))).toMatch(/No background/);
+    expect(cutoutProblem(cutoutShares(pixels(Array(100).fill(0))))).toMatch(/Too little/);
+    expect(cutoutProblem(cutoutShares(pixels([...Array(60).fill(0), ...Array(40).fill(255)])))).toBeNull();
   });
 });
 
@@ -110,6 +124,8 @@ beforeEach(async () => {
   cookie = login.headers.get("set-cookie")!.split(";")[0]!;
 });
 
+/** The owner's switch, which is off until turned on. */
+const turnOn = () => sqlite.prepare("INSERT OR REPLACE INTO system_settings(key, value, updated_at) VALUES('picture_cleanup', 'on', '2026-10-08')").run();
 const addPhoto = async () => {
   const form = new FormData();
   form.set("display", new File([jpeg({ width: 40, height: 30 }) as BlobPart], "display.jpg", { type: "image/jpeg" }));
@@ -123,7 +139,36 @@ const detail = async () => ((await (await staff(`/api/staff/items/${ITEM}`)).jso
 const actions = () => (sqlite.prepare("SELECT action FROM audit_log WHERE action LIKE 'ITEM_CUTOUT_%' ORDER BY rowid").all() as Array<{ action: string }>).map((entry) => entry.action);
 
 describe("picture cleanup", () => {
+  it("is off until the owner turns it on, even with the binding present", async () => {
+    const { asked, runner } = images(ok());
+    env.IMAGES = runner;
+    const id = await addPhoto();
+    expect(await detail()).toMatchObject({ cutout: false, cleanable: false });
+    const response = await cut(id);
+    expect(response.status).toBe(503);
+    expect(((await response.json()) as { error: string }).error).toMatch(/turned off/);
+    expect(asked).toEqual([]);
+    expect(await cutoutsThisMonth(env.DB)).toBe(0);
+    turnOn();
+    expect(await detail()).toMatchObject({ cleanable: true });
+  });
+
+  it("is switched by the owner alone, audited, and says how many were sent this month", async () => {
+    expect(await cleanupOn(env.DB)).toBe(false);
+    expect((await staff("/api/staff/admin/cleanup", "PATCH", { on: true })).status).toBe(403);
+    const owner = { accountId: "ACC-1" } as Parameters<typeof setCleanup>[1];
+    await expect(setCleanup(env.DB, owner, { on: "yes" })).rejects.toThrow(/on or off/);
+    expect(await setCleanup(env.DB, owner, { on: true })).toEqual({ on: true });
+    await setCleanup(env.DB, owner, { on: true });
+    expect(await cleanupStatus(env.DB, undefined)).toEqual({ on: true, available: false, sentThisMonth: 0, monthlyCap: CUTOUT_MONTHLY_CAP });
+    expect(await cleanupStatus(env.DB, images(ok()).runner)).toMatchObject({ available: true });
+    await setCleanup(env.DB, owner, { on: false });
+    const changes = sqlite.prepare("SELECT details_json AS details FROM audit_log WHERE action = 'SETTING_CHANGED' AND entity_id = 'picture_cleanup' ORDER BY rowid").all() as Array<{ details: string }>;
+    expect(changes.map((change) => JSON.parse(change.details).to)).toEqual(["on", "off"]);
+  });
+
   it("is not offered, and changes nothing, without the Images binding", async () => {
+    turnOn();
     const id = await addPhoto();
     expect(await detail()).toMatchObject({ id, cutout: false, cleanable: false });
     const response = await cut(id);
@@ -135,12 +180,13 @@ describe("picture cleanup", () => {
   it("cuts the foreground, keeps the original, serves a PNG and audits it", async () => {
     const { asked, runner } = images(ok());
     env.IMAGES = runner;
+    turnOn();
     const id = await addPhoto();
     const before = [...media.objects.keys()].sort();
     expect(await detail()).toMatchObject({ cutout: false, cleanable: true });
     const response = await cut(id);
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ cutout: true, removed: 0.6, kept: 0.4 });
+    expect(await response.json()).toEqual({ cutout: true });
     expect(asked).toContainEqual({ segment: "foreground" });
     expect(asked).toContainEqual({ format: "image/png" });
     expect([...media.objects.keys()].sort()).toEqual([...before, `items/${id}/cutout`].sort());
@@ -148,13 +194,39 @@ describe("picture cleanup", () => {
     expect(await detail()).toMatchObject({ cutout: true });
     const served = await staff(`/api/staff/media/${id}/cutout`);
     expect(served.headers.get("content-type")).toBe("image/png");
+    // Made again under the same id after "Use original", so a browser must ask each time.
+    expect(served.headers.get("cache-control")).toBe("private, no-cache");
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(GOOD);
     expect(actions()).toEqual(["ITEM_CUTOUT_ADDED"]);
     expect(await cutoutsThisMonth(env.DB)).toBe(1);
   });
 
+  it("does not send a photo that is already cleaned, so a second tap spends nothing", async () => {
+    const { asked, runner } = images(ok());
+    env.IMAGES = runner;
+    turnOn();
+    const id = await addPhoto();
+    await cut(id);
+    const calls = asked.length;
+    const again = await cut(id);
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({ cutout: true });
+    expect(asked).toHaveLength(calls);
+    expect(await cutoutsThisMonth(env.DB)).toBe(1);
+    expect(actions()).toEqual(["ITEM_CUTOUT_ADDED"]);
+  });
+
+  it("refuses a result with the wrong proportions without storing it", async () => {
+    env.IMAGES = images(() => new Response(png(30, 40, subject) as BodyInit)).runner;
+    turnOn();
+    const id = await addPhoto();
+    expect((await cut(id)).status).toBe(503);
+    expect(media.objects.has(`items/${id}/cutout`)).toBe(false);
+  });
+
   it("needs a signed-in staff member and the photo the client was looking at", async () => {
     env.IMAGES = images(ok()).runner;
+    turnOn();
     const id = await addPhoto();
     expect((await call(`/api/staff/media/${id}/cutout`, { headers: { origin } })).status).toBe(401);
     expect((await call(`/api/staff/items/${ITEM}/cutout`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ expected: id }) })).status).toBe(401);
@@ -165,6 +237,7 @@ describe("picture cleanup", () => {
 
   it("goes back to the original by deleting only the cutout", async () => {
     env.IMAGES = images(ok()).runner;
+    turnOn();
     const id = await addPhoto();
     await cut(id);
     expect((await uncut(id)).status).toBe(200);
@@ -176,6 +249,7 @@ describe("picture cleanup", () => {
 
   it("removes the cutout with its photo, and a replacement photo starts without one", async () => {
     env.IMAGES = images(ok()).runner;
+    turnOn();
     const id = await addPhoto();
     await cut(id);
     const form = new FormData();
@@ -193,6 +267,7 @@ describe("picture cleanup", () => {
   it("stops at the monthly cap and never calls the provider past it", async () => {
     const { asked, runner } = images(ok());
     env.IMAGES = runner;
+    turnOn();
     const id = await addPhoto();
     sqlite.prepare("INSERT INTO system_settings(key, value, updated_at) VALUES(?, ?, '2026-10-01')").run(`image_cutouts:${new Date().toISOString().slice(0, 7)}`, String(CUTOUT_MONTHLY_CAP));
     const response = await cut(id);
@@ -203,9 +278,10 @@ describe("picture cleanup", () => {
   });
 
   it("keeps the original when the provider fails or returns something that is not a cutout, and rests after repeated failures", async () => {
-    const answers: Array<() => Response> = [() => new Response("no", { status: 500 }), () => new Response(png(40, 30, () => 255) as BodyInit), () => { throw new Error("down"); }, ok()];
+    const answers: Array<() => Response> = [() => new Response("no", { status: 500 }), () => new Response(png(40, 30, subject, { colour: 2 }) as BodyInit), () => { throw new Error("down"); }, ok()];
     const { runner } = images(() => answers.shift()!());
     env.IMAGES = runner;
+    turnOn();
     const id = await addPhoto();
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const response = await cut(id);

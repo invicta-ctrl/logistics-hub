@@ -8,7 +8,7 @@ import { aliasItems, catalogCoverage } from "./catalog-admin";
 import { insights, resumable } from "./home";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
-import { type ImagesRunner, cutoutPicture, hasCutout, makeCutout, removeCutout } from "./item-cutout";
+import { type ImagesRunner, cleanupOn, cleanupStatus, cutoutPicture, hasCutout, makeCutout, removeCutout, setCleanup } from "./item-cutout";
 import { dropObjects, itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
 import { linkItems, linksOf, unlinkItems } from "./item-relations";
 import { checkKit, createKit, createTemplate, kitDetail, kitList, kitsOfItem, recentlyCatalogued, templateDetail, updateKit, updateTemplate } from "./kits";
@@ -348,8 +348,12 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     if (path === "/api/staff/admin/activity" && method === "GET") return json(await securityActivity(env.DB));
     if (path === "/api/staff/admin/self-service" && method === "PATCH") return json(await setSelfService(env.DB, account, await body()));
     if (path === "/api/staff/admin/system" && method === "GET") {
-      const [system, assist] = await Promise.all([systemStatus(env, url.origin), assistStatus(env.DB, env.AI)]);
-      return json({ ...system, assist }, 200, { "cache-control": "private, no-store" });
+      const [system, assist, cleanup] = await Promise.all([systemStatus(env, url.origin), assistStatus(env.DB, env.AI), cleanupStatus(env.DB, env.IMAGES)]);
+      return json({ ...system, assist, cleanup }, 200, { "cache-control": "private, no-store" });
+    }
+    if (path === "/api/staff/admin/cleanup" && method === "PATCH") {
+      if (account.role !== "OWNER") return json({ error: "Picture cleanup is turned on or off by the owner." }, 403);
+      return json(await setCleanup(env.DB, account, await body()));
     }
     if (path === "/api/staff/admin/assist" && method === "PATCH") {
       if (account.role !== "OWNER") return json({ error: "Photo suggestions are turned on or off by the owner." }, 403);
@@ -506,7 +510,8 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     const [detail, freshness, kits, links] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!), linksOf(env.DB, match[1]!)]);
     // Whether this photo has a cleaned picture, and whether cleaning is offered at all (the Images binding is present).
     const cleaned = detail.item.photo ? await hasCutout(env.CATALOG_MEDIA, detail.item.photo.id) : false;
-    return json({ ...detail, item: { ...detail.item, photo: detail.item.photo ? { ...detail.item.photo, cutout: cleaned, cleanable: Boolean(env.IMAGES) } : null }, freshness, kits, links });
+    const cleanable = Boolean(env.IMAGES) && await cleanupOn(env.DB);
+    return json({ ...detail, item: { ...detail.item, photo: detail.item.photo ? { ...detail.item.photo, cutout: cleaned, cleanable } : null }, freshness, kits, links });
   }
   if (match && !match[2] && method === "PATCH") {
     const input = await body() as Record<string, unknown> | null;
@@ -527,7 +532,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     // first photo are saved. The save above has already answered; this cannot change it.
     // Then up to two earlier captures whose check could not run yet (AI was off, out of allowance or failing) get theirs.
     if (form.get("recheck") === "1" && form.get("expected") === "") await afterwards(recheckCapturedPhoto(env.DB, env.AI, env.CATALOG_MEDIA, match[1]!).then(() => recheckWaiting(env.DB, env.AI, env.CATALOG_MEDIA)));
-    return json({ photo: { ...saved.photo, cleanable: Boolean(env.IMAGES) } });
+    return json({ photo: { ...saved.photo, cleanable: Boolean(env.IMAGES) && await cleanupOn(env.DB) } });
   }
   if (match?.[2] === "/photo" && method === "DELETE") return json(await removeItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
   if (match?.[2] === "/cutout" && method === "POST") return json(await makeCutout(env.DB, env.CATALOG_MEDIA, env.IMAGES, account, match[1]!, (await body() as { expected?: unknown } | null)?.expected));
