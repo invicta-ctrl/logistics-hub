@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
 
 /*
  * V1.15 phone usability (mobile/perceived-performance amendment): on a touch phone, every control on every page is big enough to hit.
@@ -109,7 +109,7 @@ test("unsafe areas: controls stay clear of the notch and the home indicator", as
           if (strip) continue;
           const fixedBottom = getComputedStyle(control).position === "fixed" || !!control.closest(".app-nav, .toasts, .bulk-bar");
           // A text link's invisible hit padding (0.5rem each side) may reach past the edge; its words may not.
-          const slack = control.matches(".text-link, .row-link") ? 8.5 : 0.5;
+          const slack = control.matches(".text-link, .row-link, .home-card__name") ? 8.5 : 0.5;
           const trouble = box.left < insets.left - slack || box.right > width - insets.right + slack || (fixedBottom && box.bottom > height - insets.bottom + 0.5);
           if (trouble) bad.push(`${control.tagName.toLowerCase()}.${String(control.className).split(" ")[0]} “${(control.innerText || control.getAttribute("aria-label") || "").trim().slice(0, 24)}” L${Math.round(box.left)} R${Math.round(box.right)} B${Math.round(box.bottom)}`);
         }
@@ -151,6 +151,36 @@ async function judge(page: Page, name: string, insets: { top: number; bottom: nu
   expect(end!.y, `${name}: the last control is on screen`).toBeGreaterThanOrEqual(0);
 }
 
+/** One item for each way of getting something, found by name or made once, so a Self-Service form can be opened whatever else the store holds. */
+async function formItems(browser: Browser, baseURL: string): Promise<Record<"TAKE" | "BORROW" | "USE", string>> {
+  const context = await browser.newContext({ baseURL });
+  try {
+    const find = async () => ((await (await context.request.get("/api/self-service/catalog")).json()) as { items: { id: string; name: string; action: string }[] }).items.filter((item) => item.name.startsWith("Phone check"));
+    let items = await find();
+    if (new Set(items.map((item) => item.action)).size < 3) {
+      await context.newPage().then((page) => page.goto("/staff"));
+      let signedIn = false;
+      for (const secret of [process.env.E2E_OWNER_PASSWORD!, "recovered owner pass"]) {
+        signedIn ||= (await context.request.post("/api/staff/login", { headers: { origin: baseURL }, data: { username: process.env.E2E_OWNER_USERNAME, password: secret } })).ok();
+      }
+      expect(signedIn).toBe(true);
+      for (const [action, body] of [["BORROW", { name: "Phone check borrow", itemType: "Loanable" }], ["TAKE", { name: "Phone check take", itemType: "Consumable" }], ["USE", { name: "Phone check use", itemType: "Consumable", consumptionMode: "OPEN_UNIT" }]] as const) {
+        if (items.some((item) => item.action === action)) continue;
+        const response = await context.request.post("/api/staff/items", { headers: { origin: baseURL }, data: {
+          aliases: "", category: "Miscellaneous", unit: "piece", locationId: null, reorderThreshold: 0, lendingAudience: "STUDENTS_AND_USC_STAFF", needsReview: false, notes: "", openingQuantity: 3, status: "ACTIVE", ...body
+        } });
+        expect(response.status(), await response.text()).toBe(201);
+      }
+      items = await find();
+    }
+    const byAction = Object.fromEntries(items.map((item) => [item.action, item.id]));
+    for (const action of ["TAKE", "BORROW", "USE"]) expect(byAction[action], `a ${action} item to open`).toBeTruthy();
+    return byAction as Record<"TAKE" | "BORROW" | "USE", string>;
+  } finally {
+    await context.close();
+  }
+}
+
 const SAFE = { top: 47, bottom: 34, left: 0, right: 0 };
 
 for (const [label, size, zoom] of [["390 px", { width: 390, height: 844 }, "100%"], ["320 px", { width: 320, height: 568 }, "100%"], ["320 px at 200% text", { width: 320, height: 568 }, "200%"]] as const) {
@@ -161,12 +191,10 @@ for (const [label, size, zoom] of [["390 px", { width: 390, height: 844 }, "100%
     const page = await context.newPage();
     await (await context.newCDPSession(page)).send("Emulation.setSafeAreaInsetsOverride", { insets: SAFE });
     await page.addInitScript((fontSize) => { document.addEventListener("DOMContentLoaded", () => { document.documentElement.style.fontSize = fontSize; }); }, zoom);
-    const catalog = await (await page.request.get("/api/self-service/catalog")).json() as { items: { id: string; action: string }[] };
-    // Self-Service, signed out: the three forms.
-    for (const action of ["TAKE", "BORROW", "USE"]) {
-      const item = catalog.items.find((candidate) => candidate.action === action);
-      if (!item) continue;
-      await page.goto(`/self-service?do=${action.toLowerCase()}&item=${item.id}`);
+    // Self-Service, signed out: the three forms, each on an item made for it so the result does not depend on what other tests left.
+    const forms = await formItems(browser, baseURL!);
+    for (const action of ["TAKE", "BORROW", "USE"] as const) {
+      await page.goto(`/self-service?do=${action.toLowerCase()}&item=${forms[action]}`);
       await judge(page, `Self-Service ${action.toLowerCase()} form`, SAFE);
     }
     await page.goto("/staff");

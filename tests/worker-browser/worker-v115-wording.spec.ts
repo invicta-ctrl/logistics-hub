@@ -35,7 +35,7 @@ const read = (page: Page): Promise<Seen[]> => page.evaluate(() => {
   return out;
 });
 
-function problems(seen: Seen[]) {
+function problems(seen: Seen[], data: ReadonlySet<string>) {
   const found: string[] = [];
   for (const { where, text } of seen) {
     // What people typed or the catalog holds (names, references, times) is data, not interface wording.
@@ -46,6 +46,8 @@ function problems(seen: Seen[]) {
     if (/\bverified\b|\bverification\b|\bverify (the |your )?(student|id)/i.test(text)) found.push(`${where}: “verified” wording in “${text}”`);
     // A short label whose every word starts with a capital letter: Title Case.
     for (const part of text.split("·")) {
+      // A name the Worker sent (an item, category, place or person) is the owner's data, whatever its capitals.
+      if (data.has(part.trim())) continue;
       const words = part.replace(PROPER, "").replace(/[^A-Za-z' -]/g, " ").split(/\s+/).filter((word) => word.length > 1 && !ACRONYMS.has(word));
       if (!/\d/.test(part) && words.length >= 2 && words.length <= 5 && part.length <= 40 && words.every((word) => /^[A-Z]/.test(word))) found.push(`${where}: Title Case “${text}”`);
     }
@@ -67,11 +69,23 @@ test("no page shows an enum name, Title Case label or “verified” claim at ph
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 390, height: 844 });
   const found = new Map<string, string>();
+  // Every string the Worker sends to these pages: names people and the catalog hold are data, and are not judged as interface wording.
+  const data = new Set<string>();
+  const pending: Promise<unknown>[] = [];
+  const collect = (value: unknown) => {
+    if (typeof value === "string") { if (value.length <= 80) data.add(value); }
+    else if (Array.isArray(value)) for (const entry of value) collect(entry);
+    else if (value && typeof value === "object") for (const entry of Object.values(value)) collect(entry);
+  };
+  page.on("response", (response) => {
+    if ((response.headers()["content-type"] ?? "").includes("json")) pending.push(response.json().then(collect, () => undefined));
+  });
   const visit = async (route: string) => {
     await page.goto(route);
     await page.waitForLoadState("networkidle").catch(() => undefined);
     await page.locator("main, #app").first().waitFor();
-    for (const message of problems(await read(page))) if (!found.has(message)) found.set(message, route);
+    await Promise.all(pending);
+    for (const message of problems(await read(page), data)) if (!found.has(message)) found.set(message, route);
   };
   for (const route of PUBLIC) await visit(route);
   await signIn(page);

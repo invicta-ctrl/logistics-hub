@@ -208,7 +208,8 @@
 /* Nothing drags the sheet, so it shows no drag handle. */
 .ss-sheet .sheet__header::before { display: none; }
 .ss-sheet .sheet__kicker { color: var(--accent-line); font-size: .6875rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
-.ss-sheet .sheet__header h2 { font-size: var(--text-2xl); }
+/* On a narrow phone with large text the title gives way a little before a long name would break mid-word. */
+.ss-sheet .sheet__header h2 { font-size: min(var(--text-2xl), max(var(--text-md), 9vw)); }
 .ss-sheet .icon-button { width: 2.75rem; height: 2.75rem; flex: none; color: var(--text-2); }
 .ss-form { gap: 1.125rem; }
 .ss-form .field label, .ss-form .field-label, .ss-legend, .ss-choices legend { color: var(--text); font-size: var(--text-base); font-weight: 500; }
@@ -220,10 +221,12 @@
 .ss-estimate--out { background: var(--warn-tint); color: var(--warn); }
 /* One continuous control: square joins inside, rounded only at its outer ends, and one rounded focus ring. */
 .ss-stepper { height: 3.75rem; border-radius: var(--radius-lg); }
+/* The buttons and the number share the row: with large text on a narrow phone they shrink (still over 44 px) instead of pushing the form sideways. */
+.ss-stepper input { flex: 1 1 0; width: 0; }
 .ss-stepper:has(input:focus-visible) { box-shadow: var(--focus); }
 .ss-form .ss-stepper input { min-height: 0; border-color: var(--line-strong); border-radius: 0; font-size: var(--text-2xl); font-weight: 600; }
 .ss-form .ss-stepper input:focus-visible { box-shadow: none; }
-.ss-stepper .stepper__button { width: 4.25rem; border-color: var(--line-strong); background: var(--field); color: var(--accent); }
+.ss-stepper .stepper__button { width: min(4.25rem, 24%); border-color: var(--line-strong); background: var(--field); color: var(--accent); }
 .ss-stepper .stepper__button .icon { --icon-size: var(--icon-lg); }
 .ss-stepper .stepper__button:first-child { border-radius: var(--radius-lg) 0 0 var(--radius-lg); }
 .ss-stepper .stepper__button:last-child { border-radius: 0 var(--radius-lg) var(--radius-lg) 0; }
@@ -252,7 +255,7 @@
 .is-self-service .form-alert { border: 1px solid var(--bad-dot); background: var(--bad-tint); color: var(--bad); }
 .is-self-service .field__hint { color: var(--text-3); }
 .is-self-service .field__hint--warn, .is-self-service [data-over] { color: var(--warn); }
-.ss-form .button--lg { min-height: 3.5rem; border-radius: var(--radius-lg); font-size: var(--text-md); }
+.ss-form .button--lg { min-height: 3.5rem; border-radius: var(--radius-lg); font-size: var(--text-md); white-space: normal; }
 
 /* The receipt: a check, what was recorded, then the sync state as it happens. */
 .ss-receipt { display: grid; justify-items: center; gap: .5rem; padding: 2.5rem 1.5rem calc(1.5rem + env(safe-area-inset-bottom)); text-align: center; }
