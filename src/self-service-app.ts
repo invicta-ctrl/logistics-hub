@@ -504,9 +504,9 @@ function quantityField(max: number): Html {
       <p class="field__hint field__hint--warn" id="ss-over" aria-live="polite" data-over hidden></p></div>`;
 }
 
-const nameField = (label: string) => html`<div class="field"><label for="ss-name">${label}</label><input id="ss-name" name="name" autocomplete="name" autocapitalize="words" maxlength="120" required value="${profile.name}" enterkeyhint="done" /></div>`;
+const nameField = (label: string, value = profile.name) => html`<div class="field"><label for="ss-name">${label}</label><input id="ss-name" name="name" autocomplete="name" autocapitalize="words" maxlength="120" required value="${value}" enterkeyhint="done" /></div>`;
 const STUDENT_ID_HELP = "Logistics keeps a record of who has each item. Only Logistics staff see it.";
-const studentIdField = () => html`<div class="field" data-student-id><div class="ss-label-row"><label for="ss-student">Student ID number</label>${helpTip("the student ID", STUDENT_ID_HELP)}</div><input id="ss-student" name="studentId" type="text" inputmode="numeric" pattern="[0-9]{8}" minlength="8" maxlength="8" autocomplete="off" spellcheck="false" required aria-describedby="ss-student-hint" value="${rememberedId() ? profile.studentId : ""}" /><p class="field__hint" id="ss-student-hint">8 digits</p></div>`;
+const studentIdField = (value = rememberedId() ? profile.studentId : "") => html`<div class="field" data-student-id><div class="ss-label-row"><label for="ss-student">Student ID number</label>${helpTip("the student ID", STUDENT_ID_HELP)}</div><input id="ss-student" name="studentId" type="text" inputmode="numeric" pattern="[0-9]{8}" minlength="8" maxlength="8" autocomplete="off" spellcheck="false" required aria-describedby="ss-student-hint" value="${value}" /><p class="field__hint" id="ss-student-hint">8 digits</p></div>`;
 /** Whether the remembered student ID still meets the rule: an older phone may remember one that does not. */
 const rememberedId = () => SELF_SERVICE_STUDENT_ID.test(profile.studentId);
 
@@ -514,18 +514,20 @@ const rememberedId = () => SELF_SERVICE_STUDENT_ID.test(profile.studentId);
  * Who this is for. A phone that knows the person shows them with "Not you? Change"; otherwise the fields, and a choice to remember them.
  * The details live in this phone's own storage only; nothing here is shared or looked up.
  */
-function identityBlock(nameLabel: string): Html {
-  const known = Boolean(profile.name) && rememberedId();
+function identityBlock(nameLabel: string, borrower?: LocalEvent["person"]): Html {
+  // A return shows who borrowed it, and someone else handing it back changes it to themselves (Codex review on PR 22).
+  const who = borrower ? { name: borrower.name, studentId: borrower.studentId ?? "" } : profile;
+  const known = Boolean(who.name) && SELF_SERVICE_STUDENT_ID.test(who.studentId);
   return html`<div class="ss-identity" data-identity>
       ${known ? html`<div class="ss-who" data-who>
           <span class="ss-who__icon" aria-hidden="true">${icon("user")}</span>
-          <p class="ss-who__text"><strong>${profile.name}</strong><span>ID ${profile.studentId}</span></p>
+          <p class="ss-who__text"><strong>${who.name}</strong><span>ID ${who.studentId}</span></p>
           <button type="button" class="text-link ss-who__change" data-change-identity>Not you? Change</button>
         </div>` : ""}
       <div class="ss-identity__fields" data-identity-fields ${known ? "hidden" : ""}>
-        ${nameField(nameLabel)}
-        ${studentIdField()}
-        <div class="ss-remember"><label><input type="checkbox" name="remember" checked /><span>Remember me on this phone</span></label>${helpTip("remembering you", "Your name and student ID stay on this phone only, so you do not type them again. Forget them any time in My activity.")}</div>
+        ${borrower ? nameField(nameLabel, who.name) : nameField(nameLabel)}
+        ${borrower ? studentIdField(who.studentId) : studentIdField()}
+        <div class="ss-remember"><label><input type="checkbox" name="remember" ${borrower ? "" : "checked"} /><span>Remember me on this phone</span></label>${helpTip("remembering you", "Your name and student ID stay on this phone only, so you do not type them again. Forget them any time in My activity.")}</div>
       </div>
     </div>`;
 }
@@ -596,8 +598,7 @@ function borrowSheet(item: CatalogItem): Html {
     </form>`);
 }
 
-/** Only a borrow made on this phone can be returned, so the loan is always known. */
-/** A return carries the identity its borrow was made with. A borrow an older phone saved without a valid ID has to say who is returning. */
+/** Only a borrow made on this phone can be returned. Its return starts as the borrower, and "Not you? Change" makes it whoever hands it back. A borrow an older phone saved without a valid ID has to say who is returning. */
 const loanKnown = (loan: LocalEvent) => Boolean(loan.person.name) && SELF_SERVICE_STUDENT_ID.test(loan.person.studentId ?? "");
 
 function returnSheet(loan: LocalEvent): Html {
@@ -607,7 +608,7 @@ function returnSheet(loan: LocalEvent): Html {
         <label><input type="radio" name="outcome" value="RETURNED" checked /><span>Good</span></label><label><input type="radio" name="outcome" value="DAMAGED" /><span>Damaged</span></label><label><input type="radio" name="outcome" value="LOST" /><span>Lost</span></label>
       </div></fieldset>
       <div class="field" data-note hidden><label for="ss-note" data-note-label>What's damaged?</label><textarea id="ss-note" name="note" rows="2" maxlength="300"></textarea></div>
-      ${loanKnown(loan) ? "" : identityBlock("Your full name")}
+      ${identityBlock("Your full name", loanKnown(loan) ? loan.person : undefined)}
       ${photoField("Logistics staff check it before the stock is updated. Only staff can see it, and it is deleted from this phone once it is sent.", "Show the item as you hand it back.", "environment", "Take a photo of the item")}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and return")}
@@ -911,7 +912,7 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
   /** The first problem, with the field to fix it in, or null when the form is ready to check. */
   const validate = (values: ReturnType<typeof read>): [string, string] | null => {
     const { name, studentId, purpose, reason, outcome, note, count } = values;
-    const needsIdentity = !loan || !loanKnown(loan);
+    const needsIdentity = !loan || !loanKnown(loan) || !form.querySelector<HTMLElement>("[data-identity-fields]")?.hidden;
     const problem = needsIdentity && !name ? ["Please enter your full name.", "#ss-name"]
       : needsIdentity && name.split(" ").length < 2 ? ["Please enter your full name, first and last.", "#ss-name"]
       : needsIdentity && !SELF_SERVICE_STUDENT_ID.test(studentId) ? [studentId ? "The student ID number must be exactly 8 digits." : "Please enter your student ID number.", "#ss-student"]
@@ -979,7 +980,7 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     }
     const { name, studentId, purpose, reason, outcome, note, count, returnBy, remember } = values;
     const target = loan ? { itemId: loan.itemId, itemName: loan.itemName, unit: loan.unit } : { itemId: item!.id, itemName: item!.name, unit: item!.unit };
-    const person = loan && loanKnown(loan) ? loan.person : { name, studentId };
+    const person = loan && loanKnown(loan) && form.querySelector<HTMLElement>("[data-identity-fields]")?.hidden ? loan.person : { name, studentId };
     const draft: Draft = type === "TAKE" || type === "USE" ? { type, ...target, quantity: type === "USE" ? 1 : count, person }
       : type === "BORROW" ? { type, ...target, quantity: count, person, purpose, ...(purpose === "USC" ? { reason } : {}), returnBy }
       : { type, ...target, quantity: loan?.quantity ?? count, person, loanEventId: loan?.id ?? null, outcome, ...(outcome === "RETURNED" ? {} : { note }) };

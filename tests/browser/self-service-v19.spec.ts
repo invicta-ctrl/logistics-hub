@@ -168,8 +168,17 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   await back.getByRole("button", { name: "Review and return" }).click();
   await expect(back.getByRole("alert")).toContainText("Say what's damaged.");
   await back.getByLabel("What's damaged?").fill("Leg is loose");
+  // The return starts as the borrower; someone else handing it back says who they are (Codex review on PR 22).
+  await expect(back.locator(".ss-who")).toContainText("Maria Santos");
+  await expect(back.getByLabel("Your full name")).toBeHidden();
+  await back.getByRole("button", { name: "Not you? Change" }).click();
+  await expect(back.getByLabel("Your full name")).toHaveValue("Maria Santos");
+  await expect(back.getByLabel("Remember me on this phone")).not.toBeChecked();
+  await identify(back, "Pedro Reyes", "22000222");
   await back.getByRole("button", { name: "Review and return" }).click();
   await expect(back.locator(".ss-summary")).toContainText("Damaged: Leg is loose");
+  await expect(back.locator(".ss-summary")).toContainText("Pedro Reyes");
+  await expect(back.locator(".ss-summary")).toContainText("22000222");
   await back.getByRole("button", { name: "Confirm return" }).click();
   await expect(page.getByRole("dialog", { name: "Saved on this phone" })).toBeVisible();
 });
