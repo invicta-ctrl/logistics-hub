@@ -25,7 +25,7 @@ export const ROLE_MODELS: Record<ModelRole, string> = {
 /**
  * What each text role may cost and say. Reserves are counted before the call. They rest on live calls of 2026-10-08, including
  * one maximum-size call per role (Granite 0.98 with 40 terms, Qwen 1.57 with 5 candidates, GLM 1.00; docs/road-to-v2/evidence/
- * v1.15-final-pass-provider-smoke-2026-10-08.md), and through the Worker binding only Granite was shown to report `usage.neurons` (0.15). Gemma, Qwen and GLM through the binding is an open gate before any leaves shadow. One sample per role: provisional. A reply's own `usage.neurons` replaces the reserve when it reports one. The thinking option
+ * v1.15-final-pass-provider-smoke-2026-10-08.md), and through the Worker binding all four were shown to report `usage.neurons` (0.15, 0.28, 0.44, 0.49 on a tiny probe). One sample per role: provisional. A reply's own `usage.neurons` replaces the reserve when it reports one. The thinking option
  * was accepted by Qwen and GLM, but Qwen still answered in `reasoning_content`, so it is unproven for Qwen.
  */
 export const ROLE_LIMITS: Record<Exclude<ModelRole, "VISION_EXTRACT">, { reserve: number; maxTokens: number; /** Sent only to models that reason before answering; Granite is not one. Accepted by Qwen and GLM in the 2026-10-08 smoke; Qwen still answers in reasoning_content. */ thinkingOption: boolean }> = {
