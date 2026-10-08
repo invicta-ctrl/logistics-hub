@@ -1,7 +1,8 @@
+import "./id-card.css";
 import { LANDED_MS, cardMotion, flyIn, flyOut, liftShadow } from "./card-motion";
 import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
 import { ISSUE_KINDS, type IssueKind, type Pair, type Preflight, preflight } from "./staff-import";
-import { ApiError, type Html, api, dataUrl, failure, formatDateTime, html, icon, jpegOf, mount, navigate, plural, reducedMotion, setMessage, toast } from "./ui";
+import { ApiError, type Html, api, dataUrl, failure, formatDateTime, html, icon, jpegOf, mount, navigate, onLeave, plural, reducedMotion, setMessage, toast } from "./ui";
 
 /*
  * Official USC ID scans in the browser (Administration → Staff Directory): fetching them for one visit, a person's card large
@@ -22,20 +23,72 @@ type Who = { id: string; name: string; department: string };
  * per viewer and card every ten, so a card opened again later is always recorded again.
  */
 const KEEP_MS = 5 * 60_000;
+/** A scan still not here after this long is given up on, so a stalled connection ends in a message and a retry, not a spinner. */
+const SCAN_TIMEOUT_MS = 20_000;
 const scans = new Map<string, { at: number; url: Promise<string> }>();
+/** What a person reads when a scan cannot be opened: the Worker's own words, or a plain line for a network that did not answer. */
+const scanFailure = (error: unknown): Error => error instanceof ApiError ? error
+  : error instanceof DOMException && error.name === "TimeoutError" ? new Error("This scan is taking too long to open. Check your connection and try again.")
+  : new Error("This scan could not be opened. Check your connection and try again.");
 export function scan(personId: string, mediaId: string, side: Side): Promise<string> {
   const key = `${personId}/${mediaId}/${side}`;
   const kept = scans.get(key);
   if (kept && Date.now() - kept.at < KEEP_MS) return kept.url;
-  const url = fetch(`/api/staff/admin/directory/${personId}/id/${side}`, { credentials: "same-origin", cache: "no-store" }).then(async (response) => {
+  const url = fetch(`/api/staff/admin/directory/${personId}/id/${side}`, { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(SCAN_TIMEOUT_MS) }).then(async (response) => {
     if (!response.ok) throw new ApiError(response.status, response.status === 429 ? "Too many ID scans opened in a short time. Please wait a few minutes." : "This scan could not be opened.");
     return dataUrl(await response.blob());
-  });
+  }).catch((error: unknown) => { throw scanFailure(error); });
+  // A scan that failed is forgotten, so the next ask is a fresh try.
   url.catch(() => scans.delete(key));
   scans.set(key, { at: Date.now(), url });
   return url;
 }
 export const forgetScans = (): void => scans.clear();
+
+/** How long a person's card details may take before the viewer gives up and says so. */
+const CARD_TIMEOUT_MS = 15_000;
+/** The work's answer, or an error with `message` once `ms` have passed. */
+const within = <T>(work: Promise<T>, ms: number, message: string): Promise<T> => new Promise<T>((resolve, reject) => {
+  const timer = window.setTimeout(() => reject(new Error(message)), ms);
+  work.then(resolve, reject).finally(() => window.clearTimeout(timer));
+});
+
+/**
+ * Fills the two ID tiles of a profile (`[data-open]` buttons holding an `img`): each side is fetched when its tile is near the
+ * screen, the front first and the back once the front has settled (so the front is not slowed by a second download), with a
+ * loading state meanwhile and, when a scan cannot be opened, the reason and a "Try again". Tiles are laid out at their scan's
+ * shape first, so nothing moves when the picture arrives.
+ */
+export function fillTiles(host: HTMLElement, personId: string, card: Card): void {
+  const frontSettled: { done: Promise<void> | null } = { done: null };
+  const load = (button: HTMLElement) => {
+    const side = button.dataset.open as Side;
+    const figure = button.closest("figure")!;
+    figure.querySelector(".id-tile__failed")?.remove();
+    button.classList.add("is-loading");
+    const after = side === "back" ? frontSettled.done ?? Promise.resolve() : Promise.resolve();
+    const done = after.then(() => scan(personId, card.mediaId, side)).then((url) => {
+      button.querySelector("img")!.src = url;
+      button.classList.remove("is-loading");
+    }, (error: unknown) => {
+      button.classList.remove("is-loading");
+      const note = document.createElement("div");
+      note.className = "id-tile__failed";
+      note.setAttribute("role", "alert");
+      mount(note, html`<p class="form-alert form-alert--error">${icon("alert")}<span>${failure(error)}</span></p><button type="button" class="button button--secondary button--sm">Try again</button>`);
+      note.querySelector("button")!.addEventListener("click", () => load(button));
+      figure.append(note);
+    });
+    if (side === "front") frontSettled.done = done;
+  };
+  const tiles = [...host.querySelectorAll<HTMLElement>("[data-open]")];
+  if (!("IntersectionObserver" in window)) return tiles.forEach(load);
+  const watcher = new IntersectionObserver((seen) => {
+    for (const entry of seen) if (entry.isIntersecting) { watcher.unobserve(entry.target); load(entry.target as HTMLElement); }
+  }, { rootMargin: "240px" });
+  tiles.forEach((tile) => watcher.observe(tile));
+  onLeave(() => watcher.disconnect());
+}
 
 /* ---------- The card, large ---------- */
 
@@ -124,8 +177,17 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
     holder.className = "id-card__scan is-loading";
     const image = Object.assign(document.createElement("img"), { alt: `${side === "front" ? "Front" : "Back"} of ${person.name}'s USC ID`, draggable: false });
     image.dataset.face = side;
-    holder.append(image);
-    return { holder, image, ready: null as Promise<void> | null };
+    // Shown instead of the picture when the scan cannot be opened; "Try again" asks for it afresh.
+    const failed = document.createElement("div");
+    failed.className = "id-card__failed";
+    failed.hidden = true;
+    failed.setAttribute("role", "alert");
+    const message = document.createElement("p");
+    const retry = Object.assign(document.createElement("button"), { type: "button", className: "button button--sm", textContent: "Try again" });
+    retry.dataset.retry = side;
+    failed.append(message, retry);
+    holder.append(image, failed);
+    return { holder, image, failed, message, ready: null as Promise<void> | null };
   };
   const sides = { front: scanFace("front"), back: scanFace("back") };
   const cover = opening.cover();
@@ -137,8 +199,26 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   }).then(async (url) => {
     sides[side].image.src = url;
     await sides[side].image.decode().catch(() => undefined);
-    sides[side].holder.classList.remove("is-loading");
-  }, (error: unknown) => { sides[side].ready = null; throw error; });
+    sides[side].holder.classList.remove("is-loading", "is-failed");
+    sides[side].failed.hidden = true;
+  }, (error: unknown) => {
+    const failed = sides[side];
+    failed.ready = null;
+    failed.message.textContent = failure(error);
+    failed.holder.classList.remove("is-loading");
+    failed.holder.classList.add("is-failed");
+    failed.failed.hidden = false;
+    throw error;
+  });
+  /** Asks again for a side that could not be opened; the card shows its loading state until the answer. */
+  const retrySide = (side: Side) => {
+    sides[side].failed.hidden = true;
+    sides[side].holder.classList.remove("is-failed");
+    sides[side].holder.classList.add("is-loading");
+    void loadSide(side).then(side === "front" ? warmBack : undefined, () => undefined);
+  };
+  /** The back is fetched once the front has landed, so it turns over at once without sharing the first download. */
+  const warmBack = () => void loadSide("back").catch(() => undefined);
   const ratio = (content: Content) => (content === "front" || content === "back") && card ? card[content].width / card[content].height : content === "details" ? DETAILS_RATIO : CARD_RATIO;
 
   // The card's turn, in degrees: always a multiple of 180, so one face is up.
@@ -252,9 +332,16 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   const other: Content = leaves !== shown ? leaves : shown === "details" ? "cover" : "back";
   place(other, faces[1]);
   if (shown !== "details") {
-    try { await loadCard(); } catch (error) { toast(failure(error), "error"); dialog.remove(); return; }
-    void loadSide("back").catch(() => undefined);
-    await Promise.race([loadSide("front").catch((error: unknown) => toast(failure(error), "error")), new Promise((resolve) => window.setTimeout(resolve, 600))]);
+    // The tile says at once that the tap was taken; a card that does not come within the limit ends in a message, and a second tap asks again.
+    tile?.setAttribute("aria-busy", "true");
+    try { await within(loadCard(), CARD_TIMEOUT_MS, "The card is taking too long to open. Check your connection and try again."); }
+    catch (error) { cardLoad = null; toast(failure(error), "error"); dialog.remove(); return; }
+    finally { tile?.removeAttribute("aria-busy"); }
+    // The front first, then the back, so on a slow connection the first look is not shared with a second download.
+    const front = loadSide("front");
+    void front.then(warmBack, () => undefined);
+    // A failed side says so on the card itself, with its own "Try again".
+    await Promise.race([front.catch(() => undefined), new Promise((resolve) => window.setTimeout(resolve, 600))]);
   }
   flight.style.setProperty("--ratio", String(ratio(shown)));
   motion.turn(0, false);
@@ -317,6 +404,8 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
       return;
     }
     if (target.closest("[data-close]")) closeViewer();
+    const retry = target.closest<HTMLElement>("[data-retry]")?.dataset.retry;
+    if (retry === "front" || retry === "back") retrySide(retry);
     if (target.closest("[data-flip]")) flip();
     const viewButton = target.closest<HTMLButtonElement>("[data-view]");
     if (viewButton) void show(viewButton.dataset.view as View);
