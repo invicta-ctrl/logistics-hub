@@ -443,6 +443,25 @@ test.describe("photo suggestions (ambient assist)", () => {
     await expect(page.locator("#cat-draft")).not.toContainText("a photo cannot show the real amount");
   });
 
+  test("the draft line is a polite status that is not redrawn while typing, and looking at the count and leaving it settles it", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    await page.route("**/api/staff/catalogue/photo-name", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "Stapler", model: null }) }));
+    await begin(page, server);
+    await expect(page.locator("#cat-draft")).toHaveAttribute("role", "status");
+    await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.locator("#cat-draft")).toContainText("a photo cannot show the real amount");
+    // A redraw with the same words keeps the same text node, so a screen reader is not told again.
+    await page.locator("#cat-draft").evaluate((element) => { (window as unknown as { mark: Node | null }).mark = element.lastChild; });
+    await page.locator("#cat-notes, #cat-name").first().fill("Stapler, grey");
+    await page.waitForTimeout(200);
+    expect(await page.locator("#cat-draft").evaluate((element) => (window as unknown as { mark: Node | null }).mark === element.lastChild)).toBe(true);
+    // The shelf really holds 1: opening the count and leaving it is the person's confirmation.
+    await page.locator("#cat-qty").focus();
+    await page.locator("#cat-name").focus();
+    await expect(page.locator("#cat-draft")).not.toContainText("a photo cannot show the real amount");
+  });
+
   test("an older retake finishing late does not hide Preparing while a newer one is still running", async ({ page }) => {
     const server = serve(page, { active: true });
     await server.ready;

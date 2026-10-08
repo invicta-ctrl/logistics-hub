@@ -142,7 +142,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         </fieldset>
         <div class="cat-qty field"><label for="cat-qty">How many are here?</label>
           <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One fewer">${icon("minus")}</button><input id="cat-qty" type="number" inputmode="numeric" min="0" max="100000" step="1" value="1" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div></div>
-        <p class="cat-suggest" id="cat-draft"></p>
+        <p class="cat-suggest" id="cat-draft" role="status"></p>
         <div class="field-grid">
           <div class="field"><label for="cat-category">Category <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-category" list="cat-categories" maxlength="100" autocomplete="off" /><datalist id="cat-categories"></datalist><div class="cat-chips" id="cat-category-chips"></div></div>
           <div class="field"><label for="cat-unit">Counted in <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-unit" list="cat-units" maxlength="30" autocomplete="off" placeholder="piece, box, ream" /><datalist id="cat-units"></datalist><div class="cat-chips" id="cat-unit-chips"></div></div>
@@ -297,8 +297,11 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
 
   /** What a photo cannot settle, said once in plain words: the CatalogDraft decides which fields still need a person. */
   const DRAFT_LABELS: Partial<Record<DraftFieldName, string>> = { category: "the category", unit: "what it is counted in", behaviour: "how it is handed out" };
+  /** The line last drawn. It is a polite status region, so it is only replaced when its words change: a redraw on every keystroke would read it out again. */
+  let draftText = "";
   const drawDraft = (raw: ReturnType<typeof suggest>) => {
-    if (!photo) { mount($("#cat-draft"), html``); return; }
+    const say = (text: string) => { if (text === draftText) return; draftText = text; mount($("#cat-draft"), text ? html`${icon("info")}${text}` : html``); };
+    if (!photo) { say(""); return; }
     const edited = new Set<DraftFieldName>();
     const typed: Partial<Record<DraftFieldName, string>> = {};
     const own = (name: DraftFieldName, text: string) => { if (text) { edited.add(name); typed[name] = text; } };
@@ -309,10 +312,12 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     own("unit", value("cat-unit"));
     if (behaviour) own("behaviour", behaviour);
     const draft = composeDraft({ revision: photoRevision, typed, edited, suggestions: raw, photo: { name: photoName, model: modelFromPhoto ? value("cat-model") : null }, session: {}, defaultQuantity: 1 });
-    const still = needsAttention(draft).filter((name) => DRAFT_LABELS[name]).map((name) => DRAFT_LABELS[name]!);
+    // Only what nothing has been offered for: a suggestion or a split is already named above ("Maybe: …", "Choose one"), and category and unit are optional under "Review later".
+    const optional = behaviour === "REVIEW_LATER";
+    const still = needsAttention(draft).filter((name) => DRAFT_LABELS[name] && draft[name].state === "unknown" && !(optional && (name === "category" || name === "unit"))).map((name) => DRAFT_LABELS[name]!);
     const count = draft.quantity.state === "needs-confirmation" ? "Count what is on the shelf; a photo cannot show the real amount." : "";
     const choose = still.length ? `Still to choose: ${still.join(", ")}.` : "";
-    mount($("#cat-draft"), count || choose ? html`${icon("info")}${[count, choose].filter(Boolean).join(" ")}` : html``);
+    say([count, choose].filter(Boolean).join(" "));
   };
 
   let drawTimer = 0;
@@ -320,6 +325,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   onLeave(() => window.clearTimeout(drawTimer));
   form.addEventListener("input", () => { armed = false; later(); });
   field("cat-qty").addEventListener("input", () => { quantityEdited = true; });
+  // Having looked at the count and left the field is confirming it, even when the shelf really holds 1.
+  field("cat-qty").addEventListener("blur", () => { if (photo && !quantityEdited) { quantityEdited = true; later(); } });
 
   const choose = (next: Behaviour) => { behaviour = next; armed = false; setMessage($("#cat-alert"), ""); $("#cat-behaviour").classList.remove("is-invalid"); draw(); };
   root.addEventListener("click", (event) => {
