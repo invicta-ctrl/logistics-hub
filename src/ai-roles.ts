@@ -23,8 +23,10 @@ export const ROLE_MODELS: Record<ModelRole, string> = {
 };
 
 /**
- * What each text role may cost and say. Reserves are counted before the call and are conservative guesses until the first approved
- * live smoke measures them (nothing has run yet); a reply's own `usage.neurons` replaces the reserve when it reports one.
+ * What each text role may cost and say. Reserves are counted before the call. They rest on ONE small call per model on 2026-10-08
+ * (0.22, 0.63, 0.82 Neurons; docs/road-to-v2/evidence/v1.15-final-pass-provider-smoke-2026-10-08.md), not on maximum-size inputs or the
+ * Worker binding, so they are provisional. A reply's own `usage.neurons` replaces the reserve when it reports one. The thinking option
+ * was accepted by Qwen and GLM, but Qwen still answered in `reasoning_content`, so it is unproven for Qwen.
  */
 export const ROLE_LIMITS: Record<Exclude<ModelRole, "VISION_EXTRACT">, { reserve: number; maxTokens: number; /** Sent only to models that reason before answering; Granite is not one. Unconfirmed until the live smoke. */ thinkingOption: boolean }> = {
   TEXT_NORMALIZE: { reserve: 1, maxTokens: 40, thinkingOption: false },
