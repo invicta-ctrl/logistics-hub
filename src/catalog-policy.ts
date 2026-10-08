@@ -226,7 +226,7 @@ export const IDENTITY_RULE_KEY = "identity_rule_from";
  * - A phone photo is compressed to about 300 KB; 2 MB leaves room without letting four photos
  *   exceed the request cap.
  */
-export const SELF_SERVICE_LIMITS = { quantity: 30, eventsPerSync: 5, photosPerSync: 4, unitsPerItemHour: 30, heldPerNetworkDay: 60, photoBytes: 2 * 1024 * 1024 } as const;
+export const SELF_SERVICE_LIMITS = { quantity: 30, eventsPerSync: 5, photosPerSync: 4, unitsPerItemHour: 30, heldPerNetworkDay: 60, photoBytes: 2 * 1024 * 1024, photoEdge: 1280, photoQuality: 0.75 } as const;
 
 
 const REFERENCE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";

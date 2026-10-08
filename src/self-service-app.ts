@@ -252,7 +252,7 @@ function estimateLine(item: CatalogItem): Html {
 }
 
 /** Where the item is kept, when staff share it, and the way into the full route. Without a shared place the person is pointed to the desk. */
-const whereLine = (item: CatalogItem): Html => html`<p class="ss-where">${icon("pin")}<span>${item.location ?? "Ask DOL staff where this is kept."}</span><button type="button" class="text-link" data-where="${item.id}">Where is it?</button></p>`;
+const whereLine = (item: CatalogItem): Html => html`<p class="ss-where">${icon("pin")}<span>${item.location ?? "Ask DoL staff where this is kept."}</span><button type="button" class="text-link" data-where="${item.id}">Where is it?</button></p>`;
 
 /* ---------- Home ---------- */
 
@@ -760,7 +760,7 @@ function renderPaused(): void {
         <h1 id="ss-paused">Self-Service is under maintenance</h1>
         <p class="ss-hero__hello">You can't borrow, take or return items with your phone for now.</p>
       </section>
-      <section class="ss-ready ss-ready--todo">${icon("pin")}<div><h2>Ask DOL staff in person</h2><p>Any logistics request must be made in person. Go to the Department of Logistics and ask DOL staff for permission. They will record it for you.</p></div></section>
+      <section class="ss-ready ss-ready--todo">${icon("pin")}<div><h2>Ask DoL staff in person</h2><p>Any logistics request must be made in person. Go to the Department of Logistics and ask DoL staff for permission. They will record it for you.</p></div></section>
       ${waiting ? html`<p class="ss-warning">${icon("clock")}<span>${waiting} ${waiting === 1 ? "record is" : "records are"} still saved on this phone. ${waiting === 1 ? "It" : "They"} will be sent when Self-Service reopens, so don't clear this site's data or delete the app.</span></p>` : ""}
       <a class="button button--secondary button--block" href="/lending" data-route>See what's available to borrow</a>
     </div>`);
@@ -878,7 +878,8 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     if (photoBox) mount(photoBox, html`<p class="photo-field__busy">Preparing the photo…</p>`);
     preparing = (async () => {
       try {
-        photo = await shrinkPhoto(chosen, SELF_SERVICE_LIMITS.photoBytes);
+        // Proof photos are kept for a year, so they are smaller than item photos (Earl, 2026-10-08: about half the storage).
+        photo = await shrinkPhoto(chosen, SELF_SERVICE_LIMITS.photoBytes, SELF_SERVICE_LIMITS.photoEdge, SELF_SERVICE_LIMITS.photoQuality);
         photoUrl = await dataUrl(photo);
         showPhoto(photoUrl);
       } catch (error) {
@@ -1122,7 +1123,7 @@ export async function selfService(): Promise<void> {
     const steps: Step[] = ancestry(known, item.locationId ?? null).reverse().map(({ id }) => ({ id, name: shared.get(id)!.name, directions: shared.get(id)!.directions, photo: shared.get(id)!.photo }));
     openWhereIsIt({
       item: item.name, steps, note: false, sheetClass: "ss-sheet", pictureUrl: (id, size) => `/api/public/location-media/${id}/${size}`,
-      noRoute: "DOL staff keep this one at the office. Please ask them where to find it.",
+      noRoute: "DoL staff keep this one at the office. Please ask them where to find it.",
       askName: { value: profile.name },
       report: offline ? null : (kind, _note, name, id) => sendReport(item.id, kind, name, id),
       reportBlocked: "Reports need a connection. You can report again when you are back online."
