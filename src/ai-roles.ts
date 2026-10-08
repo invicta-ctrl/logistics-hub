@@ -75,7 +75,7 @@ export function normalizeTask(observed: string, terms: readonly string[]): Task 
     .sort((a, b) => overlap(b) - overlap(a) || a.localeCompare(b)).slice(0, MAX_TERMS);
   return {
     field: "term", allowed,
-    system: "You match a storeroom item name to the catalogue's own wording. Reply with JSON only: {\"term\": ...}. term must be copied exactly from the list in the request, or null when none clearly means the same thing.",
+    system: "You match a storeroom item name to the catalogue's own wording. Reply with JSON only: {\"term\": ...}. term must be copied exactly from the list in the request. Answer only when the name is clearly the same item as one term (a misspelling, a plural, reordered words, or one missing word) and no other term fits equally well; otherwise null.",
     user: JSON.stringify({ name: clean(observed, 80), terms: allowed })
   };
 }
