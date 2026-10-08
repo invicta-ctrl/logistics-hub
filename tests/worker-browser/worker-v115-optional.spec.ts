@@ -61,7 +61,9 @@ test("with every photo and optional panel failing, staff and students still do t
   await page.getByRole("searchbox").first().fill(name);
   const row = page.locator("#main-content").getByRole("button", { name }).first();
   await expect(row).toBeVisible();
-  expect(await brokenPictures(page), "the list shows no broken picture").toEqual([]);
+  // A failed picture reads as complete a moment before its error event lets the shared handler (ui.ts) swap in the icon, so wait
+  // for it to settle, as the profile check below does; a picture that is never swapped still fails.
+  await expect.poll(() => brokenPictures(page), { message: "the list shows no broken picture" }).toEqual([]);
   await row.click();
   await expect(page.locator("#photo-panel [data-tile]")).toBeVisible();
   await expect.poll(() => brokenPictures(page), { message: "the profile shows no broken picture" }).toEqual([]);
