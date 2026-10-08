@@ -608,7 +608,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .sheet::backdrop { background: var(--scrim); }
 .sheet[open] { display: flex; flex-direction: column; }
 .sheet__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: var(--space-5) var(--space-6); border-top: 3px solid var(--brand); border-bottom: 1px solid var(--line); }
-.sheet__kicker { color: var(--text-3); font-size: var(--text-sm); }
+.sheet__kicker { color: var(--text-3); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .sheet__header h2 { margin-top: var(--space-1); font-size: var(--text-lg); overflow-wrap: anywhere; }
 .sheet__body { display: grid; flex: 1; align-content: start; gap: var(--space-5); overflow-y: auto; padding: var(--space-6) max(var(--space-6), env(safe-area-inset-right, 0px)) calc(var(--space-6) + var(--safe-bottom)) var(--space-6); scroll-padding-bottom: calc(var(--space-6) + var(--safe-bottom)); overscroll-behavior: contain; }
 .panel-stack { display: grid; gap: var(--space-5); }

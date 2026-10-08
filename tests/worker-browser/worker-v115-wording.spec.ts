@@ -73,7 +73,8 @@ test("no page shows an enum name, Title Case label or “verified” claim at ph
   const data = new Set<string>();
   const pending: Promise<unknown>[] = [];
   const collect = (value: unknown) => {
-    if (typeof value === "string") { if (value.length <= 80) data.add(value); }
+    // A category is stored in capitals and shown with a capital on each word, so both spellings are the owner's data.
+    if (typeof value === "string") { if (value.length <= 80) { data.add(value); if (/^[A-Z][A-Z &'()-]+$/.test(value)) data.add(value.toLowerCase().replace(/\b\p{L}/gu, (letter) => letter.toUpperCase())); } }
     else if (Array.isArray(value)) for (const entry of value) collect(entry);
     else if (value && typeof value === "object") for (const entry of Object.values(value)) collect(entry);
   };
