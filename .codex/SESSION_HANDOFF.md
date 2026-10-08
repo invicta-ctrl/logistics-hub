@@ -9,9 +9,9 @@ BASE COMMIT: e919d8d (V1.15 with main 1247274 / V1.14 merged in)
 BRANCH/WORKTREE: road-to-v2/v1.15-v2-consolidation / Claude Cloud (integrator). road-to-v2/v1.15-task-consolidation (Build V1.15, second writer) merged at ea86bd1 in 484ebcd; it has stopped.
 LAST PUSHED COMMIT: `git log -1 origin/road-to-v2/v1.15-v2-consolidation`
 FILES CHANGED: since e919d8d: src (ambient assist, staff-ids, ui working(), self-service-app, styles, admin-*, directory, catalogue pages, main placeholder); tests (controls sweep, writes, refresh, optional, wording, phone, tab-style, id-card-loading); docs (plan, visual research, releases v1.15 and v2.0); scripts/visual-evidence.mjs (More button lookup); .codex/*
-CONTRACTS ADDED/CHANGED: as in the v1.15 record; plus shrinkPhoto(file, maxBytes, edge, quality) and SELF_SERVICE_LIMITS.photoEdge/photoQuality (1280, 0.75); working(scope) restores focus.
+CONTRACTS ADDED/CHANGED: as in the v1.15 record; plus shrinkPhoto(file, maxBytes, edge, quality) and SELF_SERVICE_LIMITS.photoEdge/photoQuality (1280, 0.75); working(scope) restores focus; Ambient Assist reserve() is one conditional write; assist_recheck:<itemId> keeps a duplicate check that could not run (recheckWaiting, WAITING_PER_SYNC 2); Possible existing item offers Use existing; a Self-Service return starts as the borrower with Not you? Change (Codex review on PR 22, e420add, dc8503e).
 MIGRATIONS: None.
-TESTS RUN: typecheck; npx vitest run (704 passed, 2 skipped); npx playwright test (203 passed); verify:privacy (0); evidence render against origin/main; CI on the head (see the v1.15 record, "CI").
+TESTS RUN: typecheck; npx vitest run (706 passed, 2 skipped); npx playwright test (204 passed); verify:privacy (0); evidence render against origin/main; CI on the head (see the v1.15 record, "CI").
 RESULTS: green; two container-only real-Worker failures as before, both green in CI.
 UNRUN CHECKS: real phone, screen reader, Safari; production signed-in check after deploy.
 KNOWN LIMITATIONS: see the v1.15 record.
