@@ -38,8 +38,9 @@ if (!dry && (!account || !token)) { console.error("Needs CLOUDFLARE_ACCOUNT_ID a
 
 const stats = { neurons: 0, calls: 0, failed: 0, streak: 0, ms: [] };
 async function ask(role, task) {
-  if (stats.neurons >= stopAt || stats.calls >= HARD.calls || stats.streak >= HARD.consecutiveFailures) return { stopped: true };
   const limit = m.ROLE_LIMITS[role];
+  // The role's conservative reserve must fit in what is left, and a failed call keeps its reserve (the provider may still have charged it).
+  if (stats.neurons + limit.reserve > stopAt || stats.calls >= HARD.calls || stats.streak >= HARD.consecutiveFailures) return { stopped: true };
   const started = Date.now();
   try {
     const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${m.ROLE_MODELS[role]}`, {
@@ -50,11 +51,11 @@ async function ask(role, task) {
     });
     const body = await response.json().catch(() => ({}));
     stats.calls += 1; stats.ms.push(Date.now() - started);
-    if (!response.ok || !body.success) { stats.failed += 1; stats.streak += 1; return { answered: false, value: null }; }
+    if (!response.ok || !body.success) { stats.failed += 1; stats.streak += 1; stats.neurons += limit.reserve; return { answered: false, value: null }; }
     stats.streak = 0;
     stats.neurons += Number(body.result?.usage?.neurons ?? limit.reserve);
     return { answered: true, value: m.readChoice(body.result, task) };
-  } catch { stats.failed += 1; stats.streak += 1; stats.calls += 1; return { answered: false, value: null }; }
+  } catch { stats.failed += 1; stats.streak += 1; stats.calls += 1; stats.neurons += limit.reserve; return { answered: false, value: null }; }
 }
 const pick = (items, count) => { const step = Math.max(1, Math.floor(items.length / Math.max(1, count))); return items.filter((_, index) => index % step === 0).slice(0, count); };
 const pct = (x) => x === null ? "–" : `${Math.round(x * 100)}%`;

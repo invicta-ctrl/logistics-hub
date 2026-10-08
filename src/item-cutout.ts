@@ -61,6 +61,9 @@ export async function setCleanup(db: D1Database, actor: Account, input: unknown)
 
 export const cutoutKey = (mediaId: string) => `items/${mediaId}/cutout`;
 /** A new cut waits here until the browser has judged it; nothing serves it as the item's picture and a closed tab leaves nothing live. */
+export const claimKey = (mediaId: string) => `cutout_claim:${mediaId}`;
+/** A claim older than this is a request that died; it no longer blocks (the provider timeout is 20 s). */
+const CLAIM_MS = 60_000;
 export const pendingKey = (mediaId: string) => `items/${mediaId}/cutout-pending`;
 const monthKey = (now: number) => `image_cutouts:${new Date(now).toISOString().slice(0, 7)}`;
 
@@ -137,6 +140,24 @@ export async function makeCutout(db: D1Database, bucket: R2Bucket, images: Image
   if (now < breaker.openUntil) throw new InputError(503, "Picture cleanup is resting after errors. Try again in a few minutes.");
   const source = await bucket.get(key(mediaId, "display"));
   if (!source) throw new InputError(404, "Photo not found.");
+  // One cut at a time per photo, claimed in a single statement: a second tab asking now would otherwise spend a second transformation and
+  // could overwrite the pending bytes after the first browser had judged them.
+  const claim = await db.prepare(`INSERT INTO system_settings(key, value, updated_at) VALUES(?1, '1', ?2)
+    ON CONFLICT(key) DO UPDATE SET updated_at = ?2 WHERE updated_at < ?3`)
+    .bind(claimKey(mediaId), new Date(now).toISOString(), new Date(now - CLAIM_MS).toISOString()).run();
+  if (!claim.meta.changes) throw new InputError(409, "This photo is already being cleaned. Give it a moment.");
+  try {
+    // Look again now that the photo is ours: another request may have finished between the first look and the claim.
+    if (await hasCutout(bucket, mediaId)) return { cutout: true };
+    if (await bucket.head(pendingKey(mediaId)).catch(() => null)) return { pending: true };
+    return await cutAndHold(db, bucket, images, mediaId, current, source.body as ReadableStream<Uint8Array>, now);
+  } finally {
+    await db.prepare("DELETE FROM system_settings WHERE key = ?").bind(claimKey(mediaId)).run().catch(() => undefined);
+  }
+}
+
+/** The provider call and the pending write, run while the photo is claimed. */
+async function cutAndHold(db: D1Database, bucket: R2Bucket, images: ImagesRunner, mediaId: string, current: { mediaId: string; width: number; height: number }, source: ReadableStream<Uint8Array>, now: number) {
   if (!await reserveCutout(db, now)) throw new InputError(503, "This month's picture cleanup allowance is used. The original photo is still in use.");
   // The timeout below stops waiting, not the provider: a call that finishes late may still count as a transformation, which is why the
   // reservation above is never given back.
@@ -148,7 +169,7 @@ export async function makeCutout(db: D1Database, bucket: R2Bucket, images: Image
   let bytes: Uint8Array;
   try {
     const output = await Promise.race([
-      images.input(source.body as ReadableStream<Uint8Array>).transform({ segment: "foreground" }).output({ format: "image/png" }),
+      images.input(source).transform({ segment: "foreground" }).output({ format: "image/png" }),
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), CUTOUT_TIMEOUT_MS))
     ]);
     const answer = output.response();
@@ -163,7 +184,7 @@ export async function makeCutout(db: D1Database, bucket: R2Bucket, images: Image
   breaker.failures = 0;
   await bucket.put(pendingKey(mediaId), bytes, { httpMetadata: { contentType: "image/png" } });
   // The photo may have been replaced while the provider worked: keep the cut only if it is still the item's photo.
-  const still = await db.prepare("SELECT 1 FROM item_media WHERE item_id = ? AND media_id = ?").bind(itemId, mediaId).first();
+  const still = await db.prepare("SELECT 1 FROM item_media WHERE media_id = ?").bind(mediaId).first();
   if (!still) { await bucket.delete(pendingKey(mediaId)).catch(() => undefined); throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again."); }
   return { pending: true };
 }

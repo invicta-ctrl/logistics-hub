@@ -215,6 +215,30 @@ describe("picture cleanup", () => {
     expect(actions()).toEqual(["ITEM_CUTOUT_ADDED"]);
   });
 
+  it("lets one cut run per photo at a time: a second tab asking meanwhile spends nothing and cannot overwrite it", async () => {
+    const { asked, runner } = images(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); return ok()(); });
+    env.IMAGES = runner;
+    turnOn();
+    const id = await addPhoto();
+    const [first, second] = await Promise.all([cut(id), cut(id)]);
+    const statuses = [first.status, second.status].sort();
+    expect(statuses).toEqual([200, 409]);
+    expect(asked.filter((entry) => JSON.stringify(entry) === JSON.stringify({ segment: "foreground" }))).toHaveLength(1);
+    expect(await cutoutsThisMonth(env.DB)).toBe(1);
+    // The claim is released afterwards, and the waiting cut is found rather than cut again.
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM system_settings WHERE key LIKE 'cutout_claim:%'").get()).toEqual({ n: 0 });
+    expect(await (await cut(id)).json()).toEqual({ pending: true });
+    expect(await cutoutsThisMonth(env.DB)).toBe(1);
+  });
+
+  it("ignores a claim left by a request that died", async () => {
+    env.IMAGES = images(ok()).runner;
+    turnOn();
+    const id = await addPhoto();
+    sqlite.prepare("INSERT INTO system_settings(key, value, updated_at) VALUES(?, '1', '2026-01-01T00:00:00.000Z')").run(`cutout_claim:${id}`);
+    expect((await cut(id)).status).toBe(200);
+  });
+
   it("leaves nothing live when the browser never answers, and a rejected cut is deleted", async () => {
     const { asked, runner } = images(ok());
     env.IMAGES = runner;
