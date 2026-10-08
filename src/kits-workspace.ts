@@ -4,7 +4,7 @@ import { CHECK_LABELS, CHECK_OUTCOMES, COMPONENT_STATE_LABELS, KIT_STATE_LABELS,
 import { openViewer, photoPanel, rowThumb } from "./item-photo";
 import { inOrder, pathOf, placesOf } from "./location-tree";
 import { type PlaceRow, ageOf, loadSession, shell } from "./staff";
-import { ApiError, type Html, api, emptyState, expired, failure, html, icon, live, mount, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, writeParams } from "./ui";
+import { ApiError, type Html, api, emptyState, expired, failure, html, icon, live, mount, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, working, writeParams } from "./ui";
 
 /*
  * Kits (/staff/kits): groupings such as a Sewing Kit, made of items that already exist. A kit holds no stock. Each component keeps its
@@ -258,12 +258,13 @@ export async function kitsWorkspace(): Promise<void> {
         const name = host.querySelector<HTMLInputElement>("#tpl-name")!.value;
         const problem = host.querySelector<HTMLElement>("#tpl-alert")!;
         setMessage(problem, "");
+        const settle = working(form);
         try {
           await api("/api/staff/kit-templates", { method: "POST", body: JSON.stringify({ name, description: kit.description, fromKitId: kit.id }) });
           await poll.refresh();
           mount(host, html``);
           toast("Template saved. Choose it when you make the next kit.");
-        } catch (error) { setMessage(problem, failure(error)); }
+        } catch (error) { setMessage(problem, failure(error)); } finally { settle(); }
       });
     });
     const body = sheetElement.querySelector<HTMLElement>("#kit-photo")!;

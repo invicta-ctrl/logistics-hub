@@ -139,7 +139,8 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   await expect(summary.getByRole("img", { name: "The photo you are sending" })).toBeVisible();
   expect(await page.evaluate(() => new Promise<number>((resolve) => { const open = indexedDB.open("logistics-hub"); open.onsuccess = () => { const count = open.result.transaction("events").objectStore("events").count(); count.onsuccess = () => resolve(count.result); }; }))).toBe(0);
   await sheet.getByRole("button", { name: "Confirm borrow" }).click();
-  const receipt = page.getByRole("dialog", { name: "Borrowed" });
+  // The record is on the phone and the server has not answered, so the receipt says "saved", not "borrowed".
+  const receipt = page.getByRole("dialog", { name: "Saved on this phone" });
   await expect(receipt.locator(".ss-receipt__ref strong")).toHaveText(/^SS-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
   await expect(receipt).toContainText("Maria Santos · ID 21000115");
   await expect(receipt).toContainText("Return it by Tomorrow");
@@ -170,7 +171,7 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   await back.getByRole("button", { name: "Review and return" }).click();
   await expect(back.locator(".ss-summary")).toContainText("Damaged: Leg is loose");
   await back.getByRole("button", { name: "Confirm return" }).click();
-  await expect(page.getByRole("dialog", { name: "Damaged return sent" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Saved on this phone" })).toBeVisible();
 });
 
 test("a remembered person shows as a card with Not you? Change, a different person is not remembered, and forgetting is in My activity", async ({ page }) => {
@@ -213,6 +214,56 @@ test("a remembered person shows as a card with Not you? Change, a different pers
   await expect(page.locator(".ss-more")).toContainText("Nobody is remembered on this phone");
   await page.goto("/self-service?do=take&item=ITM-0002");
   await expect(page.getByRole("dialog", { name: "Bottled Water" }).getByLabel("Your full name")).toHaveValue("");
+});
+
+for (const [action, item, title] of [["take", "ITM-0002", "Bottled Water"], ["use", "ITM-0003", "A4 Bond Paper"]] as const) {
+  test(`${action}: a full name, an eight-digit student ID number and a photo are each asked for, in that order, before the check`, async ({ page }) => {
+    await serve(page, small);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/self-service?do=${action}&item=${item}`);
+    const sheet = page.getByRole("dialog", { name: title });
+    const review = sheet.getByRole("button", { name: `Review and ${action}` });
+    await expect(sheet.getByLabel("Student ID number")).toHaveAttribute("pattern", "[0-9]{8}");
+    await expect(sheet.getByLabel("Student ID number")).toHaveAttribute("inputmode", "numeric");
+    await review.click();
+    await expect(sheet.getByRole("alert")).toContainText("Please enter your full name.");
+    await sheet.getByLabel("Your full name").fill("Maria Santos");
+    await review.click();
+    await expect(sheet.getByRole("alert")).toContainText("Please enter your student ID number.");
+    // Seven digits can be typed and are refused; a ninth digit cannot be typed at all (the field holds eight; the Worker refuses nine anyway).
+    await sheet.getByLabel("Student ID number").fill("1234567");
+    await review.click();
+    await expect(sheet.getByRole("alert")).toContainText("must be exactly 8 digits");
+    await sheet.getByLabel("Student ID number").fill("21000115");
+    await review.click();
+    await expect(sheet.getByRole("alert")).toContainText("Take a photo holding the item.");
+    // Nothing is saved until the check is confirmed.
+    expect(await page.evaluate(() => new Promise<number>((resolve) => { const open = indexedDB.open("logistics-hub"); open.onsuccess = () => { const count = open.result.transaction("events").objectStore("events").count(); count.onsuccess = () => resolve(count.result); }; }))).toBe(0);
+    await attachPhoto(sheet);
+    await review.click();
+    await expect(sheet.locator(".ss-summary")).toContainText("Maria Santos");
+    await expect(sheet.locator(".ss-summary")).toContainText("21000115");
+    await expect(sheet.getByRole("img", { name: "The photo you are sending" })).toBeVisible();
+  });
+}
+
+test("a phone that remembers an ID that is not eight digits asks again instead of trusting it", async ({ page }) => {
+  await serve(page, small);
+  await page.goto("/self-service");
+  await expect(page.locator(".ss-card").first()).toBeVisible();
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    const open = indexedDB.open("logistics-hub");
+    open.onsuccess = () => { const put = open.result.transaction("meta", "readwrite").objectStore("meta").put({ name: "Maria Santos", studentId: "21-0001" }, "profile"); put.onsuccess = () => resolve(); };
+  }));
+  await page.goto("/self-service?do=take&item=ITM-0002");
+  const sheet = page.getByRole("dialog", { name: "Bottled Water" });
+  // The name is kept for typing less; the old ID is not offered as if it were valid.
+  await expect(sheet.getByLabel("Student ID number")).toBeVisible();
+  await expect(sheet.getByLabel("Student ID number")).toHaveValue("");
+  await expect(sheet.getByLabel("Your full name")).toHaveValue("Maria Santos");
+  await attachPhoto(sheet);
+  await sheet.getByRole("button", { name: "Review and take" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("Please enter your student ID number.");
 });
 
 test("a USC-only item asks for a reason and the same identity and photo as every other action", async ({ page }) => {
@@ -351,3 +402,50 @@ test("an offline phone keeps browsing from what it saved, and an item gone from 
   await page.goto("/self-service?do=item&item=ITM-9999");
   await expect(page.getByText("This item isn't offered in Self-Service right now.")).toBeVisible();
 });
+
+/*
+ * V1.15 (no durable write claims success before the commit): the receipt of a Take says "Saved on this phone" while the record is
+ * only on the phone, and only says "Taken" once Logistics has it. A record Logistics did not accept loses its tick.
+ */
+const RECEIPTS = [
+  { result: { outcome: "accepted" }, heading: "Taken", mark: "done", line: "Sent to Logistics" },
+  { result: { outcome: "review", message: "A limit was reached. Staff will check it." }, heading: "Staff will check it", mark: "review", line: "A limit was reached. Staff will check it." },
+  { result: { outcome: "rejected", message: "This item is not offered right now." }, heading: "Not recorded", mark: "bad", line: "Not recorded: This item is not offered right now." }
+] as const;
+
+for (const { result, heading, mark, line } of RECEIPTS) {
+  test(`a Take's receipt says saved while the server has not answered, then "${heading}" when it ${result.outcome === "accepted" ? "accepts" : result.outcome === "review" ? "holds it" : "refuses"} it`, async ({ page }) => {
+    await serve(page, small);
+    let release: () => void = () => undefined;
+    const answered = new Promise<void>((resolve) => { release = resolve; });
+    let asked = 0;
+    await page.route("**/api/self-service/sync", async (route) => {
+      asked += 1;
+      const id = /"v":2,"id":"([^"]+)"/.exec(route.request().postData() ?? "")![1];
+      await answered;
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ revision: 8, results: [{ id, ...result }] }) });
+    });
+    await page.goto("/self-service?do=take&item=ITM-0002");
+    const sheet = page.getByRole("dialog", { name: "Bottled Water" });
+    await identify(sheet, "Maria Santos");
+    await sheet.getByRole("button", { name: "Review and take" }).click();
+    await sheet.getByRole("button", { name: "Confirm take" }).click();
+
+    // Asked, not answered: saved on the phone, a waiting mark, no word that anything was taken.
+    const receipt = page.getByRole("dialog", { name: "Saved on this phone" });
+    await expect(receipt.locator(".ss-receipt__sync")).toContainText("sending…");
+    await expect.poll(() => asked).toBeGreaterThan(0);
+    await expect(receipt.locator(".ss-receipt__mark")).toHaveClass(/ss-receipt__mark--wait/);
+    await expect(page.getByRole("heading", { name: "Taken" })).toHaveCount(0);
+    await page.waitForTimeout(500);
+    await expect(receipt.getByRole("heading", { name: "Saved on this phone" })).toBeVisible();
+
+    // Answered: the receipt now says what happened.
+    release();
+    const settled = page.getByRole("dialog", { name: heading });
+    await expect(settled).toBeVisible();
+    await expect(settled.locator(".ss-receipt__sync")).toContainText(line);
+    await expect(settled.locator(".ss-receipt__mark")).toHaveClass(new RegExp(`ss-receipt__mark--${mark}`));
+    await expect(settled.getByRole("button", { name: "Done" })).toBeFocused();
+  });
+}

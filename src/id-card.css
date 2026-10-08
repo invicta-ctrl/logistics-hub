@@ -1,0 +1,19 @@
+/*
+ * USC ID scans (V1.15): what a scan shows while it loads and when it cannot be opened, on the directory's two tiles and on the
+ * large card. The scans themselves are private and never cached (src/staff-ids.ts); these states carry no picture.
+ */
+.id-card__scan.is-failed img { visibility: hidden; }
+.id-card__failed { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: var(--space-3); padding: var(--space-4); background: rgb(12 10 9 / 82%); color: #fff; text-align: center; }
+.id-card__failed[hidden] { display: none; }
+.id-card__failed p { max-width: 24rem; font-size: var(--text-sm); }
+.id-card__failed .button { border: 1px solid rgb(255 255 255 / 40%); color: #fff; }
+.id-card__failed .button:hover { background: rgb(255 255 255 / 14%); }
+
+.id-tile__button.is-loading { background: linear-gradient(110deg, var(--subtle) 30%, var(--hover) 50%, var(--subtle) 70%) 0 0 / 300% 100%; cursor: progress; }
+@media (prefers-reduced-motion: no-preference) { .id-tile__button.is-loading { animation: id-tile-shimmer 1.4s linear infinite; } }
+@keyframes id-tile-shimmer { to { background-position: -300% 0; } }
+.id-tile__failed { display: grid; justify-items: center; gap: var(--space-2); }
+.id-tile__failed p { margin: 0; }
+
+/* A card being opened: the tile it will fly from says the tap was taken. */
+.id-tile__button[aria-busy="true"], .dir-card[aria-busy="true"], [data-head][aria-busy="true"] { cursor: progress; opacity: .7; }

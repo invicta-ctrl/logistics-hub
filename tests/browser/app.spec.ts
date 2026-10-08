@@ -149,7 +149,7 @@ test("self-service: the item decides Borrow, Take or Use, and a use asks no amou
   await expect(sheet.getByRole("button", { name: "Review and use" })).toBeVisible();
   await sheet.getByRole("button", { name: "Review and use" }).click();
   await sheet.getByRole("button", { name: "Confirm use" }).click();
-  const receipt = page.getByRole("dialog", { name: "Use recorded" });
+  const receipt = page.getByRole("dialog", { name: "Saved on this phone" });
   await expect(receipt).toContainText("Saved on this phone");
   await expect(receipt.locator(".ss-receipt__ref strong")).toHaveText(/^SS-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
   await expect(receipt.getByRole("button", { name: "Use something else" })).toBeVisible();
@@ -188,7 +188,7 @@ test("self-service closed for maintenance: every address sends people to DOL sta
   await identify(page.getByRole("dialog", { name: "A4 Bond Paper" }), "Ana Reyes");
   await page.getByRole("button", { name: "Review and use" }).click();
   await page.getByRole("button", { name: "Confirm use" }).click();
-  await page.getByRole("dialog", { name: "Use recorded" }).getByRole("button", { name: "Done" }).click();
+  await page.getByRole("dialog", { name: "Saved on this phone" }).getByRole("button", { name: "Done" }).click();
   closed = true;
   for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1366, height: 768 }]) {
     await page.setViewportSize(viewport);
@@ -451,6 +451,24 @@ test("activity: a short window, such as a phone on its side, lets the page scrol
   expect(layout.feedHeight).toBeGreaterThan(300);
   await page.locator(".activity-row").last().scrollIntoViewIfNeeded();
   await expect(page.locator(".activity-row").last()).toBeInViewport();
+});
+
+test("activity: on a phone the freshness line stays out of the way until the list stops updating", async ({ page }) => {
+  let online = true;
+  await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", mustChangePassword: false, recovery: null, selfServiceReviews: 0 }) }));
+  await page.route("**/api/staff/activity*", (route) => online ? route.fulfill({ contentType: "application/json", headers: { etag: '"a"' }, body: JSON.stringify({ events: [], nextCursor: null }) }) : route.abort("connectionrefused"));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/staff/activity");
+  await expect(page.getByText("No activity yet")).toBeVisible();
+  await expect(page.locator("#live-status")).toBeHidden();
+  online = false;
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(page.locator("#live-status")).toBeVisible();
+  await expect(page.locator("#live-status")).toHaveText("Offline, retrying");
+  // The title and the export button still share one line, and the page does not scroll sideways.
+  const [title, exportButton] = await Promise.all([page.getByRole("heading", { name: "Activity", level: 1 }).boundingBox(), page.getByRole("button", { name: "Export CSV" }).boundingBox()]);
+  expect(Math.abs((title!.y + title!.height / 2) - (exportButton!.y + exportButton!.height / 2))).toBeLessThan(24);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 test("activity: without scroll observation the button still loads older entries, and the feed is a focusable region", async ({ page }) => {

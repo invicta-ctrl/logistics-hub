@@ -2,10 +2,10 @@ import { ACCESS_HINT, type AccountEvent, accessChoices, accessTag, bindCopy, eve
 import { DEPARTMENTS, DEPARTMENT_CODES, type DepartmentCode } from "./directory-policy";
 import { type Loan, loanRow, openReturn } from "./loan-form";
 import { tiltTile } from "./card-motion";
-import { type Card, type View, cardForm, cardSource, forgetScans, importArchive, makeMissingImages, openCard, scan } from "./staff-ids";
+import { type Card, type View, cardForm, cardSource, fillTiles, forgetScans, importArchive, makeMissingImages, openCard } from "./staff-ids";
 import { type Access, type Role, type Session, accessLabel, initials, loadSession, shell } from "./staff";
 import { adminTabs } from "./admin-frame";
-import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
 
 /*
  * Administration → Staff Directory (V1.3). One page: the directory as a wall of cards by department, and a person's profile in
@@ -278,6 +278,7 @@ export async function staffDirectory(): Promise<void> {
       event.preventDefault();
       const values = new FormData(form);
       const body = { name: values.get("name"), department: values.get("department"), position: values.get("position"), officer: values.get("officer") === "on", studentId: values.get("studentId"), ...(person ? { active: values.get("active") === "1", updatedAt: person.updatedAt } : {}) };
+      const settle = working(form);
       try {
         if (person) {
           const result = await api<{ changed: number }>(`/api/staff/admin/directory/${person.id}`, { method: "PATCH", body: JSON.stringify(body) });
@@ -293,7 +294,7 @@ export async function staffDirectory(): Promise<void> {
         panel.close(true);
         people = null;
         await done?.();
-      } catch (error) { setMessage(sheetElement.querySelector("#person-alert")!, failure(error)); }
+      } catch (error) { setMessage(sheetElement.querySelector("#person-alert")!, failure(error)); } finally { settle(); }
     });
   }
 
@@ -516,8 +517,10 @@ export async function staffDirectory(): Promise<void> {
       event.preventDefault();
       const accountId = new FormData(event.target as HTMLFormElement).get("accountId");
       if (!accountId) { setMessage(host.querySelector("[data-alert]")!, "Choose a sign-in."); return; }
+      const settle = working(event.target as HTMLFormElement);
       try { await api(`/api/staff/admin/directory/${person.id}/account`, { method: "PUT", body: JSON.stringify({ accountId }) }); toast("Linked."); await reload(); }
       catch (error) { setMessage(host.querySelector("[data-alert]")!, failure(error)); }
+      finally { settle(); }
     });
   }
 
@@ -552,9 +555,8 @@ export async function staffDirectory(): Promise<void> {
       // Set through the CSSOM: the Content-Security-Policy (style-src 'self') drops inline style attributes.
       tileOf(side)!.style.setProperty("--ratio", String(card[side].width / card[side].height));
       tiltTile(tileOf(side)!);
-      const image = host.querySelector<HTMLImageElement>(`[data-scan="${side}"]`)!;
-      void scan(person.id, card.mediaId, side).then((url) => { image.src = url; }, (error: unknown) => { image.closest("figure")!.append(Object.assign(document.createElement("p"), { className: "form-alert", textContent: failure(error) })); });
     }
+    fillTiles(host, person.id, card);
     host.addEventListener("click", (event) => {
       const target = event.target as HTMLElement;
       const open = target.closest<HTMLElement>("[data-open]");

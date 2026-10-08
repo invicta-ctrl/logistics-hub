@@ -46,7 +46,8 @@ export async function accountability(): Promise<void> {
       document.querySelector<HTMLButtonElement>("#ret-run")!.disabled = none;
     } catch (error) { status.textContent = ""; setMessage(alert!, failure(error)); }
   }
-  document.querySelector("#ret-run")?.addEventListener("click", async () => {
+  document.querySelector("#ret-run")?.addEventListener("click", async (event) => {
+    const trigger = event.currentTarget as HTMLButtonElement;
     const confirmed = await confirmImpact({
       kicker: "Old personal details",
       title: "Remove the names, student IDs and photos listed here?",
@@ -55,6 +56,9 @@ export async function accountability(): Promise<void> {
       danger: true
     });
     if (!confirmed) return;
+    // Off and busy until the removal ends; the check below then sets the button as the new figures say.
+    trigger.disabled = true;
+    trigger.setAttribute("aria-busy", "true");
     const total = { loans: 0, phoneRecords: 0 };
     try {
       // One request erases a bounded number of rows; ask again while more are due.
@@ -68,6 +72,7 @@ export async function accountability(): Promise<void> {
       toast(`Removed details from ${plural(total.loans, "loan")} and ${plural(total.phoneRecords, "phone record")}.`);
     } catch (error) { setMessage(alert!, failure(error)); }
     await Promise.all([checkRetention(), loadActivity()]);
+    trigger.removeAttribute("aria-busy");
   });
   await Promise.all([loadActivity(), checkRetention()]);
 }
