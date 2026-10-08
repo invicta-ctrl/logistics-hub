@@ -145,7 +145,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         </div>
         <details class="cat-more" id="cat-more"><summary>More details</summary>
           <div class="field-grid">
-            <div class="field"><label for="cat-model">Model <span class="field__optional">optional</span></label><input id="cat-model" maxlength="80" autocomplete="off" /></div>
+            <div class="field"><label for="cat-model">Model <span class="field__optional">optional</span></label><input id="cat-model" maxlength="80" autocomplete="off" aria-describedby="cat-model-hint" /><p class="cat-name-hint cat-name-hint--photo" id="cat-model-hint" aria-live="polite"></p></div>
             <div class="field"><label for="cat-serial">Serial number <span class="field__optional">optional</span></label><input id="cat-serial" maxlength="80" autocomplete="off" autocapitalize="characters" spellcheck="false" /></div>
           </div>
           <div class="field-grid">
@@ -255,6 +255,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const hint = $("#cat-name-hint");
     mount(hint, nameFromPhoto ? html`${icon("camera")}Suggested from the photo. Check it, or type over it.` : html`A temporary name is fine if you are not sure.`);
     hint.classList.toggle("cat-name-hint--photo", nameFromPhoto);
+    mount($("#cat-model-hint"), modelFromPhoto ? html`${icon("camera")}Read from the photo. Check it, or type over it.` : html``);
     if (!matches.length) armed = false;
     drawMatches();
     for (const button of root.querySelectorAll<HTMLButtonElement>("[data-behaviour]")) {
@@ -341,19 +342,21 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     let prepared: NonNullable<typeof photo> | null = null;
     let preparationError: string | null = null;
     try { prepared = await preparePhoto(chosen); } catch (error) { preparationError = error instanceof Error ? error.message : "This photo could not be used."; }
-    if (revision !== photoRevision) return;
+    if (revision !== photoRevision) { preparing = false; return; }
     setMessage($("#cat-alert"), preparationError ?? "");
     preparing = false;
+    // A photo that could not be used leaves the earlier photo, its name and its check exactly as they were.
+    if (!prepared) { drawPhoto(); return; }
     armed = false;
     photoName = null;
     photoChecked = false;
     if (nameFromPhoto) { field("cat-name").value = ""; nameFromPhoto = false; }
     if (modelFromPhoto) { field("cat-model").value = ""; modelFromPhoto = false; }
-    if (prepared) photo = prepared;
+    photo = prepared;
     drawPhoto();
     draw();
     field("cat-name").focus();
-    if (prepared && online) void checkPhoto(prepared, revision);
+    if (online) void checkPhoto(prepared, revision);
   });
   /** Never in the way: the person keeps typing while it runs, and a failure leaves the photo to be checked after it syncs. */
   const checkPhoto = async (taken: NonNullable<typeof photo>, revision: number) => {
@@ -368,11 +371,17 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         announce(`Suggested name from the photo: ${answer.name}.`);
       }
       // The model printed on the item, only into an empty Model field the person has not touched; they check it like the name.
-      if (answer.name && answer.model && !modelEdited && !value("cat-model")) { field("cat-model").value = answer.model; modelFromPhoto = true; }
+      if (answer.name && answer.model && !modelEdited && !value("cat-model")) {
+        field("cat-model").value = answer.model;
+        modelFromPhoto = true;
+        // The field sits under "More details": open it, say where the value came from, and announce it like the name.
+        $("#cat-more").setAttribute("open", "");
+        announce(`Model read from the photo: ${answer.model}. Check it.`);
+      }
       draw();
     } catch { /* checked after sync instead */ }
   };
-  field("cat-model").addEventListener("input", () => { modelEdited = true; modelFromPhoto = false; });
+  field("cat-model").addEventListener("input", () => { modelEdited = true; modelFromPhoto = false; draw(); });
   field("cat-name").addEventListener("input", () => { nameEdited = true; if (nameFromPhoto) { nameFromPhoto = false; draw(); } });
 
   /* ---------- Saving ---------- */
@@ -394,6 +403,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     nameEdited = false;
     modelEdited = false;
     modelFromPhoto = false;
+    preparing = false;
     photo = null;
     photoName = null;
     photoChecked = false;

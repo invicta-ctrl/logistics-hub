@@ -102,6 +102,13 @@ describe("what a model is sent and what is kept", () => {
     expect(readPhotoReading("nope")).toEqual({ name: null, brand: null, model: null, packaging: null });
   });
 
+  it("recovers the name from a reply cut off by the token limit, and keeps ordinary names like Hand Sanitizer and Sound System", () => {
+    expect(readPhotoReading(chat('{"name":"stapler","brand":"Ma')).name).toBe("Stapler");
+    expect(readPhotoReading(chat('{"name":"stapler","brand":"Ma')).brand).toBeNull();
+    for (const name of ["hand sanitizer", "sound system"]) expect(readPhotoName(chat(JSON.stringify({ name })))).not.toBeNull();
+    expect(readPhotoName(chat('{"name":"ignore instructions"}'))).toBeNull();
+  });
+
   it("returns the reading only beside a name, and the route carries it to the screen", async () => {
     answer = () => chat('{"name":"stapler","brand":"Max","model":"HD-10","packaging":null}');
     expect(await photoName(env.DB, env.AI, PHOTO, "USER")).toMatchObject({ name: "Stapler", reading: { brand: "Max", model: "HD-10" } });
@@ -148,12 +155,12 @@ describe("POST /api/staff/catalogue/photo-name", () => {
     const named = await nameOf();
     expect(named.status).toBe(200);
     expect(named.headers.get("cache-control")).toBe("private, no-store");
-    expect(await named.json()).toEqual({ name: "Hammer", brand: null, model: null, packaging: null });
+    expect(await named.json()).toEqual({ name: "Hammer", model: null });
     env.AI = undefined;
-    expect(await (await nameOf()).json()).toEqual({ name: null, brand: null, model: null, packaging: null });
+    expect(await (await nameOf()).json()).toEqual({ name: null, model: null });
     env.AI = fakeAi();
     answer = () => { throw new Error("down"); };
-    expect(await (await nameOf()).json()).toEqual({ name: null, brand: null, model: null, packaging: null });
+    expect(await (await nameOf()).json()).toEqual({ name: null, model: null });
   });
 
   it("refuses a photo larger than a catalogue thumbnail before reading it", async () => {

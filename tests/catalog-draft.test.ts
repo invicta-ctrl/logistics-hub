@@ -31,7 +31,7 @@ describe("the catalogue draft", () => {
   });
 
   it("suggests the photo's name, and the person's typing wins, even a cleared name", () => {
-    expect(composeDraft(input({ photo: { name: "Stapler" } })).name).toMatchObject({ value: "Stapler", source: "OBSERVED_PHOTO", state: "suggested" });
+    expect(composeDraft(input({ photo: { name: "Stapler" } })).name).toMatchObject({ value: "Stapler", source: "OBSERVED_PHOTO", state: "needs-confirmation" });
     const typed = composeDraft(input({ photo: { name: "Stapler" }, typed: { name: "Desk stapler" }, edited: new Set(["name"]) }));
     expect(typed.name).toMatchObject({ value: "Desk stapler", source: "USER", wasUserEdited: true });
     const cleared = composeDraft(input({ photo: { name: "Stapler" }, typed: { name: "" }, edited: new Set(["name"]) }));
@@ -59,6 +59,12 @@ describe("the catalogue draft", () => {
     expect(read.brand).toMatchObject({ value: "Max", source: "OBSERVED_PHOTO", state: "needs-confirmation" });
     expect(composeDraft(input({ photo: { name: "Stapler", brand: "  ", model: "!!!" } })).brand.state).toBe("unknown");
     expect(composeDraft(input({ photo: { name: "Stapler", model: "!!!" } })).model.value).toBeNull();
+  });
+
+  it("reports a value only as the person's when the screen says they changed it", () => {
+    const written = composeDraft(input({ photo: { name: "Stapler" }, typed: { name: "Stapler", model: "HD-10" } }));
+    expect(written.name).toMatchObject({ source: "OBSERVED_PHOTO", wasUserEdited: false });
+    expect(written.model).toMatchObject({ value: null, wasUserEdited: false });
   });
 
   it("lists what a person still has to look at", () => {

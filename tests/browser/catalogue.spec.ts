@@ -417,10 +417,13 @@ test.describe("photo suggestions (ambient assist)", () => {
       await route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "Stapler", brand: "Max", model: requests === 1 ? "HD-10" : "HD-50", packaging: null }) });
     });
     await begin(page, server);
-    await page.locator("#cat-more").evaluate((element) => element.setAttribute("open", ""));
     await page.locator("#cat-file").setInputFiles({ name: "first.png", mimeType: "image/png", buffer: PNG });
+    // The field is under "More details": it opens by itself and says where the value came from.
+    await expect(page.locator("#cat-model")).toBeVisible();
     await expect(page.locator("#cat-model")).toHaveValue("HD-10");
+    await expect(page.locator("#cat-model-hint")).toContainText("Read from the photo");
     await page.locator("#cat-model").fill("HD-10N");
+    await expect(page.locator("#cat-model-hint")).toBeEmpty();
     await page.locator("#cat-file").setInputFiles({ name: "second.png", mimeType: "image/png", buffer: PNG });
     await expect.poll(() => requests).toBe(2);
     await expect(name(page)).toHaveValue("Stapler");

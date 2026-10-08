@@ -1,4 +1,5 @@
 import { type Behaviour } from "./catalog-policy";
+import type { PhotoReading } from "./ambient-assist";
 import { type Basis, type Suggestion, type Suggestions } from "./catalogue-suggest";
 
 /*
@@ -50,17 +51,14 @@ export type CatalogDraft = {
   reorder: DraftField<number>;
 };
 
-/** What the photo's reading may say: observable, legible facts only; every part is optional and none is policy. */
-export type PhotoReading = { name?: string | null; brand?: string | null; model?: string | null; packaging?: string | null };
-
 export type DraftInput = {
   revision: number;
-  /** What is in the form now; a non-empty or deliberately cleared field is the person's. */
+  /** Only what the person typed or deliberately cleared. A value the photo wrote into the form must not be passed here, or it would be reported as theirs. */
   typed: Partial<Record<DraftFieldName, string>>;
   /** Fields the person has touched, even if now empty (a cleared name is still their choice). */
   edited: ReadonlySet<DraftFieldName>;
   suggestions: Suggestions;
-  photo: PhotoReading | null;
+  photo: Partial<PhotoReading> | null;
   /** The place and stock area the staff member chose for this session, if any. */
   session: { place?: string | null; placeName?: string | null; stockArea?: string | null };
   /** The starting quantity the screen offers. */
@@ -109,7 +107,7 @@ function observed(text: string | null | undefined, limit: number, what: string):
 export function composeDraft(input: DraftInput): CatalogDraft {
   const mine = <T>(field: DraftFieldName, convert: (text: string) => T | null): DraftField<T> | null => {
     const text = input.typed[field] ?? "";
-    if (!input.edited.has(field) && !text.trim()) return null;
+    if (!input.edited.has(field)) return null;
     return owned(text.trim() ? convert(text.trim()) : null);
   };
   const text = (field: DraftFieldName) => mine<string>(field, (value) => value);
@@ -119,7 +117,7 @@ export function composeDraft(input: DraftInput): CatalogDraft {
   const catalogue = input.suggestions;
 
   const name: DraftField<string> = text("name") ?? (photoName
-    ? { value: photoName, source: "OBSERVED_PHOTO", reason: "Suggested from the photo. Check it, or type over it.", state: "suggested", wasUserEdited: false }
+    ? { value: photoName, source: "OBSERVED_PHOTO", reason: "Suggested from the photo. Check it, or type over it.", state: "needs-confirmation", wasUserEdited: false }
     : unknown("Type what it is called. A temporary name is fine."));
 
   const quantity: DraftField<number> = count("quantity") ?? { value: input.defaultQuantity, source: "DEFAULT", reason: NOT_FROM_A_PHOTO.quantity!, state: "needs-confirmation", wasUserEdited: false };

@@ -33,9 +33,10 @@ export type Band = "NORMAL" | "CONSERVE" | "RESERVE" | "CRITICAL" | "STOPPED";
 export type Urgency = "USER" | "BACKGROUND";
 /**
  * The most one photo call may cost, counted before the call so two calls cannot both squeeze under a line. Measured 2026-10-07:
- * 3.6 Neurons for a 320 px photo; the reply's own `usage.neurons` replaces it once it answers, and a failed call keeps it.
+ * 3.6 Neurons for a 320 px photo at 40 output tokens. The Final Pass reply is up to 64 tokens with a longer instruction, so the reserve is
+ * raised to 10 until a short approved live smoke re-measures it; the reply's own `usage.neurons` replaces it once it answers, and a failed call keeps it.
  */
-export const PHOTO_RESERVE = 6;
+export const PHOTO_RESERVE = 10;
 /** A call this slow is abandoned (one of 24 measured calls took 28 s); the person keeps typing meanwhile. */
 export const CALL_TIMEOUT_MS = 10_000;
 /** Consecutive failures that open the breaker, and how long it stays open. Per Worker instance: a restart simply tries again. */
@@ -127,7 +128,7 @@ const INSTRUCTION = "You help a student council storeroom catalogue its supplies
 const READING_FIELD = { type: ["string", "null"] };
 const NAME_SCHEMA = { type: "object", properties: { name: { type: ["string", "null"] }, brand: READING_FIELD, model: READING_FIELD, packaging: READING_FIELD }, required: ["name", "brand", "model", "packaging"], additionalProperties: false };
 /** Words that mean the photo shows people rather than a thing: such an answer is dropped, never shown or stored. */
-const PEOPLE = /\b(person|people|man|men|woman|women|boy|girl|child|children|kid|face|selfie|student|staff|portrait|hand|hands)\b/i;
+const PEOPLE = /\b(person|people|man|men|woman|women|boy|girl|child|children|kid|face|selfie|student|staff|portrait|hands)\b/i;
 
 /** The JSON object a model answered with (chat-completion or older `response` shape, parsed if text), or null. */
 function replyObject(reply: unknown): Record<string, unknown> | null {
@@ -136,7 +137,14 @@ function replyObject(reply: unknown): Record<string, unknown> | null {
     const choices = (reply as { choices?: unknown }).choices;
     value = Array.isArray(choices) ? (choices[0] as { message?: { content?: unknown } } | undefined)?.message?.content : (reply as { response?: unknown }).response;
   }
-  if (typeof value === "string") { try { value = JSON.parse(value); } catch { return null; } }
+  if (typeof value === "string") {
+    const text = value;
+    try { value = JSON.parse(text); } catch {
+      // A reply cut off by the token limit still carries its name when the name came first: keep that, drop the rest.
+      const cut = /"name"\s*:\s*"([^"\\]{1,60})"/.exec(text);
+      return cut ? { name: cut[1] } : null;
+    }
+  }
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
@@ -145,12 +153,12 @@ export function readPhotoName(reply: unknown): string | null {
   const raw = replyObject(reply)?.name;
   if (typeof raw !== "string") return null;
   const name = raw.normalize("NFKC").replace(/[^\p{L}\p{N}\s'&/-]/gu, " ").replace(/\s+/g, " ").trim();
-  if (name.length < 2 || name.length > 48 || name.split(" ").length > 5 || !/\p{L}/u.test(name) || PEOPLE.test(name)) return null;
+  if (name.length < 2 || name.length > 48 || name.split(" ").length > 5 || !/\p{L}/u.test(name) || PEOPLE.test(name) || COMMANDLIKE.test(name)) return null;
   return name.replace(/(^|\s)(\p{Ll})/gu, (_, space: string, letter: string) => space + letter.toUpperCase());
 }
 
 /** Words that would turn printed text into a command if anything ever treated it as one: such a reading is dropped. */
-const COMMANDLIKE = /\b(ignore|disregard|instruction|system|prompt|assistant|override|execute)\b/i;
+const COMMANDLIKE = /\b(ignore|disregard|instructions?|assistant|override|execute)\b/i;
 
 /** Printed text a person can check (a brand, a model, a packaging word), or null. Never a sentence, never a command. */
 function readPrinted(raw: unknown, limit: number, wordLimit: number): string | null {
@@ -205,7 +213,7 @@ export async function photoName(db: D1Database, ai: AiRunner | undefined, jpeg: 
       reply = await Promise.race([
         ai.run(PHOTO_MODEL, {
           messages: [{ role: "system", content: INSTRUCTION }, { role: "user", content: [{ type: "text", text: "What is this item?" }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64(jpeg)}` } }] }],
-          response_format: { type: "json_schema", json_schema: NAME_SCHEMA }, max_tokens: 90, temperature: 0, chat_template_kwargs: { enable_thinking: false }
+          response_format: { type: "json_schema", json_schema: NAME_SCHEMA }, max_tokens: 64, temperature: 0, chat_template_kwargs: { enable_thinking: false }
         }),
         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), CALL_TIMEOUT_MS); })
       ]);
