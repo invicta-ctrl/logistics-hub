@@ -1393,8 +1393,16 @@ export async function workspace(): Promise<void> {
     });
   }
 
-  function openNew(): void {
-    if (!discardOk()) return;
+  let waitingForList = false;
+  async function openNew(): Promise<void> {
+    if (waitingForList || !discardOk()) return;
+    // The page draws before its first answer, and the form's places and duplicate-name check come from that answer:
+    // a form opened earlier offered no place to choose. Wait for it once instead.
+    if (!inventory) {
+      waitingForList = true;
+      try { await poll.refresh(); } finally { waitingForList = false; }
+      if (!sheet.isConnected) return;
+    }
     dirty = false;
     openId = null;
     detail = null;
