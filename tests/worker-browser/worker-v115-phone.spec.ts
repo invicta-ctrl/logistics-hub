@@ -125,7 +125,7 @@ test("unsafe areas: controls stay clear of the notch and the home indicator", as
 });
 
 
-/** Opens a sheet or dialog and judges it as a thumb meets it: on screen, not sideways, its way out and its last action reachable. */
+/** Opens a sheet or dialog and judges it as a thumb meets it: on screen, not sideways, its way out and its lowest control clear of the home indicator. */
 async function judge(page: Page, name: string, insets: { top: number; bottom: number; left: number; right: number }) {
   const dialog = page.locator("dialog[open]").last();
   await expect(dialog, `${name} is open`).toBeVisible();
@@ -143,12 +143,19 @@ async function judge(page: Page, name: string, insets: { top: number; bottom: nu
   await out.scrollIntoViewIfNeeded();
   const closing = await out.boundingBox();
   expect(Math.min(closing!.width, closing!.height), `${name}: the way out is 44 px or more`).toBeGreaterThanOrEqual(43.5);
-  // Scrolled to the very end, the last control sits above the home indicator (the sheet's bottom padding is what lifts it).
+  // Scrolled to the very end, no control sits in the home indicator's strip (the sheet's bottom padding is what lifts the lowest one).
   await dialog.evaluate((element) => { for (const node of [element, ...element.querySelectorAll<HTMLElement>("*")]) if (node.scrollHeight > node.clientHeight && /auto|scroll/.test(getComputedStyle(node).overflowY)) node.scrollTop = node.scrollHeight; });
-  const last = dialog.locator("button:visible, a[href]:visible, input:visible, select:visible, textarea:visible").last();
-  const end = await last.boundingBox();
-  expect(end!.y + end!.height, `${name}: the last control clears the home indicator`).toBeLessThanOrEqual(size.height - insets.bottom + 0.5);
-  expect(end!.y, `${name}: the last control is on screen`).toBeGreaterThanOrEqual(0);
+  const lowest = await dialog.evaluate((element) => {
+    let found: { top: number; bottom: number; text: string } | null = null;
+    for (const control of element.querySelectorAll<HTMLElement>("button, a[href], input:not([type=hidden]), select, textarea")) {
+      const box = control.getBoundingClientRect();
+      if (!box.width || !box.height || getComputedStyle(control).visibility === "hidden" || control.closest("[hidden]")) continue;
+      if (!found || box.bottom > found.bottom) found = { top: box.top, bottom: box.bottom, text: (control.innerText || control.getAttribute("aria-label") || control.id || control.tagName).trim().slice(0, 30) };
+    }
+    return found;
+  });
+  expect(lowest, `${name}: has controls`).toBeTruthy();
+  expect(lowest!.bottom, `${name}: the lowest control (${lowest!.text}) clears the home indicator`).toBeLessThanOrEqual(size.height - insets.bottom + 0.5);
 }
 
 /** One item for each way of getting something, found by name or made once, so a Self-Service form can be opened whatever else the store holds. */
