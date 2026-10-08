@@ -80,7 +80,7 @@ export async function neuronsToday(db: D1Database, now = Date.now()): Promise<nu
  * the call's line, so two calls that both read a count just under the line cannot both start (review on PR 22). Answers whether the
  * reserve was taken.
  */
-async function reserve(db: D1Database, neurons: number, urgency: Urgency, now: number): Promise<boolean> {
+export async function reserve(db: D1Database, neurons: number, urgency: Urgency, now: number): Promise<boolean> {
   const line = urgency === "USER" ? BANDS.stop : BANDS.critical;
   const result = await db.prepare(`INSERT INTO system_settings(key, value, updated_at) SELECT ?1, CAST(?2 AS TEXT), ?3 WHERE ?2 <= ?4
     ON CONFLICT(key) DO UPDATE SET value = CAST(ROUND(CAST(value AS REAL) + ?2, 3) AS TEXT), updated_at = ?3 WHERE CAST(value AS REAL) + ?2 <= ?4`)
@@ -89,7 +89,7 @@ async function reserve(db: D1Database, neurons: number, urgency: Urgency, now: n
 }
 
 /** Adds to today's count in one statement, so concurrent calls never lose each other's Neurons; drops counts older than a week. */
-function spend(db: D1Database, neurons: number, now: number): Promise<unknown> {
+export function spend(db: D1Database, neurons: number, now: number): Promise<unknown> {
   return db.batch([
     db.prepare(`INSERT INTO system_settings(key, value, updated_at) VALUES(?1, ?2, ?3)
       ON CONFLICT(key) DO UPDATE SET value = CAST(ROUND(CAST(value AS REAL) + ?2, 3) AS TEXT), updated_at = ?3`).bind(usageKey(utcDay(now)), neurons, new Date(now).toISOString()),

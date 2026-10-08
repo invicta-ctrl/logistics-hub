@@ -430,6 +430,28 @@ test.describe("photo suggestions (ambient assist)", () => {
     await expect(page.locator("#cat-model")).toHaveValue("HD-10N");
   });
 
+  test("an older retake finishing late does not hide Preparing while a newer one is still running", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    await page.addInitScript(() => {
+      const real = window.createImageBitmap.bind(window);
+      let calls = 0;
+      (window as unknown as { releaseSecond: () => void }).releaseSecond = () => {};
+      window.createImageBitmap = (async (...args: Parameters<typeof real>) => {
+        calls += 1;
+        if (calls === 2) await new Promise<void>((resolve) => { (window as unknown as { releaseSecond: () => void }).releaseSecond = resolve; });
+        return real(...args);
+      }) as typeof window.createImageBitmap;
+    });
+    await page.route("**/api/staff/catalogue/photo-name", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: null }) }));
+    await begin(page, server);
+    await page.locator("#cat-file").setInputFiles({ name: "first.png", mimeType: "image/png", buffer: PNG });
+    await page.locator("#cat-file").setInputFiles({ name: "second.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.locator("#cat-photo")).toContainText("Preparing");
+    await page.evaluate(() => (window as unknown as { releaseSecond: () => void }).releaseSecond());
+    await expect(page.locator("#cat-photo img")).toBeVisible();
+  });
+
   test("a retake ignores an older photo response that finishes last", async ({ page }) => {
     const server = serve(page, { active: true });
     await server.ready;

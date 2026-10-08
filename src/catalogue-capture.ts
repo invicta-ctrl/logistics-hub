@@ -342,7 +342,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     let prepared: NonNullable<typeof photo> | null = null;
     let preparationError: string | null = null;
     try { prepared = await preparePhoto(chosen); } catch (error) { preparationError = error instanceof Error ? error.message : "This photo could not be used."; }
-    if (revision !== photoRevision) { preparing = false; return; }
+    // A newer retake (or a reset, which clears the flag itself) owns "Preparing…" now: an older one finishing late must not hide it.
+    if (revision !== photoRevision) return;
     setMessage($("#cat-alert"), preparationError ?? "");
     preparing = false;
     // A photo that could not be used leaves the earlier photo, its name and its check exactly as they were.
