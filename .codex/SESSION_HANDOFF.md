@@ -1,5 +1,25 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Road to V2 — V1.15 V2 consolidation (COMPLETE, WAITING ON OWNER ACTIONS; Claude Cloud integrator, 2026-10-08)
+
+~~~text
+TASK: Finish V1.15 under its spec and accepted amendments, integrate the second writer, and write the release records.
+STATUS: COMPLETE, WAITING ON OWNER ACTIONS. Every acceptance line in docs/road-to-v2/v1.15-consolidation-plan.md has evidence.
+BASE COMMIT: e919d8d (V1.15 with main 1247274 / V1.14 merged in)
+BRANCH/WORKTREE: road-to-v2/v1.15-v2-consolidation / Claude Cloud (integrator). road-to-v2/v1.15-task-consolidation (Build V1.15, second writer) merged at ea86bd1 in 484ebcd; it has stopped.
+LAST PUSHED COMMIT: `git log -1 origin/road-to-v2/v1.15-v2-consolidation`
+FILES CHANGED: since e919d8d: src (ambient assist, staff-ids, ui working(), self-service-app, styles, admin-*, directory, catalogue pages, main placeholder); tests (controls sweep, writes, refresh, optional, wording, phone, tab-style, id-card-loading); docs (plan, visual research, releases v1.15 and v2.0); scripts/visual-evidence.mjs (More button lookup); .codex/*
+CONTRACTS ADDED/CHANGED: as in the v1.15 record; plus shrinkPhoto(file, maxBytes, edge, quality) and SELF_SERVICE_LIMITS.photoEdge/photoQuality (1280, 0.75); working(scope) restores focus.
+MIGRATIONS: None.
+TESTS RUN: typecheck; npx vitest run (704 passed, 2 skipped); npx playwright test (203 passed); verify:privacy (0); evidence render against origin/main; CI on the head (see the v1.15 record, "CI").
+RESULTS: green; two container-only real-Worker failures as before, both green in CI.
+UNRUN CHECKS: real phone, screen reader, Safari; production signed-in check after deploy.
+KNOWN LIMITATIONS: see the v1.15 record.
+BLOCKERS: none for the branch. Integration waits on Earl: the count-only Student ID check, then his merge.
+NEXT EXACT ACTION: Earl runs owner action 1 and merges the V1.15 PR. Then verify main's CI, deploy, admin verify and CodeQL; set v2.0.md to COMPLETE; give Earl the branch delete commands.
+MERGE ORDER / DEPENDENCIES: V1.15 is the last Road-to-V2 branch; nothing to propagate forward. V1.14's branch holds only a superseded test commit (a5840d0) and can be deleted.
+~~~
+
 ## Road to V2 — V1.15 V2 consolidation (IN PROGRESS; Claude Cloud sole integrator, 2026-10-07)
 
 - **Ambient AI Assist built:** online Quick Catalog photo name (Gemma, thumbnail only, fills an empty name, editable), photo look-alikes through the deterministic duplicate rule, offline enrichment intent (`recheck`) checked after sync, unresolved look-alikes in Attention as Possible duplicates with Compare and Keep both, UTC Neuron bands with a 9,500 stop, three-failure breaker, owner switch in Administration > System. Contracts, the Gemma check and the not-built decisions (Qwen, GLM, Granite runtime, AI Gateway) are in `docs/road-to-v2/v1.15-consolidation-plan.md`.

@@ -2021,7 +2021,7 @@ async function capture(url, dir) {
         // The account menu (from a page with nothing modal open); on phones it is the More sheet.
         await page.goto(`${url}/staff/items`);
         await page.waitForSelector("tbody tr");
-        const opener = size === "phone" ? page.getByRole("button", { name: "More" }) : page.getByRole("button", { name: /^Account:/ });
+        const opener = size === "phone" ? page.getByRole("button", { name: "More", exact: true }) : page.getByRole("button", { name: /^Account:/ });
         if (await opener.count()) { await opener.click(); await shot(page, `${role.toLowerCase()}-${size}-menu`); }
         await context.close();
       }

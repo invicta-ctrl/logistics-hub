@@ -3,9 +3,8 @@ INTENT: finish V1.15 under its spec, the 2026-10-07 amendments and the 2026-10-0
 BRANCH: `road-to-v2/v1.15-v2-consolidation`; derive the head with `git rev-parse HEAD`.
 AUTHORITY: `docs/specs/accepted/road-to-v2/v1.15-v2-consolidation.md` and its accepted amendments; Earl's 2026-10-07 continuation prompt.
 EXCLUDED: merge or push to `main`, production D1/R2 writes, provider configuration beyond the reviewed `AI` binding, reopening Self-Service, anything sent to AI other than intentional catalog photos.
-STATUS: IN PROGRESS. Ambient AI Assist is pushed; see `.codex/SESSION_HANDOFF.md` (top) for the full handoff block.
-NEXT ACTION: merge `wip/v1.15-codex-windows` when it exists, then the remaining V1.15 acceptance work.
-
+STATUS: COMPLETE, WAITING ON OWNER ACTIONS (`docs/road-to-v2/releases/v1.15.md`). See `.codex/SESSION_HANDOFF.md` (top).
+NEXT ACTION: Earl's count-only Student ID check, then the merge of the V1.15 pull request; then the post-merge checks that turn `docs/road-to-v2/releases/v2.0.md` to COMPLETE.
 ---
 
 # Previous task — none active (Part 6 complete on main; awaiting Earl's acceptance)
