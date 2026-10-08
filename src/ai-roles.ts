@@ -1,5 +1,6 @@
-import { type AiRunner, BREAKER_FAILURES, BREAKER_MS, CALL_TIMEOUT_MS, type Urgency, assistOn, reserve, spend } from "./ambient-assist";
+import { type AiRunner, BANDS, BREAKER_FAILURES, BREAKER_MS, CALL_TIMEOUT_MS, type Urgency, assistOn, reserve, spend } from "./ambient-assist";
 import { aiReplyText } from "./catalog-ai";
+import { words } from "./duplicates";
 
 /*
  * The four model roles of the Final Pass (amendment §5), behind the one boundary in ambient-assist.ts. Each role is a real adapter: its
@@ -30,7 +31,11 @@ export const ROLE_LIMITS: Record<Exclude<ModelRole, "VISION_EXTRACT">, { reserve
   CANDIDATE_ARBITRATE: { reserve: 8, maxTokens: 60 },
   RARE_SECOND_OPINION: { reserve: 8, maxTokens: 80 }
 };
-/** All three start in shadow: Granite failed its first classification test (13% and 24%), and Qwen and GLM have no held-out result at all. */
+/**
+ * All three start in shadow: Granite failed its first classification test (13% and 24%), and Qwen and GLM have no held-out result at
+ * all. Changed only by a reviewed commit after a role passes its gate (amendment §7.3); production code passes no override, and only
+ * tests assign to it.
+ */
 export const ROUTE_STATE: Record<Exclude<ModelRole, "VISION_EXTRACT">, RouteState> = {
   TEXT_NORMALIZE: "SHADOW_EVALUATION",
   CANDIDATE_ARBITRATE: "SHADOW_EVALUATION",
@@ -39,7 +44,11 @@ export const ROUTE_STATE: Record<Exclude<ModelRole, "VISION_EXTRACT">, RouteStat
 
 export type TextRole = keyof typeof ROLE_LIMITS;
 export type RoleOutcome = "ANSWER" | "ABSTAIN" | "UNAVAILABLE";
-export type RoleResult = { role: TextRole; version: string; outcome: RoleOutcome; reason: string; value: string | null; neurons: number | null; shadow: boolean };
+/**
+ * `value` is what a caller may use. In SHADOW_EVALUATION it is always null; the model's answer is then in `observed`, which only a
+ * bounded evaluation (`evaluation: true`) receives and which no screen or route reads.
+ */
+export type RoleResult = { role: TextRole; version: string; outcome: RoleOutcome; reason: string; value: string | null; observed: string | null; neurons: number | null; shadow: boolean };
 
 const breakers: Record<TextRole, { failures: number; openUntil: number }> = {
   TEXT_NORMALIZE: { failures: 0, openUntil: 0 },
@@ -55,8 +64,13 @@ const clean = (text: string, limit: number) => text.replace(/\s+/g, " ").trim().
 type Task = { system: string; user: string; allowed: readonly string[]; field: string };
 
 /** TEXT_NORMALIZE (Granite): the observed or typed name, and the canonical terms it may be normalized to. Returns one of them or null. */
+export const MAX_TERMS = 40;
 export function normalizeTask(observed: string, terms: readonly string[]): Task {
-  const allowed = [...new Set(terms.map((term) => clean(term, 60)).filter(Boolean))].slice(0, 40);
+  const wanted = new Set(words(observed));
+  const overlap = (term: string) => words(term).filter((word) => wanted.has(word)).length;
+  // Terms longer than 60 characters are skipped rather than cut (a cut term could match something else); the closest 40 are kept.
+  const allowed = [...new Set(terms.map((term) => term.replace(/\s+/g, " ").trim()).filter((term) => term && term.length <= 60))]
+    .sort((a, b) => overlap(b) - overlap(a) || a.localeCompare(b)).slice(0, MAX_TERMS);
   return {
     field: "term", allowed,
     system: "You match a storeroom item name to the catalogue's own wording. Reply with JSON only: {\"term\": ...}. term must be copied exactly from the list in the request, or null when none clearly means the same thing.",
@@ -76,12 +90,15 @@ export function arbitrateTask(observed: string, candidates: ReadonlyArray<{ id: 
 
 /** The follow-up questions the second opinion may ask a person to settle; it picks one or none and decides nothing itself. */
 export const FOLLOW_UPS = ["CHECK_NAME", "CHECK_CATEGORY", "CHECK_COUNTING_UNIT", "CHECK_BORROW_OR_TAKE", "LOOKS_LIKE_EXISTING_ITEM"] as const;
-/** RARE_SECOND_OPINION (GLM): conflicting evidence, summarized as short facts. Returns one fixed follow-up or null. */
-export function secondOpinionTask(facts: readonly string[]): Task {
+/** What conflicts, as fixed codes: no catalogue text, name or person data can reach the second opinion. */
+export const FACT_CODES = ["NAME_AND_PHOTO_DISAGREE", "CATALOGUE_AND_KNOWLEDGE_DISAGREE", "CATEGORY_SPLIT", "UNIT_SPLIT", "BEHAVIOUR_SPLIT", "POSSIBLE_DUPLICATE"] as const;
+export type FactCode = typeof FACT_CODES[number];
+/** RARE_SECOND_OPINION (GLM): which things conflict. Returns one fixed follow-up or null. */
+export function secondOpinionTask(facts: readonly FactCode[]): Task {
   return {
     field: "follow_up", allowed: FOLLOW_UPS,
     system: "Staff are cataloguing a storeroom item and the evidence conflicts. Reply with JSON only: {\"follow_up\": ...}. follow_up is the one question a person should check first, copied exactly from the allowed list, or null.",
-    user: JSON.stringify({ evidence: facts.slice(0, 6).map((fact) => clean(fact, 120)), allowed: FOLLOW_UPS })
+    user: JSON.stringify({ conflicts: [...new Set(facts)].filter((fact) => FACT_CODES.includes(fact)), allowed: FOLLOW_UPS })
   };
 }
 
@@ -107,13 +124,13 @@ const log = (role: TextRole, outcome: RoleOutcome, reason: string, ms: number, n
  * reason code and no value. In SHADOW_EVALUATION the call runs only when `evaluation` is true (a bounded benchmark), and even then
  * the result carries `shadow: true` so no caller may use the value for a field.
  */
-export async function runRole(db: D1Database, ai: AiRunner | undefined, role: TextRole, task: Task, urgency: Urgency, options: { evaluation?: boolean; now?: number; states?: Record<TextRole, RouteState> } = {}): Promise<RoleResult> {
+export async function runRole(db: D1Database, ai: AiRunner | undefined, role: TextRole, task: Task, urgency: Urgency, options: { evaluation?: boolean; now?: number } = {}): Promise<RoleResult> {
   const now = options.now ?? Date.now();
   const started = Date.now();
-  const shadow = (options.states ?? ROUTE_STATE)[role] === "SHADOW_EVALUATION";
+  const shadow = ROUTE_STATE[role] === "SHADOW_EVALUATION";
   const done = (outcome: RoleOutcome, reason: string, value: string | null = null, neurons: number | null = null): RoleResult => {
     log(role, outcome, reason, Date.now() - started, neurons ?? 0);
-    return { role, version: ROLE_MODELS[role], outcome, reason, value, neurons, shadow };
+    return { role, version: ROLE_MODELS[role], outcome, reason, value: shadow ? null : value, observed: shadow && options.evaluation ? value : null, neurons, shadow };
   };
   try {
     if (!ai) return done("UNAVAILABLE", "NO_BINDING");
@@ -131,7 +148,7 @@ export async function runRole(db: D1Database, ai: AiRunner | undefined, role: Te
         ai.run(ROLE_MODELS[role], {
           messages: [{ role: "system", content: task.system }, { role: "user", content: task.user }],
           response_format: { type: "json_schema", json_schema: { type: "object", properties: { [task.field]: { type: ["string", "null"], enum: [...task.allowed, null] } }, required: [task.field], additionalProperties: false } },
-          max_tokens: limits.maxTokens, temperature: 0
+          max_tokens: limits.maxTokens, temperature: 0, chat_template_kwargs: { enable_thinking: false }
         }),
         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), CALL_TIMEOUT_MS); })
       ]);
@@ -163,22 +180,22 @@ export type RouteContext = {
   terms: readonly string[];
   /** Verified items that remain equally plausible for the name. */
   candidates: ReadonlyArray<{ id: string; name: string }>;
-  /** Short conflicting facts, when a different answer would change what a person should check. */
-  conflict: readonly string[];
-  /** Neurons left under the user line today. */
-  headroom: number;
+  /** What conflicts, as fixed codes, when a different answer would change what a person should check. */
+  conflict: readonly FactCode[];
+  /** Neurons spent today (neuronsToday). GLM is asked only in the NORMAL band, below the first protection line. */
+  used: number;
 };
 
 /**
  * The calls a draft may need, in order, never more than two in routine use (amendment §5): zero when an exact match resolves it,
  * Granite only when deterministic normalization failed and terms exist, Qwen only with two or more valid candidates, GLM only for an
- * unresolved conflict with ample allowance. All four roles run together only in a bounded conformance test, never here.
+ * unresolved conflict while the day is still in the NORMAL band. All four roles run together only in a bounded conformance test, never here.
  */
 export function route(context: RouteContext): TextRole[] {
   if (context.exactMatch) return [];
   const calls: TextRole[] = [];
   if (context.unmatchedName && context.terms.length > 0) calls.push("TEXT_NORMALIZE");
   if (context.candidates.length >= 2) calls.push("CANDIDATE_ARBITRATE");
-  if (calls.length === 0 && context.conflict.length > 0 && context.headroom >= 1_000) calls.push("RARE_SECOND_OPINION");
+  if (calls.length === 0 && context.conflict.length > 0 && context.used < BANDS.conserve) calls.push("RARE_SECOND_OPINION");
   return calls.slice(0, 2);
 }
