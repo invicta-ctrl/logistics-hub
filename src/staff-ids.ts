@@ -64,7 +64,10 @@ export function fillTiles(host: HTMLElement, personId: string, card: Card): void
   const load = (button: HTMLElement) => {
     const side = button.dataset.open as Side;
     const figure = button.closest("figure")!;
-    figure.querySelector(".id-tile__failed")?.remove();
+    const failedNote = figure.querySelector(".id-tile__failed");
+    // "Try again" goes with its note, so focus moves to the tile first rather than falling to the page.
+    if (failedNote?.contains(document.activeElement)) button.focus({ preventScroll: true });
+    failedNote?.remove();
     button.classList.add("is-loading");
     const after = side === "back" ? frontSettled.done ?? Promise.resolve() : Promise.resolve();
     const done = after.then(() => scan(personId, card.mediaId, side)).then((url) => {
@@ -212,6 +215,8 @@ export async function openCard(person: Who, opening: Opening): Promise<void> {
   });
   /** Asks again for a side that could not be opened; the card shows its loading state until the answer. */
   const retrySide = (side: Side) => {
+    // "Try again" is hidden with its note, so focus stays in the viewer instead of falling to the page.
+    if (sides[side].failed.contains(document.activeElement)) (flipButton.hidden ? dialog.querySelector<HTMLElement>("button:not([hidden]):not(:disabled)") : flipButton)?.focus({ preventScroll: true });
     sides[side].failed.hidden = true;
     sides[side].holder.classList.remove("is-failed");
     sides[side].holder.classList.add("is-loading");

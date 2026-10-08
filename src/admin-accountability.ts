@@ -37,14 +37,15 @@ export async function accountability(): Promise<void> {
 
   const status = document.querySelector<HTMLElement>("#ret-status");
   const alert = document.querySelector<HTMLElement>("#ret-alert");
-  async function checkRetention(): Promise<void> {
-    if (!status) return;
+  async function checkRetention(): Promise<boolean> {
+    if (!status) return true;
     try {
       const due = await api<{ loans: number; phoneRecords: number; photos: number }>("/api/staff/admin/retention");
       const none = !due.loans && !due.phoneRecords;
       status.textContent = none ? "Nothing is old enough to remove yet." : `Ready to remove: ${plural(due.loans, "loan")}, ${plural(due.phoneRecords, "phone record")} and ${plural(due.photos, "photo")}.`;
       document.querySelector<HTMLButtonElement>("#ret-run")!.disabled = none;
-    } catch (error) { status.textContent = ""; setMessage(alert!, failure(error)); }
+      return true;
+    } catch (error) { status.textContent = ""; setMessage(alert!, failure(error)); return false; }
   }
   document.querySelector("#ret-run")?.addEventListener("click", async (event) => {
     const trigger = event.currentTarget as HTMLButtonElement;
@@ -60,6 +61,7 @@ export async function accountability(): Promise<void> {
     trigger.disabled = true;
     trigger.setAttribute("aria-busy", "true");
     const total = { loans: 0, phoneRecords: 0 };
+    let failed = false;
     try {
       // One request erases a bounded number of rows; ask again while more are due.
       for (let more = true; more;) {
@@ -70,8 +72,10 @@ export async function accountability(): Promise<void> {
       }
       setMessage(alert!, "");
       toast(`Removed details from ${plural(total.loans, "loan")} and ${plural(total.phoneRecords, "phone record")}.`);
-    } catch (error) { setMessage(alert!, failure(error)); }
-    await Promise.all([checkRetention(), loadActivity()]);
+    } catch (error) { setMessage(alert!, failure(error)); failed = true; }
+    // A failed check leaves the button on (it cannot say what is due), and does not hide why the removal stopped.
+    const [checked] = await Promise.all([failed ? Promise.resolve(false) : checkRetention(), loadActivity()]);
+    if (!checked) trigger.disabled = false;
     trigger.removeAttribute("aria-busy");
   });
   await Promise.all([loadActivity(), checkRetention()]);

@@ -59,9 +59,11 @@ test("a tile whose scan cannot be opened says why and loads it when asked again"
   // The back is unaffected, and nothing about the failure is stored.
   await expect(back(page).locator("img")).toHaveAttribute("src", /^data:image\//);
   scans.fail.delete("front");
-  await note.getByRole("button", { name: "Try again" }).click();
+  // From the keyboard: the button goes with its note, and focus moves to the tile rather than falling to the page.
+  await note.getByRole("button", { name: "Try again" }).press("Enter");
   await expect(front(page).locator("img")).toHaveAttribute("src", /^data:image\//);
   await expect(page.locator(".id-tile__failed")).toHaveCount(0);
+  await expect(front(page)).toBeFocused();
   await expect(front(page)).not.toHaveClass(/is-loading/);
 });
 
@@ -91,9 +93,11 @@ test("the large card shows a failed side with its own Try again, and the back fo
   // The back is not requested while the front is not here.
   expect(scans.asked).toEqual(["front"]);
   scans.fail.delete("front");
-  await failed.getByRole("button", { name: "Try again" }).click();
+  await failed.getByRole("button", { name: "Try again" }).press("Enter");
   await expect(viewer.getByRole("img", { name: "Front of Ana Santos's USC ID" })).toBeVisible();
   await expect(failed).toBeHidden();
+  // Focus stayed in the viewer when the button was hidden.
+  expect(await viewer.evaluate((dialog) => dialog.contains(document.activeElement) && document.activeElement !== dialog)).toBe(true);
   await expect.poll(() => scans.asked).toEqual(["front", "front", "back"]);
   // Pressing the button did not turn the card over.
   await expect(page.locator("[data-card]")).toHaveAttribute("data-side", "front");

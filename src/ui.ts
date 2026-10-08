@@ -321,14 +321,14 @@ export function jpegOf(bitmap: ImageBitmap, edge: number, quality: number): Prom
 }
 
 /**
- * Shrinks a camera photo to at most 1600 px as JPEG, so it uploads quickly on school Wi-Fi and
+ * Shrinks a camera photo to at most 1600 px as JPEG (or `edge` at `quality`), so it uploads quickly on school Wi-Fi and
  * stays small on the phone. A browser that cannot decode it sends the original, up to `maxBytes`.
  */
-export async function shrinkPhoto(file: File, maxBytes = 8 * 1024 * 1024): Promise<Blob> {
+export async function shrinkPhoto(file: File, maxBytes = 8 * 1024 * 1024, edge = MAX_PHOTO_EDGE, quality = 0.82): Promise<Blob> {
   let photo: Blob | null;
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-    try { photo = await jpegOf(bitmap, MAX_PHOTO_EDGE, 0.82); } finally { bitmap.close(); }
+    try { photo = await jpegOf(bitmap, edge, quality); } finally { bitmap.close(); }
   } catch {
     photo = /^image\/(jpeg|png|webp)$/.test(file.type) ? file : null;
   }
@@ -378,12 +378,17 @@ export function failure(error: unknown): string {
 
 /**
  * Acknowledges a save the moment it is pressed: the form's submit buttons (or the one button given) go off and are marked busy until the write settles, so a
- * second tap cannot send it twice. The returned function puts them back, on success and on failure alike.
+ * second tap cannot send it twice. The returned function puts them back, on success and on failure alike, and returns focus to
+ * the button that had it (turning a button off drops its focus, so a failed save would otherwise leave the keyboard on the page).
  */
 export function working(scope: ParentNode): () => void {
   const buttons = scope instanceof HTMLButtonElement ? (scope.disabled ? [] : [scope]) : [...scope.querySelectorAll<HTMLButtonElement>("button[type=submit]:not(:disabled)")];
+  const focused = buttons.find((button) => button === document.activeElement);
   for (const button of buttons) { button.disabled = true; button.setAttribute("aria-busy", "true"); }
-  return () => { for (const button of buttons) { button.disabled = false; button.removeAttribute("aria-busy"); } };
+  return () => {
+    for (const button of buttons) { button.disabled = false; button.removeAttribute("aria-busy"); }
+    if (focused?.isConnected && (document.activeElement === document.body || !document.activeElement)) focused.focus({ preventScroll: true });
+  };
 }
 
 export function setMessage(element: HTMLElement, message: string | Html, tone: "error" | "ok" | "" = "error"): void {
