@@ -1,6 +1,6 @@
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
-import { type AiRunner, MAX_PHOTO_BYTES, assistStatus, keepBoth, photoName, recheckCapturedPhoto, setAssist } from "./ambient-assist";
+import { type AiRunner, MAX_PHOTO_BYTES, assistStatus, keepBoth, photoName, recheckCapturedPhoto, recheckWaiting, setAssist } from "./ambient-assist";
 import { attention, attentionSummary, reviewIdentity, reviewReturn, selfServiceToCheck } from "./attention";
 import { auditDetail, auditReview, auditState, finishAudit, itemFreshness, observe, resolveObservation, startAudit, updateAudit } from "./audits";
 import { bulkUpdate } from "./bulk";
@@ -520,7 +520,8 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     const saved = await putItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, form);
     // A capture whose photo was not checked when it was taken (offline, or the check failed) is checked once, now that its record and
     // first photo are saved. The save above has already answered; this cannot change it.
-    if (form.get("recheck") === "1" && form.get("expected") === "") await afterwards(recheckCapturedPhoto(env.DB, env.AI, env.CATALOG_MEDIA, match[1]!));
+    // Then up to two earlier captures whose check could not run yet (AI was off, out of allowance or failing) get theirs.
+    if (form.get("recheck") === "1" && form.get("expected") === "") await afterwards(recheckCapturedPhoto(env.DB, env.AI, env.CATALOG_MEDIA, match[1]!).then(() => recheckWaiting(env.DB, env.AI, env.CATALOG_MEDIA)));
     return json(saved);
   }
   if (match?.[2] === "/photo" && method === "DELETE") return json(await removeItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));

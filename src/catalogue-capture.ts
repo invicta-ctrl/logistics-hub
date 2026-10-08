@@ -213,7 +213,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const item = everything().find((entry) => entry.id === match.id);
     const pending = match.id.startsWith("pending:");
     return html`<li class="cat-dup__row"><span class="cat-dup__text"><strong>${item?.name ?? match.id}</strong><span>${match.reason}${item ? ` · ${item.onHand} ${units(item.onHand, item.unit)}` : ""}${item?.locationId ? ` · ${list.paths.get(item.locationId) ?? ""}` : ""}</span></span>
-      ${pending ? html`<span class="muted">Just added</span>` : html`<a class="text-link" href="/staff/items?item=${match.id}" target="_blank" rel="noopener">Open<span class="visually-hidden"> ${item?.name ?? match.id} (opens in a new tab)</span></a>`}</li>`;
+      ${pending ? html`<span class="muted">Just added</span>` : html`<span class="cat-dup__actions"><a class="text-link" href="/staff/items?item=${match.id}" target="_blank" rel="noopener">Open<span class="visually-hidden"> ${item?.name ?? match.id} (opens in a new tab)</span></a><a class="text-link" href="/staff/items?item=${match.id}" target="_blank" rel="noopener" data-use-existing="${item?.name ?? ""}">Use existing<span class="visually-hidden"> ${item?.name ?? match.id} instead of adding this one (opens in a new tab)</span></a></span>`}</li>`;
   })}`;
 
   const drawMatches = () => {
@@ -289,6 +289,10 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   const choose = (next: Behaviour) => { behaviour = next; armed = false; setMessage($("#cat-alert"), ""); $("#cat-behaviour").classList.remove("is-invalid"); draw(); };
   root.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
+    // "Use existing" (amendment 2026-10-08, Possible existing item): the record already in the catalog opens to be updated there, and
+    // this capture is dropped, so the match never becomes a duplicate. Nothing about the existing item changes from here.
+    const existing = target.closest<HTMLAnchorElement>("[data-use-existing]");
+    if (existing) { const name = existing.dataset.useExisting; clear(false); toast(name ? `Not added. ${name} is open in a new tab to update.` : "Not added."); return; }
     const button = target.closest<HTMLElement>("[data-behaviour], [data-fill], [data-step], #cat-use-all");
     if (!button) return;
     if (button.dataset.behaviour) choose(button.dataset.behaviour as Behaviour);

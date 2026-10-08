@@ -358,6 +358,22 @@ test.describe("photo suggestions (ambient assist)", () => {
     expect(server.state.photoAsks).toBe(1);
   });
 
+  test("Use existing opens the item already in the catalog and drops this capture, so no duplicate is made (Codex review on PR 22)", async ({ page }) => {
+    const server = serve(page, { active: true });
+    server.state.photoName = "Stapler";
+    await begin(page, server);
+    await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.locator("#cat-dup")).toContainText("This may already be in the catalog.");
+    const opened = page.context().waitForEvent("page");
+    await page.getByRole("link", { name: "Use existing Stapler instead of adding this one (opens in a new tab)" }).click();
+    expect((await opened).url()).toContain("/staff/items?item=ITM-0002");
+    await expect(page.getByText("Not added. Stapler is open in a new tab to update.")).toBeVisible();
+    await expect(name(page)).toHaveValue("");
+    await expect(page.locator("#cat-dup")).toBeEmpty();
+    await expect(page.locator("#cat-photo img")).toHaveCount(0);
+    expect(server.state.captures).toHaveLength(0);
+  });
+
   test("a typed name is never replaced, and a photo that names nothing changes nothing on screen", async ({ page }) => {
     const server = serve(page, { active: true });
     await begin(page, server);

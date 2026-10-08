@@ -44,6 +44,8 @@ export const BREAKER_MS = 10 * 60_000;
 export const SWITCH_KEY = "ambient_assist";
 const usageKey = (day: string) => `ai_neurons:${day}`;
 const FINDING_PREFIX = "assist_photo_match:";
+/** A check after sync that could not run yet (AI off, out of today's allowance, failing): kept until it runs to an answer. */
+const PENDING_PREFIX = "assist_recheck:";
 const utcDay = (now: number) => new Date(now).toISOString().slice(0, 10);
 
 export function bandOf(used: number): Band {
@@ -69,6 +71,19 @@ export async function assistOn(db: D1Database): Promise<boolean> {
 
 export async function neuronsToday(db: D1Database, now = Date.now()): Promise<number> {
   return Number(await db.prepare("SELECT value FROM system_settings WHERE key = ?").bind(usageKey(utcDay(now))).first<string>("value") ?? 0) || 0;
+}
+
+/**
+ * Holds `neurons` of today's allowance for a call, in one conditional statement: it succeeds only while the count stays at or under
+ * the call's line, so two calls that both read a count just under the line cannot both start (review on PR 22). Answers whether the
+ * reserve was taken.
+ */
+async function reserve(db: D1Database, neurons: number, urgency: Urgency, now: number): Promise<boolean> {
+  const line = urgency === "USER" ? BANDS.stop : BANDS.critical;
+  const result = await db.prepare(`INSERT INTO system_settings(key, value, updated_at) SELECT ?1, CAST(?2 AS TEXT), ?3 WHERE ?2 <= ?4
+    ON CONFLICT(key) DO UPDATE SET value = CAST(ROUND(CAST(value AS REAL) + ?2, 3) AS TEXT), updated_at = ?3 WHERE CAST(value AS REAL) + ?2 <= ?4`)
+    .bind(usageKey(utcDay(now)), neurons, new Date(now).toISOString(), line).run();
+  return Boolean(result.meta.changes);
 }
 
 /** Adds to today's count in one statement, so concurrent calls never lose each other's Neurons; drops counts older than a week. */
@@ -153,10 +168,10 @@ export async function photoName(db: D1Database, ai: AiRunner | undefined, jpeg: 
     if (!ai) return done("UNAVAILABLE");
     if (!await assistOn(db)) return done("OFF");
     if (breaker.openUntil > now) return done("BREAKER");
-    if (!mayCall(await neuronsToday(db, now), urgency)) return done("BUDGET");
     if (jpeg.length < 4 || jpeg.length > MAX_PHOTO_BYTES || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) return done("NO_NAME");
-    // Counted first; corrected to the reported cost below. A call that failed or timed out may still have run, so it keeps the reserve.
-    await spend(db, PHOTO_RESERVE, now);
+    // Held first, against the line, in one statement; corrected to the reported cost below. A call that failed or timed out may still
+    // have run, so it keeps the reserve.
+    if (!await reserve(db, PHOTO_RESERVE, urgency, now)) return done("BUDGET");
     let reply: unknown;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -188,24 +203,35 @@ export async function photoName(db: D1Database, ai: AiRunner | undefined, jpeg: 
 
 type CatalogRow = DuplicateKnown & { mediaId: string | null };
 
+/** Outcomes after which a photo has had its check: anything else (off, no AI, no allowance, breaker, failure) leaves it waiting. */
+const ANSWERED: ReadonlySet<PhotoOutcome> = new Set(["NAMED", "NO_NAME"]);
+
 /**
- * Checks a just-synced capture's photo once against the catalog as it is now. Called after the item's first photo is saved, which
- * happens once per item (a repeat upload is refused), so the check cannot run twice. Stays silent unless the photo names an item the
- * Hub's own duplicate rule did not already raise for this record (those the person saw, and chose to keep, when it was saved).
+ * Checks a just-synced capture's photo against the catalog as it is now. Called once per item after its first photo is saved (a repeat
+ * upload is refused). When the check cannot run yet, the item waits in `system_settings` (a reconsideration request, never a command)
+ * and is checked on a later sync (`recheckWaiting`), so a capture made offline on a day AI was off or out of allowance is not lost.
+ * Stays silent unless the photo names an item the Hub's own duplicate rule did not already raise for this record (those the person
+ * saw, and chose to keep, when it was saved).
  */
 export async function recheckCapturedPhoto(db: D1Database, ai: AiRunner | undefined, media: R2Bucket, itemId: string, now = Date.now()): Promise<"SILENT" | "FOUND" | "SKIPPED"> {
+  const waiting = PENDING_PREFIX + itemId;
+  const wait = () => db.prepare("INSERT OR IGNORE INTO system_settings(key, value, updated_at) VALUES(?1, '1', ?2)").bind(waiting, new Date(now).toISOString()).run();
+  const settle = () => db.prepare("DELETE FROM system_settings WHERE key = ?").bind(waiting).run();
   // Cheap checks first, so nothing is read from storage or sent to a model when the answer cannot matter.
-  if (!ai || !await assistOn(db) || breaker.openUntil > now || !mayCall(await neuronsToday(db, now), "BACKGROUND")) return "SKIPPED";
+  if (!ai || !await assistOn(db) || breaker.openUntil > now || !mayCall(await neuronsToday(db, now), "BACKGROUND")) { await wait(); return "SKIPPED"; }
   const rows = (await db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.model, i.serial_number AS serialNumber, m.dhash AS photoHash, i.status, m.media_id AS mediaId
     FROM items i LEFT JOIN item_media m ON m.item_id = i.id WHERE i.status <> 'INACTIVE'`).all<CatalogRow>()).results;
   const item = rows.find((row) => row.id === itemId);
-  if (!item?.mediaId) return "SKIPPED";
+  // Gone, retired or without a photo: there is nothing left to check.
+  if (!item?.mediaId) { await settle(); return "SKIPPED"; }
   const others = rows.filter((row) => row.id !== itemId);
   // What the Hub's own rule finds for the record as saved: already shown to the person at capture, so never raised again.
   const seen = new Set(possibleDuplicates(item, others).map((match) => match.id));
   const thumb = await media.get(key(item.mediaId, "thumb"));
-  if (!thumb) return "SKIPPED";
-  const { name } = await photoName(db, ai, new Uint8Array(await new Response(thumb.body).arrayBuffer()), "BACKGROUND", "PHOTO_RECHECK", now);
+  if (!thumb) { await settle(); return "SKIPPED"; }
+  const { name, outcome } = await photoName(db, ai, new Uint8Array(await new Response(thumb.body).arrayBuffer()), "BACKGROUND", "PHOTO_RECHECK", now);
+  if (!ANSWERED.has(outcome)) { await wait(); return "SKIPPED"; }
+  await settle();
   if (!name) return "SILENT";
   // The record may have changed while the model answered: re-read it before deciding anything.
   const current = await db.prepare("SELECT status FROM items WHERE id = ?").bind(itemId).first<{ status: string }>();
@@ -215,6 +241,19 @@ export async function recheckCapturedPhoto(db: D1Database, ai: AiRunner | undefi
   await db.prepare("INSERT OR IGNORE INTO system_settings(key, value, updated_at) VALUES(?1, ?2, ?3)")
     .bind(FINDING_PREFIX + itemId, JSON.stringify({ with: match.id, seen: name }), new Date(now).toISOString()).run();
   return "FOUND";
+}
+
+/** How many waiting checks one sync may take on, oldest first; bounded so a sync never does a day's backlog at once. */
+export const WAITING_PER_SYNC = 2;
+
+/** Checks up to `WAITING_PER_SYNC` captures still waiting, oldest first, stopping at the first that still cannot run. */
+export async function recheckWaiting(db: D1Database, ai: AiRunner | undefined, media: R2Bucket, now = Date.now()): Promise<void> {
+  if (!ai) return;
+  const { results } = await db.prepare("SELECT key FROM system_settings WHERE key LIKE ? ORDER BY updated_at, key LIMIT ?").bind(`${PENDING_PREFIX}%`, WAITING_PER_SYNC).all<{ key: string }>();
+  for (const { key: waiting } of results) {
+    if (await recheckCapturedPhoto(db, ai, media, waiting.slice(PENDING_PREFIX.length), now) === "SKIPPED"
+      && await db.prepare("SELECT 1 FROM system_settings WHERE key = ?").bind(waiting).first()) return;
+  }
 }
 
 /* ---------- Attention ---------- */

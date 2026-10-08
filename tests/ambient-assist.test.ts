@@ -110,6 +110,20 @@ describe("what a model is sent and what is kept", () => {
     // A failed call may still have run: it is counted at its reserve.
     expect(await neuronsToday(env.DB)).toBe(3 * PHOTO_RESERVE);
   });
+
+  it("lets only one of two calls that both see a count just under the stop line start (review on PR 22)", async () => {
+    const now = Date.now();
+    const day = new Date(now).toISOString().slice(0, 10);
+    sqlite.prepare("INSERT INTO system_settings(key, value, updated_at) VALUES(?, ?, ?)").run(`ai_neurons:${day}`, String(BANDS.stop - PHOTO_RESERVE), new Date(now).toISOString());
+    answer = () => chat('{"name":"hammer"}', PHOTO_RESERVE);
+    const outcomes = (await Promise.all([photoName(env.DB, env.AI, PHOTO, "USER", "PHOTO_NAME", now), photoName(env.DB, env.AI, PHOTO, "USER", "PHOTO_NAME", now)])).map((result) => result.outcome).sort();
+    expect(outcomes).toEqual(["BUDGET", "NAMED"]);
+    expect(sent).toHaveLength(1);
+    expect(await neuronsToday(env.DB, now)).toBe(BANDS.stop);
+    // Background work stops at the critical line even with room left before the stop.
+    sqlite.prepare("UPDATE system_settings SET value = ? WHERE key = ?").run(String(BANDS.critical - PHOTO_RESERVE + 1), `ai_neurons:${day}`);
+    expect((await photoName(env.DB, env.AI, PHOTO, "BACKGROUND", "PHOTO_RECHECK", now)).outcome).toBe("BUDGET");
+  });
 });
 
 describe("POST /api/staff/catalogue/photo-name", () => {
@@ -203,6 +217,30 @@ describe("one check after an offline capture syncs", () => {
     expect((await upload(mine, true)).status).toBe(200);
     expect(sent).toHaveLength(0);
     expect(sqlite.prepare("SELECT COUNT(*) AS n FROM item_media WHERE item_id = ?").get(mine)).toEqual({ n: 1 });
+  });
+
+  it("keeps a check that could not run and runs it on a later sync, once (review on PR 22)", async () => {
+    const waiting = () => (sqlite.prepare("SELECT key FROM system_settings WHERE key LIKE 'assist_recheck:%' ORDER BY key").all() as Array<{ key: string }>).map((row) => row.key);
+    // Offline capture synced while the owner had photo suggestions off: nothing is sent, and the check waits.
+    sqlite.prepare("INSERT INTO system_settings(key, value, updated_at) VALUES('ambient_assist', 'off', 'x')").run();
+    const first = await capture("Black tool");
+    expect((await upload(first, true)).status).toBe(200);
+    // A second sync while the model fails: it waits too.
+    sqlite.prepare("DELETE FROM system_settings WHERE key = 'ambient_assist'").run();
+    answer = () => { throw new Error("provider down"); };
+    const second = await capture("Grey tool");
+    await upload(second, true);
+    expect(waiting()).toEqual([`assist_recheck:${first}`, `assist_recheck:${second}`].sort());
+    // Later, with AI back, the next sync checks its own photo and then the waiting ones, each once.
+    answer = () => chat('{"name":"hammer"}');
+    resetBreaker();
+    sent = [];
+    await upload(await capture("Red tool"), true);
+    expect(sent).toHaveLength(3);
+    expect(waiting()).toEqual([]);
+    expect((await possible()).map((entry) => entry.title).sort()).toEqual(["Black tool", "Grey tool", "Red tool"]);
+    await upload(await capture("Blue thing"), true);
+    expect(sent).toHaveLength(4);
   });
 });
 
