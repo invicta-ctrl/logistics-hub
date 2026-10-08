@@ -4,12 +4,13 @@
 
 ORDER: Runs before Road to V3. Scope is additional V1.15 work only.
 SPEC: docs/specs/accepted/road-to-v2/2026-10-08-v1.15-final-pass-ai-intelligence-amendment.md.
-BRANCH: slice/v1.15-catalog-intelligence from verified main 8068b0e; one writer lock only.
+BRANCH: slice/v1.15-final-pass-qbqr20 (Claude Cloud) continues Codex's slice/v1.15-catalog-intelligence checkpoint 3176c74 from verified main 8068b0e; one writer only.
 FP-A: classified stale staged handoff records were privately preserved and reconciled; untracked NUL remains preserved.
 FP-B CHECKPOINT: Add-items photo naming preserves a typed-and-cleared name and rejects stale preparation/model results after a retake, reset, or leave.
 VERIFIED: focused delayed-response browser regressions, negative control, build/typecheck, privacy scan.
 PROVIDER / QUALITY: no inference, provider/configuration change, deployment, migration, or production write; quality and provider gates remain unverified.
-NEXT: next manual writer verifies the pushed checkpoint, then implements typed CatalogDraft provenance/unknown states and deterministic grounding.
+FP-B CONTRACT: src/catalog-draft.ts (typed CatalogDraft, composeDraft, isStale) tested, not yet wired into the screen.
+NEXT: wire composeDraft into catalogue-capture draw(), then FP-C Gemma extraction.
 
 ## Road to V3 — prepared on `main`, NOT STARTED — 2026-10-08
 

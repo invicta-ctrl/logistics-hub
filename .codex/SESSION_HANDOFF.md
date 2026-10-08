@@ -1,5 +1,20 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## V1.15 Final Pass — FP-B CatalogDraft contract (Claude Cloud, 2026-10-08)
+
+~~~text
+TASK: Typed CatalogDraft with field provenance and unknown states (FP-B contract freeze).
+STATUS: CHECKPOINT PUSHED. Contract and pure composer done and tested; NOT yet wired into the Add items screen. FP-A provider/quality gates, FP-C Gemma extraction, FP-D adapters, FP-E cutout, FP-F release: not started.
+BASE: Codex checkpoint 3176c74 (08883cb stale-photo guard) fast-forwarded onto this branch; main 8068b0e.
+BRANCH / WORKTREE: slice/v1.15-final-pass-qbqr20 / Claude Cloud container (Codex's slice/v1.15-catalog-intelligence is at 3176c74 and is superseded by this branch; Codex's local state is UNKNOWN beyond that push; the Windows writer lock was not visible from here).
+FILES: src/catalog-draft.ts (new); src/catalogue-suggest.ts (each Suggestion now carries basis CATALOG|KNOWLEDGE|SESSION); tests/catalog-draft.test.ts (new); tests/catalogue.test.ts and tests/item-knowledge.test.ts (basis in exact-equality assertions).
+CONTRACT: composeDraft() gives every Add items field value|null, source, reason, state (verified|suggested|needs-confirmation|unknown) and wasUserEdited. Person's entry wins (even a cleared name); quantity is a DEFAULT to confirm, never photo-verified; place/stock area come from the session; serial, expiry, reorder, notes are unknown; brand/model only from legible photo reading, always for checking; weak or split evidence needs confirmation and a split is never filled. isStale() drops results for an older revision.
+VERIFIED: vitest catalog-draft, item-knowledge, catalogue, catalog-ai, ambient-assist (85 passed); tsc app and worker clean; privacy scan 0 matches.
+UNRUN: full suite, browser suites, any provider call, held-out evaluation.
+NO inference, binding change, deployment, migration or production write.
+NEXT EXACT ACTION: wire composeDraft into src/catalogue-capture.ts draw() (replace the ad-hoc photoName/nameFromPhoto/nameEdited state), then FP-C Gemma structured extraction (brand/model/packaging) behind the same boundary; the 254-fixture baseline and held-out set need Earl's data decision.
+~~~
+
 ## V1.15 Final Pass — FP-A baseline reconciled; FP-B photo-result safety checkpoint (Codex, 2026-10-08)
 
 ~~~text

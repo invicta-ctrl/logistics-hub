@@ -62,7 +62,7 @@ describe("strength tiers", () => {
 
   it("a knowledge-base hint alone is Weak, with its reason; nothing is saved or percent-scored", () => {
     const result = suggest("Batteries AA", [], []);
-    expect(result.behaviour).toEqual({ value: "CONSUME", why: "Batteries are used up", tier: "WEAK" });
+    expect(result.behaviour).toEqual({ value: "CONSUME", why: "Batteries are used up", tier: "WEAK", basis: "KNOWLEDGE" });
     expect(JSON.stringify(result)).not.toMatch(/%|percent|confidence/i);
   });
 
@@ -90,7 +90,7 @@ describe("strength tiers", () => {
   });
 
   it("the session's own repetition still comes last, as Weak", () => {
-    expect(suggest("zebra", [], [item({ name: "A", category: "TOOLS" }), item({ name: "B", category: "TOOLS" })]).category).toEqual({ value: "TOOLS", why: "Same as your last two items", tier: "WEAK" });
+    expect(suggest("zebra", [], [item({ name: "A", category: "TOOLS" }), item({ name: "B", category: "TOOLS" })]).category).toEqual({ value: "TOOLS", why: "Same as your last two items", tier: "WEAK", basis: "SESSION" });
   });
 });
 
