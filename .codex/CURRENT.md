@@ -1,5 +1,16 @@
 # Current Work Pointer — Logistics Hub
 
+## Data-Surface UI — UX-1 container-aware Stock and Items cards — VERIFIED, STAGED, NOT COMMITTED OR PUSHED — 2026-10-09
+
+SPEC: `docs/specs/accepted/2026-10-08-data-surface-ui-amendment.md` (accepted). BRANCH: `slice/ux-data-surface`; `HEAD` and `origin/main` are `05b83cb4f42f1e3d0a9c75df174e75273c87b101`; no upstream is configured. Sole writer lock: Codex pending safe yield.
+
+STATE: UX-1 reproduced the absent UX-0 mocked-fixture baseline, then fixed the Stock action clipping with a 44rem responsive-wrapper container query. Ten UX-1 paths are staged; the permanent lean-ctx commit block means none is committed or pushed. Baseline, screenshots and final metrics are in `docs/visual-research/data-surface-ui.md`. The V1.15 Final Pass remains PARTIAL with its owner actions preserved below; it is excluded from this slice.
+
+SCOPE: container-aware card conversion for Items and Stock at 44rem, with the existing card anatomy and no data/API/action change. UX-2 menus, UX-3 number/sort semantics, UX-4 Directory Usage and the final legacy-rule cleanup are not started.
+
+NEXT: owner approval of a safe commit route is pending; then root reviews UX-1. UX-2, UX-3 and UX-4 remain bounded next tasks; V3 is frozen. The later Granite/Qwen/GLM review-and-correction extension requires a registered accepted amendment and is not started.
+
+
 ## V1.15 Final Pass — four-model Ambient Intelligence — MERGED (PARTIAL), owner actions open — 2026-10-08
 
 ORDER: Runs before Road to V3. Scope was additional V1.15 work only (not V2.1, not V3).
@@ -9,9 +20,9 @@ RECORD: `docs/road-to-v2/releases/v1.15-final-pass.md` (each gap and its next st
 DONE: typed CatalogDraft in Add items; Gemma reads name, brand, model and packaging; Granite, Qwen and GLM adapters with budgets and breakers, all three in SHADOW_EVALUATION because none passes its gate and none abstains; Cloudflare Images cutout code behind the owner's switch (off), a 500 a month cap and browser-side judging.
 NOT PROVEN: Gemma accuracy on real photos; a cutout of real catalogue photos and its Neuron cost; the Free plan beyond Earl's statement; active use of any text role.
 OWNER ACTIONS (Earl): confirm the Bindings page shows one Images binding `IMAGES` and no `IMAGES_BINDING`; turn "Picture cleanup" on in Administration > System when ready, then clean one real 1280 px photo and read the Workers AI and Images usage pages before and after; add Free-plan proof to the evidence file; delete the merged branch `slice/v1.15-final-pass-qbqr20` (`slice/v1.15-catalog-intelligence` is already gone).
-NEXT: `slice/ux-data-surface` (Data-Surface UI amendment) starts only when Earl says go; then Road to V3 under its own gates.
+NEXT: Data-Surface UI UX-1 is complete on `slice/ux-data-surface` and awaiting root review; Road to V3 remains under its own gates.
 
-UI AMENDMENT (separate workstream): `docs/specs/accepted/2026-10-08-data-surface-ui-amendment.md` is ACCEPTED (Earl, 2026-10-08). It is scheduled as its own `slice/ux-data-surface` after the V1.15 Final Pass (merged) and before RTV3-01. Waiting on Earl's go. Not started; it does not change Final Pass scope.
+UI AMENDMENT (separate workstream): `docs/specs/accepted/2026-10-08-data-surface-ui-amendment.md` is ACCEPTED (Earl, 2026-10-08). `slice/ux-data-surface` is active after the V1.15 Final Pass merge; UX-1 is complete and awaiting root review. It does not change Final Pass scope.
 
 ## Road to V3 — prepared on `main`, NOT STARTED — 2026-10-08
 

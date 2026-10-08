@@ -530,6 +530,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .table-toolbar__count { margin-left: auto; color: var(--text-3); font-size: var(--text-sm); white-space: nowrap; }
 
 .data-table-wrap { overflow: clip; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.data-table-wrap--responsive { container-type: inline-size; }
 .table-more { display: flex; justify-content: center; margin: var(--space-3) 0 0; }
 .table-more .button { height: auto; min-height: 2.75rem; max-width: 100%; white-space: normal; text-align: center; }
 .data-table { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
@@ -960,28 +961,47 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .hero__banner { order: -1; max-width: 44rem; }
   .panels { grid-template-columns: minmax(0, 1fr); }
 }
+
+@container (max-width: 44rem) {
+  .data-table-wrap--responsive .data-table thead { display: none; }
+  .data-table-wrap--responsive .data-table, .data-table-wrap--responsive .data-table tbody, .data-table-wrap--responsive .data-table tr, .data-table-wrap--responsive .data-table td { display: block; }
+  .data-table-wrap--responsive .data-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-4); padding: var(--space-4); border-bottom: 1px solid var(--line); }
+  .data-table-wrap--responsive .data-table tbody tr:last-child { border-bottom: 0; }
+  .data-table-wrap--responsive .data-table td { height: auto; padding: 0; border: 0; }
+  .data-table-wrap--responsive .data-table .col-id, .data-table-wrap--responsive .data-table .col-category, .data-table-wrap--responsive .data-table .col-location { display: none; }
+  .data-table-wrap--responsive .data-table--items td.col-item { width: auto; min-height: 2.5rem; padding-left: 3.25rem; }
+  .data-table-wrap--responsive .data-table--items .cell-id { display: inline; }
+  .data-table-wrap--responsive .thumb { left: 0; }
+  .data-table-wrap--responsive .data-table .col-qty { grid-row: 1; grid-column: 2; width: auto; max-width: 8rem; white-space: normal; }
+  .data-table-wrap--responsive .data-table .col-status { grid-column: 1 / -1; width: auto; }
+  .data-table-wrap--responsive .data-table .col-actions { grid-column: 1 / -1; width: auto; text-align: left; }
+  .data-table-wrap--responsive .data-table .col-actions .row-actions { flex-direction: row; justify-content: flex-start; }
+  .data-table-wrap--responsive .data-table td.col-item { min-width: 0; }
+  .data-table-wrap--responsive .data-table .col-level { width: auto; color: var(--text-2); font-size: var(--text-sm); }
+  .data-table-wrap--responsive .data-table .col-level::before { content: "Reorder level: "; }
+  .data-table-wrap--responsive .data-table .col-desired { width: auto; }
+}
 @media (max-width: 760px) {
   .lockup__text { display: none; }
   .lockup .crest { height: 2.75rem; }
   .lockup .mark { height: 2.5rem; }
   .site-header__inner { min-height: 4rem; }
-  .data-table thead { display: none; }
-  .data-table, .data-table tbody, .data-table tr, .data-table td { display: block; }
-  .data-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-4); padding: var(--space-4) var(--space-4); border-bottom: 1px solid var(--line); }
-  .data-table tbody tr:last-child { border-bottom: 0; }
-  .data-table td { height: auto; padding: 0; border: 0; }
-  .data-table .col-id, .data-table .col-category, .data-table .col-location { display: none; }
-  .data-table--items td.col-item { width: auto; min-height: 2.5rem; padding-left: 3.25rem; }
-  .thumb { left: 0; }
-  /* The amount may wrap beneath its number when text is enlarged, so it never sits on top of the name. */
-  .data-table .col-qty { grid-row: 1; grid-column: 2; width: auto; max-width: 8rem; white-space: normal; }
-  .data-table .col-status { grid-column: 1 / -1; width: auto; }
-  .data-table .col-actions { grid-column: 1 / -1; width: auto; text-align: left; }
-  .data-table .col-actions .row-actions { flex-direction: row; justify-content: flex-start; }
-  .data-table td.col-item { min-width: 0; }
-  .data-table .col-level { width: auto; color: var(--text-2); font-size: var(--text-sm); }
-  .data-table .col-level::before { content: "Reorder level: "; }
-  .data-table .col-desired { width: auto; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table thead { display: none; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table, .data-table-wrap:not(.data-table-wrap--responsive) .data-table tbody, .data-table-wrap:not(.data-table-wrap--responsive) .data-table tr, .data-table-wrap:not(.data-table-wrap--responsive) .data-table td { display: block; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-4); padding: var(--space-4); border-bottom: 1px solid var(--line); }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table tbody tr:last-child { border-bottom: 0; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table td { height: auto; padding: 0; border: 0; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table .col-id, .data-table-wrap:not(.data-table-wrap--responsive) .data-table .col-category, .data-table-wrap:not(.data-table-wrap--responsive) .data-table .col-location { display: none; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table--items td.col-item { width: auto; min-height: 2.5rem; padding-left: 3.25rem; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .thumb { left: 0; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table .col-qty { grid-row: 1; grid-column: 2; width: auto; max-width: 8rem; white-space: normal; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table .col-status { grid-column: 1 / -1; width: auto; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table .col-actions { grid-column: 1 / -1; width: auto; text-align: left; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table .col-actions .row-actions { flex-direction: row; justify-content: flex-start; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table td.col-item { min-width: 0; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table .col-level { width: auto; color: var(--text-2); font-size: var(--text-sm); }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table .col-level::before { content: "Reorder level: "; }
+  .data-table-wrap:not(.data-table-wrap--responsive) .data-table .col-desired { width: auto; }
   .activity-row { grid-template-columns: 3rem minmax(0, 1fr); padding-inline: var(--space-3); }
   /* A catalog or account entry has no stock column to align with; on phones its text takes the full width. */
   .activity-row:has(.activity-row__change:empty) { grid-template-columns: minmax(0, 1fr); }

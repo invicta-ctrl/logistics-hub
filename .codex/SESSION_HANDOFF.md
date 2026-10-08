@@ -1,5 +1,23 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Data-Surface UI — UX-1 container-aware Stock and Items cards (Codex checkpoint, 2026-10-09)
+
+~~~text
+TASK: First atomic Data-Surface UI packet: replace viewport-only table-card behavior with a 44rem `.data-table-wrap` container query for Items and Stock only.
+STATUS: UX-1 VERIFIED, STAGED, NOT COMMITTED OR PUSHED. Codex holds the shared writer lock on `slice/ux-data-surface` pending safe yield; `HEAD` and `origin/main` are `05b83cb4f42f1e3d0a9c75df174e75273c87b101`, and the branch has no upstream. Untracked `NUL` is preserved. The V1.15 Final Pass is merged PARTIAL and is excluded.
+BASE: `05b83cb4f42f1e3d0a9c75df174e75273c87b101` (`origin/main`).
+SCOPE: UX-1 only; preserve existing table/card anatomy, 100-row increment, filters, bulk selection, sheets and focus. No action-menu, API, data, AI, role, migration or production work.
+BASELINE: the referenced UX-0 files were absent from the Git tree. The recreated mocked baseline captured 320/390/768/1024/1440 and 620/700/1000 container widths before CSS containment; Stock at 1024px clipped after `Sto…`.
+VERIFY: final focused large-list browser regression passed 4/4 (`test-results/ux1-final-persistent-selection`); accessibility passed 26/26 after the display-only ID correction (`test-results/ux1-accessibility-final`); final build/typecheck and privacy scan passed. The regression asserts 620/700px cards inside a 1440px browser, 1000px table/sticky-header behavior, action bounds, no page overflow, item ID visibility, and selected-row checkbox focus/geometry after its rerender with a persistent 620px external-container rule. Visual pairs and metrics: `docs/visual-research/data-surface-ui.md`. Real phone and screen reader are unrun.
+STAGED PATHS (10): `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md`, `docs/visual-research/data-surface-ui.md`, its three fictional-fixture PNGs, `src/staff.ts`, `src/stock-workspace.ts`, `src/styles.css`, and `tests/browser/large-lists.spec.ts`. No provider or production change occurred.
+COMMIT BLOCK: lean-ctx permanently rejected `git commit -m` and explicitly forbade `ctx_execute(language="shell")` rerouting; do not retry, alter the allowlist, commit or push. OWNER APPROVAL PENDING: a narrow safe commit route.
+HANDOFF: ready only for local Claude takeover on the same staged, unpushed branch; cloud cannot see this work until the commit gate is resolved. Required new prompt and screenshot paths have not been supplied.
+FUTURE, NOT STARTED: user authorized a later review-only Granite/Qwen/GLM keep/reject/correct extension and operational/admin-approved knowledge proposals, with no automatic retraining or policy rewrite; it requires a registered accepted amendment. UX-2, UX-3 and UX-4 remain next bounded tasks; V3 is frozen.
+READY CLAUDE MESSAGE (manual copy; not automatic launch): Use `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`; read governance, `.codex/CURRENT.md`, and this handoff; run `npm run agent:status` to verify unclaimed, then `npm run agent:claim -- claude`; verify `HEAD` `05b83cb4f42f1e3d0a9c75df174e75273c87b101`, branch `slice/ux-data-surface`, the exact ten staged paths and preserved `NUL`; adopt the known Codex-staged UX-1 without discard or retesting already-green checks; resolve the permanent commit block only with exact owner approval, then review, commit, and push this same branch; continue UX-2 through UX-4 before the accepted AI-extension prompt; create no other branch and make no production or provider calls.
+NEXT: yield the Codex lock after staging this handoff. Do not begin another phase.
+~~~
+
+
 ## V1.15 Final Pass merged, PARTIAL (Claude Cloud, 2026-10-08)
 
 ~~~text

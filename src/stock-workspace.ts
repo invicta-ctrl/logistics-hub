@@ -209,7 +209,7 @@ export async function stockWorkspace(): Promise<void> {
           html`<button type="button" class="chip" data-focus="${key}" aria-pressed="${key === focus}">${text}<span class="chip__count">${count}</span></button>`)}
       </div>
       ${unset ? html`<p class="hint-line">${icon("info")}<span>${plural(unset, "active item")} ${unset === 1 ? "has" : "have"} no reorder level, so ${unset === 1 ? "it is" : "they are"} never called low. Set levels in an item's Edit details in <a class="text-link" href="/staff/items" data-route>Items</a>.</span></p>` : ""}
-      ${shown.length ? html`<div class="data-table-wrap"><table class="data-table data-table--static">
+      ${shown.length ? html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Items that need attention</caption>
         <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Why</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
         <tbody>${shown.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit, item)}${levelCell(item)}<td>${whyTags(item)}</td>
@@ -227,7 +227,7 @@ export async function stockWorkspace(): Promise<void> {
     const byId = new Map(data.items.map((item) => [item.id, item]));
     const suggestions = data.items.filter((item) => item.status !== "INACTIVE" && item.reorderThreshold > 0 && stockState(item) !== "OK" && !item.reorderStatus);
     return html`
-      ${open.length ? html`<div class="data-table-wrap"><table class="data-table data-table--static">
+      ${open.length ? html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Restock list</caption>
         <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-desired">Restock qty</th><th scope="col">Status</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
         <tbody>${open.map((reorder) => {
@@ -252,7 +252,7 @@ export async function stockWorkspace(): Promise<void> {
     const pantry = data.items.filter((item) => item.stockArea === "Pantry" && item.status !== "INACTIVE")
       .sort((a, b) => Number(expiring(b)) - Number(expiring(a)) || a.name.localeCompare(b.name));
     if (!pantry.length) return emptyState("No pantry items", "Set an item's stock area to Pantry in Items → Edit details to track it here.");
-    return html`<div class="data-table-wrap"><table class="data-table data-table--static">
+    return html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
       <caption class="visually-hidden">Pantry items</caption>
       <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Expiry</th><th scope="col">Status</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
       <tbody>${pantry.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit, item)}${levelCell(item)}<td>${expiryTag(item)}</td>

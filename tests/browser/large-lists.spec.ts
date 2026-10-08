@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
 /* V1.14: the items table draws a page of rows at a time, so a bigger catalog does not mean a bigger page. Fictional data, API mocked. */
 
@@ -14,6 +14,71 @@ async function open(page: Page, count: number) {
   await page.setViewportSize({ width: 1280, height: 900 });
 }
 const rows = (page: Page) => page.locator(".data-table--items tbody tr").count();
+
+
+type LayoutMetrics = {
+  name: string;
+  viewport: number;
+  containerWidth: number;
+  isCard: boolean;
+  actionInside: boolean;
+  pageOverflow: number;
+  headerPosition: string;
+  headerTop: number | null;
+  headerAtAppBar: boolean;
+  itemIdVisible: boolean;
+  idColumnVisible: boolean;
+};
+
+const stockItem = { ...item(1), name: "Replacement toner cartridge", onHand: 0, reorderThreshold: 3, countNeeded: true };
+
+async function openStock(page: Page) {
+  await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(session) }));
+  await page.route("**/api/staff/attention/summary", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ needsAction: 1, bySource: { Stock: 1 } }) }));
+  await page.route("**/api/staff/stock", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify({ revision: 1, items: [stockItem], locations: [], reorders: [], activity: [] }) }));
+}
+
+async function captureLayout(page: Page, testInfo: TestInfo, name: string, viewport: number, table: string, containerWidth?: number): Promise<LayoutMetrics> {
+  await page.setViewportSize({ width: viewport, height: 900 });
+  await page.goto(table === "items" ? "/staff/items" : "/staff/stock");
+  const dataTable = page.locator(table === "items" ? ".data-table--items" : "#stock-results .data-table").first();
+  await expect(dataTable.locator("tbody tr").first()).toBeVisible();
+  if (containerWidth) await dataTable.evaluate((element, width) => {
+    const wrap = element.closest<HTMLElement>(".data-table-wrap")!;
+    wrap.style.width = `${width}px`;
+    wrap.style.maxWidth = "none";
+  }, containerWidth);
+  await page.screenshot({ path: testInfo.outputPath(`${name}.png`), animations: "disabled" });
+  if (table === "items") await dataTable.locator("tbody tr").nth(10).scrollIntoViewIfNeeded();
+  return dataTable.evaluate((element, { name, viewport, containerWidth }) => {
+    const wrap = element.closest<HTMLElement>(".data-table-wrap")!;
+    const wrapRect = wrap.getBoundingClientRect();
+    const actionButtons = [...element.querySelectorAll<HTMLElement>(".col-actions button")];
+    const actionInside = actionButtons.length > 0 && actionButtons.every((button) => {
+      const rect = button.getBoundingClientRect();
+      return rect.left >= wrapRect.left && rect.right <= wrapRect.right && rect.top >= wrapRect.top && rect.bottom <= wrapRect.bottom;
+    });
+    const header = element.querySelector<HTMLElement>("thead");
+    const headerCell = element.querySelector<HTMLElement>("thead th");
+    const headerTop = headerCell ? Math.round(headerCell.getBoundingClientRect().top) : null;
+    const appBarBottom = document.querySelector<HTMLElement>(".app-bar")?.getBoundingClientRect().bottom ?? null;
+    const itemId = element.querySelector<HTMLElement>(".cell-id");
+    const idColumn = element.querySelector<HTMLElement>("tbody .col-id");
+    return {
+      name,
+      viewport,
+      containerWidth: wrapRect.width,
+      isCard: getComputedStyle(element).display === "block" && header ? getComputedStyle(header).display === "none" : false,
+      actionInside,
+      pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      headerPosition: headerCell ? getComputedStyle(headerCell).position : "missing",
+      headerTop,
+      headerAtAppBar: headerTop !== null && appBarBottom !== null && Math.abs(headerTop - appBarBottom) <= 1,
+      itemIdVisible: Boolean(itemId && getComputedStyle(itemId).display !== "none" && itemId.getBoundingClientRect().width > 0),
+      idColumnVisible: Boolean(idColumn && getComputedStyle(idColumn).display !== "none" && idColumn.getBoundingClientRect().width > 0)
+    };
+  }, { name, viewport, containerWidth: containerWidth ?? 0 });
+}
 
 test.describe("Items table", () => {
   test("draws the same page of rows whether the catalog has 300 items or 6,000", async ({ page }) => {
@@ -60,5 +125,54 @@ test.describe("Items table", () => {
     await page.goto("/staff/items?item=ITM-00420");
     await expect(page.locator('tr[data-key="ITM-00420"]')).toHaveCount(1);
     expect(await rows(page)).toBeGreaterThanOrEqual(100);
+  });
+});
+
+
+test.describe("Responsive data tables", () => {
+  test("keeps Stock actions visible and adapts from the table container", async ({ page }, testInfo) => {
+    await open(page, 300);
+    const metrics: LayoutMetrics[] = [];
+    for (const viewport of [320, 390, 768, 1024, 1440]) metrics.push(await captureLayout(page, testInfo, `items-${viewport}`, viewport, "items"));
+    for (const width of [620, 700, 1000]) metrics.push(await captureLayout(page, testInfo, `items-container-${width}`, 1440, "items", width));
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/staff/items");
+    const constrainedItems = page.locator(".data-table--items");
+    await expect(constrainedItems.locator("tbody tr").first()).toBeVisible();
+    await page.locator("#select-toggle").click();
+    await page.addStyleTag({ content: ".data-table-wrap:has(.data-table--items) { width: 620px; max-width: none; }" });
+    await expect(constrainedItems).toHaveCSS("display", "block");
+    expect(await constrainedItems.evaluate((element) => Math.round(element.closest<HTMLElement>(".data-table-wrap")!.getBoundingClientRect().width))).toBe(620);
+    const selection = constrainedItems.locator("tbody .select-box").first();
+    await expect(selection).toBeVisible();
+    await selection.check();
+    await expect(selection).toBeFocused();
+    await expect(constrainedItems).toHaveCSS("display", "block");
+    expect(await constrainedItems.evaluate((element) => Math.round(element.closest<HTMLElement>(".data-table-wrap")!.getBoundingClientRect().width))).toBe(620);
+    expect(await selection.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const wrap = element.closest<HTMLElement>(".data-table-wrap")!.getBoundingClientRect();
+      return rect.left >= wrap.left && rect.right <= wrap.right && rect.top >= wrap.top && rect.bottom <= wrap.bottom;
+    })).toBe(true);
+    await page.unrouteAll();
+    await openStock(page);
+    for (const viewport of [320, 390, 768, 1024, 1440]) metrics.push(await captureLayout(page, testInfo, `stock-${viewport}`, viewport, "stock"));
+    console.log(`UX1_LAYOUT_METRICS ${JSON.stringify(metrics)}`);
+    await testInfo.attach("ux1-layout-metrics.json", { body: JSON.stringify(metrics, null, 2), contentType: "application/json" });
+
+    const byName = new Map(metrics.map((metric) => [metric.name, metric]));
+    expect(byName.get("items-container-620")?.isCard).toBe(true);
+    expect(byName.get("items-container-700")?.isCard).toBe(true);
+    expect(byName.get("items-container-1000")?.isCard).toBe(false);
+    expect(byName.get("items-container-620")?.itemIdVisible).toBe(true);
+    expect(byName.get("items-container-700")?.itemIdVisible).toBe(true);
+    expect(byName.get("items-container-1000")?.idColumnVisible).toBe(true);
+    for (const viewport of [320, 390, 768, 1024, 1440]) {
+      const stock = byName.get(`stock-${viewport}`)!;
+      expect(stock.actionInside).toBe(true);
+      expect(stock.pageOverflow).toBe(0);
+    }
+    expect(byName.get("items-container-1000")?.headerPosition).toBe("sticky");
+    expect(byName.get("items-container-1000")?.headerAtAppBar).toBe(true);
   });
 });
