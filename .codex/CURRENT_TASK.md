@@ -4,7 +4,7 @@ BRANCH: `road-to-v2/v1.15-v2-consolidation`; derive the head with `git rev-parse
 AUTHORITY: `docs/specs/accepted/road-to-v2/v1.15-v2-consolidation.md` and its accepted amendments; Earl's 2026-10-07 continuation prompt.
 EXCLUDED: merge or push to `main`, production D1/R2 writes, provider configuration beyond the reviewed `AI` binding, reopening Self-Service, anything sent to AI other than intentional catalog photos.
 STATUS: COMPLETE AND MERGED TO MAIN (`575a2f8`, PR 22). V2.0 COMPLETE (`docs/road-to-v2/releases/v2.0.md`). See `.codex/SESSION_HANDOFF.md` (top).
-NEXT ACTION: none for an agent. Earl's three confirmations in the v2.0 record, and the branch deletes.
+NEXT ACTION: none for an agent. Earl re-runs `npm run admin -- verify` on current `main`, and deletes the merged branches.
 ---
 
 # Previous task — none active (Part 6 complete on main; awaiting Earl's acceptance)

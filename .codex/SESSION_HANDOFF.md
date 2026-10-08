@@ -16,7 +16,7 @@ RESULTS: green; two container-only real-Worker failures as before, both green in
 UNRUN CHECKS: real phone, screen reader, Safari; production signed-in check after deploy.
 KNOWN LIMITATIONS: see the v1.15 record.
 BLOCKERS: none. main's CI, CodeQL analysis and the Workers Builds deploy are green on 575a2f8; production serves the V1.15 build (signed-out check).
-NEXT EXACT ACTION: none for an agent. Earl confirms the v2.0 record's three owner checks (Student ID count, npm run admin -- verify, CodeQL alerts closed in the Security tab) and deletes the merged branches. Codex's staged .codex edits on Earl's Windows checkout were never pushed; this block supersedes them.
+NEXT EXACT ACTION: none for an agent. Earl re-runs npm run admin -- verify on current main (his 2026-10-08 check passed the Student ID count, 0 open CodeQL alerts and the Cloudflare deploy) and deletes the merged branches. Codex's staged .codex edits on Earl's Windows checkout were never pushed; this block supersedes them.
 MERGE ORDER / DEPENDENCIES: V1.15 is the last Road-to-V2 branch; nothing to propagate forward. V1.14's branch holds only a superseded test commit (a5840d0) and can be deleted.
 ~~~
 
