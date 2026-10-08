@@ -1,5 +1,41 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## V1.15 Final Pass — FP-A reconciled; FP-B photo-result safety checkpoint (Codex, 2026-10-08)
+
+~~~text
+TASK: First V1.15 Final-Pass runtime-integrated safety checkpoint.
+STATUS: CHECKPOINT READY FOR HANDOFF; not a provider or quality acceptance.
+BASE: 8068b0effd5b3aebde9bea0c5f61193b23ef4371.
+BRANCH/WORKTREE: slice/v1.15-catalog-intelligence / D:\\Documents\\HAU-USC Logistics Hub\\workspace\\logistics-hub.
+FILES: src/catalogue-capture.ts; tests/browser/catalogue.spec.ts; .codex/CURRENT.md; .codex/SESSION_HANDOFF.md; docs/SHARED_AGENT_WORKFLOW.md.
+CONTRACT: every name input owns the field even when cleared; photo preparation/model results carry a revision and cannot update a retaken, reset, or left form.
+VERIFIED: focused Playwright delayed-response tests pass (2); negative control without ownership guard fails by returning Stapler; npm run build passes; npm run verify:privacy reports 0 matches.
+UNRUN: held-out photo-quality evaluation; provider smoke/availability; full suite; provider/production checks.
+PROVIDER: no inference, binding/configuration, deployment, migration, or production write. Do not claim provider or quality verification.
+DIRTY: NUL remains untracked and preserved; verify status before claim.
+NEXT: manual receiver verifies pushed HEAD/status, claims named lock, and starts typed CatalogDraft provenance/unknown-state/deterministic-grounding work only.
+MANUAL TAKEOVER: Codex commits/pushes this same slice, updates this block, then yields. Claude reads this block, verifies origin/slice HEAD and clean status, claims npm run agent:claim -- claude, pushes the same slice, updates this block, and yields. Cloud sync mirrors pushed commits only; it does not launch or authorize a writer.
+~~~
+
+
+## V1.15 Final Pass — FP-A reconciled; FP-B photo-result safety checkpoint (Codex, 2026-10-08)
+
+~~~text
+TASK: First V1.15 Final-Pass runtime-integrated safety checkpoint.
+STATUS: CHECKPOINT READY FOR HANDOFF; not a provider or quality acceptance.
+BASE: 8068b0effd5b3aebde9bea0c5f61193b23ef4371.
+BRANCH/WORKTREE: slice/v1.15-catalog-intelligence / D:\\Documents\\HAU-USC Logistics Hub\\workspace\\logistics-hub.
+FILES: src/catalogue-capture.ts; tests/browser/catalogue.spec.ts; .codex/CURRENT.md; .codex/SESSION_HANDOFF.md; docs/SHARED_AGENT_WORKFLOW.md.
+CONTRACT: every name input owns the field even when cleared; photo preparation/model results carry a revision and cannot update a retaken, reset, or left form.
+VERIFIED: focused Playwright delayed-response tests pass (2); negative control without ownership guard fails by returning Stapler; npm run build passes; npm run verify:privacy reports 0 matches.
+UNRUN: held-out photo-quality evaluation; provider smoke/availability; full suite; provider/production checks.
+PROVIDER: no inference, binding/configuration, deployment, migration, or production write. Do not claim provider or quality verification.
+DIRTY: NUL remains untracked and preserved; verify status before claim.
+NEXT: manual receiver verifies pushed HEAD/status, claims named lock, and starts typed CatalogDraft provenance/unknown-state/deterministic-grounding work only.
+MANUAL TAKEOVER: Codex commits/pushes this same slice, updates this block, then yields. Claude reads this block, verifies origin/slice HEAD and clean status, claims npm run agent:claim -- claude, pushes the same slice, updates this block, and yields. Cloud sync mirrors pushed commits only; it does not launch or authorize a writer.
+~~~
+
+
 ## V2.0 closed, Road to V3 prepared (NOT STARTED; Claude on Earl's workstation, 2026-10-08)
 
 ~~~text

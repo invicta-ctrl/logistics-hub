@@ -385,6 +385,54 @@ test.describe("photo suggestions (ambient assist)", () => {
     await expect(page.locator("#cat-dup")).toBeEmpty();
   });
 
+  test("a delayed photo response respects a typed-and-cleared name", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    let requests = 0;
+    let release!: () => void;
+    await page.route("**/api/staff/catalogue/photo-name", async (route) => {
+      requests += 1;
+      await new Promise<void>((resolve) => { release = resolve; });
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "Stapler" }) });
+    });
+    await begin(page, server);
+    await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
+    await expect.poll(() => requests).toBe(1);
+    await name(page).fill("Staff choice");
+    await name(page).fill("");
+    const response = page.waitForResponse("**/api/staff/catalogue/photo-name");
+    release();
+    await (await response).finished();
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    await expect(name(page)).toHaveValue("");
+    await expect(page.locator("#cat-name-hint")).toHaveText("A temporary name is fine if you are not sure.");
+  });
+
+  test("a retake ignores an older photo response that finishes last", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    let requests = 0;
+    let releaseFirst!: () => void;
+    await page.route("**/api/staff/catalogue/photo-name", async (route) => {
+      requests += 1;
+      if (requests === 1) {
+        await new Promise<void>((resolve) => { releaseFirst = resolve; });
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "First photo" }) });
+      } else await route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "Second photo" }) });
+    });
+    await begin(page, server);
+    await page.locator("#cat-file").setInputFiles({ name: "first.png", mimeType: "image/png", buffer: PNG });
+    await expect.poll(() => requests).toBe(1);
+    await page.locator("#cat-file").setInputFiles({ name: "second.png", mimeType: "image/png", buffer: PNG });
+    await expect.poll(() => requests).toBe(2);
+    await expect(name(page)).toHaveValue("Second photo");
+    const response = page.waitForResponse("**/api/staff/catalogue/photo-name");
+    releaseFirst();
+    await (await response).finished();
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    await expect(name(page)).toHaveValue("Second photo");
+  });
+
   test("when the check fails, the capture still saves at once and asks for one check after it syncs", async ({ page }) => {
     const server = serve(page, { active: true });
     await server.ready;

@@ -98,6 +98,11 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   let photoName: string | null = null;
   let photoChecked = false;
   let nameFromPhoto = false;
+  /** Each retake and form reset invalidates both in-flight preparation and model responses. */
+  let photoRevision = 0;
+  /** A typed empty name is still an explicit staff choice until this capture is reset. */
+  let nameEdited = false;
+  onLeave(() => { photoRevision += 1; });
   const thumbs = new Map<string, string>();
   const canAddPlace = who.mode === "signed-in";
 
@@ -327,27 +332,33 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const chosen = file.files?.[0];
     file.value = "";
     if (!chosen) return;
+    const revision = ++photoRevision;
     preparing = true;
     drawPhoto();
-    try { photo = await preparePhoto(chosen); setMessage($("#cat-alert"), ""); } catch (error) { setMessage($("#cat-alert"), error instanceof Error ? error.message : "This photo could not be used."); }
+    let prepared: NonNullable<typeof photo> | null = null;
+    let preparationError: string | null = null;
+    try { prepared = await preparePhoto(chosen); } catch (error) { preparationError = error instanceof Error ? error.message : "This photo could not be used."; }
+    if (revision !== photoRevision) return;
+    setMessage($("#cat-alert"), preparationError ?? "");
     preparing = false;
     armed = false;
     photoName = null;
     photoChecked = false;
     if (nameFromPhoto) { field("cat-name").value = ""; nameFromPhoto = false; }
+    if (prepared) photo = prepared;
     drawPhoto();
     draw();
     field("cat-name").focus();
-    if (photo && online) void checkPhoto(photo);
+    if (prepared && online) void checkPhoto(prepared, revision);
   });
   /** Never in the way: the person keeps typing while it runs, and a failure leaves the photo to be checked after it syncs. */
-  const checkPhoto = async (taken: NonNullable<typeof photo>) => {
+  const checkPhoto = async (taken: NonNullable<typeof photo>, revision: number) => {
     try {
       const answer = await api<{ name: string | null }>("/api/staff/catalogue/photo-name", { method: "POST", body: taken.thumb, headers: { "content-type": "image/jpeg" }, ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(15_000) } : {}) });
-      if (photo !== taken) return;
+      if (revision !== photoRevision || photo !== taken) return;
       photoChecked = true;
       photoName = answer.name;
-      if (answer.name && !value("cat-name")) {
+      if (answer.name && !nameEdited && !value("cat-name")) {
         field("cat-name").value = answer.name;
         nameFromPhoto = true;
         announce(`Suggested name from the photo: ${answer.name}.`);
@@ -355,7 +366,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       draw();
     } catch { /* checked after sync instead */ }
   };
-  field("cat-name").addEventListener("input", () => { if (nameFromPhoto) { nameFromPhoto = false; draw(); } });
+  field("cat-name").addEventListener("input", () => { nameEdited = true; if (nameFromPhoto) { nameFromPhoto = false; draw(); } });
 
   /* ---------- Saving ---------- */
 
@@ -372,6 +383,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   const clear = (keepShared: boolean) => {
     const kept = keepShared ? { name: value("cat-name"), category: value("cat-category"), unit: value("cat-unit"), model: value("cat-model"), stock: $<HTMLSelectElement>("#cat-stock").value } : null;
     form.reset();
+    photoRevision += 1;
+    nameEdited = false;
     photo = null;
     photoName = null;
     photoChecked = false;

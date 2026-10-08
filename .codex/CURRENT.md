@@ -1,13 +1,15 @@
 # Current Work Pointer — Logistics Hub
 
-## V1.15 Final Pass — four-model Ambient Intelligence — ACCEPTED, QUEUED FIRST, NOT STARTED — 2026-10-08
+## V1.15 Final Pass — four-model Ambient Intelligence — IN PROGRESS (FP-A reconciled; FP-B checkpoint) — 2026-10-08
 
-ORDER: this runs before Road to V3 (Earl, 2026-10-08: "prepare for this too before the v3 roadmap"). RTV3-01 waits until it is complete or Earl changes the order.
-SPEC: `docs/specs/accepted/road-to-v2/2026-10-08-v1.15-final-pass-ai-intelligence-amendment.md` (ACCEPTED 2026-10-08: Earl's acceptance record, then his amendment text unchanged), listed in the V1.15 spec. Slices FP-A to FP-F (§9), proof matrix §12, Definition of Done §10.
-AUTHORITY: Earl's prompt `CLAUDE_V1_15_FINAL_PASS_FOUR_MODEL_IMPLEMENTATION_PROMPT.md` (SHA-256 `bb798e7187e1bc02ea023cd5fd1803502ef11493204708067735cb60aaf948df`). Additional V1.15 work on top of PR 22: not V2.1, not V3, and the V1.15 branch is not revived. Not authorized by it: production deploy, destructive migration, paid services, billing changes, unlimited provider tests.
-PREFLIGHT ALREADY DONE (read-only, 2026-10-08): `main` verified (CI, CodeQL, deploy, `admin verify` 12/12, migrations 30/30); the four model IDs exist in the account's Workers AI catalog: `@cf/google/gemma-4-26b-a4b-it` (live today), `@cf/ibm-granite/granite-4.0-h-micro`, `@cf/qwen/qwen3-30b-a3b-fp8`, `@cf/zai-org/glm-4.7-flash`. NOT checked: per-model Free-plan pricing/Neurons, Cloudflare Images `segment=foreground` access on this plan and whether it consumes Neurons, spend protection. No inference was run for the final pass.
-BRANCH: `slice/v1.15-catalog-intelligence` from verified `main` when it starts (amendment §1.2, `AGENTS.md`); none exists yet.
-NEXT_EXACT_ACTION: Earl says `start`. Then FP-A (read-only baseline re-check, writer lock, the slice branch), and the prompt's opening report (repo/branch/lock state, gaps, FP-A–FP-F ownership and dependencies, budget/privacy risks, first action) before FP-B.
+ORDER: Runs before Road to V3. Scope is additional V1.15 work only.
+SPEC: docs/specs/accepted/road-to-v2/2026-10-08-v1.15-final-pass-ai-intelligence-amendment.md.
+BRANCH: slice/v1.15-catalog-intelligence from verified main 8068b0e; one writer lock only.
+FP-A: classified stale staged handoff records were privately preserved and reconciled; untracked NUL remains preserved.
+FP-B CHECKPOINT: Add-items photo naming preserves a typed-and-cleared name and rejects stale preparation/model results after a retake, reset, or leave.
+VERIFIED: focused delayed-response browser regressions, negative control, build/typecheck, privacy scan.
+PROVIDER / QUALITY: no inference, provider/configuration change, deployment, migration, or production write; quality and provider gates remain unverified.
+NEXT: next manual writer verifies the pushed checkpoint, then implements typed CatalogDraft provenance/unknown states and deterministic grounding.
 
 ## Road to V3 — prepared on `main`, NOT STARTED — 2026-10-08
 
