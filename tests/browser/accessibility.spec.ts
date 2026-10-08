@@ -128,6 +128,12 @@ test.describe("Staff Directory", () => {
     await page.goto(`/staff/admin/directory?person=${ID}&tab=usage`);
     const table = page.getByRole("table", { name: "What left stock for Ana Marie Santos" });
     await expect(table.locator("tbody tr")).toHaveCount(100);
+    await table.evaluate((element) => { const wrap = element.closest<HTMLElement>(".data-table-wrap")!; wrap.style.width = "620px"; wrap.style.maxWidth = "none"; });
+    await expect(table).toHaveCSS("display", "block");
+    await expect(table.locator("thead")).toHaveCSS("display", "none");
+    await table.evaluate((element) => { const wrap = element.closest<HTMLElement>(".data-table-wrap")!; wrap.style.width = "1000px"; });
+    await expect(table).toHaveCSS("display", "table");
+    await expect(table.locator("thead")).toHaveCSS("display", "table-header-group");
     await expect(table.locator("tbody tr").first()).toContainText("Used (phone)");
     await expect(page.locator(".stat").first()).toContainText("229 phone takes, 1 use");
     await page.getByRole("button", { name: /Show 100 more/ }).click();

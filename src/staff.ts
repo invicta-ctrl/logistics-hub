@@ -13,7 +13,7 @@ import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { bulkBar } from "./bulk-select";
 import { placeList } from "./catalogue-places";
 import { setAccess } from "./catalogue-store";
-import { ApiError, MARK, type Html, type IconName, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDate, formatDateTime, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, raw, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { ApiError, MARK, type Html, type IconName, animateNumber, api, app, categoryName, emptyState, expired, failure, formatDate, formatDateTime, formatQuantity, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, raw, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
@@ -540,7 +540,7 @@ export async function workspace(): Promise<void> {
     <td class="col-item">${rowThumb(item)}<button type="button" class="row-link">${item.name}</button><span class="cell-sub"><span class="cell-id">${item.id} · </span>${label(item.itemType)}${item.aliases ? html` · <span class="cell-alias">${item.aliases}</span>` : ""}${placeText(item) ? html`<span class="cell-place"> · ${placeText(item)}</span>` : ""}</span></td>
     <td class="col-category">${categoryName(item.category)}</td>
     <td class="col-location">${placeCell(item)}</td>
-    <td class="col-qty"><span class="qty" data-qty="${item.id}">${item.onHand}</span> <span class="qty-unit">${units(item.onHand, item.unit)}</span>${item.openUnits ? html`<span class="cell-sub">${sealedLine(item.onHand, item.openUnits, item.openCondition)}</span>` : ""}</td>
+    <td class="col-qty"><span class="qty" data-qty="${item.id}" data-quantity="${item.onHand}">${formatQuantity(item.onHand)}</span> <span class="qty-unit">${units(item.onHand, item.unit)}</span>${item.openUnits ? html`<span class="cell-sub">${sealedLine(item.onHand, item.openUnits, item.openCondition)}</span>` : ""}</td>
     <td class="col-status">${tags(item)}</td></tr>`;
 
   /** The leaf place with the places around it beneath; an item whose typed location has no place yet shows what was typed. */
@@ -602,7 +602,7 @@ export async function workspace(): Promise<void> {
       : emptyState(view === "review" && !query ? "Every record is reviewed" : "No items match", view === "review" && !query ? "Nothing is waiting for review with these filters." : "Try another search, filter, or view.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
     for (const [id, was] of changed) {
       const cell = results.querySelector(`[data-qty="${CSS.escape(id)}"]`);
-      animateNumber(cell, Number(cell?.textContent), was);
+      animateNumber(cell, Number(cell?.getAttribute("data-quantity")), was);
     }
     changed.clear();
     (document.querySelector("#clear-search") as HTMLElement).hidden = !search.value;

@@ -114,6 +114,58 @@ export function icon(name: IconName): Html {
   return raw(`<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${ICONS[name]}"/></svg>`);
 }
 
+/** A compact, native-popover action list. Its action buttons keep their existing delegated handlers. */
+export function rowActionMenu(id: string, label: string, actions: Html): Html {
+  return html`<span class="row-menu"><button class="button button--ghost button--sm row-menu__trigger" type="button" data-row-menu popovertarget="${id}" aria-controls="${id}" aria-expanded="false" aria-label="More actions for ${label}">${icon("more")}<span>More actions</span></button><div class="menu menu--row" id="${id}" popover><ul class="menu__list">${actions}</ul></div></span>`;
+}
+
+/** Keeps each row menu aligned with its opener, including the small no-Popover fallback. */
+export function bindRowActionMenus(scope: HTMLElement): void {
+  const native = "showPopover" in HTMLElement.prototype;
+  const triggers = [...scope.querySelectorAll<HTMLButtonElement>("[data-row-menu]")];
+  const position = (trigger: HTMLButtonElement, menu: HTMLElement) => requestAnimationFrame(() => {
+    const triggerRect = trigger.getBoundingClientRect();
+    const menuRect = menu.getBoundingClientRect();
+    const gutter = 8;
+    const left = Math.max(gutter, Math.min(triggerRect.right - menuRect.width, window.innerWidth - menuRect.width - gutter));
+    const below = triggerRect.bottom + 4;
+    const top = below + menuRect.height <= window.innerHeight - gutter ? below : Math.max(gutter, triggerRect.top - menuRect.height - 4);
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+  });
+  for (const trigger of triggers) {
+    const menu = document.getElementById(trigger.getAttribute("aria-controls") ?? "");
+    if (!(menu instanceof HTMLElement)) continue;
+    const expanded = (open: boolean) => trigger.setAttribute("aria-expanded", String(open));
+    expanded(false);
+    if (native) menu.addEventListener("toggle", (event) => {
+      const open = (event as ToggleEvent).newState === "open";
+      expanded(open);
+      if (open) position(trigger, menu);
+    });
+    else {
+      trigger.removeAttribute("popovertarget");
+      trigger.parentElement?.classList.add("row-menu--fallback");
+      menu.removeAttribute("popover");
+      menu.classList.add("menu--row-fallback");
+      menu.hidden = true;
+      trigger.addEventListener("click", () => {
+        const open = menu.hidden;
+        scope.querySelectorAll<HTMLElement>(".menu--row:not([hidden])").forEach((other) => { other.hidden = true; scope.querySelector<HTMLButtonElement>(`[aria-controls="${other.id}"]`)?.setAttribute("aria-expanded", "false"); });
+        menu.hidden = !open;
+        expanded(open);
+        if (open) position(trigger, menu);
+      });
+      menu.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        menu.hidden = true;
+        expanded(false);
+        trigger.focus();
+      });
+    }
+  }
+}
+
 export const MARK = raw(`<img class="mark" src="/brand/dol-mark.png" alt="HAU USC Department of Logistics" width="183" height="163" />`);
 /** The HAU University Student Council crest, shown beside the DOL mark on public pages. */
 export const CREST = raw(`<img class="crest" src="/brand/hau-usc-crest.webp" alt="Holy Angel University Student Council" width="205" height="240" />`);
@@ -185,7 +237,9 @@ export function categoryName(value: string): string {
 
 export { units } from "./catalog-policy";
 
-export const plural = (count: number, word: string): string => `${count.toLocaleString()} ${word}${count === 1 ? "" : "s"}`;
+const quantities = new Intl.NumberFormat("en-PH");
+export const formatQuantity = (value: number): string => quantities.format(value);
+export const plural = (count: number, word: string): string => `${formatQuantity(count)} ${word}${count === 1 ? "" : "s"}`;
 
 const dateTime = new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" });
 export const formatDateTime = (iso: string): string => dateTime.format(new Date(iso));
@@ -202,15 +256,15 @@ export const formatDate = (isoDay: string): string => dateOnly.format(new Date(`
 export const reducedMotion = (): boolean => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** Rolls a number to `to` (from `from`, or its current text), so a change is seen rather than jumped. */
-export function animateNumber(element: Element | null, to: number, from = Number(element?.textContent)): void {
+export function animateNumber(element: Element | null, to: number, from = Number(element?.textContent?.replace(/,/g, ""))): void {
   if (!element) return;
-  if (!Number.isFinite(from) || from === to || reducedMotion()) { element.textContent = String(to); return; }
+  if (!Number.isFinite(from) || from === to || reducedMotion()) { element.textContent = formatQuantity(to); return; }
   const start = performance.now();
   const duration = Math.min(700, 250 + Math.abs(to - from) * 30);
-  element.textContent = String(from);
+  element.textContent = formatQuantity(from);
   const step = (now: number) => {
     const progress = Math.min(1, (now - start) / duration);
-    element.textContent = String(Math.round(from + (to - from) * (1 - (1 - progress) ** 3)));
+    element.textContent = formatQuantity(Math.round(from + (to - from) * (1 - (1 - progress) ** 3)));
     if (progress < 1) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);

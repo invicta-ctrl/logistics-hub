@@ -63,7 +63,7 @@ export async function staffAccounts(): Promise<void> {
     try {
       const { accounts } = await api<{ accounts: Row[] }>("/api/staff/admin/accounts");
       rows = accounts;
-      mount(document.querySelector("#accounts")!, html`<div class="data-table-wrap"><table class="data-table data-table--static">
+      mount(document.querySelector("#accounts")!, html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Accounts that can sign in to the staff workspace</caption>
         <thead><tr><th scope="col">Account</th><th scope="col">Role</th><th scope="col">Status</th><th scope="col">Last sign-in</th><th scope="col" class="col-qty">Sessions</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
         <tbody>${accounts.map((row) => html`<tr>

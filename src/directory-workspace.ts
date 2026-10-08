@@ -5,7 +5,7 @@ import { tiltTile } from "./card-motion";
 import { type Card, type View, cardForm, cardSource, fillTiles, forgetScans, importArchive, makeMissingImages, openCard } from "./staff-ids";
 import { type Access, type Role, type Session, accessLabel, initials, loadSession, shell } from "./staff";
 import { adminTabs } from "./admin-frame";
-import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
+import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatQuantity, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
 
 /*
  * Administration → Staff Directory (V1.3). One page: the directory as a wall of cards by department, and a person's profile in
@@ -609,16 +609,16 @@ export async function staffDirectory(): Promise<void> {
       const byCategory = [...shown.reduce((map, row) => map.set(row.category, (map.get(row.category) ?? 0) + row.quantity), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
       mount(host.querySelector("[data-usage]")!, rows.length === 0 ? emptyState("Nothing found in these dates", "No loan, phone take or phone use in these dates has this person's student ID.", "", "", 3) : html`
         <dl class="stat-strip">
-          <div class="stat"><dt>Units taken</dt><dd><span class="stat__value">${taken.reduce((sum, row) => sum + row.quantity, 0)}</span><span class="stat__note">${plural(taken.length, "phone take")}${used.length ? `, ${plural(used.length, "use")}` : ""}</span></dd></div>
-          <div class="stat"><dt>Borrowed</dt><dd><span class="stat__value">${loans.reduce((sum, row) => sum + row.quantity, 0)}</span><span class="stat__note">${plural(loans.length, "loan")}</span></dd></div>
+          <div class="stat"><dt>Units taken</dt><dd><span class="stat__value">${formatQuantity(taken.reduce((sum, row) => sum + row.quantity, 0))}</span><span class="stat__note">${plural(taken.length, "phone take")}${used.length ? `, ${plural(used.length, "use")}` : ""}</span></dd></div>
+          <div class="stat"><dt>Borrowed</dt><dd><span class="stat__value">${formatQuantity(loans.reduce((sum, row) => sum + row.quantity, 0))}</span><span class="stat__note">${plural(loans.length, "loan")}</span></dd></div>
           <div class="stat"><dt>Items</dt><dd><span class="stat__value">${new Set(shown.map((row) => row.itemId)).size}</span><span class="stat__note">different</span></dd></div>
-          <div class="stat"><dt>Most used</dt><dd><span class="stat__value stat__value--text">${byCategory[0] ? categoryName(byCategory[0][0]) : "—"}</span><span class="stat__note">${byCategory[0] ? `${byCategory[0][1]} units` : ""}</span></dd></div>
+          <div class="stat"><dt>Most used</dt><dd><span class="stat__value stat__value--text">${byCategory[0] ? categoryName(byCategory[0][0]) : "—"}</span><span class="stat__note">${byCategory[0] ? `${formatQuantity(byCategory[0][1])} units` : ""}</span></dd></div>
         </dl>
-        ${shown.length ? html`<div class="data-table-wrap"><table class="data-table data-table--static">
+        ${shown.length ? html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
           <caption class="visually-hidden">What left stock for ${person.name}</caption>
-          <thead><tr><th scope="col">Date</th><th scope="col">Item</th><th scope="col" class="col-hide-phone">Category</th><th scope="col" class="col-qty">Qty</th><th scope="col">How</th></tr></thead>
-          <tbody>${shown.slice(0, limit).map((row) => html`<tr><td>${formatDate(officeDay(row.at))}</td><td><a class="row-link" href="/staff/items?item=${row.itemId}" data-route>${row.itemName}</a></td><td class="col-hide-phone">${categoryName(row.category)}</td>
-            <td class="col-qty">${row.quantity} <span class="muted">${units(row.quantity, row.unit)}</span></td><td>${row.kind === "LOAN" ? html`Borrowed${row.purpose ? ` · ${label(row.purpose)}` : ""}` : row.kind === "USE" ? "Used" : "Taken"}${row.phone ? html` <span class="muted">(phone)</span>` : ""}</td></tr>`)}</tbody></table></div>
+          <thead><tr><th scope="col">Item</th><th scope="col" class="col-qty">Qty</th><th scope="col">Date</th><th scope="col">How</th><th scope="col" class="col-category col-hide-phone">Category</th></tr></thead>
+          <tbody>${shown.slice(0, limit).map((row) => html`<tr><td><a class="row-link" href="/staff/items?item=${row.itemId}" data-route>${row.itemName}</a></td><td class="col-qty"><span class="qty">${formatQuantity(row.quantity)}</span> <span class="muted">${units(row.quantity, row.unit)}</span></td>
+            <td>${formatDate(officeDay(row.at))}</td><td>${row.kind === "LOAN" ? html`Borrowed${row.purpose ? ` · ${label(row.purpose)}` : ""}` : row.kind === "USE" ? "Used" : "Taken"}${row.phone ? html` <span class="muted">(phone)</span>` : ""}</td><td class="col-category col-hide-phone">${categoryName(row.category)}</td></tr>`)}</tbody></table></div>
         ${shown.length > limit ? html`<p class="table-more"><button type="button" class="button button--secondary" data-usage-more>Show ${Math.min(USAGE_PAGE, shown.length - limit)} more <span class="muted">(${limit} of ${shown.length.toLocaleString()} shown)</span></button></p>` : ""}` : html`<p class="muted">Nothing matches these filters.</p>`}
         ${truncated ? html`<p class="field__hint">Only the newest 1,000 entries are shown; narrow the dates to see older ones.</p>` : ""}`);
     };

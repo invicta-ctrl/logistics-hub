@@ -197,7 +197,7 @@ export async function selfServiceReview(): Promise<void> {
     if (!review.recent.length) return emptyState("No Self-Service activity this week", "Takes, borrows and returns recorded with phones appear here.");
     const shown = found(review.recent);
     if (!shown.length) return emptyState("No record matches", "Check the reference, or try a name or an item. This list covers the last 7 days.");
-    return html`<div class="data-table-wrap"><table class="data-table data-table--static">
+    return html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Self-Service records this week</caption>
         <thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Who</th><th scope="col">State</th></tr></thead>
         <tbody>${shown.map((entry) => html`<tr>

@@ -5,7 +5,7 @@ import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { loadSession, shell } from "./staff";
 import {
   type Html, api, categoryName, emptyState, expired, failure, formatDate, formatDateTime, formatTime, html, icon, label, live, mount,
-  officeDay, onLeave, plural, preservingFocus, sheet as createSheet, sheetContent, toast, units, writeParams
+  bindRowActionMenus, formatQuantity, officeDay, onLeave, plural, preservingFocus, rowActionMenu, sheet as createSheet, sheetContent, toast, units, working, writeParams
 } from "./ui";
 
 type StockItem = {
@@ -53,7 +53,7 @@ function expiryTag(item: StockItem): Html {
 function whyTags(item: StockItem): Html {
   return html`<span class="tags">${reasons(item).map((reason) => {
     if (reason === "out") return html`<span class="tag tag--bad">Out of stock</span>`;
-    if (reason === "low") return html`<span class="tag tag--warn">${item.onHand < item.reorderThreshold ? `Low · ${item.reorderThreshold - item.onHand} short of level` : "Low · at reorder level"}</span>`;
+    if (reason === "low") return html`<span class="tag tag--warn">${item.onHand < item.reorderThreshold ? `Low · ${formatQuantity(item.reorderThreshold - item.onHand)} short of level` : "Low · at reorder level"}</span>`;
     if (reason === "count") return html`<span class="tag tag--pending">Needs count</span>`;
     if (reason === "open") return html`<span class="tag tag--warn">Open units need review</span>`;
     return expiryTag(item);
@@ -64,8 +64,8 @@ function whyTags(item: StockItem): Html {
 let placeNames = new Map<string, string>();
 const placeOf = (item: { locationId: string | null }) => (item.locationId ? placeNames.get(item.locationId) : undefined) ?? "No place";
 const itemCell = (item: { id: string; name: string; locationId?: string | null }) => html`<td class="col-item"><a class="row-link" href="/staff/items?item=${item.id}" data-route>${item.name}</a><span class="cell-sub"><span class="mono">${item.id}</span>${item.locationId !== undefined ? html` · ${placeOf({ locationId: item.locationId })}` : ""}</span></td>`;
-const qtyCell = (onHand: number, unit: string, item?: StockItem) => html`<td class="col-qty"><span class="qty">${onHand}</span> <span class="qty-unit">${units(onHand, unit)}</span>${item?.openUnits ? html`<span class="cell-sub">${sealedLine(onHand, item.openUnits, item.openCondition)}</span>` : ""}</td>`;
-const levelCell = (item: StockItem) => html`<td class="col-level">${item.reorderThreshold > 0 ? item.reorderThreshold : html`<span class="muted">Not set</span>`}</td>`;
+const qtyCell = (onHand: number | null, unit: string, item?: StockItem) => html`<td class="col-qty">${onHand === null ? html`<span class="muted">Not available</span>` : html`<span class="qty">${formatQuantity(onHand)}</span> <span class="qty-unit">${units(onHand, unit)}</span>${item?.openUnits ? html`<span class="cell-sub">${sealedLine(onHand, item.openUnits, item.openCondition)}</span>` : ""}`}</td>`;
+const levelCell = (item: StockItem) => html`<td class="col-level"><span class="cell-label">Reorder level: </span>${item.reorderThreshold > 0 ? formatQuantity(item.reorderThreshold) : html`<span class="muted">Not set</span>`}</td>`;
 
 export async function stockWorkspace(): Promise<void> {
   const session = await loadSession("stock");
@@ -167,7 +167,7 @@ export async function stockWorkspace(): Promise<void> {
     const card = document.querySelector("#record-card")!;
     if (!item) { mount(card, html`<p class="muted">Choose an item to see what is on the shelf.</p>`); movement.refresh(); return; }
     mount(card, html`<p class="record-card__name">${item.name} <span class="mono muted">${item.id}</span></p>
-      <p class="record-card__meta"><strong>${item.onHand}</strong> ${units(item.onHand, item.unit)} on hand${item.openUnits ? ` (${sealedLine(item.onHand, item.openUnits, item.openCondition)})` : ""} · ${placeOf(item)} · reorder level ${item.reorderThreshold > 0 ? item.reorderThreshold : "not set"}</p>
+      <p class="record-card__meta"><strong>${formatQuantity(item.onHand)}</strong> ${units(item.onHand, item.unit)} on hand${item.openUnits ? ` (${sealedLine(item.onHand, item.openUnits, item.openCondition)})` : ""} · ${placeOf(item)} · reorder level ${item.reorderThreshold > 0 ? formatQuantity(item.reorderThreshold) : "not set"}</p>
       ${reasons(item).length || item.reorderStatus ? whyTags(item) : ""}`);
     movement.refresh();
   }
@@ -216,7 +216,7 @@ export async function stockWorkspace(): Promise<void> {
           <td class="col-actions"><span class="row-actions">
             ${reasons(item)[0] === "open" ? html`<button type="button" class="button button--secondary button--sm" data-open-units="${item.id}">Open units</button>`
               : html`<button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="${reasons(item)[0] === "count" ? "COUNT" : "DELIVERY"}">${reasons(item)[0] === "count" ? "Count" : "Stock in"}</button>`}
-            ${item.reorderStatus ? "" : html`<button type="button" class="button button--ghost button--sm" data-restock="${item.id}">Add to restock</button>`}
+            ${item.reorderStatus ? "" : rowActionMenu(`attention-actions-${item.id}`, item.name, html`<li><button type="button" class="menu__item" data-restock="${item.id}">Add to restock</button></li>`)}
           </span></td></tr>`)}</tbody></table></div>`
         : emptyState(focus === "all" ? "Nothing needs attention" : `No items: ${FOCUS[focus as keyof typeof FOCUS]}`, focus === "all" ? "Every active item is in stock, above its reorder level, counted where needed, and not near expiry." : "Try another filter.")}`;
   }
@@ -232,18 +232,17 @@ export async function stockWorkspace(): Promise<void> {
         <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-desired">Restock qty</th><th scope="col">Status</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
         <tbody>${open.map((reorder) => {
           const item = byId.get(reorder.itemId);
-          return html`<tr data-key="${reorder.id}">${itemCell({ id: reorder.itemId, name: reorder.itemName, locationId: item?.locationId ?? null })}${qtyCell(item?.onHand ?? 0, reorder.unit)}
+          return html`<tr data-key="${reorder.id}">${itemCell({ id: reorder.itemId, name: reorder.itemName, locationId: item?.locationId ?? null })}${qtyCell(item?.onHand ?? null, reorder.unit)}
             <td class="col-desired"><label class="visually-hidden" for="desired-${reorder.id}">Restock quantity for ${reorder.itemName}</label><input class="input-compact" id="desired-${reorder.id}" type="number" inputmode="numeric" min="0" max="100000" step="1" value="${reorder.desiredQuantity ?? ""}" placeholder="—" data-desired="${reorder.id}" /></td>
             <td><span class="tag ${reorder.status === "PLANNED" ? "tag--gold" : "tag--warn"}">${label(reorder.status)}</span><span class="cell-sub">${reorder.note ?? ""}${reorder.note && reorder.updatedBy ? " · " : ""}${reorder.updatedBy ?? ""}</span></td>
             <td class="col-actions"><span class="row-actions">
               <button type="button" class="button button--primary button--sm" data-receive="${reorder.id}">Receive</button>
-              <button type="button" class="button button--secondary button--sm" data-status="${reorder.status === "PLANNED" ? "NEEDS_RESTOCK" : "PLANNED"}" data-reorder="${reorder.id}">${reorder.status === "PLANNED" ? "Not planned" : "Mark planned"}</button>
-              <button type="button" class="button button--ghost button--sm" data-status="DISMISSED" data-reorder="${reorder.id}">Dismiss</button>
+              ${rowActionMenu(`restock-actions-${reorder.id}`, reorder.itemName, html`<li><button type="button" class="menu__item" data-status="${reorder.status === "PLANNED" ? "NEEDS_RESTOCK" : "PLANNED"}" data-reorder="${reorder.id}">${reorder.status === "PLANNED" ? "Not planned" : "Mark planned"}</button></li><li><button type="button" class="menu__item" data-status="DISMISSED" data-reorder="${reorder.id}">Dismiss</button></li>`)}
             </span></td></tr>`;
         })}</tbody></table></div>`
         : emptyState("The restock list is empty", "Add items from Needs attention, or from the suggestions below when stock drops to its reorder level.")}
       ${suggestions.length ? html`<section class="subsection" aria-labelledby="suggested-title"><h2 class="subsection__title" id="suggested-title">Suggested from reorder levels</h2>
-        <ul class="plain-list">${suggestions.map((item) => html`<li><span><strong>${item.name}</strong> <span class="muted">· ${item.onHand} on hand, level ${item.reorderThreshold}</span></span><button type="button" class="button button--secondary button--sm" data-restock="${item.id}">Add</button></li>`)}</ul></section>` : ""}
+        <ul class="plain-list">${suggestions.map((item) => html`<li><span><strong>${item.name}</strong> <span class="muted">· ${formatQuantity(item.onHand)} on hand, level ${formatQuantity(item.reorderThreshold)}</span></span><button type="button" class="button button--secondary button--sm" data-restock="${item.id}">Add</button></li>`)}</ul></section>` : ""}
       ${closed.length ? html`<section class="subsection" aria-labelledby="closed-title"><h2 class="subsection__title" id="closed-title">Closed in the last two weeks</h2>
         <ul class="plain-list plain-list--muted">${closed.map((reorder) => html`<li><span>${reorder.itemName}</span><span class="muted">${label(reorder.status)} · ${formatDateTime(reorder.closedAt ?? reorder.updatedAt)}${reorder.updatedBy ? ` · ${reorder.updatedBy}` : ""}</span></li>`)}</ul></section>` : ""}`;
   }
@@ -259,7 +258,7 @@ export async function stockWorkspace(): Promise<void> {
         <td>${stockState(item) === "OUT" ? html`<span class="tag tag--bad">Out of stock</span>` : stockState(item) === "LOW" ? html`<span class="tag tag--warn">Low stock</span>` : html`<span class="tag tag--ok">In stock</span>`}</td>
         <td class="col-actions"><span class="row-actions">${tracked(item)
           ? html`<button type="button" class="button button--secondary button--sm" data-open-units="${item.id}">Open units</button>`
-          : html`<button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="CONSUMED" data-delta="-1">Use</button>`}<button type="button" class="button button--ghost button--sm" data-record-item="${item.id}" data-reason="DELIVERY">Restock</button></span></td></tr>`)}</tbody></table></div>`;
+          : html`<button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="CONSUMED" data-delta="-1">Use</button>`}${rowActionMenu(`pantry-actions-${item.id}`, item.name, html`<li><button type="button" class="menu__item" data-record-item="${item.id}" data-reason="DELIVERY">Restock</button></li>`)}</span></td></tr>`)}</tbody></table></div>`;
   }
 
   function activityMarkup(data: Stock): Html {
@@ -290,6 +289,7 @@ export async function stockWorkspace(): Promise<void> {
       ? `${plural(today.length, "stock movement")} today · last by ${today[0]!.actor ?? "staff"} at ${formatTime(today[0]!.createdAt)}`
       : "No stock movements recorded today yet.";
     preservingFocus(results, () => mount(results, view === "attention" ? attentionMarkup(stock!) : view === "restock" ? restockMarkup(stock!) : view === "pantry" ? pantryMarkup(stock!) : activityMarkup(stock!)));
+    bindRowActionMenus(results);
   };
 
   const poll = live<Stock>("/api/staff/stock", {
@@ -339,6 +339,15 @@ export async function stockWorkspace(): Promise<void> {
   document.querySelector("[data-record]")!.addEventListener("click", showRecord);
   results.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
+    const menuAction = target.closest<HTMLButtonElement>(".menu--row .menu__item");
+    if (menuAction) {
+      const menu = menuAction.closest<HTMLElement>(".menu--row")!;
+      const trigger = results.querySelector<HTMLButtonElement>(`[aria-controls="${menu.id}"]`);
+      if ("hidePopover" in menu && menu.matches(":popover-open")) menu.hidePopover();
+      else menu.hidden = true;
+      trigger?.setAttribute("aria-expanded", "false");
+      trigger?.focus({ preventScroll: true });
+    }
     const chip = target.closest<HTMLButtonElement>("[data-focus]");
     if (chip) { focus = chip.dataset.focus as Focus; render(); results.querySelector<HTMLElement>(`[data-focus="${focus}"]`)?.focus(); return; }
     const range = target.closest<HTMLButtonElement>("[data-range]");
@@ -348,7 +357,7 @@ export async function stockWorkspace(): Promise<void> {
     const openUnitsButton = target.closest<HTMLButtonElement>("[data-open-units]");
     if (openUnitsButton) return startRecord(openUnitsButton.dataset.openUnits!, {});
     const add = target.closest<HTMLButtonElement>("[data-restock]");
-    if (add) return void restock(add.dataset.restock!);
+    if (add) { const done = working(add); void restock(add.dataset.restock!).finally(done); return; }
     const receive = target.closest<HTMLButtonElement>("[data-receive]");
     const reorderOf = (id: string | undefined) => stock?.reorders.find((entry) => entry.id === id);
     if (receive) {
@@ -359,7 +368,7 @@ export async function stockWorkspace(): Promise<void> {
     const status = target.closest<HTMLButtonElement>("[data-status]");
     if (status) {
       const reorder = reorderOf(status.dataset.reorder);
-      if (reorder && (status.dataset.status !== "DISMISSED" || window.confirm(`Remove ${reorder.itemName} from the restock list?`))) void patchReorder(reorder, { status: status.dataset.status });
+      if (reorder && (status.dataset.status !== "DISMISSED" || window.confirm(`Remove ${reorder.itemName} from the restock list?`))) { const done = working(status); void patchReorder(reorder, { status: status.dataset.status }).finally(done); }
     }
   });
   results.addEventListener("change", (event) => {
