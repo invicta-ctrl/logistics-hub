@@ -12,6 +12,8 @@ PROVIDER / QUALITY: no inference, provider/configuration change, deployment, mig
 FP-B CONTRACT: src/catalog-draft.ts (typed CatalogDraft, composeDraft, isStale) tested, not yet wired into the screen.
 NEXT: wire composeDraft into catalogue-capture draw(), then FP-C Gemma extraction.
 
+UI AMENDMENT (separate workstream): `docs/specs/accepted/2026-10-08-data-surface-ui-amendment.md` is ACCEPTED (Earl, 2026-10-08). It is scheduled as its own `slice/ux-data-surface` after the V1.15 Final Pass merges and before RTV3-01. Not started; it does not change Final Pass scope.
+
 ## Road to V3 — prepared on `main`, NOT STARTED — 2026-10-08
 
 V2.0: COMPLETE and verified (Earl, 2026-10-08). Handoff: `docs/road-to-v2/releases/v2.0.md`, "Handoff to Road to V3"; readiness evidence `docs/road-to-v2/evidence/v2.0-production-readiness.md`.
