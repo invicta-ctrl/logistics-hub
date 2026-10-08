@@ -23,10 +23,10 @@ export function itemVisualControl(host: HTMLElement, current: () => EditableVisu
     const suggestion = suggestItemIcon(item).key;
     const hasPhoto = Boolean(item.photoId);
     const photoActive = hasPhoto && item.visualType !== "SYSTEM_ICON";
-    mount(host, html`<h3 class="form-section__title">Item Visual</h3>
-      <div class="photo-actions" role="group" aria-label="Item visual type">
-        <button type="button" class="button button--secondary button--sm" data-visual-mode="SYSTEM_ICON" aria-pressed="${!photoActive}">System Icon</button>
-        <button type="button" class="button button--secondary button--sm" data-visual-mode="PHOTO" aria-pressed="${photoActive}">Real Photo</button>
+    mount(host, html`<h3 class="form-section__title">Item picture</h3>
+      <div class="photo-actions" role="group" aria-label="Item picture type">
+        <button type="button" class="button button--secondary button--sm" data-visual-mode="SYSTEM_ICON" aria-pressed="${!photoActive}">System icon</button>
+        <button type="button" class="button button--secondary button--sm" data-visual-mode="PHOTO" aria-pressed="${photoActive}">Real photo</button>
       </div>
       <p class="field__hint">${photoActive ? "The selected photo appears first. This icon remains its fallback." : "This icon appears on the catalog. You can keep it or choose another."}</p>
       <p class="visual-suggestion">${raw(itemIconSvg(selected))}<span>${ITEM_ICONS.find((icon) => icon.key === selected)!.label}${item.iconKey ? " · chosen icon" : " · automatic"}</span></p>
