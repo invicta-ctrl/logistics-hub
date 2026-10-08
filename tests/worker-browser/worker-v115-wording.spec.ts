@@ -47,7 +47,7 @@ function problems(seen: Seen[], data: ReadonlySet<string>) {
     // A short label whose every word starts with a capital letter: Title Case.
     for (const part of text.split("·")) {
       // A name the Worker sent (an item, category, place or person) is the owner's data, whatever its capitals.
-      if (data.has(part.trim())) continue;
+      if (data.has(part.trim().toLowerCase())) continue;
       const words = part.replace(PROPER, "").replace(/[^A-Za-z' -]/g, " ").split(/\s+/).filter((word) => word.length > 1 && !ACRONYMS.has(word));
       if (!/\d/.test(part) && words.length >= 2 && words.length <= 5 && part.length <= 40 && words.every((word) => /^[A-Z]/.test(word))) found.push(`${where}: Title Case “${text}”`);
     }
@@ -73,8 +73,8 @@ test("no page shows an enum name, Title Case label or “verified” claim at ph
   const data = new Set<string>();
   const pending: Promise<unknown>[] = [];
   const collect = (value: unknown) => {
-    // A category is stored in capitals and shown with a capital on each word, so both spellings are the owner's data.
-    if (typeof value === "string") { if (value.length <= 80) { data.add(value); if (/^[A-Z][A-Z &'()-]+$/.test(value)) data.add(value.toLowerCase().replace(/\b\p{L}/gu, (letter) => letter.toUpperCase())); } }
+    // A category is stored in one spelling and shown with a capital on each word, so any capitalisation of a name the Worker sent is data.
+    if (typeof value === "string") { if (value.length <= 80) data.add(value.toLowerCase()); }
     else if (Array.isArray(value)) for (const entry of value) collect(entry);
     else if (value && typeof value === "object") for (const entry of Object.values(value)) collect(entry);
   };

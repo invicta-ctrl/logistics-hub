@@ -143,9 +143,9 @@ async function judge(page: Page, name: string, insets: { top: number; bottom: nu
   await out.scrollIntoViewIfNeeded();
   const closing = await out.boundingBox();
   expect(Math.min(closing!.width, closing!.height), `${name}: the way out is 44 px or more`).toBeGreaterThanOrEqual(43.5);
-  // The last control can be scrolled to, and then sits above the home indicator.
+  // Scrolled to the very end, the last control sits above the home indicator (the sheet's bottom padding is what lifts it).
+  await dialog.evaluate((element) => { for (const node of [element, ...element.querySelectorAll<HTMLElement>("*")]) if (node.scrollHeight > node.clientHeight && /auto|scroll/.test(getComputedStyle(node).overflowY)) node.scrollTop = node.scrollHeight; });
   const last = dialog.locator("button:visible, a[href]:visible, input:visible, select:visible, textarea:visible").last();
-  await last.scrollIntoViewIfNeeded();
   const end = await last.boundingBox();
   expect(end!.y + end!.height, `${name}: the last control clears the home indicator`).toBeLessThanOrEqual(size.height - insets.bottom + 0.5);
   expect(end!.y, `${name}: the last control is on screen`).toBeGreaterThanOrEqual(0);
