@@ -60,12 +60,12 @@ export async function preparePhoto(file: File): Promise<Prepared> {
 }
 
 /**
- * Judges the cleaned picture the Worker just stored by drawing it small and reading its alpha channel (the Worker cannot afford to decode
+ * Judges the pending cut the Worker just made (not yet the item's picture) by drawing it small and reading its alpha channel (the Worker cannot afford to decode
  * it). Answers null for a real cutout, or the sentence that says why not. A picture that cannot be loaded is not a cutout either.
  */
 async function cutoutFault(id: string): Promise<string | null> {
   try {
-    const response = await fetch(`/api/staff/media/${id}/cutout`, { credentials: "same-origin", cache: "no-store" });
+    const response = await fetch(`/api/staff/media/${id}/pending`, { credentials: "same-origin", cache: "no-store" });
     if (!response.ok) return "The cleaned picture could not be loaded.";
     const bitmap = await createImageBitmap(await response.blob());
     try {
@@ -277,11 +277,16 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       error = "";
       draw();
       try {
-        if (cleaning) await api(options.cleanup, { method: "POST", body: JSON.stringify({ expected: photo.id }) });
-        else await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
-        // A cut that is not a real cutout is undone at once: the original stays the picture in use.
-        const fault = cleaning ? await cutoutFault(photo.id) : null;
-        if (fault) await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
+        // A new cut waits as pending: the browser judges it, and only an accepted one becomes the picture. A closed tab leaves the original.
+        let fault: string | null = null;
+        if (cleaning) {
+          const made = await api<{ pending?: boolean; cutout?: boolean }>(options.cleanup, { method: "POST", body: JSON.stringify({ expected: photo.id }) });
+          if (made.pending) {
+            fault = await cutoutFault(photo.id);
+            if (fault) await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
+            else await api(options.cleanup, { method: "POST", body: JSON.stringify({ expected: photo.id, accept: true }) });
+          }
+        } else await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
         photo = { ...photo, cutout: cleaning && !fault };
         state = "";
         draw();

@@ -1,17 +1,15 @@
 # Current Work Pointer — Logistics Hub
 
-## V1.15 Final Pass — four-model Ambient Intelligence — IN PROGRESS (FP-A baseline reconciled; provider gates pending; FP-B checkpoint) — 2026-10-08
+## V1.15 Final Pass — four-model Ambient Intelligence — PARTIAL, PR READY FOR EARL TO MERGE — 2026-10-08
 
 ORDER: Runs before Road to V3. Scope is additional V1.15 work only.
 SPEC: docs/specs/accepted/road-to-v2/2026-10-08-v1.15-final-pass-ai-intelligence-amendment.md.
-BRANCH: slice/v1.15-final-pass-qbqr20 (Claude Cloud) continues Codex's slice/v1.15-catalog-intelligence checkpoint 3176c74 from verified main 8068b0e; one writer only.
-FP-A: classified stale staged handoff records were privately preserved and reconciled; untracked NUL remains preserved.
-FP-B CHECKPOINT: Add-items photo naming preserves a typed-and-cleared name and rejects stale preparation/model results after a retake, reset, or leave.
-VERIFIED: focused delayed-response browser regressions, negative control, build/typecheck, privacy scan.
-PROVIDER / QUALITY: no inference, provider/configuration change, deployment, migration, or production write; quality and provider gates remain unverified.
-WRITER TRANSFER (Earl, 2026-10-08 12:48 UTC): Codex hit its usage limit. Implementation passed to Claude Cloud; `slice/v1.15-final-pass-qbqr20` is the canonical branch and contains all of `slice/v1.15-catalog-intelligence` (3176c74), which is now retired work: delete it only after Earl confirms no local-only Codex work. Codex's local uncommitted work on Windows is UNKNOWN. Codex may resume only through a formal writer-lock handoff on this same branch.
-FP-B CONTRACT: src/catalog-draft.ts (typed CatalogDraft, composeDraft, isStale) tested, not yet wired into the screen.
-NEXT: wire composeDraft into catalogue-capture draw(), then FP-C Gemma extraction.
+BRANCH: slice/v1.15-final-pass-qbqr20 (Claude Cloud), from verified main 8068b0e, contains Codex's slice/v1.15-catalog-intelligence checkpoint 3176c74; one writer only.
+RECORD: `docs/road-to-v2/releases/v1.15-final-pass.md` (STATUS: PARTIAL, with each gap and its next step). Evidence: `docs/road-to-v2/evidence/v1.15-final-pass-provider-smoke-2026-10-08.md` and `...-role-benchmark-2026-10-08.md`.
+DONE: typed CatalogDraft in Add items; Gemma reads name, brand, model and packaging; Granite, Qwen and GLM adapters with budgets and breakers (live smokes, binding reports Neurons), all three in SHADOW_EVALUATION because none passes its gate and none abstains; Cloudflare Images cutout code with the owner's switch (off), a 500 a month cap and browser-side judging, one real `segment=foreground` call succeeded on a synthetic fixture.
+NOT PROVEN: Gemma accuracy on real photos (needs Earl's photo-set decision); a cutout of real catalogue photos and its Neuron cost; the Free plan beyond Earl's statement; active use of any text role.
+OWNER ACTIONS (in the record): merge the PR, turn "Picture cleanup" on in Administration > System when ready (the `IMAGES` binding is in `wrangler.jsonc`; Earl's dashboard binding `IMAGES_BINDING` is replaced by it on deploy), delete merged branches. `slice/v1.15-catalog-intelligence` only after Earl confirms Codex has no local-only work (Codex's Windows state is UNKNOWN; it may resume only through a formal writer-lock handoff).
+NEXT: after the merge, refresh the V2.0 handoff's AI line (done in this PR as a dated addendum, history not rewritten), then `slice/ux-data-surface`.
 
 UI AMENDMENT (separate workstream): `docs/specs/accepted/2026-10-08-data-surface-ui-amendment.md` is ACCEPTED (Earl, 2026-10-08). It is scheduled as its own `slice/ux-data-surface` after the V1.15 Final Pass merges and before RTV3-01. Not started; it does not change Final Pass scope.
 

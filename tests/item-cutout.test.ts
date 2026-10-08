@@ -134,6 +134,9 @@ const addPhoto = async () => {
   return (await (await call(`/api/staff/items/${ITEM}/photo`, { method: "PUT", headers: { origin, cookie }, body: form })).json() as { photo: { id: string } }).photo.id;
 };
 const cut = (expected: string) => staff(`/api/staff/items/${ITEM}/cutout`, "POST", { expected });
+const accept = (expected: string) => staff(`/api/staff/items/${ITEM}/cutout`, "POST", { expected, accept: true });
+/** What the browser does for a cut it likes: ask for one, then accept it. */
+const clean = async (expected: string) => { await cut(expected); return accept(expected); };
 const uncut = (expected: string) => staff(`/api/staff/items/${ITEM}/cutout?expected=${expected}`, "DELETE");
 const detail = async () => ((await (await staff(`/api/staff/items/${ITEM}`)).json()) as { item: { photo: { id: string; cutout: boolean; cleanable: boolean } | null } }).item.photo;
 const actions = () => (sqlite.prepare("SELECT action FROM audit_log WHERE action LIKE 'ITEM_CUTOUT_%' ORDER BY rowid").all() as Array<{ action: string }>).map((entry) => entry.action);
@@ -177,7 +180,7 @@ describe("picture cleanup", () => {
     expect(media.objects.has(`items/${id}/cutout`)).toBe(false);
   });
 
-  it("cuts the foreground, keeps the original, serves a PNG and audits it", async () => {
+  it("cuts the foreground into a pending picture, and only the browser's accept makes it the item's", async () => {
     const { asked, runner } = images(ok());
     env.IMAGES = runner;
     turnOn();
@@ -186,11 +189,19 @@ describe("picture cleanup", () => {
     expect(await detail()).toMatchObject({ cutout: false, cleanable: true });
     const response = await cut(id);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ cutout: true });
+    expect(await response.json()).toEqual({ pending: true });
     expect(asked).toContainEqual({ segment: "foreground" });
     expect(asked).toContainEqual({ format: "image/png" });
-    expect([...media.objects.keys()].sort()).toEqual([...before, `items/${id}/cutout`].sort());
+    // Waiting: not the item's picture, not served as it, nothing audited yet; the original is untouched.
+    expect([...media.objects.keys()].sort()).toEqual([...before, `items/${id}/cutout-pending`].sort());
+    expect(await detail()).toMatchObject({ cutout: false });
+    expect((await staff(`/api/staff/media/${id}/cutout`)).status).toBe(404);
+    expect(actions()).toEqual([]);
+    expect(new Uint8Array(await (await staff(`/api/staff/media/${id}/pending`)).arrayBuffer())).toEqual(GOOD);
     expect(media.objects.get(`items/${id}/display`)!.bytes).toEqual(Uint8Array.from(jpeg({ width: 40, height: 30 })));
+
+    expect(await (await accept(id)).json()).toEqual({ cutout: true });
+    expect([...media.objects.keys()].sort()).toEqual([...before, `items/${id}/cutout`].sort());
     expect(await detail()).toMatchObject({ cutout: true });
     const served = await staff(`/api/staff/media/${id}/cutout`);
     expect(served.headers.get("content-type")).toBe("image/png");
@@ -199,6 +210,39 @@ describe("picture cleanup", () => {
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(GOOD);
     expect(actions()).toEqual(["ITEM_CUTOUT_ADDED"]);
     expect(await cutoutsThisMonth(env.DB)).toBe(1);
+    // Accepting again changes nothing.
+    expect(await (await accept(id)).json()).toEqual({ cutout: true });
+    expect(actions()).toEqual(["ITEM_CUTOUT_ADDED"]);
+  });
+
+  it("leaves nothing live when the browser never answers, and a rejected cut is deleted", async () => {
+    const { asked, runner } = images(ok());
+    env.IMAGES = runner;
+    turnOn();
+    const id = await addPhoto();
+    await cut(id);
+    // The tab was closed: a second tap finds the waiting cut and spends nothing.
+    const calls = asked.length;
+    expect(await (await cut(id)).json()).toEqual({ pending: true });
+    expect(asked).toHaveLength(calls);
+    expect(await cutoutsThisMonth(env.DB)).toBe(1);
+    expect(await detail()).toMatchObject({ cutout: false });
+    // The browser did not like it.
+    expect((await uncut(id)).status).toBe(200);
+    expect(media.objects.has(`items/${id}/cutout-pending`)).toBe(false);
+    expect((await accept(id)).status).toBe(404);
+    expect(actions()).toEqual([]);
+  });
+
+  it("accepts nothing while the owner's switch is off or for a photo that was replaced", async () => {
+    env.IMAGES = images(ok()).runner;
+    turnOn();
+    const id = await addPhoto();
+    await cut(id);
+    expect((await accept("00000000-0000-4000-8000-000000000000")).status).toBe(409);
+    sqlite.prepare("DELETE FROM system_settings WHERE key = 'picture_cleanup'").run();
+    expect((await accept(id)).status).toBe(503);
+    expect(media.objects.has(`items/${id}/cutout`)).toBe(false);
   });
 
   it("does not send a photo that is already cleaned, so a second tap spends nothing", async () => {
@@ -206,7 +250,7 @@ describe("picture cleanup", () => {
     env.IMAGES = runner;
     turnOn();
     const id = await addPhoto();
-    await cut(id);
+    await clean(id);
     const calls = asked.length;
     const again = await cut(id);
     expect(again.status).toBe(200);
@@ -239,7 +283,7 @@ describe("picture cleanup", () => {
     env.IMAGES = images(ok()).runner;
     turnOn();
     const id = await addPhoto();
-    await cut(id);
+    await clean(id);
     expect((await uncut(id)).status).toBe(200);
     expect(await detail()).toMatchObject({ cutout: false });
     expect(media.objects.has(`items/${id}/display`)).toBe(true);
@@ -251,15 +295,16 @@ describe("picture cleanup", () => {
     env.IMAGES = images(ok()).runner;
     turnOn();
     const id = await addPhoto();
-    await cut(id);
+    await clean(id);
     const form = new FormData();
     form.set("display", new File([jpeg({ width: 40, height: 30 }) as BlobPart], "display.jpg", { type: "image/jpeg" }));
     form.set("thumb", new File([jpeg({ width: 16, height: 12 }) as BlobPart], "thumb.jpg", { type: "image/jpeg" }));
     form.set("expected", id);
     const replaced = await (await call(`/api/staff/items/${ITEM}/photo`, { method: "PUT", headers: { origin, cookie }, body: form })).json() as { photo: { id: string } };
-    expect([...media.objects.keys()].filter((name) => name.endsWith("/cutout"))).toEqual([]);
+    expect([...media.objects.keys()].filter((name) => name.includes("cutout"))).toEqual([]);
     expect(await detail()).toMatchObject({ id: replaced.photo.id, cutout: false });
     await cut(replaced.photo.id);
+    expect([...media.objects.keys()].filter((name) => name.includes("cutout"))).toEqual([`items/${replaced.photo.id}/cutout-pending`]);
     await staff(`/api/staff/items/${ITEM}/photo?expected=${replaced.photo.id}`, "DELETE");
     expect([...media.objects.keys()]).toEqual([]);
   });

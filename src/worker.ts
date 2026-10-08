@@ -8,7 +8,7 @@ import { aliasItems, catalogCoverage } from "./catalog-admin";
 import { insights, resumable } from "./home";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
-import { type ImagesRunner, cleanupOn, cleanupStatus, cutoutPicture, hasCutout, makeCutout, removeCutout, setCleanup } from "./item-cutout";
+import { type ImagesRunner, acceptCutout, cleanupOn, cleanupStatus, cutoutPicture, hasCutout, makeCutout, removeCutout, setCleanup } from "./item-cutout";
 import { dropObjects, itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
 import { linkItems, linksOf, unlinkItems } from "./item-relations";
 import { checkKit, createKit, createTemplate, kitDetail, kitList, kitsOfItem, recentlyCatalogued, templateDetail, updateKit, updateTemplate } from "./kits";
@@ -504,7 +504,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     return json(await createItem(env.DB, account, parseItemInput(input), opening), 201);
   }
   const media = MEDIA_PATH.exec(path);
-  if (media && method === "GET") return media[2] === "cutout" ? cutoutPicture(env.CATALOG_MEDIA, media[1]!) : itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!);
+  if (media && method === "GET") return media[2] === "cutout" || media[2] === "pending" ? cutoutPicture(env.CATALOG_MEDIA, media[1]!, media[2] === "pending") : itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!);
   const match = ITEM_PATH.exec(path);
   if (match && !match[2] && method === "GET") {
     const [detail, freshness, kits, links] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!), linksOf(env.DB, match[1]!)]);
@@ -535,7 +535,15 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     return json({ photo: { ...saved.photo, cleanable: Boolean(env.IMAGES) && await cleanupOn(env.DB) } });
   }
   if (match?.[2] === "/photo" && method === "DELETE") return json(await removeItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
-  if (match?.[2] === "/cutout" && method === "POST") return json(await makeCutout(env.DB, env.CATALOG_MEDIA, env.IMAGES, account, match[1]!, (await body() as { expected?: unknown } | null)?.expected));
+  if (match?.[2] === "/cutout" && method === "POST") {
+    const input = await body() as { expected?: unknown; accept?: unknown } | null;
+    // `accept` is the browser's verdict on a pending cut; without it the request makes (or finds) one. Both need the owner's switch.
+    if (input?.accept === true) {
+      if (!await cleanupOn(env.DB)) throw new InputError(503, "Picture cleanup is turned off.");
+      return json(await acceptCutout(env.DB, env.CATALOG_MEDIA, account, match[1]!, input.expected));
+    }
+    return json(await makeCutout(env.DB, env.CATALOG_MEDIA, env.IMAGES, account, match[1]!, input?.expected));
+  }
   if (match?.[2] === "/cutout" && method === "DELETE") return json(await removeCutout(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
   if (match?.[2] === "/open-units" && method === "POST") return json(await openUnitAction(env.DB, account, match[1]!, await body()));
   if (match?.[2] === "/loans" && method === "POST") {
