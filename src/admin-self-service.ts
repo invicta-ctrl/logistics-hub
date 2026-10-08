@@ -40,7 +40,7 @@ export async function selfServiceSettings(): Promise<void> {
       kicker: COPY.label,
       title: closing ? "Close Self-Service for maintenance?" : "Reopen Self-Service?",
       impact: closing
-        ? html`<p>Phones show the maintenance screen at once and record nothing until you reopen it. People are sent to DOL staff in person.</p>
+        ? html`<p>Phones show the maintenance screen at once and record nothing until you reopen it. People are sent to DoL staff in person.</p>
           <p>${waiting ? `${plural(waiting, "record")} already waiting for a check stay in Self-Service.` : "Nothing is waiting for a check."} Records waiting on a phone are kept and sent when it reopens.</p>`
         : html`<p>Phones can take, borrow, use and return again at once. Records kept on phones during the closure are sent and wait for staff to check them.</p>`,
       confirm: closing ? "Close for maintenance" : "Reopen Self-Service",

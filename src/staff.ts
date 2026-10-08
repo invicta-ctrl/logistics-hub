@@ -455,7 +455,7 @@ export async function workspace(): Promise<void> {
           <p class="live-status" id="live-status">Connecting…</p>
           <a class="button button--secondary" href="/staff/locations" data-route>${icon("pin")}Locations</a>
           <a class="button button--secondary" href="/staff/kits" data-route>${icon("stack")}Kits</a>
-          <a class="button button--secondary" href="/staff/catalogue" data-route>${icon("camera")}Catalogue</a>
+          <a class="button button--secondary" href="/staff/catalogue" data-route>${icon("camera")}Add items</a>
           <button class="button button--primary" type="button" id="new-item">${icon("plus")}New item</button>
         </div>
       </header>

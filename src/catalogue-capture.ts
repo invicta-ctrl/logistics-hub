@@ -56,7 +56,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     else detail = await api<Detail>(`/api/staff/catalogue/sessions/${encodeURIComponent(record?.serverId ?? sessionId)}`);
   } catch (error) {
     if (!(record && error instanceof ApiError && error.status === 0)) {
-      mount(root, emptyState("This cataloguing session could not be opened", record || online ? failure(error) : "It isn't saved on this device, so it opens only with a connection.", html`<a class="button button--secondary" href="/staff/catalogue" data-route>Back to Catalogue</a>`, "error", 1));
+      mount(root, emptyState("This cataloguing session could not be opened", record || online ? failure(error) : "It isn't saved on this device, so it opens only with a connection.", html`<a class="button button--secondary" href="/staff/catalogue" data-route>Back to Add items</a>`, "error", 1));
       return;
     }
     detail = record.detail;
@@ -106,7 +106,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     <p class="visually-hidden" id="cat-announce" role="status"></p>
     <input class="visually-hidden" type="file" id="cat-file" accept="image/*" capture="environment" tabindex="-1" aria-label="Choose a photo" />
     <header class="cat-bar">
-      <a class="button button--ghost button--sm" href="/staff/catalogue" data-route>${icon("back")}Catalogue</a>
+      <a class="button button--ghost button--sm" href="/staff/catalogue" data-route>${icon("back")}Add items</a>
       <div class="cat-bar__place"><span class="cat-bar__label">Cataloguing in</span>
         <button type="button" class="cat-place" id="cat-place" aria-expanded="false" aria-controls="cat-place-panel">${icon("pin")}<span id="cat-place-name"></span><span class="cat-place__change">Change</span></button></div>
       <p class="cat-bar__count"><strong id="cat-count"></strong> <span id="cat-sync" class="live-status" data-state="live"></span> <button type="button" class="text-link cat-see" id="cat-see" hidden>See</button></p>

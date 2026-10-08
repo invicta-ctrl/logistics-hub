@@ -35,8 +35,8 @@ export type WhereIsIt = {
 };
 
 const CONFIRM: Record<ReportKind, string> = {
-  CANT_FIND: "Tell DOL staff this item could not be found where it should be.",
-  LOCATION_WRONG: "Tell DOL staff that this item is not kept where the route says."
+  CANT_FIND: "Tell DoL staff this item could not be found where it should be.",
+  LOCATION_WRONG: "Tell DoL staff that this item is not kept where the route says."
 };
 
 /** The nearest picture on the way: the item's own place first, then the places around it. */
@@ -80,14 +80,14 @@ export function openWhereIsIt(options: WhereIsIt): void {
     if (!options.report) return html`<p class="where__blocked">${icon("cloudOff")}<span>${options.reportBlocked ?? "Reports are not available right now."}</span></p>`;
     if (state.phase === "sent") {
       return html`<div class="where__done" role="status">${icon("check")}<div><p><strong>${state.recorded ? "Reported. Thank you." : "Already reported. Thank you."}</strong></p>
-        <p>DOL staff will check. Nothing was changed: stock and where the item is kept stay as they were.</p></div></div>`;
+        <p>DoL staff will check. Nothing was changed: stock and where the item is kept stay as they were.</p></div></div>`;
     }
     if (state.phase === "confirm") {
       const { kind, sending, error, note, name } = state;
       return html`<form class="where__confirm form" data-confirm novalidate aria-labelledby="where-confirm-title">
         <h3 id="where-confirm-title">${REPORT_LABELS[kind]}</h3>
         <p>${CONFIRM[kind]} Nothing is changed by this report.</p>
-        ${options.askName ? html`<div class="field"><label for="where-name">Your name</label><input id="where-name" name="name" autocomplete="name" autocapitalize="words" maxlength="120" required value="${name}" ${sending ? "disabled" : ""} enterkeyhint="done" /><p class="field__hint">So DOL staff know who to ask.</p></div>` : ""}
+        ${options.askName ? html`<div class="field"><label for="where-name">Your name</label><input id="where-name" name="name" autocomplete="name" autocapitalize="words" maxlength="120" required value="${name}" ${sending ? "disabled" : ""} enterkeyhint="done" /><p class="field__hint">So DoL staff know who to ask.</p></div>` : ""}
         ${options.note ? html`<div class="field"><label for="where-note">Note <span class="field__optional">optional</span></label><textarea id="where-note" name="note" rows="2" maxlength="300" ${sending ? "disabled" : ""}>${note}</textarea></div>` : ""}
         ${error ? html`<p class="form-alert" role="alert">${icon("alert")}<span>${error}</span></p>` : ""}
         <div class="where__buttons"><button class="button button--primary" type="submit" ${sending ? "disabled" : ""}>${sending ? "Sending…" : "Send report"}</button>
@@ -131,7 +131,7 @@ export function openWhereIsIt(options: WhereIsIt): void {
     const note = dialog.querySelector<HTMLTextAreaElement>("#where-note")?.value.trim() ?? "";
     const name = dialog.querySelector<HTMLInputElement>("#where-name")?.value.trim() ?? "";
     if (options.askName && !name) {
-      state = { phase: "confirm", kind, sending: false, error: "Enter your name so DOL staff know who to ask.", note, name };
+      state = { phase: "confirm", kind, sending: false, error: "Enter your name so DoL staff know who to ask.", note, name };
       redrawReport("#where-name");
       return;
     }
@@ -146,7 +146,7 @@ export function openWhereIsIt(options: WhereIsIt): void {
       dialog.querySelector<HTMLElement>("#where-report .where__done")?.focus();
     } catch (problem) {
       // A busy network or a closed Self-Service is said plainly; the same id is sent again on retry.
-      state = { phase: "confirm", kind, sending: false, error: problem instanceof ApiError && problem.status === 429 ? "Too many reports just now. Please ask DOL staff in person." : failure(problem), note, name };
+      state = { phase: "confirm", kind, sending: false, error: problem instanceof ApiError && problem.status === 429 ? "Too many reports just now. Please ask DoL staff in person." : failure(problem), note, name };
       redrawReport("[data-confirm] button[type=submit]");
     }
   });

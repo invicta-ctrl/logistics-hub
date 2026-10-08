@@ -41,7 +41,7 @@ export type Env = {
 };
 
 /** Phones keep anything waiting and show the maintenance screen on this answer (offline-sync.ts). */
-const selfServicePaused = () => json({ error: "Self-Service is under maintenance. Please ask DOL staff in person.", maintenance: true }, 503);
+const selfServicePaused = () => json({ error: "Self-Service is under maintenance. Please ask DoL staff in person.", maintenance: true }, 503);
 
 /**
  * Closed to this request (the setting in Administration: phones show the maintenance screen and nothing new is recorded):
@@ -615,7 +615,7 @@ async function selfServiceLocationReport(request: Request, env: Env, url: URL): 
   if (!size) return json({ error: "Missing content length." }, 411);
   if (size > 1024) return json({ error: "Too much at once." }, 413);
   const network = networkOf(request);
-  if (await throttled(env.DB, `location-report:${network}`, 10, 10 * 60_000)) return json({ error: "Too many reports at once. Please ask DOL staff in person." }, 429, { "retry-after": "600" });
+  if (await throttled(env.DB, `location-report:${network}`, 10, 10 * 60_000)) return json({ error: "Too many reports at once. Please ask DoL staff in person." }, 429, { "retry-after": "600" });
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const itemId = body?.itemId;
   if (typeof itemId !== "string" || !ITEM_ID.test(itemId)) throw new InputError(400, "Choose an item.");

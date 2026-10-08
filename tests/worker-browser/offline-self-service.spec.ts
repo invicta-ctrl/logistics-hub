@@ -210,7 +210,7 @@ test.describe.serial("offline self-service", () => {
     expect(await localState(page)).toEqual({ states: ["pending", "pending", "pending"], photos: 3 });
 
     await context.setOffline(false);
-    // The take and the borrow apply; the return (with its photo) waits for DOL staff.
+    // The take and the borrow apply; the return (with its photo) waits for DoL staff.
     await expect(page.getByRole("link", { name: /1 needs review/ })).toBeVisible({ timeout: 20_000 });
     expect(await localState(page)).toEqual({ states: ["synced", "synced", "review"], photos: 0 });
     expect((await item(WATER)).onHand).toBe(waterBefore - 2);

@@ -49,7 +49,7 @@ test.describe.serial("checking a place", () => {
     await page.getByRole("textbox", { name: "Username" }).fill(username);
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByRole("heading", { name: "Catalogue", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Add items", level: 1 })).toBeVisible();
     const { post } = api(page);
     const room = (await post<{ id: string }>("/api/staff/locations", { name: "E2E V17 Store", parentId: null })).id;
     shelf = (await post<{ id: string }>("/api/staff/locations", { name: "E2E V17 Shelf", parentId: room, directions: "Second shelf from the door." })).id;

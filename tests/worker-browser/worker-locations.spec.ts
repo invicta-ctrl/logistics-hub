@@ -194,10 +194,10 @@ test.describe.serial("smart locations", () => {
     await phone.goto(`/self-service?do=item&item=${stapler.id}`);
     const sheet = phone.locator(".ss-item");
     // Shelf 2 was never shared: the phone is pointed to the desk, and can still say it could not find the item.
-    await expect(sheet.locator(".ss-where")).toContainText("Ask DOL staff where this is kept.");
+    await expect(sheet.locator(".ss-where")).toContainText("Ask DoL staff where this is kept.");
     await sheet.getByRole("button", { name: "Where is it?" }).click();
     const desk = phone.getByRole("dialog", { name: "E2E Stapler" }).last();
-    await expect(desk).toContainText("DOL staff keep this one at the office");
+    await expect(desk).toContainText("DoL staff keep this one at the office");
     await expect(desk.getByRole("button", { name: "Location looks wrong" })).toHaveCount(0);
     await expect(desk.getByRole("button", { name: "I can’t find it" })).toBeVisible();
     await desk.getByRole("button", { name: "Close" }).click();
@@ -244,6 +244,6 @@ test.describe.serial("smart locations", () => {
     await where.getByRole("button", { name: "Close" }).click();
     await expect(phone.locator("dialog.where")).toHaveCount(0);
     await reopen(null);
-    await expect(sheet.locator(".ss-where")).toContainText("Ask DOL staff where this is kept.");
+    await expect(sheet.locator(".ss-where")).toContainText("Ask DoL staff where this is kept.");
   });
 });

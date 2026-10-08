@@ -127,8 +127,8 @@ test.describe("starting and resuming", () => {
     const server = serve(page);
     await server.ready;
     await page.goto("/staff/items");
-    await page.getByRole("link", { name: "Catalogue" }).click();
-    await expect(page.getByRole("heading", { name: "Catalogue", level: 1 })).toBeVisible();
+    await page.getByRole("link", { name: "Add items" }).click();
+    await expect(page.getByRole("heading", { name: "Add items", level: 1 })).toBeVisible();
   });
 });
 
@@ -631,8 +631,8 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     await server.ready;
     await disconnect(page);
     await page.goto("/staff/catalogue");
-    await expect(page.getByRole("heading", { name: "The Catalogue needs a connection here" })).toBeVisible();
-    await expect(page.getByText(/turn on offline cataloguing on the Catalogue page/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Add items needs a connection here" })).toBeVisible();
+    await expect(page.getByText(/turn on offline cataloguing on the Add items page/)).toBeVisible();
   });
 
   test("signed out, the device keeps cataloguing for its member and says what else needs a sign-in", async ({ page }) => {
@@ -654,7 +654,7 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     await server.ready;
     const shown = () => page.evaluate(() => ({ app: document.documentElement.dataset.app ?? null, manifest: document.querySelector('link[rel="manifest"]')?.getAttribute("href") }));
     await page.goto("/staff/catalogue");
-    await expect(page.getByRole("heading", { level: 1, name: "Catalogue" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Add items" })).toBeVisible();
     expect(await shown()).toEqual({ app: "catalog", manifest: "/catalogue.webmanifest" });
     // The Catalog's own frame: its name and connection, no staff sections.
     await expect(page.getByRole("link", { name: "Catalog home" })).toBeVisible();
@@ -667,7 +667,7 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     await page.goBack();
     await expect(page).toHaveURL(/\/staff\/catalogue$/);
     await expect.poll(shown).toEqual({ app: "catalog", manifest: "/catalogue.webmanifest" });
-    await expect(page.getByRole("heading", { level: 1, name: "Catalogue" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Add items" })).toBeVisible();
   });
 
   test("signing out on the device forgets its offline access", async ({ page }) => {

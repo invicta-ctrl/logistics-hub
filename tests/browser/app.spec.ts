@@ -177,7 +177,7 @@ test("self-service fits phones, tablets and desktops, with every screen and shee
   await expect(page.getByRole("dialog", { name: "Scissors" })).toContainText("The records show none left.");
 });
 
-test("self-service closed for maintenance: every address sends people to DOL staff, keeps waiting records, and reopens", async ({ page }) => {
+test("self-service closed for maintenance: every address sends people to DoL staff, keeps waiting records, and reopens", async ({ page }) => {
   let closed = false;
   await page.route("**/api/self-service/catalog", (route) => closed
     ? route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Self-Service is under maintenance.", maintenance: true }) })
@@ -195,7 +195,7 @@ test("self-service closed for maintenance: every address sends people to DOL sta
     for (const route of ["/self-service", "/self-service?do=take&item=ITM-0043", "/self-service?do=activity"]) {
       await page.goto(route);
       await expect(page.getByRole("heading", { level: 1 })).toHaveText("Self-Service is under maintenance");
-      await expect(page.getByRole("heading", { name: "Ask DOL staff in person" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Ask DoL staff in person" })).toBeVisible();
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await expect(page.locator(".ss-tile")).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${route} at ${viewport.width}`).toBeTruthy();

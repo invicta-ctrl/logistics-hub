@@ -13,7 +13,7 @@ export const SELF_SERVICE_COPY = {
   },
   closed: {
     state: "Closed for maintenance",
-    effect: "Phones show the maintenance screen and record nothing, and people are sent to DOL staff in person. Records already waiting on a phone are kept and sent once it reopens."
+    effect: "Phones show the maintenance screen and record nothing, and people are sent to DoL staff in person. Records already waiting on a phone are kept and sent once it reopens."
   }
 } as const;
 
