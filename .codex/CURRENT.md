@@ -9,6 +9,7 @@ FP-A: classified stale staged handoff records were privately preserved and recon
 FP-B CHECKPOINT: Add-items photo naming preserves a typed-and-cleared name and rejects stale preparation/model results after a retake, reset, or leave.
 VERIFIED: focused delayed-response browser regressions, negative control, build/typecheck, privacy scan.
 PROVIDER / QUALITY: no inference, provider/configuration change, deployment, migration, or production write; quality and provider gates remain unverified.
+WRITER TRANSFER (Earl, 2026-10-08 12:48 UTC): Codex hit its usage limit. Implementation passed to Claude Cloud; `slice/v1.15-final-pass-qbqr20` is the canonical branch and contains all of `slice/v1.15-catalog-intelligence` (3176c74), which is now retired work: delete it only after Earl confirms no local-only Codex work. Codex's local uncommitted work on Windows is UNKNOWN. Codex may resume only through a formal writer-lock handoff on this same branch.
 FP-B CONTRACT: src/catalog-draft.ts (typed CatalogDraft, composeDraft, isStale) tested, not yet wired into the screen.
 NEXT: wire composeDraft into catalogue-capture draw(), then FP-C Gemma extraction.
 

@@ -1,5 +1,15 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Writer transfer Codex -> Claude Cloud (Earl, 2026-10-08 12:48 UTC)
+
+~~~text
+TASK: Controlled takeover after Codex usage exhaustion.
+STATUS: Claude Cloud is the sole writer on slice/v1.15-final-pass-qbqr20 (canonical). It contains origin/slice/v1.15-catalog-intelligence 3176c74 with no divergence (verified by git).
+CODEX LOCAL STATE: UNKNOWN (uncommitted Windows work not visible from the cloud). Codex's own handoff said it had pushed its checkpoint and yielded.
+RESUME RULE: Codex may resume only via a formal lock handoff on this same branch: Claude yields, Codex claims, same branch name.
+NEXT EXACT ACTION: see the FP-C step 1 block below.
+~~~
+
 ## V1.15 Final Pass — FP-C step 1: structured photo reading (Claude Cloud, 2026-10-08)
 
 ~~~text
