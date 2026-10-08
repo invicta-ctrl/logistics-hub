@@ -71,7 +71,8 @@ describe("running a role", () => {
     expect(result).toMatchObject({ outcome: "ANSWER", value: "Stapler", shadow: false });
     expect(sent[0]!.input.max_tokens).toBe(ROLE_LIMITS.TEXT_NORMALIZE.maxTokens);
     expect(sent[0]!.input.messages).toHaveLength(2);
-    expect((sent[0]!.input as unknown as { chat_template_kwargs: unknown }).chat_template_kwargs).toEqual({ enable_thinking: false });
+    // Granite is not a thinking model: it is sent no thinking option.
+    expect(sent[0]!.input).not.toHaveProperty("chat_template_kwargs");
     expect(await neuronsToday(db)).toBeCloseTo(1.2, 5);
   });
 
@@ -102,6 +103,13 @@ describe("running a role", () => {
     answer = () => chat('{"id":"a"}', 2);
     const other = await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("x", [{ id: "a", name: "A" }, { id: "b", name: "B" }]), "USER", {});
     expect(other).toMatchObject({ outcome: "ANSWER", value: "a" });
+  });
+
+  it("turns thinking off for the reasoning models", async () => {
+    active();
+    answer = () => chat('{"id":"a"}', 2);
+    await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("x", [{ id: "a", name: "A" }, { id: "b", name: "B" }]), "USER");
+    expect(sent[0]!.input).toHaveProperty("chat_template_kwargs", { enable_thinking: false });
   });
 
   it("lets Qwen choose only a supplied id and GLM only a fixed follow-up", async () => {

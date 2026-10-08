@@ -26,10 +26,10 @@ export const ROLE_MODELS: Record<ModelRole, string> = {
  * What each text role may cost and say. Reserves are counted before the call and are conservative guesses until the first approved
  * live smoke measures them (nothing has run yet); a reply's own `usage.neurons` replaces the reserve when it reports one.
  */
-export const ROLE_LIMITS: Record<Exclude<ModelRole, "VISION_EXTRACT">, { reserve: number; maxTokens: number }> = {
-  TEXT_NORMALIZE: { reserve: 4, maxTokens: 40 },
-  CANDIDATE_ARBITRATE: { reserve: 8, maxTokens: 60 },
-  RARE_SECOND_OPINION: { reserve: 8, maxTokens: 80 }
+export const ROLE_LIMITS: Record<Exclude<ModelRole, "VISION_EXTRACT">, { reserve: number; maxTokens: number; /** Sent only to models that reason before answering; Granite is not one. Unconfirmed until the live smoke. */ thinkingOption: boolean }> = {
+  TEXT_NORMALIZE: { reserve: 4, maxTokens: 40, thinkingOption: false },
+  CANDIDATE_ARBITRATE: { reserve: 8, maxTokens: 60, thinkingOption: true },
+  RARE_SECOND_OPINION: { reserve: 8, maxTokens: 80, thinkingOption: true }
 };
 /**
  * All three start in shadow: Granite failed its first classification test (13% and 24%), and Qwen and GLM have no held-out result at
@@ -148,7 +148,7 @@ export async function runRole(db: D1Database, ai: AiRunner | undefined, role: Te
         ai.run(ROLE_MODELS[role], {
           messages: [{ role: "system", content: task.system }, { role: "user", content: task.user }],
           response_format: { type: "json_schema", json_schema: { type: "object", properties: { [task.field]: { type: ["string", "null"], enum: [...task.allowed, null] } }, required: [task.field], additionalProperties: false } },
-          max_tokens: limits.maxTokens, temperature: 0, chat_template_kwargs: { enable_thinking: false }
+          max_tokens: limits.maxTokens, temperature: 0, ...(limits.thinkingOption ? { chat_template_kwargs: { enable_thinking: false } } : {})
         }),
         new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), CALL_TIMEOUT_MS); })
       ]);
