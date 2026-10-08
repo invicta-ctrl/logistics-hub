@@ -1,6 +1,6 @@
 # Proposed amendment: Data-surface UI (Stock actions, container-aware tables, number semantics)
 
-STATUS: ACCEPTED BY OWNER (Earl, "accept" in the Data-Surface UI plan review thread, 2026-10-08 12:46 UTC, in reply to this draft and its recommended placement). NOT YET REGISTERED IN THE REPOSITORY, NOT IMPLEMENTED
+STATUS: ACCEPTED BY OWNER (Earl, "accept" in the Data-Surface UI plan review thread, 2026-10-08 12:46 UTC, in reply to this draft and its recommended placement). REGISTERED IN THE REPOSITORY (commit 6c2d874), NOT IMPLEMENTED
 REGISTER AS: `docs/specs/accepted/2026-10-NN-data-surface-ui-amendment.md` once Earl accepts (a standalone UX slice, not a Road-to-V2 version and not an RTV3 milestone)
 BASE: `main` at `8068b0e`
 SOURCE: Earl's "Data-Surface UI Philosophy, Findings and Fix Plan" (2026-10-08), narrowed by the verified-findings report in this folder
