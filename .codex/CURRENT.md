@@ -1,5 +1,22 @@
 # Current Work Pointer — Logistics Hub
 
+## V1.15 Final Pass — four-model Ambient Intelligence — QUEUED FIRST, NOT STARTED — 2026-10-08
+
+ORDER: this runs before Road to V3 (Earl, 2026-10-08: "prepare for this too before the v3 roadmap"). RTV3-01 waits until it is complete or Earl changes the order.
+AUTHORITY: Earl's prompt `D:\Download\CLAUDE_V1_15_FINAL_PASS_FOUR_MODEL_IMPLEMENTATION_PROMPT.md` (SHA-256 `bb798e7187e1bc02ea023cd5fd1803502ef11493204708067735cb60aaf948df`), which accepts the attached `LOGISTICS_HUB_V1_15_FINAL_PASS_AI_INTELLIGENCE_AMENDMENT_REVISED.md` as V1.15 Final-Pass additional work (slices FP-A to FP-F). Additional V1.15 work on top of PR 22: not V2.1, not V3, and the V1.15 branch is not revived.
+BLOCKER BEFORE START: the amendment file is not in the repository or on the workstation (searched 2026-10-08). Earl provides it; the first action of the work is to register it under `docs/specs/accepted/road-to-v2/` (the V1.15 amendments' location).
+PREFLIGHT ALREADY DONE (read-only, 2026-10-08): `main` verified (CI, CodeQL, deploy, `admin verify` 12/12, migrations 30/30); the four model IDs exist in the account's Workers AI catalog: `@cf/google/gemma-4-26b-a4b-it` (live today), `@cf/ibm-granite/granite-4.0-h-micro`, `@cf/qwen/qwen3-30b-a3b-fp8`, `@cf/zai-org/glm-4.7-flash`. NOT checked: per-model Free-plan pricing/Neurons, Cloudflare Images `segment=foreground` access on this plan and whether it consumes Neurons, spend protection. No inference was run for the final pass.
+BRANCH: one `slice/<part>-<scope>` branch from verified `main` when it starts (per the prompt and `AGENTS.md`); none exists yet.
+NEXT_EXACT_ACTION: Earl supplies the amendment file and says `start`.
+
+## Road to V3 — prepared on `main`, NOT STARTED — 2026-10-08
+
+V2.0: COMPLETE and verified (Earl, 2026-10-08). Handoff: `docs/road-to-v2/releases/v2.0.md`, "Handoff to Road to V3"; readiness evidence `docs/road-to-v2/evidence/v2.0-production-readiness.md`.
+PACKAGE: `docs/road-to-v3/` (Earl's frozen Road to V3 package, SHA-256 of the zip `ef50a1b3…f2aa80`). Milestones RTV3-01 to RTV3-09, then V3.0; boot sequence `docs/road-to-v3/00_COORDINATOR_CARD.md`. Repository authority outranks the package; known differences are rows in `docs/road-to-v3/08_RECONCILIATION_REGISTER.md` (R-034 open: the AI role list).
+STATE: nothing started. No RTV3 branch, accepted spec, task packet or code exists. Only `main` exists. No active writer.
+GATES: RTV3-01 starts only when Earl accepts an RTV3-01 spec (`docs/road-to-v3/templates/ACCEPTED_SPEC_TEMPLATE.md`, scope `03_V2_HANDOFF_AND_RTV3_01_FOUNDATION.md` §2–§9) under `docs/specs/accepted/road-to-v3/` and then says `start`. RTV3-02 and later also need the accepted Product Direction Amendment (`07_PRODUCT_DIRECTION_AMENDMENT_DRAFT.md`, pre-drafted in RTV3-01 F8). Branches follow `AGENTS.md`: one slice branch, merged and deleted when green.
+NEXT_EXACT_ACTION: after the V1.15 Final Pass above: refresh the V2.0 handoff's AI line from the final pass's evidence, then Earl decides the RTV3-01 spec. Also open for Earl: the uncommitted V1.6-era edits in his local `.claude/worktrees/v1.6-catalog-pwa`.
+
 ## Road to V2 — V1.15 V2 product consolidation — 2026-10-08
 
 SPEC: `docs/specs/accepted/road-to-v2/v1.15-v2-consolidation.md` with the 2026-10-07 mobile/perceived-performance and identity/semantic/Activity amendments and the accepted `2026-10-08-v1.15-ambient-ai-assist-reconciliation-amendment.md`. BRANCH: `road-to-v2/v1.15-v2-consolidation`.

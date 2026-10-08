@@ -1,5 +1,29 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## V2.0 closed, Road to V3 prepared (NOT STARTED; Claude on Earl's workstation, 2026-10-08)
+
+~~~text
+TASK: V2.0 production readiness (PR 24), branch cleanup to main only, the V2.0 handoff, and preparing main for the Road to V3 package without starting it.
+STATUS: COMPLETE. V2.0 is genuinely done; Road to V3 is prepared and not started.
+ACTIVE RELEASE: none. Next: RTV3-01 Foundation & Operability, once Earl accepts its spec.
+ACCEPTED SPEC: none yet for Road to V3. Package (planning baseline): docs/road-to-v3/.
+BASE COMMIT: 085f3ce (main after PR 24).
+BRANCH / WORKTREE: main only (local and GitHub). Earl's local .claude/worktrees/v1.6-catalog-pwa is detached at ec0f4c6 and holds uncommitted V1.6-era edits: Earl decides; do not discard.
+LAST PUSHED COMMIT: `git log -1 origin/main`.
+FILES CHANGED: package.json/package-lock.json (sharp override); docs/road-to-v3/ (package, plus the V2.0 status lines and register rows R-033, R-034); docs/road-to-v2/releases/v2.0.md (handoff); .codex/*; CLAUDE.md (Road to V3 pointer).
+CONTRACTS ADDED / CHANGED: none.
+MIGRATIONS: none. Production at 0030, none pending.
+TESTS RUN: see docs/road-to-v2/evidence/v2.0-production-readiness.md; for the sharp override: dependency test, build, real-Worker locations and visuals specs (4/4), and CI on the pull request.
+RESULTS: green.
+UNRUN CHECKS: screen reader; Safari beyond Playwright WebKit and Earl's iPhone check.
+PERFORMANCE NOTES: no runtime change.
+SECURITY / PRIVACY NOTES: Dependabot alert 12 (sharp) fixed by override; remove the override once wrangler's miniflare pins sharp 0.35.5 or later. Workers Builds pull-request deploy command is `npx wrangler deploy --dry-run` (Cloudflare setting, Earl's decision; rollback: set it back to `npx wrangler preview`).
+KNOWN LIMITATIONS: v2.0.md, "Handoff to Road to V3".
+BLOCKERS: none.
+NEXT EXACT ACTION: none for an agent until Earl supplies LOGISTICS_HUB_V1_15_FINAL_PASS_AI_INTELLIGENCE_AMENDMENT_REVISED.md and says `start` for the V1.15 Final Pass (prompt and SHA-256 in .codex/CURRENT.md). Its first action: register the amendment under docs/specs/accepted/road-to-v2/, then one slice/<part>-<scope> branch from verified main.
+MERGE ORDER / DEPENDENCIES: V1.15 Final Pass first (it changes the AI baseline), then refresh the V2.0 handoff's AI line, then RTV3-01; RTV3-02+ also need the accepted Product Direction Amendment.
+~~~
+
 ## Road to V2 — V1.15 V2 consolidation (COMPLETE AND MERGED TO MAIN `575a2f8`; V2.0 COMPLETE; Claude Cloud integrator, 2026-10-08)
 
 ~~~text
