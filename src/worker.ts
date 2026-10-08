@@ -36,7 +36,7 @@ export type Env = {
   /** Official USC ID scans (V1.3): their own bucket, reached only through the Staff Directory's Administration routes. */
   STAFF_IDS: R2Bucket;
   SESSION_SECRET?: string;
-  /** Workers AI (ambient-assist.ts). Absent in local development and tests: every assist then stays silent. */
+  /** Workers AI (ambient-assist.ts). Absent in unit tests; under `wrangler dev --local` it refuses every call. Either way every assist stays silent. */
   AI?: AiRunner;
 };
 
