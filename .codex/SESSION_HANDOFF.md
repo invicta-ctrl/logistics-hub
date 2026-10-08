@@ -1,10 +1,10 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-## Road to V2 — V1.15 V2 consolidation (COMPLETE, WAITING ON OWNER ACTIONS; Claude Cloud integrator, 2026-10-08)
+## Road to V2 — V1.15 V2 consolidation (COMPLETE AND MERGED TO MAIN `575a2f8`; V2.0 COMPLETE; Claude Cloud integrator, 2026-10-08)
 
 ~~~text
 TASK: Finish V1.15 under its spec and accepted amendments, integrate the second writer, and write the release records.
-STATUS: COMPLETE, WAITING ON OWNER ACTIONS. Every acceptance line in docs/road-to-v2/v1.15-consolidation-plan.md has evidence.
+STATUS: COMPLETE AND MERGED (PR 22, 575a2f8, 2026-10-08 04:15 UTC). Every acceptance line in docs/road-to-v2/v1.15-consolidation-plan.md has evidence. V2.0 COMPLETE (docs/road-to-v2/releases/v2.0.md).
 BASE COMMIT: e919d8d (V1.15 with main 1247274 / V1.14 merged in)
 BRANCH/WORKTREE: road-to-v2/v1.15-v2-consolidation / Claude Cloud (integrator). road-to-v2/v1.15-task-consolidation (Build V1.15, second writer) merged at ea86bd1 in 484ebcd; it has stopped.
 LAST PUSHED COMMIT: `git log -1 origin/road-to-v2/v1.15-v2-consolidation`
@@ -15,8 +15,8 @@ TESTS RUN: typecheck; npx vitest run (706 passed, 2 skipped); npx playwright tes
 RESULTS: green; two container-only real-Worker failures as before, both green in CI.
 UNRUN CHECKS: real phone, screen reader, Safari; production signed-in check after deploy.
 KNOWN LIMITATIONS: see the v1.15 record.
-BLOCKERS: none for the branch. Integration waits on Earl: the count-only Student ID check, then his merge.
-NEXT EXACT ACTION: Earl runs owner action 1 and merges the V1.15 PR. Then verify main's CI, deploy, admin verify and CodeQL; set v2.0.md to COMPLETE; give Earl the branch delete commands.
+BLOCKERS: none. main's CI, CodeQL analysis and the Workers Builds deploy are green on 575a2f8; production serves the V1.15 build (signed-out check).
+NEXT EXACT ACTION: none for an agent. Earl re-runs npm run admin -- verify on current main (his 2026-10-08 check passed the Student ID count, 0 open CodeQL alerts and the Cloudflare deploy) and deletes the merged branches. Codex's staged .codex edits on Earl's Windows checkout were never pushed; this block supersedes them.
 MERGE ORDER / DEPENDENCIES: V1.15 is the last Road-to-V2 branch; nothing to propagate forward. V1.14's branch holds only a superseded test commit (a5840d0) and can be deleted.
 ~~~
 
