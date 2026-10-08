@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { type BrowserContext, expect, test, type Page } from "@playwright/test";
 
 /*
  * The Staff Directory as a wall of cards (Earl, 2026-10-03: the card is what you press). A card opens on the person's details
@@ -17,7 +17,8 @@ const card = { mediaId: "00000000-0000-4000-8000-00000000abcd", front: { width: 
 const loan = { id: "LN-1", itemId: "ITM-1", itemName: "Extension cord", unit: "piece", quantity: 2, purpose: "USC", borrowerName: "Ana Marie Santos", studentId: null, reason: null, returnBy: "2026-10-06", status: "OUT", returnNote: null, createdAt: "2026-10-01T02:00:00.000Z", closedAt: null, createdBy: null, closedBy: null };
 const pixel = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
-async function mock(page: Page) {
+/** Mocks one page, or a whole browser context so a tab the test opens is answered too (it never reaches a real server). */
+async function mock(page: Page | BrowserContext) {
   const scans: string[] = [];
   await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-owner", username: "owner.sample", displayName: "Owner Sample", role: "OWNER", mustChangePassword: false, recovery: { configured: true, createdAt: null }, selfServiceReviews: 0, selfServiceClosed: false, directory: null }) }));
   await page.route("**/api/staff/admin/directory**", (route) => {
@@ -123,9 +124,16 @@ test("a card's section link closes it and opens that section; Back returns to th
 });
 
 test("a modifier press follows the card's link to the profile, and the profile's own card opens on the ID", async ({ page, context }) => {
-  await mock(page);
+  // The new tab is mocked too. Unmocked, its API calls reached the preview server, which has no API, so it showed "The staff
+  // workspace is unavailable" and the test proved only the address; now it proves the profile opens there.
+  await mock(context);
   await page.goto("/staff/admin/directory");
   const [tab] = await Promise.all([context.waitForEvent("page"), page.getByRole("link", { name: /Ana Marie Santos/ }).click({ modifiers: ["ControlOrMeta"] })]);
+  // A modifier press opens the tab in the background, and a background tab may hold its drawing until it is shown (twice in CI
+  // it never drew its page within 15 s). A person switches to the tab to read it, so the test does too.
+  await tab.bringToFront();
+  await expect(tab).toHaveURL(new RegExp(`person=${id(1)}`), { timeout: 15_000 });
+  await expect(tab.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 15_000 });
   await expect(tab).toHaveURL(new RegExp(`person=${id(1)}`));
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.goto(`/staff/admin/directory?person=${id(1)}`);
@@ -184,4 +192,17 @@ test("a sign-in for another department's staff opens their account only, with no
   await expect(page.getByRole("link", { name: "Administration" })).toHaveCount(0);
   await page.goto("/staff/admin/directory");
   await expect(page).toHaveURL(/\/staff\/account$/);
+});
+
+test("an address whose person is not a directory id opens the wall and asks the API for nothing else", async ({ page }) => {
+  await mock(page);
+  const asked: string[] = [];
+  page.on("request", (request) => { const url = new URL(request.url()); if (url.pathname.startsWith("/api/")) asked.push(url.pathname); });
+  for (const forged of ["..", "../../items", "PER-1/../../../items"]) {
+    asked.length = 0;
+    await page.goto(`/staff/admin/directory?person=${encodeURIComponent(forged)}`);
+    await expect(page.getByRole("link", { name: /Ana Marie Santos/ })).toBeVisible();
+    // Only the wall's own reads; before the check, ".." fetched /api/staff/admin/ and the others a profile that is no one's.
+    expect(asked.filter((path) => !["/api/staff/session", "/api/staff/attention/summary", "/api/staff/admin/directory", "/api/staff/admin/directory/derived"].includes(path) && !/^\/api\/staff\/admin\/directory\/PER-[0-9a-f-]+\/id\/thumb$/.test(path))).toEqual([]);
+  }
 });

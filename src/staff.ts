@@ -102,7 +102,6 @@ export type Session = {
 };
 type Section = "home" | "items" | "stock" | "loans" | "self-service" | "activity" | "attention" | "admin" | "account";
 
-export const ROLE_LABELS: Record<Role, string> = { STAFF: "Staff", ADMIN: "Administrator", OWNER: "Owner" };
 
 /** The staff sections in working order. On phones the first four sit in the bottom bar; `more` ones move under More. */
 const SECTIONS: ReadonlyArray<{ id: Section; href: string; text: string; icon: IconName; more?: true }> = [
@@ -450,13 +449,13 @@ export async function workspace(): Promise<void> {
       <header class="page-header">
         <div class="page-header__title">
           <h1>Items</h1>
-          <div class="review-meter" id="review-meter" hidden></div>
+          <div class="review-meter" id="review-meter"><span class="skeleton skeleton--text" aria-hidden="true"></span></div>
         </div>
         <div class="page-header__actions">
           <p class="live-status" id="live-status">Connecting…</p>
           <a class="button button--secondary" href="/staff/locations" data-route>${icon("pin")}Locations</a>
           <a class="button button--secondary" href="/staff/kits" data-route>${icon("stack")}Kits</a>
-          <a class="button button--secondary" href="/staff/catalogue" data-route>${icon("camera")}Catalogue</a>
+          <a class="button button--secondary" href="/staff/catalogue" data-route>${icon("camera")}Add items</a>
           <button class="button button--primary" type="button" id="new-item">${icon("plus")}New item</button>
         </div>
       </header>
@@ -1138,7 +1137,7 @@ export async function workspace(): Promise<void> {
         <h3 class="form-section__title">Catalog</h3>
         ${text("name", "Name", item.name, html`required maxlength="120" autocomplete="off"`)}
         <div id="suggested-visual" class="visual-suggestion" aria-live="polite"></div>
-        ${creating ? html`<div class="field"><label for="f-iconKey">System Icon</label><select id="f-iconKey" name="iconKey"><option value="">Use suggested icon</option>${ITEM_ICONS.map((entry) => html`<option value="tabler:${entry.key}">${entry.label}</option>`)}</select><p class="field__hint">Optional. A suggestion is already selected; you can upload a real photo after creating the item.</p></div>` : ""}
+        ${creating ? html`<div class="field"><label for="f-iconKey">System icon</label><select id="f-iconKey" name="iconKey"><option value="">Use suggested icon</option>${ITEM_ICONS.map((entry) => html`<option value="tabler:${entry.key}">${entry.label}</option>`)}</select><p class="field__hint">Optional. A suggestion is already selected; you can upload a real photo after creating the item.</p></div>` : ""}
         <p class="field__hint field__hint--warn" id="duplicate-hint" hidden></p>
         ${text("aliases", "Other names", item.aliases, html`maxlength="300" autocomplete="off"`, "Names people also use for it, separated by commas. Search finds these too.", true)}
         ${!creating && item.itemType === "NEEDS_REVIEW" ? html`<div class="classify-hint" id="classify-hint" aria-live="polite"></div>` : ""}

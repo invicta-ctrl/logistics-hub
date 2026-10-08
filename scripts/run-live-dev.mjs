@@ -39,9 +39,11 @@ if (await portInUse(8791)) {
   process.exit(0);
 }
 
-const vars = fs.existsSync(devVars) ? fs.readFileSync(devVars, "utf8") : "";
+// Read without a separate existence check, then append: no window for the file to change between check and write.
+let vars = "";
+try { vars = fs.readFileSync(devVars, "utf8"); } catch (error) { if (error.code !== "ENOENT") throw error; }
 if (!/^SESSION_SECRET=/m.test(vars)) {
-  fs.writeFileSync(devVars, `${vars}${vars && !vars.endsWith("\n") ? "\n" : ""}SESSION_SECRET=${crypto.randomBytes(48).toString("base64url")}\n`, { mode: 0o600 });
+  fs.appendFileSync(devVars, `${vars && !vars.endsWith("\n") ? "\n" : ""}SESSION_SECRET=${crypto.randomBytes(48).toString("base64url")}\n`, { mode: 0o600 });
 }
 
 // A local database migrated before the seed was split (Sept 2026) records migration

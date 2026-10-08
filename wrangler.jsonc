@@ -6,6 +6,8 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-28",
   "observability": { "enabled": true },
+  // Workers AI for ambient assist (accepted amendment 2026-10-08, src/ambient-assist.ts). Not available in local development.
+  "ai": { "binding": "AI" },
   "d1_databases": [
     {
       "binding": "DB",

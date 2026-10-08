@@ -16,6 +16,8 @@
 .cg-bar__title { display: grid; min-width: 0; font-family: var(--serif); font-size: 1.125rem; font-weight: 500; line-height: 1.1; white-space: nowrap; }
 .cg-bar__title > * { overflow: hidden; text-overflow: ellipsis; }
 .cg-bar__title small { color: var(--gold-action); font-family: var(--sans); font-size: .625rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+/* Below 360 px the online status needs the room; "Catalog" alone names the app, as Self-Service does. */
+@media (max-width: 359px) { .cg-bar__title small { display: none; } }
 .cg-bar__end { display: flex; flex: none; align-items: center; gap: var(--space-2); }
 
 /* How this device is connected: a small light. */

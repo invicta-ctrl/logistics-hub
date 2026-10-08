@@ -455,24 +455,39 @@ describe("usage, loans and activity come from the existing records", () => {
       VALUES(?, ?, 'STOCK_OUT', 'OUT', ?, 2, ?, -2, 'SELF_SERVICE', ?, 'SELF_SERVICE', 'CONSUMED', 'POSTED')`).run(mov, at, id, unit, event);
   }
 
-  it("matches by student ID when both have one, otherwise by the exact full name, and never by surname alone", async () => {
+  function use(name: string, studentId: string | null, applied = 1, at = "2026-09-14T02:00:00.000Z") {
+    const event = `00000000-0000-4000-9000-${String(++movement).padStart(12, "0")}`;
+    sqlite.prepare(`INSERT INTO self_service_events(id, device_id, seq, event_type, item_id, quantity, person_name, student_id, purpose, device_time, sent_at, occurred_at, received_at, applied, review)
+      VALUES(?, 'dev', ?, 'USE', ?, 1, ?, ?, 'INDIVIDUAL', ?, ?, ?, ?, ?, ?)`).run(event, movement, item().id, name, studentId, at, at, at, at, applied, applied ? null : "CLOCK");
+  }
+
+  it("links records by the exact student ID only (amendment G): any name typed with it, never by name alone", async () => {
     const ana = await addPerson({ name: "Ana Santos", department: "DoL", studentId: "20-1111-222" });
-    const surname = await addPerson({ name: "Santos", department: "DEM" });
-    loan("Ana Santos", "20-1111-222");          // student ID
-    loan("A. Santos", "20-1111-222");           // student ID despite another spelling
-    loan("ana santos", null);                    // exact name, no ID on the record
-    loan("Ana Santos", "20-5555-666");          // same name, someone else's ID
-    loan("Santos", null);                        // surname only
+    const ben = await addPerson({ name: "Ben Lim", department: "DEM", studentId: "20-3333-444" });
+    const noId = await addPerson({ name: "Carla Reyes", department: "DEM" });
+    loan("Ana Santos", "20-1111-222");          // her ID and name
+    loan("Ana", "20-1111-222");                 // a first name with her exact ID is still hers
+    loan("Ben Lim", "20-1111-222");             // another person's name cannot move a record carrying her ID
+    loan("ana santos", null);                    // her exact name with no ID: not linked to anyone
+    loan("Ana Santos", "20-5555-666");          // her name with an ID outside the directory: an ordinary student record
+    loan("Carla Reyes", null);                   // a person with no ID on file has no linked records
+    take("Ana Santos", " 20-1111-222 ");        // outer spaces aside
     take("Ana Santos", "20-1111-222");
-    take("Ben Lim", null);
+    use("A. Santos", "20-1111-222");            // a phone use moves no stock and still shows
+    use("Ana Santos", "20-1111-222", 0);        // held for staff, not applied: not usage
     const loans = (await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/loans`))).loans as Array<{ borrowerName: string; studentId: string | null }>;
-    expect(loans.map((entry) => [entry.borrowerName, entry.studentId]).sort()).toEqual([["A. Santos", "20-1111-222"], ["Ana Santos", "20-1111-222"], ["ana santos", null]]);
-    const usage = (await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/usage`))).usage as Array<{ kind: string; matchedBy: string; quantity: number }>;
-    expect(usage.map((row) => `${row.kind}:${row.matchedBy}:${row.quantity}`).sort()).toEqual(["LOAN:NAME:1", "LOAN:STUDENT_ID:1", "LOAN:STUDENT_ID:1", "TAKE:STUDENT_ID:2"]);
-    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${surname}/loans`))).loans).toEqual([]);
-    // Office days: a take on the 12th (Manila) is inside 12–12 and outside 13–20.
-    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/usage?from=2026-09-12&to=2026-09-12`))).usage).toHaveLength(1);
-    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/usage?from=2026-09-13&to=2026-09-20`))).usage).toHaveLength(0);
+    expect(loans.map((entry) => entry.borrowerName).sort()).toEqual(["Ana", "Ana Santos", "Ben Lim"]);
+    const usage = (await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/usage`))).usage as Array<{ kind: string; quantity: number; matchedBy?: string }>;
+    expect(usage.map((row) => `${row.kind}:${row.quantity}`).sort()).toEqual(["LOAN:1", "LOAN:1", "LOAN:1", "TAKE:2", "TAKE:2", "USE:1"]);
+    expect(usage.every((row) => !("matchedBy" in row))).toBe(true);
+    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${ben}/loans`))).loans).toEqual([]);
+    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${ben}/usage`))).usage).toEqual([]);
+    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${noId}/loans`))).loans).toEqual([]);
+    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${noId}/usage`))).usage).toEqual([]);
+    // Office days: the takes on the 12th (Manila) are inside 12–12 and outside 13–13; the use on the 14th is inside 14–20.
+    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/usage?from=2026-09-12&to=2026-09-12`))).usage).toHaveLength(2);
+    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/usage?from=2026-09-13&to=2026-09-13`))).usage).toHaveLength(0);
+    expect((await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/usage?from=2026-09-14&to=2026-09-20`))).usage.map((row: { kind: string }) => row.kind)).toEqual(["USE"]);
     expect((await call("ADMIN", `/api/staff/admin/directory/${ana}/usage?from=2026-09-20&to=2026-09-13`)).status).toBe(400);
   });
 

@@ -160,10 +160,6 @@ function goOption(hit: GoHit, tokens: string[]): Option {
 
 /* ---------- The dialog ---------- */
 
-const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
-/** The shortcut as people read it on this device. */
-export const SHORTCUT_TEXT = MAC ? "⌘K" : "Ctrl K";
-
 let dialog: HTMLDialogElement | null = null;
 let admin = false;
 let opener: HTMLElement | null = null;

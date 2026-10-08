@@ -29,7 +29,7 @@ async function signIn(target: Page): Promise<void> {
   await target.getByRole("textbox", { name: "Username" }).fill(username);
   await target.getByLabel("Password", { exact: true }).fill(password);
   await target.getByRole("button", { name: "Sign in" }).click();
-  await expect(target.getByRole("heading", { name: "Catalogue", level: 1 })).toBeVisible();
+  await expect(target.getByRole("heading", { name: "Add items", level: 1 })).toBeVisible();
 }
 
 const named = async (from: Page, name: string) => ((await (await from.request.get("/api/staff/inventory")).json()) as { items: Row[] }).items.filter((item) => item.name === name);

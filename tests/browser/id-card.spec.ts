@@ -87,15 +87,26 @@ test("with reduced motion nothing flies, leans or spins: the card opens flat and
   await page.setViewportSize({ width: 1280, height: 800 });
   await mock(page);
   const { tile, viewer } = await openFront(page);
-  expect(await page.locator("dialog.id-viewer").evaluate((dialog) => dialog.getAnimations({ subtree: true }).length)).toBe(0);
+  // Nothing that moves: the reduced-motion rule cuts every CSS transition and animation to 0.01 ms. On a busy runner such a transition
+  // can stay listed, still at its start, for a while before the browser starts it, so what is checked is how long each one lasts.
+  expect(await page.locator("dialog.id-viewer").evaluate((dialog) =>
+    dialog.getAnimations({ subtree: true }).map((animation) => Number(animation.effect?.getComputedTiming().endTime ?? 0)).filter((end) => end > 1))).toEqual([]);
   await expect(viewer.locator(".id-viewer__hint")).not.toContainText("tilt");
   const box = (await page.locator("[data-flight]").boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.9, box.y + box.height * 0.1, { steps: 4 });
   await page.waitForTimeout(400);
   expect(flat("front")(await pose(page))).toBe(true);
-  // At once: within 120 ms (the app's reduced-motion rule leaves a 0.01 ms transition), where a spring turn is still 50° short.
-  await page.evaluate(() => document.querySelector("dialog.id-viewer")!.dispatchEvent(new KeyboardEvent("keydown", { key: "d", bubbles: true })));
-  await expect.poll(async () => flat("back")(await pose(page)), { timeout: 120, intervals: [16] }).toBe(true);
+  // At once: the turn is a jump, so once the 0.01 ms transitions it leaves have run (however late a busy runner starts them) the card is
+  // flat on the other side. A spring turn moves without CSS transitions and would still be most of the way short. Measured in the page.
+  const turned = await page.locator("dialog.id-viewer").evaluate(async (dialog) => {
+    dialog.dispatchEvent(new KeyboardEvent("keydown", { key: "d", bubbles: true }));
+    const moving = dialog.getAnimations({ subtree: true });
+    if (moving.some((animation) => Number(animation.effect?.getComputedTiming().endTime ?? 0) > 1)) return { m11: 0, m13: 1, m22: 0, m23: 1 };
+    await Promise.all(moving.map((animation) => animation.finished.catch(() => undefined)));
+    const matrix = new DOMMatrixReadOnly(getComputedStyle(dialog.querySelector("[data-card]")!).transform);
+    return { m11: matrix.m11, m13: matrix.m13, m22: matrix.m22, m23: matrix.m23 };
+  });
+  expect(flat("back")(turned)).toBe(true);
   await page.keyboard.press("Escape");
   await expect(viewer).toHaveCount(0);
   await expect(tile).toBeFocused();

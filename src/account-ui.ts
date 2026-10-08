@@ -19,7 +19,6 @@ export const accessChoices = (actor: Pick<Session, "role">): Access[] => ["DoL",
 export const ACCESS_HINT = "DoL Staff use the Logistics Hub. Staff of other departments and officers can sign in to their own account only, for now. The owner has full access.";
 export const accessTag = (access: Access) => html`<span class="tag ${access === "OWNER" ? "tag--brand" : access === "ADMIN" ? "tag--gold" : access === "DoL" ? "tag--ok" : ""}">${accessLabel(access)}</span>`;
 /** Whether an actor may give an account this role: an owner any; an administrator staff and officer roles only. */
-export const mayGive = (actor: Pick<Session, "role">, access: Access) => actor.role === "OWNER" || (access !== "OWNER" && access !== "ADMIN");
 export type { Role };
 
 /** A secret shown exactly once, with copy, and an explicit instruction. */

@@ -2,7 +2,7 @@
 // run on the real migrated schema. Concurrency is two requests started together; the D1 stand-in, like D1, runs each
 // batch as one transaction, so the requests interleave exactly at their awaits.
 import { describe, expect, it } from "vitest";
-import { recoverOwner, revokeRecoveryKey, rotateRecoveryKey, updateAccount, type Account } from "../src/accounts";
+import { generatePassword, recoverOwner, revokeRecoveryKey, rotateRecoveryKey, updateAccount, type Account } from "../src/accounts";
 import { verifyPassword } from "../src/session";
 import { eraseOldDetails, retentionPreview } from "../src/retention";
 import { createLoan } from "../src/loans";
@@ -313,5 +313,19 @@ describe("R7: Stock activity reads only what its page needs, with the same answe
     const sparse = ledger(20, 3);
     odd.forEach((at, k) => add(sparse.sqlite, `ODD-${k}`, at, `PERF-${1 + (k % 3)}`));
     expect(await sparse.same()).toBe(19 + odd.length);
+  });
+});
+
+describe("Generated passwords", () => {
+  it("are four groups of five characters from the unambiguous alphabet", () => {
+    for (let run = 0; run < 50; run++) expect(generatePassword()).toMatch(/^[a-km-zA-HJ-NP-Z2-9]{5}(-[a-km-zA-HJ-NP-Z2-9]{5}){3}$/);
+  });
+
+  it("discards bytes that would bias the first characters instead of wrapping them", () => {
+    const batches = [new Uint8Array(32).fill(255), new Uint8Array(32).fill(224), new Uint8Array(32).fill(223)];
+    const password = generatePassword((bytes) => { bytes.set(batches.shift()!); return bytes; });
+    // 255 % 56 and 224 % 56 would both have given "a"; only 223 (the last unbiased byte) is used.
+    expect(password).toBe("99999-99999-99999-99999");
+    expect(batches).toHaveLength(0);
   });
 });

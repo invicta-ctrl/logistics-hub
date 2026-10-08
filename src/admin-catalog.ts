@@ -2,7 +2,7 @@ import "./admin.css";
 import { adminPage } from "./admin-frame";
 import { BEHAVIOUR_LABELS } from "./catalog-policy";
 import { KNOWLEDGE, KNOWLEDGE_VERSION } from "./item-knowledge";
-import { type Html, api, categoryName, emptyState, failure, html, mount, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast } from "./ui";
+import { type Html, api, categoryName, emptyState, failure, html, mount, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
 
 type Coverage = { active: number; unclassified: number; captured: number; capturedClassified: number };
 type AliasItem = { id: string; name: string; category: string; aliases: string | null; updatedAt: string | null };
@@ -21,7 +21,7 @@ export async function catalogSettings(): Promise<void> {
     body: () => html`
     <section class="admin-block admin-block--first" aria-labelledby="coverage-title">
       <h2 id="coverage-title" class="section-title">Classification</h2>
-      <div id="coverage" aria-busy="true"><div class="skeleton skeleton--block" aria-hidden="true"></div></div>
+      <div id="coverage" aria-busy="true"><div class="skeleton skeleton--block skeleton--coverage" aria-hidden="true"></div></div>
     </section>
     <section class="admin-block" aria-labelledby="names-title">
       <h2 id="names-title" class="section-title">Other names</h2>
@@ -115,6 +115,7 @@ export async function catalogSettings(): Promise<void> {
     form.querySelector<HTMLInputElement>("#names-input")!.focus();
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const settle = working(form);
       try {
         const result = await api<{ changed: number; aliases: string | null; updatedAt: string | null }>(`/api/staff/admin/catalog/aliases/${encodeURIComponent(item.id)}`, { method: "PATCH", body: JSON.stringify({ aliases: new FormData(form).get("aliases"), updatedAt: item.updatedAt }) });
         item.aliases = result.aliases;
@@ -122,7 +123,7 @@ export async function catalogSettings(): Promise<void> {
         toast(result.changed ? `Other names saved for ${item.name}.` : "No changes to save.");
         panel.close(true);
         renderNames();
-      } catch (error) { setMessage(sheet.querySelector("#names-alert")!, failure(error)); }
+      } catch (error) { setMessage(sheet.querySelector("#names-alert")!, failure(error)); } finally { settle(); }
     });
   }
 

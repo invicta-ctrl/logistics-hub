@@ -316,7 +316,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "classify", title: "Items to classify", detail: "Items, Unclassified", href: "/staff/items?type=NEEDS_REVIEW", terms: ["unclassified", "classify", "to classify", "not sorted"] },
   { id: "attention", title: "Attention", detail: "What needs a person now", href: "/staff/attention", terms: ["attention", "needs attention", "inbox", "bell"], start: true },
   { id: "items", title: "Items", detail: "Page", href: "/staff/items", terms: ["items", "catalog items", "inventory"] },
-  { id: "catalogue", title: "Add items", detail: "Catalogue, rapid capture", href: "/staff/catalogue", terms: ["add items", "add item", "new item", "catalogue", "catalog", "capture"], start: true },
+  { id: "catalogue", title: "Add items", detail: "Rapid capture, a shelf at a time", href: "/staff/catalogue", terms: ["add items", "add item", "new item", "catalogue", "catalog", "capture"], start: true },
   { id: "stock", title: "Stock", detail: "Page", href: "/staff/stock", terms: ["stock", "stock in", "stock out", "pantry"] },
   { id: "loans", title: "Loans", detail: "Page", href: "/staff/loans", terms: ["loans", "lend", "lending", "borrowed", "returns"] },
   { id: "places", title: "Places", detail: "Page, where things are kept", href: "/staff/locations", terms: ["places", "locations", "where", "shelves"], start: true },

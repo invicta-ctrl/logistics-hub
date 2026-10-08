@@ -327,10 +327,10 @@ test.describe("Where is it? in Self-Service", () => {
   test("an item staff keep private sends the person to the desk, and offline says reports need a connection", async ({ page, context }) => {
     await page.goto("/self-service?do=item&item=ITM-0262");
     const sheet = page.locator(".ss-item");
-    await expect(sheet.locator(".ss-where")).toContainText("Ask DOL staff where this is kept.");
+    await expect(sheet.locator(".ss-where")).toContainText("Ask DoL staff where this is kept.");
     await sheet.getByRole("button", { name: "Where is it?" }).click();
     const desk = page.getByRole("dialog", { name: "Scissors" }).last();
-    await expect(desk).toContainText("DOL staff keep this one at the office");
+    await expect(desk).toContainText("DoL staff keep this one at the office");
     await expect(desk.getByRole("button", { name: "Location looks wrong" })).toHaveCount(0);
     await expect(desk.getByRole("button", { name: "I can’t find it" })).toBeVisible();
     await desk.getByRole("button", { name: "Close" }).click();

@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const session = { authenticated: true, id: "ACC-staff", username: "staff.sample", displayName: "Staff Sample", role: "STAFF", access: "DoL", hub: true, mustChangePassword: false, recovery: null, selfServiceReviews: 0, selfServiceClosed: false, directory: null };
 
-type Entry = { key: string; reason: string; source: string; urgency: "NOW" | "SOON" | "LATER"; title: string; why: string; since: string | null; href: string; action: string; review?: { loanId: string } };
+type Entry = { key: string; reason: string; source: string; urgency: "NOW" | "SOON" | "LATER"; title: string; why: string; since: string | null; href: string; action: string; review?: { loanId: string }; identity?: { eventId: string } };
 const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
 
 const overdue = (index: number): Entry => ({ key: `LOAN_OVERDUE:LN-${index}`, reason: "LOAN_OVERDUE", source: "Loans", urgency: "NOW", title: `Projector ${index}`, why: `Sample Borrower ${index} was due to return it, ${index + 2} days ago.`, since: daysAgo(index + 2).slice(0, 10), href: `/staff/loans?loan=LN-${index}`, action: "Open the loan" });
@@ -14,7 +14,7 @@ const kit: Entry = { key: "KIT:KIT-1", reason: "KIT_REPLENISH", source: "Kits", 
 const unclassified: Entry = { key: "CLASSIFY:ITM-0900", reason: "CLASSIFY", source: "Catalog", urgency: "LATER", title: "Whiteboard marker blue", why: "Not yet sorted into how it is used.", since: daysAgo(40), href: "/staff/items?item=ITM-0900&tab=details", action: "Classify it" };
 
 const GROUP_LABELS: Record<string, [string, string]> = {
-  LOAN_OVERDUE: ["Loans", "Overdue loans"], RETURN_PROBLEM: ["Loans", "Damaged or lost returns"], STOCK_OUT: ["Stock", "Out of stock"], KIT_REPLENISH: ["Kits", "Kits to replenish"], CLASSIFY: ["Catalog", "Items not yet sorted"]
+  LOAN_OVERDUE: ["Loans", "Overdue loans"], RETURN_PROBLEM: ["Loans", "Damaged or lost returns"], STOCK_OUT: ["Stock", "Out of stock"], KIT_REPLENISH: ["Kits", "Kits to replenish"], CLASSIFY: ["Catalog", "Items not yet sorted"], IDENTITY_REVIEW: ["Self-Service", "Identity needs review"]
 };
 
 function answer(entries: Entry[], totals: Record<string, number> = {}) {
@@ -191,5 +191,64 @@ test.describe("Deep links from Attention", () => {
   test("a loan that is not in the list says so instead of failing quietly", async ({ page }) => {
     await page.goto("/staff/loans?view=history&loan=LN-404");
     await expect(page.getByText("That loan is not in this list.")).toBeVisible();
+  });
+});
+
+test.describe("Identity needs review", () => {
+  const identity = (n: number, why: string): Entry => ({ key: `IDENTITY_REVIEW:${n}`, reason: "IDENTITY_REVIEW", source: "Self-Service", urgency: "SOON", title: `Phone take of Markers ${n}`, why, since: daysAgo(1),
+    href: "/staff/activity?q=Markers", action: "See the record", identity: { eventId: `00000000-0000-4000-8000-00000000000${n}` } });
+
+  test("each entry says what is missing and offers Confirm identity and Ignore; each decision is sent once, then the entry leaves", async ({ page }) => {
+    const state = await mock(page, [identity(1, "Juan gave no student ID number."), identity(2, "Maria Santos gave a student ID number that is not 8 digits.")]);
+    const decided: Array<{ id: string; body: unknown }> = [];
+    await page.route("**/api/staff/self-service/*/identity", async (route) => {
+      const id = route.request().url().split("/").at(-2)!;
+      decided.push({ id, body: route.request().postDataJSON() });
+      state.entries = state.entries.filter((entry) => entry.identity?.eventId !== id);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      return route.fulfill({ contentType: "application/json", body: JSON.stringify({ decided: true }) });
+    });
+    for (const viewport of [{ width: 320, height: 700 }, { width: 1366, height: 900 }]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/staff/attention?reason=IDENTITY_REVIEW");
+      await expect(page.getByRole("heading", { level: 2, name: "Identity needs review" })).toBeVisible();
+      const first = page.locator("li").filter({ hasText: "Phone take of Markers 1" });
+      await expect(first).toContainText("Juan gave no student ID number.");
+      await expect(first.getByRole("button", { name: "Confirm identity" })).toBeVisible();
+      await expect(first.getByRole("button", { name: "Ignore" })).toBeVisible();
+      expect(await sideways(page), `no sideways scroll at ${viewport.width}`).toBe(0);
+      if (viewport.width === 320) {
+        const boxes = await first.getByRole("button").evaluateAll((buttons) => buttons.map((button) => { const box = button.getBoundingClientRect(); return [box.width, box.height]; }));
+        for (const [width, height] of boxes) { expect(width).toBeGreaterThanOrEqual(44); expect(height).toBeGreaterThanOrEqual(24); }
+      }
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/staff/attention?reason=IDENTITY_REVIEW");
+    const first = page.locator("li").filter({ hasText: "Phone take of Markers 1" });
+    const second = page.locator("li").filter({ hasText: "Phone take of Markers 2" });
+    await first.getByRole("button", { name: "Confirm identity" }).dblclick();
+    await expect(page.getByText("Identity confirmed.")).toBeVisible();
+    await expect(first).toHaveCount(0);
+    await second.getByRole("button", { name: "Ignore" }).click();
+    await expect(page.getByText("Ignored. The record keeps what the person gave.")).toBeVisible();
+    await expect(second).toHaveCount(0);
+    // One request for each decision, naming the outcome and nothing else.
+    expect(decided).toEqual([{ id: "00000000-0000-4000-8000-000000000001", body: { outcome: "CONFIRMED" } }, { id: "00000000-0000-4000-8000-000000000002", body: { outcome: "IGNORED" } }]);
+  });
+
+  test("a decision that fails says so, keeps the entry and lets staff try again", async ({ page }) => {
+    await mock(page, [identity(1, "Juan gave no student ID number.")]);
+    let fail = true;
+    await page.route("**/api/staff/self-service/*/identity", (route) => fail ? route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "That did not save. Please try again." }) }) : route.fulfill({ contentType: "application/json", body: "{}" }));
+    await page.goto("/staff/attention?reason=IDENTITY_REVIEW");
+    const entry = page.locator("li").filter({ hasText: "Phone take of Markers 1" });
+    await entry.getByRole("button", { name: "Ignore" }).click();
+    await expect(page.getByText("That did not save. Please try again.")).toBeVisible();
+    await expect(entry).toBeVisible();
+    await expect(entry.getByRole("button", { name: "Ignore" })).toBeEnabled();
+    await expect(entry.getByRole("button", { name: "Confirm identity" })).toBeEnabled();
+    fail = false;
+    await entry.getByRole("button", { name: "Confirm identity" }).click();
+    await expect(page.getByText("Identity confirmed.")).toBeVisible();
   });
 });

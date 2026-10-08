@@ -6,7 +6,7 @@ import "@fontsource/newsreader/latin-500.css";
 import "./styles.css";
 import { landing, lending, notFound, offlinePage } from "./public";
 import { startPwa } from "./pwa";
-import { handOverQuery, leave, navigate, shown, toast } from "./ui";
+import { MARK, app, handOverQuery, html, leave, mount, navigate, shown, toast } from "./ui";
 
 type View = () => void | Promise<void>;
 
@@ -46,6 +46,9 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
 const CATALOG_PAGE = document.documentElement.dataset.app === "catalog";
 const catalogRoute = (path: string) => path === "/staff/catalogue";
 
+const staffPlaceholder = html`<header class="app-bar"><div class="app-bar__inner"><span class="app-bar__brand" aria-hidden="true"><span>${MARK}</span></span></div></header>
+  <main id="main-content" class="app-main" aria-busy="true"><div class="page-header"><span class="skeleton skeleton--heading"></span></div><div class="skeleton skeleton--block"></div></main>`;
+
 let navigation = 0;
 // A fresh page load already starts at the top, so only in-app navigation moves focus to the page body. It never does inside a
 // frame (Administration's Self-Service test panel): that would pull focus out of the page around it.
@@ -55,6 +58,7 @@ async function render(): Promise<void> {
   const current = ++navigation;
   const moveFocus = loaded && window.self === window.top;
   const focusedBefore = document.activeElement;
+  const first = !loaded;
   loaded = true;
   shown.address = window.location.pathname + window.location.search;
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
@@ -66,6 +70,9 @@ async function render(): Promise<void> {
     return;
   }
   sessionStorage.removeItem("reloaded-for-page");
+  // Opened or refreshed on a staff page: the bar and the page's shape show at once, while its code and the session load, instead of
+  // a blank screen (V1.15 perceived performance). The page replaces it whole; in-app moves keep the page they leave until then.
+  if (first && path.startsWith("/staff/") && !app.childElementCount) mount(app, staffPlaceholder);
   let view: View;
   try {
     view = await (ROUTES[path] ?? (() => notFound))();

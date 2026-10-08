@@ -33,7 +33,7 @@ export async function catalogueWorkspace(): Promise<void> {
   try {
     who = await identify();
   } catch (error) {
-    catalogueShell(null, emptyState("The Catalogue could not be opened", failure(error), html`<a class="button button--secondary" href="/staff/catalogue" data-route>Try again</a>`, "error", 1));
+    catalogueShell(null, emptyState("Add items could not be opened", failure(error), html`<a class="button button--secondary" href="/staff/catalogue" data-route>Try again</a>`, "error", 1));
     return;
   }
   if (who.mode === "signed-out") return navigate(signInHere(), true);
@@ -42,15 +42,16 @@ export async function catalogueWorkspace(): Promise<void> {
   // From here this member's work is sent whenever it can be, on this page and the capture screen alike.
   startSending({ owner: who.session.id, legacy: who.mode === "signed-in" });
   const query = new URLSearchParams(window.location.search);
+  // Ids from the address become API paths: anything but the shape this app issues is ignored.
   const open = query.get("session");
-  if (open) return captureScreen(who, open);
+  if (open && /^CS-[A-Za-z0-9-]+$/.test(open)) return captureScreen(who, open);
   const check = query.get("audit");
-  if (check) return checkScreen(who, check);
-  document.title = "Catalogue · Catalog";
+  if (check && /^LA-[A-Za-z0-9-]+$/.test(check)) return checkScreen(who, check);
+  document.title = "Add items · Catalog";
   whenIdle(() => true);
   onLeave(() => whenIdle(() => false));
   catalogueShell(who, html`<div id="cat-start" aria-busy="true"><div class="skeleton skeleton--block"></div></div>`, html`
-    <h1>Catalogue</h1>
+    <h1>Add items</h1>
     <p class="cg-hero__lead">Walk a shelf with a phone or tablet: photo, name, how it is used, how many, next.</p>
     ${who.mode === "offline" ? html`<p class="cg-mode" role="status">${icon("cloudOff")}<span><strong>You're offline.</strong> You can keep cataloguing on this device until ${day(who.access.expiresAt)}. What you save here is sent when you're back online.</span></p>` : ""}
     ${who.mode === "lease" ? html`<p class="cg-mode" role="status">${icon("user")}<span><strong>You're signed out.</strong> This device can still catalogue for you until ${day(who.access.expiresAt)}, and sends what you save. Sign in again for Items, Stock and the rest.</span> <a class="cg-mode__action" href="${signInHere()}" data-route>Sign in</a></p>` : ""}`);
@@ -64,17 +65,17 @@ export async function catalogueWorkspace(): Promise<void> {
     await draw(root, who, state, catalog?.places ?? []);
   } catch (error) {
     root.removeAttribute("aria-busy");
-    mount(root, emptyState("The Catalogue could not be opened", failure(error), html`<a class="button button--secondary" href="/staff/catalogue" data-route>Try again</a>`, "error"));
+    mount(root, emptyState("Add items could not be opened", failure(error), html`<a class="button button--secondary" href="/staff/catalogue" data-route>Try again</a>`, "error"));
   }
 }
 
 /** Offline, with no offline access on this device: nothing can be catalogued until there is a connection. */
 async function closed(granted: Access | null): Promise<void> {
-  document.title = "Catalogue · Catalog";
+  document.title = "Add items · Catalog";
   const held = await entries();
   const ended = granted && granted.expiresAt <= Date.now() ? ` Offline cataloguing on this device ended ${day(granted.expiresAt)}.` : "";
-  catalogueShell(null, emptyState("The Catalogue needs a connection here",
-    `You're offline, and this device isn't set up to catalogue without one.${ended} Connect, sign in, and turn on offline cataloguing on the Catalogue page to use it offline next time.${held.length ? ` ${plural(held.length, "item")} catalogued here ${held.length === 1 ? "is" : "are"} waiting on this device and will be sent once you're back online and signed in.` : ""}`,
+  catalogueShell(null, emptyState("Add items needs a connection here",
+    `You're offline, and this device isn't set up to catalogue without one.${ended} Connect, sign in, and turn on offline cataloguing on the Add items page to use it offline next time.${held.length ? ` ${plural(held.length, "item")} catalogued here ${held.length === 1 ? "is" : "are"} waiting on this device and will be sent once you're back online and signed in.` : ""}`,
     html`<a class="button button--secondary" href="/staff/catalogue" data-route>Try again</a>`, "error", 1));
 }
 
@@ -253,20 +254,20 @@ async function deviceCard(host: HTMLElement, who: Signed): Promise<void> {
       return html`<p class="card__text">Keeps the catalog and your session on this device for a week, so you can keep cataloguing where there's no signal. What you save offline is sent when you're back online. Your password is never kept on the device.</p>
         ${who.mode === "signed-in" ? html`<div class="where__buttons"><button type="button" class="button button--primary" data-offline-on>${icon("cloudOff")}Turn on offline cataloguing</button></div>` : ""}`;
     }
-    if (!state.storage) return html`<p class="cat-ready cat-ready--bad">${icon("alert")}<span><strong>This browser won't keep data for the Catalogue.</strong> It may be a private window. Open the Catalogue in a normal window to catalogue offline.</span></p>`;
+    if (!state.storage) return html`<p class="cat-ready cat-ready--bad">${icon("alert")}<span><strong>This browser won't keep data for adding items.</strong> It may be a private window. Open Add items in a normal window to catalogue offline.</span></p>`;
     if (state.needsHomeScreen) return html`<p class="cat-ready cat-ready--bad">${icon("alert")}<span><strong>Open the Catalog from your Home Screen.</strong> On iPhone and iPad a Safari tab keeps its data apart from the Home Screen app, so offline cataloguing works from the app.</span></p>`;
     const until = html`Works without a connection until ${day(granted.expiresAt)}.${state.savedAt ? ` Catalog saved ${day(Date.parse(state.savedAt))}.` : ""}`;
     if (ready(state)) return html`<p class="cat-ready cat-ready--ok">${icon("check")}<span><strong>Ready for offline cataloguing</strong> ${until} What you save offline is sent when you're back online.</span></p>
-      ${granted.expiresAt - Date.now() < 24 * 60 * 60 * 1000 ? html`<p class="card__text">Offline cataloguing here ends soon. Open the Catalogue while you're signed in and online to keep it on for another week.</p>` : ""}
+      ${granted.expiresAt - Date.now() < 24 * 60 * 60 * 1000 ? html`<p class="card__text">Offline cataloguing here ends soon. Open Add items while you're signed in and online to keep it on for another week.</p>` : ""}
       ${state.persisted ? "" : html`<p class="card__text">The browser may clear saved data if this device runs out of space, so send your work when you can.</p>`}`;
     if (problem) return html`<p class="cat-ready cat-ready--bad">${icon("alert")}<span><strong>Not ready for offline cataloguing.</strong> ${problem}</span></p>
       ${who.mode !== "offline" ? html`<div class="where__buttons"><button type="button" class="button button--secondary" data-offline-retry>${icon("refresh")}Try again</button></div>` : ""}`;
-    return html`<p class="cat-ready" aria-live="polite">${icon("refresh")}<span><strong>Getting ready for offline cataloguing…</strong> Keep this page open for a moment while the Catalogue and the catalog are saved on this device.</span></p>`;
+    return html`<p class="cat-ready" aria-live="polite">${icon("refresh")}<span><strong>Getting ready for offline cataloguing…</strong> Keep this page open for a moment while Add items and the catalog are saved on this device.</span></p>`;
   };
 
   const install = (): Html => isStandalone() ? html`` : html`<details class="cat-install"${!granted && ios ? html` open` : ""}>
       <summary>${icon("install")}Install the Catalog on this ${ios || platform() === "android" ? "phone or tablet" : "computer"}</summary>
-      ${ios ? "" : html`<p class="card__text">It opens straight to the Catalogue, like an app, and works best offline.</p>`}
+      ${ios ? "" : html`<p class="card__text">It opens straight to Add items, like an app, and works best offline.</p>`}
       ${canPromptInstall() ? html`<div class="where__buttons"><button type="button" class="button button--secondary" data-install>${icon("install")}Install</button></div>` : ""}
       <ol class="cat-steps">${installSteps().map((step) => html`<li>${step}</li>`)}</ol>
     </details>`;
@@ -274,7 +275,7 @@ async function deviceCard(host: HTMLElement, who: Signed): Promise<void> {
   const render = () => mount(host, html`<section class="card cat-card cat-device" aria-labelledby="device-title">
       <div class="card__head"><h2 id="device-title">Offline cataloguing on this device</h2></div>
       ${status()}
-      ${hasUpdate() ? html`<p class="card__text">A new version of the Catalogue is ready. <button type="button" class="text-link" data-update>Update now</button></p>` : ""}
+      ${hasUpdate() ? html`<p class="card__text">A new version of the Catalog is ready. <button type="button" class="text-link" data-update>Update now</button></p>` : ""}
       ${granted ? html`<p class="card__text"><button type="button" class="text-link" data-offline-off>Turn off offline cataloguing</button></p>` : ""}
       ${install()}
     </section>`);
@@ -288,8 +289,8 @@ async function deviceCard(host: HTMLElement, who: Signed): Promise<void> {
     state = await readiness(granted);
     preparing = false;
     if (!ready(state) && state.storage && !state.needsHomeScreen) {
-      problem = !("serviceWorker" in navigator) ? "This browser can't keep the Catalogue for use without a connection. Use Chrome, Edge or Safari."
-        : !state.screens ? "The Catalogue's screens could not be saved on this device. Check the connection and try again."
+      problem = !("serviceWorker" in navigator) ? "This browser can't keep Add items for use without a connection. Use Chrome, Edge or Safari."
+        : !state.screens ? "The screens for adding items could not be saved on this device. Check the connection and try again."
         : "The catalog could not be saved on this device. Check the connection and try again.";
     }
     render();
@@ -343,7 +344,7 @@ export function finishedView(root: HTMLElement, detail: Detail, onDevice = 0, ca
   mount(root, html`
     <header class="page-header">
       <div class="page-header__title"><h1>${done ? "Cataloguing finished" : `${session.owner} is cataloguing`}</h1><p>${session.place ?? "No place"} · started ${formatDateTime(session.startedAt)}</p></div>
-      <div class="page-header__actions"><a class="button button--secondary" href="/staff/catalogue" data-route>Back to Catalogue</a></div>
+      <div class="page-header__actions"><a class="button button--secondary" href="/staff/catalogue" data-route>Back to Add items</a></div>
     </header>
     <section class="card cat-card" aria-labelledby="sum-title"><div class="card__head"><h2 id="sum-title">${plural(total, "item")} ${onDevice ? "catalogued" : "saved"}</h2></div>
       ${total ? html`<ul class="plain-list">${(Object.keys(BEHAVIOUR_LABELS) as Behaviour[]).filter((key) => counts[key]).map((key) => html`<li><span class="cat-count">${counts[key]}</span> ${BEHAVIOUR_LABELS[key]}</li>`)}</ul>` : html`<p class="muted">Nothing was saved in this session.</p>`}

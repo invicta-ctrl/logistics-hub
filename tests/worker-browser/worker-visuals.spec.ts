@@ -35,7 +35,7 @@ test("item visuals: suggestion, keyboard picker, reset, photo preference and fai
   await panel.locator("input[type=file]").setInputFiles({ name: "projector.jpg", mimeType: "image/jpeg", buffer: Buffer.from(image, "base64") });
   await panel.getByRole("button", { name: "Save photo" }).click();
   await expect(panel.locator("[data-tile] .item-visual--loaded img")).toBeVisible();
-  await expect(controls.getByRole("button", { name: "Real Photo", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(controls.getByRole("button", { name: "Real photo", exact: true })).toHaveAttribute("aria-pressed", "true");
   const detail = await (await page.request.get(`/api/staff/items/${id}`)).json();
   const photoId = detail.item.photo.id;
   await page.route(`**/api/staff/media/${photoId}/display`, (route) => route.abort());
@@ -44,13 +44,13 @@ test("item visuals: suggestion, keyboard picker, reset, photo preference and fai
   await page.keyboard.press("Escape");
   await expect(page.locator("dialog.viewer")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => !history.state?.viewer)).toBe(true);
-  await controls.getByRole("button", { name: "System Icon", exact: true }).click();
+  await controls.getByRole("button", { name: "System icon", exact: true }).click();
   await expect(panel.locator("[data-tile] img")).toHaveCount(0);
   expect((await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id).toBe(photoId);
   expect((await page.request.get(`/api/public/media/${photoId}/thumb`)).status()).toBe(404);
   await page.route(`**/api/staff/media/${photoId}/thumb`, (route) => route.abort());
-  await controls.getByRole("button", { name: "Real Photo", exact: true }).click();
-  await expect(controls.getByRole("button", { name: "Real Photo", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await controls.getByRole("button", { name: "Real photo", exact: true }).click();
+  await expect(controls.getByRole("button", { name: "Real photo", exact: true })).toHaveAttribute("aria-pressed", "true");
   expect((await page.request.get(`/api/public/media/${photoId}/thumb`)).status()).toBe(200);
   await expect(panel.locator("[data-tile] img")).toHaveCount(0);
   await expect(panel.locator("[data-tile] .item-icon")).toBeVisible();

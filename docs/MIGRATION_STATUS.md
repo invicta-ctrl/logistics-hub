@@ -1,5 +1,7 @@
 # Migration Status — 2026-09-28
 
+This is the record of the original V1 data migration as it stood on 2026-09-28. The current production migration level is in `docs/DATA_ARCHITECTURE.md` ("Production migration level").
+
 ## Inventory
 - Current Production items captured: 397.
 - Unique item IDs: 397.

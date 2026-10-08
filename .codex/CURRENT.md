@@ -1,5 +1,12 @@
 # Current Work Pointer — Logistics Hub
 
+## Road to V2 — V1.15 V2 product consolidation — 2026-10-08
+
+SPEC: `docs/specs/accepted/road-to-v2/v1.15-v2-consolidation.md` with the 2026-10-07 mobile/perceived-performance and identity/semantic/Activity amendments and the accepted `2026-10-08-v1.15-ambient-ai-assist-reconciliation-amendment.md`. BRANCH: `road-to-v2/v1.15-v2-consolidation`.
+GATE: V1.14 is on `main` (PR 20, `1247274`) and merged into this branch.
+STATE: COMPLETE, WAITING ON OWNER ACTIONS: `docs/road-to-v2/releases/v1.15.md`. Ambient AI Assist, the mobile-first and perceived-performance pass, Self-Service identity, exact-ID Directory linking, Identity needs review, Activity, one tab style, "Add items" and "DoL staff" wording, 1280 px proof photos, CodeQL fixes, the controls sweep and the final visual record are done. Build V1.15's second-writer branch is merged (`484ebcd`); Codex's Windows work was never pushed and was dropped. No migration. `docs/road-to-v2/releases/v2.0.md` is `PENDING INTEGRATION` until the merge, deploy and CodeQL on `main` are verified.
+NEXT_EXACT_ACTION: Earl runs the count-only Student ID check (v1.15 record, owner action 1), then merges the V1.15 pull request into `main`. Afterwards: verify `main`'s CI, the deploy and `npm run admin -- verify`, confirm CodeQL closed the ten alerts, set v2.0.md to COMPLETE, and delete the merged branches. Handoff block: `.codex/SESSION_HANDOFF.md` (top).
+
 ## Road to V2 — V1.14 Offline, performance and reliability hardening — 2026-10-07
 
 SPEC: `docs/specs/accepted/road-to-v2/v1.14-offline-performance.md` (with the amendment's §11 item). BRANCH: `road-to-v2/v1.14-offline-performance` (a cloud thread built it, in parallel with V1.15 on its own branch; the auto-assigned `claude/project-thread-a2x6ai` was not used).

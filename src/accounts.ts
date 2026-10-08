@@ -55,10 +55,15 @@ export function isAdmin(account: Pick<Account, "role">): boolean {
 }
 
 /** Four groups of five unambiguous characters: easy to read aloud, ~115 bits. */
-export function generatePassword(): string {
+export function generatePassword(random: (bytes: Uint8Array) => Uint8Array = (bytes) => crypto.getRandomValues(bytes)): string {
   const alphabet = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const bytes = crypto.getRandomValues(new Uint8Array(20));
-  return Array.from({ length: 4 }, (_, group) => Array.from({ length: 5 }, (_, index) => alphabet[bytes[group * 5 + index]! % alphabet.length]).join("")).join("-");
+  // Rejection sampling: bytes at or above the largest multiple of the alphabet size would favour its first characters.
+  const limit = 256 - (256 % alphabet.length);
+  const chars: string[] = [];
+  while (chars.length < 20) {
+    for (const byte of random(new Uint8Array(32))) if (byte < limit && chars.length < 20) chars.push(alphabet[byte % alphabet.length]!);
+  }
+  return Array.from({ length: 4 }, (_, group) => chars.slice(group * 5, group * 5 + 5).join("")).join("-");
 }
 
 function body(input: unknown): Record<string, unknown> {

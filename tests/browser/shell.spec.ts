@@ -56,7 +56,7 @@ for (const [width, text] of [[320, ""], [320, "150%"], [375, ""], [414, ""], [37
   test(`staff shell at ${width}px${text ? ` with ${text} text` : ""}: every label in full, square icons, named controls, both menus`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
     await page.goto("/staff/account");
-    await expect(page.locator(".app-bar")).toBeVisible();
+    await expect(page.locator(".app-bar .account")).toBeVisible();
     if (text) await page.evaluate((size) => document.documentElement.style.setProperty("font-size", size, "important"), text);
     expect(await problems(page), "bar").toEqual(clean);
     const phone = await page.locator(".app-nav__more").isVisible();
@@ -73,7 +73,7 @@ for (const [width, text] of [[320, ""], [320, "150%"], [375, ""], [414, ""], [37
 test("with 200% text on a 320 px phone every section stays on screen, named in full, and More opens the menu", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto("/staff/account");
-  await expect(page.locator(".app-bar")).toBeVisible();
+  await expect(page.locator(".app-bar .account")).toBeVisible();
   await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
   // Five labels cannot fit side by side at this size: a label may shorten with an ellipsis, but nothing else may break.
   const { cutOff, ...rest } = await problems(page);

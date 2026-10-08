@@ -132,8 +132,12 @@ async function status() {
   }
   const record = lastDeployment();
   if (record) {
-    const health = await fetch(`${record.url}/api/public/catalog`).then((response) => response.status, () => 0);
-    (health === 200 ? pass : fail)("Live site", `${record.url} (commit ${record.commit}) → HTTP ${health || "unreachable"}`);
+    let origin = null;
+    try { origin = siteOrigin(record.url); } catch (error) { fail("Live site", error.message); }
+    if (origin) {
+      const health = await fetch(`${origin}/api/public/catalog`).then((response) => response.status, () => 0);
+      (health === 200 ? pass : fail)("Live site", `${record.url} (commit ${record.commit}) → HTTP ${health || "unreachable"}`);
+    }
   }
   return true;
 }
@@ -269,6 +273,14 @@ const settingsDir = process.platform === "win32"
 const configFile = path.join(settingsDir, "console.json");
 const pairingFile = path.join(settingsDir, "owner-recovery.dpapi.json");
 const PREVIEW_URL = "http://127.0.0.1:8791";
+// Site addresses come from local files (settings, deployment records). Only an https:// site
+// or the local preview is ever contacted, so a stray value cannot send credentials in the clear.
+function siteOrigin(value) {
+  let url = null;
+  try { url = new URL(String(value)); } catch { /* reported below */ }
+  if (url?.origin === PREVIEW_URL || (url?.protocol === "https:" && !url.username && !url.password)) return url.origin;
+  throw new Error(`Not a Logistics Hub address: ${value}. Use the production https:// address or the local preview.`);
+}
 
 function readUserConfig() {
   try { return JSON.parse(fs.readFileSync(configFile, "utf8")); } catch { return {}; }
@@ -320,7 +332,9 @@ function installLauncher(folder = LAUNCHER_DIR) {
   ];
   const file = path.join(folder, "LOGISTICS_ADMIN.cmd");
   const content = lines.join("\r\n") + "\r\n";
-  if (fs.existsSync(file) && fs.readFileSync(file, "utf8") === content) return { file, changed: false };
+  let current = null;
+  try { current = fs.readFileSync(file, "utf8"); } catch { /* not installed yet */ }
+  if (current === content) return { file, changed: false };
   fs.mkdirSync(folder, { recursive: true });
   fs.writeFileSync(file, content);
   return { file, changed: true };
@@ -332,7 +346,7 @@ function installLauncher(folder = LAUNCHER_DIR) {
 // carrying the HttpOnly session cookie. Every permission rule is enforced by the site.
 class Site {
   constructor(url) {
-    this.url = url.replace(/\/+$/, "");
+    this.url = siteOrigin(url);
     this.cookie = "";
     this.me = null;
   }
@@ -427,7 +441,8 @@ function showOnce(label, secret, advice) {
 async function interactive() {
   const ask = prompter();
   const config = readUserConfig();
-  let site = new Site(config.site ?? config.productionUrl ?? lastDeployment()?.url ?? PREVIEW_URL);
+  let site;
+  try { site = new Site(config.site ?? config.productionUrl ?? lastDeployment()?.url ?? PREVIEW_URL); } catch (error) { note(error.message); site = new Site(PREVIEW_URL); }
 
   if (process.platform === "win32" && fs.existsSync("D:\\")) {
     try {

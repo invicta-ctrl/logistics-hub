@@ -1,7 +1,7 @@
 import "./admin.css";
 import { adminPage, confirmImpact } from "./admin-frame";
 import { SELF_SERVICE_COPY as COPY, SELF_SERVICE_RULES } from "./setting-copy";
-import { api, failure, html, plural, setMessage, toast } from "./ui";
+import { api, failure, html, plural, setMessage, toast, working } from "./ui";
 
 /** Administration > Self-Service: the one switch phones obey, what it changes, and what phones ask for. */
 export async function selfServiceSettings(): Promise<void> {
@@ -32,25 +32,27 @@ export async function selfServiceSettings(): Promise<void> {
     }
   });
   if (!session) return;
-  document.querySelector("#ss-toggle")!.addEventListener("click", async () => {
+  document.querySelector("#ss-toggle")!.addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
     const closing = !session.selfServiceClosed;
     const waiting = session.selfServiceReviews;
     const confirmed = await confirmImpact({
       kicker: COPY.label,
       title: closing ? "Close Self-Service for maintenance?" : "Reopen Self-Service?",
       impact: closing
-        ? html`<p>Phones show the maintenance screen at once and record nothing until you reopen it. People are sent to DOL staff in person.</p>
+        ? html`<p>Phones show the maintenance screen at once and record nothing until you reopen it. People are sent to DoL staff in person.</p>
           <p>${waiting ? `${plural(waiting, "record")} already waiting for a check stay in Self-Service.` : "Nothing is waiting for a check."} Records waiting on a phone are kept and sent when it reopens.</p>`
         : html`<p>Phones can take, borrow, use and return again at once. Records kept on phones during the closure are sent and wait for staff to check them.</p>`,
       confirm: closing ? "Close for maintenance" : "Reopen Self-Service",
       danger: closing
     });
     if (!confirmed) return;
+    const settle = working(button);
     try {
       await api("/api/staff/admin/self-service", { method: "PATCH", body: JSON.stringify({ state: closing ? "paused" : "open" }) });
       // The page depends on the setting (the test panel), and a same-address navigation does not re-render: run the view again.
       await selfServiceSettings();
       toast(closing ? "Self-Service is closed for maintenance." : "Self-Service is open.");
-    } catch (error) { setMessage(document.querySelector("#ss-alert")!, failure(error)); }
+    } catch (error) { setMessage(document.querySelector("#ss-alert")!, failure(error)); } finally { settle(); }
   });
 }

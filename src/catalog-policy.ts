@@ -54,7 +54,6 @@ export const MOVEMENT_REASONS = {
 export const LOAN_PURPOSES = ["INDIVIDUAL", "USC"] as const;
 /** How a loan ends. Only a good return puts the quantity back on the shelf. */
 export const LOAN_OUTCOMES = ["RETURNED", "DAMAGED", "LOST"] as const;
-export const REORDER_STATUSES = ["NEEDS_RESTOCK", "PLANNED", "RESTOCKED", "DISMISSED"] as const;
 export const OPEN_REORDER_STATUSES = new Set<string>(["NEEDS_RESTOCK", "PLANNED"]);
 
 export const LABELS: Record<string, string> = {
@@ -180,7 +179,7 @@ export const ACTIVITY_TYPES: Record<ActivitySource, Record<string, string>> = {
     UNIT_RECONCILED: "Open units closed by a count"
   },
   LOAN: { LOAN_OUT: "Lent", LOAN_RETURN: "Returned", LOAN_DAMAGED: "Returned damaged", LOAN_LOST: "Reported lost", LOAN_CLOSED: "Loan closed", LOAN_REVIEWED: "Return reviewed" },
-  PHONE: { PHONE_TAKE: "Phone take", PHONE_BORROW: "Phone borrow", PHONE_RETURN: "Phone return", PHONE_USE: "Phone use", REVIEW_RESOLVED: "Review resolved" },
+  PHONE: { PHONE_TAKE: "Phone take", PHONE_BORROW: "Phone borrow", PHONE_RETURN: "Phone return", PHONE_USE: "Phone use", REVIEW_RESOLVED: "Review resolved", IDENTITY_REVIEWED: "Identity reviewed" },
   CATALOG: { ITEM_CREATED: "Item added", ITEM_UPDATED: "Item edited", ITEM_PHOTO_ADDED: "Photo added", ITEM_PHOTO_REPLACED: "Photo replaced", ITEM_PHOTO_REMOVED: "Photo removed",
     ITEM_VISUAL_CHANGED: "Item visual changed", ITEM_LINKED: "Items linked", ITEM_UNLINKED: "Items unlinked",
     LOCATION_CREATED: "Place added", LOCATION_UPDATED: "Place edited", LOCATION_PHOTO_ADDED: "Place picture added", LOCATION_PHOTO_REPLACED: "Place picture replaced", LOCATION_PHOTO_REMOVED: "Place picture removed",
@@ -207,6 +206,17 @@ export const ACTIVITY_TITLES: Record<string, string> = Object.assign({}, ...Obje
 export const STUDENT_ID_PATTERN = /^[A-Z0-9][A-Z0-9-]{2,29}$/;
 
 /**
+ * A new Self-Service record names its person by exactly eight digits. Only the format is checked: the number is not
+ * confirmed against any student source, though an exact match to a Staff Directory person links to that person.
+ * Older records and staff-entered loans keep the wider pattern above, so no history is invalid.
+ */
+export const SELF_SERVICE_STUDENT_ID = /^\d{8}$/;
+/** Records made before the identity rule are version 1 and are still accepted, then listed in Attention; version 2 is held to the rule. */
+export const SELF_SERVICE_RECORD_VERSION = 2;
+/** The settings row holding when this Hub first received a record under the identity rule: Attention never asks about anything earlier. */
+export const IDENTITY_RULE_KEY = "identity_rule_from";
+
+/**
  * Limits shared by the phone and the Worker, so the form never offers what the server refuses.
  * - Five events per sync keeps one request inside D1's per-invocation budget (about 25 round
  *   trips at worst).
@@ -216,7 +226,7 @@ export const STUDENT_ID_PATTERN = /^[A-Z0-9][A-Z0-9-]{2,29}$/;
  * - A phone photo is compressed to about 300 KB; 2 MB leaves room without letting four photos
  *   exceed the request cap.
  */
-export const SELF_SERVICE_LIMITS = { quantity: 30, eventsPerSync: 5, photosPerSync: 4, unitsPerItemHour: 30, heldPerNetworkDay: 60, photoBytes: 2 * 1024 * 1024 } as const;
+export const SELF_SERVICE_LIMITS = { quantity: 30, eventsPerSync: 5, photosPerSync: 4, unitsPerItemHour: 30, heldPerNetworkDay: 60, photoBytes: 2 * 1024 * 1024, photoEdge: 1280, photoQuality: 0.75 } as const;
 
 
 const REFERENCE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";

@@ -16,7 +16,7 @@ V1.2's item media architecture is inherited, not rebuilt. No Claude commit or Ro
 
 - Every catalog item gets a deterministic icon immediately; no backfill of icon assignments. Name and aliases match specific phrases before category, type and a package fallback.
 - New-item and review forms show a live suggestion. Creating/importing an unknown item requires no icon selection. Creation can save an optional override.
-- Item profiles offer System Icon, Real Photo, a searchable 63-icon picker and Use suggested icon. Selecting an icon retains a saved photograph; selecting/uploading a photograph retains the icon fallback.
+- Item profiles offer System icon, Real photo, a searchable 63-icon picker and Use suggested icon. Selecting an icon retains a saved photograph; selecting/uploading a photograph retains the icon fallback.
 - Staff Items, Lending Hub and Self-Service use fixed visual frames. Loading, missing, failed and offline photos reveal the bundled icon. The staff large-photo viewer also falls back to an icon on failure.
 - Decorative SVGs and list photos do not repeat adjacent item names. Profile photos use the item name. Native buttons and search support keyboard selection and preserve existing focus treatment.
 
@@ -37,7 +37,7 @@ The only historical name without a specific match is **Straw**, which receives t
 
 Reuse private `CATALOG_MEDIA`, `item_media` and `items/<media-id>/display|thumb`; no new bucket or EVIDENCE prefix. Existing browser JPEG processing applies orientation, resizes and strips metadata; JPEG/PNG/WebP source uploads are limited to 20 MB. The Worker checks JPEG MIME and structure, strips unsafe metadata, bounds dimensions and stored sizes (display 1600 px/1 MB; thumb 480 px/150 KB), generates UUID object keys and never trusts filenames. Authenticated writes retain CSRF/session checks, media compare-and-swap and audit/revision gating. The current UI also sends the item version, preventing a delayed upload from overwriting a newer visual choice.
 
-Public access remains the guarded 320 px thumbnail; full photos stay staff-only. Selecting System Icon hides the retained photo in both public DTOs and makes new public thumbnail requests return 404, including conditional requests. Staff can still access the retained photograph. Previously issued public thumbnails retain the existing one-hour browser cache bound. PWA shell/assets cache bundled icons; APIs are not cached and no new photo caching policy is introduced. Old catalog snapshots without icon metadata still compute suggestions.
+Public access remains the guarded 320 px thumbnail; full photos stay staff-only. Selecting System icon hides the retained photo in both public DTOs and makes new public thumbnail requests return 404, including conditional requests. Staff can still access the retained photograph. Previously issued public thumbnails retain the existing one-hour browser cache bound. PWA shell/assets cache bundled icons; APIs are not cached and no new photo caching policy is introduced. Old catalog snapshots without icon metadata still compute suggestions.
 
 ## Production sequence — approved by Earl on 2026-10-04
 

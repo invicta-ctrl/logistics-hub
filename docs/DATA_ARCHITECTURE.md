@@ -88,11 +88,8 @@ Borrowed, where they earn their place:
 
 Not restored: React, MUI, Radix, Apps Script, Sheets as operational truth, repository/service layers, dependency injection, generic factories, duplicated pipelines, or infrastructure for a need nobody has measured.
 
-## Pending production steps
+## Production migration level
 
-- `0030_item_relationships.sql` (V1.11) is additive: one empty table (`item_relationships`) and two indexes; no existing table or row changes. It applies with the V1.11 release manifest (`ops/releases/v1.11.json`) before V1.11 merges. The code live before it never reads the table.
+Production D1 has every migration in `migrations/`, `0001` through `0030_item_relationships.sql` (30 files), and nothing is pending. Evidence: the V1.11 preflight ([run 37610387104](https://github.com/invicta-ctrl/logistics-hub/actions/runs/37610387104)) found 29 applied with exactly `0030` pending, and the V1.11 prepare ([run 37610911740](https://github.com/invicta-ctrl/logistics-hub/actions/runs/37610911740), `READY_TO_MERGE`) applied `0030` after an encrypted backup (`docs/road-to-v2/releases/v1.11.md`). V1.12 and V1.13 added no migration.
 
-- `0028_location_audits.sql` (V1.7) is additive: three new tables, their indexes and triggers; no existing table or row changes. It applies with the V1.7 release manifest (`ops/releases/v1.7.json`) before V1.7 merges. The code live before it never reads the new tables.
-
-- `0024_locations.sql` (V1.4) is additive and applies with the V1.4 release manifest, after `0022` and `0023`. It creates one place per distinct typed storage value, links items by that exact value and writes one `LOCATIONS_RECONCILED` audit entry with the counts. It changes no quantity, no typed value and no `updated_at`. The code live before it keeps working on the migrated database: it still reads `items.storage_location`, which is untouched.
-- `0022_audit_log_append_only.sql` and `0023_last_active_owner.sql` are on `main` but not yet applied to production. The lane applies only migrations a release manifest pins, so the next release that runs it (V1.4, unless another comes first) pins both beside its own. Nothing depends on them meanwhile: they only add triggers, and until `0023` is applied the Worker's own check still refuses the last Owner outside a race.
+Every migration after the seed is additive or a recorded, audited data step; each one's purpose, checksum and the run that applied it are in the release record that introduced it (`docs/road-to-v2/releases/`). The lane (`docs/DEPLOYMENT.md`, "Cloud Operations") applies only the migrations a release manifest in `ops/releases/` pins, after a backup, and never re-applies one.

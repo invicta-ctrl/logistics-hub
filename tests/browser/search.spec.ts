@@ -44,7 +44,7 @@ async function setup(page: Page, { role = "OWNER", indexStatus = 200 }: Setup = 
     return route.fulfill({ contentType: "application/json", body: JSON.stringify({ people, total: /santos/i.test(query) ? 30 : 0 }) });
   });
   await page.goto("/staff/account");
-  await expect(page.locator(".app-bar")).toBeVisible();
+  await expect(page.locator(".app-bar .account")).toBeVisible();
   return { peopleAsked, indexAsked };
 }
 

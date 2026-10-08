@@ -33,4 +33,3 @@ export const normalizeIdentity = (raw: string): string =>
  * second entry for someone already in the directory).
  */
 export const sourceKey = (identity: string, department: DepartmentCode): string => `${normalizeIdentity(identity).replace(/ /g, "")}|${department}`;
-export const SOURCE_KEY = /^[a-z0-9]+\|[A-Za-z]{2,4}$/;

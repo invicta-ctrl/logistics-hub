@@ -2,10 +2,10 @@ import { ACCESS_HINT, type AccountEvent, accessChoices, accessTag, bindCopy, eve
 import { DEPARTMENTS, DEPARTMENT_CODES, type DepartmentCode } from "./directory-policy";
 import { type Loan, loanRow, openReturn } from "./loan-form";
 import { tiltTile } from "./card-motion";
-import { type Card, type View, cardForm, cardSource, forgetScans, importArchive, makeMissingImages, openCard, scan } from "./staff-ids";
+import { type Card, type View, cardForm, cardSource, fillTiles, forgetScans, importArchive, makeMissingImages, openCard } from "./staff-ids";
 import { type Access, type Role, type Session, accessLabel, initials, loadSession, shell } from "./staff";
 import { adminTabs } from "./admin-frame";
-import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
 
 /*
  * Administration → Staff Directory (V1.3). One page: the directory as a wall of cards by department, and a person's profile in
@@ -27,7 +27,7 @@ type AccessInfo = { account: null; suggestedUsername: string } | {
 };
 type Entry = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
 type Detail = { person: Person; card: Card | null; history: Entry[] };
-type Usage = { id: string; at: string; itemId: string; itemName: string; category: string; stockArea: string; unit: string; quantity: number; kind: "LOAN" | "TAKE"; purpose: string | null; phone: number; matchedBy: "STUDENT_ID" | "NAME" };
+type Usage = { id: string; at: string; itemId: string; itemName: string; category: string; stockArea: string; unit: string; quantity: number; kind: "LOAN" | "TAKE" | "USE"; purpose: string | null; phone: number };
 type ActivityEvent = { id: string; at: string | null; title: string; summary: string };
 type Linkable = { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; personId: string | null; personName: string | null };
 type Tab = "profile" | "id" | "usage" | "loans" | "activity";
@@ -47,6 +47,8 @@ const matchable = (person: Pick<Person, "name" | "studentId">) => Boolean(person
 /** First and last name's initials, as on a badge: "Ana Marie Santos" is AS. */
 const cardInitials = (name: string) => { const words = name.split(/\s+/).filter(Boolean); return words.length > 1 ? `${words[0]![0]}${words.at(-1)![0]}`.toUpperCase() : initials(name); };
 const toElement = (markup: Html): HTMLElement => { const host = document.createElement("div"); mount(host, markup); return host.firstElementChild as HTMLElement; };
+/** Usage rows drawn at first, and added by each "Show more". */
+const USAGE_PAGE = 100;
 const picture = (person: Pick<Person, "id">, kind: "thumb" | "face") => `/api/staff/admin/directory/${person.id}/id/${kind}`;
 // A card imported before thumbnails were made has none yet: its picture is dropped and the drawn card or the initials show.
 document.addEventListener("error", (event) => {
@@ -276,6 +278,7 @@ export async function staffDirectory(): Promise<void> {
       event.preventDefault();
       const values = new FormData(form);
       const body = { name: values.get("name"), department: values.get("department"), position: values.get("position"), officer: values.get("officer") === "on", studentId: values.get("studentId"), ...(person ? { active: values.get("active") === "1", updatedAt: person.updatedAt } : {}) };
+      const settle = working(form);
       try {
         if (person) {
           const result = await api<{ changed: number }>(`/api/staff/admin/directory/${person.id}`, { method: "PATCH", body: JSON.stringify(body) });
@@ -291,7 +294,7 @@ export async function staffDirectory(): Promise<void> {
         panel.close(true);
         people = null;
         await done?.();
-      } catch (error) { setMessage(sheetElement.querySelector("#person-alert")!, failure(error)); }
+      } catch (error) { setMessage(sheetElement.querySelector("#person-alert")!, failure(error)); } finally { settle(); }
     });
   }
 
@@ -308,7 +311,7 @@ export async function staffDirectory(): Promise<void> {
   async function profile(id: string, tab: Tab): Promise<void> {
     mount(root, html`<a class="back-link" href="${DIRECTORY}" data-route>${icon("back")}Staff Directory</a><div data-profile><div class="skeleton skeleton--block"></div></div>`);
     let detail: Detail;
-    try { detail = await api<Detail>(`/api/staff/admin/directory/${id}`); } catch (error) {
+    try { detail = await api<Detail>(`/api/staff/admin/directory/${encodeURIComponent(id)}`); } catch (error) {
       mount(root.querySelector("[data-profile]")!, emptyState("This profile could not be opened", failure(error), html`<a class="button button--secondary" href="${DIRECTORY}" data-route>Back to the directory</a>`, "error", 1));
       return;
     }
@@ -514,8 +517,10 @@ export async function staffDirectory(): Promise<void> {
       event.preventDefault();
       const accountId = new FormData(event.target as HTMLFormElement).get("accountId");
       if (!accountId) { setMessage(host.querySelector("[data-alert]")!, "Choose a sign-in."); return; }
+      const settle = working(event.target as HTMLFormElement);
       try { await api(`/api/staff/admin/directory/${person.id}/account`, { method: "PUT", body: JSON.stringify({ accountId }) }); toast("Linked."); await reload(); }
       catch (error) { setMessage(host.querySelector("[data-alert]")!, failure(error)); }
+      finally { settle(); }
     });
   }
 
@@ -550,9 +555,8 @@ export async function staffDirectory(): Promise<void> {
       // Set through the CSSOM: the Content-Security-Policy (style-src 'self') drops inline style attributes.
       tileOf(side)!.style.setProperty("--ratio", String(card[side].width / card[side].height));
       tiltTile(tileOf(side)!);
-      const image = host.querySelector<HTMLImageElement>(`[data-scan="${side}"]`)!;
-      void scan(person.id, card.mediaId, side).then((url) => { image.src = url; }, (error: unknown) => { image.closest("figure")!.append(Object.assign(document.createElement("p"), { className: "form-alert", textContent: failure(error) })); });
     }
+    fillTiles(host, person.id, card);
     host.addEventListener("click", (event) => {
       const target = event.target as HTMLElement;
       const open = target.closest<HTMLElement>("[data-open]");
@@ -573,9 +577,8 @@ export async function staffDirectory(): Promise<void> {
   /* ---------- Usage ---------- */
 
   const matchNote = (person: Person): Html => {
-    const ways = [person.studentId ? html`student ID <span class="mono">${person.studentId}</span>` : "", person.name.includes(" ") ? html`the exact name “${person.name}”` : ""].filter(Boolean);
-    if (!ways.length) return html`<p class="callout">${icon("info")}<span>Add ${person.name}'s full name or student ID number (Edit profile) to find their loans and phone records. A single name never matches, so no one else's records appear here.</span></p>`;
-    return html`<p class="field__hint">Found in the existing loan and phone records by ${ways.length === 2 ? html`${ways[0]} or ${ways[1]}` : ways[0]}. Records written another way are not included.</p>`;
+    if (!person.studentId) return html`<p class="callout">${icon("info")}<span>Add ${person.name}'s student ID number (Edit profile) to find their loans and phone records. Records are found by student ID only, never by name.</span></p>`;
+    return html`<p class="field__hint">Loans and phone records with student ID <span class="mono">${person.studentId}</span>, whatever name was typed with them.</p>`;
   };
 
   async function usagePanel(host: HTMLElement, person: Person): Promise<void> {
@@ -594,26 +597,29 @@ export async function staffDirectory(): Promise<void> {
     const form = host.querySelector<HTMLFormElement>(".usage-filters")!;
     let rows: Usage[] = [];
     let truncated = false;
+    /** Rows drawn: the table grows by a page on request, so the profile does not grow with a year of history (amendment J). */
+    let limit = USAGE_PAGE;
     const draw = () => {
       const values = new FormData(form);
       const term = fold(String(values.get("item") ?? "").trim());
       const shown = rows.filter((row) => (!values.get("area") || row.stockArea === values.get("area")) && (!values.get("category") || row.category === values.get("category")) && (!term || fold(row.itemName).includes(term)));
       const taken = shown.filter((row) => row.kind === "TAKE");
+      const used = shown.filter((row) => row.kind === "USE");
       const loans = shown.filter((row) => row.kind === "LOAN");
       const byCategory = [...shown.reduce((map, row) => map.set(row.category, (map.get(row.category) ?? 0) + row.quantity), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
-      mount(host.querySelector("[data-usage]")!, rows.length === 0 ? emptyState("Nothing found in these dates", "No loan or phone take in these dates matches this person.", "", "", 3) : html`
+      mount(host.querySelector("[data-usage]")!, rows.length === 0 ? emptyState("Nothing found in these dates", "No loan, phone take or phone use in these dates has this person's student ID.", "", "", 3) : html`
         <dl class="stat-strip">
-          <div class="stat"><dt>Units taken</dt><dd><span class="stat__value">${taken.reduce((sum, row) => sum + row.quantity, 0)}</span><span class="stat__note">${plural(taken.length, "phone take")}</span></dd></div>
+          <div class="stat"><dt>Units taken</dt><dd><span class="stat__value">${taken.reduce((sum, row) => sum + row.quantity, 0)}</span><span class="stat__note">${plural(taken.length, "phone take")}${used.length ? `, ${plural(used.length, "use")}` : ""}</span></dd></div>
           <div class="stat"><dt>Borrowed</dt><dd><span class="stat__value">${loans.reduce((sum, row) => sum + row.quantity, 0)}</span><span class="stat__note">${plural(loans.length, "loan")}</span></dd></div>
           <div class="stat"><dt>Items</dt><dd><span class="stat__value">${new Set(shown.map((row) => row.itemId)).size}</span><span class="stat__note">different</span></dd></div>
           <div class="stat"><dt>Most used</dt><dd><span class="stat__value stat__value--text">${byCategory[0] ? categoryName(byCategory[0][0]) : "—"}</span><span class="stat__note">${byCategory[0] ? `${byCategory[0][1]} units` : ""}</span></dd></div>
         </dl>
         ${shown.length ? html`<div class="data-table-wrap"><table class="data-table data-table--static">
           <caption class="visually-hidden">What left stock for ${person.name}</caption>
-          <thead><tr><th scope="col">Date</th><th scope="col">Item</th><th scope="col" class="col-hide-phone">Category</th><th scope="col" class="col-qty">Qty</th><th scope="col">How</th><th scope="col" class="col-hide-phone">Matched by</th></tr></thead>
-          <tbody>${shown.map((row) => html`<tr><td>${formatDate(officeDay(row.at))}</td><td><a class="row-link" href="/staff/items?item=${row.itemId}" data-route>${row.itemName}</a></td><td class="col-hide-phone">${categoryName(row.category)}</td>
-            <td class="col-qty">${row.quantity} <span class="muted">${units(row.quantity, row.unit)}</span></td><td>${row.kind === "LOAN" ? html`Borrowed${row.purpose ? ` · ${label(row.purpose)}` : ""}` : "Taken"}${row.phone ? html` <span class="muted">(phone)</span>` : ""}</td>
-            <td class="col-hide-phone">${row.matchedBy === "STUDENT_ID" ? "Student ID" : "Name"}</td></tr>`)}</tbody></table></div>` : html`<p class="muted">Nothing matches these filters.</p>`}
+          <thead><tr><th scope="col">Date</th><th scope="col">Item</th><th scope="col" class="col-hide-phone">Category</th><th scope="col" class="col-qty">Qty</th><th scope="col">How</th></tr></thead>
+          <tbody>${shown.slice(0, limit).map((row) => html`<tr><td>${formatDate(officeDay(row.at))}</td><td><a class="row-link" href="/staff/items?item=${row.itemId}" data-route>${row.itemName}</a></td><td class="col-hide-phone">${categoryName(row.category)}</td>
+            <td class="col-qty">${row.quantity} <span class="muted">${units(row.quantity, row.unit)}</span></td><td>${row.kind === "LOAN" ? html`Borrowed${row.purpose ? ` · ${label(row.purpose)}` : ""}` : row.kind === "USE" ? "Used" : "Taken"}${row.phone ? html` <span class="muted">(phone)</span>` : ""}</td></tr>`)}</tbody></table></div>
+        ${shown.length > limit ? html`<p class="table-more"><button type="button" class="button button--secondary" data-usage-more>Show ${Math.min(USAGE_PAGE, shown.length - limit)} more <span class="muted">(${limit} of ${shown.length.toLocaleString()} shown)</span></button></p>` : ""}` : html`<p class="muted">Nothing matches these filters.</p>`}
         ${truncated ? html`<p class="field__hint">Only the newest 1,000 entries are shown; narrow the dates to see older ones.</p>` : ""}`);
     };
     const fetchRows = async () => {
@@ -626,8 +632,15 @@ export async function staffDirectory(): Promise<void> {
         draw();
       } catch (error) { mount(host.querySelector("[data-usage]")!, emptyState("Usage could not be loaded", failure(error), "", "error", 3)); }
     };
-    form.addEventListener("change", (event) => { if ((event.target as HTMLElement).matches("[type=date]")) void fetchRows(); else draw(); });
-    form.addEventListener("input", (event) => { if ((event.target as HTMLElement).id === "u-item") draw(); });
+    form.addEventListener("change", (event) => { limit = USAGE_PAGE; if ((event.target as HTMLElement).matches("[type=date]")) void fetchRows(); else draw(); });
+    form.addEventListener("input", (event) => { if ((event.target as HTMLElement).id === "u-item") { limit = USAGE_PAGE; draw(); } });
+    host.addEventListener("click", (event) => {
+      if (!(event.target as HTMLElement).closest("[data-usage-more]")) return;
+      const first = limit;
+      limit += USAGE_PAGE;
+      draw();
+      host.querySelectorAll<HTMLElement>("tbody .row-link")[first]?.focus({ preventScroll: true });
+    });
     await fetchRows();
   }
 
@@ -689,7 +702,8 @@ export async function staffDirectory(): Promise<void> {
   let shownPerson: string | null = null;
   async function render(): Promise<void> {
     const params = new URLSearchParams(window.location.search);
-    const id = params.get("person");
+    // The id becomes an API path: anything but a directory id opens the list instead.
+    const id = params.get("person")?.match(/^PER-[A-Za-z0-9-]+$/)?.[0] ?? null;
     // A person's scans stay in memory only while their own profile is open.
     if (id !== shownPerson) forgetScans();
     shownPerson = id;

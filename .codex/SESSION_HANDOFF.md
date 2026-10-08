@@ -1,5 +1,74 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Road to V2 — V1.15 V2 consolidation (COMPLETE, WAITING ON OWNER ACTIONS; Claude Cloud integrator, 2026-10-08)
+
+~~~text
+TASK: Finish V1.15 under its spec and accepted amendments, integrate the second writer, and write the release records.
+STATUS: COMPLETE, WAITING ON OWNER ACTIONS. Every acceptance line in docs/road-to-v2/v1.15-consolidation-plan.md has evidence.
+BASE COMMIT: e919d8d (V1.15 with main 1247274 / V1.14 merged in)
+BRANCH/WORKTREE: road-to-v2/v1.15-v2-consolidation / Claude Cloud (integrator). road-to-v2/v1.15-task-consolidation (Build V1.15, second writer) merged at ea86bd1 in 484ebcd; it has stopped.
+LAST PUSHED COMMIT: `git log -1 origin/road-to-v2/v1.15-v2-consolidation`
+FILES CHANGED: since e919d8d: src (ambient assist, staff-ids, ui working(), self-service-app, styles, admin-*, directory, catalogue pages, main placeholder); tests (controls sweep, writes, refresh, optional, wording, phone, tab-style, id-card-loading); docs (plan, visual research, releases v1.15 and v2.0); scripts/visual-evidence.mjs (More button lookup); .codex/*
+CONTRACTS ADDED/CHANGED: as in the v1.15 record; plus shrinkPhoto(file, maxBytes, edge, quality) and SELF_SERVICE_LIMITS.photoEdge/photoQuality (1280, 0.75); working(scope) restores focus; Ambient Assist reserve() is one conditional write; assist_recheck:<itemId> keeps a duplicate check that could not run (recheckWaiting, WAITING_PER_SYNC 2); Possible existing item offers Use existing; a Self-Service return starts as the borrower with Not you? Change (Codex review on PR 22, e420add, dc8503e).
+MIGRATIONS: None.
+TESTS RUN: typecheck; npx vitest run (706 passed, 2 skipped); npx playwright test (204 passed); verify:privacy (0); evidence render against origin/main; CI on the head (see the v1.15 record, "CI").
+RESULTS: green; two container-only real-Worker failures as before, both green in CI.
+UNRUN CHECKS: real phone, screen reader, Safari; production signed-in check after deploy.
+KNOWN LIMITATIONS: see the v1.15 record.
+BLOCKERS: none for the branch. Integration waits on Earl: the count-only Student ID check, then his merge.
+NEXT EXACT ACTION: Earl runs owner action 1 and merges the V1.15 PR. Then verify main's CI, deploy, admin verify and CodeQL; set v2.0.md to COMPLETE; give Earl the branch delete commands.
+MERGE ORDER / DEPENDENCIES: V1.15 is the last Road-to-V2 branch; nothing to propagate forward. V1.14's branch holds only a superseded test commit (a5840d0) and can be deleted.
+~~~
+
+## Road to V2 — V1.15 V2 consolidation (IN PROGRESS; Claude Cloud sole integrator, 2026-10-07)
+
+- **Ambient AI Assist built:** online Quick Catalog photo name (Gemma, thumbnail only, fills an empty name, editable), photo look-alikes through the deterministic duplicate rule, offline enrichment intent (`recheck`) checked after sync, unresolved look-alikes in Attention as Possible duplicates with Compare and Keep both, UTC Neuron bands with a 9,500 stop, three-failure breaker, owner switch in Administration > System. Contracts, the Gemma check and the not-built decisions (Qwen, GLM, Granite runtime, AI Gateway) are in `docs/road-to-v2/v1.15-consolidation-plan.md`.
+- **V1.11 measurement:** run and recorded (aggregates only); negative for category and unit, so no model-chosen classification ships.
+
+~~~text
+TASK: V1.15 consolidation: Ambient AI Assist, then the remaining amendment work (phone audit, perceived performance, Directory linking, long panels, tests, evidence).
+STATUS: IN PROGRESS. Pushed since the gate: Ambient AI Assist; the photo hint style; 320 px bar and tab-strip fixes and the Self-Service rules copy; exact-ID Directory linking with phone uses; Directory usage paging; the Ctrl-click test; first-load placeholder and layout-shift fixes; docs/visual-research/v1.15.md (in progress).
+BASE COMMIT: e919d8d (V1.15 with main 1247274 / V1.14 merged in at 22b8672)
+BRANCH/WORKTREE: road-to-v2/v1.15-v2-consolidation / Claude Cloud (sole V1.15 writer and integrator; Build V1.15 stopped at e919d8d, CodeQL thread stopped after 5ac9a7f)
+LAST PUSHED COMMIT: `git log -1 origin/road-to-v2/v1.15-v2-consolidation`
+FILES CHANGED: src/ambient-assist.ts, worker.ts, wrangler.jsonc, attention*.ts, catalogue-capture/store/sync.ts, admin-system.ts, admin-catalog.ts, admin.css, styles.css, catalogue.css, setting-copy.ts, staff-directory.ts, directory-workspace.ts, staff.ts, main.ts; tests (ambient-assist, catalog-ai, staff-directory, browser catalogue/accessibility/card-wall/search/shell); docs (plan, visual research v1.15); .codex/*
+CONTRACTS ADDED/CHANGED: AI binding; POST /api/staff/catalogue/photo-name; photo PUT recheck=1; POST /api/staff/attention/possible-duplicate/:itemId; PATCH /api/staff/admin/assist; Attention POSSIBLE_DUPLICATE; system_settings ai_neurons:<date>, ambient_assist, assist_photo_match:<itemId>. Directory usage: rows are LOAN, TAKE or USE, linked by exact student ID only; the matchedBy field is removed.
+MIGRATIONS: None.
+TESTS RUN: typecheck; build; npm test (703 passed, 2 skipped); verify:privacy (0); test:browser (185/185); test:browser:worker (50 passed, 2 failed, 3 not run).
+RESULTS: The two real-Worker failures (offline-self-service "works offline…", worker-v16 "installs as its own app", installability error in-incognito) fail identically on e919d8d without these changes in this container and pass in GitHub CI (e919d8d and dbcb039 green).
+UNRUN CHECKS: real photo through the deployed AI binding; signed-in production check; dark mode and reduced motion for the new parts; final V2 journey re-run on the final head.
+KNOWN LIMITATIONS: Gemma names 8 of 12 sample photos usefully (an editable suggestion only). Breaker is per isolate. Neuron count can overshoot a line by one call under concurrency. Kits still measures CLS 0.10 on a slow first load.
+BLOCKERS: Codex's uncommitted Windows work (ID card loading/retry states, its Self-Service and Directory patches) is not on GitHub; Catalog/Catalogue wording and the Student ID count check wait on Earl.
+NEXT EXACT ACTION: Merge wip/v1.15-codex-windows when it exists (keep this branch's exact-ID owned() if both changed it); then dark mode/reduced motion review, final journeys, docs/visual-research/v1.15.md final, docs/road-to-v2/releases/v1.15.md, and v2.0.md only if the V2 gate holds.
+MERGE ORDER / DEPENDENCIES: V1.15 merges to main after Earl approves, from his computer, after CI is green. Deploying adds the AI binding; rollback is Administration > System > Photo suggestions > Turn off, or removing the binding. No production data step. CodeQL alerts close once main is scanned after the merge.
+~~~
+
+## Road to V2 — V1.15 Codex Windows checkpoint (superseded above; its uncommitted work is awaited on wip/v1.15-codex-windows)
+
+- **Authority / where:** accepted V1.15 spec, 2026-10-07 mobile/perceived-performance and identity/semantic/Activity amendments, and accepted docs/specs/accepted/road-to-v2/2026-10-08-v1.15-ambient-ai-assist-reconciliation-amendment.md. Earl explicitly authorized only C:\Users\adria\.codex\worktrees\5952\logistics-hub as the sole V1.15 writer; the shared D: worktree, PR #20 worktree and V1.9 residue remain untouched.
+- **Baseline / integration:** integration baseline 171a56e is the local-only merge of V1.15 e3fbf3c and PR #20/V1.14 44e307f; docs checkpoint b0f519a is pushed to the V1.15 branch. V1.14 is COMPLETE/WAITING ON OWNER ACTIONS with no data action, satisfying the CLAUDE successor gate. PR #20 is merged to remote main 1247274 with externally verified product CI green. No source/test patch commit or push, no main merge, provider write or migration.
+- **Current work / user scope:** source/test work remains uncommitted: the Self-Service 8-digit minlength/maxlength HTML constraint plus browser assertion, and exact-ID-only Directory association plus regression test. The Directory suite currently stops before tests with a Vitest SyntaxError; direct Node import and typecheck parsing pass, so diagnosis remains incomplete. The focused Self-Service browser operation alone is blocked: its run timed out at 30,044 ms with no result/job receipt; observed Node processes have unknown ownership/relationship; do not duplicate or terminate them. The detailed Format-List process inspection and an earlier parenthesized inspection were permanently lean-ctx blocked and not rerouted. Other independent work may proceed. The owner-approved ID-card/performance repair is bounded to full private ID loading with retry/error states, bounded/lazy media and measured before/after; it must not weaken private caching or send ID media to AI/Git/reports.
+- **Ambient amendment / constraints:** Slice A documentation is committed and pushed as 868a255. Owner reported zero total Workers AI usage in the UTC window ending 2026-10-08T00:00Z; re-verify after reset and reserve against concurrent usage before the owner-authorized measurement. The measurement remains pending shared-account quota/authentication and evaluation-harness preflight; official model availability/pricing/free-plan facts are recorded in the amendment. Local runtime contracts may be implemented and mock-tested after Slice A contracts; production provider configuration still requires exact Cloud Operations authority. AI stays optional, deterministic-first and private-identity/evidence excluded; only intentional catalog media may enter a future vision path. Current user scope also requires the V1.11 measurement before V2 completion; do not start its metered execution until the shared-account quota/authentication and harness preflight is verified.
+- **Verified / next:** npm ci made no tracked change; npm test -- tests/self-service.test.ts passed 43/43; npm run typecheck passed. Claude must claim the sole writer lock, review the complete dirty diff, and finish the ID-media lifecycle/tests before the next checkpoint. Next, finish the Directory parser diagnosis and use the reader's bounded ID-card/media and speed packets for independent repairs; browser verification remains separate and may run only via an authorized reconciled path. Preserve strict new-only IDs, private evidence, exact-ID association, audited identity decisions, bounded work and V1.14 budgets. Do not claim V2 or push without root review.
+
+~~~text
+TASK: V1.15 consolidation: accepted Ambient Assist amendment documentation, existing ID/Directory atomic work, and owner-approved private ID-card/performance repair preparation.
+STATUS: IN PROGRESS; docs-only checkpoint b0f519a is pushed; source/test work remains dirty for review. Browser verification is blocked only for its affected operation.
+BASE COMMIT: 171a56ee613e216808a4b5beaec1e33c381041c6
+BRANCH/WORKTREE: road-to-v2/v1.15-v2-consolidation / C:\Users\adria\.codex\worktrees\5952\logistics-hub
+LAST PUSHED COMMIT: b0f519a53ff82992899cb295ce2bac9fc657b008
+FILES CHANGED: uncommitted playwright.config.ts; src/directory-workspace.ts; src/self-service-app.ts; src/staff-directory.ts; src/staff-ids.ts; src/styles.css; tests/browser/card-wall.spec.ts; tests/browser/id-card.spec.ts; tests/browser/self-service-v19.spec.ts; tests/staff-directory.test.ts; empty untracked scripts/ops/.debug-import-release.mjs preserved.
+CONTRACTS ADDED/CHANGED: 2026-10-08 Ambient AI Assist reconciliation amendment (accepted); no runtime contract is implemented.
+MIGRATIONS: None.
+TESTS RUN: npm ci; npm test -- tests/self-service.test.ts; npm run typecheck; focused Directory suite; focused Self-Service browser suite; earlier focused ID-card/CardWall run 11/11 before final lifecycle review.
+RESULTS: npm ci no tracked change; Self-Service 43/43 and typecheck pass; Directory Vitest suite stops before tests with SyntaxError; Self-Service browser suite timed out at 30,044 ms with no result/receipt; ID-card/CardWall final rerun pending.
+UNRUN CHECKS: final ID-card/media regression and visual review; Directory regression after parser diagnosis; CI repairs; AI harness/contracts and provider/auth/quota preflight; deferred V1.11 measurement; speed, Identity and Activity verification; final V1.15 journey/visual/privacy/performance evidence.
+KNOWN LIMITATIONS: Main 1247274 remains unmerged locally; V2 incomplete; official provider availability/free-plan facts are recorded; owner-reported prior-window usage was zero but current quota/authentication is not yet reverified; runtime AI is not started.
+BLOCKERS: ID-media review/rerun; Windows Vitest SyntaxError diagnosis; focused browser process receipt unavailable; AI harness and provider/auth/quota gates; remaining V1.15 acceptance work.
+NEXT EXACT ACTION: Claude claims the sole writer lock, reviews the complete dirty diff, finishes and verifies ID media, then updates and pushes the next coherent checkpoint before CI, AI, speed, Identity, Activity and final evidence slices.
+MERGE ORDER / DEPENDENCIES: Preserve every listed dirty source/test file and the untracked debug file; no reset/clean/overwrite. Finish/review ID-media and identity patches before integrating additional shared changes; no main/production push; provider calls only after accepted quota/auth/harness gates.
+~~~
+
 ## Road to V2 — V1.12 Operations home and practical insights (COMPLETE, WAITING ON INTEGRATION; record `docs/road-to-v2/releases/v1.12.md`; Claude Cloud, 2026-10-07)
 - **Where:** Claude Cloud thread on `road-to-v2/v1.12-operations-home`; no migration; V1.13 is built in parallel by its own thread, which pulls this branch itself; V1.14 and V1.15 follow after integration.
 - **Built:** `src/home.ts` (`resumable`, `insights`, windows and rules), `src/home-workspace.ts` and `src/home.css` (the page), routes `GET /api/staff/home` and `/api/staff/home/insights` in `src/worker.ts`, `groupsOf` and `GAP_*` predicates in `src/attention.ts` (the summary now carries groups), `openSession` / `openChecks` shared from `src/catalogue.ts` and `src/audits.ts`, the `?reason=` filter in `src/attention-workspace.ts`, Home in the logo, the account menu, search and sign-in, a `home` scene in `scripts/visual-evidence.mjs`.

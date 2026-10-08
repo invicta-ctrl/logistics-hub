@@ -1,5 +1,6 @@
 import { type CatalogItem, type Decision, type SharedPlace, type LocalEvent, type ServerResult, type WireEvent, applyDecisions, applyResults, forgettable, nextBatch, retryAll, toWire } from "./offline-queue";
 import * as store from "./offline-store";
+import { SELF_SERVICE_RECORD_VERSION } from "./catalog-policy";
 
 /*
  * The sync engine. Records a new action locally first (it is safe the moment it is saved), then
@@ -81,7 +82,7 @@ export async function record(draft: Draft, photo?: Blob): Promise<LocalEvent> {
   const id = crypto.randomUUID();
   const occurredAt = new Date().toISOString();
   const saved = await store.saveEvent((seq) => ({
-    ...draft, v: 1, id, seq, occurredAt, catalogRevision: snapshot?.revision ?? null, ...testing ? { test: true as const } : {},
+    ...draft, v: SELF_SERVICE_RECORD_VERSION, id, seq, occurredAt, catalogRevision: snapshot?.revision ?? null, ...testing ? { test: true as const } : {},
     state: "pending", attempts: 0, nextAttemptAt: 0, hasPhoto: Boolean(photo)
   }), photo && bytes ? { type: photo.type || "image/jpeg", bytes } : undefined);
   announce({ type: "changed" });

@@ -1,5 +1,6 @@
+import { PHOTO_MATCH_FROM } from "./ambient-assist";
 import { UNSETTLED_FINDING } from "./audits";
-import { OPEN_REORDER_STATUSES, REVIEW_REASONS, type ReviewReason } from "./catalog-policy";
+import { IDENTITY_RULE_KEY, OPEN_REORDER_STATUSES, REVIEW_REASONS, type ReviewReason } from "./catalog-policy";
 import { type Actor, BUMP_REVISION, InputError } from "./inventory";
 import { kitsNotReady } from "./kits";
 import { LOAN_ID, officeDay } from "./loans";
@@ -31,10 +32,16 @@ export type Entry = {
   action: string;
   /** Set when a person can mark it reviewed here. */
   review?: { loanId: string };
+  /** Set when a person can confirm or ignore a phone record's identity here. */
+  identity?: { eventId: string };
+  /** Set when a person can say two items that look alike in a photo are different things here. */
+  keepBoth?: { itemId: string };
 };
 
 /** Past this many days an unreviewed damaged or lost return is left to the loan history instead of asking again. */
 export const RETURN_PROBLEM_DAYS = 60;
+/** Past this many days an identity left unreviewed is left to the record's own history instead of asking again. */
+export const IDENTITY_DAYS = 60;
 const PER_REASON = 100;
 const OPEN = [...OPEN_REORDER_STATUSES].map((status) => `'${status}'`).join(",");
 const DAY_MS = 86_400_000;
@@ -73,12 +80,34 @@ type Reason = {
   cols: string;
   order: string;
   bind?: (today: string, now: number) => Array<string | number>;
+  /** False when the Self-Service page cannot settle it: the staff shell's Self-Service badge leaves it out. */
+  onSelfServicePage?: false;
   entry: (row: Row, now: number) => Omit<Entry, "key" | "reason" | "source" | "urgency">;
 };
 
 /** The two catalog gaps, defined once: Attention lists them and Home counts them against the whole catalog. */
 export const GAP_UNCLASSIFIED = "i.status = 'ACTIVE' AND i.item_type = 'NEEDS_REVIEW'";
 export const GAP_NO_PLACE = "i.status = 'ACTIVE' AND i.item_type <> 'NEEDS_REVIEW' AND i.location_id IS NULL";
+
+/*
+ * Identity needs review: a phone record whose person cannot be told from the record alone. Only records received since the
+ * identity rule began (the marker the Worker writes with the first record saved under it) and within IDENTITY_DAYS count, so
+ * older history is never reopened, and one decided by a person leaves. The name's first and last words are what a directory
+ * match is checked against, so a middle name or a suffix never raises it. SQL, so the list and the count share one rule.
+ */
+const WHO = "lower(trim(e.person_name))";
+const FIRST_WORD = `substr(${WHO}, 1, instr(${WHO} || ' ', ' ') - 1)`;
+const LAST_WORD = `substr(${WHO}, length(rtrim(${WHO}, replace(${WHO}, ' ', ''))) + 1)`;
+const NAME_GAP = `instr(${WHO}, ' ') = 0`;
+const ID_GAP = "(e.student_id IS NULL OR e.student_id NOT GLOB '[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]')";
+const DIRECTORY_WORDS = "' ' || lower(d.full_name) || ' '";
+const NAME_CLASH = `EXISTS (SELECT 1 FROM staff_directory d WHERE d.student_id = e.student_id
+  AND NOT (instr(${DIRECTORY_WORDS}, ' ' || ${FIRST_WORD} || ' ') > 0 AND instr(${DIRECTORY_WORDS}, ' ' || ${LAST_WORD} || ' ') > 0))`;
+const IDENTITY_DECIDED = "EXISTS (SELECT 1 FROM audit_log a WHERE a.entity_type = 'ITEM' AND a.entity_id = e.item_id AND a.action = 'IDENTITY_REVIEWED' AND json_extract(a.details_json, '$.eventId') = e.id)";
+const IDENTITY_FROM = `FROM self_service_events e INDEXED BY idx_self_service_events_received JOIN items i ON i.id = e.item_id
+  WHERE e.received_at >= ?1 AND e.received_at >= (SELECT value FROM system_settings WHERE key = '${IDENTITY_RULE_KEY}')
+    AND e.person_name <> '${ERASED}' AND COALESCE(e.review, '') <> 'TEST' AND (${ID_GAP} OR ${NAME_GAP} OR ${NAME_CLASH}) AND NOT ${IDENTITY_DECIDED}`;
+const IDENTITY_PROBLEM = `CASE WHEN ${ID_GAP} THEN CASE WHEN e.student_id IS NULL THEN 'ID_MISSING' ELSE 'ID_FORMAT' END WHEN ${NAME_GAP} THEN 'NAME' ELSE 'CLASH' END`;
 
 const REASONS: readonly Reason[] = [
   {
@@ -182,6 +211,16 @@ const REASONS: readonly Reason[] = [
     entry: (row) => ({ title: String(row.item), why: "Not classified yet, so it stays out of every public list.", since: null, href: `/staff/items?item=${row.id}&tab=details`, action: "Classify it" })
   },
   {
+    // Found once, after an offline capture's photo synced (ambient-assist.ts): never on a page load.
+    id: "POSSIBLE_DUPLICATE", source: "Catalog", label: "Possible duplicates",
+    from: PHOTO_MATCH_FROM,
+    urgency: "'LATER'", cols: "i.id AS id, i.name AS item, o.id AS other, o.name AS otherName, s.updated_at AS at", order: "s.updated_at, i.id",
+    entry: (row) => ({
+      title: String(row.item), why: `Its photo looks like ${row.otherName}, which is already in the catalog. If it is the same thing, make one of them inactive.`,
+      since: String(row.at), href: `/staff/items?item=${row.id}`, action: "Compare", keepBoth: { itemId: String(row.id) }
+    })
+  },
+  {
     id: "NO_PLACE", source: "Catalog", label: "Items without a place",
     from: `FROM items i WHERE ${GAP_NO_PLACE}`,
     urgency: "'LATER'", cols: "i.id AS id, i.name AS item", order: "i.name COLLATE NOCASE, i.id",
@@ -199,6 +238,22 @@ const REASONS: readonly Reason[] = [
       title: `Phone ${String(row.type).toLowerCase()} of ${row.item}${Number(row.quantity) > 1 ? ` × ${row.quantity}` : ""}`,
       why: `${REVIEW_REASONS[row.review as ReviewReason] ?? "It needs a person to decide"}.`,
       since: String(row.at), href: "/staff/self-service", action: "Check the record"
+    })
+  },
+  {
+    id: "IDENTITY_REVIEW", source: "Self-Service", label: "Identity needs review", onSelfServicePage: false,
+    from: IDENTITY_FROM, urgency: "'SOON'",
+    cols: `e.id AS id, i.name AS item, e.event_type AS type, e.person_name AS who, e.received_at AS at, ${IDENTITY_PROBLEM} AS problem,
+      (SELECT d.full_name FROM staff_directory d WHERE d.student_id = e.student_id) AS directoryName`,
+    order: "e.received_at, e.id",
+    bind: (_today, now) => [new Date(now - IDENTITY_DAYS * DAY_MS).toISOString()],
+    entry: (row) => ({
+      title: `Phone ${String(row.type).toLowerCase()} of ${row.item}`,
+      why: row.problem === "ID_MISSING" ? `${row.who} gave no student ID number.`
+        : row.problem === "ID_FORMAT" ? `${row.who} gave a student ID number that is not 8 digits.`
+        : row.problem === "NAME" ? `The name "${row.who}" has no last name, so it cannot be told from other people.`
+        : `The student ID number belongs to ${row.directoryName} in the Staff Directory, but the name given was "${row.who}".`,
+      since: String(row.at), href: "/staff/self-service", action: "Open Self-Service", identity: { eventId: String(row.id) }
     })
   },
   {
@@ -306,9 +361,37 @@ export async function reviewReturn(db: D1Database, actor: Actor, loanId: string)
   return { reviewed: true };
 }
 
+/** A phone record's id: the Worker mints it as a UUID. */
+const EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export const IDENTITY_OUTCOMES = ["CONFIRMED", "IGNORED"] as const;
+
+/**
+ * A person has looked at a phone record's identity and decided: confirmed (it is who the record says) or ignored (it is left
+ * as it is). Neither deletes or rewrites what the person submitted; this only stops the inbox asking, and is audited. Written
+ * once per record: a second decision answers with the first.
+ */
+export async function reviewIdentity(db: D1Database, actor: Actor, eventId: string, input: unknown) {
+  if (!EVENT_ID.test(eventId)) throw new InputError(404, "Not found.");
+  const record = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const outcome = record.outcome;
+  if (typeof outcome !== "string" || !(IDENTITY_OUTCOMES as readonly string[]).includes(outcome)) throw new InputError(400, "Choose to confirm the identity or ignore it.");
+  const note = typeof record.note === "string" ? record.note.trim().slice(0, 300) : "";
+  const event = await db.prepare(`SELECT e.id, e.item_id AS itemId, e.event_type AS type, ${IDENTITY_DECIDED} AS decided,
+      (e.person_name <> '${ERASED}' AND (${ID_GAP} OR ${NAME_GAP} OR ${NAME_CLASH})) AS flagged FROM self_service_events e WHERE e.id = ?`)
+    .bind(eventId).first<{ id: string; itemId: string; type: string; decided: number; flagged: number }>();
+  if (!event) throw new InputError(404, "Not found.");
+  if (!event.decided && !event.flagged) throw new InputError(409, "This record's identity does not need a review.");
+  await db.batch([db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
+      SELECT ?1, ?2, ?3, 'IDENTITY_REVIEWED', 'ITEM', ?4, ?5
+      WHERE NOT EXISTS (SELECT 1 FROM audit_log a WHERE a.entity_type = 'ITEM' AND a.entity_id = ?4 AND a.action = 'IDENTITY_REVIEWED' AND json_extract(a.details_json, '$.eventId') = ?6)`)
+    .bind(crypto.randomUUID(), new Date().toISOString(), actor.accountId, event.itemId, JSON.stringify({ eventId: event.id, type: event.type, outcome, ...(note ? { note } : {}) }), event.id),
+    db.prepare(`${BUMP_REVISION} AND changes() > 0`)]);
+  return { reviewed: true };
+}
+
 /** Records waiting for a person in Self-Service: what the staff shell's Self-Service badge counts, from the same definitions as the inbox. */
 export async function selfServiceToCheck(db: D1Database): Promise<number> {
-  const mine = REASONS.filter((reason) => reason.source === "Self-Service");
+  const mine = REASONS.filter((reason) => reason.source === "Self-Service" && reason.onSelfServicePage !== false);
   const now = Date.now();
   const counts = await db.batch(mine.map((reason) => db.prepare(countSql(reason)).bind(...bindFor(reason, officeDay(new Date(now)), now))));
   return counts.reduce((sum, result) => sum + (result.results as Array<{ n: number }>).reduce((inner, row) => inner + row.n, 0), 0);

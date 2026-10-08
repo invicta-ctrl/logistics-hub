@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { identify } from "../self-service-browser";
 
 const catalog = { revision: 1, categories: ["FURNITURE", "SCHOOL SUPPLIES"], items: [
   { id: "ITM-0005", name: "Folding Table", category: "FURNITURE", unit: "piece", available: 3, audience: "STUDENTS_AND_USC_STAFF" },
@@ -138,17 +139,17 @@ test("self-service: the item decides Borrow, Take or Use, and a use asks no amou
   await expect(sheet).toContainText("Use · School Supplies");
   await expect(sheet.getByLabel("How many?")).toHaveCount(0);
   await expect(sheet.getByRole("radio")).toHaveCount(0);
-  await sheet.getByLabel("Your name").fill("Ana Reyes");
+  await identify(sheet, "Ana Reyes");
   await sheet.getByRole("button", { name: "Review and use" }).click();
   // Nothing is saved until the person has seen what will be sent and confirmed it.
   await expect(sheet.getByRole("heading", { name: "Check before you send" })).toBeFocused();
-  await expect(sheet.locator(".ss-summary")).toContainText("Used by");
   await expect(sheet.locator(".ss-summary")).toContainText("Ana Reyes");
+  await expect(sheet.locator(".ss-summary")).toContainText("21000115");
   await sheet.getByRole("button", { name: "Edit" }).click();
   await expect(sheet.getByRole("button", { name: "Review and use" })).toBeVisible();
   await sheet.getByRole("button", { name: "Review and use" }).click();
   await sheet.getByRole("button", { name: "Confirm use" }).click();
-  const receipt = page.getByRole("dialog", { name: "Use recorded" });
+  const receipt = page.getByRole("dialog", { name: "Saved on this phone" });
   await expect(receipt).toContainText("Saved on this phone");
   await expect(receipt.locator(".ss-receipt__ref strong")).toHaveText(/^SS-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
   await expect(receipt.getByRole("button", { name: "Use something else" })).toBeVisible();
@@ -176,7 +177,7 @@ test("self-service fits phones, tablets and desktops, with every screen and shee
   await expect(page.getByRole("dialog", { name: "Scissors" })).toContainText("The records show none left.");
 });
 
-test("self-service closed for maintenance: every address sends people to DOL staff, keeps waiting records, and reopens", async ({ page }) => {
+test("self-service closed for maintenance: every address sends people to DoL staff, keeps waiting records, and reopens", async ({ page }) => {
   let closed = false;
   await page.route("**/api/self-service/catalog", (route) => closed
     ? route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Self-Service is under maintenance.", maintenance: true }) })
@@ -184,17 +185,17 @@ test("self-service closed for maintenance: every address sends people to DOL sta
   await page.route("**/api/self-service/sync", (route) => route.abort());
   // A use recorded before the office closed Self-Service waits on the phone.
   await page.goto("/self-service?do=use&item=ITM-0300");
-  await page.getByRole("dialog", { name: "A4 Bond Paper" }).getByLabel("Your name").fill("Ana Reyes");
+  await identify(page.getByRole("dialog", { name: "A4 Bond Paper" }), "Ana Reyes");
   await page.getByRole("button", { name: "Review and use" }).click();
   await page.getByRole("button", { name: "Confirm use" }).click();
-  await page.getByRole("dialog", { name: "Use recorded" }).getByRole("button", { name: "Done" }).click();
+  await page.getByRole("dialog", { name: "Saved on this phone" }).getByRole("button", { name: "Done" }).click();
   closed = true;
   for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1366, height: 768 }]) {
     await page.setViewportSize(viewport);
     for (const route of ["/self-service", "/self-service?do=take&item=ITM-0043", "/self-service?do=activity"]) {
       await page.goto(route);
       await expect(page.getByRole("heading", { level: 1 })).toHaveText("Self-Service is under maintenance");
-      await expect(page.getByRole("heading", { name: "Ask DOL staff in person" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Ask DoL staff in person" })).toBeVisible();
       await expect(page.getByRole("dialog")).toHaveCount(0);
       await expect(page.locator(".ss-tile")).toHaveCount(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${route} at ${viewport.width}`).toBeTruthy();
@@ -220,7 +221,7 @@ test("administration tests a closed Self-Service in its own panel: records are t
   await page.route("**/api/self-service/sync", (route) => {
     const body = route.request().postData() ?? "";
     sent.push({ test: route.request().headers()["x-self-service-test"], body });
-    const id = /"v":1,"id":"([^"]+)"/.exec(body)![1];
+    const id = /"v":2,"id":"([^"]+)"/.exec(body)![1];
     return route.fulfill({ contentType: "application/json", body: JSON.stringify({ revision: 4, results: [{ id, outcome: "review", message: "Test saved. It waits for staff and changes nothing." }] }) });
   });
   await page.goto("/staff/admin/self-service");
@@ -230,7 +231,7 @@ test("administration tests a closed Self-Service in its own panel: records are t
   await panel.locator(".ss-card", { hasText: "Bottled Water" }).first().click();
   await panel.getByRole("link", { name: "Take", exact: true }).click();
   const sheet = panel.getByRole("dialog", { name: "Bottled Water" });
-  await sheet.getByLabel("Your name").fill("Owner One");
+  await identify(sheet, "Owner One");
   await sheet.getByRole("button", { name: "Review and take" }).click();
   await sheet.getByRole("button", { name: "Confirm take" }).click();
   await expect.poll(() => sent.length).toBe(1);
@@ -238,7 +239,7 @@ test("administration tests a closed Self-Service in its own panel: records are t
   expect(sent[0]!.body).toContain('"test":true');
   await expect(panel.getByRole("link", { name: /1 needs review/ })).toBeVisible();
   // Once staff accept it, the panel learns so on its next check and no longer waits.
-  const takeId = /"v":1,"id":"([^"]+)"/.exec(sent[0]!.body)![1];
+  const takeId = /"v":2,"id":"([^"]+)"/.exec(sent[0]!.body)![1];
   await page.route("**/api/self-service/decisions?*", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ results: [{ id: takeId, outcome: "accepted" }] }) }));
   await page.reload();
   await panel.getByRole("link", { name: /Synced/ }).click();
@@ -363,14 +364,133 @@ test("activity: a live refresh also refreshes the older pages on screen, so an e
     return route.fulfill({ contentType: "application/json", headers: { etag: `"v${version}"` }, body: JSON.stringify(body) });
   });
   await page.goto("/staff/activity?attention=1");
-  await expect(page.locator(".activity-row")).toHaveCount(2);
-  await page.getByRole("button", { name: "Load older" }).click();
+  // Two short rows leave the end of the feed in view, so the older page loads without a press.
   await expect(page.locator(".activity-row")).toHaveCount(4);
   version = 2;
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
   await expect(page.locator(".activity-row")).toHaveCount(3);
   await expect(page.locator(".activity-row", { hasText: "Item D" })).toHaveCount(0);
   await expect(page.locator("#activity-count")).toHaveText("3 entries");
+});
+
+test("activity: the page keeps one viewport and only the feed scrolls, loading older pages as it nears the end, up to a bounded count", async ({ page }) => {
+  const PAGE = 50;
+  const entry = (n: number) => ({ id: `phone:E${n}`, correlationId: `E${n}`, at: new Date(Date.UTC(2026, 9, 1, 2, 0) - n * 60_000).toISOString(), source: "PHONE", type: "PHONE_RETURN",
+    summary: `A phone return of 1 piece of Item ${n} was held for staff.`, actor: "Self-Service", actorId: "SELF_SERVICE", itemId: `ITM-${n}`, itemName: `Item ${n}`, unit: "piece",
+    change: 0, stockChanged: false, before: null, after: null, reason: null, note: null, attention: false });
+  const cursors: string[] = [];
+  await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", mustChangePassword: false, recovery: null, selfServiceReviews: 0 }) }));
+  await page.route("**/api/staff/activity*", (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    if (cursor) cursors.push(cursor);
+    const start = cursor ? Number(cursor) : 0;
+    // 1,000 entries exist; the page must stop asking at 300.
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify({ events: Array.from({ length: PAGE }, (_, index) => entry(start + index)), nextCursor: String(start + PAGE) }) });
+  });
+  const measure = () => page.evaluate(() => {
+    const feed = document.querySelector<HTMLElement>("#activity-feed")!;
+    const fits = (selector: string) => { const box = document.querySelector(selector)!.getBoundingClientRect(); return box.top >= 0 && box.bottom <= window.innerHeight && box.right <= window.innerWidth; };
+    const nav = document.querySelector<HTMLElement>(".app-nav");
+    const feedBottom = feed.getBoundingClientRect().bottom;
+    return {
+      pageGrows: document.documentElement.scrollHeight - window.innerHeight,
+      sideways: document.documentElement.scrollWidth - window.innerWidth,
+      feedScrolls: feed.scrollHeight > feed.clientHeight + 1, feedHeight: feed.clientHeight, overflowY: getComputedStyle(feed).overflowY,
+      searchReachable: fits("#activity-search"), filtersReachable: fits("#activity-filters"), sourcesReachable: fits("#activity-sources"),
+      // On a phone the bottom bar sits below the feed, never over it.
+      underBar: nav && getComputedStyle(nav).position === "fixed" ? feedBottom > nav.getBoundingClientRect().top + 1 : false,
+      rows: document.querySelectorAll(".activity-row").length
+    };
+  });
+  for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 820, height: 1100 }, { width: 1440, height: 900 }]) {
+    cursors.length = 0;
+    await page.setViewportSize(viewport);
+    await page.goto("/staff/activity");
+    await expect(page.locator(".activity-row")).toHaveCount(PAGE);
+    const first = await measure();
+    expect(first.pageGrows, `the page does not grow with history at ${viewport.width}`).toBeLessThanOrEqual(1);
+    expect(first.sideways, `no sideways scroll at ${viewport.width}`).toBeLessThanOrEqual(0);
+    expect(first.overflowY).toBe("auto");
+    expect(first.feedHeight, `the feed has room at ${viewport.width}`).toBeGreaterThan(200);
+    expect(first.feedScrolls, `the feed scrolls on its own at ${viewport.width}`).toBe(true);
+    expect(first.underBar).toBe(false);
+    // Scroll the feed to its end: the next page loads without pressing anything, the page itself never moves.
+    for (let step = 0; step < 12; step += 1) {
+      const rows = await page.locator(".activity-row").count();
+      if (rows >= 300) break;
+      await page.locator("#activity-feed").evaluate((feed) => { feed.scrollTop = feed.scrollHeight; });
+      await expect.poll(() => page.locator(".activity-row").count(), { message: `older page ${step + 1} loads at ${viewport.width}` }).toBeGreaterThan(rows);
+    }
+    await expect(page.locator(".activity-row")).toHaveCount(300);
+    await expect(page.locator("#activity-end")).toContainText("Showing the newest 300 entries");
+    await expect(page.locator("#activity-older")).toBeHidden();
+    await page.locator("#activity-feed").evaluate((feed) => { feed.scrollTop = feed.scrollHeight; });
+    await page.waitForTimeout(150);
+    expect(cursors.length, "no request past the cap").toBe(5);
+    const last = await measure();
+    expect(last.pageGrows).toBeLessThanOrEqual(1);
+    expect(last.rows).toBe(300);
+    // Search, source tabs and filters stay in view however far the feed has scrolled.
+    expect(last.searchReachable && last.filtersReachable && last.sourcesReachable, `controls stay reachable at ${viewport.width}`).toBe(true);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  }
+});
+
+test("activity: a short window, such as a phone on its side, lets the page scroll as before instead of squeezing the feed", async ({ page }) => {
+  const entry = (n: number) => ({ id: `phone:S${n}`, correlationId: `S${n}`, at: new Date(Date.UTC(2026, 9, 1, 2, 0) - n * 60_000).toISOString(), source: "PHONE", type: "PHONE_RETURN",
+    summary: `A phone return of 1 piece of Item ${n} was held for staff.`, actor: "Self-Service", actorId: "SELF_SERVICE", itemId: `ITM-${n}`, itemName: `Item ${n}`, unit: "piece",
+    change: 0, stockChanged: false, before: null, after: null, reason: null, note: null, attention: false });
+  await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", mustChangePassword: false, recovery: null, selfServiceReviews: 0 }) }));
+  await page.route("**/api/staff/activity*", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ events: Array.from({ length: 12 }, (_, index) => entry(index)), nextCursor: null }) }));
+  await page.setViewportSize({ width: 740, height: 360 });
+  await page.goto("/staff/activity");
+  await expect(page.locator(".activity-row")).toHaveCount(12);
+  const layout = await page.evaluate(() => ({ feedOverflow: getComputedStyle(document.querySelector("#activity-feed")!).overflowY, grows: document.documentElement.scrollHeight > window.innerHeight, feedHeight: document.querySelector<HTMLElement>("#activity-feed")!.clientHeight }));
+  expect(layout.feedOverflow).toBe("visible");
+  expect(layout.grows).toBe(true);
+  expect(layout.feedHeight).toBeGreaterThan(300);
+  await page.locator(".activity-row").last().scrollIntoViewIfNeeded();
+  await expect(page.locator(".activity-row").last()).toBeInViewport();
+});
+
+test("activity: on a phone the freshness line stays out of the way until the list stops updating", async ({ page }) => {
+  let online = true;
+  await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", mustChangePassword: false, recovery: null, selfServiceReviews: 0 }) }));
+  await page.route("**/api/staff/activity*", (route) => online ? route.fulfill({ contentType: "application/json", headers: { etag: '"a"' }, body: JSON.stringify({ events: [], nextCursor: null }) }) : route.abort("connectionrefused"));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/staff/activity");
+  await expect(page.getByText("No activity yet")).toBeVisible();
+  await expect(page.locator("#live-status")).toBeHidden();
+  online = false;
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(page.locator("#live-status")).toBeVisible();
+  await expect(page.locator("#live-status")).toHaveText("Offline, retrying");
+  // The title and the export button still share one line, and the page does not scroll sideways.
+  const [title, exportButton] = await Promise.all([page.getByRole("heading", { name: "Activity", level: 1 }).boundingBox(), page.getByRole("button", { name: "Export CSV" }).boundingBox()]);
+  expect(Math.abs((title!.y + title!.height / 2) - (exportButton!.y + exportButton!.height / 2))).toBeLessThan(24);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("activity: without scroll observation the button still loads older entries, and the feed is a focusable region", async ({ page }) => {
+  await page.addInitScript(() => { delete (window as { IntersectionObserver?: unknown }).IntersectionObserver; });
+  const entry = (n: number) => ({ id: `phone:K${n}`, correlationId: `K${n}`, at: new Date(Date.UTC(2026, 9, 1, 2, 0) - n * 60_000).toISOString(), source: "PHONE", type: "PHONE_RETURN",
+    summary: `A phone return of 1 piece of Item ${n} was held for staff.`, actor: "Self-Service", actorId: "SELF_SERVICE", itemId: `ITM-${n}`, itemName: `Item ${n}`, unit: "piece",
+    change: 0, stockChanged: false, before: null, after: null, reason: null, note: null, attention: false });
+  await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", mustChangePassword: false, recovery: null, selfServiceReviews: 0 }) }));
+  await page.route("**/api/staff/activity*", (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get("cursor");
+    const events = cursor ? [entry(3), entry(4)] : [entry(1), entry(2)];
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify({ events, nextCursor: cursor ? null : "2" }) });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/staff/activity");
+  await expect(page.locator(".activity-row")).toHaveCount(2);
+  await page.getByRole("button", { name: "Load older" }).click();
+  await expect(page.locator(".activity-row")).toHaveCount(4);
+  await expect(page.locator("#activity-end")).toHaveText("That is the beginning of the records.");
+  const feed = page.getByRole("region", { name: "Activity feed" });
+  await feed.focus();
+  await expect(feed).toBeFocused();
 });
 
 /* Public item photos (docs/specs/accepted/2026-10-03-public-item-photos-amendment.md): thumbnails in both lists and the Self-Service sheet. */
