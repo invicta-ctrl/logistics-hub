@@ -14,7 +14,9 @@ export type Known = { name: string; aliases?: string | null; category: string; i
  * knowledge base disagree, or the vote ties; both options are shown, each with its reason. No percentage is ever shown.
  */
 export type Tier = "STRONG" | "WEAK" | "CONFLICTING";
-export type Suggestion<T> = { value: T; why: string; tier: Tier; /** The other side of a Conflicting suggestion. */ other?: { value: T; why: string } };
+/** Where a suggestion's evidence came from: confirmed items, the built-in knowledge base, or what this session just added. */
+export type Basis = "CATALOG" | "KNOWLEDGE" | "SESSION";
+export type Suggestion<T> = { value: T; why: string; tier: Tier; basis: Basis; /** The other side of a Conflicting suggestion. */ other?: { value: T; why: string } };
 export type Suggestions = { behaviour?: Suggestion<Behaviour>; category?: Suggestion<string>; unit?: Suggestion<string>; stockArea?: Suggestion<string> };
 
 /** How many look-alike items vote. */
@@ -49,11 +51,11 @@ function tally<T>(values: T[]): Array<[T, number]> {
 function decide<T>(votes: T[], exact: boolean, why: string, hint: { value: T; why: string } | undefined): Suggestion<T> | undefined {
   const ranked = tally(votes);
   const top = ranked[0];
-  if (!top) return hint ? { value: hint.value, why: hint.why, tier: "WEAK" } : undefined;
+  if (!top) return hint ? { value: hint.value, why: hint.why, tier: "WEAK", basis: "KNOWLEDGE" } : undefined;
   const tied = ranked[1] !== undefined && ranked[1][1] === top[1];
-  if (tied) return { value: top[0], why, tier: "CONFLICTING", other: { value: ranked[1]![0], why } };
-  if (hint && hint.value !== top[0]) return { value: top[0], why, tier: "CONFLICTING", other: hint };
-  return { value: top[0], why, tier: exact || top[1] >= STRONG_VOTES ? "STRONG" : "WEAK" };
+  if (tied) return { value: top[0], why, tier: "CONFLICTING", basis: "CATALOG", other: { value: ranked[1]![0], why } };
+  if (hint && hint.value !== top[0]) return { value: top[0], why, tier: "CONFLICTING", basis: "CATALOG", other: hint };
+  return { value: top[0], why, tier: exact || top[1] >= STRONG_VOTES ? "STRONG" : "WEAK", basis: "CATALOG" };
 }
 
 /**
@@ -82,10 +84,10 @@ export function suggest(typed: string, catalog: readonly Known[], recent: readon
   const last = recent.filter((item) => item.category !== UNSORTED_CATEGORY);
   if (last[0]) {
     const same = <T>(pick: (item: Known) => T) => last.length >= 2 && last.slice(0, 2).every((item) => pick(item) === pick(last[0]!));
-    if (!out.category) out.category = { value: last[0].category, why: same((item) => item.category) ? "Same as your last two items" : "Same as your last item", tier: "WEAK" };
+    if (!out.category) out.category = { value: last[0].category, why: same((item) => item.category) ? "Same as your last two items" : "Same as your last item", tier: "WEAK", basis: "SESSION" };
     const behaviour = behaviourOf(last[0]);
-    if (!out.behaviour && behaviour && behaviour !== "REVIEW_LATER" && same((item) => behaviourOf(item))) out.behaviour = { value: behaviour, why: "Same as your last two items", tier: "WEAK" };
-    if (!out.stockArea && same((item) => item.stockArea ?? "Inventory")) out.stockArea = { value: last[0].stockArea ?? "Inventory", why: "Same as your last two items", tier: "WEAK" };
+    if (!out.behaviour && behaviour && behaviour !== "REVIEW_LATER" && same((item) => behaviourOf(item))) out.behaviour = { value: behaviour, why: "Same as your last two items", tier: "WEAK", basis: "SESSION" };
+    if (!out.stockArea && same((item) => item.stockArea ?? "Inventory")) out.stockArea = { value: last[0].stockArea ?? "Inventory", why: "Same as your last two items", tier: "WEAK", basis: "SESSION" };
   }
   return out;
 }

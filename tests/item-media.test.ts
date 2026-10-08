@@ -208,7 +208,7 @@ describe("adding a photo", () => {
     expect(actions()).toEqual(["ITEM_PHOTO_ADDED"]);
     expect(revision()).toBe(before + 1);
     expect((await listed()).photoId).toBe(photo.id);
-    expect((await detail()).photo).toEqual({ id: photo.id, width: 40, height: 30 });
+    expect((await detail()).photo).toEqual({ id: photo.id, width: 40, height: 30, cutout: false, cleanable: false });
   });
 
   it("stores the cleaned bytes, never what the client sent", async () => {

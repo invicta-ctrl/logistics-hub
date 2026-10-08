@@ -1,4 +1,5 @@
 import type { Who } from "./catalogue-offline";
+import { type DraftFieldName, composeDraft, needsAttention } from "./catalog-draft";
 import { suggest } from "./catalogue-suggest";
 import { type Detail, type Entry, type SessionRecord, type Snapshot, type SnapshotItem, drop, dropSession, durable, entries, keep, keepSession, sessions, setAccess, setSnapshot, snapshot } from "./catalogue-store";
 import { type PlaceList, bindNewPlace, newPlaceForm, placeList, placeOptions, refreshParents } from "./catalogue-places";
@@ -98,6 +99,16 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   let photoName: string | null = null;
   let photoChecked = false;
   let nameFromPhoto = false;
+  /** Each retake and form reset invalidates both in-flight preparation and model responses. */
+  let photoRevision = 0;
+  /** A typed empty name is still an explicit staff choice until this capture is reset. */
+  let nameEdited = false;
+  /** The same ownership rule for the Model field: a keystroke makes it the person's, and a retake or reset takes back only what the photo wrote. */
+  let modelEdited = false;
+  /** The count is the person's once they change it; the starting 1 is only a default (amendment §4). */
+  let quantityEdited = false;
+  let modelFromPhoto = false;
+  onLeave(() => { photoRevision += 1; });
   const thumbs = new Map<string, string>();
   const canAddPlace = who.mode === "signed-in";
 
@@ -131,13 +142,14 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         </fieldset>
         <div class="cat-qty field"><label for="cat-qty">How many are here?</label>
           <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One fewer">${icon("minus")}</button><input id="cat-qty" type="number" inputmode="numeric" min="0" max="100000" step="1" value="1" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div></div>
+        <p class="cat-suggest" id="cat-draft" role="status"></p>
         <div class="field-grid">
           <div class="field"><label for="cat-category">Category <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-category" list="cat-categories" maxlength="100" autocomplete="off" /><datalist id="cat-categories"></datalist><div class="cat-chips" id="cat-category-chips"></div></div>
           <div class="field"><label for="cat-unit">Counted in <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-unit" list="cat-units" maxlength="30" autocomplete="off" placeholder="piece, box, ream" /><datalist id="cat-units"></datalist><div class="cat-chips" id="cat-unit-chips"></div></div>
         </div>
         <details class="cat-more" id="cat-more"><summary>More details</summary>
           <div class="field-grid">
-            <div class="field"><label for="cat-model">Model <span class="field__optional">optional</span></label><input id="cat-model" maxlength="80" autocomplete="off" /></div>
+            <div class="field"><label for="cat-model">Model <span class="field__optional">optional</span></label><input id="cat-model" maxlength="80" autocomplete="off" aria-describedby="cat-model-hint" /><p class="cat-name-hint cat-name-hint--photo" id="cat-model-hint" aria-live="polite"></p></div>
             <div class="field"><label for="cat-serial">Serial number <span class="field__optional">optional</span></label><input id="cat-serial" maxlength="80" autocomplete="off" autocapitalize="characters" spellcheck="false" /></div>
           </div>
           <div class="field-grid">
@@ -244,9 +256,11 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         if (matches.length < 3 && !matches.some((each) => each.id === match.id)) matches.push({ ...match, reason: "Looks like it in the photo" });
       }
     }
+    drawDraft(raw);
     const hint = $("#cat-name-hint");
     mount(hint, nameFromPhoto ? html`${icon("camera")}Suggested from the photo. Check it, or type over it.` : html`A temporary name is fine if you are not sure.`);
     hint.classList.toggle("cat-name-hint--photo", nameFromPhoto);
+    mount($("#cat-model-hint"), modelFromPhoto ? html`${icon("camera")}Read from the photo. Check it, or type over it.` : html``);
     if (!matches.length) armed = false;
     drawMatches();
     for (const button of root.querySelectorAll<HTMLButtonElement>("[data-behaviour]")) {
@@ -281,10 +295,38 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     $("#cat-save").firstChild!.textContent = matches.length && armed ? "Save as a separate item " : "Save & next ";
   };
 
+  /** What a photo cannot settle, said once in plain words: the CatalogDraft decides which fields still need a person. */
+  const DRAFT_LABELS: Partial<Record<DraftFieldName, string>> = { category: "the category", unit: "what it is counted in", behaviour: "how it is handed out" };
+  /** The line last drawn. It is a polite status region, so it is only replaced when its words change: a redraw on every keystroke would read it out again. */
+  let draftText = "";
+  const drawDraft = (raw: ReturnType<typeof suggest>) => {
+    const say = (text: string) => { if (text === draftText) return; draftText = text; mount($("#cat-draft"), text ? html`${icon("info")}${text}` : html``); };
+    if (!photo) { say(""); return; }
+    const edited = new Set<DraftFieldName>();
+    const typed: Partial<Record<DraftFieldName, string>> = {};
+    const own = (name: DraftFieldName, text: string) => { if (text) { edited.add(name); typed[name] = text; } };
+    if (nameEdited) { edited.add("name"); typed.name = value("cat-name"); }
+    if (modelEdited) own("model", value("cat-model"));
+    if (quantityEdited) own("quantity", field("cat-qty").value);
+    own("category", value("cat-category"));
+    own("unit", value("cat-unit"));
+    if (behaviour) own("behaviour", behaviour);
+    const draft = composeDraft({ revision: photoRevision, typed, edited, suggestions: raw, photo: { name: photoName, model: modelFromPhoto ? value("cat-model") : null }, session: {}, defaultQuantity: 1 });
+    // Only what nothing has been offered for: a suggestion or a split is already named above ("Maybe: …", "Choose one"), and category and unit are optional under "Review later".
+    const optional = behaviour === "REVIEW_LATER";
+    const still = needsAttention(draft).filter((name) => DRAFT_LABELS[name] && draft[name].state === "unknown" && !(optional && (name === "category" || name === "unit"))).map((name) => DRAFT_LABELS[name]!);
+    const count = draft.quantity.state === "needs-confirmation" ? "Count what is on the shelf; a photo cannot show the real amount." : "";
+    const choose = still.length ? `Still to choose: ${still.join(", ")}.` : "";
+    say([count, choose].filter(Boolean).join(" "));
+  };
+
   let drawTimer = 0;
   const later = () => { window.clearTimeout(drawTimer); drawTimer = window.setTimeout(draw, 70); };
   onLeave(() => window.clearTimeout(drawTimer));
   form.addEventListener("input", () => { armed = false; later(); });
+  field("cat-qty").addEventListener("input", () => { quantityEdited = true; });
+  // Having looked at the count and left the field is confirming it, even when the shelf really holds 1.
+  field("cat-qty").addEventListener("blur", () => { if (photo && !quantityEdited) { quantityEdited = true; later(); } });
 
   const choose = (next: Behaviour) => { behaviour = next; armed = false; setMessage($("#cat-alert"), ""); $("#cat-behaviour").classList.remove("is-invalid"); draw(); };
   root.addEventListener("click", (event) => {
@@ -300,6 +342,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     else if (button.dataset.step) {
       const quantity = field("cat-qty");
       quantity.value = String(Math.min(100_000, Math.max(0, (Number(quantity.value) || 0) + Number(button.dataset.step))));
+      quantityEdited = true;
+      later();
     } else if (button.id === "cat-use-all") {
       if (suggestions.behaviour) behaviour = suggestions.behaviour.value;
       if (suggestions.category && !value("cat-category")) field("cat-category").value = suggestions.category.value;
@@ -327,35 +371,54 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const chosen = file.files?.[0];
     file.value = "";
     if (!chosen) return;
+    const revision = ++photoRevision;
     preparing = true;
     drawPhoto();
-    try { photo = await preparePhoto(chosen); setMessage($("#cat-alert"), ""); } catch (error) { setMessage($("#cat-alert"), error instanceof Error ? error.message : "This photo could not be used."); }
+    let prepared: NonNullable<typeof photo> | null = null;
+    let preparationError: string | null = null;
+    try { prepared = await preparePhoto(chosen); } catch (error) { preparationError = error instanceof Error ? error.message : "This photo could not be used."; }
+    // A newer retake (or a reset, which clears the flag itself) owns "Preparing…" now: an older one finishing late must not hide it.
+    if (revision !== photoRevision) return;
+    setMessage($("#cat-alert"), preparationError ?? "");
     preparing = false;
+    // A photo that could not be used leaves the earlier photo, its name and its check exactly as they were.
+    if (!prepared) { drawPhoto(); return; }
     armed = false;
     photoName = null;
     photoChecked = false;
     if (nameFromPhoto) { field("cat-name").value = ""; nameFromPhoto = false; }
+    if (modelFromPhoto) { field("cat-model").value = ""; modelFromPhoto = false; }
+    photo = prepared;
     drawPhoto();
     draw();
     field("cat-name").focus();
-    if (photo && online) void checkPhoto(photo);
+    if (online) void checkPhoto(prepared, revision);
   });
   /** Never in the way: the person keeps typing while it runs, and a failure leaves the photo to be checked after it syncs. */
-  const checkPhoto = async (taken: NonNullable<typeof photo>) => {
+  const checkPhoto = async (taken: NonNullable<typeof photo>, revision: number) => {
     try {
-      const answer = await api<{ name: string | null }>("/api/staff/catalogue/photo-name", { method: "POST", body: taken.thumb, headers: { "content-type": "image/jpeg" }, ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(15_000) } : {}) });
-      if (photo !== taken) return;
+      const answer = await api<{ name: string | null; model?: string | null }>("/api/staff/catalogue/photo-name", { method: "POST", body: taken.thumb, headers: { "content-type": "image/jpeg" }, ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(15_000) } : {}) });
+      if (revision !== photoRevision || photo !== taken) return;
       photoChecked = true;
       photoName = answer.name;
-      if (answer.name && !value("cat-name")) {
+      if (answer.name && !nameEdited && !value("cat-name")) {
         field("cat-name").value = answer.name;
         nameFromPhoto = true;
         announce(`Suggested name from the photo: ${answer.name}.`);
       }
+      // The model printed on the item, only into an empty Model field the person has not touched; they check it like the name.
+      if (answer.name && answer.model && !modelEdited && !value("cat-model")) {
+        field("cat-model").value = answer.model;
+        modelFromPhoto = true;
+        // The field sits under "More details": open it, say where the value came from, and announce it like the name.
+        $("#cat-more").setAttribute("open", "");
+        announce(`Model read from the photo: ${answer.model}. Check it.`);
+      }
       draw();
     } catch { /* checked after sync instead */ }
   };
-  field("cat-name").addEventListener("input", () => { if (nameFromPhoto) { nameFromPhoto = false; draw(); } });
+  field("cat-model").addEventListener("input", () => { modelEdited = true; modelFromPhoto = false; draw(); });
+  field("cat-name").addEventListener("input", () => { nameEdited = true; if (nameFromPhoto) { nameFromPhoto = false; draw(); } });
 
   /* ---------- Saving ---------- */
 
@@ -372,6 +435,12 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   const clear = (keepShared: boolean) => {
     const kept = keepShared ? { name: value("cat-name"), category: value("cat-category"), unit: value("cat-unit"), model: value("cat-model"), stock: $<HTMLSelectElement>("#cat-stock").value } : null;
     form.reset();
+    photoRevision += 1;
+    nameEdited = false;
+    modelEdited = false;
+    quantityEdited = false;
+    modelFromPhoto = false;
+    preparing = false;
     photo = null;
     photoName = null;
     photoChecked = false;

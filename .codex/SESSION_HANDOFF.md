@@ -1,5 +1,65 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Writer transfer Codex -> Claude Cloud (Earl, 2026-10-08 12:48 UTC)
+
+~~~text
+TASK: Controlled takeover after Codex usage exhaustion.
+STATUS: Claude Cloud is the sole writer on slice/v1.15-final-pass-qbqr20 (canonical). It contains origin/slice/v1.15-catalog-intelligence 3176c74 with no divergence (verified by git).
+CODEX LOCAL STATE: UNKNOWN (uncommitted Windows work not visible from the cloud). Codex's own handoff said it had pushed its checkpoint and yielded.
+RESUME RULE: Codex may resume only via a formal lock handoff on this same branch: Claude yields, Codex claims, same branch name.
+NEXT EXACT ACTION: see the FP-C step 1 block below.
+~~~
+
+## V1.15 Final Pass — FP-C step 1: structured photo reading (Claude Cloud, 2026-10-08)
+
+~~~text
+STATUS: CHECKPOINT PUSHED (Codex confirmed stopped; Claude Cloud is the sole writer on slice/v1.15-final-pass-qbqr20).
+CHANGED: src/ambient-assist.ts (Gemma now asked for name, brand, model, packaging in one call; readPhotoReading keeps each only as short printed text, drops command-like or people words; reading returned only beside a name); src/worker.ts photo-name route returns name/brand/model/packaging; src/catalogue-capture.ts fills an empty, untouched Model field from the photo with the same ownership rule as the name (retake/reset undo only what the photo wrote).
+VERIFIED: vitest ambient-assist + catalog-draft (26); tsc app; browser catalogue.spec photo group (8) and full file earlier (45) with PLAYWRIGHT_CHROMIUM_PATH=/opt/pw-browsers/chromium.
+UNRUN: full suite; any live Gemma call (the prompt change is mocked only; max_tokens 40->90, PHOTO_RESERVE 6 unchanged and must be re-measured on the first approved live call).
+REVIEW 1 FIXES (this commit): B1 Model prefill opens More details, shows 'Read from the photo' and announces; B2 PHOTO_RESERVE 6->10 and max_tokens 90->64 until a live smoke re-measures (Earl has not approved one); N1 name salvaged from a cut-off reply; N2 composeDraft owns only fields in `edited`, test added; N3 photo name is needs-confirmation; N4 failed new photo leaves the old photo/name/check; N5 clear() resets preparing; N6 route returns name+model only, one PhotoReading type; N7 'system'/'prompt'/'hand' no longer drop names, command filter applies to name.
+FP-D STEP 1 (mocked only): src/ai-roles.ts = Granite/Qwen/GLM adapters (runRole: per-role model, reserve 4/8/8 Neurons, max_tokens, breaker, strict allowlist reply check), ROUTE_STATE (all three SHADOW_EVALUATION: never reach a field, run only on an evaluation flag) and route() (0-2 calls; exact match = 0; GLM only with a conflict and >=1000 Neurons headroom). Reserves are unmeasured guesses. tests/ai-roles.test.ts (12). NOT wired into any route or screen; no live call. R1 (review): stale prepare no longer clears `preparing`; browser spec added (does not fail on the old code since the tile only redraws elsewhere; the flag matters to whenIdle).
+FP-D REVIEW FIXES: shadow roles return value null (answer only in `observed`, evaluation only); no `states` override in runRole (tests assign ROUTE_STATE); enable_thinking:false sent to all text roles (UNCONFIRMED on Qwen/GLM until the live smoke); Granite terms ranked by overlap before the 40 cap, >60-char terms skipped; GLM facts are fixed codes; router takes `used` Neurons and asks GLM only in the NORMAL band (<6,500). Live smoke NOT run: Earl's 'i approve' named no operation and the account was unconfirmed; asked in thread.
+LIVE SMOKE DONE 2026-10-08 (Earl approved): one call per model on a synthetic fixture, ~5.6 Neurons total; receipts in docs/road-to-v2/evidence/v1.15-final-pass-provider-smoke-2026-10-08.md. Found: Qwen returns its JSON in reasoning_content (reader fixed). Reserves now Gemma 6, Granite 1, Qwen 2, GLM 3. Account 879618e4 is NOT confirmed as the hausc.org account; REST not the Worker binding.
+G1/G2 DONE (Earl approved, account confirmed): max-size calls Granite 0.98, Qwen 1.57, GLM 1.00, Gemma 4.13 Neurons; the Worker AI binding reports usage.neurons. Reserves Gemma 6, Granite 2, Qwen 3, GLM 3. Free-tier entitlement still unproven.
+BENCHMARK (this commit): docs/road-to-v2/evidence/v1.15-final-pass-role-benchmark-2026-10-08.md. Granite 52%/55% and Qwen 38% precision on synthetic seed-catalogue variants: FAIL; all text roles stay SHADOW_EVALUATION. ~187 Neurons spent. Draft line wired (3338f7e). Open: Gemma/Qwen/GLM via Worker binding; FP-E; full suite; release record; PR.
+NOT YET: brand/packaging are returned but unused by the screen; composeDraft is not yet wired into draw().
+NEXT: wire composeDraft; FP-D adapters (Granite, Qwen, GLM) with the typed router on mocks; live smoke needs Earl's approval.
+~~~
+
+## V1.15 Final Pass — FP-B CatalogDraft contract (Claude Cloud, 2026-10-08)
+
+~~~text
+TASK: Typed CatalogDraft with field provenance and unknown states (FP-B contract freeze).
+STATUS: CHECKPOINT PUSHED. Contract and pure composer done and tested; NOT yet wired into the Add items screen. FP-A provider/quality gates, FP-C Gemma extraction, FP-D adapters, FP-E cutout, FP-F release: not started.
+BASE: Codex checkpoint 3176c74 (08883cb stale-photo guard) fast-forwarded onto this branch; main 8068b0e.
+BRANCH / WORKTREE: slice/v1.15-final-pass-qbqr20 / Claude Cloud container (Codex's slice/v1.15-catalog-intelligence is at 3176c74 and is superseded by this branch; Codex's local state is UNKNOWN beyond that push; the Windows writer lock was not visible from here).
+FILES: src/catalog-draft.ts (new); src/catalogue-suggest.ts (each Suggestion now carries basis CATALOG|KNOWLEDGE|SESSION); tests/catalog-draft.test.ts (new); tests/catalogue.test.ts and tests/item-knowledge.test.ts (basis in exact-equality assertions).
+CONTRACT: composeDraft() gives every Add items field value|null, source, reason, state (verified|suggested|needs-confirmation|unknown) and wasUserEdited. Person's entry wins (even a cleared name); quantity is a DEFAULT to confirm, never photo-verified; place/stock area come from the session; serial, expiry, reorder, notes are unknown; brand/model only from legible photo reading, always for checking; weak or split evidence needs confirmation and a split is never filled. isStale() drops results for an older revision.
+VERIFIED: vitest catalog-draft, item-knowledge, catalogue, catalog-ai, ambient-assist (85 passed); tsc app and worker clean; privacy scan 0 matches.
+UNRUN: full suite, browser suites, any provider call, held-out evaluation.
+NO inference, binding change, deployment, migration or production write.
+NEXT EXACT ACTION: wire composeDraft into src/catalogue-capture.ts draw() (replace the ad-hoc photoName/nameFromPhoto/nameEdited state), then FP-C Gemma structured extraction (brand/model/packaging) behind the same boundary; the 254-fixture baseline and held-out set need Earl's data decision.
+~~~
+
+## V1.15 Final Pass — FP-A baseline reconciled; FP-B photo-result safety checkpoint (Codex, 2026-10-08)
+
+~~~text
+TASK: First V1.15 Final-Pass runtime-integrated safety checkpoint.
+STATUS: CHECKPOINT PUSHED; reconciliation is complete, but FP-A provider/quality acceptance is not.
+BASE / UPSTREAM MAIN: 8068b0effd5b3aebde9bea0c5f61193b23ef4371.
+CHECKPOINT: 08883cb3849253630d2160ea78d2a8795c77ee98 (local and origin/slice equal before this documentation-only repair).
+BRANCH / WORKTREE: slice/v1.15-catalog-intelligence / D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub.
+RECOVERY: classified pre-reconciliation records are preserved at C:\Users\adria\.codex\private-recovery\v1.15-final-pass-20261008T115837Z; untracked NUL is untouched.
+FILES: src/catalogue-capture.ts; tests/browser/catalogue.spec.ts; .codex/CURRENT.md; .codex/SESSION_HANDOFF.md; docs/SHARED_AGENT_WORKFLOW.md.
+CONTRACT: every name input owns the field even when cleared; photo preparation/model results carry a revision and cannot update a retaken, reset, or left form.
+VERIFIED: npm run test:browser -- tests/browser/catalogue.spec.ts --grep 'delayed|retake' (2 passed); negative control without ownership guard failed by returning Stapler; npm run build passed; npm run verify:privacy reported 0 matches.
+UNRUN: full suite; held-out 100-photo licensed dataset/ground truth and photo-quality evaluation; provider smoke/availability; provider/production checks.
+PROVIDER: read-only evidence says Workers Free 45.93/10k UTC-today and hausc.org Transformations DISABLED with 0 usage. Images segmentation entitlement, private-source security, live model/cutout behavior, and photo accuracy remain unverified. No inference, binding/configuration, deployment, migration, or production write occurred.
+NEXT: manual receiver verifies the pushed same-branch HEAD/status, claims its named lock, then implements only typed CatalogDraft provenance/unknown states, grounded matching, and evaluation preparation. Do not restart, create another branch, run provider inference, or treat cloud sync as authorization.
+READY CLAUDE MESSAGE: In D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub, run git fetch origin --prune; verify origin/slice/v1.15-catalog-intelligence and local HEAD equal this checkpoint; verify status preserves only NUL; then npm run agent:claim -- claude. Continue on this same slice with typed CatalogDraft field provenance/unknown states plus deterministic grounded matching/evaluation preparation. Do not create a branch, restart FP-A, run provider calls, deploy, migrate, or infer live quality. Commit/push one coherent checkpoint, update this handoff, and yield manually.
+~~~
+
 ## V2.0 closed, Road to V3 prepared (NOT STARTED; Claude on Earl's workstation, 2026-10-08)
 
 ~~~text

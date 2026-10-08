@@ -89,13 +89,16 @@ describe("what may come back", () => {
 describe("the V1.11 second opinion stays a measurement", () => {
   it("is reached by no route or page: measured on 2026-10-07 and left off (V1.15 plan, Ambient AI Assist amendment)", () => {
     const users = readdirSync("src").filter((file) => /\.ts$/.test(file) && readFileSync(`src/${file}`, "utf8").includes("./catalog-ai"));
-    expect(users).toEqual(["suggest-evaluation.ts"]);
+    // ai-roles.ts takes only the reply-text helper, not the second opinion itself.
+    expect(users).toEqual(["ai-roles.ts", "suggest-evaluation.ts"]);
   });
 
-  it("the Workers AI binding is used by ambient assist alone, which the Worker alone calls", () => {
+  it("the Workers AI binding is used by ambient assist and the role adapters alone, and only ambient assist is reached by the Worker", () => {
     expect(readFileSync("wrangler.jsonc", "utf8")).toMatch(/"ai"\s*:\s*\{\s*"binding"\s*:\s*"AI"\s*\}/);
     const sources = readdirSync("src").filter((file) => /\.ts$/.test(file));
-    expect(sources.filter((file) => /\bai\.run\(|\.AI\.run\(/.test(readFileSync(`src/${file}`, "utf8")))).toEqual(["ambient-assist.ts"]);
+    expect(sources.filter((file) => /\bai\.run\(|\.AI\.run\(/.test(readFileSync(`src/${file}`, "utf8")))).toEqual(["ai-roles.ts", "ambient-assist.ts"]);
+    // The three text roles (ai-roles.ts) are measured by scripts/evaluate-roles.mjs and answer no staff request until a benchmark passes.
+    expect(sources.filter((file) => readFileSync(`src/${file}`, "utf8").includes("./ai-roles"))).toEqual([]);
     expect(sources.filter((file) => /env\.AI\b/.test(readFileSync(`src/${file}`, "utf8")))).toEqual(["worker.ts"]);
   });
 });

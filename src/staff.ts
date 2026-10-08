@@ -5,7 +5,7 @@ import { suggest, type Suggestion } from "./catalogue-suggest";
 import { BEHAVIOUR_LABELS, type Behaviour, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, behaviourFields, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
-import { type Photo, type PhotoPanel, openViewer, photoPanel, photoUrl, rowThumb } from "./item-photo";
+import { type Photo, type PhotoPanel, openViewer, photoPanel, photoUrl, rowThumb, shownUrl } from "./item-photo";
 import { MAX_DEPTH, PATH_SEPARATOR, REPORT_LABELS, type ReportKind, VISIBILITY_LABELS, ancestry, inOrder, pathOf, placesOf, withinPlace } from "./location-tree";
 import { type Step, openWhereIsIt } from "./where-is-it";
 import { type ItemLink, bindItemLinks } from "./item-links-panel";
@@ -1095,10 +1095,11 @@ export async function workspace(): Promise<void> {
     bindDetailsForm(item);
     photo = photoPanel(sheet.querySelector<HTMLElement>("#photo-panel")!, {
       visual: () => ({ ...detail!.item, photoId: detail!.item.photo?.id }), updatedAt: () => detail!.item.updatedAt,
-      id: item.id, name: item.name, photo: item.photo, noun: "photo", endpoint: `/api/staff/items/${encodeURIComponent(item.id)}/photo`, thumbUrl: (id) => photoUrl(id, "thumb"),
+      id: item.id, name: item.name, photo: item.photo, noun: "photo", endpoint: `/api/staff/items/${encodeURIComponent(item.id)}/photo`, cleanup: `/api/staff/items/${encodeURIComponent(item.id)}/cutout`,
+      thumbUrl: (id) => photoUrl(id, "thumb"),
       hintAdd: "Everyone sees this photo on the Lending Hub and Self-Service. Show the item itself, not people or documents.",
       hintHas: "Everyone sees this photo on the Lending Hub and Self-Service. The large version stays staff-only.", removeNote: "The item keeps its stock and history.",
-      view: (shown) => void openViewer(photoUrl(shown.id, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLElement>("#photo-panel [data-view] img"), item.name, resolveItemIcon(detail!.item).key),
+      view: (shown) => void openViewer(shownUrl(shown, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLElement>("#photo-panel [data-view] img"), item.name, resolveItemIcon(detail!.item).key),
       changed: async (next) => { if (detail?.item.id === item.id) detail = { ...detail, item: { ...detail.item, photo: next } }; await refreshStock(item.id); await poll.refresh(); },
       // Someone else changed the photo first: show theirs, and the list with it.
       refresh: async () => { await refreshStock(item.id); await poll.refresh(); }

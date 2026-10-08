@@ -385,6 +385,130 @@ test.describe("photo suggestions (ambient assist)", () => {
     await expect(page.locator("#cat-dup")).toBeEmpty();
   });
 
+  test("a delayed photo response respects a typed-and-cleared name", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    let requests = 0;
+    let release!: () => void;
+    await page.route("**/api/staff/catalogue/photo-name", async (route) => {
+      requests += 1;
+      await new Promise<void>((resolve) => { release = resolve; });
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "Stapler" }) });
+    });
+    await begin(page, server);
+    await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
+    await expect.poll(() => requests).toBe(1);
+    await name(page).fill("Staff choice");
+    await name(page).fill("");
+    const response = page.waitForResponse("**/api/staff/catalogue/photo-name");
+    release();
+    await (await response).finished();
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    await expect(name(page)).toHaveValue("");
+    await expect(page.locator("#cat-name-hint")).toHaveText("A temporary name is fine if you are not sure.");
+  });
+
+  test("the model read from the photo fills an empty Model field, and typing there keeps it the person's", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    let requests = 0;
+    await page.route("**/api/staff/catalogue/photo-name", async (route) => {
+      requests += 1;
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "Stapler", brand: "Max", model: requests === 1 ? "HD-10" : "HD-50", packaging: null }) });
+    });
+    await begin(page, server);
+    await page.locator("#cat-file").setInputFiles({ name: "first.png", mimeType: "image/png", buffer: PNG });
+    // The field is under "More details": it opens by itself and says where the value came from.
+    await expect(page.locator("#cat-model")).toBeVisible();
+    await expect(page.locator("#cat-model")).toHaveValue("HD-10");
+    await expect(page.locator("#cat-model-hint")).toContainText("Read from the photo");
+    await page.locator("#cat-model").fill("HD-10N");
+    await expect(page.locator("#cat-model-hint")).toBeEmpty();
+    await page.locator("#cat-file").setInputFiles({ name: "second.png", mimeType: "image/png", buffer: PNG });
+    await expect.poll(() => requests).toBe(2);
+    await expect(name(page)).toHaveValue("Stapler");
+    await expect(page.locator("#cat-model")).toHaveValue("HD-10N");
+  });
+
+  test("a photo says what it cannot settle: the real count", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    await page.route("**/api/staff/catalogue/photo-name", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "Stapler", model: null }) }));
+    await begin(page, server);
+    await expect(page.locator("#cat-draft")).toBeEmpty();
+    await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.locator("#cat-draft")).toContainText("a photo cannot show the real amount");
+    // Changing the count makes it the person's: the reminder about the count goes away.
+    await page.locator("#cat-qty").fill("12");
+    await expect(page.locator("#cat-draft")).not.toContainText("a photo cannot show the real amount");
+  });
+
+  test("the draft line is a polite status that is not redrawn while typing, and looking at the count and leaving it settles it", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    await page.route("**/api/staff/catalogue/photo-name", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "Stapler", model: null }) }));
+    await begin(page, server);
+    await expect(page.locator("#cat-draft")).toHaveAttribute("role", "status");
+    await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.locator("#cat-draft")).toContainText("a photo cannot show the real amount");
+    // A redraw with the same words keeps the same text node, so a screen reader is not told again.
+    await page.locator("#cat-draft").evaluate((element) => { (window as unknown as { mark: Node | null }).mark = element.lastChild; });
+    await page.locator("#cat-notes, #cat-name").first().fill("Stapler, grey");
+    await page.waitForTimeout(200);
+    expect(await page.locator("#cat-draft").evaluate((element) => (window as unknown as { mark: Node | null }).mark === element.lastChild)).toBe(true);
+    // The shelf really holds 1: opening the count and leaving it is the person's confirmation.
+    await page.locator("#cat-qty").focus();
+    await page.locator("#cat-name").focus();
+    await expect(page.locator("#cat-draft")).not.toContainText("a photo cannot show the real amount");
+  });
+
+  test("an older retake finishing late does not hide Preparing while a newer one is still running", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    await page.addInitScript(() => {
+      const real = window.createImageBitmap.bind(window);
+      let calls = 0;
+      (window as unknown as { releaseSecond: () => void }).releaseSecond = () => {};
+      window.createImageBitmap = (async (...args: Parameters<typeof real>) => {
+        calls += 1;
+        if (calls === 2) await new Promise<void>((resolve) => { (window as unknown as { releaseSecond: () => void }).releaseSecond = resolve; });
+        return real(...args);
+      }) as typeof window.createImageBitmap;
+    });
+    await page.route("**/api/staff/catalogue/photo-name", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: null }) }));
+    await begin(page, server);
+    await page.locator("#cat-file").setInputFiles({ name: "first.png", mimeType: "image/png", buffer: PNG });
+    await page.locator("#cat-file").setInputFiles({ name: "second.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.locator("#cat-photo")).toContainText("Preparing");
+    await page.evaluate(() => (window as unknown as { releaseSecond: () => void }).releaseSecond());
+    await expect(page.locator("#cat-photo img")).toBeVisible();
+  });
+
+  test("a retake ignores an older photo response that finishes last", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    let requests = 0;
+    let releaseFirst!: () => void;
+    await page.route("**/api/staff/catalogue/photo-name", async (route) => {
+      requests += 1;
+      if (requests === 1) {
+        await new Promise<void>((resolve) => { releaseFirst = resolve; });
+        await route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "First photo" }) });
+      } else await route.fulfill({ contentType: "application/json", body: JSON.stringify({ name: "Second photo" }) });
+    });
+    await begin(page, server);
+    await page.locator("#cat-file").setInputFiles({ name: "first.png", mimeType: "image/png", buffer: PNG });
+    await expect.poll(() => requests).toBe(1);
+    await page.locator("#cat-file").setInputFiles({ name: "second.png", mimeType: "image/png", buffer: PNG });
+    await expect.poll(() => requests).toBe(2);
+    await expect(name(page)).toHaveValue("Second photo");
+    const response = page.waitForResponse("**/api/staff/catalogue/photo-name");
+    releaseFirst();
+    await (await response).finished();
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+    await expect(name(page)).toHaveValue("Second photo");
+  });
+
   test("when the check fails, the capture still saves at once and asks for one check after it syncs", async ({ page }) => {
     const server = serve(page, { active: true });
     await server.ready;

@@ -54,6 +54,7 @@ export function memoryR2(): { bucket: R2Bucket; objects: Map<string, { bytes: Ui
       const object = objects.get(key);
       return object ? { body: new Blob([object.bytes as BlobPart]).stream(), httpMetadata: { contentType: object.contentType } } : null;
     },
+    head: async (key: string) => (objects.has(key) ? { key, size: objects.get(key)!.bytes.length } : null),
     delete: async (key: string) => { objects.delete(key); },
     list: async (options?: { prefix?: string }) => ({ objects: [...objects.keys()].filter((key) => key.startsWith(options?.prefix ?? "")).map((key) => ({ key })), truncated: false })
   };

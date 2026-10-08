@@ -1,13 +1,17 @@
 # Current Work Pointer — Logistics Hub
 
-## V1.15 Final Pass — four-model Ambient Intelligence — ACCEPTED, QUEUED FIRST, NOT STARTED — 2026-10-08
+## V1.15 Final Pass — four-model Ambient Intelligence — PARTIAL, PR READY FOR EARL TO MERGE — 2026-10-08
 
-ORDER: this runs before Road to V3 (Earl, 2026-10-08: "prepare for this too before the v3 roadmap"). RTV3-01 waits until it is complete or Earl changes the order.
-SPEC: `docs/specs/accepted/road-to-v2/2026-10-08-v1.15-final-pass-ai-intelligence-amendment.md` (ACCEPTED 2026-10-08: Earl's acceptance record, then his amendment text unchanged), listed in the V1.15 spec. Slices FP-A to FP-F (§9), proof matrix §12, Definition of Done §10.
-AUTHORITY: Earl's prompt `CLAUDE_V1_15_FINAL_PASS_FOUR_MODEL_IMPLEMENTATION_PROMPT.md` (SHA-256 `bb798e7187e1bc02ea023cd5fd1803502ef11493204708067735cb60aaf948df`). Additional V1.15 work on top of PR 22: not V2.1, not V3, and the V1.15 branch is not revived. Not authorized by it: production deploy, destructive migration, paid services, billing changes, unlimited provider tests.
-PREFLIGHT ALREADY DONE (read-only, 2026-10-08): `main` verified (CI, CodeQL, deploy, `admin verify` 12/12, migrations 30/30); the four model IDs exist in the account's Workers AI catalog: `@cf/google/gemma-4-26b-a4b-it` (live today), `@cf/ibm-granite/granite-4.0-h-micro`, `@cf/qwen/qwen3-30b-a3b-fp8`, `@cf/zai-org/glm-4.7-flash`. NOT checked: per-model Free-plan pricing/Neurons, Cloudflare Images `segment=foreground` access on this plan and whether it consumes Neurons, spend protection. No inference was run for the final pass.
-BRANCH: `slice/v1.15-catalog-intelligence` from verified `main` when it starts (amendment §1.2, `AGENTS.md`); none exists yet.
-NEXT_EXACT_ACTION: Earl says `start`. Then FP-A (read-only baseline re-check, writer lock, the slice branch), and the prompt's opening report (repo/branch/lock state, gaps, FP-A–FP-F ownership and dependencies, budget/privacy risks, first action) before FP-B.
+ORDER: Runs before Road to V3. Scope is additional V1.15 work only.
+SPEC: docs/specs/accepted/road-to-v2/2026-10-08-v1.15-final-pass-ai-intelligence-amendment.md.
+BRANCH: slice/v1.15-final-pass-qbqr20 (Claude Cloud), from verified main 8068b0e, contains Codex's slice/v1.15-catalog-intelligence checkpoint 3176c74; one writer only.
+RECORD: `docs/road-to-v2/releases/v1.15-final-pass.md` (STATUS: PARTIAL, with each gap and its next step). Evidence: `docs/road-to-v2/evidence/v1.15-final-pass-provider-smoke-2026-10-08.md` and `...-role-benchmark-2026-10-08.md`.
+DONE: typed CatalogDraft in Add items; Gemma reads name, brand, model and packaging; Granite, Qwen and GLM adapters with budgets and breakers (live smokes, binding reports Neurons), all three in SHADOW_EVALUATION because none passes its gate and none abstains; Cloudflare Images cutout code with the owner's switch (off), a 500 a month cap and browser-side judging, one real `segment=foreground` call succeeded on a synthetic fixture.
+NOT PROVEN: Gemma accuracy on real photos (needs Earl's photo-set decision); a cutout of real catalogue photos and its Neuron cost; the Free plan beyond Earl's statement; active use of any text role.
+OWNER ACTIONS (in the record): merge the PR, turn "Picture cleanup" on in Administration > System when ready (the `IMAGES` binding is in `wrangler.jsonc`; Earl's dashboard binding `IMAGES_BINDING` is replaced by it on deploy), delete merged branches. `slice/v1.15-catalog-intelligence` only after Earl confirms Codex has no local-only work (Codex's Windows state is UNKNOWN; it may resume only through a formal writer-lock handoff).
+NEXT: after the merge, refresh the V2.0 handoff's AI line (done in this PR as a dated addendum, history not rewritten), then `slice/ux-data-surface`.
+
+UI AMENDMENT (separate workstream): `docs/specs/accepted/2026-10-08-data-surface-ui-amendment.md` is ACCEPTED (Earl, 2026-10-08). It is scheduled as its own `slice/ux-data-surface` after the V1.15 Final Pass merges and before RTV3-01. Not started; it does not change Final Pass scope.
 
 ## Road to V3 — prepared on `main`, NOT STARTED — 2026-10-08
 

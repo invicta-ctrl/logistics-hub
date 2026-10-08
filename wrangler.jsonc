@@ -8,6 +8,9 @@
   "observability": { "enabled": true },
   // Workers AI for ambient assist (accepted amendment 2026-10-08, src/ambient-assist.ts). Not available in local development.
   "ai": { "binding": "AI" },
+  // Cloudflare Images for picture cleanup on item photos (Final Pass FP-E, src/item-cutout.ts). Cleans nothing until the owner turns
+  // "Picture cleanup" on in Administration > System; capped at 500 photos a month in the app.
+  "images": { "binding": "IMAGES" },
   "d1_databases": [
     {
       "binding": "DB",

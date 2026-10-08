@@ -12,6 +12,8 @@ type Status = {
   selfService: "open" | "paused" | null;
   /** Photo suggestions in Catalogue (ambient-assist.ts): the owner's switch and today's Workers AI use against the daily stop. */
   assist: { on: boolean; available: boolean; neuronsToday: number; band: "NORMAL" | "CONSERVE" | "RESERVE" | "CRITICAL" | "STOPPED"; stopAt: number };
+  /** Picture cleanup on item photos (item-cutout.ts): the owner's switch (off until turned on) and this month's photos sent against the cap. */
+  cleanup: { on: boolean; available: boolean; sentThisMonth: number; monthlyCap: number };
 };
 
 /** What the runbook (docs/DEPLOYMENT.md, Backups and restore) says protects what. The page adds nothing the runbook does not say. */
@@ -49,6 +51,14 @@ function assistRow(assist: Status["assist"], owner: boolean): Html {
   return row("Photo suggestions", state, html`${detail}${owner ? html` <button type="button" class="text-link" id="assist-toggle" data-on="${String(!assist.on)}">${assist.on ? "Turn off" : "Turn on"}</button>` : ""}`);
 }
 
+function cleanupRow(cleanup: Status["cleanup"], owner: boolean): Html {
+  const state = !cleanup.available ? tag("warn", "Not available here") : !cleanup.on ? tag("warn", "Off") : cleanup.sentThisMonth >= cleanup.monthlyCap ? tag("warn", "Paused for this month") : tag("ok", "On");
+  const detail = cleanup.available
+    ? html`${cleanup.sentThisMonth.toLocaleString("en-PH")} of ${cleanup.monthlyCap.toLocaleString("en-PH")} photos cleaned this month (UTC). Staff choose "Remove background" on an item's photo; the original is always kept.`
+    : html`This copy of the application has no Cloudflare Images. Photos are used as they are.`;
+  return row("Picture cleanup", state, html`${detail}${owner && cleanup.available ? html` <button type="button" class="text-link" id="cleanup-toggle" data-on="${String(!cleanup.on)}">${cleanup.on ? "Turn off" : "Turn on"}</button>` : ""}`);
+}
+
 function render(status: Status, owner: boolean): Html {
   const issues = problems(status);
   const level = status.database.migrations;
@@ -63,6 +73,7 @@ function render(status: Status, owner: boolean): Html {
         ${status.storage.map((bucket) => row(bucket.label, bucket.ok ? tag("ok", "Answering") : tag("bad", "Not answering"), bucket.ok ? html`${bucket.holds} <span class="muted">${quick(bucket)}</span>` : "It did not answer within two seconds."))}
         ${row("Self-Service", status.selfService === "open" ? tag("ok", "Open") : status.selfService === "paused" ? tag("warn", "Closed for maintenance") : tag("warn", "Unknown"), html`<a class="text-link" href="/staff/admin/self-service" data-route>${status.selfService === null ? "Open the Self-Service settings" : "Change it in Self-Service"}</a>`)}
         ${assistRow(status.assist, owner)}
+        ${cleanupRow(status.cleanup, owner)}
       </ul>
       <div class="form-actions form-actions--start admin-actions"><button type="button" class="button button--secondary" id="check-again">Check again</button></div>
     </section>
@@ -103,6 +114,12 @@ export async function systemStatus(): Promise<void> {
         const button = event.currentTarget as HTMLButtonElement;
         button.disabled = true;
         api("/api/staff/admin/assist", { method: "PATCH", body: JSON.stringify({ on: button.dataset.on === "true" }) })
+          .then(() => check(), (error) => { button.disabled = false; mount(target.querySelector("#system-summary")!, html`<p>${failure(error)}</p>`); });
+      });
+      document.querySelector<HTMLButtonElement>("#cleanup-toggle")?.addEventListener("click", (event) => {
+        const button = event.currentTarget as HTMLButtonElement;
+        button.disabled = true;
+        api("/api/staff/admin/cleanup", { method: "PATCH", body: JSON.stringify({ on: button.dataset.on === "true" }) })
           .then(() => check(), (error) => { button.disabled = false; mount(target.querySelector("#system-summary")!, html`<p>${failure(error)}</p>`); });
       });
     } catch (error) {

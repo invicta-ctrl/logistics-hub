@@ -144,6 +144,10 @@ Before yielding:
 
 The next agent reads the handoff, claims the lock, verifies HEAD/status, and continues the exact next action. It does not redo planning already settled.
 
+## Manual Codex ↔ Claude takeover on one slice
+
+A handoff is manual. The yielding writer commits and pushes one coherent checkpoint on the existing slice branch, updates SESSION_HANDOFF with the exact next task and verification, then yields its named lock. The receiving writer reads that record, verifies origin/slice HEAD and clean status, claims its own named lock, and continues on the same branch. Cloud-preview synchronization does not launch, claim, or authorize a writer.
+
 ## Usage-aware handoff
 
 At ~25% remaining usage or any warning:

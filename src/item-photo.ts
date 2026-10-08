@@ -1,7 +1,9 @@
+import { cutoutProblem, cutoutShares } from "./cutout-share";
 import { type VisualItem, itemIconSvg } from "./item-icons";
 import { ApiError, type Html, api, dataUrl, failure, html, icon, jpegOf, itemVisual, mount, raw, reducedMotion, toast } from "./ui";
 
-export type Photo = { id: string; width: number; height: number };
+/** `cutout`: a cleaned picture (background removed) is kept beside the original. `cleanable`: the Worker can make one (src/item-cutout.ts). */
+export type Photo = { id: string; width: number; height: number; cutout?: boolean; cleanable?: boolean };
 type Size = "thumb" | "display";
 
 /** Long sides of the two variants every photo is stored as: lists and the profile use the small one, the viewer the large one. */
@@ -10,6 +12,8 @@ const EDGES = { display: 1280, thumb: 320 } as const;
 const QUALITIES = [0.82, 0.6, 0.4];
 
 export const photoUrl = (id: string, size: Size) => `/api/staff/media/${id}/${size}`;
+/** The picture an item shows: its cleaned cutout when it has one, else the original at `size`. */
+export const shownUrl = (photo: Photo, size: Size) => (photo.cutout ? `/api/staff/media/${photo.id}/cutout` : photoUrl(photo.id, size));
 
 /** Decorative fixed-size item visual; only loaded real photos open the viewer. */
 export const rowThumb = (item: VisualItem): Html => itemVisual(item, (id) => photoUrl(id, "thumb"), "thumb");
@@ -53,6 +57,25 @@ export async function preparePhoto(file: File): Promise<Prepared> {
     for (const quality of QUALITIES.slice(1)) if (display.size > 900_000) display = await jpegOf(bitmap, EDGES.display, quality);
     return { display, thumb: await jpegOf(bitmap, EDGES.thumb, 0.8), preview: await dataUrl(display), hash: dhashOf(bitmap) };
   } finally { bitmap.close(); }
+}
+
+/**
+ * Judges the pending cut the Worker just made (not yet the item's picture) by drawing it small and reading its alpha channel (the Worker cannot afford to decode
+ * it). Answers null for a real cutout, or the sentence that says why not. A picture that cannot be loaded is not a cutout either.
+ */
+async function cutoutFault(id: string): Promise<string | null> {
+  try {
+    const response = await fetch(`/api/staff/media/${id}/pending`, { credentials: "same-origin", cache: "no-store" });
+    if (!response.ok) return "The cleaned picture could not be loaded.";
+    const bitmap = await createImageBitmap(await response.blob());
+    try {
+      const scale = Math.min(1, 160 / Math.max(bitmap.width, bitmap.height));
+      const canvas = Object.assign(document.createElement("canvas"), { width: Math.max(1, Math.round(bitmap.width * scale)), height: Math.max(1, Math.round(bitmap.height * scale)) });
+      const context = canvas.getContext("2d", { willReadFrequently: true })!;
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      return cutoutProblem(cutoutShares(context.getImageData(0, 0, canvas.width, canvas.height).data));
+    } finally { bitmap.close(); }
+  } catch { return "The cleaned picture could not be checked."; }
 }
 
 /* ---------- Viewer ---------- */
@@ -139,11 +162,11 @@ export type PhotoSubject = {
  * `[data-tile]` for the picture and a `[data-actions]` beside it for the buttons. `refresh` re-reads the record after
  * another person changed the picture first; `changed` runs after every save.
  */
-export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: string; name: string; photo: Photo | null; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo) => void; visual?: () => VisualItem; updatedAt?: () => string | null }): PhotoPanel {
+export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: string; name: string; photo: Photo | null; /** Item photos only: the route that cleans (POST) and restores (DELETE) the background, e.g. /api/staff/items/ITM-0001/cutout. */ cleanup?: string; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo) => void; visual?: () => VisualItem; updatedAt?: () => string | null }): PhotoPanel {
   const { id: itemId, name, noun, endpoint } = options;
   let photo = options.photo;
   let staged: Prepared | null = null;
-  let state: "" | "preparing" | "saving" | "removing" = "";
+  let state: "" | "preparing" | "saving" | "removing" | "cleaning" = "";
   let confirming = false;
   let error = "";
   const tile = host.querySelector<HTMLElement>("[data-tile]")!;
@@ -156,7 +179,16 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   input.setAttribute("aria-label", `Choose a ${noun} of ${name}`);
   host.append(input);
   const busy = () => state !== "";
+  /** The profile tile shows the cleaned picture when there is one. */
+  const tileUrl = (id: string) => (photo?.cutout && photo.id === id ? shownUrl(photo, "thumb") : options.thumbUrl(id));
   const show = (picture: Html, buttons: Html) => { mount(tile, picture); mount(actions, buttons); };
+
+  /** Item photos only: remove the background, or go back to the original. The original photo is never changed by either. */
+  const cleanButton = (): Html => {
+    if (!options.cleanup || !photo) return html``;
+    if (photo.cutout) return html`<button type="button" class="button button--ghost button--sm" data-original ${busy() ? "disabled" : ""}>Use original</button>`;
+    return photo.cleanable ? html`<button type="button" class="button button--ghost button--sm" data-clean ${busy() ? "disabled" : ""}>Remove background</button>` : html``;
+  };
 
   const draw = () => {
     const alert = error ? html`<p class="form-alert" role="alert">${icon("alert")}<span>${error}</span></p>` : "";
@@ -172,11 +204,11 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     }
     show(options.visual && options.visual().visualType === "SYSTEM_ICON"
       ? html`<div class="photo-tile">${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}</div>`
-      : html`<button type="button" class="photo-tile" data-view aria-label="View ${noun} of ${name}">${options.visual ? itemVisual({ ...options.visual(), photoId: photo.id }, options.thumbUrl, "profile-visual", true) : html`<img src="${options.thumbUrl(photo.id)}" alt="" width="160" height="160" />`}</button>`,
+      : html`<button type="button" class="photo-tile" data-view aria-label="View ${noun} of ${name}">${options.visual ? itemVisual({ ...options.visual(), photoId: photo.id }, tileUrl, "profile-visual", true) : html`<img src="${tileUrl(photo.id)}" alt="" width="160" height="160" />`}</button>`,
       html`${confirming
         ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>
             <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : `Remove ${noun}`}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>`
-        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-remove>Remove</button></div><p class="field__hint">${options.visual?.().visualType === "SYSTEM_ICON" ? "Your photo is saved. Select Real Photo to display it on the catalog." : options.hintHas}</p>`}${alert}`);
+        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-remove>Remove</button>${cleanButton()}</div>${state === "cleaning" ? html`<p class="field__hint" role="status">Working on the picture…</p>` : ""}<p class="field__hint">${options.visual?.().visualType === "SYSTEM_ICON" ? "Your photo is saved. Select Real Photo to display it on the catalog." : options.hintHas}</p>`}${alert}`);
   };
   const focus = (selector: string) => host.querySelector<HTMLElement>(selector)?.focus();
 
@@ -239,6 +271,32 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       } catch (problem) {
         await failed(problem);
       }
+    } else if ((target.closest("[data-clean]") || target.closest("[data-original]")) && photo && options.cleanup) {
+      const cleaning = Boolean(target.closest("[data-clean]"));
+      state = "cleaning";
+      error = "";
+      draw();
+      try {
+        // A new cut waits as pending: the browser judges it, and only an accepted one becomes the picture. A closed tab leaves the original.
+        let fault: string | null = null;
+        if (cleaning) {
+          const made = await api<{ pending?: boolean; cutout?: boolean }>(options.cleanup, { method: "POST", body: JSON.stringify({ expected: photo.id }) });
+          if (made.pending) {
+            fault = await cutoutFault(photo.id);
+            if (fault) await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
+            else await api(options.cleanup, { method: "POST", body: JSON.stringify({ expected: photo.id, accept: true }) });
+          }
+        } else await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
+        photo = { ...photo, cutout: cleaning && !fault };
+        state = "";
+        draw();
+        if (fault) { error = `${fault} The original photo is still in use.`; draw(); focus("[data-clean]"); return; }
+        toast(cleaning ? "Background removed. The original photo is kept." : "Using the original photo.");
+        void Promise.resolve(options.changed(photo)).catch(() => undefined);
+        focus(cleaning ? "[data-original]" : "[data-clean]");
+      } catch (problem) {
+        await failed(problem);
+      }
     } else if (target.closest("[data-remove-confirmed]") && photo) {
       state = "removing";
       draw();
@@ -258,5 +316,11 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   });
 
   draw();
-  return { render: (next) => { if (busy() || staged) return; photo = next; confirming = false; error = ""; draw(); } };
+  return { render: (next) => {
+    if (busy() || staged) return;
+    // A redraw replaces the buttons, so whichever one has focus is given it again.
+    const held = ["data-pick", "data-view", "data-remove", "data-clean", "data-original"].find((name) => host.querySelector(`[${name}]:focus`));
+    photo = next; confirming = false; error = ""; draw();
+    if (held) focus(`[${held}]`);
+  } };
 }

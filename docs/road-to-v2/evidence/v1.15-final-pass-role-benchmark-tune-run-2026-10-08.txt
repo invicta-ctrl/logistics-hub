@@ -1,0 +1,6 @@
+split TUNE (tuning half); catalogue names 394, this half 204; variants 603 (75 ambiguous set aside, 25 not in the catalogue); baseline alone: 530 resolved, 73 left to a model; near-tied 14
+Deterministic baseline, all variants: 603 cases (25 with no right name); truth offered in 578; baseline answered 530 (precision 99%); model answered 0 (coverage 0%, precision –, wrong 0, answered where no name was right 0); fixes 0, breaks 0; gate: {"pass":false,"why":"only 0 answers (needs 30)"}
+Granite on baseline-unresolved variants: 77 cases (25 with no right name); truth offered in 52; baseline answered 0 (precision –); model answered 77 (coverage 100%, precision 61%, wrong 30, answered where no name was right 25); fixes 47, breaks 0 (breaks are zero by construction here); gate: {"pass":false,"why":"precision 61% is under 95%"}
+Qwen on near-tied variants (baseline = nearest name): 29 cases (15 with no right name); truth offered in 14; baseline answered 29 (precision 45%); model answered 28 (coverage 97%, precision 46%, wrong 15, answered where no name was right 14); fixes 0, breaks 0; gate: {"pass":false,"why":"only 28 answers (needs 30)"}
+GLM follow-ups: {"CHECK_CATEGORY":3,"CHECK_NAME":3}
+calls 112 (ceiling 300), failed 0, Neurons 77.2 (ceiling 250), latency p50 563 ms, p95 1033 ms. These calls use the REST API and are not in the app's daily counter.
