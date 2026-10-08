@@ -8,6 +8,7 @@ import { aliasItems, catalogCoverage } from "./catalog-admin";
 import { insights, resumable } from "./home";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
+import { type ImagesRunner, cutoutPicture, hasCutout, makeCutout, removeCutout } from "./item-cutout";
 import { dropObjects, itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
 import { linkItems, linksOf, unlinkItems } from "./item-relations";
 import { checkKit, createKit, createTemplate, kitDetail, kitList, kitsOfItem, recentlyCatalogued, templateDetail, updateKit, updateTemplate } from "./kits";
@@ -38,6 +39,8 @@ export type Env = {
   SESSION_SECRET?: string;
   /** Workers AI (ambient-assist.ts). Absent in unit tests; under `wrangler dev --local` it refuses every call. Either way every assist stays silent. */
   AI?: AiRunner;
+  /** Cloudflare Images (item-cutout.ts). Absent unless the deployment adds the binding; then picture cleanup is simply not offered. */
+  IMAGES?: ImagesRunner;
 };
 
 /** Phones keep anything waiting and show the maintenance screen on this answer (offline-sync.ts). */
@@ -69,7 +72,7 @@ const LEASE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const leaseKey = (secret: string) => `catalogue-lease:${secret}`;
 /** Attention: "Keep both" on a possible duplicate found from a synced photo (ambient-assist.ts). */
 const KEEP_BOTH_PATH = /^\/api\/staff\/attention\/possible-duplicate\/(ITM-[A-Za-z0-9-]{1,24})$/;
-const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/location-report|\/visual)?$/;
+const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/cutout|\/location-report|\/visual)?$/;
 const LOCATION_PATH = /^\/api\/staff\/locations\/(LOC-\d{4,})(\/photo|\/move-items)?$/;
 const RELATION_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})\/links(?:\/(ITM-[A-Za-z0-9-]{1,24}))?$/;
 const KIT_PATH = /^\/api\/staff\/kits\/(KIT-\d{4,})(\/photo|\/checks)?$/;
@@ -497,11 +500,13 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     return json(await createItem(env.DB, account, parseItemInput(input), opening), 201);
   }
   const media = MEDIA_PATH.exec(path);
-  if (media && method === "GET") return itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!);
+  if (media && method === "GET") return media[2] === "cutout" ? cutoutPicture(env.CATALOG_MEDIA, media[1]!) : itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!);
   const match = ITEM_PATH.exec(path);
   if (match && !match[2] && method === "GET") {
     const [detail, freshness, kits, links] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!), linksOf(env.DB, match[1]!)]);
-    return json({ ...detail, freshness, kits, links });
+    // Whether this photo has a cleaned picture, and whether cleaning is offered at all (the Images binding is present).
+    const cleaned = detail.item.photo ? await hasCutout(env.CATALOG_MEDIA, detail.item.photo.id) : false;
+    return json({ ...detail, item: { ...detail.item, photo: detail.item.photo ? { ...detail.item.photo, cutout: cleaned, cleanable: Boolean(env.IMAGES) } : null }, freshness, kits, links });
   }
   if (match && !match[2] && method === "PATCH") {
     const input = await body() as Record<string, unknown> | null;
@@ -522,9 +527,11 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     // first photo are saved. The save above has already answered; this cannot change it.
     // Then up to two earlier captures whose check could not run yet (AI was off, out of allowance or failing) get theirs.
     if (form.get("recheck") === "1" && form.get("expected") === "") await afterwards(recheckCapturedPhoto(env.DB, env.AI, env.CATALOG_MEDIA, match[1]!).then(() => recheckWaiting(env.DB, env.AI, env.CATALOG_MEDIA)));
-    return json(saved);
+    return json({ photo: { ...saved.photo, cleanable: Boolean(env.IMAGES) } });
   }
   if (match?.[2] === "/photo" && method === "DELETE") return json(await removeItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
+  if (match?.[2] === "/cutout" && method === "POST") return json(await makeCutout(env.DB, env.CATALOG_MEDIA, env.IMAGES, account, match[1]!, (await body() as { expected?: unknown } | null)?.expected));
+  if (match?.[2] === "/cutout" && method === "DELETE") return json(await removeCutout(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
   if (match?.[2] === "/open-units" && method === "POST") return json(await openUnitAction(env.DB, account, match[1]!, await body()));
   if (match?.[2] === "/loans" && method === "POST") {
     const form = await request.formData().catch(() => null);

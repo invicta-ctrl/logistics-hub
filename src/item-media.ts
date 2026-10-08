@@ -142,6 +142,8 @@ export const CHANGED = "Someone else changed this photo. Reload to see the lates
 
 /** Removes a photo's objects. D1 no longer points at them, so a failure here only leaves an unused file behind. */
 export async function dropObjects(bucket: R2Bucket, mediaId: string, folder: "items" | "locations" | "kits" = "items"): Promise<void> {
+  // An item photo may also have a cleaned picture (src/item-cutout.ts); it goes with the photo.
+  if (folder === "items") await bucket.delete(`items/${mediaId}/cutout`).catch(() => { console.error("media_cleanup_failed", { mediaId, variant: "cutout" }); });
   await Promise.all((Object.keys(VARIANTS) as Variant[]).map((variant) => bucket.delete(key(mediaId, variant, folder)).catch(() => {
     console.error("media_cleanup_failed", { mediaId, variant });
   })));
