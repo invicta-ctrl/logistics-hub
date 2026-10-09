@@ -7,6 +7,7 @@ import { migratedD1 } from "./d1-sqlite";
 /* The Workers AI second opinion's boundary (amendment §13.2–13.3): what may be sent, what may come back, and that nothing calls it yet. */
 
 const options = { categories: ["Office Equipment and Supplies", "Medical Supplies", "UNSORTED", "Medical Supplies"], units: ["piece", "box", "roll"] };
+const reviewedFixtures = (count: number) => Array.from({ length: count }, (_, index) => ({ name: `Evaluation item ${index}`, aliases: null, category: `Evaluation category ${index}`, itemType: "Consumable", consumptionMode: "WHOLE_UNIT", unit: `unit-${index}`, stockArea: "Inventory", status: "ACTIVE", needsReview: false }));
 
 describe("the payload allowlist", () => {
   it("sends the typed name, its other names and the live option lists, and nothing else a record carries", () => {
@@ -36,8 +37,10 @@ describe("the payload allowlist", () => {
 
   it("the measurement hands the model only payloads, never records", async () => {
     const { sqlite } = migratedD1();
-    const catalog = (sqlite.prepare("SELECT name, aliases, category, item_type AS itemType, consumption_mode AS consumptionMode, unit, stock_area AS stockArea, status FROM items").all() as Array<Record<string, string>>)
-      .slice(0, 60).map((item) => ({ ...item, notes: "SECRET-NOTE", id: "ITM-SECRET" })) as unknown as Parameters<typeof evaluateWithAi>[0];
+    const seeded = (sqlite.prepare("SELECT name, aliases, category, item_type AS itemType, consumption_mode AS consumptionMode, unit, stock_area AS stockArea, status, needs_review AS needsReview FROM items").all() as Array<Record<string, unknown>>)
+      .slice(0, 60).map(({ needsReview, ...item }) => ({ ...item, needsReview: Number(needsReview) !== 0, notes: "SECRET-NOTE", id: "ITM-SECRET" }));
+    expect(seeded.every((item) => typeof item.needsReview === "boolean")).toBe(true);
+    const catalog = [...seeded, ...reviewedFixtures(6)] as unknown as Parameters<typeof evaluateWithAi>[0];
     const seen: AiPayload[] = [];
     const result = await evaluateWithAi(catalog, async (payload) => { seen.push(payload); return { response: "{}" }; }, 1_000);
     expect(seen.length).toBe(result.calls);
@@ -46,6 +49,15 @@ describe("the payload allowlist", () => {
       expect(Object.keys(payload).sort()).toEqual(["aliases", "name", "options"]);
       expect(JSON.stringify(payload)).not.toContain("SECRET");
     }
+  });
+
+  it("excludes unreviewed records from the measurement", async () => {
+    let calls = 0;
+    const [reviewed, unreviewed] = reviewedFixtures(2);
+    const catalog = [reviewed, { ...unreviewed, needsReview: true }] as unknown as Parameters<typeof evaluateWithAi>[0];
+    const result = await evaluateWithAi(catalog, async () => { calls += 1; return { response: "{}" }; }, 1_000);
+    expect(result).toMatchObject({ items: 1, calls: 1 });
+    expect(calls).toBe(1);
   });
 });
 
@@ -77,7 +89,10 @@ describe("what may come back", () => {
 
   it("the measurement survives a failing provider and stops at its call limit", async () => {
     const { sqlite } = migratedD1();
-    const catalog = sqlite.prepare("SELECT name, aliases, category, item_type AS itemType, consumption_mode AS consumptionMode, unit, stock_area AS stockArea, status FROM items").all() as unknown as Parameters<typeof evaluateWithAi>[0];
+    const seeded = (sqlite.prepare("SELECT name, aliases, category, item_type AS itemType, consumption_mode AS consumptionMode, unit, stock_area AS stockArea, status, needs_review AS needsReview FROM items").all() as Array<Record<string, unknown>>)
+      .map(({ needsReview, ...item }) => ({ ...item, needsReview: Number(needsReview) !== 0 }));
+    expect(seeded.every((item) => typeof item.needsReview === "boolean")).toBe(true);
+    const catalog = [...seeded, ...reviewedFixtures(6)] as unknown as Parameters<typeof evaluateWithAi>[0];
     const failing = await evaluateWithAi(catalog, async () => { throw new Error("3040: Out of capacity"); }, 5);
     expect(failing.calls).toBe(5);
     expect(failing.failed).toBe(5);

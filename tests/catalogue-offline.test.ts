@@ -241,8 +241,8 @@ describe("the catalog snapshot", () => {
     const response = await as(session, "/api/staff/catalogue/snapshot");
     const body = (await response.json()) as { revision: number; items: Array<Record<string, unknown>>; categories: string[]; units: string[]; places: Array<Record<string, unknown>> };
     const tape = body.items.find((item) => item.name === "Gaffer tape")!;
-    expect(Object.keys(tape).sort()).toEqual(["aliases", "category", "consumptionMode", "id", "itemType", "locationId", "model", "name", "onHand", "photoHash", "serialNumber", "status", "stockArea", "unit"]);
-    expect(tape).toMatchObject({ model: "GT-2", serialNumber: "SN-9", onHand: 3, locationId: shelf });
+    expect(Object.keys(tape).sort()).toEqual(["aliases", "category", "consumptionMode", "id", "itemType", "locationId", "model", "name", "needsReview", "onHand", "photoHash", "serialNumber", "status", "stockArea", "unit"]);
+    expect(tape).toMatchObject({ model: "GT-2", serialNumber: "SN-9", needsReview: true, onHand: 3, locationId: shelf });
     expect(JSON.stringify(body)).not.toContain("Private note");
     expect(body.places).toEqual([{ id: shelf, name: "Shelf 2", parentId: null, active: true, directions: null }]);
     expect(body.categories).toContain("SUPPLIES");

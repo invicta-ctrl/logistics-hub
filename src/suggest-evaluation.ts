@@ -64,7 +64,7 @@ export type AiEvaluation = { items: number; calls: number; failed: number; skipp
  * `ask` receives only `aiPayload`'s output, never the record. `limit` caps the calls; items past it are counted as skipped.
  */
 export async function evaluateWithAi(catalog: readonly Known[], ask: (payload: AiPayload) => Promise<unknown>, limit: number): Promise<AiEvaluation> {
-  const items = catalog.filter(confirmed);
+  const items = catalog.filter(verified);
   const cell = (): AiCell => ({ n: 0, answered: 0, aiRight: 0, builtInRight: 0, eitherRight: 0 });
   const empty = (): Record<Soft, AiCell> => ({ WEAK: cell(), CONFLICTING: cell(), NONE: cell() });
   const result: AiEvaluation = { items: items.length, calls: 0, failed: 0, skipped: 0, fields: { behaviour: empty(), unit: empty(), category: empty() } };
