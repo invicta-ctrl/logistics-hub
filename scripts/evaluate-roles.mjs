@@ -7,6 +7,7 @@
 // is no answer). Hard ceilings below cannot be raised from the command line. Needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN. Calls go one at a time, stop at --stop-neurons, and count against the account's
 // daily Workers AI allowance. Only a Free-tier, owner-approved run should use it.
 import { build } from "esbuild";
+import { fileURLToPath } from "node:url";
 
 const arg = (name, fallback) => process.argv.includes(name) ? Number(process.argv[process.argv.indexOf(name) + 1]) : fallback;
 const dry = process.argv.includes("--dry");
@@ -19,7 +20,7 @@ const splitFlag = process.argv.includes("--split") ? process.argv[process.argv.i
 if (splitFlag !== "tune" && splitFlag !== "test") { console.error("--split is tune or test."); process.exit(1); }
 const split = splitFlag.toUpperCase();
 const summaryPath = process.argv.includes("--summary") ? process.argv[process.argv.indexOf("--summary") + 1] : null;
-const root = new URL("..", import.meta.url).pathname;
+const root = fileURLToPath(new URL("..", import.meta.url));
 const { outputFiles } = await build({
   stdin: {
     resolveDir: root,

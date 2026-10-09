@@ -16,12 +16,12 @@ const active = () => { for (const role of Object.keys(ROUTE_STATE) as TextRole[]
 beforeEach(() => { Object.assign(ROUTE_STATE, SHADOW); db = migratedD1().d1; sent = []; answer = () => chat('{"term":"Stapler"}', 1.2); resetBreaker(); resetRoleBreakers(); });
 
 describe("the four roles", () => {
-  it("maps each role to its accepted model, and starts every text role in shadow", () => {
+  it("maps each role to its accepted model, and starts every text role review-only", () => {
     expect(ROLE_MODELS).toEqual({
       VISION_EXTRACT: "@cf/google/gemma-4-26b-a4b-it", TEXT_NORMALIZE: "@cf/ibm-granite/granite-4.0-h-micro",
       CANDIDATE_ARBITRATE: "@cf/qwen/qwen3-30b-a3b-fp8", RARE_SECOND_OPINION: "@cf/zai-org/glm-4.7-flash"
     });
-    expect(Object.values(ROUTE_STATE)).toEqual(["SHADOW_EVALUATION", "SHADOW_EVALUATION", "SHADOW_EVALUATION"]);
+    expect(Object.values(ROUTE_STATE)).toEqual(["REVIEW_ONLY", "REVIEW_ONLY", "REVIEW_ONLY"]);
   });
 });
 
@@ -30,7 +30,7 @@ describe("reading a reply", () => {
     const task = normalizeTask("staplr", ["Stapler", "Hole puncher"]);
     expect(readChoice(chat('{"term":"Stapler"}'), task)).toBe("Stapler");
     expect(readChoice({ response: { term: "Stapler" } }, task)).toBe("Stapler");
-    for (const bad of ['{"term":"stapler"}', '{"term":"Calculator"}', '{"term":null}', '{"other":"Stapler"}', "[]", "not json", ""]) expect(readChoice(chat(bad), task), bad).toBeNull();
+    for (const bad of ['{"term":"stapler"}', '{"term":"Calculator"}', '{"term":null}', '{"other":"Stapler"}', '{"term":"Stapler","extra":true}', "[]", "not json", ""]) expect(readChoice(chat(bad), task), bad).toBeNull();
     expect(readChoice(null, task)).toBeNull();
   });
 
@@ -63,12 +63,32 @@ describe("reading a reply", () => {
 describe("running a role", () => {
   const task = () => normalizeTask("staplr", ["Stapler", "Hole puncher"]);
 
-  it("stays silent in shadow unless a bounded evaluation asks, and never sends anything then", async () => {
-    expect(await runRole(db, ai, "TEXT_NORMALIZE", task(), "USER")).toMatchObject({ outcome: "ABSTAIN", reason: "SHADOW_ONLY", value: null, observed: null, shadow: true });
+  it("returns a typed review-only proposal without a trusted value or observation", async () => {
+    expect(await runRole(db, ai, "TEXT_NORMALIZE", task(), "USER")).toMatchObject({ outcome: "ANSWER", value: null, observed: null, proposal: { kind: "REVIEW_ONLY", role: "TEXT_NORMALIZE", field: "term", value: "Stapler" }, shadow: false });
+    expect(sent).toHaveLength(1);
+  });
+
+  it("keeps Qwen and GLM answers as typed review-only proposals", async () => {
+    answer = () => chat('{"id":"a"}');
+    expect(await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("x", [{ id: "a", name: "A" }, { id: "b", name: "B" }]), "USER")).toMatchObject({ value: null, observed: null, proposal: { kind: "REVIEW_ONLY", role: "CANDIDATE_ARBITRATE", field: "id", value: "a" } });
+    answer = () => chat('{"follow_up":"CHECK_CATEGORY"}');
+    expect(await runRole(db, ai, "RARE_SECOND_OPINION", secondOpinionTask(["CATEGORY_SPLIT"]), "USER")).toMatchObject({ value: null, observed: null, proposal: { kind: "REVIEW_ONLY", role: "RARE_SECOND_OPINION", field: "follow_up", value: "CHECK_CATEGORY" } });
+    answer = () => chat('{"id":"a","extra":true}');
+    expect(await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("x", [{ id: "a", name: "A" }, { id: "b", name: "B" }]), "USER")).toMatchObject({ outcome: "ABSTAIN", reason: "NO_VALID_ANSWER", value: null, proposal: null, observed: null });
+  });
+
+  it("rejects a task whose proposal field does not belong to its role", async () => {
+    expect(await runRole(db, ai, "CANDIDATE_ARBITRATE", task(), "USER")).toMatchObject({ outcome: "ABSTAIN", reason: "TASK_MISMATCH", value: null, proposal: null, observed: null });
+    expect(sent).toHaveLength(0);
+  });
+
+  it("keeps observations for explicit shadow evaluation only", async () => {
+    ROUTE_STATE.TEXT_NORMALIZE = "SHADOW_EVALUATION";
+    expect(await runRole(db, ai, "TEXT_NORMALIZE", task(), "USER")).toMatchObject({ outcome: "ABSTAIN", reason: "SHADOW_ONLY", value: null, proposal: null, observed: null, shadow: true });
     expect(sent).toHaveLength(0);
     // Even in an evaluation the usable value stays null; the answer is only in `observed`.
     const evaluated = await runRole(db, ai, "TEXT_NORMALIZE", task(), "USER", { evaluation: true });
-    expect(evaluated).toMatchObject({ outcome: "ANSWER", value: null, observed: "Stapler", shadow: true, neurons: 1.2 });
+    expect(evaluated).toMatchObject({ outcome: "ANSWER", value: null, proposal: null, observed: "Stapler", shadow: true, neurons: 1.2 });
     expect(sent[0]!.model).toBe(ROLE_MODELS.TEXT_NORMALIZE);
   });
 
@@ -136,11 +156,13 @@ describe("the router", () => {
     expect(route({ ...base, exactMatch: true, unmatchedName: "x", terms: ["a"], candidates: [{ id: "1", name: "a" }, { id: "2", name: "b" }] })).toEqual([]);
     expect(route(base)).toEqual([]);
   });
-  it("asks Granite only when the rules failed and terms exist, Qwen only with two or more candidates, never more than two", () => {
+  it("asks at most one role: Qwen takes priority, then Granite only for a relevant normalization", () => {
     expect(route({ ...base, unmatchedName: "staplr", terms: ["Stapler"] })).toEqual(["TEXT_NORMALIZE"]);
+    expect(route({ ...base, unmatchedName: "staplr", terms: ["Hole puncher"] })).toEqual([]);
     expect(route({ ...base, unmatchedName: "staplr", terms: [] })).toEqual([]);
     expect(route({ ...base, candidates: [{ id: "1", name: "a" }] })).toEqual([]);
-    expect(route({ ...base, unmatchedName: "x", terms: ["a"], candidates: [{ id: "1", name: "a" }, { id: "2", name: "b" }], conflict: ["UNIT_SPLIT"] })).toEqual(["TEXT_NORMALIZE", "CANDIDATE_ARBITRATE"]);
+    expect(route({ ...base, candidates: [{ id: "1", name: "a" }, { id: "1", name: "b" }, { id: "", name: "c" }, { id: "2", name: " " }] })).toEqual([]);
+    expect(route({ ...base, unmatchedName: "x", terms: ["a"], candidates: [{ id: "1", name: "a" }, { id: "2", name: "b" }], conflict: ["UNIT_SPLIT"] })).toEqual(["CANDIDATE_ARBITRATE"]);
   });
   it("keeps GLM for a rare conflict with ample allowance", () => {
     expect(route({ ...base, conflict: ["CATEGORY_SPLIT"] })).toEqual(["RARE_SECOND_OPINION"]);

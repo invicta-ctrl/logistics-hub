@@ -6,14 +6,14 @@ import { words } from "./duplicates";
  * The four model roles of the Final Pass (amendment §5), behind the one boundary in ambient-assist.ts. Each role is a real adapter: its
  * own model, narrow task, strict reply check, token and time limits, Neuron reserve and breaker. Gemma's photo call stays in
  * ambient-assist.ts (VISION_EXTRACT); this file carries the three text roles and the router that decides, from what the Hub already
- * knows, which of them (if any) to ask. A role whose measured quality has not passed runs in SHADOW_EVALUATION: it is called only by
- * a bounded evaluation, and its answer never reaches a field. Nothing here writes a record; an answer is a value picked from a list
- * the caller supplied, or null.
+ * knows, which of them (if any) to ask. A role whose measured quality has not passed starts REVIEW_ONLY: it may produce a bounded
+ * proposal for a person, but never a trusted field value. SHADOW_EVALUATION remains limited to bounded evaluations. Nothing here
+ * writes a record; an answer is a value picked from a list the caller supplied, or null.
  */
 
 export type ModelRole = "VISION_EXTRACT" | "TEXT_NORMALIZE" | "CANDIDATE_ARBITRATE" | "RARE_SECOND_OPINION";
-/** Amendment §5.1. A role is ACTIVE_ELIGIBLE only after its held-out quality gate passed (§7.3); until then it is shadow only. */
-export type RouteState = "ACTIVE_ELIGIBLE" | "SHADOW_EVALUATION";
+/** Amendment §5.1. A role is ACTIVE_ELIGIBLE only after its held-out quality gate passed (§7.3); until then it is review-only. */
+export type RouteState = "ACTIVE_ELIGIBLE" | "REVIEW_ONLY" | "SHADOW_EVALUATION";
 
 export const ROLE_MODELS: Record<ModelRole, string> = {
   VISION_EXTRACT: "@cf/google/gemma-4-26b-a4b-it",
@@ -34,23 +34,27 @@ export const ROLE_LIMITS: Record<Exclude<ModelRole, "VISION_EXTRACT">, { reserve
   RARE_SECOND_OPINION: { reserve: 3, maxTokens: 80, thinkingOption: true }
 };
 /**
- * All three start in shadow: Granite failed its first classification test (13% and 24%), and Qwen and GLM have no held-out result at
- * all. Changed only by a reviewed commit after a role passes its gate (amendment §7.3); production code passes no override, and only
- * tests assign to it.
+ * All three start review-only: Granite failed its first classification test (13% and 24%), and Qwen and GLM have no held-out result at
+ * all. A proposed answer needs a person's Keep, Reject or Correct decision before it can affect a draft. ACTIVE_ELIGIBLE remains a
+ * future reviewed-gate state; production code passes no override, and only tests assign to it.
  */
 export const ROUTE_STATE: Record<Exclude<ModelRole, "VISION_EXTRACT">, RouteState> = {
-  TEXT_NORMALIZE: "SHADOW_EVALUATION",
-  CANDIDATE_ARBITRATE: "SHADOW_EVALUATION",
-  RARE_SECOND_OPINION: "SHADOW_EVALUATION"
+  TEXT_NORMALIZE: "REVIEW_ONLY",
+  CANDIDATE_ARBITRATE: "REVIEW_ONLY",
+  RARE_SECOND_OPINION: "REVIEW_ONLY"
 };
 
 export type TextRole = keyof typeof ROLE_LIMITS;
 export type RoleOutcome = "ANSWER" | "ABSTAIN" | "UNAVAILABLE";
+export type ProposalField = "term" | "id" | "follow_up";
+const ROLE_FIELDS: Record<TextRole, ProposalField> = { TEXT_NORMALIZE: "term", CANDIDATE_ARBITRATE: "id", RARE_SECOND_OPINION: "follow_up" };
+/** A bounded candidate for a person to Keep, Reject or Correct; never a trusted draft value. */
+export type ReviewProposal = { kind: "REVIEW_ONLY"; role: TextRole; field: ProposalField; value: string };
 /**
- * `value` is what a caller may use. In SHADOW_EVALUATION it is always null; the model's answer is then in `observed`, which only a
- * bounded evaluation (`evaluation: true`) receives and which no screen or route reads.
+ * `value` is what a caller may use. REVIEW_ONLY and SHADOW_EVALUATION always return null; only the latter exposes its answer in
+ * `observed` to a bounded evaluation (`evaluation: true`), which no screen or route reads.
  */
-export type RoleResult = { role: TextRole; version: string; outcome: RoleOutcome; reason: string; value: string | null; observed: string | null; neurons: number | null; shadow: boolean };
+export type RoleResult = { role: TextRole; version: string; outcome: RoleOutcome; reason: string; value: string | null; proposal: ReviewProposal | null; observed: string | null; neurons: number | null; shadow: boolean };
 
 const breakers: Record<TextRole, { failures: number; openUntil: number }> = {
   TEXT_NORMALIZE: { failures: 0, openUntil: 0 },
@@ -63,7 +67,7 @@ const clean = (text: string, limit: number) => text.replace(/\s+/g, " ").trim().
 
 /* ---------- The three adapters: what is sent, the schema asked for, and how a reply is read ---------- */
 
-type Task = { system: string; user: string; allowed: readonly string[]; field: string };
+type Task = { system: string; user: string; allowed: readonly string[]; field: ProposalField };
 
 /** TEXT_NORMALIZE (Granite): the observed or typed name, and the canonical terms it may be normalized to. Returns one of them or null. */
 export const MAX_TERMS = 40;
@@ -116,6 +120,8 @@ export function readChoice(reply: unknown, task: Pick<Task, "allowed" | "field">
     try { value = JSON.parse(value.trim().replace(/^```(?:json)?\s*|\s*```$/g, "")); } catch { return null; }
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const keys = Object.keys(value);
+  if (keys.length !== 1 || keys[0] !== task.field) return null;
   const picked = (value as Record<string, unknown>)[task.field];
   return typeof picked === "string" && task.allowed.includes(picked) ? picked : null;
 }
@@ -128,21 +134,25 @@ const log = (role: TextRole, outcome: RoleOutcome, reason: string, ms: number, n
 
 /**
  * Runs one text role. Never throws. An allowance, switch, breaker or reply check that refuses is an ABSTAIN or UNAVAILABLE with a
- * reason code and no value. In SHADOW_EVALUATION the call runs only when `evaluation` is true (a bounded benchmark), and even then
- * the result carries `shadow: true` so no caller may use the value for a field.
+ * reason code and no value. REVIEW_ONLY returns a typed proposal with a null trusted value. SHADOW_EVALUATION runs only when
+ * `evaluation` is true (a bounded benchmark), and only that state exposes an observation.
  */
 export async function runRole(db: D1Database, ai: AiRunner | undefined, role: TextRole, task: Task, urgency: Urgency, options: { evaluation?: boolean; now?: number } = {}): Promise<RoleResult> {
   const now = options.now ?? Date.now();
   const started = Date.now();
-  const shadow = ROUTE_STATE[role] === "SHADOW_EVALUATION";
+  const state = ROUTE_STATE[role];
+  const shadow = state === "SHADOW_EVALUATION";
+  const reviewOnly = state === "REVIEW_ONLY";
   const done = (outcome: RoleOutcome, reason: string, value: string | null = null, neurons: number | null = null): RoleResult => {
     log(role, outcome, reason, Date.now() - started, neurons ?? 0);
-    return { role, version: ROLE_MODELS[role], outcome, reason, value: shadow ? null : value, observed: shadow && options.evaluation ? value : null, neurons, shadow };
+    const proposal = reviewOnly && value ? { kind: "REVIEW_ONLY" as const, role, field: task.field, value } : null;
+    return { role, version: ROLE_MODELS[role], outcome, reason, value: shadow || reviewOnly ? null : value, proposal, observed: shadow && options.evaluation ? value : null, neurons, shadow };
   };
   try {
     if (!ai) return done("UNAVAILABLE", "NO_BINDING");
     if (shadow && !options.evaluation) return done("ABSTAIN", "SHADOW_ONLY");
     if (!await assistOn(db)) return done("ABSTAIN", "SWITCHED_OFF");
+    if (task.field !== ROLE_FIELDS[role]) return done("ABSTAIN", "TASK_MISMATCH");
     if (task.allowed.length === 0) return done("ABSTAIN", "NOTHING_TO_CHOOSE");
     const breaker = breakers[role];
     if (breaker.openUntil > now) return done("UNAVAILABLE", "BREAKER_OPEN");
@@ -193,16 +203,36 @@ export type RouteContext = {
   used: number;
 };
 
+const closeWord = (left: string, right: string): boolean => {
+  if (left === right) return true;
+  if (Math.abs(left.length - right.length) > 1) return false;
+  let leftAt = 0;
+  let rightAt = 0;
+  let edits = 0;
+  while (leftAt < left.length && rightAt < right.length) {
+    if (left[leftAt] === right[rightAt]) { leftAt += 1; rightAt += 1; continue; }
+    if (++edits > 1) return false;
+    if (left.length > right.length) leftAt += 1;
+    else if (right.length > left.length) rightAt += 1;
+    else { leftAt += 1; rightAt += 1; }
+  }
+  return true;
+};
+
+const relevantTerm = (name: string, terms: readonly string[]) => {
+  const typed = words(name);
+  return typed.some((typedWord) => terms.some((term) => words(term).some((termWord) => closeWord(typedWord, termWord))));
+};
+
 /**
- * The calls a draft may need, in order, never more than two in routine use (amendment §5): zero when an exact match resolves it,
- * Granite only when deterministic normalization failed and terms exist, Qwen only with two or more valid candidates, GLM only for an
- * unresolved conflict while the day is still in the NORMAL band. All four roles run together only in a bounded conformance test, never here.
+ * A draft asks at most one text role: Qwen takes priority for two or more valid candidates, Granite only follows failed deterministic
+ * normalization with relevant terms, and GLM only asks a fixed meaningful conflict while the day remains in the NORMAL band.
  */
 export function route(context: RouteContext): TextRole[] {
   if (context.exactMatch) return [];
-  const calls: TextRole[] = [];
-  if (context.unmatchedName && context.terms.length > 0) calls.push("TEXT_NORMALIZE");
-  if (context.candidates.length >= 2) calls.push("CANDIDATE_ARBITRATE");
-  if (calls.length === 0 && context.conflict.length > 0 && context.used < BANDS.conserve) calls.push("RARE_SECOND_OPINION");
-  return calls.slice(0, 2);
+  const validCandidateIds = new Set(context.candidates.filter((candidate) => candidate.id.trim() && candidate.name.trim()).map((candidate) => candidate.id));
+  if (validCandidateIds.size >= 2) return ["CANDIDATE_ARBITRATE"];
+  if (context.unmatchedName && relevantTerm(context.unmatchedName, context.terms)) return ["TEXT_NORMALIZE"];
+  if (context.conflict.some((fact) => FACT_CODES.includes(fact)) && context.used < BANDS.conserve) return ["RARE_SECOND_OPINION"];
+  return [];
 }
