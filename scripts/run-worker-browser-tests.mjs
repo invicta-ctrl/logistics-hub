@@ -17,6 +17,8 @@ try {
   fs.writeFileSync(`${stateDir}/.env`, `SESSION_SECRET=${randomBytes(32).toString("base64url")}\n`, { mode: 0o600 });
   const migrate = spawnSync(process.execPath, [wrangler, "d1", "migrations", "apply", "DB", "--local", "--persist-to", stateDir], { stdio: "inherit" });
   if (migrate.status !== 0) throw new Error("local e2e migration failed");
+  // This controlled local fixture is the reviewed, fully classified evidence for the PWA's Whiteboard suggestion proof.
+  runD1("UPDATE items SET status = 'ACTIVE', needs_review = 0, item_type = 'Loanable', consumption_mode = 'WHOLE_UNIT', category = 'SCHOOL SUPPLIES', unit = 'piece' WHERE id = 'ITM-0311'", { persistTo: stateDir });
   // Self-Service is tested open; migration 0018 seeds it closed, as on production.
   runD1("UPDATE system_settings SET value = 'open' WHERE key = 'self_service'", { persistTo: stateDir });
   const username = `e2e-${randomBytes(4).toString("hex")}`;
