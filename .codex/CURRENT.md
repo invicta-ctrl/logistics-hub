@@ -1,6 +1,6 @@
 # Current Work Pointer — Logistics Hub
 
-## V1.15 review-only AI — filter and adapter source checkpoints pushed; integration not wired — 2026-10-09
+## V1.15 photo/mobile workflow first; review-only AI preserved — 2026-10-10
 
 SPEC: `docs/specs/accepted/road-to-v2/2026-10-09-v1.15-review-only-ai-and-correction-learning-amendment.md` (accepted). BRANCH: `slice/v1.15-review-only-ai`; the source checkpoint is `f6b19e3f3241a4c52efa5e6e50e1cb89904d17d2` and later commits are continuity-only. A receiver must freshly verify local `HEAD` equals `origin/slice/v1.15-review-only-ai` and that this source checkpoint is its ancestor. `main`/`origin/main` are `31d963414cdee85d2032eb21a8efdd696da893c1` after PR 31 merged at 2026-10-09 11:19 UTC; the former UI slice is deleted after ancestry proof. Writer lock: yielded.
 
@@ -8,7 +8,9 @@ STATE: The accepted filter/cache checkpoint is `290be35b5d713afda0f4e0afbbbdb7f0
 
 VERIFY: catalog-draft/item-knowledge 24/24 (earlier unchanged); catalog-ai/catalogue-offline 33/33; ai-roles 18/18; typecheck, build and privacy passed; dry evaluator passed with zero provider calls. On `f68eb492e1cf953830778cb3e3741aae31563ca1`, Node 22 build/unit/privacy/perf passed and CodeQL `37924738151` succeeded; browser and Worker CI were still in progress when recorded. The role checkpoint Checks workflow `37925055084` was canceled by later documentation pushes; its CodeQL `37925055073` succeeded. Full CI must be verified for the final branch HEAD. The cache browser regression remains UNRUN because its exact Playwright command is permanently lean-ctx-blocked. Local Node 26 catalogue-suite SyntaxError remains UNKNOWN; Node 22 CI previously ran catalogue 40/40.
 
-NEXT: no new source task in this session. A manual same-branch writer reads AGENTS, project policy, CURRENT, this handoff, shared workflow and the accepted AI amendment before checking `agent:status` is null and claiming. It then verifies PR 32 CI for the source checkpoint, then implements the accepted Worker dedup/review-offer/UI feedback atomic vertical: reviewed DB inputs; unique AI request before Gemma/text; exact match zero AI, then at most one role; bounded actor/revision/catalogue-bound offer; Keep/Reject/Correct before save and stale/retake/reset guards; idempotent feedback ignored if forged/stale without failing manual save. Only later: bounded audited correction ranking and administrator support/conflict first decision, with approved knowledge-base changes awaiting code review/version/fixtures. No provider call, migration, deployment, production write, main merge or V3 work. Preserve `NUL`.
+STATE: `1a39f7e` repairs Worker PWA test setup with a throwaway reviewed Whiteboard fixture; focused PWA 4/4 passed. The accepted `2026-10-10-v1.15-photo-workflow-and-mobile-ui-amendment.md` now governs: complete photo/mobile first, homepage second, then resume the review-only Worker/UI feedback vertical. Photo contract: sanitized uncropped 1280 display and hash are retained; crop only derives a 320 thumb and saves through a new-id CAS. Public/catalogue thumbs remain originals; existing cutout is detail-only, owner-off by default, and no provider call is authorized. Preserve `NUL`.
+
+NEXT: implement the bounded photo/mobile checkpoint only: shared camera/library chooser, non-destructive crop Apply/Reset/Cancel and stale/offline safety, actionable local cleanup state, and mobile-safe Catalogue/item layouts. No schema change, provider probe, production write, main merge or V3 work. Homepage only after this checkpoint and the root's separate direction.
 
 
 ## V1.15 Final Pass — four-model Ambient Intelligence — MERGED (PARTIAL), owner actions open — 2026-10-08
