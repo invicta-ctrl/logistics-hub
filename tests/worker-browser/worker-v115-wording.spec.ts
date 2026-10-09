@@ -19,6 +19,12 @@ const PROPER = /\b(Logistics (Hub|Catalog|Catalogue)|Lending Hub|Staff Directory
 
 type Seen = { where: string; text: string };
 
+function staticWording({ where, text }: Seen, data: ReadonlySet<string>): string {
+  const prefix = "More actions for ";
+  const itemName = text.startsWith(prefix) ? text.slice(prefix.length).trim() : "";
+  return where === "[aria-label]" && itemName && data.has(itemName.toLowerCase()) ? "More actions" : text;
+}
+
 const read = (page: Page): Promise<Seen[]> => page.evaluate(() => {
   const out: { where: string; text: string }[] = [];
   const shown = (element: Element | null) => { for (let node = element; node; node = node.parentElement) { const tag = node.tagName; if (tag === "SCRIPT" || tag === "STYLE" || tag === "NOSCRIPT" || (tag === "DIALOG" && !(node as HTMLDialogElement).open) || node.hasAttribute("hidden")) return false; } return true; };
@@ -37,15 +43,17 @@ const read = (page: Page): Promise<Seen[]> => page.evaluate(() => {
 
 function problems(seen: Seen[], data: ReadonlySet<string>) {
   const found: string[] = [];
-  for (const { where, text } of seen) {
+  for (const entry of seen) {
+    const { where, text } = entry;
+    const wording = staticWording(entry, data);
     // What people typed or the catalog holds (names, references, times) is data, not interface wording.
     if (/row-link|cell-id|account__name|live-status|attn-row__title|hint-row__says|cell-strong|visually-hidden|\[alt\]/.test(where) || /^(Updated|Saved|Last) /.test(text)) continue;
-    for (const word of text.match(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/g) ?? []) found.push(`${where}: enum name ${word} in “${text}”`);
+    for (const word of wording.match(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/g) ?? []) found.push(`${where}: enum name ${word} in “${text}”`);
     // A reference such as SS-ABCD-EFGH and a column of initials are not words.
-    for (const word of text.replace(/\bSS-[A-Z0-9-]+\b/g, "").match(/\b[A-Z]{3,}\b/g) ?? []) if (!ACRONYMS.has(word)) found.push(`${where}: capitals ${word} in “${text}”`);
-    if (/\bverified\b|\bverification\b|\bverify (the |your )?(student|id)/i.test(text)) found.push(`${where}: “verified” wording in “${text}”`);
+    for (const word of wording.replace(/\bSS-[A-Z0-9-]+\b/g, "").match(/\b[A-Z]{3,}\b/g) ?? []) if (!ACRONYMS.has(word)) found.push(`${where}: capitals ${word} in “${text}”`);
+    if (/\bverified\b|\bverification\b|\bverify (the |your )?(student|id)/i.test(wording)) found.push(`${where}: “verified” wording in “${text}”`);
     // A short label whose every word starts with a capital letter: Title Case.
-    for (const part of text.split("·")) {
+    for (const part of wording.split("·")) {
       // A name the Worker sent (an item, category, place or person) is the owner's data, whatever its capitals.
       if (data.has(part.trim().toLowerCase())) continue;
       const words = part.replace(PROPER, "").replace(/[^A-Za-z' -]/g, " ").split(/\s+/).filter((word) => word.length > 1 && !ACRONYMS.has(word));
@@ -54,6 +62,13 @@ function problems(seen: Seen[], data: ReadonlySet<string>) {
   }
   return found;
 }
+
+test("wording audit exempts only a known item in the row action menu label", () => {
+  const data = new Set(["brother ink d60 - black"]);
+  expect(problems([{ where: "[aria-label]", text: "More actions for BROTHER Ink D60 - Black" }], data)).toEqual([]);
+  expect(problems([{ where: "[aria-label]", text: "MORE actions for BROTHER Ink D60 - Black" }], data)).toContain("[aria-label]: capitals MORE in “MORE actions for BROTHER Ink D60 - Black”");
+  expect(problems([{ where: "[aria-label]", text: "Review RETURN_CHECK status" }], data)).toContain("[aria-label]: enum name RETURN_CHECK in “Review RETURN_CHECK status”");
+});
 
 async function signIn(page: Page) {
   await page.goto("/staff");

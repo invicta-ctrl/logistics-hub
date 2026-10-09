@@ -452,10 +452,12 @@ test("stock workspace: record a delivery, restock and receive, then read it in a
   await expect(panel.getByLabel("Item", { exact: true })).toBeFocused();
 
   const ketchup = page.locator("tr", { hasText: "Banana Ketchup" });
+  await ketchup.getByRole("button", { name: "More actions for Banana Ketchup" }).click();
   await ketchup.getByRole("button", { name: "Add to restock" }).click();
   await expect(page.getByText("Banana Ketchup added to the restock list.")).toBeVisible();
   await page.getByRole("button", { name: /^Restock list/ }).click();
   const entry = page.locator("tr", { hasText: "Banana Ketchup" });
+  await entry.getByRole("button", { name: "More actions for Banana Ketchup" }).click();
   await entry.getByRole("button", { name: "Mark planned" }).click();
   await expect(entry.getByText("Planned", { exact: true })).toBeVisible();
   await entry.getByRole("button", { name: "Receive" }).click();
