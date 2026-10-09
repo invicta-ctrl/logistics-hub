@@ -579,7 +579,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .profile__actions { display: grid; gap: var(--space-2); justify-items: start; margin-top: var(--space-2); }
 .profile__actions:empty { display: none; }
 .photo-tile { position: relative; display: grid; width: 100%; aspect-ratio: 1; place-items: center; overflow: hidden; padding: 0; border: 0; border-radius: var(--radius-lg); background: var(--subtle); box-shadow: inset 0 0 0 1px var(--line); }
-.photo-tile img { width: 100%; height: 100%; object-fit: cover; }
+.photo-tile img { width: 100%; height: 100%; object-fit: contain; }
 .photo-tile[data-view] { cursor: zoom-in; }
 .photo-tile--preview img { object-fit: contain; }
 .photo-tile--add { align-content: center; justify-items: center; gap: var(--space-2); border: 1.5px dashed var(--line-strong); background: var(--surface); box-shadow: none; color: var(--text-2); font-size: var(--text-sm); font-weight: 500; transition: border-color var(--dur-2), background-color var(--dur-2), color var(--dur-2); }
@@ -1485,11 +1485,12 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .cat-layout { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-5); align-items: start; }
 .cat-form { gap: var(--space-4); background: var(--surface); }
 .cat-top { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.cat-photo-wrap { display: grid; gap: var(--space-1); justify-items: stretch; }
 .cat-photo { position: relative; display: grid; width: 6.5rem; aspect-ratio: 1; place-items: center; overflow: hidden; padding: 0; border: 1.5px dashed var(--line-field); border-radius: var(--radius-lg); background: var(--subtle); color: var(--text-2); }
 .cat-photo:hover { border-color: var(--brand); background: var(--brand-tint); color: var(--brand); }
 .cat-photo:focus-visible { outline: none; box-shadow: var(--focus); }
 .cat-photo.has-photo { border-style: solid; border-color: var(--line-strong); }
-.cat-photo img { width: 100%; height: 100%; object-fit: cover; }
+.cat-photo img { width: 100%; height: 100%; object-fit: contain; }
 .cat-photo__empty { display: grid; justify-items: center; gap: var(--space-1); font-size: var(--text-sm); font-weight: 500; }
 .cat-photo__empty .icon { --icon-size: var(--icon-xl); }
 .cat-photo__retake { position: absolute; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: center; gap: var(--space-1); padding: var(--space-1); background: var(--photo-veil); color: var(--on-dark); font-size: var(--text-sm); }
@@ -1576,8 +1577,8 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .cat-steps .icon { --icon-size: var(--icon-xs); margin-inline: .125rem; vertical-align: -.15em; }
 @media (max-width: 960px) { .cat-layout { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 760px) {
-  /* The save buttons stay under the thumb, above the bottom bar, however far the form has scrolled. */
-  .cat-actions { position: sticky; bottom: calc(var(--bottom-bar) + var(--safe-bottom)); z-index: 5; margin: 0 calc(-1 * var(--space-5)); padding: var(--space-3) var(--space-5); border-top: 1px solid var(--line); background: var(--surface); }
+  /* Phone actions stay in the form's reading order, so they cannot cover a focused field or the keyboard. */
+  .cat-actions { position: static; margin: 0; padding: var(--space-3) 0 calc(var(--space-3) + var(--safe-bottom)); border-top: 1px solid var(--line); background: var(--surface); }
 }
 @media (max-width: 520px) {
   /* The shelf is the one thing that must always be readable: it takes the whole row and wraps rather than cut. */
@@ -1586,7 +1587,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .cat-choice { min-height: 4rem; padding-inline: var(--space-2); }
   .cat-choice__hint { font-size: .75rem; }
   .cat-choice__suggest { position: static; justify-self: start; }
-  .cat-actions { grid-template-columns: 1.3fr 1fr; align-items: stretch; }
+  .cat-actions { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
   .cat-actions .button { white-space: normal; line-height: 1.2; }
 }
 @media (max-width: 340px) {

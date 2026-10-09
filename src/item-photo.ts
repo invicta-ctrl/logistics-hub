@@ -178,6 +178,11 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   input.tabIndex = -1;
   input.setAttribute("aria-label", `Choose a ${noun} of ${name}`);
   host.append(input);
+  const camera = input.cloneNode() as HTMLInputElement;
+  camera.setAttribute("capture", "environment");
+  camera.setAttribute("aria-label", `Take a ${noun} of ${name}`);
+  host.append(camera);
+  let selection = 0;
   const busy = () => state !== "";
   /** The profile tile shows the cleaned picture when there is one. */
   const tileUrl = (id: string) => (photo?.cutout && photo.id === id ? shownUrl(photo, "thumb") : options.thumbUrl(id));
@@ -195,12 +200,12 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     if (state === "preparing") return show(html`<div class="photo-tile photo-tile--busy" role="status">Preparing the photo…</div>`, html``);
     if (staged) {
       return show(html`<div class="photo-tile photo-tile--preview"><img src="${staged.preview}" alt="Preview of the new ${noun} of ${name}" /></div>`, html`<div class="photo-actions"><button type="button" class="button button--primary button--sm" data-save ${busy() ? "disabled" : ""}>${state === "saving" ? "Saving…" : `Save ${noun}`}</button>
-          <button type="button" class="button button--secondary button--sm" data-pick ${busy() ? "disabled" : ""}>Choose another</button>
+          <button type="button" class="button button--secondary button--sm" data-pick ${busy() ? "disabled" : ""}>Choose another</button><button type="button" class="button button--ghost button--sm" data-camera ${busy() ? "disabled" : ""}>Take photo</button>
           <button type="button" class="button button--ghost button--sm" data-cancel ${busy() ? "disabled" : ""}>Cancel</button></div>${alert}`);
     }
     if (!photo) {
       return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick aria-describedby="photo-hint-${itemId}">${options.visual ? itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual") : icon("camera")}<span>${options.visual ? "Upload photo" : `Add ${noun}`}</span></button>`,
-        html`<p class="field__hint" id="photo-hint-${itemId}">${options.hintAdd}</p>${alert}`);
+        html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>Choose photo</button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button></div><p class="field__hint" id="photo-hint-${itemId}">${options.hintAdd}</p>${alert}`);
     }
     show(options.visual && options.visual().visualType === "SYSTEM_ICON"
       ? html`<div class="photo-tile">${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}</div>`
@@ -212,18 +217,26 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   };
   const focus = (selector: string) => host.querySelector<HTMLElement>(selector)?.focus();
 
-  input.addEventListener("change", async () => {
-    const file = input.files?.[0];
-    input.value = "";
+  const select = async (chooser: HTMLInputElement) => {
+    const file = chooser.files?.[0];
+    chooser.value = "";
     if (!file) return;
+    const revision = ++selection;
     state = "preparing";
     error = "";
     draw();
-    try { staged = await preparePhoto(file); } catch (problem) { error = problem instanceof Error ? problem.message : "This photo could not be used."; }
+    let prepared: Prepared | null = null;
+    let preparationError = "";
+    try { prepared = await preparePhoto(file); } catch (problem) { preparationError = problem instanceof Error ? problem.message : "This photo could not be used."; }
+    if (revision !== selection || !host.isConnected) return;
+    staged = prepared;
+    error = preparationError;
     state = "";
     draw();
     focus(staged ? "[data-save]" : "[data-pick]");
-  });
+  };
+  input.addEventListener("change", () => void select(input));
+  camera.addEventListener("change", () => void select(camera));
 
   /** A write another person got to first is said so and replaced by what is there now; anything else stays here to retry. */
   const failed = async (problem: unknown) => {
@@ -245,8 +258,9 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     const target = event.target as HTMLElement;
     if (busy()) return;
     if (target.closest("[data-pick]")) input.click();
+    else if (target.closest("[data-camera]")) camera.click();
     else if (target.closest("[data-view]") && photo) options.view(photo);
-    else if (target.closest("[data-cancel]")) { staged = null; error = ""; draw(); focus("[data-pick]"); }
+    else if (target.closest("[data-cancel]")) { selection += 1; staged = null; error = ""; draw(); focus("[data-pick]"); }
     else if (target.closest("[data-remove]")) { confirming = true; draw(); focus("[data-remove-confirmed]"); }
     else if (target.closest("[data-keep]")) { confirming = false; draw(); focus("[data-remove]"); }
     else if (target.closest("[data-save]") && staged) {
@@ -318,6 +332,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   draw();
   return { render: (next) => {
     if (busy() || staged) return;
+    selection += 1;
     // A redraw replaces the buttons, so whichever one has focus is given it again.
     const held = ["data-pick", "data-view", "data-remove", "data-clean", "data-original"].find((name) => host.querySelector(`[${name}]:focus`));
     photo = next; confirming = false; error = ""; draw();

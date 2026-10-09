@@ -115,7 +115,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   mount(root, html`
     <h1 class="visually-hidden">Cataloguing</h1>
     <p class="visually-hidden" id="cat-announce" role="status"></p>
-    <input class="visually-hidden" type="file" id="cat-file" accept="image/*" capture="environment" tabindex="-1" aria-label="Choose a photo" />
+    <input class="visually-hidden" type="file" id="cat-file" accept="image/jpeg,image/png,image/webp" capture="environment" tabindex="-1" aria-label="Take a photo" />
+    <input class="visually-hidden" type="file" id="cat-library" accept="image/jpeg,image/png,image/webp" tabindex="-1" aria-label="Choose a photo" />
     <header class="cat-bar">
       <a class="button button--ghost button--sm" href="/staff/catalogue" data-route>${icon("back")}Add items</a>
       <div class="cat-bar__place"><span class="cat-bar__label">Cataloguing in</span>
@@ -132,7 +133,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     <div class="cat-layout">
       <form class="cat-form card" id="cat-form" novalidate aria-label="Add an item">
         <div class="cat-top">
-          <button type="button" class="cat-photo" id="cat-photo" aria-label="Take a photo"><span class="cat-photo__empty">${icon("camera")}<span>Photo</span></span></button>
+          <div class="cat-photo-wrap"><button type="button" class="cat-photo" id="cat-photo" aria-label="Take a photo"><span class="cat-photo__empty">${icon("camera")}<span>Take photo</span></span></button><button type="button" class="button button--ghost button--sm cat-photo__choose" id="cat-library-button">Choose photo</button></div>
           <div class="field cat-name"><label for="cat-name">Name</label><input id="cat-name" maxlength="120" autocomplete="off" autocapitalize="sentences" spellcheck="false" enterkeyhint="next" placeholder="What is it?" aria-describedby="cat-name-hint" /><p class="field__hint" id="cat-name-hint">A temporary name is fine if you are not sure.</p></div>
         </div>
         <div class="cat-dup" id="cat-dup" aria-live="polite"></div>
@@ -366,10 +367,12 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     tile.setAttribute("aria-label", photo ? "Retake the photo" : "Take a photo");
   };
   const file = field("cat-file");
+  const library = field("cat-library");
   $("#cat-photo").addEventListener("click", () => file.click());
-  file.addEventListener("change", async () => {
-    const chosen = file.files?.[0];
-    file.value = "";
+  $("#cat-library-button").addEventListener("click", () => library.click());
+  const selectPhoto = async (chooser: HTMLInputElement) => {
+    const chosen = chooser.files?.[0];
+    chooser.value = "";
     if (!chosen) return;
     const revision = ++photoRevision;
     preparing = true;
@@ -393,7 +396,9 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     draw();
     field("cat-name").focus();
     if (online) void checkPhoto(prepared, revision);
-  });
+  };
+  file.addEventListener("change", () => void selectPhoto(file));
+  library.addEventListener("change", () => void selectPhoto(library));
   /** Never in the way: the person keeps typing while it runs, and a failure leaves the photo to be checked after it syncs. */
   const checkPhoto = async (taken: NonNullable<typeof photo>, revision: number) => {
     try {

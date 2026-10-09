@@ -108,6 +108,42 @@ async function begin(page: Page, server: Server) {
   await expect(name(page)).toBeFocused();
 }
 
+test("a library photo is kept whole and mobile save actions leave focused fields visible", async ({ page }) => {
+  const server = serve(page, { active: true });
+  await begin(page, server);
+  await expect(page.locator("#cat-file")).toHaveAttribute("capture", "environment");
+  await expect(page.locator("#cat-library")).not.toHaveAttribute("capture");
+  await expect(page.getByRole("button", { name: "Choose photo" })).toBeVisible();
+  const portrait = Buffer.from(await page.evaluate(async () => {
+    const canvas = Object.assign(document.createElement("canvas"), { width: 80, height: 160 });
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#6c1d45"; context.fillRect(0, 0, 80, 80);
+    context.fillStyle = "#f4b942"; context.fillRect(0, 80, 80, 80);
+    const blob = await new Promise<Blob>((resolve) => canvas.toBlob((value) => resolve(value!), "image/png"));
+    return [...new Uint8Array(await blob.arrayBuffer())];
+  }));
+  await page.locator("#cat-library").setInputFiles({ name: "portrait.png", mimeType: "image/png", buffer: portrait });
+  const photo = page.locator("#cat-photo img");
+  await expect(photo).toBeVisible();
+  await expect(photo).toHaveCSS("object-fit", "contain");
+  await expect.poll(async () => photo.evaluate((image) => {
+    const portraitImage = image as HTMLImageElement;
+    return portraitImage.naturalHeight > portraitImage.naturalWidth;
+  })).toBe(true);
+  await page.setViewportSize({ width: 390, height: 430 });
+  await page.locator("#cat-more summary").click();
+  const notes = page.getByLabel(/Notes/);
+  await notes.scrollIntoViewIfNeeded();
+  await notes.focus();
+  const clearOfSaveActions = await page.evaluate(() => {
+    const field = document.querySelector<HTMLTextAreaElement>("#cat-notes")!.getBoundingClientRect();
+    const save = document.querySelector<HTMLElement>(".cat-actions")!.getBoundingClientRect();
+    return field.top >= 0 && field.bottom <= window.innerHeight && (save.top >= window.innerHeight || field.bottom <= save.top || field.top >= save.bottom);
+  });
+  expect(clearOfSaveActions).toBe(true);
+  await expect(page.locator(".cat-actions")).toHaveCSS("position", "static");
+});
+
 test.describe("starting and resuming", () => {
   test("a place is chosen once, and an open session resumes from the Catalogue page", async ({ page }) => {
     const server = serve(page);
