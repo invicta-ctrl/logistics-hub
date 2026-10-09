@@ -32,7 +32,7 @@ function known(entry: Entry): Item {
   return {
     id: entry.itemId ?? `pending:${entry.id}`, name: String(body.name), aliases: text("aliases"), category: text("category") ?? UNSORTED_CATEGORY, unit: text("unit") ?? "piece",
     itemType: behaviour === "BORROW" ? "Loanable" : behaviour === "REVIEW_LATER" ? "NEEDS_REVIEW" : "Consumable", consumptionMode: behaviour === "GRADUAL" ? "OPEN_UNIT" : "WHOLE_UNIT",
-    stockArea: text("stockArea"), status: "ACTIVE", model: text("model"), serialNumber: text("serialNumber"), photoHash: entry.photo?.hash ?? null,
+    stockArea: text("stockArea"), status: "ACTIVE", needsReview: true, model: text("model"), serialNumber: text("serialNumber"), photoHash: entry.photo?.hash ?? null,
     locationId: text("locationId"), onHand: Number(body.quantity)
   };
 }
@@ -217,7 +217,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
 
   const recent = (): Item[] => [...waiting].reverse().map(known).concat(detail.recent.filter((row) => !waiting.some((entry) => entry.id === row.captureId)).map((row) => ({
     id: row.itemId, name: row.name, aliases: null, category: row.category, itemType: row.itemType, consumptionMode: row.consumptionMode, unit: row.unit, stockArea: row.stockArea,
-    status: "ACTIVE", model: null, serialNumber: null, photoHash: null, photoId: row.photoId, locationId: null, onHand: row.onHand
+    status: "ACTIVE", needsReview: true, model: null, serialNumber: null, photoHash: null, photoId: row.photoId, locationId: null, onHand: row.onHand
   })));
 
   let matches: Match[] = [];
@@ -733,7 +733,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   // Online, the saved catalog is kept current (one small 304 while nothing changes) and the screen reads the same copy offline.
   const poll = online ? live<Omit<Snapshot, "fetchedAt">>("/api/staff/catalogue/snapshot", {
     interval: 30_000,
-    etag: catalog ? `"r${catalog.revision}"` : "",
+    etag: catalog?.items.every((item) => typeof item.needsReview === "boolean") ? `"r${catalog.revision}"` : "",
     status: () => null,
     onData: (data) => { const fresh = { ...data, fetchedAt: new Date().toISOString() }; void setSnapshot(fresh); takeCatalog(fresh); },
     onError: (error) => { if (error.status === 401) void ended(); }

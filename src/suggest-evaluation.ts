@@ -1,6 +1,6 @@
 import { type AiPayload, aiPayload, readAiAnswer } from "./catalog-ai";
-import { UNSORTED_CATEGORY, behaviourOf } from "./catalog-policy";
-import { type Known, type Tier, suggest } from "./catalogue-suggest";
+import { behaviourOf } from "./catalog-policy";
+import { type Known, type Tier, suggest, verified } from "./catalogue-suggest";
 
 /*
  * Leave-one-out measurement of the suggestion pipeline (catalog intelligence amendment §9). Each confirmed item is hidden in turn, its
@@ -13,10 +13,8 @@ export type Field = typeof FIELDS[number];
 export type Cell = { n: number; right: number; either: number };
 export type Evaluation = { items: number; fields: Record<Field, Record<Tier | "NONE", Cell>> };
 
-const confirmed = (item: Known) => item.itemType !== "NEEDS_REVIEW" && item.category !== UNSORTED_CATEGORY && item.status !== "INACTIVE";
-
 export function evaluate(catalog: readonly Known[], options: { knowledge: boolean }): Evaluation {
-  const items = catalog.filter(confirmed);
+  const items = catalog.filter(verified);
   const empty = (): Record<Tier | "NONE", Cell> => ({ STRONG: { n: 0, right: 0, either: 0 }, WEAK: { n: 0, right: 0, either: 0 }, CONFLICTING: { n: 0, right: 0, either: 0 }, NONE: { n: 0, right: 0, either: 0 } });
   const result: Evaluation = { items: items.length, fields: { behaviour: empty(), unit: empty(), category: empty() } };
   for (const [index, item] of items.entries()) {

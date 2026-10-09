@@ -88,14 +88,14 @@ export async function sessionDetail(db: D1Database, actor: Actor, id: string) {
  */
 export async function catalogueSnapshot(db: D1Database) {
   const [items, places] = await db.batch([
-    db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.unit, i.stock_area AS stockArea, i.status,
+    db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.unit, i.stock_area AS stockArea, i.status, i.needs_review AS needsReview,
         i.model, i.serial_number AS serialNumber, i.location_id AS locationId, p.dhash AS photoHash, COALESCE(b.on_hand, 0) AS onHand
       FROM items i LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN inventory_balances b ON b.id = i.id ORDER BY i.name COLLATE NOCASE, i.id`),
     db.prepare("SELECT id, name, parent_id AS parentId, active, directions FROM locations ORDER BY name COLLATE NOCASE, id")
   ]);
-  const rows = items!.results as Array<{ category: string; unit: string }>;
+  const rows = items!.results as Array<{ category: string; unit: string; needsReview: number }>;
   return {
-    items: rows,
+    items: rows.map((row) => ({ ...row, needsReview: row.needsReview === 0 ? false : true })),
     categories: distinct(rows.map((row) => row.category).filter((category) => category !== UNSORTED_CATEGORY)),
     units: distinct(rows.map((row) => row.unit)),
     places: (places!.results as Array<{ active: number }>).map((row) => ({ ...row, active: row.active === 1 }))

@@ -111,7 +111,7 @@ export type AuditRecord = {
 export type Access = { accountId: string; displayName: string; username: string; role: string; access: string; expiresAt: number };
 
 export type SnapshotItem = {
-  id: string; name: string; aliases: string | null; category: string; itemType: string; consumptionMode: string; unit: string; stockArea: string | null; status: string;
+  id: string; name: string; aliases: string | null; category: string; itemType: string; consumptionMode: string; unit: string; stockArea: string | null; status: string; needsReview: boolean;
   model: string | null; serialNumber: string | null; locationId: string | null; photoHash: string | null; onHand: number;
 };
 export type Snapshot = { revision: number; items: SnapshotItem[]; categories: string[]; units: string[]; places: Array<Place & { directions?: string | null }>; fetchedAt: string };

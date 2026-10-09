@@ -7,7 +7,7 @@ import { evaluate, report } from "../src/suggest-evaluation";
 
 /* V1.8 catalog intelligence: the built-in knowledge base, the strength tiers (no percentages) and the leave-one-out measurement. */
 
-const item = (fields: Partial<Known> & { name: string }): Known => ({ category: "SCHOOL SUPPLIES", itemType: "Consumable", consumptionMode: "WHOLE_UNIT", unit: "piece", stockArea: "Inventory", status: "ACTIVE", ...fields });
+const item = (fields: Partial<Known> & { name: string }): Known => ({ category: "SCHOOL SUPPLIES", itemType: "Consumable", consumptionMode: "WHOLE_UNIT", unit: "piece", stockArea: "Inventory", status: "ACTIVE", needsReview: false, ...fields });
 const CATEGORIES = ["SCHOOL SUPPLIES", "CLEANING SUPPLIES & EQUIPMENT", "MEDICAL SUPPLIES", "PANTRY"];
 
 describe("the knowledge base", () => {
@@ -91,6 +91,30 @@ describe("strength tiers", () => {
 
   it("the session's own repetition still comes last, as Weak", () => {
     expect(suggest("zebra", [], [item({ name: "A", category: "TOOLS" }), item({ name: "B", category: "TOOLS" })]).category).toEqual({ value: "TOOLS", why: "Same as your last two items", tier: "WEAK", basis: "SESSION" });
+  });
+  it("trusts reviewed active aliases only, while an unreviewed fully classified record stays out of catalogue evidence", () => {
+    const reviewed = item({ name: "Board marker", aliases: "dry erase pen", category: "OFFICE SUPPLIES" });
+    const unreviewed = item({ name: "Dry erase pen provisional", aliases: "provisional pen", category: "UNTRUSTED", needsReview: true });
+    expect(suggest("dry erase pen", [reviewed, unreviewed], []).category).toMatchObject({ value: "OFFICE SUPPLIES", tier: "STRONG", basis: "CATALOG" });
+    expect(suggest("provisional pen", [unreviewed], [])).toEqual({});
+    const recent = [item({ name: "Last provisional", category: "TOOLS", needsReview: true }), item({ name: "Earlier provisional", category: "TOOLS", needsReview: true })];
+    expect(suggest("zebra", [], recent).category).toMatchObject({ value: "TOOLS", tier: "WEAK", basis: "SESSION" });
+  });
+  it("fails closed for incomplete trusted data and leaves colliding exact aliases conflicting", () => {
+    const { needsReview: _missingFlag, ...missingFlag } = item({ name: "Missing flag", category: "MISSING" });
+    const reviewedPiece = item({ name: "Reviewed piece", category: "VALID", unit: "piece" });
+    const blankUnit = item({ name: "Blank unit", category: "UNKNOWN", unit: " " });
+    const blankCategory = item({ name: "Blank category", category: " " });
+    const invalidBehaviour = item({ name: "Invalid behaviour", itemType: "Consumable", consumptionMode: "OTHER" });
+    expect(suggest("missing flag", [missingFlag as unknown as Known], [])).toEqual({});
+    expect(suggest("reviewed piece", [reviewedPiece], []).category).toMatchObject({ value: "VALID", tier: "STRONG" });
+    expect(suggest("blank unit", [blankUnit], [])).toEqual({});
+    expect(suggest("blank category", [blankCategory], [])).toEqual({});
+    expect(suggest("invalid behaviour", [invalidBehaviour], [])).toEqual({});
+    const first = item({ name: "Marker first", aliases: "shared ink", category: "FIRST", unit: "box" });
+    const second = item({ name: "Marker second", aliases: "shared ink", category: "SECOND", unit: "bottle" });
+    expect(suggest("shared ink", [first, second], []).category).toMatchObject({ tier: "CONFLICTING", basis: "CATALOG" });
+    expect(suggest("shared ink", [first, second], []).unit).toMatchObject({ tier: "CONFLICTING", basis: "CATALOG" });
   });
 });
 

@@ -1,14 +1,14 @@
 # Current Work Pointer — Logistics Hub
 
-## Data-Surface UI — UX-1 container-aware Stock and Items cards — COMMITTED, NOT YET PUSHED — 2026-10-09
+## V1.15 review-only AI — first verified-catalogue filter checkpoint local; pending root diff review — 2026-10-09
 
-SPEC: `docs/specs/accepted/2026-10-08-data-surface-ui-amendment.md` (accepted). BRANCH: `slice/ux-data-surface`; UX-1 commit `333b73081ecc86e9af05dd5bdc5392cc39d78b6a`; `origin/main` is `05b83cb4f42f1e3d0a9c75df174e75273c87b101`; no upstream is configured and the slice is not pushed. Sole writer: Codex.
+SPEC: `docs/specs/accepted/road-to-v2/2026-10-09-v1.15-review-only-ai-and-correction-learning-amendment.md` (accepted). BRANCH: `slice/v1.15-review-only-ai` at `31d963414cdee85d2032eb21a8efdd696da893c1`, with no upstream until the first reviewed AI checkpoint is pushed. `origin/main` is the same SHA: PR 31 merged by fast-forward at 2026-10-09 11:19 UTC; the former `slice/ux-data-surface` remote branch is deleted after ancestry proof. Writer lock: Codex, claimed 2026-10-08 22:13 UTC.
 
-STATE: UX-1 reproduced the absent UX-0 mocked-fixture baseline, then fixed the Stock action clipping with a 44rem responsive-wrapper container query. The reviewed ten-path checkpoint committed after owner-approved narrow lean-ctx allowance; it is not pushed. Baseline, screenshots and final metrics are in `docs/visual-research/data-surface-ui.md`. The V1.15 Final Pass remains PARTIAL with its owner actions preserved below; it is excluded from this slice.
+STATE: Data-Surface UI UX-1 through UX-4 is complete on `main` at `31d9634`; its CI repair covers the Stock More-actions locators and dynamic item-name wording audit. The known local review-only AI filter/cache diff is preserved on this branch and is the active checkpoint. The V1.15 Final Pass remains PARTIAL with its owner actions preserved below.
 
-SCOPE: container-aware card conversion for Items and Stock at 44rem, with the existing card anatomy and no data/API/action change. UX-2 menus, UX-3 number/sort semantics, UX-4 Directory Usage and the final legacy-rule cleanup are not started.
+SCOPE: Only the accepted review-only AI filter/cache checkpoint: active, reviewed, fully classified items form verified suggestion/evaluation evidence; aliases are bounded to the current reviewed catalogue; missing cached review flags fail closed; duplicates remain complete-inventory warnings; SESSION remains weak. The changed source/test paths are preserved unstaged pending root exact-diff review. `npx vitest run tests/catalog-draft.test.ts tests/item-knowledge.test.ts` passed 24/24 and `npm run typecheck` passed; no provider was called.
 
-NEXT: commit this continuity correction and push the same slice branch, then begin only UX-2 after its focused authority check. UX-3 and UX-4 follow separate root review packets; V3 is frozen. The later Granite/Qwen/GLM review-and-correction extension requires a registered accepted amendment and is not started.
+NEXT: root reviews the first filter/cache logical diff before a commit. Then push the coherent checkpoint to this branch for Node 22 CI and cache-browser evidence. The cache browser regression remains UNRUN because its exact Playwright command was permanently lean-ctx-blocked. `tests/catalogue.test.ts` fails before tests on local Node v26.3.0/Vitest 4.1.11 with unlocated `SyntaxError: Invalid or unexpected token`, still UNKNOWN. The `ai-roles` baseline passed 15/15, but its review-only adapter is NOT STARTED. V3 is frozen; no provider call, migration, production write, or review-role implementation started.
 
 
 ## V1.15 Final Pass — four-model Ambient Intelligence — MERGED (PARTIAL), owner actions open — 2026-10-08

@@ -7,7 +7,7 @@ import { knowledgeHints } from "./item-knowledge";
  * offered. A suggestion is only ever a button to tap; nothing is chosen or saved because of one, and nothing here calls a network.
  */
 
-export type Known = { name: string; aliases?: string | null; category: string; itemType: string; consumptionMode: string; unit: string; stockArea: string | null; status: string };
+export type Known = { name: string; aliases?: string | null; category: string; itemType: string; consumptionMode: string; unit: string; stockArea: string | null; status: string; needsReview: boolean };
 /**
  * Strong: an exact name match to a confirmed item, or enough look-alikes agree and nothing in the built-in knowledge disagrees.
  * Weak: a single look-alike, a few that do not yet agree enough, or the knowledge base alone. Conflicting: the look-alikes and the
@@ -23,6 +23,12 @@ export type Suggestions = { behaviour?: Suggestion<Behaviour>; category?: Sugges
 const VOTERS = 5;
 /** Look-alikes (of at most five) that must agree, with nothing contradicting them, for a Strong suggestion: 4, from 3, because the leave-one-out run separated Strong from Weak cleanly there (tuned by `npm run evaluate:suggestions`). */
 export const STRONG_VOTES = 4;
+const knownNames = (item: Known) => [item.name, ...(item.aliases ?? "").split(/[;,\n]/).map((alias) => alias.trim()).filter(Boolean)];
+const isExact = (typed: string, item: Known) => {
+  const wanted = words(typed).join(" ");
+  return wanted.length > 0 && knownNames(item).some((name) => words(name).join(" ") === wanted);
+};
+export const verified = (item: Known) => item.status === "ACTIVE" && item.needsReview === false && item.category.trim() !== "" && item.category !== UNSORTED_CATEGORY && item.unit.trim() !== "" && (item.itemType === "Loanable" ? item.consumptionMode === "WHOLE_UNIT" : item.itemType === "Consumable" && (item.consumptionMode === "WHOLE_UNIT" || item.consumptionMode === "OPEN_UNIT"));
 const quoted = (name: string) => `“${name.length > 28 ? `${name.slice(0, 27).trimEnd()}…` : name}”`;
 
 /** Existing items whose name shares words with what was typed (the last word may still be half typed), best first. */
@@ -32,10 +38,11 @@ function lookAlikes(typed: string, known: readonly Known[]): Known[] {
   const last = wanted[wanted.length - 1]!;
   const scored: Array<{ item: Known; hit: number; size: number }> = [];
   for (const item of known) {
-    if (item.itemType === "NEEDS_REVIEW" || item.category === UNSORTED_CATEGORY) continue;
-    const other = words(item.name);
-    const hit = wanted.filter((word) => other.includes(word) || (word === last && word.length >= 3 && other.some((candidate) => candidate.startsWith(word)))).length;
-    if (hit && hit / wanted.length >= 0.5) scored.push({ item, hit, size: other.length });
+    const closest = knownNames(item).map((name) => words(name)).map((other) => ({
+      hit: wanted.filter((word) => other.includes(word) || (word === last && word.length >= 3 && other.some((candidate) => candidate.startsWith(word)))).length,
+      size: other.length
+    })).sort((a, b) => b.hit - a.hit || a.size - b.size)[0];
+    if (closest && closest.hit / wanted.length >= 0.5) scored.push({ item, ...closest });
   }
   return scored.sort((a, b) => b.hit / wanted.length - a.hit / wanted.length || a.size - b.size || a.item.name.localeCompare(b.item.name)).slice(0, VOTERS).map(({ item }) => item);
 }
@@ -48,10 +55,14 @@ function tally<T>(values: T[]): Array<[T, number]> {
 }
 
 /** What the look-alikes and the knowledge base say about one field, and how sure that is. */
-function decide<T>(votes: T[], exact: boolean, why: string, hint: { value: T; why: string } | undefined): Suggestion<T> | undefined {
+function decide<T>(votes: T[], exact: boolean, conflictingExact: boolean, why: string, hint: { value: T; why: string } | undefined): Suggestion<T> | undefined {
   const ranked = tally(votes);
   const top = ranked[0];
   if (!top) return hint ? { value: hint.value, why: hint.why, tier: "WEAK", basis: "KNOWLEDGE" } : undefined;
+  if (conflictingExact) {
+    const other = ranked.find(([value]) => value !== top[0]);
+    if (other) return { value: top[0], why, tier: "CONFLICTING", basis: "CATALOG", other: { value: other[0], why } };
+  }
   const tied = ranked[1] !== undefined && ranked[1][1] === top[1];
   if (tied) return { value: top[0], why, tier: "CONFLICTING", basis: "CATALOG", other: { value: ranked[1]![0], why } };
   if (hint && hint.value !== top[0]) return { value: top[0], why, tier: "CONFLICTING", basis: "CATALOG", other: hint };
@@ -64,23 +75,26 @@ function decide<T>(votes: T[], exact: boolean, why: string, hint: { value: T; wh
  * knowledge base (item-knowledge.ts); with neither, the session's own repetition is offered.
  */
 export function suggest(typed: string, catalog: readonly Known[], recent: readonly Known[], options: { knowledge?: boolean } = {}): Suggestions {
-  const active = catalog.filter((item) => item.status !== "INACTIVE");
-  const similar = lookAlikes(typed, active);
-  const hints = options.knowledge === false ? {} : knowledgeHints(typed, [...new Set(active.map((item) => item.category))]);
+  const trusted = catalog.filter(verified);
+  const exact = trusted.filter((item) => isExact(typed, item));
+  const similar = exact.length ? exact : lookAlikes(typed, trusted);
+  const hints = options.knowledge === false ? {} : knowledgeHints(typed, [...new Set(trusted.map((item) => item.category))]);
   const out: Suggestions = {};
   if (similar.length || hints.behaviour || hints.unit || hints.category) {
-    const exact = similar.length > 0 && words(similar[0]!.name).join(" ") === words(typed).join(" ");
+    const exactAgrees = exact.length > 0;
+    const exactConflicts = <T>(pick: (item: Known) => T) => new Set(exact.map(pick)).size > 1;
     const why = similar.length ? `Like ${quoted(similar[0]!.name)}${similar.length > 1 ? ` and ${similar.length - 1} more` : ""}` : "";
-    const behaviour = decide(similar.map((item) => behaviourOf(item)).filter((value): value is Behaviour => value !== null && value !== "REVIEW_LATER"), exact, why, hints.behaviour);
-    const category = decide(similar.map((item) => item.category), exact, why, hints.category);
-    const unit = decide(similar.map((item) => item.unit), exact, why, hints.unit);
-    const stockArea = decide(similar.map((item) => item.stockArea ?? "Inventory"), exact, why, undefined);
+    const behaviour = decide(similar.map((item) => behaviourOf(item)).filter((value): value is Behaviour => value !== null && value !== "REVIEW_LATER"), exactAgrees, exactConflicts(behaviourOf), why, hints.behaviour);
+    const category = decide(similar.map((item) => item.category), exactAgrees, exactConflicts((item) => item.category), why, hints.category);
+    const unit = decide(similar.map((item) => item.unit), exactAgrees, exactConflicts((item) => item.unit), why, hints.unit);
+    const stockArea = decide(similar.map((item) => item.stockArea ?? "Inventory"), exactAgrees, exactConflicts((item) => item.stockArea ?? "Inventory"), why, undefined);
     if (behaviour) out.behaviour = behaviour;
     if (category) out.category = category;
     if (unit) out.unit = unit;
     if (stockArea) out.stockArea = stockArea;
     if (similar.length) return out;
   }
+  // A session hint is deliberately weak and does not enter the verified catalogue path.
   const last = recent.filter((item) => item.category !== UNSORTED_CATEGORY);
   if (last[0]) {
     const same = <T>(pick: (item: Known) => T) => last.length >= 2 && last.slice(0, 2).every((item) => pick(item) === pick(last[0]!));

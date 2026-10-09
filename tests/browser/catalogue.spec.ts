@@ -766,6 +766,38 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     expect(server.state.starts).toEqual([{ id: proposed, locationId: "LOC-0003" }]);
   });
 
+  test("refreshes an old cached snapshot so reviewed catalogue matching recovers", async ({ page }) => {
+    const server = serve(page);
+    await turnOn(page, server);
+    expect(server.state.items).toContainEqual(expect.objectContaining({ name: "Whiteboard Marker Black", needsReview: false }));
+    await page.evaluate(async () => new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open("logistics-hub-catalogue");
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const transaction = db.transaction("meta", "readwrite");
+        const store = transaction.objectStore("meta");
+        const read = store.get("snapshot");
+        read.onerror = () => reject(read.error);
+        read.onsuccess = () => {
+          const old = read.result as { items: Array<Record<string, unknown>> };
+          delete old.items[0]!.needsReview;
+          store.put(old, "snapshot");
+        };
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+      };
+    }));
+    const snapshots: Array<string | undefined> = [];
+    page.on("request", (request) => { if (request.url().includes("/api/staff/catalogue/snapshot")) snapshots.push(request.headers()["if-none-match"]); });
+    await page.getByRole("button", { name: /^Start cataloguing/ }).click();
+    await expect(page).toHaveURL(/session=CS-/);
+    await expect.poll(() => snapshots.length).toBeGreaterThan(0);
+    expect(snapshots[0]).toBeUndefined();
+    await name(page).fill("Whiteboard");
+    await expect(page.locator("#cat-why")).toContainText("Whiteboard Marker Black");
+  });
+
   test("offline, a device that cannot catalogue offline says so, and what waits on it", async ({ page }) => {
     const server = serve(page);
     await server.ready;

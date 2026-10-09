@@ -4,7 +4,7 @@ import { type Known, suggest } from "../src/catalogue-suggest";
 
 /* Final Pass FP-B: the draft contract. Every Add items field has a source and a state; a person's entry always wins; a photo never proves a quantity. */
 
-const item = (fields: Partial<Known> & { name: string }): Known => ({ category: "OFFICE EQUIPMENT AND SUPPLIES", itemType: "Loanable", consumptionMode: "WHOLE_UNIT", unit: "piece", stockArea: "Inventory", status: "ACTIVE", ...fields });
+const item = (fields: Partial<Known> & { name: string }): Known => ({ category: "OFFICE EQUIPMENT AND SUPPLIES", itemType: "Loanable", consumptionMode: "WHOLE_UNIT", unit: "piece", stockArea: "Inventory", status: "ACTIVE", needsReview: false, ...fields });
 const staplers = ["Stapler", "Heavy duty stapler", "Mini stapler", "Stapler, desk", "Red stapler"].map((name) => item({ name }));
 const input = (over: Partial<DraftInput> = {}): DraftInput => ({ revision: 1, typed: {}, edited: new Set(), suggestions: {}, photo: null, session: {}, defaultQuantity: 1, ...over });
 

@@ -55,7 +55,7 @@ describe("possible duplicates", () => {
 describe("at 600 items", () => {
   const many = Array.from({ length: 600 }, (_, index) => known({ id: `ITM-${index + 1}`, name: `Sample ${["Marker", "Stapler", "Paper", "Cord", "Tape"][index % 5]} ${index}`, model: index % 3 ? null : `M${index}`, serialNumber: index % 7 ? null : `SN${index}`, photoHash: (index * 2654435761 % 2 ** 32).toString(16).padStart(16, "0") }));
   it("judges possible matches and suggestions for every keystroke in a few milliseconds", () => {
-    const catalog = many.map((item) => ({ name: item.name, category: item.category, itemType: "Consumable", consumptionMode: "WHOLE_UNIT", unit: "piece", stockArea: "Inventory", status: "ACTIVE" }));
+    const catalog = many.map((item) => ({ name: item.name, category: item.category, itemType: "Consumable", consumptionMode: "WHOLE_UNIT", unit: "piece", stockArea: "Inventory", status: "ACTIVE", needsReview: false }));
     const started = performance.now();
     for (let run = 0; run < 100; run += 1) {
       possibleDuplicates({ name: `Sample Marker ${run}`, category: "SUPPLIES", model: "M3", serialNumber: "SN9", photoHash: "00000000ffffffff" }, many);
@@ -66,7 +66,7 @@ describe("at 600 items", () => {
 });
 
 describe("suggestions", () => {
-  const item = (fields: Partial<Parameters<typeof suggest>[1][number]> & { name: string }) => ({ category: "SUPPLIES", itemType: "Consumable", consumptionMode: "WHOLE_UNIT", unit: "piece", stockArea: "Inventory", status: "ACTIVE", ...fields });
+  const item = (fields: Partial<Parameters<typeof suggest>[1][number]> & { name: string }) => ({ category: "SUPPLIES", itemType: "Consumable", consumptionMode: "WHOLE_UNIT", unit: "piece", stockArea: "Inventory", status: "ACTIVE", needsReview: false, ...fields });
   const catalog = [
     item({ name: "Whiteboard Marker Black", category: "OFFICE SUPPLIES", unit: "piece" }),
     item({ name: "Whiteboard Marker Blue", category: "OFFICE SUPPLIES", unit: "piece" }),
