@@ -32,7 +32,7 @@ test("item visuals: suggestion, keyboard picker, reset, photo preference and fai
     const draw = canvas.getContext("2d")!; draw.fillStyle = "#45685a"; draw.fillRect(0, 0, 600, 400);
     return canvas.toDataURL("image/jpeg").split(",")[1]!;
   });
-  await panel.locator("input[type=file]").setInputFiles({ name: "projector.jpg", mimeType: "image/jpeg", buffer: Buffer.from(image, "base64") });
+  await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "projector.jpg", mimeType: "image/jpeg", buffer: Buffer.from(image, "base64") });
   await panel.getByRole("button", { name: "Save photo" }).click();
   await expect(panel.locator("[data-tile] .item-visual--loaded img")).toBeVisible();
   await expect(controls.getByRole("button", { name: "Real photo", exact: true })).toHaveAttribute("aria-pressed", "true");

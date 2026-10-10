@@ -41,7 +41,7 @@ test("with every photo and optional panel failing, staff and students still do t
     return canvas.toDataURL("image/jpeg").split(",")[1]!;
   });
   const panel = page.locator("#photo-panel");
-  await panel.locator("input[type=file]").setInputFiles({ name: "lamp.jpg", mimeType: "image/jpeg", buffer: Buffer.from(image, "base64") });
+  await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "lamp.jpg", mimeType: "image/jpeg", buffer: Buffer.from(image, "base64") });
   await panel.getByRole("button", { name: "Save photo" }).click();
   await expect(panel.locator("[data-tile] .item-visual--loaded img")).toBeVisible();
 

@@ -76,7 +76,7 @@ async function itemWithPhoto(page: Page, baseURL: string, cutoutBody: Buffer): P
     const draw = canvas.getContext("2d")!; draw.fillStyle = "#45685a"; draw.fillRect(0, 0, 600, 400);
     return canvas.toDataURL("image/jpeg").split(",")[1]!;
   });
-  await panel.locator("input[type=file]").setInputFiles({ name: "stapler.jpg", mimeType: "image/jpeg", buffer: Buffer.from(image, "base64") });
+  await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "stapler.jpg", mimeType: "image/jpeg", buffer: Buffer.from(image, "base64") });
   await panel.getByRole("button", { name: "Save photo" }).click();
   await expect(panel.locator("[data-tile] .item-visual--loaded img")).toBeVisible();
   const photoId = (await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id as string;

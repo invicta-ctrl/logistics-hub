@@ -810,22 +810,26 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await page.goto("/staff/items?item=ITM-0262");
   const sheet = page.getByRole("dialog", { name: "Scissors" });
   const panel = sheet.locator("#photo-panel");
+  const libraryInput = panel.locator("input[type=file]:not([capture])");
+  const cameraInput = panel.locator("input[type=file][capture=environment]");
+  await expect(libraryInput).toHaveCount(1);
+  await expect(cameraInput).toHaveCount(1);
   await expect(panel.getByRole("button", { name: "Upload photo" })).toBeVisible();
   await expect(sheet.locator(".profile__stock")).toContainText("on hand");
 
   // Something that is not a picture is refused in words, and nothing is shown or saved.
-  await panel.locator("input[type=file]").setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("not an image") });
+  await libraryInput.setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("not an image") });
   await expect(panel.getByRole("alert")).toContainText("JPEG, PNG or WebP");
   await expect(panel.getByRole("button", { name: "Upload photo" })).toBeVisible();
   expect(await detail()).toBeNull();
 
   // A photo taken sideways: the preview comes first, and Cancel saves nothing.
-  await panel.locator("input[type=file]").setInputFiles({ name: "camera.jpg", mimeType: "image/jpeg", buffer: phonePhoto(6) });
+  await cameraInput.setInputFiles({ name: "camera.jpg", mimeType: "image/jpeg", buffer: phonePhoto(6) });
   await expect(panel.getByRole("img", { name: "Preview of the new photo of Scissors" })).toBeVisible();
   await panel.getByRole("button", { name: "Cancel" }).click();
   await expect(panel.getByRole("button", { name: "Upload photo" })).toBeVisible();
   expect(await detail()).toBeNull();
-  await panel.locator("input[type=file]").setInputFiles({ name: "camera.jpg", mimeType: "image/jpeg", buffer: phonePhoto(6) });
+  await cameraInput.setInputFiles({ name: "camera.jpg", mimeType: "image/jpeg", buffer: phonePhoto(6) });
   await panel.getByRole("button", { name: "Save photo" }).click();
   await expect(page.getByText("Photo saved.")).toBeVisible();
   await expect(panel.getByRole("button", { name: "View photo of Scissors" })).toBeVisible();
@@ -946,7 +950,7 @@ test("item photos: a photo someone else added meanwhile is never overwritten, an
   const sheet = page.getByRole("dialog", { name: "Scotch Tape" });
   const panel = sheet.locator("#photo-panel");
   await expect(panel.getByRole("button", { name: "Upload photo" })).toBeVisible();
-  await panel.locator("input[type=file]").setInputFiles({ name: "mine.jpg", mimeType: "image/jpeg", buffer: phonePhoto(1) });
+  await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "mine.jpg", mimeType: "image/jpeg", buffer: phonePhoto(1) });
   await expect(panel.getByRole("img", { name: /Preview of the new photo/ })).toBeVisible();
   // Meanwhile a colleague adds one through the same endpoint.
   const small = await page.evaluate(() => {

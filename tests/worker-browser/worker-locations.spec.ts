@@ -69,7 +69,7 @@ test.describe.serial("smart locations", () => {
     await addPlace(page, "Cabinet 1", "Storage Area", { directions: "Grey cabinet on the left wall.", shared: true });
     // The picture of a place: added with a preview, shown in its row, shared by whatever is kept inside.
     const cabinet = page.getByRole("dialog", { name: "Cabinet 1" });
-    await cabinet.locator("input[type=file]").setInputFiles(banner);
+    await cabinet.locator("input[type=file]:not([capture])").setInputFiles(banner);
     await expect(cabinet.getByRole("img", { name: "Preview of the new picture of Cabinet 1" })).toBeVisible();
     await cabinet.getByRole("button", { name: "Save picture" }).click();
     await expect(page.getByText("Picture saved.")).toBeVisible();
