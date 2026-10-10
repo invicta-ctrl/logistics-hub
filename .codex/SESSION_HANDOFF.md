@@ -1,5 +1,18 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## V1.15/V2 post-merge Stock correction (Codex cloud, 2026-10-10)
+
+~~~text
+TASK: Continue until accepted V1.15/V2 scope and live release gates are complete; PR closure/main integration does not end the task. Earl authorizes continued checkpoint pushes and main integration.
+INTEGRATED: PR 32 MERGED at 47e0fba737c64bb8842fae9d6092ddb535b16634; main fast-forwarded, old slice deleted/pruned. All eight source checks green. Main Workers Build/CodeQL/app 232 passed; Worker 85 passed, one Stock first-load failure.
+ACTIVE: slice/v1.15-stock-load-race, base 47e0fba. Root Codex remains sole writer. A valid item typed before the initial stock response now resolves on arrival; quantity enables without retyping or inventory writes.
+VERIFY: Controlled phone regression fails on old source and passes with fix; exact typed choice and quantity 5 preserved, zero movements/receipts. Existing real Worker Stock durable-write case passed 3/3 repetitions, startup typecheck/build passed. Staged privacy and exact-head remote CI must pass before integration.
+NEXT: Check pushed Stock-fix head's CI; if green, fast-forward main, verify main checks/deploy, delete/prune merged slice. If already integrated, stay on main. Fix any concrete postflight failure; do not repeat broad reviews without new evidence.
+LIVE: Prepared procedure /tmp/logistics-provider-check-prep.md uses temporary hybrid Wrangler config: AI/IMAGES remote:true, D1/R2 remote:false, fresh local state/random local owner. Plain dev (not dev --local, which disables remote bindings). One public-photo Gemma request and one real 1280px cleanup; no production inventory mutation. Needs secure CLOUDFLARE_API_TOKEN, confirmed CLOUDFLARE_ACCOUNT_ID, published api.cloudflare.com access and the existing account preview host discovered read-only. Do not register a new subdomain or bypass restrictions. Read-only production HTTP/binding postflight remains separate. No provider call has run in this continuation; usage evidence is waived, not live functionality.
+ROLLBACK: Full release baseline 31d963414cdee85d2032eb21a8efdd696da893c1; immediate Stock-fix baseline 47e0fba737c64bb8842fae9d6092ddb535b16634. Checked reverse patch/local bundle support a new revert commit; no force push, schema or data restore.
+LOCK: Codex yields only after coherent integration/postflight or a documented technical dependency. Receiver runs npm run agent:status before claiming. Earlier blocks are historical.
+~~~
+
 ## V1.15/V2 local feature completion (Codex cloud, 2026-10-10)
 
 ~~~text

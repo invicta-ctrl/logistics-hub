@@ -1,5 +1,15 @@
 # Current Work Pointer — Logistics Hub
 
+## V1.15/V2 post-merge continuation — 2026-10-10
+
+PR 32 is MERGED at `47e0fba737c64bb8842fae9d6092ddb535b16634`, now on `main`; its slice was deleted. All eight source-head checks passed before the fast-forward. Main's Workers Build, CodeQL and 232 app-browser cases passed, but its Worker run passed 85/86 and exposed a first-load Stock race: an item entered before the initial stock payload stayed unresolved and the quantity field stayed disabled.
+
+ACTIVE SLICE: `slice/v1.15-stock-load-race`, based on that main commit. The stock refresh now resolves a recognized typed item when the first data arrives. One controlled browser regression fails before the fix and passes after it, preserving the typed choice and recording no movement. The real Worker stock-write case passed three repetitions; its startup typecheck/build passed. Exact pushed-head CI remains the integration gate at this checkpoint. Once green, fast-forward main, verify its checks/deploy and delete/prune this slice. Actual Git refs/check pages establish whether integration has already happened; do not recreate a merged slice.
+
+OWNER CONTINUATION: Earl explicitly requires continuing after PR closure/main pushes until accepted V1.15/V2 work is genuinely complete, with pushed checkpoints and efficient delegation. No further merge approval is needed. Stop redundant broad reviews; fix concrete failures and finish outstanding live checks. Remaining provider gates are one public-photo Gemma call and one real 1280 px foreground cleanup, plus production HTTP postflight. Secure Cloudflare token, confirmed account ID and supported API/preview-host network access are not configured in this runtime. A prepared hybrid preview keeps D1/R2 isolated locally while using real AI/Images bindings; this does not by itself prove production bindings. Independent usage evidence is waived. No trusted model activation, schema/dependency/migration or V3 work.
+
+ROLLBACK: Full release baseline remains `31d963414cdee85d2032eb21a8efdd696da893c1`; immediate Stock-fix baseline is `47e0fba737c64bb8842fae9d6092ddb535b16634`. Restore code through a new revert commit, never a force push or database restore. Receiver must check the writer lock before claiming. The earlier blocks below are history; this block is current.
+
 ## V1.15/V2 continuation implemented; release evidence remains partial — 2026-10-10
 
 SPEC: Accepted 2026-10-09 review-only AI/correction-learning and 2026-10-10 photo/mobile amendments. BRANCH: `slice/v1.15-review-only-ai`; draft PR 32. Implementation `4a5054cf87985543b84e4da363bf252af91fe0c4`; bounded-evidence guard `d392e4e70232591435a5e9106c5cbf017caf9bcd`; crop visibility guard `c337784c3d85ba1117f03f27c5d3544b07b99520`; full-suite integration fixes `6dc243d882036cda1712ec0eed9d30c7b97573b3`. Starting checkpoint `13752a7966d4e97ca3c15846bd70fc5cc951ef90`; pre-integration rollback baseline is `31d963414cdee85d2032eb21a8efdd696da893c1`.

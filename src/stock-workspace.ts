@@ -305,7 +305,9 @@ export async function stockWorkspace(): Promise<void> {
         optionsSignature = signature;
         mount(document.querySelector("#record-items")!, html`${data.items.filter((item) => item.status !== "INACTIVE").map((item) => html`<option value="${item.name} · ${item.id}">${categoryName(item.category)}</option>`)}`);
       }
-      if (selected) select(data.items.find((item) => item.id === selected!.id) ?? null);
+      // A person may have entered the item while the first stock answer was still loading.
+      const item = selected ? data.items.find((item) => item.id === selected!.id) ?? null : findItem(input.value);
+      if (selected || item) select(item);
       render();
     },
     onError: (error) => {
