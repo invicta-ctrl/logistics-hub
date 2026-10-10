@@ -83,6 +83,7 @@ function serve(page: Page, options: { items?: Item[]; active?: boolean } = {}) {
       expect(route.request().headers()["content-type"]).toBe("image/jpeg");
       await json(route, { name: state.photoName }, 200, { "cache-control": "private, no-store" });
     });
+    await page.route("**/ai-offer", (route) => json(route, { ...route.request().postDataJSON(), expiresAt: Date.now() + 60000, proposal: null, reason: "NO_RELEVANT_EVIDENCE" }));
     await page.route("**/api/staff/items/bulk", async (route) => {
       const body = route.request().postDataJSON() as { action: string; value?: string; items: Array<{ id: string }> };
       state.bulk.push({ action: body.action, value: body.value, count: body.items.length });
@@ -113,7 +114,13 @@ test("a library photo is kept whole and mobile save actions leave focused fields
   await begin(page, server);
   await expect(page.locator("#cat-file")).toHaveAttribute("capture", "environment");
   await expect(page.locator("#cat-library")).not.toHaveAttribute("capture");
-  await expect(page.getByRole("button", { name: "Choose photo" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Choose photo or file", exact: true })).toBeVisible();
+  const libraryChooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Choose photo or file", exact: true }).click();
+  expect(await (await libraryChooser).element().getAttribute("id")).toBe("cat-library");
+  const cameraChooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Take photo", exact: true }).click();
+  expect(await (await cameraChooser).element().getAttribute("capture")).toBe("environment");
   const portrait = Buffer.from(await page.evaluate(async () => {
     const canvas = Object.assign(document.createElement("canvas"), { width: 80, height: 160 });
     const context = canvas.getContext("2d")!;
@@ -1025,7 +1032,7 @@ for (const decision of ["Keep", "Reject", "Correct"] as const) {
     await pick(page, "Take").click();
     await page.getByLabel("Category").fill("OFFICE SUPPLIES");
     await page.getByLabel("Counted in").fill("piece");
-    await page.getByRole("button", { name: "Review AI suggestion", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Review AI suggestion", exact: true })).toHaveCount(0);
     await expect(page.locator("#cat-ai")).toContainText("AI suggestion");
     await expect(name(page)).toHaveValue("Unknown marker");
     await page.locator("#cat-ai").getByRole("button", { name: decision, exact: true }).click();
@@ -1045,22 +1052,54 @@ for (const decision of ["Keep", "Reject", "Correct"] as const) {
   });
 }
 
+test("photo prefill checks AI automatically and a retake queues only the newest draft", async ({ page }) => {
+  const server = serve(page, { active: true });
+  await server.ready;
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  const requests: Array<{ name: string; revision: number }> = [];
+  await page.route("**/ai-offer", async (route) => {
+    const body = route.request().postDataJSON(); requests.push(body);
+    if (requests.length === 1) await held;
+    await route.fulfill({ json: { id: body.name, ...body, expiresAt: Date.now() + 60000, proposal: { kind: "REVIEW_ONLY", role: "TEXT_NORMALIZE", field: "term", value: `${body.name} suggestion` }, label: `${body.name} suggestion`, reason: "OK" } });
+  });
+  await begin(page, server);
+  await expect(page.locator(".cat-ai")).toBeHidden();
+  server.state.photoName = "First photo";
+  await page.locator("#cat-library").setInputFiles({ name: "first.png", mimeType: "image/png", buffer: PNG });
+  await expect.poll(() => requests.length).toBe(1);
+  server.state.photoName = "Latest photo";
+  await page.locator("#cat-library").setInputFiles({ name: "retake.png", mimeType: "image/png", buffer: PNG });
+  await expect(name(page)).toHaveValue("Latest photo");
+  expect(requests).toHaveLength(1);
+  release();
+  await expect(page.locator("#cat-ai")).toContainText("Latest photo suggestion");
+  await expect(page.locator("#cat-ai")).not.toContainText("First photo suggestion");
+  expect(requests.map((body) => body.name)).toEqual(["First photo", "Latest photo"]);
+  expect(requests[1]!.revision).toBeGreaterThan(requests[0]!.revision);
+  await expect(name(page)).toHaveValue("Latest photo");
+  expect(server.state.captures).toHaveLength(0);
+});
+
 test("a late AI response cannot overwrite a staff edit; offline saving is independent", async ({ page }) => {
   const server = serve(page, { active: true });
   await server.ready;
   let release: () => void = () => {};
   const barrier = new Promise<void>((resolve) => { release = resolve; });
   let requested = false;
+  let completed = false;
   await page.route("**/ai-offer", async (route) => {
-    const body = route.request().postDataJSON(); requested = true; await barrier;
+    const body = route.request().postDataJSON();
+    if (body.name !== "Staplr") { await route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...body, expiresAt: Date.now() + 60000, proposal: null, reason: "NO_RELEVANT_EVIDENCE" }) }); return; }
+    requested = true; await barrier;
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ id: "late", ...body, expiresAt: Date.now() + 60000, proposal: { kind: "REVIEW_ONLY", role: "TEXT_NORMALIZE", field: "term", value: "Stapler" }, label: "Stapler", reason: "OK" }) });
+    completed = true;
   });
   await begin(page, server);
   await name(page).fill("Staplr");
-  await page.getByRole("button", { name: "Review AI suggestion", exact: true }).click();
   await expect.poll(() => requested).toBe(true);
   await name(page).fill("Staff owns this name"); release();
-  await expect(page.getByRole("button", { name: "Review AI suggestion", exact: true })).toBeEnabled();
+  await expect.poll(() => completed).toBe(true);
   await expect(page.locator("#cat-ai")).not.toContainText("AI suggestion");
   await expect(name(page)).toHaveValue("Staff owns this name");
   await pick(page, "Not sure").click();
@@ -1085,11 +1124,13 @@ test("crop Apply, Reset and Cancel keep the full photo and identity", async ({ p
     let next = source;
     let cancel = false;
     cropEditor(host, source, (value) => { next = value; }, () => { cancel = true; });
-    const width = host.querySelector<HTMLInputElement>('[data-crop="width"]')!;
-    width.value = "50"; width.dispatchEvent(new Event("input", { bubbles: true }));
+    const corner = host.querySelector<HTMLButtonElement>('[data-crop-handle="ne"]')!;
+    await new Promise<void>((resolve) => { const check = () => corner.disabled ? setTimeout(check, 10) : resolve(); check(); });
+    const resize = () => { for (let i = 0; i < 10; i++) corner.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", shiftKey: true, bubbles: true })); };
+    resize();
     host.querySelector<HTMLButtonElement>("[data-reset]")!.click();
-    const reset = width.value;
-    width.value = "50"; width.dispatchEvent(new Event("input", { bubbles: true }));
+    const reset = host.querySelector<HTMLElement>(".photo-crop__frame")!.style.width;
+    resize();
     host.querySelector<HTMLButtonElement>("[data-apply]")!.click();
     await new Promise<void>((resolve) => { const check = () => next === source ? setTimeout(check, 10) : resolve(); check(); });
     const bitmap = await createImageBitmap(next.thumb); const dimensions = [bitmap.width, bitmap.height]; bitmap.close();
@@ -1098,7 +1139,7 @@ test("crop Apply, Reset and Cancel keep the full photo and identity", async ({ p
     host.querySelector<HTMLButtonElement>("[data-cancel-crop]")!.click();
     host.remove(); return { reset, dimensions, kept, cancel };
   });
-  expect(result).toEqual({ reset: "100", dimensions: [320, 320], kept: true, cancel: true });
+  expect(result).toEqual({ reset: "100%", dimensions: [320, 320], kept: true, cancel: true });
 });
 
 test("a corrupt replacement keeps a valid unsaved profile photo and its Save action", async ({ page }) => {
@@ -1117,11 +1158,12 @@ test("a corrupt replacement keeps a valid unsaved profile photo and its Save act
   await expect(panel.locator("[data-save]")).toBeVisible();
   const preview = await panel.locator("[data-tile] img").getAttribute("src");
   await panel.getByRole("button", { name: "Crop thumbnail", exact: true }).click();
-  const width = panel.getByRole("slider", { name: "Crop width" });
-  await width.focus(); await page.keyboard.press("ArrowLeft");
-  await expect(width).toHaveValue("99");
+  const corner = panel.getByRole("button", { name: "Resize crop from top right" });
+  await expect(corner).toBeEnabled();
+  await corner.focus(); await page.keyboard.press("ArrowLeft");
+  expect(await panel.locator(".photo-crop__frame").evaluate((frame) => (frame as HTMLElement).style.width)).toBe("99%");
   await panel.getByRole("button", { name: "Reset crop", exact: true }).click();
-  await expect(width).toHaveValue("100");
+  expect(await panel.locator(".photo-crop__frame").evaluate((frame) => (frame as HTMLElement).style.width)).toBe("100%");
   await panel.getByRole("button", { name: "Cancel crop", exact: true }).click();
   await expect(panel.locator("[data-tile] img")).toHaveAttribute("src", preview!);
   await input.setInputFiles({ name: "corrupt.jpg", mimeType: "image/jpeg", buffer: Buffer.from("invalid jpeg") });

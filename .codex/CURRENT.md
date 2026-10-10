@@ -1,5 +1,13 @@
 # Current Work Pointer — Logistics Hub
 
+## Familiar mobile photo flow — active owner refinement, 2026-10-11
+
+ACTIVE: `slice/v1.15-familiar-photo-flow`, based on main `66c497941b424d5720675cea623c0742f451f10e`; Codex holds the writer lock. The owner requests automatic AI analysis after prefill, a native photo/file chooser plus a camera action, cleanup while updating Inventory photos, direct crop handles, simpler screen design, and a calculator recognition fix. Accepted clarification lives in the existing 2026-10-10 photo/mobile amendment. Keep human Keep/Reject/Correct and reviewed-evidence boundaries.
+
+CHECKPOINT: Automatic serialized/debounced offers, stale draft/photo guards, native source selection and direct corner/frame crop controls are implemented. Eight focused browser cases passed, including all feedback decisions, a held offer across retake, a late staff edit, chooser sources, crop reset/cancel and original identity. Typecheck/build passed. Continue with truthful recognition outcomes, weak calculator photo candidates, staged replacement cleanup/owner activation, shared mobile simplification and actual touch verification; exact-head CI governs main integration. Push coherent checkpoints and merge/prune once green under existing owner authorization.
+
+LIVE ACCESS: `wrangler.jsonc` already declares AI and IMAGES. Main auto-deploy supplies configured bindings; no environment edit is required to use them from the owner's signed-in phone. Cleanup is owner-controlled and defaults off; actual production setting is unknown without authenticated status. A Cloudflare token is optional for the separately prepared isolated probes, not a prerequisite for site operation. Two real provider checks remain unproven; independent usage evidence is waived. Do not claim the roadmap fully verified from mocks.
+
 ## V1.15/V2 runtime verified on main; two live photo checks blocked — 2026-10-10
 
 RUNTIME: `3bc7c1e8bd1b3b0646b6ddc9684758a4a7f4e47d` is merged to main and deployed; PR 32 and the subsequent Stock slice are integrated and their branches pruned. Both source and main CI passed all 233 app-browser and 86 real-Worker cases; main CodeQL and Workers Build passed. Public HTTP postflight passed: homepage/Lending/Self-Service/login respond, unauthenticated private APIs return 401, build.json remains 404, and deployed main/CSS/Stock bundles match the verified build byte for byte. No production data was written. This checkpoint changes records only; runtime verification refers to the stated code commit.

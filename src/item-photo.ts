@@ -75,34 +75,91 @@ export async function cropPhoto(source: Prepared, rect: { x: number; y: number; 
   } finally { bitmap.close(); }
 }
 
-/** Native sliders work with touch, arrows and assistive technology; nothing saves until Apply, then Save. */
+/** Drag the frame or its corners; only the thumbnail changes after Apply, then Save. */
 export function cropEditor(host: HTMLElement, source: Prepared, apply: (photo: Prepared) => void, cancel: () => void): void {
   let closed = false;
-  mount(host, html`<fieldset class="photo-crop"><legend>Crop thumbnail</legend><p>The full photo is kept. Adjust the frame, then apply it.</p>
-    <div class="photo-crop__image"><img src="${source.preview}" alt="Full photo with the selected crop frame" /><div class="photo-crop__frame" aria-hidden="true"></div></div>
-    ${(["width", "height", "x", "y"] as const).map((key) => html`<label>${{ width: "Crop width", height: "Crop height", x: "Horizontal position", y: "Vertical position" }[key]}<input type="range" data-crop="${key}" min="${key === "width" || key === "height" ? 10 : 0}" max="100" value="${key === "width" || key === "height" ? 100 : 0}" /><output></output></label>`)}
-    <p role="alert" hidden></p><div class="photo-actions"><button type="button" class="button button--primary" data-apply>Apply crop</button><button type="button" class="button button--secondary" data-reset>Reset crop</button><button type="button" class="button button--ghost" data-cancel-crop>Cancel crop</button></div></fieldset>`);
+  let preparing = false;
+  let ready = false;
+  let rect = { x: 0, y: 0, width: 100, height: 100 };
+  type Handle = "move" | "nw" | "ne" | "sw" | "se";
+  type Rect = typeof rect;
+  let drag: { pointer: number; handle: Handle; x: number; y: number; rect: Rect; bounds: DOMRect } | null = null;
+  const hintId = `photo-crop-hint-${crypto.randomUUID()}`;
+  mount(host, html`<fieldset class="photo-crop"><legend>Crop thumbnail</legend>
+    <p id="${hintId}">Drag a corner to crop. Drag inside the frame to move it.<span class="visually-hidden"> Arrow keys adjust the focused control. Hold Shift for a larger step.</span></p>
+    <div class="photo-crop__stage"><div class="photo-crop__image"><img alt="Full photo with the selected crop frame" draggable="false" />
+      <div class="photo-crop__frame" hidden><button type="button" class="photo-crop__move" data-crop-handle="move" aria-label="Move crop frame" aria-describedby="${hintId}"><span class="photo-crop__grid" aria-hidden="true"></span></button>
+        ${(["nw", "ne", "sw", "se"] as const).map((handle) => html`<button type="button" class="photo-crop__handle photo-crop__handle--${handle}" data-crop-handle="${handle}" aria-label="Resize crop from ${{ nw: "top left", ne: "top right", sw: "bottom left", se: "bottom right" }[handle]}" aria-describedby="${hintId}"></button>`)}
+      </div></div></div>
+    <output class="visually-hidden" data-crop-summary aria-live="polite"></output><p role="alert" hidden></p>
+    <div class="photo-actions"><button type="button" class="button button--primary" data-apply disabled>Apply crop</button><button type="button" class="button button--secondary" data-reset disabled>Reset crop</button><button type="button" class="button button--ghost" data-cancel-crop>Cancel crop</button></div></fieldset>`);
   const editor = host.querySelector<HTMLFieldSetElement>("fieldset")!;
   const preview = editor.querySelector<HTMLImageElement>("img")!;
-  void dataUrl(source.display).then((url) => { if (!closed && preview.isConnected) preview.src = url; }).catch(() => undefined);
-  const fields = Object.fromEntries([...host.querySelectorAll<HTMLInputElement>("[data-crop]")].map((field) => [field.dataset.crop!, field]));
-  const rect = () => ({ x: Number(fields.x!.value), y: Number(fields.y!.value), width: Number(fields.width!.value), height: Number(fields.height!.value) });
+  const image = editor.querySelector<HTMLElement>(".photo-crop__image")!;
+  const frame = editor.querySelector<HTMLElement>(".photo-crop__frame")!;
+  const move = editor.querySelector<HTMLButtonElement>("[data-crop-handle=move]")!;
+  const controls = [...editor.querySelectorAll<HTMLButtonElement>("button:not([data-cancel-crop])")];
+  for (const button of controls) button.disabled = true;
+  const valid = () => !closed && editor.isConnected && host.contains(editor);
   const draw = () => {
-    fields.x!.max = String(100 - Number(fields.width!.value)); fields.y!.max = String(100 - Number(fields.height!.value));
-    for (const field of Object.values(fields)) field.nextElementSibling!.textContent = `${field.value}%`;
-    const r = rect(); const frame = host.querySelector<HTMLElement>(".photo-crop__frame")!;
-    Object.assign(frame.style, { left: `${r.x}%`, top: `${r.y}%`, width: `${r.width}%`, height: `${r.height}%` });
+    Object.assign(frame.style, { left: `${rect.x}%`, top: `${rect.y}%`, width: `${rect.width}%`, height: `${rect.height}%` });
+    editor.querySelector<HTMLOutputElement>("[data-crop-summary]")!.value = `${Math.round(rect.width)}% wide, ${Math.round(rect.height)}% high, ${Math.round(rect.x)}% from the left and ${Math.round(rect.y)}% from the top.`;
   };
-  host.querySelector("[data-reset]")!.addEventListener("click", () => { fields.width!.value = fields.height!.value = "100"; fields.x!.value = fields.y!.value = "0"; draw(); });
-  host.querySelector("[data-cancel-crop]")!.addEventListener("click", () => { closed = true; cancel(); });
-  editor.addEventListener("input", draw);
-  host.querySelector<HTMLButtonElement>("[data-apply]")!.addEventListener("click", async (event) => {
-    const button = event.currentTarget as HTMLButtonElement; button.disabled = true;
-    try { const next = await cropPhoto(source, rect()); if (!closed && editor.isConnected && host.contains(editor)) { closed = true; apply(next); } }
-    catch { const alert = host.querySelector<HTMLElement>("[role=alert]")!; alert.hidden = false; alert.textContent = "The crop could not be prepared. Your photo is unchanged."; }
-    finally { button.disabled = false; }
+  const showError = () => { const alert = editor.querySelector<HTMLElement>("[role=alert]")!; alert.hidden = false; alert.textContent = "The crop could not be prepared. Your photo is unchanged."; };
+  const endDrag = () => { const pointer = drag?.pointer; drag = null; if (pointer !== undefined && frame.hasPointerCapture(pointer)) frame.releasePointerCapture(pointer); };
+  const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
+  const adjust = (from: Rect, handle: Handle, dx: number, dy: number, bounds: DOMRect) => {
+    if (handle === "move") rect = { ...from, x: clamp(from.x + dx, 0, 100 - from.width), y: clamp(from.y + dy, 0, 100 - from.height) };
+    else {
+      const minWidth = Math.min(from.width, Math.max(10, 48 / bounds.width * 100));
+      const minHeight = Math.min(from.height, Math.max(10, 48 / bounds.height * 100));
+      let left = from.x, top = from.y, right = from.x + from.width, bottom = from.y + from.height;
+      if (handle.endsWith("w")) left = clamp(left + dx, 0, right - minWidth);
+      else right = clamp(right + dx, left + minWidth, 100);
+      if (handle.startsWith("n")) top = clamp(top + dy, 0, bottom - minHeight);
+      else bottom = clamp(bottom + dy, top + minHeight, 100);
+      rect = { x: left, y: top, width: right - left, height: bottom - top };
+    }
+    draw();
+  };
+  frame.addEventListener("pointerdown", (event) => {
+    if (!ready || preparing || drag || (event.pointerType === "mouse" && event.button !== 0)) return;
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-crop-handle]");
+    if (!button) return;
+    const bounds = image.getBoundingClientRect(); if (!bounds.width || !bounds.height) return;
+    event.preventDefault(); button.focus({ preventScroll: true });
+    drag = { pointer: event.pointerId, handle: button.dataset.cropHandle as Handle, x: event.clientX, y: event.clientY, rect: { ...rect }, bounds };
+    frame.setPointerCapture(event.pointerId);
   });
-  draw(); fields.width!.focus();
+  frame.addEventListener("pointermove", (event) => {
+    if (!drag || drag.pointer !== event.pointerId || !valid()) return;
+    adjust(drag.rect, drag.handle, (event.clientX - drag.x) / drag.bounds.width * 100, (event.clientY - drag.y) / drag.bounds.height * 100, drag.bounds);
+  });
+  for (const event of ["pointerup", "pointercancel", "lostpointercapture"] as const) frame.addEventListener(event, (event) => { if (drag?.pointer === event.pointerId) endDrag(); });
+  frame.addEventListener("keydown", (event) => {
+    if (!ready || preparing || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    const handle = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-crop-handle]")?.dataset.cropHandle as Handle | undefined;
+    if (!handle) return;
+    event.preventDefault(); const step = event.shiftKey ? 5 : 1;
+    adjust(rect, handle, event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0, event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0, image.getBoundingClientRect());
+  });
+  editor.querySelector("[data-reset]")!.addEventListener("click", () => { endDrag(); rect = { x: 0, y: 0, width: 100, height: 100 }; draw(); move.focus({ preventScroll: true }); });
+  editor.querySelector("[data-cancel-crop]")!.addEventListener("click", () => { if (!valid()) return; closed = true; endDrag(); cancel(); });
+  editor.querySelector("[data-apply]")!.addEventListener("click", async () => {
+    if (!valid() || !ready || preparing) return;
+    endDrag(); preparing = true; for (const button of controls) button.disabled = true;
+    try { const next = await cropPhoto(source, { ...rect }); if (valid()) { closed = true; apply(next); } }
+    catch { if (valid()) showError(); }
+    finally { preparing = false; if (valid()) for (const button of controls) button.disabled = false; }
+  });
+  preview.addEventListener("load", () => {
+    if (!valid() || !preview.naturalWidth || !preview.naturalHeight) return;
+    image.style.setProperty("--photo-ratio", String(preview.naturalWidth / preview.naturalHeight));
+    ready = true; frame.hidden = false; for (const button of controls) button.disabled = false; draw(); move.focus({ preventScroll: true });
+  }, { once: true });
+  preview.addEventListener("error", () => { if (valid()) showError(); }, { once: true });
+  void dataUrl(source.display).then((url) => { if (valid()) preview.src = url; }).catch(() => { if (valid()) showError(); });
+  draw();
 }
 
 /**

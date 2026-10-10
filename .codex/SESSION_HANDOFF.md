@@ -1,5 +1,12 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Codex mobile photo refinement — 2026-10-11
+
+~~~text
+ACTIVE: slice/v1.15-familiar-photo-flow from main 66c497941b424d5720675cea623c0742f451f10e; Codex writer lock. See CURRENT.md and the accepted photo/mobile clarification for scope and tests. Keep pushing checkpoints and integrate verified main without renewed approval.
+NEXT: Finish calculator photo-name candidates, truthful recognition failures/recheck, staged Save & remove background with owner activation, visual simplification and mobile touch verification; then exact-head CI, main auto-deploy and public postflight. No schema/dependency changes or automatic trust. wrangler.jsonc already declares AI/IMAGES; the owner can operate settings from their phone. CF credentials are optional for isolated provider probes, not required for site features. Live provider success remains unproven.
+~~~
+
 ## V1.15/V2 verified runtime and live-check dependency (Codex cloud, 2026-10-10)
 
 ~~~text

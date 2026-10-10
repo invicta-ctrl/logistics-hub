@@ -94,6 +94,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   let reviewOffer: ReviewOffer | null = null;
   let reviewDecision: { decision: "KEEP" | "REJECT" | "CORRECT"; correction?: string } | null = null;
   let requestingReview = false;
+  let reviewTimer: ReturnType<typeof setTimeout> | undefined;
+  let wantedReview: { id: string; revision: number; name: string } | null = null;
   let behaviour: Behaviour | null = null;
   /** True once Save has shown the possible matches: the next Save is the person saying "a different one". */
   let armed = false;
@@ -123,7 +125,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     <h1 class="visually-hidden">Cataloguing</h1>
     <p class="visually-hidden" id="cat-announce" role="status"></p>
     <input class="visually-hidden" type="file" id="cat-file" accept="image/jpeg,image/png,image/webp" capture="environment" tabindex="-1" aria-label="Take a photo" />
-    <input class="visually-hidden" type="file" id="cat-library" accept="image/jpeg,image/png,image/webp" tabindex="-1" aria-label="Choose a photo" />
+    <input class="visually-hidden" type="file" id="cat-library" accept="image/jpeg,image/png,image/webp" tabindex="-1" aria-label="Choose a photo or image file" />
     <header class="cat-bar">
       <a class="button button--ghost button--sm" href="/staff/catalogue" data-route>${icon("back")}Add items</a>
       <div class="cat-bar__place"><span class="cat-bar__label">Cataloguing in</span>
@@ -140,11 +142,11 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     <div class="cat-layout">
       <form class="cat-form card" id="cat-form" novalidate aria-label="Add an item">
         <div class="cat-top">
-          <div class="cat-photo-wrap"><button type="button" class="cat-photo" id="cat-photo" aria-label="Take a photo"><span class="cat-photo__empty">${icon("camera")}<span>Take photo</span></span></button><button type="button" class="button button--ghost button--sm cat-photo__choose" id="cat-library-button">Choose photo</button><button type="button" class="button button--ghost button--sm" id="cat-crop-button" hidden>Crop thumbnail</button></div>
+          <div class="cat-photo-wrap"><button type="button" class="cat-photo" id="cat-photo" aria-label="Choose photo or file"><span class="cat-photo__empty">${icon("camera")}<span>Choose photo or file</span></span></button><button type="button" class="button button--ghost button--sm cat-photo__choose" id="cat-camera-button">Take photo</button><button type="button" class="button button--ghost button--sm" id="cat-crop-button" hidden>Crop thumbnail</button></div>
           <div class="field cat-name"><label for="cat-name">Name</label><input id="cat-name" maxlength="120" autocomplete="off" autocapitalize="sentences" spellcheck="false" enterkeyhint="next" placeholder="What is it?" aria-describedby="cat-name-hint" /><p class="field__hint" id="cat-name-hint">A temporary name is fine if you are not sure.</p></div>
         </div>
         <div id="cat-crop" hidden></div>
-        <section class="cat-ai" aria-label="AI review"><button type="button" class="button button--secondary button--sm" id="cat-ask-ai">Review AI suggestion</button><div id="cat-ai" aria-live="polite"></div></section>
+        <section class="cat-ai" aria-label="AI suggestions" hidden><div id="cat-ai" aria-live="polite"></div></section>
         <div class="cat-dup" id="cat-dup" aria-live="polite"></div>
         <fieldset class="cat-behaviour" id="cat-behaviour"><legend>How is it used?</legend>
           <div class="cat-choices">${BEHAVIOURS.map((value, index) => html`<button type="button" class="cat-choice" data-behaviour="${value}" aria-pressed="false" aria-keyshortcuts="Alt+${index + 1}"><span class="cat-choice__title">${BEHAVIOUR_LABELS[value]}</span><span class="cat-choice__hint">${HINTS[value]}</span><span class="cat-choice__suggest" hidden>Suggested</span></button>`)}</div>
@@ -188,15 +190,24 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   onLeave(() => whenIdle(() => false));
 
   const invalidateReview = () => {
+    clearTimeout(reviewTimer);
+    reviewTimer = undefined;
+    wantedReview = null;
     draftRevision += 1;
     reviewOffer = null;
     reviewDecision = null;
     mount($("#cat-ai"), html``);
+    $(".cat-ai").hidden = true;
   };
-  onLeave(() => { draftRevision += 1; });
-  form.addEventListener("input", (event) => { if (!(event.target as HTMLElement).closest(".cat-ai, #cat-crop")) invalidateReview(); });
-  form.addEventListener("change", (event) => { if (!(event.target as HTMLElement).closest(".cat-ai, #cat-crop")) invalidateReview(); });
+  onLeave(invalidateReview);
+  // Native fields emit input as they change; their later blur/change must not invalidate a displayed decision.
+  form.addEventListener("input", (event) => {
+    if ((event.target as HTMLElement).closest(".cat-ai, #cat-crop")) return;
+    invalidateReview();
+    scheduleReview();
+  });
   const drawReview = () => {
+    $(".cat-ai").hidden = false;
     const target = $("#cat-ai");
     if (!reviewOffer?.proposal) {
       mount(target, html`<p role="status">${reviewOffer?.reason === "EXACT_MATCH" ? "The reviewed catalogue already matches this name; AI was not needed." : reviewOffer?.reason === "PENDING" ? "A suggestion is still being checked. You can save manually." : "No AI suggestion is available. You can save manually."}</p>`);
@@ -209,25 +220,37 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       ${reviewDecision ? html`<p role="status">${reviewDecision.decision === "KEEP" ? "Kept" : reviewDecision.decision === "REJECT" ? "Rejected" : "Corrected"}. Save the item when you are ready.</p>` : html`<div class="photo-actions"><button type="button" class="button button--secondary" data-ai-decision="KEEP">Keep</button><button type="button" class="button button--ghost" data-ai-decision="REJECT">Reject</button><button type="button" class="button button--ghost" data-ai-correct>Correct</button></div>
         <div id="cat-ai-correction" hidden><label for="cat-ai-corrected">Correct reviewed item name</label><input id="cat-ai-corrected" maxlength="120" autocomplete="off" /><button type="button" class="button button--secondary" data-ai-apply>Apply correction</button><p role="alert" id="cat-ai-error"></p></div>`}`);
   };
-  $("#cat-ask-ai").addEventListener("click", async () => {
-    if (requestingReview) return;
-    if (!online || who.mode !== "signed-in" || !record?.serverId) { mount($("#cat-ai"), html`<p>AI review needs a connection and a staff sign-in. Saving still works.</p>`); return; }
-    if (photo && !photoChecked) { mount($("#cat-ai"), html`<p>Wait for the photo check, or save manually. You can keep editing.</p>`); return; }
-    if (!value("cat-name")) { field("cat-name").focus(); return; }
-    const revision = draftRevision;
-    const id = draftId;
+  const canReview = () => root.isConnected && online && who.mode === "signed-in" && Boolean(record?.serverId) && !preparing && (!photo || photoChecked) && Boolean(value("cat-name"));
+  /** One request at a time; a newer settled draft replaces the queued one, never the person's fields. */
+  const requestReview = async () => {
+    if (requestingReview || !wantedReview) return;
+    const { id, revision, name } = wantedReview;
+    wantedReview = null;
+    if (!canReview() || id !== draftId || revision !== draftRevision) return;
     requestingReview = true;
-    $("#cat-ask-ai").setAttribute("disabled", "");
+    $(".cat-ai").hidden = false;
     mount($("#cat-ai"), html`<p role="status">Checking a suggestion… You can keep editing or save.</p>`);
     try {
-      const offer = await api<ReviewOffer>(`/api/staff/catalogue/sessions/${record.serverId}/ai-offer`, { method: "POST", body: JSON.stringify({ draftId: id, revision, name: value("cat-name") }) });
+      const offer = await api<ReviewOffer>(`/api/staff/catalogue/sessions/${record!.serverId}/ai-offer`, { method: "POST", body: JSON.stringify({ draftId: id, revision, name }), ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(30_000) } : {}) });
       if (!root.isConnected || revision !== draftRevision || id !== draftId || offer.draftId !== id || offer.revision !== revision || offer.expiresAt <= Date.now()) return;
       reviewOffer = offer;
       reviewDecision = null;
       drawReview();
-    } catch { if (root.isConnected && revision === draftRevision) mount($("#cat-ai"), html`<p>AI review is unavailable. Save manually or try later.</p>`); }
-    finally { requestingReview = false; $("#cat-ask-ai").removeAttribute("disabled"); }
-  });
+    } catch { if (root.isConnected && id === draftId && revision === draftRevision) mount($("#cat-ai"), html`<p>AI suggestions are unavailable. You can still save this item.</p>`); }
+    finally { requestingReview = false; if (wantedReview) void requestReview(); }
+  };
+  /** Wait for typing to settle; photo prefill requests immediately. Failures and abstentions never retry themselves. */
+  const scheduleReview = (delay = 700) => {
+    clearTimeout(reviewTimer);
+    reviewTimer = undefined;
+    if (!canReview()) return;
+    reviewTimer = setTimeout(() => {
+      reviewTimer = undefined;
+      if (!canReview()) return;
+      wantedReview = { id: draftId, revision: draftRevision, name: value("cat-name") };
+      void requestReview();
+    }, delay);
+  };
   $("#cat-ai").addEventListener("click", (event) => {
     if (!reviewOffer?.proposal || reviewOffer.revision !== draftRevision || reviewOffer.expiresAt <= Date.now()) return;
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button");
@@ -267,6 +290,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   const choosePlace = async (id: string) => {
     invalidateReview();
     placeId = id;
+    scheduleReview();
     showPlace();
     panel.hidden = true;
     $("#cat-place").setAttribute("aria-expanded", "false");
@@ -430,6 +454,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       draw();
       field("cat-qty").focus();
     }
+    scheduleReview();
   });
 
   /* ---------- Photo ---------- */
@@ -438,22 +463,21 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const tile = $("#cat-photo");
     tile.classList.toggle("has-photo", Boolean(photo) || preparing);
     mount(tile, preparing ? html`<span class="cat-photo__empty" role="status">Preparing…</span>`
-      : photo ? html`<img src="${photo.preview}" alt="Photo to save with this item" /><span class="cat-photo__retake">${icon("camera")}Retake</span>`
-      : html`<span class="cat-photo__empty">${icon("camera")}<span>Photo</span></span>`);
+      : photo ? html`<img src="${photo.preview}" alt="Photo to save with this item" /><span class="cat-photo__retake">${icon("camera")}Change photo</span>`
+      : html`<span class="cat-photo__empty">${icon("camera")}<span>Choose photo or file</span></span>`);
     $("#cat-crop-button").hidden = !photo || preparing;
-    tile.setAttribute("aria-label", photo ? "Retake the photo" : "Take a photo");
+    tile.setAttribute("aria-label", photo ? "Change photo or file" : "Choose photo or file");
   };
   const file = field("cat-file");
   const library = field("cat-library");
-  $("#cat-photo").addEventListener("click", () => file.click());
-  $("#cat-library-button").addEventListener("click", () => library.click());
+  $("#cat-photo").addEventListener("click", () => library.click());
+  $("#cat-camera-button").addEventListener("click", () => file.click());
   $("#cat-crop-button").addEventListener("click", () => {
     if (!photo || preparing) return;
     const source = originalPhoto ?? photo;
     const revision = photoRevision;
     const host = $("#cat-crop"); host.hidden = false;
     cropEditor(host, source, (cropped) => { if (revision !== photoRevision || !root.isConnected) return; photo = cropped; host.hidden = true; drawPhoto(); $("#cat-crop-button").focus(); }, () => { host.hidden = true; $("#cat-crop-button").focus(); });
-    host.querySelector<HTMLInputElement>("input")!.focus();
   });
   const selectPhoto = async (chooser: HTMLInputElement) => {
     const chosen = chooser.files?.[0];
@@ -472,7 +496,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     setMessage($("#cat-alert"), preparationError ?? "");
     preparing = false;
     // A photo that could not be used leaves the earlier photo, its name and its check exactly as they were.
-    if (!prepared) { drawPhoto(); return; }
+    if (!prepared) { drawPhoto(); scheduleReview(); return; }
     armed = false;
     photoName = null;
     photoChecked = false;
@@ -508,6 +532,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       }
       invalidateReview();
       draw();
+      scheduleReview(0);
     } catch { /* checked after sync instead */ }
   };
   field("cat-model").addEventListener("input", () => { modelEdited = true; modelFromPhoto = false; draw(); });
@@ -557,6 +582,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     draw();
     field("cat-name").focus();
     if (keepShared) field("cat-name").select();
+    if (keepShared) scheduleReview();
   };
 
   /** True from pressing Save until the item is on this device: a second press or a held key cannot queue it twice. */
@@ -730,6 +756,13 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       void syncNow();
     } else if (act.dataset.edit) {
       if ((value("cat-name") || photo) && !window.confirm("Replace what you are typing with this item?")) return;
+      draftId = crypto.randomUUID();
+      invalidateReview();
+      const revision = ++photoRevision;
+      preparing = false;
+      nameEdited = modelEdited = quantityEdited = true;
+      modelFromPhoto = false;
+      $("#cat-crop").hidden = true;
       const body = entry.body;
       field("cat-name").value = String(body.name);
       behaviour = body.behaviour as Behaviour;
@@ -743,7 +776,12 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       $<HTMLSelectElement>("#cat-stock").value = String(body.stockArea ?? "Inventory");
       originalPhoto = null;
       photo = entry.photo ? { ...entry.photo, preview: thumbs.get(entry.id) ?? "" } : null;
-      if (photo && !photo.preview) photo.preview = await dataUrl(photo.display);
+      if (photo && !photo.preview) {
+        const restored = photo;
+        const preview = await dataUrl(restored.display);
+        if (revision !== photoRevision || !root.isConnected) return;
+        restored.preview = preview;
+      }
       photoName = null;
       photoChecked = Boolean(photo) && !entry.recheck;
       nameFromPhoto = false;
@@ -752,6 +790,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       drawPhoto();
       draw();
       drawList();
+      scheduleReview();
       field("cat-name").focus();
     } else if (window.confirm(entry.itemId ? "Keep this item without its photo?" : `Discard ${String(entry.body.name)}? It has not been saved.`)) {
       await drop(entry.id);
@@ -779,8 +818,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     // Alt + a key, so a shortcut never fires while someone is typing a name (WCAG 2.1.4); it works from any field.
     if (!event.altKey || event.ctrlKey || event.metaKey) return;
     const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
-    if (digit && Number(digit) <= BEHAVIOURS.length) { event.preventDefault(); invalidateReview(); choose(BEHAVIOURS[Number(digit) - 1]!); }
-    else if (event.code === "KeyP") { event.preventDefault(); file.click(); }
+    if (digit && Number(digit) <= BEHAVIOURS.length) { event.preventDefault(); invalidateReview(); choose(BEHAVIOURS[Number(digit) - 1]!); scheduleReview(); }
+    else if (event.code === "KeyP") { event.preventDefault(); library.click(); }
   };
   document.addEventListener("keydown", onKey);
   onLeave(() => document.removeEventListener("keydown", onKey));
