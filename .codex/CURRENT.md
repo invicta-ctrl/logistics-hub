@@ -10,7 +10,7 @@ VERIFY: Full unit run 781 passed, two existing skips; after the final evidence g
 
 RELEASE: PARTIAL only for exact-head release CI/account evidence and production integration: real-photo accuracy gathered during cataloguing, real catalogue cutout and independent Free-plan proof remain unverified. No provider probe, production write, main merge or V3 work. Main push/merge auto-deploys and still needs explicit production authority and rollback controls.
 
-NEXT: Review final branch checks and the release record `docs/road-to-v2/releases/v1.15-final-pass.md`. Only then satisfy the account/deployment gates. Codex yields after committing/pushing the handoff; receiver must check actual writer-lock status before claiming. The review's unsaved-photo regression is fixed with browser coverage.
+NEXT: Review final branch checks and the release record `docs/road-to-v2/releases/v1.15-final-pass.md`. Only then satisfy the account/deployment gates. Codex yields after committing/pushing the handoff; receiver must check actual writer-lock status before claiming. The review's unsaved-photo regression is fixed with browser coverage. Full Worker diagnostics also corrected the System link, staff-facing reviewed wording, owner-recovery fixture, loan handover assertions and offline reachability/audit state. All 15 distinct affected Worker cases passed across follow-up runs; full exact-head CI remains the integration authority.
 
 ## V1.15 Final Pass — four-model Ambient Intelligence — MERGED (PARTIAL), owner actions open — 2026-10-08
 

@@ -210,6 +210,9 @@ test.describe.serial("offline self-service", () => {
     expect(await localState(page)).toEqual({ states: ["pending", "pending", "pending"], photos: 3 });
 
     await context.setOffline(false);
+    // Chromium can reset its adapter hint during a service-worker navigation,
+    // so restoring the emulated network does not always emit this transition.
+    await page.evaluate(() => window.dispatchEvent(new Event("online")));
     // The take and the borrow apply; the return (with its photo) waits for DoL staff.
     await expect(page.getByRole("link", { name: /1 needs review/ })).toBeVisible({ timeout: 20_000 });
     expect(await localState(page)).toEqual({ states: ["synced", "synced", "review"], photos: 0 });

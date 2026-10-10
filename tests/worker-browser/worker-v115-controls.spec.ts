@@ -94,7 +94,14 @@ for (const [width, height] of [[390, 844], [1440, 900]] as const) {
       for (const href of links.slice(0, 8)) {
         await open();
         await page.locator(`#main-content a[data-route][href="${href}"]`).first().click();
-        await expect(page, `${route} → ${href}`).toHaveURL(new URL(href, page.url()).href);
+        const destination = new URL(href, page.url());
+        const focusedLoan = destination.pathname === "/staff/loans" ? destination.searchParams.get("loan") : null;
+        if (focusedLoan) {
+          // Loans consumes this one-time handover after highlighting the exact record.
+          await expect(page.locator(`[data-key="${focusedLoan}"].is-focus`), `${route} → loan ${focusedLoan}`).toBeVisible();
+          destination.searchParams.delete("loan");
+        }
+        await expect(page, `${route} → ${href}`).toHaveURL(destination.href);
         await expect(page.locator("main h1")).toHaveCount(1);
         used++;
       }

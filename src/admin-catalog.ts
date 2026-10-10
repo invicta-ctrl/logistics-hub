@@ -39,8 +39,8 @@ export async function catalogSettings(): Promise<void> {
         <p class="hint-row__says">${[entry.behaviour && BEHAVIOUR_LABELS[entry.behaviour], entry.unit && `counted by the ${entry.unit}`, entry.category && categoryName(entry.category)].filter(Boolean).join(" · ") || "Nothing on its own"}<span class="muted"> · ${entry.note}</span></p></li>`)}</ul></details>
     </section>
     <section class="admin-block" aria-labelledby="ai-title">
-      <h2 id="ai-title" class="section-title">AI review and verified corrections</h2>
-      <p>Staff can Keep, Reject or Correct a review-only suggestion in Add items. Kept guesses never become training evidence. AI availability and today's allowance are shown in <a href="/staff/admin/system" data-route>System</a>.</p>
+      <h2 id="ai-title" class="section-title">AI review and reviewed corrections</h2>
+      <p>Staff can Keep, Reject or Correct a review-only suggestion in Add items. Kept guesses never become training evidence. AI availability and today's allowance are shown in <a href="/staff/admin" data-route>System</a>.</p>
       <p>Proposals use the last 200 catalogue audit events. Approval records a request for code review; built-in hints change only after a knowledge version update and fixture tests.</p>
       <div id="ai-proposals" aria-live="polite"></div>
     </section>
@@ -55,7 +55,7 @@ export async function catalogSettings(): Promise<void> {
     const host = document.querySelector<HTMLElement>("#ai-proposals")!;
     try {
       const { proposals } = await api<{ proposals: KnowledgeProposal[] }>("/api/staff/admin/catalog/proposals");
-      mount(host, proposals.length ? html`<ul class="hint-list">${proposals.map((proposal) => html`<li class="hint-row"><p><strong>${proposal.observed}</strong> → ${proposal.target.name} · ${categoryName(proposal.target.category)} · ${proposal.target.unit} · ${BEHAVIOUR_LABELS[proposal.target.behaviour as keyof typeof BEHAVIOUR_LABELS]}</p><p>${proposal.support} reviewed corrections from ${proposal.actors} staff; ${proposal.conflicts} conflicts.</p>${proposal.decision ? html`<p>${proposal.decision === "APPROVE" ? "Approved — awaiting code review" : "Rejected"}</p>` : proposal.support >= 3 && proposal.actors >= 2 && !proposal.conflicts ? html`<div class="photo-actions"><button class="button button--secondary" data-proposal="${proposal.id}" data-decision="APPROVE">Approve for code review</button><button class="button button--ghost" data-proposal="${proposal.id}" data-decision="REJECT">Reject</button></div>` : html`<p class="muted">More independent evidence is needed.</p>`}</li>`)}</ul>` : html`<p>No verified correction proposals yet.</p>`);
+      mount(host, proposals.length ? html`<ul class="hint-list">${proposals.map((proposal) => html`<li class="hint-row"><p><strong>${proposal.observed}</strong> → ${proposal.target.name} · ${categoryName(proposal.target.category)} · ${proposal.target.unit} · ${BEHAVIOUR_LABELS[proposal.target.behaviour as keyof typeof BEHAVIOUR_LABELS]}</p><p>${proposal.support} reviewed corrections from ${proposal.actors} staff; ${proposal.conflicts} conflicts.</p>${proposal.decision ? html`<p>${proposal.decision === "APPROVE" ? "Approved — awaiting code review" : "Rejected"}</p>` : proposal.support >= 3 && proposal.actors >= 2 && !proposal.conflicts ? html`<div class="photo-actions"><button class="button button--secondary" data-proposal="${proposal.id}" data-decision="APPROVE">Approve for code review</button><button class="button button--ghost" data-proposal="${proposal.id}" data-decision="REJECT">Reject</button></div>` : html`<p class="muted">More independent evidence is needed.</p>`}</li>`)}</ul>` : html`<p>No reviewed correction proposals yet.</p>`);
     } catch (error) { mount(host, html`<p role="alert">${failure(error)}</p>`); }
   };
   document.querySelector("#ai-proposals")!.addEventListener("click", async (event) => {

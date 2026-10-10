@@ -153,6 +153,8 @@ export async function checkScreen(who: Signed, id: string): Promise<void> {
 
 async function checking(root: HTMLElement, who: Signed, start: AuditRecord): Promise<void> {
   let record = start;
+  // Failed session retrieval is stronger evidence than the browser's adapter hint.
+  let offline = who.mode === "offline" || !navigator.onLine;
   let filter: "todo" | "done" | "findings" = "todo";
   let counting: string | null = null;
   let reviewing: string | null = null;
@@ -197,7 +199,6 @@ async function checking(root: HTMLElement, who: Signed, start: AuditRecord): Pro
     const todo = items.filter((item) => !item.observation);
     const done = items.filter((item) => item.observation);
     const paused = (record.pending?.status ?? detail.audit.status) === "PAUSED";
-    const offline = !navigator.onLine;
     if (filter === "todo" && !todo.length) filter = "done";
     const shown = filter === "todo" ? todo : filter === "done" ? done : findings.filter((entry): entry is AuditItem => "onHand" in entry);
     mount(root, html`
@@ -421,13 +422,24 @@ async function checking(root: HTMLElement, who: Signed, start: AuditRecord): Pro
     reading = (async () => {
       do {
         again = false;
-        if (navigator.onLine && await refreshCheck(record.id, who.session.id).catch(() => null)) record = (await audits()).find((each) => each.id === record.id) ?? record;
+        if (navigator.onLine && await refreshCheck(record.id, who.session.id).catch(() => null)) {
+          offline = false;
+          record = (await audits()).find((each) => each.id === record.id) ?? record;
+        }
         // Never under someone's fingers: an open count, reason or note keeps what is typed, and closing it draws the fresh state.
         if (counting === null && reviewing === null && !editingNote) await draw();
       } while (again);
     })();
     try { await reading; } finally { reading = null; }
   };
+  const disconnected = () => {
+    offline = true;
+    if (counting === null && reviewing === null && !editingNote) void draw();
+  };
+  const reconnected = () => void reread();
+  window.addEventListener("offline", disconnected);
+  window.addEventListener("online", reconnected);
+  onLeave(() => { window.removeEventListener("offline", disconnected); window.removeEventListener("online", reconnected); });
   onLeave(onSyncChange(() => void reread()));
   await draw();
 }

@@ -75,9 +75,19 @@ async function render(): Promise<void> {
   if (first && path.startsWith("/staff/") && !app.childElementCount) mount(app, staffPlaceholder);
   let view: View;
   try {
-    view = await (ROUTES[path] ?? (() => notFound))();
+    // Staff tools are not cached. Render their offline message before attempting an
+    // uncached import; the Catalogue alone has its own offline lease and screens.
+    const staffOffline = !navigator.onLine && (path === "/staff" || path.startsWith("/staff/")) && !catalogRoute(path);
+    view = staffOffline ? offlinePage : await (ROUTES[path] ?? (() => notFound))();
   } catch {
+    // A connected network adapter can still have no route to the server. Confirm
+    // reachability before treating a failed import as a replaced deployment.
+    let reachable = false;
     if (navigator.onLine) {
+      try { reachable = (await fetch("/build.json", { cache: "no-store", signal: AbortSignal.timeout(5_000) })).ok; } catch { /* no connection */ }
+    }
+    if (current !== navigation) return;
+    if (reachable) {
       // A deploy replaced the files this page was built with: load the new version once.
       if (!sessionStorage.getItem("reloaded-for-update")) {
         sessionStorage.setItem("reloaded-for-update", "1");

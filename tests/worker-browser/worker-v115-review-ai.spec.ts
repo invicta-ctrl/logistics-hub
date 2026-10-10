@@ -3,11 +3,15 @@ import { expect, test } from "@playwright/test";
 /* Real local Worker and D1, owner switch off: no provider traffic is required for this release proof. */
 test("review offers respect the owner switch and manual captures still save once", async ({ page, baseURL, browser }) => {
   await page.goto("/staff");
-  await page.getByRole("textbox", { name: "Username" }).fill(process.env.E2E_OWNER_USERNAME!);
-  await page.getByLabel("Password", { exact: true }).fill(process.env.E2E_OWNER_PASSWORD!);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
   const headers = { origin: baseURL! };
+  // The full suite's account-recovery proof may already have changed this fixture's password.
+  let signedIn = false;
+  for (const password of [process.env.E2E_OWNER_PASSWORD!, "recovered owner pass"]) {
+    signedIn ||= (await page.request.post("/api/staff/login", { headers, data: { username: process.env.E2E_OWNER_USERNAME, password } })).ok();
+  }
+  expect(signedIn).toBe(true);
+  await page.goto("/staff/home");
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
   expect((await page.request.patch("/api/staff/admin/assist", { headers, data: { on: false } })).status()).toBe(200);
   const locationId = (await (await page.request.post("/api/staff/locations", { headers, data: { name: "E2E AI review shelf", parentId: null } })).json()).id;
   const active = (await (await page.request.post("/api/staff/catalogue/sessions", { headers, data: { locationId } })).json()).id;
