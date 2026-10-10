@@ -17,6 +17,8 @@ const outcome = (item: Pick<Reviewed, "name" | "category" | "unit" | "itemType" 
 const same = (a: Outcome, b: Outcome) => a.name === b.name && a.category === b.category && a.unit === b.unit && a.behaviour === b.behaviour;
 async function reviewed(db: D1Database): Promise<Reviewed[]> {
   const { results } = await db.prepare("SELECT id, name, aliases, category, unit, item_type AS itemType, consumption_mode AS consumptionMode, stock_area AS stockArea, status, needs_review AS needsReview FROM items WHERE status = 'ACTIVE' AND needs_review = 0 AND item_type <> 'NEEDS_REVIEW' ORDER BY id LIMIT 1000").all<Omit<Reviewed, "needsReview"> & { needsReview: number }>();
+  // A full evidence window is incomplete: abstain globally rather than ask AI about an exact item outside it.
+  if (results.length === 1000) throw new InputError(503, "AI review is unavailable for this catalogue size. Saving manually still works.");
   return results.map((item) => ({ ...item, needsReview: item.needsReview === 0 ? false : true })).filter(verified);
 }
 async function stored(db: D1Database, actor: Actor): Promise<{ raw: string; offer: StoredOffer } | null> {
@@ -100,7 +102,11 @@ export async function captureFeedback(db: D1Database, actor: Actor, sessionId: s
   const offer = current?.offer;
   if (!offer || !offer.proposal || offer.actor !== actor.accountId || offer.sessionId !== sessionId || offer.id !== feedback.offerId || offer.draftId !== feedback.draftId || offer.revision !== feedback.revision || offer.expiresAt <= Date.now() || offer.catalogRevision !== await catalogRevision(db)) return empty;
   const correction = typeof feedback.correction === "string" ? feedback.correction.trim().slice(0, 120) : "";
-  const target = feedback.decision === "CORRECT" && correction !== offer.label ? (await reviewed(db)).map(outcome).find((target) => normalized(target.name) === normalized(correction) && same(saved, target)) : undefined;
+  let target: Outcome | undefined;
+  if (feedback.decision === "CORRECT" && correction !== offer.label) {
+    try { target = (await reviewed(db)).map(outcome).find((target) => normalized(target.name) === normalized(correction) && same(saved, target)); }
+    catch { /* Optional learning evidence never blocks a manual save. */ }
+  }
   return (itemId) => [db.prepare(`INSERT INTO audit_log(id, actor_user_id, action, entity_type, entity_id, details_json, created_at)
     SELECT ?, ?, 'AI_REVIEW_FEEDBACK', 'CATALOGUE', ?, ?, ? WHERE EXISTS (SELECT 1 FROM system_settings WHERE key = ? AND value = ?)
     AND (SELECT value FROM catalog_revision WHERE id = 1) = ?

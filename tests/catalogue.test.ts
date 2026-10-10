@@ -625,6 +625,16 @@ describe("review-only AI offers and correction evidence", () => {
 });
 
 describe("review routing at the Worker boundary", () => {
+  it("abstains when the bounded catalogue window is full, including exact items beyond it", async () => {
+    sqlite.prepare("UPDATE items SET status = 'ARCHIVED'").run();
+    const insert = sqlite.prepare("INSERT INTO items(id, name, category, item_type, consumption_mode, unit, needs_review) VALUES(?, ?, 'TOOLS', 'Loanable', 'WHOLE_UNIT', 'piece', 0)");
+    for (let at = 0; at < 1001; at += 1) insert.run(`ITM-AI-${String(at).padStart(4, "0")}`, `Stapler ${at}`);
+    const run = vi.fn(async () => ({ response: { term: "Stapler 0" } })); env.AI = { run } as unknown as Ai;
+    const shelf = await place("AI bounded shelf"); const session = await begin(shelf);
+    const response = await staff(`/api/staff/catalogue/sessions/${session}/ai-offer`, "POST", { draftId: crypto.randomUUID(), revision: 1, name: "Stapler 1000" });
+    expect(await response.json()).toMatchObject({ proposal: null, reason: "UNAVAILABLE" }); expect(run).not.toHaveBeenCalled();
+    expect((await save(session, shot(shelf))).status).toBe(201);
+  });
   it("discards an offer when the catalogue changes during the model call", async () => {
     sqlite.prepare("UPDATE items SET status = 'ARCHIVED'").run();
     sqlite.prepare("INSERT INTO items(id, name, category, item_type, consumption_mode, unit, needs_review) VALUES('ITM-AI-S', 'Stapler', 'TOOLS', 'Loanable', 'WHOLE_UNIT', 'piece', 0)").run();
