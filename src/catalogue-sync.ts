@@ -1,4 +1,4 @@
-import { type AuditDetail, type Detail, type Entry, type ObservationEntry, audits, drop, dropAudit, dropObservation, dropSession, entries, keep, keepAudit, keepObservation, keepSession, observations, sessions } from "./catalogue-store";
+import { type AuditDetail, type Detail, type Entry, type ObservationEntry, audits, drop, dropAudit, dropObservation, dropSession, entries, keep, keepObservation, keepSession, observations, sessions, updateAudit } from "./catalogue-store";
 import { ApiError, api } from "./ui";
 
 /*
@@ -240,7 +240,7 @@ async function sendChecks(): Promise<void> {
       if (!record.serverId) {
         const started = await api<{ id: string }>("/api/staff/audits", { method: "POST", body: JSON.stringify({ id: record.id, locationId: record.detail.audit.locationId }), ...within(20_000) });
         record.serverId = started.id;
-        await keepAudit(record);
+        await updateAudit(record.id, (current) => current ? { ...current, serverId: started.id } : null);
       }
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
@@ -272,22 +272,30 @@ async function sendChecks(): Promise<void> {
     if (blocked || (await observations()).some((entry) => entry.auditId === record.id && entry.state === "waiting")) continue;
     try {
       if (record.pending) {
-        await api(`/api/staff/audits/${record.serverId}`, { method: "PATCH", body: JSON.stringify(record.pending), ...within(20_000) });
-        record.pending = null;
-        await keepAudit(record);
+        const sent = { ...record.pending };
+        const answer = await api<Pick<AuditDetail["audit"], "status" | "placeNote">>(`/api/staff/audits/${record.serverId}`, { method: "PATCH", body: JSON.stringify(sent), ...within(20_000) });
+        await updateAudit(record.id, (current) => {
+          if (!current) return null;
+          const pending = { ...current.pending };
+          if (sent.status !== undefined && pending.status === sent.status) delete pending.status;
+          if ("placeNote" in sent && pending.placeNote === sent.placeNote) delete pending.placeNote;
+          return { ...current, pending: Object.keys(pending).length ? pending : null,
+            detail: { ...current.detail, audit: { ...current.detail.audit, ...answer, ...pending } } };
+        });
       }
-      if (record.finishing) {
+      const current = (await audits()).find((each) => each.id === record.id);
+      if (current?.finishing && !current.pending && !(await observations()).some((entry) => entry.auditId === record.id && entry.state === "waiting")) {
         await api(`/api/staff/audits/${record.serverId}/finish`, { method: "POST", ...within(20_000) });
         // The server has it all now: its summary is the record. What was stopped stays until a person looks.
         if (!(await observations()).some((entry) => entry.auditId === record.id)) await dropAudit(record.id);
-        else await keepAudit({ ...record, finishing: false, detail: { ...record.detail, audit: { ...record.detail.audit, status: "FINISHED" } } });
+        else await updateAudit(record.id, (current) => current ? { ...current, finishing: false, detail: { ...current.detail, audit: { ...current.detail.audit, status: "FINISHED" } } } : null);
       }
       changed();
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
       if (error.status === 401) { ended = true; return; }
       // A finished check refuses a pause: it was finished elsewhere, and its pause no longer matters.
-      if (error.status === 409 && record.pending) { record.pending = null; await keepAudit(record); }
+      if (error.status === 409 && record.pending) await updateAudit(record.id, (current) => current ? { ...current, pending: null } : null);
     }
   }
 }
@@ -313,7 +321,13 @@ export async function refreshCheck(id: string, owner: string): Promise<AuditDeta
     const held = record ? (await observations()).filter((entry) => entry.auditId === record.id) : [];
     const answer = await api<AuditDetail>(`/api/staff/audits/${encodeURIComponent(record?.serverId ?? id)}`, within(20_000));
     const detail = record ? withHeld(answer, held) : answer;
-    if (detail.audit.mine && detail.audit.status !== "FINISHED") await keepAudit({ id: record?.id ?? id, owner, serverId: detail.audit.id, pending: record?.pending ?? null, finishing: record?.finishing ?? false, detail });
+    if (detail.audit.mine && detail.audit.status !== "FINISHED") {
+      const saved = await updateAudit(record?.id ?? id, (current) => {
+        if (Boolean(current) !== Boolean(record) || current?.revision !== record?.revision) return current;
+        return { id: record?.id ?? id, owner, serverId: detail.audit.id, pending: current?.pending ?? null, finishing: current?.finishing ?? false, detail };
+      });
+      return saved?.detail ?? null;
+    }
     else if (record && !record.finishing && detail.audit.status === "FINISHED" && !(await observations()).some((entry) => entry.auditId === record.id)) await dropAudit(record.id);
     return detail;
   } catch (error) {

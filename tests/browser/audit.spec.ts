@@ -59,6 +59,158 @@ function serve(page: Page) {
 }
 
 const row = (page: Page, name: string) => page.locator(".ck-row", { hasText: name });
+
+test("an old refresh cannot erase a pause after the server acknowledged it", async ({ page }) => {
+  await serve(page).ready;
+  await page.goto("/");
+  await page.evaluate(async ({ id, owner }) => {
+    const storePath = "/src/catalogue-store.ts";
+    const store = await import(storePath) as typeof import("../../src/catalogue-store");
+    const detail = await (await fetch(`/api/staff/audits/${id}`)).json();
+    await store.keepAudit({ id, owner, serverId: id, detail, pending: null, finishing: false });
+  }, { id: AUDIT, owner: session.id });
+  let started!: () => void, release!: () => void;
+  const asking = new Promise<void>((resolve) => { started = resolve; });
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(`**/api/staff/audits/${AUDIT}`, async (route) => {
+    if (route.request().method() === "PATCH") {
+      await route.fulfill({ contentType: "application/json", json: { status: "PAUSED", placeNote: null } });
+      return;
+    }
+    const old = await page.evaluate(async () => {
+      const storePath = "/src/catalogue-store.ts";
+      const store = await import(storePath) as typeof import("../../src/catalogue-store");
+      return (await store.audits())[0]!.detail;
+    });
+    started();
+    await held;
+    await route.fulfill({ contentType: "application/json", json: old });
+  });
+  await page.evaluate(async ({ id, owner }) => {
+    const syncPath = "/src/catalogue-sync.ts";
+    const { refreshCheck } = await import(syncPath) as typeof import("../../src/catalogue-sync");
+    (window as any).auditRead = refreshCheck(id, owner);
+  }, { id: AUDIT, owner: session.id });
+  await asking;
+  await page.evaluate(async (owner) => {
+    const storePath = "/src/catalogue-store.ts";
+    const store = await import(storePath) as typeof import("../../src/catalogue-store");
+    const syncPath = "/src/catalogue-sync.ts";
+    const sync = await import(syncPath) as typeof import("../../src/catalogue-sync");
+    const record = (await store.audits())[0]!;
+    record.pending = { status: "PAUSED" };
+    record.detail.audit.status = "PAUSED";
+    await store.keepAudit(record);
+    sync.startSending({ owner, legacy: false });
+    await sync.syncNow();
+    const saved = (await store.audits())[0]!;
+    if (saved.pending !== null || saved.detail.audit.status !== "PAUSED") throw new Error("Pause was not acknowledged");
+  }, session.id);
+  release();
+  const saved = await page.evaluate(async () => {
+    await (window as any).auditRead;
+    const storePath = "/src/catalogue-store.ts";
+    const store = await import(storePath) as typeof import("../../src/catalogue-store");
+    return (await store.audits())[0];
+  });
+  expect(saved).toMatchObject({ pending: null, detail: { audit: { status: "PAUSED" } } });
+});
+
+test("an old pause acknowledgement keeps a newer resume, note and finish", async ({ page }) => {
+  await serve(page).ready;
+  await page.goto("/");
+  await page.evaluate(async ({ id, owner }) => {
+    const storePath = "/src/catalogue-store.ts";
+    const store = await import(storePath) as typeof import("../../src/catalogue-store");
+    const detail = await (await fetch(`/api/staff/audits/${id}`)).json();
+    detail.audit.status = "PAUSED";
+    detail.audit.placeNote = "Old note";
+    await store.keepAudit({ id, owner, serverId: id, detail, pending: { status: "PAUSED", placeNote: "Old note" }, finishing: false });
+  }, { id: AUDIT, owner: session.id });
+  let started!: () => void, release!: () => void;
+  const asking = new Promise<void>((resolve) => { started = resolve; });
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(`**/api/staff/audits/${AUDIT}`, async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    expect(route.request().postDataJSON()).toEqual({ status: "PAUSED", placeNote: "Old note" });
+    started();
+    await held;
+    await route.fulfill({ contentType: "application/json", json: { status: "PAUSED", placeNote: "Old note" } });
+  });
+  await page.evaluate(async (owner) => {
+    const syncPath = "/src/catalogue-sync.ts";
+    const sync = await import(syncPath) as typeof import("../../src/catalogue-sync");
+    (window as any).auditSent = new Promise<void>((resolve) => {
+      const off = sync.onSyncChange(() => { off(); resolve(); });
+    });
+    sync.startSending({ owner, legacy: false });
+  }, session.id);
+  await asking;
+  await page.evaluate(async () => {
+    const storePath = "/src/catalogue-store.ts";
+    const store = await import(storePath) as typeof import("../../src/catalogue-store");
+    const record = (await store.audits())[0]!;
+    record.pending = { status: "OPEN", placeNote: "New note" };
+    record.detail.audit.status = "OPEN";
+    record.detail.audit.placeNote = "New note";
+    record.finishing = true;
+    await store.keepAudit(record);
+  });
+  release();
+  const saved = await page.evaluate(async () => {
+    await (window as any).auditSent;
+    const storePath = "/src/catalogue-store.ts";
+    const store = await import(storePath) as typeof import("../../src/catalogue-store");
+    return (await store.audits())[0];
+  });
+  expect(saved).toMatchObject({ pending: { status: "OPEN", placeNote: "New note" }, finishing: true,
+    detail: { audit: { status: "OPEN", placeNote: "New note" } } });
+});
+
+test("after storage fills, a server acknowledgement merges with the newer in-memory check", async ({ page }) => {
+  await serve(page).ready;
+  await page.goto("/");
+  const saved = await page.evaluate(async ({ id, owner }) => {
+    const storePath = "/src/catalogue-store.ts";
+    const store = await import(storePath) as typeof import("../../src/catalogue-store");
+    const detail = await (await fetch(`/api/staff/audits/${id}`)).json();
+    const original = { id, owner, serverId: id, detail, pending: null, finishing: false };
+    await store.keepAudit(original);
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function () { throw new DOMException("full", "QuotaExceededError"); };
+    await store.keepAudit({ ...original, pending: { status: "PAUSED", placeNote: "Keep this note" }, finishing: true });
+    IDBObjectStore.prototype.put = put;
+    await store.updateAudit(id, (current) => current ? { ...current, serverId: id } : null);
+    return { durable: store.durable(), record: (await store.audits())[0] };
+  }, { id: AUDIT, owner: session.id });
+  expect(saved).toMatchObject({ durable: false, record: { pending: { status: "PAUSED", placeNote: "Keep this note" }, finishing: true } });
+});
+
+test("an acknowledgement committing as storage fills cannot overwrite the next local edit", async ({ page }) => {
+  await serve(page).ready;
+  await page.goto("/");
+  const saved = await page.evaluate(async ({ id, owner }) => {
+    const storePath = "/src/catalogue-store.ts";
+    const store = await import(storePath) as typeof import("../../src/catalogue-store");
+    const detail = await (await fetch(`/api/staff/audits/${id}`)).json();
+    await store.keepAudit({ id, owner, serverId: id, detail, pending: { status: "PAUSED" }, finishing: false });
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value, key) {
+      if (this.name === "audits" && value.finishing) throw new DOMException("full", "QuotaExceededError");
+      return key === undefined ? put.call(this, value) : put.call(this, value, key);
+    };
+    let editing: Promise<void> | undefined;
+    await store.updateAudit(id, (current) => {
+      if (!current) throw new Error("Missing check");
+      editing = store.keepAudit({ ...current, pending: { status: "OPEN", placeNote: "New note" }, finishing: true });
+      return { ...current, pending: null };
+    });
+    await editing;
+    return { durable: store.durable(), record: (await store.audits())[0] };
+  }, { id: AUDIT, owner: session.id });
+  expect(saved).toMatchObject({ durable: false, record: { pending: { status: "OPEN", placeNote: "New note" }, finishing: true } });
+});
+
 async function startCheck(page: Page) {
   await page.goto("/staff/catalogue");
   await page.getByLabel("Place to check").selectOption("LOC-0002");

@@ -97,6 +97,8 @@ export type AuditRecord = {
   /** The id this device files the check's observations under: the server's, or the one it proposed when starting offline. */
   id: string;
   owner: string;
+  /** Local write identity: a late server read cannot replace work saved after it started. */
+  revision?: string;
   /** Where the server keeps it: null until a start sent from here is answered. */
   serverId: string | null;
   /** What the server last said, or what this device knows of a check it started offline. */
@@ -201,9 +203,53 @@ export const setAccess = (value: Access | null) => put("meta", "access", value ?
 export const snapshot = async (): Promise<Snapshot | null> => (await all<Snapshot>("meta")).get("snapshot") ?? null;
 export const setSnapshot = (value: Snapshot) => put("meta", "snapshot", value);
 
-export const audits = async (): Promise<AuditRecord[]> => [...(await all<AuditRecord>("audits")).values()];
-export const keepAudit = (record: AuditRecord) => put("audits", record.id, record);
-export const dropAudit = (id: string) => put("audits", id, undefined);
+export const audits = async (): Promise<AuditRecord[]> => structuredClone([...(await all<AuditRecord>("audits")).values()]);
+// Keep this page's memory copy and durable writes in the same order, including a write that exhausts storage.
+let writingAudits: Promise<void> = Promise.resolve();
+function auditWrite<T>(write: () => Promise<T>): Promise<T> {
+  const result = writingAudits.then(write);
+  writingAudits = result.then(() => {}, () => {});
+  return result;
+}
+export const keepAudit = (record: AuditRecord) => {
+  const saved = structuredClone({ ...record, revision: crypto.randomUUID() });
+  return auditWrite(() => put("audits", saved.id, saved));
+};
+export const dropAudit = (id: string) => auditWrite(() => put("audits", id, undefined));
+
+/** Merge a server acknowledgement with the latest local intent in one IndexedDB transaction. */
+export function updateAudit(id: string, change: (current: AuditRecord | null) => AuditRecord | null): Promise<AuditRecord | null> {
+  return auditWrite(async () => {
+    const apply = (current: AuditRecord | null) => {
+      const next = change(current);
+      return next === current ? current : next ? { ...next, revision: crypto.randomUUID() } : null;
+    };
+    const remember = (record: AuditRecord | null) => {
+      if (record) memory.audits.set(id, structuredClone(record)); else memory.audits.delete(id);
+    };
+    const db = await open();
+    if (db && kept) {
+      try {
+        const transaction = db.transaction("audits", "readwrite");
+        const done = settled(transaction);
+        const store = transaction.objectStore("audits");
+        const request = store.get(id);
+        let result: AuditRecord | null = null;
+        request.onsuccess = () => {
+          const current = (request.result as AuditRecord | undefined) ?? null;
+          result = apply(current);
+          if (result !== current) { if (result) store.put(result); else store.delete(id); }
+        };
+        await done;
+        remember(result);
+        return structuredClone(result);
+      } catch { kept = false; }
+    }
+    const result = apply(structuredClone((memory.audits.get(id) as AuditRecord | undefined) ?? null));
+    remember(result);
+    return structuredClone(result);
+  });
+}
 
 /** Every observation still held here, oldest first. */
 export const observations = async (): Promise<ObservationEntry[]> => [...(await all<ObservationEntry>("observations")).values()].sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
