@@ -1,5 +1,6 @@
-import { type AuditDetail, type Detail, type Entry, type ObservationEntry, audits, drop, dropAudit, dropObservation, dropSession, entries, keep, keepObservation, keepSession, observations, sessions, updateAudit } from "./catalogue-store";
-import { ApiError, api } from "./ui";
+import { type AuditDetail, type Detail, type Entry, type ObservationEntry, audits, claimPhotoCleanup, drop, dropAudit, dropObservation, dropSession, entries, keep, keepObservation, keepSession, observations, sessions, updateAudit } from "./catalogue-store";
+import { type Photo, removePhotoBackground } from "./item-photo";
+import { ApiError, api, toast } from "./ui";
 
 /*
  * Sends what this device catalogued (catalogue-store.ts), oldest first: a session started here without a connection (under the id
@@ -158,6 +159,8 @@ async function finishedElsewhere(entry: Entry, target: string): Promise<boolean>
 }
 
 async function send(entry: Entry): Promise<void> {
+  const sending = sender;
+  let savedPhoto: Photo | null = null;
   if (!entry.itemId) {
     let target: string | undefined;
     try {
@@ -183,17 +186,32 @@ async function send(entry: Entry): Promise<void> {
     // Not checked when it was taken (offline, or the check failed): the server checks it once, after this first photo is saved.
     if (entry.recheck) form.set("recheck", "1");
     try {
-      await api(`/api/staff/items/${entry.itemId}/photo`, { method: "PUT", body: form, ...within(90_000) });
+      savedPhoto = (await api<{ photo: Photo }>(`/api/staff/items/${entry.itemId}/photo`, { method: "PUT", body: form, ...within(90_000) })).photo;
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
       if (error.status === 401) { ended = true; return; }
-      // A first photo is refused with 409 only when the item has one already: a repeat of an upload whose answer was lost.
+      // The first photo already exists: a replay or another person's replacement. Never clean an unidentified current photo.
       if (error.status !== 409) {
         if (transient(error)) {
           backOff(entry);
           await settle(entry, { state: "waiting", message: "Saved. The photo has not gone up yet; trying again." });
         } else await settle(entry, { state: "stopped", message: `Saved, but the photo was not: ${error.message}` });
         return;
+      }
+    }
+  }
+  if (entry.cleanBackground && entry.itemId) {
+    // Consume intent before the provider request. A reload or another tab cannot spend again after a cosmetic failure.
+    const claimed = await claimPhotoCleanup(entry.id);
+    if (!savedPhoto) toast("Item saved. Open it to check the current photo and remove its background.");
+    else if (!claimed || sender !== sending || !sending?.legacy) toast("Item and photo saved. Open the item to remove its background.");
+    else if (!savedPhoto.cleanable) toast(`Item and photo saved. ${savedPhoto.cleanupReason || "Background removal is unavailable right now."}`);
+    else {
+      try {
+        const fault = await removePhotoBackground(`/api/staff/items/${entry.itemId}/cutout`, savedPhoto.id);
+        toast(fault ? `${fault} Item and original photo saved.` : "Item saved. Background removed in its photo viewer; the original is kept.");
+      } catch {
+        toast("Item and photo saved. Background removal could not be confirmed; open the item to try again.");
       }
     }
   }

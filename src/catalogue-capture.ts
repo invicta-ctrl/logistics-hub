@@ -148,6 +148,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         </div>
         <div id="cat-crop" hidden></div>
         <div id="cat-photo-status" class="field__hint" role="status" hidden></div>
+        <div id="cat-cleanup" class="field__hint" hidden><span id="cat-cleanup-hint" role="status"></span> <button type="button" class="text-link" id="cat-enable-cleanup" hidden>Enable background removal</button></div>
         <section class="cat-ai" aria-label="AI suggestions" hidden><div id="cat-ai" aria-live="polite"></div></section>
         <div class="cat-dup" id="cat-dup" aria-live="polite"></div>
         <fieldset class="cat-behaviour" id="cat-behaviour"><legend>How is it used?</legend>
@@ -175,6 +176,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         <div class="form-alert" id="cat-alert" role="alert" hidden></div>
         <div class="cat-actions">
           <button type="submit" class="button button--primary button--lg" id="cat-save">Save &amp; next ${icon("next")}</button>
+          <button type="button" class="button button--secondary" id="cat-save-clean" hidden>Save &amp; remove background</button>
           <button type="button" class="button button--secondary" id="cat-like">Save, then add another like this</button>
         </div>
         <p class="cat-keys" aria-hidden="true"><kbd>Ctrl</kbd> <kbd>Enter</kbd> save · <kbd>Alt</kbd> <kbd>1</kbd>–<kbd>4</kbd> how it is used · <kbd>Alt</kbd> <kbd>P</kbd> photo</p>
@@ -396,6 +398,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const later = behaviour === "REVIEW_LATER";
     root.querySelectorAll<HTMLElement>("[data-optional]").forEach((element) => { element.hidden = !later; });
     $("#cat-save").firstChild!.textContent = matches.length && armed ? "Save as a separate item " : "Save & next ";
+    drawCleanup();
   };
 
   /** What a photo cannot settle, said once in plain words: the CatalogDraft decides which fields still need a person. */
@@ -474,7 +477,29 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const status = $("#cat-photo-status");
     status.hidden = !photoOutcome || photoOutcome === "NAMED";
     mount(status, photoOutcome && photoOutcome !== "NAMED" ? html`${messages[photoOutcome]}${photoOutcome === "OFF" && who.session.role === "OWNER" ? html` <button type="button" class="text-link" id="cat-enable-ai">Enable photo suggestions</button>` : ""}` : html``);
+    drawCleanup();
   };
+  const drawCleanup = () => {
+    const state = detail.photoCleanup;
+    const signedIn = online && who.mode === "signed-in";
+    const action = $<HTMLButtonElement>("#cat-save-clean");
+    action.hidden = !photo || preparing;
+    action.disabled = !signedIn || !state?.cleanable;
+    $("#cat-cleanup").hidden = !photo || preparing;
+    $("#cat-cleanup-hint").textContent = !signedIn ? "Sign in online to remove the background." : !state?.cleanable ? state?.cleanupReason || "Background removal is unavailable right now." : "Background removal keeps the original photo.";
+    $("#cat-enable-cleanup").hidden = !signedIn || !state?.canEnable;
+  };
+  $("#cat-enable-cleanup").addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    if (!online || who.mode !== "signed-in" || !detail.photoCleanup?.canEnable) return;
+    button.disabled = true;
+    try {
+      await api("/api/staff/admin/cleanup", { method: "PATCH", body: JSON.stringify({ on: true }) });
+      await reload();
+      if (root.isConnected) { drawCleanup(); toast("Background removal enabled."); }
+    } catch (error) { if (root.isConnected) setMessage($("#cat-alert"), failure(error)); }
+    finally { button.disabled = false; }
+  });
   $("#cat-photo-status").addEventListener("click", async (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("#cat-enable-ai");
     if (!button || !online || !photo || preparing) return;
@@ -611,8 +636,9 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
 
   /** True from pressing Save until the item is on this device: a second press or a held key cannot queue it twice. */
   let submitting = false;
-  const submit = async (like: boolean) => {
+  const submit = async (like: boolean, cleanBackground = false) => {
     if (submitting) return;
+    if (cleanBackground && (!photo || preparing || !online || who.mode !== "signed-in" || !detail.photoCleanup?.cleanable)) return;
     form.querySelectorAll("[aria-invalid]").forEach((element) => element.removeAttribute("aria-invalid"));
     $("#cat-behaviour").classList.remove("is-invalid");
     const name = value("cat-name");
@@ -631,7 +657,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       armed = true;
       draw();
       $("#cat-dup").scrollIntoView?.({ block: "nearest", behavior: "smooth" });
-      $("#cat-save").focus();
+      $(cleanBackground ? "#cat-save-clean" : "#cat-save").focus();
       return;
     }
     submitting = true;
@@ -645,6 +671,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const entry: Entry = {
       id, sessionId, owner: session.id, body, photo: photo ? { display: photo.display, thumb: photo.thumb, hash: photo.hash } : null, itemId: null, state: "waiting", message: null, matches: null,
       ...(photo && !photoChecked ? { recheck: true } : {}),
+      ...(cleanBackground ? { cleanBackground: true } : {}),
       at: new Date().toISOString(), after: matches.filter((match) => match.id.startsWith("pending:")).map((match) => match.id.slice(8))
     };
     if (photo) thumbs.set(id, photo.preview);
@@ -663,6 +690,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   };
   form.addEventListener("submit", (event) => { event.preventDefault(); void submit(false); });
   $("#cat-like").addEventListener("click", () => { void submit(true); });
+  $("#cat-save-clean").addEventListener("click", () => { void submit(false, true); });
 
   const announce = (text: string) => { $("#cat-announce").textContent = text; };
 
@@ -674,6 +702,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     if (!online || !target) return;
     try {
       detail = await api<Detail>(`/api/staff/catalogue/sessions/${target}`);
+      if (root.isConnected) drawCleanup();
       // Written back from what is stored now, and only while still open here: a finish pressed meanwhile is never undone.
       const latest = await stored();
       if (latest && !latest.finishing && detail.session.status === "ACTIVE") await keepSession(record = { ...latest, detail });
@@ -689,6 +718,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     if (online === now) return;
     online = now;
     $("#cat-offline").hidden = online;
+    drawCleanup();
     drawList();
   };
   const onConnection = () => connected(navigator.onLine);

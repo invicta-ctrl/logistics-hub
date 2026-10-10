@@ -166,3 +166,4 @@ export function needsAttention(draft: CatalogDraft): DraftFieldName[] {
 export const isStale = (resultRevision: number, currentRevision: number): boolean => resultRevision !== currentRevision;
 /** Photo reading distinguishes an answered photo from a temporary service failure. */
 export type PhotoOutcome = "NAMED" | "NO_NAME" | "OFF" | "UNAVAILABLE" | "BUDGET" | "BREAKER" | "FAILED";
+export type PhotoCleanup = { cleanable?: boolean; cleanupReason?: string; canEnable?: boolean };

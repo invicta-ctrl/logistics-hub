@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import { type Page, expect, test } from "@playwright/test";
 
+// A completed cleanup starts a profile refresh; let its route handler finish before disposing the request context.
+test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: "wait" }); });
+
 /*
  * FP-E, the screen: "Remove background" appears only when the Worker can clean pictures, shows the cleaned picture, and "Use original" goes
  * back. The local Worker has no Images binding, so the three provider-facing answers are stubbed here; the cut itself is covered in

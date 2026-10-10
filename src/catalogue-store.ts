@@ -1,4 +1,5 @@
 import type { Place } from "./location-tree";
+import type { PhotoCleanup } from "./catalog-draft";
 
 /*
  * What this device holds for cataloguing, in IndexedDB. No DOM: the service worker reads it too.
@@ -40,6 +41,8 @@ export type Entry = {
    * (ambient-assist.ts). A reconsideration, never a command: the server re-reads the catalog as it is then, and may say nothing.
    */
   recheck?: boolean;
+  /** An explicit save action: consumed before one cleanup attempt, never retried with the capture. */
+  cleanBackground?: boolean;
 };
 
 /** A saved capture as the server lists it in a session. */
@@ -48,7 +51,7 @@ export type Recent = {
   stockArea: string | null; onHand: number; place: string | null; photoId: string | null;
 };
 export type SessionInfo = { id: string; locationId: string | null; place: string | null; status: string; startedAt: string; finishedAt: string | null; saved: number; reviewLater: number; owner: string; mine: boolean };
-export type Detail = { session: SessionInfo; counts: Record<string, number>; recent: Recent[] };
+export type Detail = { session: SessionInfo; counts: Record<string, number>; recent: Recent[]; photoCleanup?: PhotoCleanup };
 
 export type SessionRecord = {
   /** The id this device files the session's captures under: the server's id, or the one it proposed when starting offline. */
@@ -193,6 +196,29 @@ async function put(store: StoreName, key: string, value: unknown): Promise<void>
 export const entries = async (): Promise<Entry[]> => [...(await all<Entry>("captures")).values()].sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
 export const keep = (entry: Entry) => put("captures", entry.id, entry);
 export const drop = (id: string) => put("captures", id, undefined);
+
+/** Atomically consume cleanup intent across tabs. Without durable storage, leave cosmetic work to an explicit Inventory action. */
+export async function claimPhotoCleanup(id: string): Promise<boolean> {
+  const db = await open();
+  if (!db || !kept) return false;
+  try {
+    const transaction = db.transaction("captures", "readwrite");
+    const done = settled(transaction);
+    const store = transaction.objectStore("captures");
+    const request = store.get(id);
+    let claimed: Entry | null = null;
+    request.onsuccess = () => {
+      const current = request.result as Entry | undefined;
+      if (current?.cleanBackground) {
+        claimed = { ...current, photo: null, cleanBackground: false };
+        store.put(claimed);
+      }
+    };
+    await done;
+    if (claimed) memory.captures.set(id, claimed);
+    return claimed !== null;
+  } catch { kept = false; return false; }
+}
 
 export const sessions = async (): Promise<SessionRecord[]> => [...(await all<SessionRecord>("sessions")).values()];
 export const keepSession = (record: SessionRecord) => put("sessions", record.id, record);

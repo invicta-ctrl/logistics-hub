@@ -460,7 +460,8 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     const detail = await sessionDetail(env.DB, account, session[1]!);
     // Any Logistics member may read a session; a lease, only its own member's.
     if (leased && !detail.session.mine) throw new InputError(403, "Sign in again to see someone else's session.");
-    return json(detail);
+    const state = await photoCleanupState(env, account);
+    return json({ ...detail, photoCleanup: leased ? { cleanable: false, canEnable: false, cleanupReason: "Sign in to remove backgrounds." } : state });
   }
   if (session && !session[2] && method === "PATCH") return json(await setSessionPlace(env.DB, account, session[1]!, await body()));
   if (session?.[2] === "/unreviewed" && method === "GET") return json(await unreviewed(env.DB, session[1]!));

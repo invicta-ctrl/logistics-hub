@@ -17,7 +17,7 @@ const base = (id: string, name: string, extra: Record<string, unknown> = {}): It
 });
 
 type Server = ReturnType<typeof serve>;
-function serve(page: Page, options: { items?: Item[]; active?: boolean } = {}) {
+function serve(page: Page, options: { items?: Item[]; active?: boolean; photoCleanup?: { cleanable: boolean; canEnable?: boolean; cleanupReason: string } } = {}) {
   const state = {
     items: options.items ?? [base("ITM-0001", "Whiteboard Marker Black"), base("ITM-0002", "Stapler", { itemType: "Loanable", category: "EQUIPMENT", onHand: 3 }), base("ITM-0003", "Bond Paper A4", { category: "PAPER", unit: "ream", consumptionMode: "OPEN_UNIT" })],
     started: Boolean(options.active), placeId: "LOC-0003",
@@ -36,7 +36,7 @@ function serve(page: Page, options: { items?: Item[]; active?: boolean } = {}) {
   };
   const json = (route: Route, body: unknown, status = 200, headers: Record<string, string> = {}) => route.fulfill({ status, contentType: "application/json", headers, body: JSON.stringify(body) });
   const info = () => ({ id: SESSION_ID, locationId: state.placeId, place: PLACES.find((entry) => entry.id === state.placeId) ? (state.placeId === "LOC-0003" ? "Office › Cabinet 1 › Shelf 2" : "Office › Cabinet 1 › Shelf 3") : null, status: state.finished ? "FINISHED" : "ACTIVE", startedAt: "2026-10-04T01:00:00.000Z", finishedAt: state.finished ? "2026-10-04T02:00:00.000Z" : null, saved: state.captures.length, reviewLater: state.captures.filter((entry) => entry.behaviour === "REVIEW_LATER").length, owner: "Staff Sample", mine: true });
-  const detail = () => ({ session: info(), counts: state.captures.reduce<Record<string, number>>((out, entry) => ({ ...out, [String(entry.behaviour)]: (out[String(entry.behaviour)] ?? 0) + 1 }), {}),
+  const detail = () => ({ session: info(), photoCleanup: options.photoCleanup, counts: state.captures.reduce<Record<string, number>>((out, entry) => ({ ...out, [String(entry.behaviour)]: (out[String(entry.behaviour)] ?? 0) + 1 }), {}),
     recent: [...state.captures].reverse().map((entry) => ({ captureId: entry.id, behaviour: entry.behaviour, capturedAt: "2026-10-04T01:05:00.000Z", itemId: entry.itemId, name: entry.name, category: entry.category || "UNSORTED", itemType: entry.behaviour === "BORROW" ? "Loanable" : entry.behaviour === "REVIEW_LATER" ? "NEEDS_REVIEW" : "Consumable", consumptionMode: entry.behaviour === "GRADUAL" ? "OPEN_UNIT" : "WHOLE_UNIT", unit: entry.unit || "piece", stockArea: "Inventory", onHand: entry.quantity, place: "Office › Cabinet 1 › Shelf 2", photoId: null })) });
 
   const ready = (async () => {
@@ -1111,6 +1111,184 @@ for (const outcome of ["FAILED", "NO_NAME"] as const) test(`photo reading ${outc
   await expect.poll(() => server.state.photos.length).toBe(1);
   expect(server.state.photos[0]!.recheck).toBe(outcome === "FAILED");
   expect(asks).toBe(1);
+});
+
+for (const outcome of ["valid", "cleanup fails", "upload conflicts"] as const) {
+  test(`Catalogue Save & remove background: ${outcome} is one-shot and preserves saving`, async ({ page }) => {
+    const server = serve(page, { active: true, photoCleanup: { cleanable: true, canEnable: false, cleanupReason: "" } });
+    await server.ready;
+    const mediaId = "00000000-0000-4000-8000-0000000000bb";
+    const otherPhotoId = "00000000-0000-4000-8000-0000000000cc";
+    const calls: Array<{ method: string; body: unknown }> = [];
+    const photoWrites: Array<{ item: string; form: Buffer }> = [];
+    let currentPhotoReads = 0;
+    let accepted = false;
+    let releasePhoto: () => void = () => {};
+    const photoHeld = new Promise<void>((resolve) => { releasePhoto = resolve; });
+
+    // Hold the upload response so the test proves Catalogue cleared/queued immediately, before cleanup.
+    await page.route("**/api/staff/items/ITM-*/photo", async (route) => {
+      expect(route.request().method()).toBe("PUT");
+      const item = /items\/(ITM-\d+)\/photo/.exec(route.request().url())![1]!;
+      const form = route.request().postDataBuffer()!;
+      photoWrites.push({ item, form });
+      await photoHeld;
+      if (outcome === "upload conflicts") {
+        await route.fulfill({ status: 409, json: { error: "Someone else changed this photo. Reload to see the latest." } });
+        return;
+      }
+      const text = form.toString("latin1");
+      const hash = /name="hash"\r\n\r\n([0-9a-f]{16})/.exec(text)?.[1] ?? null;
+      server.state.photos.push({ item, hash, recheck: /name="recheck"\r\n\r\n1/.test(text) });
+      await route.fulfill({ json: { photo: { id: mediaId, width: 1, height: 1, cleanable: true, cleanupReason: "" } } });
+    });
+    // A409 must skip cleanup, even if the other person's current picture could be cleaned.
+    await page.route(/\/api\/staff\/items\/ITM-\d+$/, async (route) => {
+      currentPhotoReads += 1;
+      await route.fulfill({ json: { item: { photo: { id: otherPhotoId, width: 1, height: 1, cleanable: true } } } });
+    });
+    await page.route("**/api/staff/items/ITM-*/cutout**", async (route) => {
+      const method = route.request().method();
+      const body = method === "POST" ? route.request().postDataJSON() : null;
+      calls.push({ method, body });
+      if (outcome === "cleanup fails") {
+        await route.fulfill({ status: 503, json: { error: "Picture cleanup is resting after errors. Try again in a few minutes." } });
+        return;
+      }
+      expect(method).toBe("POST");
+      expect(body.expected).toBe(mediaId);
+      if (body.accept === true) accepted = true;
+      await route.fulfill({ json: body.accept === true ? { cutout: true } : { pending: true } });
+    });
+    await begin(page, server);
+    const pending = Buffer.from(await page.evaluate(() => {
+      const canvas = Object.assign(document.createElement("canvas"), { width: 16, height: 16 });
+      const draw = canvas.getContext("2d")!;
+      // Half solid subject, half transparent background; the real browser alpha judge must accept it.
+      draw.fillStyle = "#9a2537"; draw.fillRect(0, 0, 8, 16);
+      return canvas.toDataURL("image/png").split(",")[1]!;
+    }), "base64");
+    await page.route(`**/api/staff/media/${mediaId}/pending`, (route) => route.fulfill({ contentType: "image/png", body: pending }));
+    await page.locator("#cat-library").setInputFiles({ name: "fictional-toolbox.png", mimeType: "image/png", buffer: PNG });
+    await expect(page.locator("#cat-photo img")).toBeVisible();
+    const saveClean = page.getByRole("button", { name: "Save & remove background", exact: true });
+    await expect(saveClean).toBeEnabled();
+
+    try {
+      if (outcome === "valid") {
+        // This action must run ordinary form validation; never create/upload an unnamed item.
+        await saveClean.click();
+        await expect(page.locator("#cat-alert")).toContainText("Give it a name");
+        expect(server.state.captures).toHaveLength(0);
+        expect(photoWrites).toHaveLength(0);
+        expect(calls).toHaveLength(0);
+      }
+      await name(page).fill("Fictional green toolbox");
+      await pick(page, "Borrow").click();
+      await page.getByLabel("Category").fill("EQUIPMENT");
+      await page.getByLabel("Counted in").fill("piece");
+      await saveClean.click();
+      await expect(name(page)).toHaveValue("");
+      await expect.poll(() => photoWrites.length).toBe(1);
+      expect(calls).toHaveLength(0);
+      expect(server.state.captures).toHaveLength(1);
+      expect(server.state.captures[0]).toMatchObject({ name: "Fictional green toolbox", behaviour: "BORROW" });
+      releasePhoto();
+      await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
+      await expect.poll(async () => page.evaluate(async () => {
+        const modulePath = "/src/catalogue-store.ts";
+        const { entries } = await import(modulePath) as typeof import("../../src/catalogue-store");
+        return (await entries()).length;
+      })).toBe(0);
+
+      if (outcome === "valid") {
+        expect(calls).toEqual([
+          { method: "POST", body: { expected: mediaId } },
+          { method: "POST", body: { expected: mediaId, accept: true } }
+        ]);
+        expect(accepted).toBe(true);
+      } else if (outcome === "cleanup fails") {
+        expect(calls).toEqual([{ method: "POST", body: { expected: mediaId } }]);
+        expect(accepted).toBe(false);
+        expect(server.state.photos).toHaveLength(1); // original saved; no second photo write or delete
+      } else {
+        expect(calls).toHaveLength(0);
+        expect(currentPhotoReads).toBe(0); // do not reread/clean the conflicting current photo
+      }
+
+      // Exercise actual scheduler entry points, then reload. Failed cosmetic work must never enter backoff.
+      const expectedCalls = calls.length;
+      await page.evaluate(async () => {
+        const modulePath = "/src/catalogue-sync.ts";
+        const { syncNow } = await import(modulePath) as typeof import("../../src/catalogue-sync");
+        await syncNow(); await syncNow();
+      });
+      await page.reload();
+      await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
+      expect(calls).toHaveLength(expectedCalls);
+      expect(photoWrites).toHaveLength(1);
+      expect(server.state.captures).toHaveLength(1);
+      expect(currentPhotoReads).toBe(0);
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "Finish", exact: true }).click();
+      await expect.poll(() => server.state.finished).toBe(true);
+      expect(calls).toHaveLength(expectedCalls);
+    } finally { releasePhoto(); }
+  });
+}
+
+test("Catalogue explains disabled cleanup and an owner can enable it without changing the photo", async ({ page }) => {
+  const photoCleanup = { cleanable: false, canEnable: true, cleanupReason: "Background removal is off." };
+  const server = serve(page, { active: true, photoCleanup });
+  await server.ready;
+  await page.route("**/api/staff/session", (route) => route.fulfill({ json: { ...session, role: "OWNER" } }));
+  let enables = 0, cleans = 0;
+  await page.route("**/api/staff/admin/cleanup", (route) => {
+    expect(route.request().method()).toBe("PATCH");
+    expect(route.request().postDataJSON()).toEqual({ on: true });
+    enables += 1;
+    Object.assign(photoCleanup, { cleanable: true, canEnable: false, cleanupReason: "" });
+    return route.fulfill({ json: { on: true } });
+  });
+  await page.route("**/api/staff/items/ITM-*/cutout**", (route) => { cleans += 1; return route.fulfill({ json: { cutout: true } }); });
+  await begin(page, server);
+  await page.locator("#cat-library").setInputFiles({ name: "fictional-photo.png", mimeType: "image/png", buffer: PNG });
+  await expect(page.locator("#cat-photo img")).toBeVisible();
+  const preview = await page.locator("#cat-photo img").getAttribute("src");
+  await expect(page.getByRole("button", { name: "Save & remove background", exact: true })).toBeDisabled();
+  await expect(page.locator("#cat-cleanup-hint")).toHaveText("Background removal is off.");
+  expect(enables).toBe(0); expect(cleans).toBe(0);
+  await page.getByRole("button", { name: "Enable background removal", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save & remove background", exact: true })).toBeEnabled();
+  await expect(page.locator("#cat-photo img")).toHaveAttribute("src", preview!);
+  expect(enables).toBe(1); expect(cleans).toBe(0);
+  expect(server.state.captures).toHaveLength(0); expect(server.state.photos).toHaveLength(0);
+});
+
+test("a cleanup intent is consumed once across tabs and stays consumed after reopening", async ({ page, context }) => {
+  const server = serve(page, { active: true });
+  await begin(page, server);
+  const other = await context.newPage();
+  await other.goto("/staff/login");
+  const id = "00000000-0000-4000-8000-0000000000dd";
+  await page.evaluate(async ({ id, sessionId }) => {
+    const modulePath = "/src/catalogue-store.ts";
+    const { keep } = await import(modulePath) as typeof import("../../src/catalogue-store");
+    await keep({ id, sessionId, owner: "ACC-staff", body: { name: "Fictional item" }, photo: { display: new Blob(["original"]), thumb: new Blob(["thumbnail"]), hash: "0".repeat(16) }, itemId: "ITM-9999", state: "stopped", message: null, after: [], matches: null, at: new Date().toISOString(), cleanBackground: true });
+  }, { id, sessionId: SESSION_ID });
+  const claim = (tab: Page) => tab.evaluate(async (id) => {
+    const modulePath = "/src/catalogue-store.ts";
+    const { claimPhotoCleanup } = await import(modulePath) as typeof import("../../src/catalogue-store");
+    return claimPhotoCleanup(id);
+  }, id);
+  expect((await Promise.all([claim(page), claim(other)])).filter(Boolean)).toHaveLength(1);
+  await other.reload();
+  expect(await claim(other)).toBe(false);
+  expect(await page.evaluate(async () => {
+    const modulePath = "/src/catalogue-store.ts";
+    const { entries } = await import(modulePath) as typeof import("../../src/catalogue-store");
+    return (await entries()).map(({ cleanBackground, photo }) => ({ cleanBackground, photo }));
+  })).toEqual([{ cleanBackground: false, photo: null }]);
 });
 
 test("a late AI response cannot overwrite a staff edit; offline saving is independent", async ({ page }) => {

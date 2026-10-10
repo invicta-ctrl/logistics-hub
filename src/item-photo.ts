@@ -1,10 +1,11 @@
 import { cutoutProblem, cutoutShares } from "./cutout-share";
+import type { PhotoCleanup } from "./catalog-draft";
+export type { PhotoCleanup } from "./catalog-draft";
 import { type VisualItem, itemIconSvg } from "./item-icons";
 import { ApiError, type Html, api, dataUrl, failure, html, icon, jpegOf, itemVisual, mount, raw, reducedMotion, toast } from "./ui";
 
 /** `cutout`: a cleaned picture (background removed) is kept beside the original. `cleanable`: the Worker can make one (src/item-cutout.ts). */
 export type Photo = { id: string; width: number; height: number; cutout?: boolean; cleanable?: boolean; cleanupReason?: string };
-export type PhotoCleanup = Pick<Photo, "cleanable" | "cleanupReason"> & { canEnable?: boolean };
 type Size = "thumb" | "display";
 
 /** Long sides of the two variants every photo is stored as: lists and the profile use the small one, the viewer the large one. */
@@ -180,6 +181,17 @@ async function cutoutFault(id: string): Promise<string | null> {
       return cutoutProblem(cutoutShares(context.getImageData(0, 0, canvas.width, canvas.height).data));
     } finally { bitmap.close(); }
   } catch { return "The cleaned picture could not be checked."; }
+}
+
+/** A pending cut becomes live only after the browser has checked its transparency. */
+export async function removePhotoBackground(endpoint: string, photoId: string): Promise<string | null> {
+  const made = await api<{ pending?: boolean; cutout?: boolean }>(endpoint, { method: "POST", body: JSON.stringify({ expected: photoId }) });
+  if (made.pending) {
+    const fault = await cutoutFault(photoId);
+    if (fault) { await api(`${endpoint}?expected=${photoId}`, { method: "DELETE" }); return fault; }
+    await api(endpoint, { method: "POST", body: JSON.stringify({ expected: photoId, accept: true }) });
+  } else if (!made.cutout) throw new Error("Background removal could not be confirmed.");
+  return null;
 }
 
 /* ---------- Viewer ---------- */
@@ -380,16 +392,9 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     error = "";
     draw();
     try {
-      // A new cut waits as pending: the browser judges it, and only an accepted one becomes the picture. A closed tab leaves the original.
       let fault: string | null = null;
-      if (cleaning) {
-        const made = await api<{ pending?: boolean; cutout?: boolean }>(options.cleanup, { method: "POST", body: JSON.stringify({ expected: photo.id }) });
-        if (made.pending) {
-          fault = await cutoutFault(photo.id);
-          if (fault) await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
-          else await api(options.cleanup, { method: "POST", body: JSON.stringify({ expected: photo.id, accept: true }) });
-        }
-      } else await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
+      if (cleaning) fault = await removePhotoBackground(options.cleanup, photo.id);
+      else await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
       photo = { ...photo, cutout: cleaning && !fault };
       state = "";
       draw();

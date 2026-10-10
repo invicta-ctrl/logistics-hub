@@ -136,7 +136,9 @@ describe("a lease on its own", () => {
     const started = await as(lease, "/api/staff/catalogue/sessions", "POST", { locationId: shelf });
     expect(started.status).toBe(201);
     const { id } = (await started.json()) as { id: string };
-    expect((await as(lease, `/api/staff/catalogue/sessions/${id}`)).status).toBe(200);
+    const detail = await as(lease, `/api/staff/catalogue/sessions/${id}`);
+    expect(detail.status).toBe(200);
+    expect(await detail.json()).toMatchObject({ photoCleanup: { cleanable: false, canEnable: false, cleanupReason: "Sign in to remove backgrounds." } });
     expect((await as(lease, `/api/staff/catalogue/sessions/${id}`, "PATCH", { locationId: shelf })).status).toBe(200);
     const saved = await as(lease, `/api/staff/catalogue/sessions/${id}/captures`, "POST", shot(shelf));
     expect(saved.status).toBe(201);
@@ -161,7 +163,7 @@ describe("a lease on its own", () => {
     for (const [method, path] of [
       ["GET", "/api/staff/session"], ["GET", "/api/staff/inventory"], ["GET", `/api/staff/items/${item}`], ["POST", "/api/staff/items"],
       ["GET", `/api/staff/catalogue/sessions/${id}/unreviewed`], ["POST", "/api/staff/items/bulk"], ["POST", "/api/staff/locations"], ["GET", "/api/staff/loans"],
-      ["GET", "/api/staff/activity"], ["GET", "/api/staff/admin/accounts"], ["PATCH", "/api/staff/me"], ["POST", "/api/staff/me/sessions/revoke"], ["DELETE", `/api/staff/items/${item}/photo`]
+      ["GET", "/api/staff/activity"], ["GET", "/api/staff/admin/accounts"], ["PATCH", "/api/staff/me"], ["POST", "/api/staff/me/sessions/revoke"], ["DELETE", `/api/staff/items/${item}/photo`], ["POST", `/api/staff/items/${item}/cutout`]
     ] as const) expect((await as(lease, path, method, method === "GET" ? undefined : {})).status, `${method} ${path}`).toBe(401);
   });
 
