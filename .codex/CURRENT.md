@@ -1,5 +1,13 @@
 # Current Work Pointer — Logistics Hub
 
+## V1.15/V2 runtime verified on main; two live photo checks blocked — 2026-10-10
+
+RUNTIME: `3bc7c1e8bd1b3b0646b6ddc9684758a4a7f4e47d` is merged to main and deployed; PR 32 and the subsequent Stock slice are integrated and their branches pruned. Both source and main CI passed all 233 app-browser and 86 real-Worker cases; main CodeQL and Workers Build passed. Public HTTP postflight passed: homepage/Lending/Self-Service/login respond, unauthenticated private APIs return 401, build.json remains 404, and deployed main/CSS/Stock bundles match the verified build byte for byte. No production data was written. This checkpoint changes records only; runtime verification refers to the stated code commit.
+
+REMAINING: One real Gemma call on the approved public photo and one real 1280 px foreground cleanup. Actual production/API HTTPS requests now work, but secure `CLOUDFLARE_API_TOKEN` and confirmed `CLOUDFLARE_ACCOUNT_ID` are absent. Add them through environment settings and publish; do not put credentials/account values in chat or Git. Discover the existing account preview host read-only and permit it through supported settings if required. Prepared one-shot scripts are in `/tmp/logistics-provider-{prepare,validate}.mjs`; commands are in `/tmp/logistics-provider-check-run.md`. They keep D1/R2 local, use real AI/Images bindings and guard against duplicate spending. After an actual result, inspect the public photo/foreground and record it truthfully. No usage evidence or renewed merge approval is required. Continue after PR closure/main pushes; avoid duplicate implementation or broad reviews. If these temporary files are unavailable in another environment, reconstruct the same isolated procedure from the application and existing local test helpers.
+
+STATE: No source work remains pending. Verify actual main/ref and writer-lock status before resuming. The documentation slice is merged/pruned once its focused record/privacy checks pass; older active-slice and production-network blocks below are historical. Live provider success is unproven, so the release remains partial. Full-release rollback baseline remains `31d963414cdee85d2032eb21a8efdd696da893c1`, restored through a new code revert without schema/data changes.
+
 ## V1.15/V2 post-merge continuation — 2026-10-10
 
 PR 32 is MERGED at `47e0fba737c64bb8842fae9d6092ddb535b16634`, now on `main`; its slice was deleted. All eight source-head checks passed before the fast-forward. Main's Workers Build, CodeQL and 232 app-browser cases passed, but its Worker run passed 85/86 and exposed a first-load Stock race: an item entered before the initial stock payload stayed unresolved and the quantity field stayed disabled.

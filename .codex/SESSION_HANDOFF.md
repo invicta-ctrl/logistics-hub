@@ -1,5 +1,16 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## V1.15/V2 verified runtime and live-check dependency (Codex cloud, 2026-10-10)
+
+~~~text
+RUNTIME HEAD: 3bc7c1e8bd1b3b0646b6ddc9684758a4a7f4e47d, merged to main and deployed. PR 32 and Stock-fix branches deleted/pruned; preserve unknown local work branch. This checkpoint updates records only, no runtime files. Fetch actual main and check its latest head rather than recreating a merged slice.
+DONE: Accepted AI/photo/mobile implementation; first-load Stock fix; source AND main CI 233 app-browser/86 Worker passes; main CodeQL/Workers Build green; public production HTTP postflight and exact main/CSS/Stock asset match. Private APIs 401 without login, build.json 404, zero production data writes. Rollback bundle/reverse patch verified against fixed pre-release baseline 31d963414cdee85d2032eb21a8efdd696da893c1.
+BLOCKED ONLY: Real public-photo Gemma and 1280px foreground cleanup. API/production HTTP now reachable, but CLOUDFLARE_API_TOKEN and confirmed CLOUDFLARE_ACCOUNT_ID are not configured. Environment draft contains secure token/account requirements and current repository snapshot; saving is not publication. Add through environment settings and publish. No credentials/account values in Git/chat, no renewed merge approval or usage proof.
+NEXT: Check runtime readiness. Read the existing account Workers subdomain via API and permit the returned preview host through supported settings if needed; do not register a new subdomain. Follow /tmp/logistics-provider-check-run.md: prepare isolated local D1/R2/random owner, plain hybrid Wrangler dev (remote AI/IMAGES only), zero-call --ready, guarded --run-once. Scripts /tmp/logistics-provider-prepare.mjs and /tmp/logistics-provider-validate.mjs passed offline syntax checks only; no live call. Inspect actual foreground-light-dark.png and Gemma response, record real success/failure, stop own preview. Temporary files may need reconstruction in a fresh environment. No production owner login/data mutation is needed.
+AUTHORITY: Earl requires continuing after closed PRs/main pushes until genuine completion, checkpoint pushes and efficient delegation. Current technical credential dependency prevents claiming DONE. Trusted model/knowledge activation and V3 remain outside scope.
+LOCK: No dirty source. Check npm run agent:status; Codex yields after the pushed record checkpoint. Actual refs/checks/lock outrank the historical blocks below.
+~~~
+
 ## V1.15/V2 post-merge Stock correction (Codex cloud, 2026-10-10)
 
 ~~~text
