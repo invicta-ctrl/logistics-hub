@@ -164,3 +164,5 @@ export function needsAttention(draft: CatalogDraft): DraftFieldName[] {
  * screen's revision, so an older answer is dropped instead of filling a different item's form.
  */
 export const isStale = (resultRevision: number, currentRevision: number): boolean => resultRevision !== currentRevision;
+/** Photo reading distinguishes an answered photo from a temporary service failure. */
+export type PhotoOutcome = "NAMED" | "NO_NAME" | "OFF" | "UNAVAILABLE" | "BUDGET" | "BREAKER" | "FAILED";

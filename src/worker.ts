@@ -44,6 +44,15 @@ export type Env = {
   IMAGES?: ImagesRunner;
 };
 
+/** The same current switch, binding and allowance apply before and after a photo save. */
+async function photoCleanupState(env: Env, account: Account) {
+  const status = await cleanupStatus(env.DB, env.IMAGES);
+  const allowance = status.sentThisMonth < status.monthlyCap;
+  const cleanable = status.on && status.available && allowance;
+  return { cleanable, canEnable: !status.on && status.available && allowance && account.role === "OWNER",
+    cleanupReason: !status.available ? "Background removal is unavailable right now." : !status.on ? "Background removal is off." : !allowance ? "This month's background removal allowance is used." : "" };
+}
+
 /** Phones keep anything waiting and show the maintenance screen on this answer (offline-sync.ts). */
 const selfServicePaused = () => json({ error: "Self-Service is under maintenance. Please ask DoL staff in person.", maintenance: true }, 503);
 
@@ -442,8 +451,8 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     const size = Number(request.headers.get("content-length"));
     if (!size) throw new InputError(411, "Missing content length.");
     if (size > MAX_PHOTO_BYTES) throw new InputError(413, "That photo is too large.");
-    const { name, reading } = await photoName(env.DB, env.AI, new Uint8Array(await request.arrayBuffer()), "USER");
-    return json({ name, model: reading?.model ?? null }, 200, { "cache-control": "private, no-store" });
+    const { name, reading, outcome } = await photoName(env.DB, env.AI, new Uint8Array(await request.arrayBuffer()), "USER");
+    return json({ name, model: reading?.model ?? null, outcome }, 200, { "cache-control": "private, no-store" });
   }
   if (path === "/api/staff/catalogue/sessions" && method === "POST") { const started = await startSession(env.DB, account, await body()); return json(started, started.resumed ? 200 : 201); }
   const session = CATALOGUE_PATH.exec(path);
@@ -515,10 +524,8 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     const [detail, freshness, kits, links] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!), linksOf(env.DB, match[1]!)]);
     // Whether this photo has a cleaned picture, and whether cleaning is offered at all (the Images binding is present).
     const cleaned = detail.item.photo ? await hasCutout(env.CATALOG_MEDIA, detail.item.photo.id) : false;
-    const cleanup = await cleanupStatus(env.DB, env.IMAGES);
-    const cleanable = cleanup.on && cleanup.available && cleanup.sentThisMonth < cleanup.monthlyCap;
-    const cleanupReason = !cleanup.on ? "Picture cleanup is turned off by the owner." : !cleanup.available ? "Picture cleanup is unavailable in this environment." : !cleanable ? "This month's picture cleanup allowance is used." : "";
-    return json({ ...detail, item: { ...detail.item, photo: detail.item.photo ? { ...detail.item.photo, cutout: cleaned, cleanable, cleanupReason } : null }, freshness, kits, links });
+    const photoCleanup = await photoCleanupState(env, account);
+    return json({ ...detail, item: { ...detail.item, photoCleanup, photo: detail.item.photo ? { ...detail.item.photo, cutout: cleaned, ...photoCleanup } : null }, freshness, kits, links });
   }
   if (match && !match[2] && method === "PATCH") {
     const input = await body() as Record<string, unknown> | null;
@@ -539,7 +546,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     // first photo are saved. The save above has already answered; this cannot change it.
     // Then up to two earlier captures whose check could not run yet (AI was off, out of allowance or failing) get theirs.
     if (form.get("recheck") === "1" && form.get("expected") === "") await afterwards(recheckCapturedPhoto(env.DB, env.AI, env.CATALOG_MEDIA, match[1]!).then(() => recheckWaiting(env.DB, env.AI, env.CATALOG_MEDIA)));
-    return json({ photo: { ...saved.photo, cleanable: Boolean(env.IMAGES) && await cleanupOn(env.DB) } });
+    return json({ photo: { ...saved.photo, ...await photoCleanupState(env, account) } });
   }
   if (match?.[2] === "/photo" && method === "DELETE") return json(await removeItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
   if (match?.[2] === "/cutout" && method === "POST") {

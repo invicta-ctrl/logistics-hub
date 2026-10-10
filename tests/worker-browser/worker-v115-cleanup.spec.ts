@@ -53,9 +53,9 @@ async function itemWithPhoto(page: Page, baseURL: string, cutoutBody: Buffer): P
     const real = await route.fetch();
     const body = await real.json();
     const { photo } = body.item ?? body;
-    if (!photo) return route.fulfill({ response: real, json: body });
-    const marked = { ...photo, cleanable: true, cutout: state.cleaned };
-    await route.fulfill({ response: real, json: body.item ? { ...body, item: { ...body.item, photo: marked } } : { photo: marked } });
+    const photoCleanup = { cleanable: true, canEnable: false, cleanupReason: "" };
+    const marked = photo ? { ...photo, ...photoCleanup, cutout: state.cleaned } : null;
+    await route.fulfill({ response: real, json: body.item ? { ...body, item: { ...body.item, photoCleanup, photo: marked } } : { photo: marked } });
   });
   await page.route(`**/api/staff/items/${id}/cutout**`, async (route) => {
     if (route.request().method() === "POST") {
@@ -112,6 +112,65 @@ test("a cut that is not a real cutout is undone at once and the original stays",
   expect(state.deletes).toBe(1);
   await expect(panel.getByRole("button", { name: "Remove background" })).toBeVisible();
   await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", `/api/staff/media/${photoId}/thumb`);
+});
+
+async function replacement(page: Page) {
+  const image = await page.evaluate(() => {
+    const canvas = Object.assign(document.createElement("canvas"), { width: 400, height: 600 });
+    const context = canvas.getContext("2d")!; context.fillStyle = "#d9b76c"; context.fillRect(0, 0, 400, 600);
+    return canvas.toDataURL("image/jpeg").split(",")[1]!;
+  });
+  await page.locator('#photo-panel input[type=file]:not([capture])').setInputFiles({ name: "replacement.jpg", mimeType: "image/jpeg", buffer: Buffer.from(image, "base64") });
+  await expect(page.getByRole("button", { name: "Save & remove background", exact: true })).toBeEnabled();
+}
+
+test("an existing photo crops at full phone width with reachable controls", async ({ page, baseURL }) => {
+  await page.setViewportSize({ width: 390, height: 650 });
+  const { id, state } = await itemWithPhoto(page, baseURL!, providerCutout);
+  const panel = page.locator("#photo-panel");
+  await panel.getByRole("button", { name: "Crop thumbnail", exact: true }).click();
+  await expect(panel.getByRole("button", { name: "Resize crop from bottom right", exact: true })).toBeEnabled();
+  await expect(panel.locator("[data-tile]")).toBeHidden();
+  const crop = (await panel.locator(".photo-crop").boundingBox())!;
+  expect(crop.width).toBeGreaterThan(280);
+  const apply = (await panel.getByRole("button", { name: "Apply crop", exact: true }).boundingBox())!;
+  expect(apply.y + apply.height).toBeLessThanOrEqual(650);
+  await page.screenshot({ path: "/tmp/logistics-inventory-crop-mobile.png" });
+  await panel.getByRole("button", { name: "Cancel crop", exact: true }).click();
+  await panel.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(state.posted).toHaveLength(0);
+  expect((await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo).not.toBeNull();
+});
+
+test("a replacement saves before cleanup, cleans its new media id and preserves original bytes", async ({ page, baseURL }) => {
+  const { id, photoId, state } = await itemWithPhoto(page, baseURL!, providerCutout);
+  let original: Buffer | null = null;
+  await page.route(`**/api/staff/items/${id}/cutout**`, async (route) => {
+    const sent = route.request().postDataJSON(); state.posted.push(sent);
+    if (!sent.accept) original = await (await page.request.get(`/api/staff/media/${sent.expected}/display`)).body();
+    else state.cleaned = true;
+    await route.fulfill({ json: sent.accept ? { cutout: true } : { pending: true } });
+  });
+  await replacement(page); await page.getByRole("button", { name: "Save & remove background", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Use original", exact: true })).toBeVisible();
+  const next = (await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id;
+  expect(next).not.toBe(photoId);
+  expect(state.posted).toEqual([{ expected: next }, { expected: next, accept: true }]);
+  expect(await (await page.request.get(`/api/staff/media/${next}/display`)).body()).toEqual(original);
+  await expect(page.locator("#photo-panel [data-tile] img").first()).toHaveAttribute("src", `/api/staff/media/${next}/cutout`);
+});
+
+for (const failure of ["save conflict", "cleanup unavailable"] as const) test(`replacement ${failure} keeps an original and never cleans a conflicting save`, async ({ page, baseURL }) => {
+  const { id, photoId, state } = await itemWithPhoto(page, baseURL!, providerCutout);
+  if (failure === "save conflict") await page.route(`**/api/staff/items/${id}/photo`, (route) => route.fulfill({ status: 409, json: { error: "Another person changed this photo." } }));
+  else await page.route(`**/api/staff/items/${id}/cutout**`, (route) => { state.posted.push(route.request().postDataJSON()); return route.fulfill({ status: 503, json: { error: "Background removal is unavailable. The original photo is kept." } }); });
+  await replacement(page); await page.getByRole("button", { name: "Save & remove background", exact: true }).click();
+  if (failure === "cleanup unavailable") await expect(page.locator("#photo-panel").getByRole("alert")).toContainText("original photo is kept");
+  await expect(page.locator("#photo-panel [data-save]")).toHaveCount(0);
+  const next = (await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id;
+  expect(next === photoId).toBe(failure === "save conflict");
+  expect(state.posted).toHaveLength(failure === "save conflict" ? 0 : 1);
+  await expect(page.locator("#photo-panel [data-tile] img").first()).toHaveAttribute("src", `/api/staff/media/${next}/thumb`);
 });
 
 test("the cleaned picture opens large over the dark overlay with its edges intact", async ({ page, baseURL }, info) => {

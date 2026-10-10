@@ -194,6 +194,18 @@ describe("catalog visual choices", () => {
 });
 
 describe("adding a photo", () => {
+  it("keeps the exhausted cleanup allowance consistent before and after the first photo save", async () => {
+    const provider = vi.fn(() => { throw new Error("Saving must not call the image provider."); });
+    env.IMAGES = { input: provider } as unknown as NonNullable<Env["IMAGES"]>;
+    const now = new Date().toISOString();
+    sqlite.prepare("INSERT INTO system_settings(key, value, updated_at) VALUES (?, ?, ?)").run("picture_cleanup", "on", now);
+    sqlite.prepare("INSERT INTO system_settings(key, value, updated_at) VALUES (?, ?, ?)").run(`image_cutouts:${now.slice(0, 7)}`, "500", now);
+    const before = await (await staff(`/api/staff/items/${ITEM}`)).json() as { item: { photoCleanup: { cleanable: boolean; cleanupReason: string } } };
+    expect(before.item.photoCleanup).toMatchObject({ cleanable: false, cleanupReason: "This month's background removal allowance is used." });
+    const saved = await (await put()).json() as { photo: { cleanable: boolean; cleanupReason: string } };
+    expect(saved.photo).toMatchObject(before.item.photoCleanup);
+    expect(provider).not.toHaveBeenCalled();
+  });
   it("stores both variants, one reference and one audit entry, and shows the photo in the list and the profile", async () => {
     const before = revision();
     expect(await listed()).toMatchObject({ photoId: null });
@@ -208,7 +220,7 @@ describe("adding a photo", () => {
     expect(actions()).toEqual(["ITEM_PHOTO_ADDED"]);
     expect(revision()).toBe(before + 1);
     expect((await listed()).photoId).toBe(photo.id);
-    expect((await detail()).photo).toEqual({ id: photo.id, width: 40, height: 30, cutout: false, cleanable: false, cleanupReason: "Picture cleanup is turned off by the owner." });
+    expect((await detail()).photo).toEqual({ id: photo.id, width: 40, height: 30, cutout: false, cleanable: false, canEnable: false, cleanupReason: "Background removal is unavailable right now." });
   });
 
   it("stores the cleaned bytes, never what the client sent", async () => {

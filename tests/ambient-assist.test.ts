@@ -155,12 +155,12 @@ describe("POST /api/staff/catalogue/photo-name", () => {
     const named = await nameOf();
     expect(named.status).toBe(200);
     expect(named.headers.get("cache-control")).toBe("private, no-store");
-    expect(await named.json()).toEqual({ name: "Hammer", model: null });
+    expect(await named.json()).toEqual({ name: "Hammer", model: null, outcome: "NAMED" });
     env.AI = undefined;
-    expect(await (await nameOf()).json()).toEqual({ name: null, model: null });
+    expect(await (await nameOf()).json()).toEqual({ name: null, model: null, outcome: "UNAVAILABLE" });
     env.AI = fakeAi();
     answer = () => { throw new Error("down"); };
-    expect(await (await nameOf()).json()).toEqual({ name: null, model: null });
+    expect(await (await nameOf()).json()).toEqual({ name: null, model: null, outcome: "FAILED" });
   });
 
   it("refuses a photo larger than a catalogue thumbnail before reading it", async () => {

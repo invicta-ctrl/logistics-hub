@@ -1081,6 +1081,38 @@ test("photo prefill checks AI automatically and a retake queues only the newest 
   expect(server.state.captures).toHaveLength(0);
 });
 
+test("a photo named Calculator offers both unreviewed calculators without classifying the draft", async ({ page }) => {
+  const server = serve(page, { active: true }); await server.ready;
+  server.state.items.push(base("ITM-0463", "8-Digit Calculator", { needsReview: true }), base("ITM-0464", "2-Liner Scientific Calculator", { needsReview: true }));
+  server.state.photoName = "Calculator";
+  await begin(page, server);
+  await page.locator("#cat-library").setInputFiles({ name: "calculator.png", mimeType: "image/png", buffer: PNG });
+  await expect(page.locator("#cat-dup")).toContainText("8-Digit Calculator");
+  await expect(page.locator("#cat-dup")).toContainText("2-Liner Scientific Calculator");
+  await expect(name(page)).toHaveValue("Calculator");
+  await expect(page.getByLabel("Category")).toHaveValue("");
+  await expect(page.getByLabel("Counted in")).toHaveValue("");
+  await expect(page.locator('.cat-choice[aria-pressed="true"]')).toHaveCount(0);
+  await name(page).fill("My checked name");
+  await expect(page.locator("#cat-dup")).toContainText("8-Digit Calculator");
+  await expect(name(page)).toHaveValue("My checked name");
+});
+
+for (const outcome of ["FAILED", "NO_NAME"] as const) test(`photo reading ${outcome} shows its status and preserves the right sync recheck`, async ({ page }) => {
+  const server = serve(page, { active: true }); await server.ready;
+  let asks = 0;
+  await page.route("**/api/staff/catalogue/photo-name", (route) => { asks += 1; return route.fulfill({ json: { name: null, outcome } }); });
+  await begin(page, server);
+  await name(page).fill("Name checked by staff");
+  await page.locator("#cat-library").setInputFiles({ name: "item.png", mimeType: "image/png", buffer: PNG });
+  await expect(page.locator("#cat-photo-status")).toContainText(outcome === "FAILED" ? "Couldn't read" : "Couldn't identify");
+  await expect(name(page)).toHaveValue("Name checked by staff");
+  await pick(page, "Not sure").click(); await page.locator("#cat-save").click();
+  await expect.poll(() => server.state.photos.length).toBe(1);
+  expect(server.state.photos[0]!.recheck).toBe(outcome === "FAILED");
+  expect(asks).toBe(1);
+});
+
 test("a late AI response cannot overwrite a staff edit; offline saving is independent", async ({ page }) => {
   const server = serve(page, { active: true });
   await server.ready;
@@ -1170,4 +1202,63 @@ test("a corrupt replacement keeps a valid unsaved profile photo and its Save act
   await expect(panel.locator("[role=alert]")).toContainText("could not be read");
   await expect(panel.locator("[data-save]")).toBeVisible();
   await expect(panel.locator("[data-tile] img")).toHaveAttribute("src", preview!);
+});
+
+test("enabling background removal keeps a staged first photo and makes no cleanup call", async ({ page }) => {
+  await page.goto("/"); let cleanupCalls = 0;
+  await page.route("**/api/staff/items/ITM-test/cutout", (route) => { cleanupCalls += 1; return route.abort(); });
+  await page.evaluate(async () => {
+    const modulePath = "/src/item-photo.ts";
+    const { photoPanel } = await import(modulePath) as typeof import("../../src/item-photo");
+    const host = document.createElement("section"); host.id = "owner-photo"; host.innerHTML = '<div data-tile></div><div data-actions></div>'; document.querySelector("main")!.append(host);
+    let cleanup = { cleanable: false, canEnable: true, cleanupReason: "Background removal is off." };
+    photoPanel(host, { id: "ITM-test", name: "Synthetic item", photo: null, noun: "photo", endpoint: "/api/staff/items/ITM-test/photo", cleanup: "/api/staff/items/ITM-test/cutout", cleanupState: () => cleanup, enableCleanup: async () => { cleanup = { cleanable: true, canEnable: false, cleanupReason: "" }; }, thumbUrl: () => "", hintAdd: "Choose photo", hintHas: "Original kept", removeNote: "", changed: () => {}, refresh: async () => {}, view: () => {} });
+  });
+  const panel = page.locator("#owner-photo");
+  await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "item.png", mimeType: "image/png", buffer: PNG });
+  const preview = await panel.locator("[data-tile] img").getAttribute("src");
+  await expect(panel.getByRole("button", { name: "Save & remove background", exact: true })).toBeDisabled();
+  await panel.getByRole("button", { name: "Enable background removal", exact: true }).click();
+  await expect(panel.getByRole("button", { name: "Save & remove background", exact: true })).toBeEnabled();
+  await expect(panel.locator("[data-tile] img")).toHaveAttribute("src", preview!);
+  await expect(panel.getByRole("button", { name: "Save photo", exact: true })).toBeVisible();
+  expect(cleanupCalls).toBe(0);
+});
+
+test("phone crop handles resize and move with real touch while keeping the original", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 650 }); await page.goto("/");
+  await page.evaluate(async () => {
+    const modulePath = "/src/item-photo.ts";
+    const { preparePhoto, cropEditor } = await import(modulePath) as typeof import("../../src/item-photo");
+    const canvas = Object.assign(document.createElement("canvas"), { width: 600, height: 900 });
+    const context = canvas.getContext("2d")!; context.fillStyle = "#e5bd62"; context.fillRect(0, 0, 600, 900); context.fillStyle = "#7a1419"; context.fillRect(200, 100, 200, 700);
+    const blob = await new Promise<Blob>((resolve) => canvas.toBlob((value) => resolve(value!), "image/png"));
+    const source = await preparePhoto(new File([blob], "portrait.png", { type: "image/png" }));
+    const host = document.createElement("section"); host.id = "touch-crop"; document.querySelector("main")!.append(host);
+    cropEditor(host, source, async (next) => { host.dataset.kept = String(next.display === source.display && next.hash === source.hash); const bitmap = await createImageBitmap(next.thumb); host.dataset.dimensions = `${bitmap.width},${bitmap.height}`; bitmap.close(); }, () => {});
+  });
+  const editor = page.locator("#touch-crop"); const corner = editor.locator('[data-crop-handle="se"]');
+  await expect(corner).toBeEnabled(); await editor.scrollIntoViewIfNeeded();
+  const image = (await editor.locator(".photo-crop__image").boundingBox())!;
+  const handle = (await corner.boundingBox())!; expect(handle.width).toBeGreaterThanOrEqual(44); expect(handle.height).toBeGreaterThanOrEqual(44);
+  const client = await page.context().newCDPSession(page);
+  await client.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
+  const drag = async (x: number, y: number, dx: number, dy: number) => {
+    await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y, id: 1 }] });
+    await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x + dx, y: y + dy, id: 1 }] });
+    await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  };
+  await drag(handle.x + handle.width / 2, handle.y + handle.height / 2, -image.width * .25, -image.height * .3);
+  const move = (await editor.locator('[data-crop-handle="move"]').boundingBox())!;
+  await drag(move.x + move.width / 2, move.y + move.height / 2, image.width * .15, image.height * .1);
+  const rect = await editor.locator(".photo-crop__frame").evaluate((node) => { const s = (node as HTMLElement).style; return { x: parseFloat(s.left), y: parseFloat(s.top), width: parseFloat(s.width), height: parseFloat(s.height) }; });
+  expect(rect.width).toBeLessThan(90); expect(rect.height).toBeLessThan(90); expect(rect.x).toBeGreaterThan(0); expect(rect.y).toBeGreaterThan(0);
+  expect(rect.x + rect.width).toBeLessThanOrEqual(100); expect(rect.y + rect.height).toBeLessThanOrEqual(100);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: "/tmp/logistics-native-crop-mobile.png" });
+  await editor.getByRole("button", { name: "Apply crop", exact: true }).click();
+  await expect(editor).toHaveAttribute("data-kept", "true"); await expect(editor).toHaveAttribute("data-dimensions", /\d+,\d+/);
+  const dimensions = (await editor.getAttribute("data-dimensions"))!.split(",").map(Number);
+  expect(Math.max(...dimensions)).toBe(320);
+  await client.detach();
 });

@@ -5,7 +5,7 @@ import { suggest, type Suggestion } from "./catalogue-suggest";
 import { BEHAVIOUR_LABELS, type Behaviour, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, behaviourFields, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
-import { type Photo, type PhotoPanel, openViewer, photoPanel, photoUrl, rowThumb, shownUrl } from "./item-photo";
+import { type Photo, type PhotoCleanup, type PhotoPanel, openViewer, photoPanel, photoUrl, rowThumb, shownUrl } from "./item-photo";
 import { MAX_DEPTH, PATH_SEPARATOR, REPORT_LABELS, type ReportKind, VISIBILITY_LABELS, ancestry, inOrder, pathOf, placesOf, withinPlace } from "./location-tree";
 import { type Step, openWhereIsIt } from "./where-is-it";
 import { type ItemLink, bindItemLinks } from "./item-links-panel";
@@ -36,7 +36,7 @@ type Movement = { id: string; createdAt: string; movementType: string; signedQua
 type Change = { from: unknown; to: unknown };
 type CatalogEvent = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
 type DetailItem = Item & {
-  location: string | null; notes: string | null; updatedAt: string | null; listingGaps: string[]; photo: Photo | null;
+  location: string | null; notes: string | null; updatedAt: string | null; listingGaps: string[]; photo: Photo | null; photoCleanup?: PhotoCleanup;
   legacyReportedAvailable: number | null; migratedOnHand: number; migrationDelta: number | null;
   legacySourceSheet: string | null; legacySourceRow: string | null; verificationNote: string | null; importedFrom: string | null;
 };
@@ -1096,6 +1096,8 @@ export async function workspace(): Promise<void> {
     photo = photoPanel(sheet.querySelector<HTMLElement>("#photo-panel")!, {
       visual: () => ({ ...detail!.item, photoId: detail!.item.photo?.id }), updatedAt: () => detail!.item.updatedAt,
       id: item.id, name: item.name, photo: item.photo, noun: "photo", endpoint: `/api/staff/items/${encodeURIComponent(item.id)}/photo`, cleanup: `/api/staff/items/${encodeURIComponent(item.id)}/cutout`,
+      cleanupState: () => detail?.item.photoCleanup,
+      enableCleanup: async () => { await api("/api/staff/admin/cleanup", { method: "PATCH", body: JSON.stringify({ on: true }) }); await poll.refresh(); },
       thumbUrl: (id) => photoUrl(id, "thumb"),
       hintAdd: "Everyone sees this photo on the Lending Hub and Self-Service. Show the item itself, not people or documents.",
       hintHas: "Everyone sees this photo on the Lending Hub and Self-Service. The large version stays staff-only.", removeNote: "The item keeps its stock and history.",

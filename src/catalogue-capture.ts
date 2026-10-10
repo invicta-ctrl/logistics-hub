@@ -1,5 +1,5 @@
 import type { Who } from "./catalogue-offline";
-import { type DraftFieldName, composeDraft, needsAttention } from "./catalog-draft";
+import { type DraftFieldName, type PhotoOutcome, composeDraft, needsAttention } from "./catalog-draft";
 import type { ReviewOffer } from "./ai-review-types";
 import { suggest, verified } from "./catalogue-suggest";
 import { type Detail, type Entry, type SessionRecord, type Snapshot, type SnapshotItem, drop, dropSession, durable, entries, keep, keepSession, sessions, setAccess, setSnapshot, snapshot } from "./catalogue-store";
@@ -107,6 +107,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
    */
   let photoName: string | null = null;
   let photoChecked = false;
+  let photoOutcome: PhotoOutcome | "CHECKING" | null = null;
   let nameFromPhoto = false;
   /** Each retake and form reset invalidates both in-flight preparation and model responses. */
   let photoRevision = 0;
@@ -140,12 +141,13 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         <div id="cat-new-place"></div>` : html`<p class="field__hint">Adding a new place needs a connection and a sign-in.</p>`}
     </div>
     <div class="cat-layout">
-      <form class="cat-form card" id="cat-form" novalidate aria-label="Add an item">
+      <form class="cat-form" id="cat-form" novalidate aria-label="Add an item">
         <div class="cat-top">
-          <div class="cat-photo-wrap"><button type="button" class="cat-photo" id="cat-photo" aria-label="Choose photo or file"><span class="cat-photo__empty">${icon("camera")}<span>Choose photo or file</span></span></button><button type="button" class="button button--ghost button--sm cat-photo__choose" id="cat-camera-button">Take photo</button><button type="button" class="button button--ghost button--sm" id="cat-crop-button" hidden>Crop thumbnail</button></div>
+          <div class="cat-photo-wrap"><button type="button" class="cat-photo" id="cat-photo" aria-label="Choose photo or file"><span class="cat-photo__empty">${icon("camera")}<span>Choose photo</span></span></button><button type="button" class="button button--ghost button--sm cat-photo__choose" id="cat-camera-button">Take photo</button><button type="button" class="button button--ghost button--sm" id="cat-crop-button" hidden>Crop thumbnail</button></div>
           <div class="field cat-name"><label for="cat-name">Name</label><input id="cat-name" maxlength="120" autocomplete="off" autocapitalize="sentences" spellcheck="false" enterkeyhint="next" placeholder="What is it?" aria-describedby="cat-name-hint" /><p class="field__hint" id="cat-name-hint">A temporary name is fine if you are not sure.</p></div>
         </div>
         <div id="cat-crop" hidden></div>
+        <div id="cat-photo-status" class="field__hint" role="status" hidden></div>
         <section class="cat-ai" aria-label="AI suggestions" hidden><div id="cat-ai" aria-live="polite"></div></section>
         <div class="cat-dup" id="cat-dup" aria-live="polite"></div>
         <fieldset class="cat-behaviour" id="cat-behaviour"><legend>How is it used?</legend>
@@ -210,7 +212,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     $(".cat-ai").hidden = false;
     const target = $("#cat-ai");
     if (!reviewOffer?.proposal) {
-      mount(target, html`<p role="status">${reviewOffer?.reason === "EXACT_MATCH" ? "The reviewed catalogue already matches this name; AI was not needed." : reviewOffer?.reason === "PENDING" ? "A suggestion is still being checked. You can save manually." : "No AI suggestion is available. You can save manually."}</p>`);
+      $(".cat-ai").hidden = reviewOffer?.reason !== "PENDING";
+      mount(target, reviewOffer?.reason === "PENDING" ? html`<p role="status">Suggestions are busy. You can keep editing or save.</p>` : html``);
       return;
     }
     const followUp = reviewOffer.proposal.field === "follow_up";
@@ -351,8 +354,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     // Possible matches, judged as the person types, against what is already known (and what was just added).
     matches = name || value("cat-serial") ? possibleDuplicates({ name, category: value("cat-category"), model: value("cat-model"), serialNumber: value("cat-serial"), photoHash: photo?.hash ?? null }, items as DuplicateKnown[]) : [];
     // What the photo looks like, when that differs from the typed name: the same rule, said as the photo's.
-    if (photoName && photoName.toLowerCase() !== name.toLowerCase()) {
-      for (const match of possibleDuplicates({ name: photoName }, items as DuplicateKnown[])) {
+    if (photoName) {
+      for (const match of possibleDuplicates({ name: photoName, photoName, serialNumber: value("cat-serial") }, items as DuplicateKnown[])) {
         if (matches.length < 3 && !matches.some((each) => each.id === match.id)) matches.push({ ...match, reason: "Looks like it in the photo" });
       }
     }
@@ -464,10 +467,25 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     tile.classList.toggle("has-photo", Boolean(photo) || preparing);
     mount(tile, preparing ? html`<span class="cat-photo__empty" role="status">Preparing…</span>`
       : photo ? html`<img src="${photo.preview}" alt="Photo to save with this item" /><span class="cat-photo__retake">${icon("camera")}Change photo</span>`
-      : html`<span class="cat-photo__empty">${icon("camera")}<span>Choose photo or file</span></span>`);
+      : html`<span class="cat-photo__empty">${icon("camera")}<span>Choose photo</span></span>`);
     $("#cat-crop-button").hidden = !photo || preparing;
     tile.setAttribute("aria-label", photo ? "Change photo or file" : "Choose photo or file");
+    const messages = { CHECKING: "Reading the photo… You can keep editing.", NO_NAME: "Couldn't identify this photo. Enter a name or try a clearer photo.", OFF: "Photo suggestions are off.", UNAVAILABLE: "Photo suggestions are unavailable right now. You can enter a name.", BUDGET: "Today's photo suggestion allowance is used. You can enter a name.", BREAKER: "Photo reading is taking a break after errors. You can enter a name.", FAILED: "Couldn't read the photo right now. You can enter a name." };
+    const status = $("#cat-photo-status");
+    status.hidden = !photoOutcome || photoOutcome === "NAMED";
+    mount(status, photoOutcome && photoOutcome !== "NAMED" ? html`${messages[photoOutcome]}${photoOutcome === "OFF" && who.session.role === "OWNER" ? html` <button type="button" class="text-link" id="cat-enable-ai">Enable photo suggestions</button>` : ""}` : html``);
   };
+  $("#cat-photo-status").addEventListener("click", async (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("#cat-enable-ai");
+    if (!button || !online || !photo || preparing) return;
+    button.disabled = true;
+    const taken = photo, revision = photoRevision;
+    try {
+      await api("/api/staff/admin/assist", { method: "PATCH", body: JSON.stringify({ on: true }) });
+      if (revision !== photoRevision || !root.isConnected) return;
+      void checkPhoto(taken, revision);
+    } catch (error) { if (revision === photoRevision && root.isConnected) { setMessage($("#cat-alert"), failure(error)); button.disabled = false; } }
+  });
   const file = field("cat-file");
   const library = field("cat-library");
   $("#cat-photo").addEventListener("click", () => library.click());
@@ -500,6 +518,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     armed = false;
     photoName = null;
     photoChecked = false;
+    photoOutcome = null;
     if (nameFromPhoto) { field("cat-name").value = ""; nameFromPhoto = false; }
     if (modelFromPhoto) { field("cat-model").value = ""; modelFromPhoto = false; }
     originalPhoto = photo = prepared;
@@ -512,10 +531,13 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   library.addEventListener("change", () => void selectPhoto(library));
   /** Never in the way: the person keeps typing while it runs, and a failure leaves the photo to be checked after it syncs. */
   const checkPhoto = async (taken: NonNullable<typeof photo>, revision: number) => {
+    photoOutcome = "CHECKING";
+    drawPhoto();
     try {
-      const answer = await api<{ name: string | null; model?: string | null }>("/api/staff/catalogue/photo-name", { method: "POST", body: taken.thumb, headers: { "content-type": "image/jpeg" }, ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(15_000) } : {}) });
+      const answer = await api<{ name: string | null; model?: string | null; outcome?: PhotoOutcome }>("/api/staff/catalogue/photo-name", { method: "POST", body: taken.thumb, headers: { "content-type": "image/jpeg" }, ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(15_000) } : {}) });
       if (revision !== photoRevision || photo?.display !== taken.display) return;
-      photoChecked = true;
+      photoOutcome = answer.outcome ?? (answer.name ? "NAMED" : "NO_NAME");
+      photoChecked = photoOutcome === "NAMED" || photoOutcome === "NO_NAME";
       photoName = answer.name;
       if (answer.name && !nameEdited && !value("cat-name")) {
         field("cat-name").value = answer.name;
@@ -532,8 +554,9 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       }
       invalidateReview();
       draw();
+      drawPhoto();
       scheduleReview(0);
-    } catch { /* checked after sync instead */ }
+    } catch { if (revision === photoRevision && photo?.display === taken.display && root.isConnected) { photoOutcome = "FAILED"; drawPhoto(); } /* checked after sync instead */ }
   };
   field("cat-model").addEventListener("input", () => { modelEdited = true; modelFromPhoto = false; draw(); });
   field("cat-name").addEventListener("input", () => { nameEdited = true; if (nameFromPhoto) { nameFromPhoto = false; draw(); } });
@@ -566,6 +589,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     photo = null;
     photoName = null;
     photoChecked = false;
+    photoOutcome = null;
     nameFromPhoto = false;
     armed = false;
     if (kept) {
@@ -783,6 +807,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         restored.preview = preview;
       }
       photoName = null;
+      photoOutcome = null;
       photoChecked = Boolean(photo) && !entry.recheck;
       nameFromPhoto = false;
       await drop(entry.id);
@@ -859,7 +884,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   /* ---------- Data ---------- */
 
   const takeCatalog = (fresh: Snapshot) => {
-    if (reviewOffer && reviewOffer.catalogRevision !== fresh.revision) invalidateReview();
+    if ((reviewOffer && reviewOffer.catalogRevision !== fresh.revision) || (requestingReview && catalog?.revision !== fresh.revision)) { invalidateReview(); scheduleReview(); }
     catalog = fresh;
     list = placeList(fresh.places);
     if (!placeId || !list.places.get(placeId)?.active) placeId = detail.session.locationId && list.places.get(detail.session.locationId)?.active ? detail.session.locationId : null;

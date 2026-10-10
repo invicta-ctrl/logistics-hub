@@ -4,6 +4,7 @@ import { ApiError, type Html, api, dataUrl, failure, html, icon, jpegOf, itemVis
 
 /** `cutout`: a cleaned picture (background removed) is kept beside the original. `cleanable`: the Worker can make one (src/item-cutout.ts). */
 export type Photo = { id: string; width: number; height: number; cutout?: boolean; cleanable?: boolean; cleanupReason?: string };
+export type PhotoCleanup = Pick<Photo, "cleanable" | "cleanupReason"> & { canEnable?: boolean };
 type Size = "thumb" | "display";
 
 /** Long sides of the two variants every photo is stored as: lists and the profile use the small one, the viewer the large one. */
@@ -155,7 +156,7 @@ export function cropEditor(host: HTMLElement, source: Prepared, apply: (photo: P
   preview.addEventListener("load", () => {
     if (!valid() || !preview.naturalWidth || !preview.naturalHeight) return;
     image.style.setProperty("--photo-ratio", String(preview.naturalWidth / preview.naturalHeight));
-    ready = true; frame.hidden = false; for (const button of controls) button.disabled = false; draw(); move.focus({ preventScroll: true });
+    ready = true; frame.hidden = false; for (const button of controls) button.disabled = false; draw(); move.focus({ preventScroll: true }); editor.scrollIntoView({ block: "nearest" });
   }, { once: true });
   preview.addEventListener("error", () => { if (valid()) showError(); }, { once: true });
   void dataUrl(source.display).then((url) => { if (valid()) preview.src = url; }).catch(() => { if (valid()) showError(); });
@@ -265,7 +266,7 @@ export type PhotoSubject = {
  * `[data-tile]` for the picture and a `[data-actions]` beside it for the buttons. `refresh` re-reads the record after
  * another person changed the picture first; `changed` runs after every save.
  */
-export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: string; name: string; photo: Photo | null; /** Item photos only: the route that cleans (POST) and restores (DELETE) the background, e.g. /api/staff/items/ITM-0001/cutout. */ cleanup?: string; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo) => void; visual?: () => VisualItem; updatedAt?: () => string | null }): PhotoPanel {
+export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: string; name: string; photo: Photo | null; /** Item photos only: the route that cleans (POST) and restores (DELETE) the background, e.g. /api/staff/items/ITM-0001/cutout. */ cleanup?: string; cleanupState?: () => PhotoCleanup | undefined; enableCleanup?: () => Promise<void>; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo) => void; visual?: () => VisualItem; updatedAt?: () => string | null }): PhotoPanel {
   const { id: itemId, name, noun, endpoint } = options;
   let photo = options.photo;
   let staged: Prepared | null = null;
@@ -294,12 +295,15 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   /** The profile tile shows the cleaned picture when there is one. */
   const tileUrl = (id: string) => (photo?.cutout && photo.id === id ? shownUrl(photo, "thumb") : options.thumbUrl(id));
   const show = (picture: Html, buttons: Html) => { mount(tile, picture); mount(actions, buttons); };
+  const cleanupState = (): PhotoCleanup | null | undefined => options.cleanupState?.() ?? photo;
+  const enableButton = (): Html => cleanupState()?.canEnable && options.enableCleanup ? html`<button type="button" class="button button--secondary button--sm" data-enable-cleanup ${busy() ? "disabled" : ""}>Enable background removal</button>` : html``;
+  const cleanupHint = (): Html => options.cleanup && cleanupState()?.cleanupReason ? html`<p class="field__hint" role="status">${cleanupState()!.cleanupReason} The original photo is kept.</p>` : html``;
 
   /** Item photos only: remove the background, or go back to the original. The original photo is never changed by either. */
   const cleanButton = (): Html => {
     if (!options.cleanup || !photo) return html``;
     if (photo.cutout) return html`<button type="button" class="button button--ghost button--sm" data-original ${busy() ? "disabled" : ""}>Use original</button>`;
-    return photo.cleanable ? html`<button type="button" class="button button--ghost button--sm" data-clean ${busy() ? "disabled" : ""}>Remove background</button>` : html``;
+    return html`<button type="button" class="button button--ghost button--sm" data-clean ${busy() || !photo.cleanable ? "disabled" : ""}>Remove background</button>${enableButton()}`;
   };
 
   const draw = () => {
@@ -313,12 +317,13 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     }
     if (staged) {
       return show(html`<div class="photo-tile photo-tile--preview"><img src="${staged.preview}" alt="Preview of the new ${noun} of ${name}" /></div>`, html`<div class="photo-actions"><button type="button" class="button button--primary button--sm" data-save ${busy() ? "disabled" : ""}>${state === "saving" ? "Saving…" : `Save ${noun}`}</button>
+          ${options.cleanup ? html`<button type="button" class="button button--secondary button--sm" data-save-clean ${busy() || !cleanupState()?.cleanable ? "disabled" : ""}>Save &amp; remove background</button>${enableButton()}` : ""}
           <button type="button" class="button button--secondary button--sm" data-pick ${busy() ? "disabled" : ""}>Choose another</button><button type="button" class="button button--ghost button--sm" data-camera ${busy() ? "disabled" : ""}>Take photo</button>
-          <button type="button" class="button button--secondary button--sm" data-crop-photo ${busy() ? "disabled" : ""}>Crop thumbnail</button><button type="button" class="button button--ghost button--sm" data-reset-photo ${busy() ? "disabled" : ""}>Reset thumbnail</button><button type="button" class="button button--ghost button--sm" data-cancel ${busy() ? "disabled" : ""}>Cancel</button></div>${alert}`);
+          <button type="button" class="button button--secondary button--sm" data-crop-photo ${busy() ? "disabled" : ""}>Crop thumbnail</button><button type="button" class="button button--ghost button--sm" data-reset-photo ${busy() ? "disabled" : ""}>Reset thumbnail</button><button type="button" class="button button--ghost button--sm" data-cancel ${busy() ? "disabled" : ""}>Cancel</button></div>${cleanupHint()}${alert}`);
     }
     if (!photo) {
       return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick aria-describedby="photo-hint-${itemId}">${options.visual ? itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual") : icon("camera")}<span>${options.visual ? "Upload photo" : `Add ${noun}`}</span></button>`,
-        html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>Choose photo</button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button></div><p class="field__hint" id="photo-hint-${itemId}">${options.hintAdd}</p>${alert}`);
+        html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>Choose photo or file</button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button>${enableButton()}</div><p class="field__hint" id="photo-hint-${itemId}">${options.hintAdd}</p>${cleanupHint()}${alert}`);
     }
     show(options.visual && options.visual().visualType === "SYSTEM_ICON"
       ? html`<div class="photo-tile">${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}</div>`
@@ -326,7 +331,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       html`${confirming
         ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>
             <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : `Remove ${noun}`}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>`
-        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button>${options.noun === "photo" ? html`<button type="button" class="button button--secondary button--sm" data-crop-existing>Crop thumbnail</button>` : ""}<button type="button" class="button button--ghost button--sm" data-remove>Remove</button>${cleanButton()}</div>${state === "cleaning" ? html`<p class="field__hint" role="status">Working on the picture…</p>` : ""}<p class="field__hint">${options.visual?.().visualType === "SYSTEM_ICON" ? "Your photo is saved. Select Real Photo to display it on the catalog." : options.hintHas}</p>`}${options.cleanup && !photo.cleanable && photo.cleanupReason ? html`<p class="field__hint" role="status">${photo.cleanupReason} The original photo is kept.</p>` : ""}${alert}`);
+        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button>${options.noun === "photo" ? html`<button type="button" class="button button--secondary button--sm" data-crop-existing>Crop thumbnail</button>` : ""}<button type="button" class="button button--ghost button--sm" data-remove>Remove</button>${cleanButton()}</div>${state === "cleaning" ? html`<p class="field__hint" role="status">Working on the picture…</p>` : ""}<p class="field__hint">${options.visual?.().visualType === "SYSTEM_ICON" ? "Your photo is saved. Select Real Photo to display it on the catalog." : options.hintHas}</p>`}${cleanupHint()}${alert}`);
   };
   const focus = (selector: string) => host.querySelector<HTMLElement>(selector)?.focus();
 
@@ -369,12 +374,47 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     draw();
   };
 
+  const changeBackground = async (cleaning: boolean) => {
+    if (!photo || !options.cleanup) return;
+    state = "cleaning";
+    error = "";
+    draw();
+    try {
+      // A new cut waits as pending: the browser judges it, and only an accepted one becomes the picture. A closed tab leaves the original.
+      let fault: string | null = null;
+      if (cleaning) {
+        const made = await api<{ pending?: boolean; cutout?: boolean }>(options.cleanup, { method: "POST", body: JSON.stringify({ expected: photo.id }) });
+        if (made.pending) {
+          fault = await cutoutFault(photo.id);
+          if (fault) await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
+          else await api(options.cleanup, { method: "POST", body: JSON.stringify({ expected: photo.id, accept: true }) });
+        }
+      } else await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
+      photo = { ...photo, cutout: cleaning && !fault };
+      state = "";
+      draw();
+      if (fault) { error = `${fault} The original photo is still in use.`; draw(); focus("[data-clean]"); return; }
+      toast(cleaning ? "Background removed. The original photo is kept." : "Using the original photo.");
+      focus(cleaning ? "[data-original]" : "[data-clean]");
+    } catch (problem) {
+      await failed(problem);
+    } finally { void Promise.resolve(options.changed(photo)).catch(() => undefined); }
+  };
+
   host.addEventListener("click", async (event) => {
     const target = event.target as HTMLElement;
     if (busy()) return;
     if (target.closest("[data-pick]")) input.click();
     else if (target.closest("[data-camera]")) camera.click();
     else if (target.closest("[data-view]") && photo) options.view(photo);
+    else if (target.closest("[data-enable-cleanup]") && cleanupState()?.canEnable && options.enableCleanup) {
+      state = "cleaning"; error = ""; draw();
+      try {
+        await options.enableCleanup();
+        if (photo) photo = { ...photo, ...cleanupState() };
+        state = ""; draw(); toast("Background removal enabled."); focus(staged ? "[data-save-clean]" : "[data-clean]");
+      } catch (problem) { await failed(problem); }
+    }
     else if (target.closest("[data-crop-photo]") && staged) { cropping = true; draw(); }
     else if (target.closest("[data-reset-photo]") && originalStaged) { staged = originalStaged; draw(); focus("[data-save]"); }
     else if (target.closest("[data-crop-existing]") && photo) {
@@ -390,7 +430,8 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     else if (target.closest("[data-cancel]")) { selection += 1; staged = originalStaged = null; cropExisting = false; error = ""; draw(); focus("[data-pick]"); }
     else if (target.closest("[data-remove]")) { confirming = true; draw(); focus("[data-remove-confirmed]"); }
     else if (target.closest("[data-keep]")) { confirming = false; draw(); focus("[data-remove]"); }
-    else if (target.closest("[data-save]") && staged) {
+    else if ((target.closest("[data-save]") || target.closest("[data-save-clean]")) && staged) {
+      const cleanAfterSave = Boolean(target.closest("[data-save-clean]"));
       state = "saving";
       error = "";
       draw();
@@ -406,7 +447,9 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
         photo = saved.photo;
         staged = originalStaged = null;
         cropExisting = false;
+        if (cleanAfterSave && options.cleanup && photo.cleanable) { await changeBackground(true); return; }
         state = "";
+        if (cleanAfterSave) error = photo.cleanupReason || "Background removal is unavailable. The saved original photo is kept.";
         draw();
         toast(`${noun === "photo" ? "Photo" : "Picture"} saved.`);
         void Promise.resolve(options.changed(photo)).catch(() => undefined);
@@ -415,31 +458,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
         await failed(problem);
       }
     } else if ((target.closest("[data-clean]") || target.closest("[data-original]")) && photo && options.cleanup) {
-      const cleaning = Boolean(target.closest("[data-clean]"));
-      state = "cleaning";
-      error = "";
-      draw();
-      try {
-        // A new cut waits as pending: the browser judges it, and only an accepted one becomes the picture. A closed tab leaves the original.
-        let fault: string | null = null;
-        if (cleaning) {
-          const made = await api<{ pending?: boolean; cutout?: boolean }>(options.cleanup, { method: "POST", body: JSON.stringify({ expected: photo.id }) });
-          if (made.pending) {
-            fault = await cutoutFault(photo.id);
-            if (fault) await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
-            else await api(options.cleanup, { method: "POST", body: JSON.stringify({ expected: photo.id, accept: true }) });
-          }
-        } else await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
-        photo = { ...photo, cutout: cleaning && !fault };
-        state = "";
-        draw();
-        if (fault) { error = `${fault} The original photo is still in use.`; draw(); focus("[data-clean]"); return; }
-        toast(cleaning ? "Background removed. The original photo is kept." : "Using the original photo.");
-        void Promise.resolve(options.changed(photo)).catch(() => undefined);
-        focus(cleaning ? "[data-original]" : "[data-clean]");
-      } catch (problem) {
-        await failed(problem);
-      }
+      await changeBackground(Boolean(target.closest("[data-clean]")));
     } else if (target.closest("[data-remove-confirmed]") && photo) {
       state = "removing";
       draw();
@@ -464,7 +483,9 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     selection += 1;
     // A redraw replaces the buttons, so whichever one has focus is given it again.
     const held = ["data-pick", "data-view", "data-remove", "data-clean", "data-original"].find((name) => host.querySelector(`[${name}]:focus`));
-    photo = next; confirming = false; error = ""; draw();
+    // A refresh of the same original must not erase a failed cleanup's explanation.
+    if (photo?.id !== next?.id) error = "";
+    photo = next; confirming = false; draw();
     if (held) focus(`[${held}]`);
   } };
 }

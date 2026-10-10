@@ -25,6 +25,14 @@ describe("possible duplicates", () => {
   it("reads words without case, punctuation or plurals", () => {
     expect(words("  Whiteboard-MARKERS, (Black) ")).toEqual(["whiteboard", "marker", "black"]);
   });
+  it("finds bounded weak photo-object candidates without loosening typed identity or serial exclusions", () => {
+    const calculators = [known({ id: "ITM-1", name: "2-Liner Scientific Calculator" }), known({ id: "ITM-2", name: "8-Digit Calculator", serialNumber: "SN-2" }), known({ id: "ITM-3", name: "Calculator case" }), known({ id: "ITM-4", name: "Desk calculator" })];
+    expect(possibleDuplicates({ name: "Calculator" }, calculators)).toEqual([]);
+    expect(possibleDuplicates({ name: "Calculator", photoName: "Calculator" }, calculators)).toHaveLength(3);
+    expect(possibleDuplicates({ name: "Calculator", photoName: "Scientific calculator" }, calculators)).toEqual([{ id: "ITM-1", reason: "Matches the object read from the photo", strong: false }]);
+    const found = possibleDuplicates({ name: "Calculator", photoName: "Calculator", serialNumber: "SN-1" }, calculators);
+    expect(found.every((match) => !match.strong && match.id !== "ITM-2")).toBe(true);
+  });
   it("finds the same name in any order or spelling, and an alias", () => {
     expect(possibleDuplicates({ name: "black whiteboard marker" }, catalog)).toEqual([{ id: "ITM-1", reason: "Same name", strong: true }]);
     expect(possibleDuplicates({ name: "Dry-erase markers" }, catalog)[0]).toMatchObject({ id: "ITM-1", strong: true });

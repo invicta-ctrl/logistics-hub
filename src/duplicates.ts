@@ -5,7 +5,7 @@
  */
 
 export type Known = { id: string; name: string; aliases: string | null; category: string; model: string | null; serialNumber: string | null; photoHash: string | null; status: string };
-export type Candidate = { name: string; category?: string; model?: string | null; serialNumber?: string | null; photoHash?: string | null };
+export type Candidate = { name: string; category?: string; model?: string | null; serialNumber?: string | null; photoHash?: string | null; /** A photo's short object name supplies weak candidates, never identity. */ photoName?: string | null };
 export type Match = { id: string; reason: string; strong: boolean };
 
 /** Lower-case words without accents or punctuation, with a plural "s" dropped, so "Markers" and "marker" read alike. */
@@ -37,6 +37,8 @@ const sameSet = (a: string[], b: string[]) => a.length === b.length && a.every((
 /** Existing items that may be the one being catalogued, strongest first. `ignore` leaves out the item being edited. */
 export function possibleDuplicates(candidate: Candidate, known: readonly Known[], ignore = ""): Match[] {
   const name = words(candidate.name);
+  const photoWords = words(candidate.photoName);
+  const canReadPhoto = photoWords.some((word) => word.length >= 4 && /\p{L}/u.test(word));
   const serial = compact(candidate.serialNumber);
   const model = compact(candidate.model);
   const category = (candidate.category ?? "").trim().toLowerCase();
@@ -47,15 +49,21 @@ export function possibleDuplicates(candidate: Candidate, known: readonly Known[]
     // Two serial numbers that differ are two individual things, however alike their names and photos.
     const otherSerial = compact(item.serialNumber);
     if (serial && otherSerial && serial !== otherSerial) continue;
+    const otherName = name.length || canReadPhoto ? words(item.name) : [];
     if (serial.length >= 3 && otherSerial === serial) match = { id: item.id, reason: "Same serial number", strong: true, rank: 0 };
-    else if (name.length && (sameSet(name, words(item.name)) || (item.aliases ?? "").split(",").some((alias) => sameSet(name, words(alias))))) match = { id: item.id, reason: "Same name", strong: true, rank: 1 };
+    else if (name.length && (sameSet(name, otherName) || item.aliases?.split(",").some((alias) => sameSet(name, words(alias))))) match = { id: item.id, reason: "Same name", strong: true, rank: 1 };
     else if (model.length >= 2 && compact(item.model) === model && category && item.category.trim().toLowerCase() === category) match = { id: item.id, reason: "Same model in the same category", strong: false, rank: 2 };
     else if (candidate.photoHash && item.photoHash && hamming(candidate.photoHash, item.photoHash) <= PHOTO_DISTANCE) match = { id: item.id, reason: "Its photo looks the same", strong: false, rank: 3 };
     else if (name.length >= 2) {
-      const other = words(item.name);
-      const shared = name.filter((word) => other.includes(word)).length;
+      const shared = name.filter((word) => otherName.includes(word)).length;
       // One name inside the other with at most a word more ("Whiteboard marker" and "Whiteboard marker black"); "Acrylic paint" and each of its twelve colours are not twins.
-      if (shared >= 2 && ((shared === Math.min(name.length, other.length) && Math.abs(name.length - other.length) <= 1) || shared / new Set([...name, ...other]).size >= 0.75)) match = { id: item.id, reason: "Almost the same name", strong: false, rank: 4 };
+      if (shared >= 2 && ((shared === Math.min(name.length, otherName.length) && Math.abs(name.length - otherName.length) <= 1) || shared / new Set([...name, ...otherName]).size >= 0.75)) match = { id: item.id, reason: "Almost the same name", strong: false, rank: 4 };
+    }
+    if (!match && canReadPhoto) {
+      if (photoWords.every((word) => otherName.includes(word)) || item.aliases?.split(",").some((alias) => {
+        const label = words(alias);
+        return photoWords.every((word) => label.includes(word));
+      })) match = { id: item.id, reason: "Matches the object read from the photo", strong: false, rank: 5 };
     }
     if (match) found.push(match);
   }

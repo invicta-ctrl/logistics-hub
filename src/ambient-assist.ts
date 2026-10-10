@@ -1,7 +1,7 @@
 import type { Account } from "./accounts";
 import { possibleDuplicates, type Known as DuplicateKnown } from "./duplicates";
 import { type Actor, InputError, audit } from "./inventory";
-import type { PhotoReading } from "./catalog-draft";
+import type { PhotoReading, PhotoOutcome } from "./catalog-draft";
 import { key } from "./item-media";
 
 /*
@@ -185,7 +185,6 @@ const base64 = (bytes: Uint8Array) => {
   return btoa(binary);
 };
 
-export type PhotoOutcome = "NAMED" | "NO_NAME" | "OFF" | "UNAVAILABLE" | "BUDGET" | "BREAKER" | "FAILED";
 /** Aggregate only: the task, the outcome, the time and the cost. Never the photo or the answer. */
 const log = (task: string, outcome: PhotoOutcome, ms: number, neurons: number) => console.log(JSON.stringify({ assist: task, model: PHOTO_MODEL, outcome, ms, neurons }));
 
@@ -270,7 +269,7 @@ export async function recheckCapturedPhoto(db: D1Database, ai: AiRunner | undefi
   // The record may have changed while the model answered: re-read it before deciding anything.
   const current = await db.prepare("SELECT status FROM items WHERE id = ?").bind(itemId).first<{ status: string }>();
   if (!current || current.status === "INACTIVE") return "SILENT";
-  const match = possibleDuplicates({ name }, others).find((each) => !seen.has(each.id));
+  const match = possibleDuplicates({ name, photoName: name }, others).find((each) => !seen.has(each.id));
   if (!match) return "SILENT";
   await db.prepare("INSERT OR IGNORE INTO system_settings(key, value, updated_at) VALUES(?1, ?2, ?3)")
     .bind(FINDING_PREFIX + itemId, JSON.stringify({ with: match.id, seen: name }), new Date(now).toISOString()).run();
