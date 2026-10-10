@@ -84,7 +84,8 @@ async function render(): Promise<void> {
     // reachability before treating a failed import as a replaced deployment.
     let reachable = false;
     if (navigator.onLine) {
-      try { reachable = (await fetch("/build.json", { cache: "no-store", signal: AbortSignal.timeout(5_000) })).ok; } catch { /* no connection */ }
+      // The public homepage is reachable without a session; build.json is deliberately private.
+      try { reachable = (await fetch("/", { cache: "no-store", signal: AbortSignal.timeout(5_000) })).ok; } catch { /* no connection */ }
     }
     if (current !== navigation) return;
     if (reachable) {
