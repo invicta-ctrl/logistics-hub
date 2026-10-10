@@ -1011,3 +1011,121 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     });
   }
 });
+
+for (const decision of ["Keep", "Reject", "Correct"] as const) {
+  test(`review-only AI: ${decision} is explicit and saves with the capture`, async ({ page }) => {
+    const server = serve(page, { active: true });
+    await server.ready;
+    await page.route("**/ai-offer", async (route) => {
+      const body = route.request().postDataJSON();
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({ id: "test-offer", draftId: body.draftId, revision: body.revision, catalogRevision: 3, observed: body.name, expiresAt: Date.now() + 60000, proposal: { kind: "REVIEW_ONLY", role: "TEXT_NORMALIZE", field: "term", value: "Whiteboard Marker Black" }, label: "Whiteboard Marker Black", reason: "OK" }) });
+    });
+    await begin(page, server);
+    await name(page).fill("Unknown marker");
+    await pick(page, "Take").click();
+    await page.getByLabel("Category").fill("OFFICE SUPPLIES");
+    await page.getByLabel("Counted in").fill("piece");
+    await page.getByRole("button", { name: "Review AI suggestion", exact: true }).click();
+    await expect(page.locator("#cat-ai")).toContainText("AI suggestion");
+    await expect(name(page)).toHaveValue("Unknown marker");
+    await page.locator("#cat-ai").getByRole("button", { name: decision, exact: true }).click();
+    if (decision === "Correct") {
+      const target = server.state.items.find((item) => item.name.includes("Whiteboard"))!;
+      await page.getByLabel("Correct reviewed item name").fill(target.name);
+      await page.getByRole("button", { name: "Apply correction", exact: true }).click();
+      await expect(name(page)).toHaveValue(target.name);
+    }
+    if (decision === "Keep") await expect(name(page)).toHaveValue("Whiteboard Marker Black");
+    if (decision === "Reject") await expect(name(page)).toHaveValue("Unknown marker");
+    await expect(page.locator("#cat-ai")).toContainText("Save the item");
+    await page.locator("#cat-save").click();
+    if (!server.state.captures.length) await page.locator("#cat-save").click();
+    await expect.poll(() => server.state.captures.length).toBe(1);
+    expect(server.state.captures[0]!.aiFeedback).toMatchObject({ offerId: "test-offer", decision: decision.toUpperCase() });
+  });
+}
+
+test("a late AI response cannot overwrite a staff edit; offline saving is independent", async ({ page }) => {
+  const server = serve(page, { active: true });
+  await server.ready;
+  let release: () => void = () => {};
+  const barrier = new Promise<void>((resolve) => { release = resolve; });
+  let requested = false;
+  await page.route("**/ai-offer", async (route) => {
+    const body = route.request().postDataJSON(); requested = true; await barrier;
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify({ id: "late", ...body, expiresAt: Date.now() + 60000, proposal: { kind: "REVIEW_ONLY", role: "TEXT_NORMALIZE", field: "term", value: "Stapler" }, label: "Stapler", reason: "OK" }) });
+  });
+  await begin(page, server);
+  await name(page).fill("Staplr");
+  await page.getByRole("button", { name: "Review AI suggestion", exact: true }).click();
+  await expect.poll(() => requested).toBe(true);
+  await name(page).fill("Staff owns this name"); release();
+  await expect(page.getByRole("button", { name: "Review AI suggestion", exact: true })).toBeEnabled();
+  await expect(page.locator("#cat-ai")).not.toContainText("AI suggestion");
+  await expect(name(page)).toHaveValue("Staff owns this name");
+  await pick(page, "Not sure").click();
+  await page.context().setOffline(true);
+  await page.locator("#cat-save").click();
+  await expect(name(page)).toHaveValue("");
+  await expect(rows(page)).toHaveCount(1);
+});
+
+test("crop Apply, Reset and Cancel keep the full photo and identity", async ({ page }) => {
+  const server = serve(page, { active: true });
+  await begin(page, server);
+  const result = await page.evaluate(async () => {
+    // Exercise actual browser codecs and the accessible editor, with a synthetic wide photo.
+    const modulePath = "/src/item-photo.ts";
+    const { preparePhoto, cropEditor } = await import(modulePath) as typeof import("../../src/item-photo");
+    const canvas = Object.assign(document.createElement("canvas"), { width: 800, height: 400 });
+    const context = canvas.getContext("2d")!; context.fillStyle = "red"; context.fillRect(0, 0, 400, 400); context.fillStyle = "blue"; context.fillRect(400, 0, 400, 400);
+    const blob = await new Promise<Blob>((resolve) => canvas.toBlob((value) => resolve(value!), "image/png"));
+    const source = await preparePhoto(new File([blob], "wide.png", { type: "image/png" }));
+    const host = document.createElement("div"); document.querySelector("#cat-form")!.append(host);
+    let next = source;
+    let cancel = false;
+    cropEditor(host, source, (value) => { next = value; }, () => { cancel = true; });
+    const width = host.querySelector<HTMLInputElement>('[data-crop="width"]')!;
+    width.value = "50"; width.dispatchEvent(new Event("input", { bubbles: true }));
+    host.querySelector<HTMLButtonElement>("[data-reset]")!.click();
+    const reset = width.value;
+    width.value = "50"; width.dispatchEvent(new Event("input", { bubbles: true }));
+    host.querySelector<HTMLButtonElement>("[data-apply]")!.click();
+    await new Promise<void>((resolve) => { const check = () => next === source ? setTimeout(check, 10) : resolve(); check(); });
+    const bitmap = await createImageBitmap(next.thumb); const dimensions = [bitmap.width, bitmap.height]; bitmap.close();
+    const kept = source.display === next.display && source.hash === next.hash;
+    cropEditor(host, source, () => {}, () => { cancel = true; });
+    host.querySelector<HTMLButtonElement>("[data-cancel-crop]")!.click();
+    host.remove(); return { reset, dimensions, kept, cancel };
+  });
+  expect(result).toEqual({ reset: "100", dimensions: [320, 320], kept: true, cancel: true });
+});
+
+test("a corrupt replacement keeps a valid unsaved profile photo and its Save action", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(async () => {
+    const modulePath = "/src/item-photo.ts";
+    const { photoPanel } = await import(modulePath) as typeof import("../../src/item-photo");
+    const host = document.createElement("section"); host.id = "test-photo-panel";
+    host.innerHTML = '<div data-tile></div><div data-actions></div>';
+    document.querySelector("main")!.append(host);
+    photoPanel(host, { id: "ITM-test", name: "Synthetic item", photo: null, noun: "photo", endpoint: "/api/staff/items/ITM-test/photo", thumbUrl: () => "", hintAdd: "Choose a photo", hintHas: "Full photo kept", removeNote: "", changed: () => {}, refresh: async () => {}, view: () => {} });
+  });
+  const panel = page.locator("#test-photo-panel");
+  const input = panel.locator("input[type=file]:not([capture])");
+  await input.setInputFiles({ name: "valid.png", mimeType: "image/png", buffer: PNG });
+  await expect(panel.locator("[data-save]")).toBeVisible();
+  const preview = await panel.locator("[data-tile] img").getAttribute("src");
+  await panel.getByRole("button", { name: "Crop thumbnail", exact: true }).click();
+  const width = panel.getByRole("slider", { name: "Crop width" });
+  await width.focus(); await page.keyboard.press("ArrowLeft");
+  await expect(width).toHaveValue("99");
+  await panel.getByRole("button", { name: "Reset crop", exact: true }).click();
+  await expect(width).toHaveValue("100");
+  await panel.getByRole("button", { name: "Cancel crop", exact: true }).click();
+  await expect(panel.locator("[data-tile] img")).toHaveAttribute("src", preview!);
+  await input.setInputFiles({ name: "corrupt.jpg", mimeType: "image/jpeg", buffer: Buffer.from("invalid jpeg") });
+  await expect(panel.locator("[role=alert]")).toContainText("could not be read");
+  await expect(panel.locator("[data-save]")).toBeVisible();
+  await expect(panel.locator("[data-tile] img")).toHaveAttribute("src", preview!);
+});

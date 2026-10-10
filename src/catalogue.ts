@@ -1,3 +1,4 @@
+import { captureFeedback } from "./ai-review";
 import { BEHAVIOURS, type Behaviour, UNSORTED_CATEGORY, UNSORTED_UNIT, behaviourFields } from "./catalog-policy";
 import { type Known, type Match, possibleDuplicates } from "./duplicates";
 import { type Actor, InputError, audit, createItem, distinct, parseItemInput, pathsOf, text, usablePlace } from "./inventory";
@@ -222,6 +223,7 @@ export async function capture(db: D1Database, actor: Actor, sessionId: string, i
   const matches = possibleDuplicates({ name: input2.name, category: input2.category, model: input2.model, serialNumber: input2.serialNumber, photoHash: hash }, results);
   if (matches.some((match) => !seen.includes(match.id))) return { duplicates: matches };
 
+  const feedback = await captureFeedback(db, actor, sessionId, body, { name: input2.name, category: input2.category, unit: input2.unit, behaviour: decided });
   const now = new Date().toISOString();
   try {
     const { id } = await createItem(db, actor, input2, quantity, {
@@ -229,7 +231,8 @@ export async function capture(db: D1Database, actor: Actor, sessionId: string, i
       also: (itemId) => [
         db.prepare("INSERT INTO catalogue_captures(id, session_id, item_id, location_id, behaviour, acknowledged, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)")
           .bind(requestId, sessionId, itemId, locationId, decided, seen.length ? JSON.stringify(seen) : null, now),
-        db.prepare("UPDATE catalogue_sessions SET location_id = ?, updated_at = ? WHERE id = ?").bind(locationId, now, sessionId)
+        db.prepare("UPDATE catalogue_sessions SET location_id = ?, updated_at = ? WHERE id = ?").bind(locationId, now, sessionId),
+        ...feedback(itemId)
       ]
     });
     return { id, captureId: requestId, replayed: false };

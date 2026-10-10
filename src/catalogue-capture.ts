@@ -1,12 +1,13 @@
 import type { Who } from "./catalogue-offline";
 import { type DraftFieldName, composeDraft, needsAttention } from "./catalog-draft";
-import { suggest } from "./catalogue-suggest";
+import type { ReviewOffer } from "./ai-review-types";
+import { suggest, verified } from "./catalogue-suggest";
 import { type Detail, type Entry, type SessionRecord, type Snapshot, type SnapshotItem, drop, dropSession, durable, entries, keep, keepSession, sessions, setAccess, setSnapshot, snapshot } from "./catalogue-store";
 import { type PlaceList, bindNewPlace, newPlaceForm, placeList, placeOptions, refreshParents } from "./catalogue-places";
 import { onSyncChange, savedItem, signedOut, syncNow } from "./catalogue-sync";
 import { BEHAVIOURS, BEHAVIOUR_LABELS, type Behaviour, UNSORTED_CATEGORY } from "./catalog-policy";
 import { type Known as DuplicateKnown, type Match, possibleDuplicates } from "./duplicates";
-import { preparePhoto, photoUrl } from "./item-photo";
+import { cropEditor, preparePhoto, photoUrl, type Prepared } from "./item-photo";
 import { whenIdle } from "./pwa";
 import { catalogueShell } from "./catalogue-shell";
 import { ApiError, type Html, api, categoryName, dataUrl, emptyState, failure, html, icon, leave, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, toast, units } from "./ui";
@@ -87,6 +88,12 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   /** Everything this page has captured, as the lists and rules read items, until the saved catalog catches up with it. */
   const local = new Map<string, Item>();
   let photo: { display: Blob; thumb: Blob; preview: string; hash: string } | null = null;
+  let originalPhoto: Prepared | null = null;
+  let draftId = crypto.randomUUID();
+  let draftRevision = 0;
+  let reviewOffer: ReviewOffer | null = null;
+  let reviewDecision: { decision: "KEEP" | "REJECT" | "CORRECT"; correction?: string } | null = null;
+  let requestingReview = false;
   let behaviour: Behaviour | null = null;
   /** True once Save has shown the possible matches: the next Save is the person saying "a different one". */
   let armed = false;
@@ -133,9 +140,11 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     <div class="cat-layout">
       <form class="cat-form card" id="cat-form" novalidate aria-label="Add an item">
         <div class="cat-top">
-          <div class="cat-photo-wrap"><button type="button" class="cat-photo" id="cat-photo" aria-label="Take a photo"><span class="cat-photo__empty">${icon("camera")}<span>Take photo</span></span></button><button type="button" class="button button--ghost button--sm cat-photo__choose" id="cat-library-button">Choose photo</button></div>
+          <div class="cat-photo-wrap"><button type="button" class="cat-photo" id="cat-photo" aria-label="Take a photo"><span class="cat-photo__empty">${icon("camera")}<span>Take photo</span></span></button><button type="button" class="button button--ghost button--sm cat-photo__choose" id="cat-library-button">Choose photo</button><button type="button" class="button button--ghost button--sm" id="cat-crop-button" hidden>Crop thumbnail</button></div>
           <div class="field cat-name"><label for="cat-name">Name</label><input id="cat-name" maxlength="120" autocomplete="off" autocapitalize="sentences" spellcheck="false" enterkeyhint="next" placeholder="What is it?" aria-describedby="cat-name-hint" /><p class="field__hint" id="cat-name-hint">A temporary name is fine if you are not sure.</p></div>
         </div>
+        <div id="cat-crop" hidden></div>
+        <section class="cat-ai" aria-label="AI review"><button type="button" class="button button--secondary button--sm" id="cat-ask-ai">Review AI suggestion</button><div id="cat-ai" aria-live="polite"></div></section>
         <div class="cat-dup" id="cat-dup" aria-live="polite"></div>
         <fieldset class="cat-behaviour" id="cat-behaviour"><legend>How is it used?</legend>
           <div class="cat-choices">${BEHAVIOURS.map((value, index) => html`<button type="button" class="cat-choice" data-behaviour="${value}" aria-pressed="false" aria-keyshortcuts="Alt+${index + 1}"><span class="cat-choice__title">${BEHAVIOUR_LABELS[value]}</span><span class="cat-choice__hint">${HINTS[value]}</span><span class="cat-choice__suggest" hidden>Suggested</span></button>`)}</div>
@@ -178,6 +187,71 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   whenIdle(() => root.isConnected && !value("cat-name") && !photo && !preparing);
   onLeave(() => whenIdle(() => false));
 
+  const invalidateReview = () => {
+    draftRevision += 1;
+    reviewOffer = null;
+    reviewDecision = null;
+    mount($("#cat-ai"), html``);
+  };
+  onLeave(() => { draftRevision += 1; });
+  form.addEventListener("input", (event) => { if (!(event.target as HTMLElement).closest(".cat-ai, #cat-crop")) invalidateReview(); });
+  form.addEventListener("change", (event) => { if (!(event.target as HTMLElement).closest(".cat-ai, #cat-crop")) invalidateReview(); });
+  const drawReview = () => {
+    const target = $("#cat-ai");
+    if (!reviewOffer?.proposal) {
+      mount(target, html`<p role="status">${reviewOffer?.reason === "EXACT_MATCH" ? "The reviewed catalogue already matches this name; AI was not needed." : reviewOffer?.reason === "PENDING" ? "A suggestion is still being checked. You can save manually." : "No AI suggestion is available. You can save manually."}</p>`);
+      return;
+    }
+    const followUp = reviewOffer.proposal.field === "follow_up";
+    const followUpLabels: Record<string, string> = { CHECK_NAME: "Check the name", CHECK_CATEGORY: "Check the category", CHECK_COUNTING_UNIT: "Check the counting unit", CHECK_BORROW_OR_TAKE: "Check how it is used", LOOKS_LIKE_EXISTING_ITEM: "Check the possible existing item" };
+    const label = followUp ? followUpLabels[reviewOffer.label!] : reviewOffer.label;
+    mount(target, html`<p><strong>AI suggestion — check it:</strong> ${label}. ${followUp ? "This is a question for staff, not a classification." : "Keep applies this name. Correct applies the reviewed item's name, category, unit and use."}</p>
+      ${reviewDecision ? html`<p role="status">${reviewDecision.decision === "KEEP" ? "Kept" : reviewDecision.decision === "REJECT" ? "Rejected" : "Corrected"}. Save the item when you are ready.</p>` : html`<div class="photo-actions"><button type="button" class="button button--secondary" data-ai-decision="KEEP">Keep</button><button type="button" class="button button--ghost" data-ai-decision="REJECT">Reject</button><button type="button" class="button button--ghost" data-ai-correct>Correct</button></div>
+        <div id="cat-ai-correction" hidden><label for="cat-ai-corrected">Correct reviewed item name</label><input id="cat-ai-corrected" maxlength="120" autocomplete="off" /><button type="button" class="button button--secondary" data-ai-apply>Apply correction</button><p role="alert" id="cat-ai-error"></p></div>`}`);
+  };
+  $("#cat-ask-ai").addEventListener("click", async () => {
+    if (requestingReview) return;
+    if (!online || who.mode !== "signed-in" || !record?.serverId) { mount($("#cat-ai"), html`<p>AI review needs a connection and a staff sign-in. Saving still works.</p>`); return; }
+    if (photo && !photoChecked) { mount($("#cat-ai"), html`<p>Wait for the photo check, or save manually. You can keep editing.</p>`); return; }
+    if (!value("cat-name")) { field("cat-name").focus(); return; }
+    const revision = draftRevision;
+    const id = draftId;
+    requestingReview = true;
+    $("#cat-ask-ai").setAttribute("disabled", "");
+    mount($("#cat-ai"), html`<p role="status">Checking a suggestion… You can keep editing or save.</p>`);
+    try {
+      const offer = await api<ReviewOffer>(`/api/staff/catalogue/sessions/${record.serverId}/ai-offer`, { method: "POST", body: JSON.stringify({ draftId: id, revision, name: value("cat-name") }) });
+      if (!root.isConnected || revision !== draftRevision || id !== draftId || offer.draftId !== id || offer.revision !== revision || offer.expiresAt <= Date.now()) return;
+      reviewOffer = offer;
+      reviewDecision = null;
+      drawReview();
+    } catch { if (root.isConnected && revision === draftRevision) mount($("#cat-ai"), html`<p>AI review is unavailable. Save manually or try later.</p>`); }
+    finally { requestingReview = false; $("#cat-ask-ai").removeAttribute("disabled"); }
+  });
+  $("#cat-ai").addEventListener("click", (event) => {
+    if (!reviewOffer?.proposal || reviewOffer.revision !== draftRevision || reviewOffer.expiresAt <= Date.now()) return;
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button");
+    if (!button) return;
+    if (button.hasAttribute("data-ai-correct")) { $("#cat-ai-correction").hidden = false; field("cat-ai-corrected").focus(); return; }
+    if (button.hasAttribute("data-ai-apply")) {
+      const corrected = value("cat-ai-corrected");
+      const target = catalog?.items.filter(verified).find((item) => item.name.toLocaleLowerCase() === corrected.toLocaleLowerCase());
+      if (!target) { $("#cat-ai-error").textContent = "Choose the exact name of a reviewed catalogue item, or edit the form manually."; return; }
+      field("cat-name").value = target.name;
+      field("cat-category").value = target.category;
+      field("cat-unit").value = target.unit;
+      choose(target.itemType === "Loanable" ? "BORROW" : target.consumptionMode === "OPEN_UNIT" ? "GRADUAL" : "CONSUME");
+      reviewDecision = { decision: "CORRECT", correction: target.name };
+      nameEdited = true; nameFromPhoto = false;
+    } else {
+      const decision = button.dataset.aiDecision;
+      if (decision !== "KEEP" && decision !== "REJECT") return;
+      if (decision === "KEEP" && reviewOffer.proposal.field !== "follow_up" && reviewOffer.label) { field("cat-name").value = reviewOffer.label; nameEdited = true; nameFromPhoto = false; }
+      reviewDecision = { decision };
+    }
+    draw(); drawReview();
+  });
+
   /* ---------- Places ---------- */
 
   const showPlace = () => {
@@ -191,6 +265,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     if (!panel.hidden) $("#cat-place-select").focus();
   });
   const choosePlace = async (id: string) => {
+    invalidateReview();
     placeId = id;
     showPlace();
     panel.hidden = true;
@@ -338,6 +413,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     if (existing) { const name = existing.dataset.useExisting; clear(false); toast(name ? `Not added. ${name} is open in a new tab to update.` : "Not added."); return; }
     const button = target.closest<HTMLElement>("[data-behaviour], [data-fill], [data-step], #cat-use-all");
     if (!button) return;
+    invalidateReview();
     if (button.dataset.behaviour) choose(button.dataset.behaviour as Behaviour);
     else if (button.dataset.fill) { field(`cat-${button.dataset.fill}`).value = button.dataset.value ?? ""; armed = false; draw(); }
     else if (button.dataset.step) {
@@ -364,17 +440,28 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     mount(tile, preparing ? html`<span class="cat-photo__empty" role="status">Preparing…</span>`
       : photo ? html`<img src="${photo.preview}" alt="Photo to save with this item" /><span class="cat-photo__retake">${icon("camera")}Retake</span>`
       : html`<span class="cat-photo__empty">${icon("camera")}<span>Photo</span></span>`);
+    $("#cat-crop-button").hidden = !photo || preparing;
     tile.setAttribute("aria-label", photo ? "Retake the photo" : "Take a photo");
   };
   const file = field("cat-file");
   const library = field("cat-library");
   $("#cat-photo").addEventListener("click", () => file.click());
   $("#cat-library-button").addEventListener("click", () => library.click());
+  $("#cat-crop-button").addEventListener("click", () => {
+    if (!photo || preparing) return;
+    const source = originalPhoto ?? photo;
+    const revision = photoRevision;
+    const host = $("#cat-crop"); host.hidden = false;
+    cropEditor(host, source, (cropped) => { if (revision !== photoRevision || !root.isConnected) return; photo = cropped; host.hidden = true; drawPhoto(); $("#cat-crop-button").focus(); }, () => { host.hidden = true; $("#cat-crop-button").focus(); });
+    host.querySelector<HTMLInputElement>("input")!.focus();
+  });
   const selectPhoto = async (chooser: HTMLInputElement) => {
     const chosen = chooser.files?.[0];
     chooser.value = "";
     if (!chosen) return;
     const revision = ++photoRevision;
+    invalidateReview();
+    $("#cat-crop").hidden = true;
     preparing = true;
     drawPhoto();
     let prepared: NonNullable<typeof photo> | null = null;
@@ -391,7 +478,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     photoChecked = false;
     if (nameFromPhoto) { field("cat-name").value = ""; nameFromPhoto = false; }
     if (modelFromPhoto) { field("cat-model").value = ""; modelFromPhoto = false; }
-    photo = prepared;
+    originalPhoto = photo = prepared;
     drawPhoto();
     draw();
     field("cat-name").focus();
@@ -403,7 +490,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   const checkPhoto = async (taken: NonNullable<typeof photo>, revision: number) => {
     try {
       const answer = await api<{ name: string | null; model?: string | null }>("/api/staff/catalogue/photo-name", { method: "POST", body: taken.thumb, headers: { "content-type": "image/jpeg" }, ...(typeof AbortSignal.timeout === "function" ? { signal: AbortSignal.timeout(15_000) } : {}) });
-      if (revision !== photoRevision || photo !== taken) return;
+      if (revision !== photoRevision || photo?.display !== taken.display) return;
       photoChecked = true;
       photoName = answer.name;
       if (answer.name && !nameEdited && !value("cat-name")) {
@@ -419,6 +506,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         $("#cat-more").setAttribute("open", "");
         announce(`Model read from the photo: ${answer.model}. Check it.`);
       }
+      invalidateReview();
       draw();
     } catch { /* checked after sync instead */ }
   };
@@ -440,6 +528,10 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   const clear = (keepShared: boolean) => {
     const kept = keepShared ? { name: value("cat-name"), category: value("cat-category"), unit: value("cat-unit"), model: value("cat-model"), stock: $<HTMLSelectElement>("#cat-stock").value } : null;
     form.reset();
+    draftId = crypto.randomUUID();
+    invalidateReview();
+    originalPhoto = null;
+    $("#cat-crop").hidden = true;
     photoRevision += 1;
     nameEdited = false;
     modelEdited = false;
@@ -497,6 +589,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const body: Record<string, unknown> = {
       id, behaviour, name, aliases: value("cat-aliases"), category: value("cat-category"), unit: value("cat-unit"), quantity, locationId: placeId,
       stockArea: $<HTMLSelectElement>("#cat-stock").value, model: value("cat-model"), serialNumber: value("cat-serial"), notes: value("cat-notes"),
+      ...(reviewOffer && reviewDecision ? { aiFeedback: { offerId: reviewOffer.id, draftId, revision: reviewOffer.revision, ...reviewDecision } } : {}),
       photoHash: photo?.hash ?? "", acknowledged: matches.filter((match) => !match.id.startsWith("pending:")).map((match) => match.id)
     };
     const entry: Entry = {
@@ -648,6 +741,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       field("cat-aliases").value = String(body.aliases ?? "");
       field("cat-notes").value = String(body.notes ?? "");
       $<HTMLSelectElement>("#cat-stock").value = String(body.stockArea ?? "Inventory");
+      originalPhoto = null;
       photo = entry.photo ? { ...entry.photo, preview: thumbs.get(entry.id) ?? "" } : null;
       if (photo && !photo.preview) photo.preview = await dataUrl(photo.display);
       photoName = null;
@@ -685,7 +779,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     // Alt + a key, so a shortcut never fires while someone is typing a name (WCAG 2.1.4); it works from any field.
     if (!event.altKey || event.ctrlKey || event.metaKey) return;
     const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
-    if (digit && Number(digit) <= BEHAVIOURS.length) { event.preventDefault(); choose(BEHAVIOURS[Number(digit) - 1]!); }
+    if (digit && Number(digit) <= BEHAVIOURS.length) { event.preventDefault(); invalidateReview(); choose(BEHAVIOURS[Number(digit) - 1]!); }
     else if (event.code === "KeyP") { event.preventDefault(); file.click(); }
   };
   document.addEventListener("keydown", onKey);
@@ -726,6 +820,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   /* ---------- Data ---------- */
 
   const takeCatalog = (fresh: Snapshot) => {
+    if (reviewOffer && reviewOffer.catalogRevision !== fresh.revision) invalidateReview();
     catalog = fresh;
     list = placeList(fresh.places);
     if (!placeId || !list.places.get(placeId)?.active) placeId = detail.session.locationId && list.places.get(detail.session.locationId)?.active ? detail.session.locationId : null;

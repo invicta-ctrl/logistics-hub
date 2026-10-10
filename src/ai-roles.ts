@@ -1,3 +1,5 @@
+import type { ReviewProposal } from "./ai-review-types";
+export type { ReviewProposal } from "./ai-review-types";
 import { type AiRunner, BANDS, BREAKER_FAILURES, BREAKER_MS, CALL_TIMEOUT_MS, type Urgency, assistOn, reserve, spend } from "./ambient-assist";
 import { aiReplyText } from "./catalog-ai";
 import { words } from "./duplicates";
@@ -49,7 +51,6 @@ export type RoleOutcome = "ANSWER" | "ABSTAIN" | "UNAVAILABLE";
 export type ProposalField = "term" | "id" | "follow_up";
 const ROLE_FIELDS: Record<TextRole, ProposalField> = { TEXT_NORMALIZE: "term", CANDIDATE_ARBITRATE: "id", RARE_SECOND_OPINION: "follow_up" };
 /** A bounded candidate for a person to Keep, Reject or Correct; never a trusted draft value. */
-export type ReviewProposal = { kind: "REVIEW_ONLY"; role: TextRole; field: ProposalField; value: string };
 /**
  * `value` is what a caller may use. REVIEW_ONLY and SHADOW_EVALUATION always return null; only the latter exposes its answer in
  * `observed` to a bounded evaluation (`evaluation: true`), which no screen or route reads.
@@ -71,12 +72,12 @@ type Task = { system: string; user: string; allowed: readonly string[]; field: P
 
 /** TEXT_NORMALIZE (Granite): the observed or typed name, and the canonical terms it may be normalized to. Returns one of them or null. */
 export const MAX_TERMS = 40;
-export function normalizeTask(observed: string, terms: readonly string[]): Task {
+export function normalizeTask(observed: string, terms: readonly string[], preferred: readonly string[] = []): Task {
   const wanted = new Set(words(observed));
   const overlap = (term: string) => words(term).filter((word) => wanted.has(word)).length;
   // Terms longer than 60 characters are skipped rather than cut (a cut term could match something else); the closest 40 are kept.
   const allowed = [...new Set(terms.map((term) => term.replace(/\s+/g, " ").trim()).filter((term) => term && term.length <= 60))]
-    .sort((a, b) => overlap(b) - overlap(a) || a.localeCompare(b)).slice(0, MAX_TERMS);
+    .sort((a, b) => overlap(b) - overlap(a) || Number(preferred.includes(b)) - Number(preferred.includes(a)) || a.localeCompare(b)).slice(0, MAX_TERMS);
   return {
     field: "term", allowed,
     system: "You match a storeroom item name to the catalogue's own wording. Reply with JSON only: {\"term\": ...}. term must be copied exactly from the list in the request. Answer only when the name is clearly the same item as one term (a misspelling, a plural, reordered words, or one missing word) and no other term fits equally well; otherwise null.",
@@ -216,7 +217,7 @@ const closeWord = (left: string, right: string): boolean => {
     else if (right.length > left.length) rightAt += 1;
     else { leftAt += 1; rightAt += 1; }
   }
-  return true;
+  return edits + (left.length - leftAt) + (right.length - rightAt) <= 1;
 };
 
 const relevantTerm = (name: string, terms: readonly string[]) => {

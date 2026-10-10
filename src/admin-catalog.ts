@@ -1,3 +1,4 @@
+import type { KnowledgeProposal } from "./ai-review-types";
 import "./admin.css";
 import { adminPage } from "./admin-frame";
 import { BEHAVIOUR_LABELS } from "./catalog-policy";
@@ -38,9 +39,10 @@ export async function catalogSettings(): Promise<void> {
         <p class="hint-row__says">${[entry.behaviour && BEHAVIOUR_LABELS[entry.behaviour], entry.unit && `counted by the ${entry.unit}`, entry.category && categoryName(entry.category)].filter(Boolean).join(" · ") || "Nothing on its own"}<span class="muted"> · ${entry.note}</span></p></li>`)}</ul></details>
     </section>
     <section class="admin-block" aria-labelledby="ai-title">
-      <h2 id="ai-title" class="section-title">AI second opinion</h2>
-      <p><span class="tag tag--pending">Not connected</span></p>
-      <p>Nothing sends item names to an AI model. This release only measured the idea on sample data, and suggestions come entirely from the built-in hints and the catalog itself. If it is ever connected, this section will show whether it is on, today's calls against the daily limit and whether it has paused itself, and show nothing it has not read.</p>
+      <h2 id="ai-title" class="section-title">AI review and verified corrections</h2>
+      <p>Staff can Keep, Reject or Correct a review-only suggestion in Add items. Kept guesses never become training evidence. AI availability and today's allowance are shown in <a href="/staff/admin/system" data-route>System</a>.</p>
+      <p>Proposals use the last 200 catalogue audit events. Approval records a request for code review; built-in hints change only after a knowledge version update and fixture tests.</p>
+      <div id="ai-proposals" aria-live="polite"></div>
     </section>
     <section class="admin-block" aria-labelledby="elsewhere-title">
       <h2 id="elsewhere-title" class="section-title">Looked after elsewhere</h2>
@@ -49,6 +51,21 @@ export async function catalogSettings(): Promise<void> {
     <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>`
   });
   if (!session) return;
+  const loadProposals = async () => {
+    const host = document.querySelector<HTMLElement>("#ai-proposals")!;
+    try {
+      const { proposals } = await api<{ proposals: KnowledgeProposal[] }>("/api/staff/admin/catalog/proposals");
+      mount(host, proposals.length ? html`<ul class="hint-list">${proposals.map((proposal) => html`<li class="hint-row"><p><strong>${proposal.observed}</strong> → ${proposal.target.name} · ${categoryName(proposal.target.category)} · ${proposal.target.unit} · ${BEHAVIOUR_LABELS[proposal.target.behaviour as keyof typeof BEHAVIOUR_LABELS]}</p><p>${proposal.support} reviewed corrections from ${proposal.actors} staff; ${proposal.conflicts} conflicts.</p>${proposal.decision ? html`<p>${proposal.decision === "APPROVE" ? "Approved — awaiting code review" : "Rejected"}</p>` : proposal.support >= 3 && proposal.actors >= 2 && !proposal.conflicts ? html`<div class="photo-actions"><button class="button button--secondary" data-proposal="${proposal.id}" data-decision="APPROVE">Approve for code review</button><button class="button button--ghost" data-proposal="${proposal.id}" data-decision="REJECT">Reject</button></div>` : html`<p class="muted">More independent evidence is needed.</p>`}</li>`)}</ul>` : html`<p>No verified correction proposals yet.</p>`);
+    } catch (error) { mount(host, html`<p role="alert">${failure(error)}</p>`); }
+  };
+  document.querySelector("#ai-proposals")!.addEventListener("click", async (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-proposal]");
+    if (!button) return;
+    button.disabled = true;
+    try { await api("/api/staff/admin/catalog/proposals", { method: "POST", body: JSON.stringify({ id: button.dataset.proposal, decision: button.dataset.decision }) }); await loadProposals(); }
+    catch (error) { toast(failure(error), "error"); button.disabled = false; }
+  });
+  void loadProposals();
 
   async function loadCoverage(): Promise<void> {
     const target = document.querySelector<HTMLElement>("#coverage")!;

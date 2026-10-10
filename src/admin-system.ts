@@ -10,7 +10,7 @@ type Status = {
   database: Probe & { migrations: { applied: number; latest: string | null; latestAppliedAt: string | null; pending: string[] | null } | null };
   storage: Array<Probe & { id: string; label: string; holds: string }>;
   selfService: "open" | "paused" | null;
-  /** Photo suggestions in Catalogue (ambient-assist.ts): the owner's switch and today's Workers AI use against the daily stop. */
+  /** Photo suggestions and review-only text proposals in Catalogue (ambient-assist.ts): the owner's switch and today's Workers AI use against the daily stop. */
   assist: { on: boolean; available: boolean; neuronsToday: number; band: "NORMAL" | "CONSERVE" | "RESERVE" | "CRITICAL" | "STOPPED"; stopAt: number };
   /** Picture cleanup on item photos (item-cutout.ts): the owner's switch (off until turned on) and this month's photos sent against the cap. */
   cleanup: { on: boolean; available: boolean; sentThisMonth: number; monthlyCap: number };
@@ -42,13 +42,13 @@ function row(name: string, state: Html, detail: Html | string): Html {
 }
 
 const BAND_WORDS: Record<Status["assist"]["band"], string> = {
-  NORMAL: "", CONSERVE: "Using less: checks after sync still run.", RESERVE: "Using the reserve.", CRITICAL: "Only while someone is cataloguing; checks after sync wait for tomorrow.", STOPPED: "Stopped for today. Cataloguing works as usual without suggestions."
+  NORMAL: "", CONSERVE: "Using less: checks after sync still run.", RESERVE: "Using the reserve.", CRITICAL: "Only while someone is cataloguing; checks after sync wait for tomorrow.", STOPPED: "Stopped for today. Cataloguing works with built-in suggestions; AI suggestions are unavailable."
 };
 function assistRow(assist: Status["assist"], owner: boolean): Html {
   const state = !assist.available ? tag("warn", "Not available here") : !assist.on ? tag("warn", "Off") : assist.band === "STOPPED" ? tag("warn", "Paused for today") : tag("ok", "On");
   const used = html`${assist.neuronsToday.toLocaleString("en-PH")} of ${assist.stopAt.toLocaleString("en-PH")} Workers AI Neurons used today (UTC). ${BAND_WORDS[assist.band]}`;
-  const detail = assist.available ? used : html`This copy of the application has no Workers AI. Cataloguing works as usual without suggestions.`;
-  return row("Photo suggestions", state, html`${detail}${owner ? html` <button type="button" class="text-link" id="assist-toggle" data-on="${String(!assist.on)}">${assist.on ? "Turn off" : "Turn on"}</button>` : ""}`);
+  const detail = assist.available ? used : html`This copy of the application has no Workers AI. Cataloguing works with built-in suggestions; AI suggestions are unavailable.`;
+  return row("AI suggestions", state, html`${detail} Photo reading and review-only text suggestions share this switch and allowance.${owner ? html` <button type="button" class="text-link" id="assist-toggle" data-on="${String(!assist.on)}">${assist.on ? "Turn off" : "Turn on"}</button>` : ""}`);
 }
 
 function cleanupRow(cleanup: Status["cleanup"], owner: boolean): Html {

@@ -25,7 +25,7 @@ const { outputFiles } = await build({
       import { AI_MODEL, aiMessages, aiReplyText, aiSchema, readAiAnswer } from "./src/catalog-ai";
       import { KNOWLEDGE, KNOWLEDGE_VERSION } from "./src/item-knowledge";
       import { migratedD1 } from "./tests/d1-sqlite";
-      const catalogOf = (external) => external ?? migratedD1().sqlite.prepare("SELECT name, aliases, category, item_type AS itemType, consumption_mode AS consumptionMode, unit, stock_area AS stockArea, status FROM items").all();
+      const catalogOf = (external) => external ?? migratedD1().sqlite.prepare("SELECT name, aliases, category, item_type AS itemType, consumption_mode AS consumptionMode, unit, stock_area AS stockArea, status, needs_review AS needsReview FROM items").all().map((item) => ({ ...item, needsReview: item.needsReview === 0 ? false : true }));
       export function run(external) {
         const catalog = catalogOf(external);
         const before = evaluate(catalog, { knowledge: false });

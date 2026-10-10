@@ -309,9 +309,6 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .hero { background: var(--brand-dark); color: var(--on-dark); }
 .hero__inner { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); align-items: center; gap: clamp(2rem, 5vw, 4.5rem); padding-block: clamp(2.5rem, 6vw, 4.5rem); }
 .hero__copy { min-width: 0; }
-/* The Youth Development Day banner carries its own title, so it is shown whole, never cropped or veiled. */
-.hero__banner { margin: 0; overflow: hidden; border: 1px solid var(--on-dark-line); border-radius: var(--radius-lg); background: var(--brand-deep); }
-.hero__banner img { width: 100%; aspect-ratio: 960 / 356; object-fit: cover; }
 .hero h1 { max-width: 20ch; margin-bottom: var(--space-4); font-family: var(--serif); font-size: var(--text-display); font-weight: 400; letter-spacing: -.02em; line-height: 1.02; overflow-wrap: anywhere; }
 .hero__lede { max-width: 34rem; color: var(--on-dark-2); font-size: var(--text-lg); line-height: 1.6; }
 .hero__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); margin-top: var(--space-8); }
@@ -966,7 +963,6 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .record-home { display: none; }
   .steps { grid-template-columns: 1fr; gap: var(--space-8); }
   .hero__inner { grid-template-columns: minmax(0, 1fr); }
-  .hero__banner { order: -1; max-width: 44rem; }
   .panels { grid-template-columns: minmax(0, 1fr); }
 }
 
@@ -1622,3 +1618,28 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
 .classify-hint .text-link { grid-column: 2; justify-self: start; }
 .classify-hint__line.is-weak .icon { color: var(--text-3); }
 .loan-row.is-focus, .loan-row.is-focus.is-overdue { background: var(--brand-tint); box-shadow: inset 0 0 0 2px var(--brand); }
+
+.photo-crop { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); padding: var(--space-3); }
+.photo-crop__image { position: relative; margin-block: var(--space-3); }
+.photo-crop__image img { display: block; width: 100%; height: auto; }
+.photo-crop__frame { position: absolute; border: 2px solid var(--brand); box-shadow: 0 0 0 1px var(--surface); pointer-events: none; }
+.photo-crop label { display: grid; gap: var(--space-1); margin-block: var(--space-2); }
+.photo-crop input { width: 100%; min-height: 2.75rem; accent-color: var(--brand); }
+@media (max-width: 520px) {
+  .sheet__header { flex-wrap: wrap; }
+  .sheet__header > * { min-width: 0; max-width: 100%; }
+  .profile__actions, .photo-actions { width: 100%; }
+  .photo-actions > .button { white-space: normal; }
+}
+
+.hero__eyebrow { font: 500 .75rem/1.5 var(--sans); letter-spacing: .13em; text-transform: uppercase; }
+.hero__services { padding: clamp(1.5rem, 4vw, 3rem); background: var(--bg); color: var(--text); border-top: 4px solid var(--gold); }
+.hero__services h2 { font-family: var(--serif); font-size: clamp(1.7rem, 3vw, 2.5rem); line-height: 1.15; margin: 1rem 0 1.5rem; }
+.hero__services a { display: block; padding: 1rem 0; border-top: 1px solid currentColor; color: inherit; text-decoration: none; }
+.hero__services strong { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.hero__services span { display: block; font-size: .9rem; margin-top: .3rem; }
+.hero__services a:hover strong { text-decoration: underline; }
+.cat-ai { margin-block: 1rem; padding-block: .75rem; border-block: 1px solid var(--line); }
+.cat-ai p { margin-block: .5rem; }
+.cat-ai input { width: 100%; margin-block: .5rem; }
+@media (max-width: 520px) { .cat-actions { flex-wrap: wrap; } .cat-actions > button { flex: 1 1 100%; white-space: normal; } }

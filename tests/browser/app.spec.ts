@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/public/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify(catalog) }));
 });
 
-test("landing shows the undistorted DOL mark beside the HAU·USC crest, and only Part 1 destinations", async ({ page }) => {
+test("landing shows the institutional identity and current Logistics services", async ({ page }) => {
   let catalogRequests = 0;
   page.on("request", (request) => { if (request.url().includes("/api/public/catalog")) catalogRequests += 1; });
   await page.goto("/");
@@ -19,7 +19,9 @@ test("landing shows the undistorted DOL mark beside the HAU·USC crest, and only
   const box = (await page.locator(".site-header__brand .mark").boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(40);
   await expect(page.locator(".site-header__brand .crest")).toBeVisible();
-  await expect(page.getByRole("img", { name: "Siglawang: Yabong ng Pamana, Youth Development Day 2026" })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Logistics services" })).toBeVisible();
+  await expect(page.locator(".hero__services").getByRole("link", { name: /Self-Service/ })).toHaveAttribute("href", "/self-service");
+  await expect(page.locator(".hero__services").getByRole("link", { name: /Staff sign-in/ })).toHaveAttribute("href", "/staff");
   await expect(page.getByRole("link", { name: "Department of Logistics home" })).toHaveAttribute("href", "/");
   const facebook = page.getByRole("contentinfo").getByRole("link", { name: "Student Council on Facebook (opens in a new tab)" });
   await expect(facebook).toHaveAttribute("href", "https://www.facebook.com/holyangeluniversitysc");
@@ -574,5 +576,18 @@ test("self-service shows an item's photo in the list and on its page, and the ho
     await expect(page.getByRole("heading", { level: 1, name: "Scissors" })).toBeVisible();
     await expect(page.locator(".ss-item__visual .item-icon")).toBeVisible();
     await expect(page.locator(".ss-item__visual img")).toHaveCount(0);
+  }
+});
+
+test("service homepage fits a short phone and a desktop without clipping links", async ({ page }) => {
+  for (const viewport of [{ width: 390, height: 560 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await expect(page.locator(".hero__services")).toBeVisible();
+    const layout = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: innerWidth, links: [...document.querySelectorAll<HTMLAnchorElement>(".hero__services a")].map((link) => ({ width: link.getBoundingClientRect().width, right: link.getBoundingClientRect().right })) }));
+    expect(layout.width).toBeLessThanOrEqual(layout.viewport);
+    expect(layout.links).toHaveLength(3);
+    for (const link of layout.links) { expect(link.width).toBeGreaterThan(200); expect(link.right).toBeLessThanOrEqual(layout.viewport); }
+    await page.screenshot({ path: `test-results/browser/home-${viewport.width}.png`, fullPage: true });
   }
 });

@@ -1,3 +1,4 @@
+import { offerReview, reviewProposals, decideKnowledge } from "./ai-review";
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
 import { type AiRunner, MAX_PHOTO_BYTES, assistStatus, keepBoth, photoName, recheckCapturedPhoto, recheckWaiting, setAssist } from "./ambient-assist";
@@ -356,9 +357,11 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
       return json(await setCleanup(env.DB, account, await body()));
     }
     if (path === "/api/staff/admin/assist" && method === "PATCH") {
-      if (account.role !== "OWNER") return json({ error: "Photo suggestions are turned on or off by the owner." }, 403);
+      if (account.role !== "OWNER") return json({ error: "AI suggestions are turned on or off by the owner." }, 403);
       return json(await setAssist(env.DB, account, await body()));
     }
+    if (path === "/api/staff/admin/catalog/proposals" && method === "GET") return json(await reviewProposals(env.DB));
+    if (path === "/api/staff/admin/catalog/proposals" && method === "POST") return json(await decideKnowledge(env.DB, account, await body()));
     if (path === "/api/staff/admin/catalog" && method === "GET") return json(await catalogCoverage(env.DB));
     if (path === "/api/staff/admin/catalog/aliases" && method === "GET") return json(await aliasItems(env.DB, url.searchParams.get("q") ?? ""));
     const names = ALIAS_PATH.exec(path);
@@ -432,6 +435,8 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   if (path === "/api/staff/catalogue/offline" && method === "POST") return enableOffline(request, env, url, account);
   if (path === "/api/staff/catalogue/offline" && method === "DELETE") return disableOffline(request, env, url, account, leased);
   if (path === "/api/staff/catalogue/snapshot" && method === "GET") return revisioned(request, env.DB, () => catalogueSnapshot(env.DB));
+  const offerSession = /^\/api\/staff\/catalogue\/sessions\/(CS-[0-9a-f-]{36})\/ai-offer$/.exec(path);
+  if (offerSession && method === "POST") return json(await offerReview(env.DB, env.AI, account, offerSession[1]!, await body()), 200, { "cache-control": "private, no-store" });
   if (path === "/api/staff/catalogue/photo-name" && method === "POST") {
     // One catalogue photo, as the device prepared it: refuse anything larger before reading it.
     const size = Number(request.headers.get("content-length"));
@@ -510,8 +515,10 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     const [detail, freshness, kits, links] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!), linksOf(env.DB, match[1]!)]);
     // Whether this photo has a cleaned picture, and whether cleaning is offered at all (the Images binding is present).
     const cleaned = detail.item.photo ? await hasCutout(env.CATALOG_MEDIA, detail.item.photo.id) : false;
-    const cleanable = Boolean(env.IMAGES) && await cleanupOn(env.DB);
-    return json({ ...detail, item: { ...detail.item, photo: detail.item.photo ? { ...detail.item.photo, cutout: cleaned, cleanable } : null }, freshness, kits, links });
+    const cleanup = await cleanupStatus(env.DB, env.IMAGES);
+    const cleanable = cleanup.on && cleanup.available && cleanup.sentThisMonth < cleanup.monthlyCap;
+    const cleanupReason = !cleanup.on ? "Picture cleanup is turned off by the owner." : !cleanup.available ? "Picture cleanup is unavailable in this environment." : !cleanable ? "This month's picture cleanup allowance is used." : "";
+    return json({ ...detail, item: { ...detail.item, photo: detail.item.photo ? { ...detail.item.photo, cutout: cleaned, cleanable, cleanupReason } : null }, freshness, kits, links });
   }
   if (match && !match[2] && method === "PATCH") {
     const input = await body() as Record<string, unknown> | null;

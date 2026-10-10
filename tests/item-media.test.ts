@@ -208,7 +208,7 @@ describe("adding a photo", () => {
     expect(actions()).toEqual(["ITEM_PHOTO_ADDED"]);
     expect(revision()).toBe(before + 1);
     expect((await listed()).photoId).toBe(photo.id);
-    expect((await detail()).photo).toEqual({ id: photo.id, width: 40, height: 30, cutout: false, cleanable: false });
+    expect((await detail()).photo).toEqual({ id: photo.id, width: 40, height: 30, cutout: false, cleanable: false, cleanupReason: "Picture cleanup is turned off by the owner." });
   });
 
   it("stores the cleaned bytes, never what the client sent", async () => {
@@ -543,5 +543,23 @@ describe("privacy and history", () => {
       ["ITEM_PHOTO_REPLACED", `Staff One replaced the photo of ${name}.`],
       ["ITEM_PHOTO_ADDED", `Staff One added a photo to ${name}.`]
     ]);
+  });
+});
+
+describe("thumbnail cropping", () => {
+  it("copies the sanitized display and hash server-side, creates a new media id and rejects stale crops", async () => {
+    const original = photoForm(null); original.set("hash", "0123456789abcdef");
+    const first = (await (await put(null, ITEM, original)).json() as { photo: { id: string } }).photo.id;
+    const before = await (await staff(`/api/staff/media/${first}/display`)).arrayBuffer();
+    const current = await (await staff(`/api/staff/items/${ITEM}`)).json() as { item: { updatedAt: string } };
+    const crop = photoForm(first, jpeg({ width: 25, height: 25 }), jpeg({ width: 10, height: 10 }));
+    crop.set("crop", "1"); crop.set("hash", "ffffffffffffffff"); crop.set("updatedAt", current.item.updatedAt);
+    const response = await put(first, ITEM, crop); expect(response.status).toBe(200);
+    const second = (await response.json() as { photo: { id: string } }).photo.id;
+    expect(second).not.toBe(first);
+    expect(await (await staff(`/api/staff/media/${second}/display`)).arrayBuffer()).toEqual(before);
+    expect(sqlite.prepare("SELECT dhash FROM item_media WHERE item_id = ?").get(ITEM)).toEqual({ dhash: "0123456789abcdef" });
+    expect((await put(first, ITEM, crop)).status).toBe(409);
+    expect((await detail()).photo!.id).toBe(second);
   });
 });

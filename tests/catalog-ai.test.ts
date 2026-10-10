@@ -108,12 +108,12 @@ describe("the V1.11 second opinion stays a measurement", () => {
     expect(users).toEqual(["ai-roles.ts", "suggest-evaluation.ts"]);
   });
 
-  it("the Workers AI binding is used by ambient assist and the role adapters alone, and only ambient assist is reached by the Worker", () => {
+  it("the Workers AI binding stays inside bounded adapters and the audited review boundary", () => {
     expect(readFileSync("wrangler.jsonc", "utf8")).toMatch(/"ai"\s*:\s*\{\s*"binding"\s*:\s*"AI"\s*\}/);
     const sources = readdirSync("src").filter((file) => /\.ts$/.test(file));
     expect(sources.filter((file) => /\bai\.run\(|\.AI\.run\(/.test(readFileSync(`src/${file}`, "utf8")))).toEqual(["ai-roles.ts", "ambient-assist.ts"]);
-    // The three text roles (ai-roles.ts) are measured by scripts/evaluate-roles.mjs and answer no staff request until a benchmark passes.
-    expect(sources.filter((file) => readFileSync(`src/${file}`, "utf8").includes("./ai-roles"))).toEqual([]);
+    // Staff text requests enter only through the server-issued review boundary. Trusted activation still needs its benchmark gate.
+    expect(sources.filter((file) => readFileSync(`src/${file}`, "utf8").includes("./ai-roles"))).toEqual(["ai-review.ts"]);
     expect(sources.filter((file) => /env\.AI\b/.test(readFileSync(`src/${file}`, "utf8")))).toEqual(["worker.ts"]);
   });
 });

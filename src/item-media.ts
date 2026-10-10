@@ -158,6 +158,16 @@ export async function dropObjects(bucket: R2Bucket, mediaId: string, folder: "it
  */
 export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Actor, itemId: string, form: FormData) {
   const expected = expectedPhoto(form.get("expected"));
+  if (form.get("crop") === "1") {
+    if (!form.has("updatedAt")) throw new InputError(400, "Reload the item before cropping its photo.");
+    if (!expected) throw new InputError(400, "Choose an existing photo to crop.");
+    const current = await db.prepare("SELECT media_id AS mediaId, dhash AS hash FROM item_media WHERE item_id = ?").bind(itemId).first<{ mediaId: string; hash: string | null }>();
+    if (!current || current.mediaId !== expected) throw new InputError(409, CHANGED);
+    const original = await bucket.get(key(expected, "display"));
+    if (!original) throw new InputError(404, "The original photo could not be loaded.");
+    form.set("display", new Blob([await new Response(original.body).arrayBuffer()], { type: "image/jpeg" }), "display.jpg");
+    form.set("hash", current.hash ?? "");
+  }
   const hasVersion = form.has("updatedAt");
   const expectedVersion = form.get("updatedAt") || null;
   if (expectedVersion !== null && typeof expectedVersion !== "string") throw new InputError(400, "Reload the item and try again.");

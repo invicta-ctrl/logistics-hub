@@ -3,7 +3,7 @@ import { type VisualItem, itemIconSvg } from "./item-icons";
 import { ApiError, type Html, api, dataUrl, failure, html, icon, jpegOf, itemVisual, mount, raw, reducedMotion, toast } from "./ui";
 
 /** `cutout`: a cleaned picture (background removed) is kept beside the original. `cleanable`: the Worker can make one (src/item-cutout.ts). */
-export type Photo = { id: string; width: number; height: number; cutout?: boolean; cleanable?: boolean };
+export type Photo = { id: string; width: number; height: number; cutout?: boolean; cleanable?: boolean; cleanupReason?: string };
 type Size = "thumb" | "display";
 
 /** Long sides of the two variants every photo is stored as: lists and the profile use the small one, the viewer the large one. */
@@ -57,6 +57,52 @@ export async function preparePhoto(file: File): Promise<Prepared> {
     for (const quality of QUALITIES.slice(1)) if (display.size > 900_000) display = await jpegOf(bitmap, EDGES.display, quality);
     return { display, thumb: await jpegOf(bitmap, EDGES.thumb, 0.8), preview: await dataUrl(display), hash: dhashOf(bitmap) };
   } finally { bitmap.close(); }
+}
+
+/** Crop only the thumbnail; the sanitized display and its identity remain untouched. */
+export async function cropPhoto(source: Prepared, rect: { x: number; y: number; width: number; height: number }): Promise<Prepared> {
+  const bitmap = await createImageBitmap(source.display);
+  try {
+    const width = Math.max(1, Math.round(bitmap.width * Math.min(100, Math.max(1, rect.width)) / 100));
+    const height = Math.max(1, Math.round(bitmap.height * Math.min(100, Math.max(1, rect.height)) / 100));
+    const x = Math.max(0, Math.min(bitmap.width - width, Math.round(bitmap.width * rect.x / 100)));
+    const y = Math.max(0, Math.min(bitmap.height - height, Math.round(bitmap.height * rect.y / 100)));
+    const scale = Math.min(1, 320 / Math.max(width, height));
+    const canvas = Object.assign(document.createElement("canvas"), { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) });
+    canvas.getContext("2d")!.drawImage(bitmap, x, y, width, height, 0, 0, canvas.width, canvas.height);
+    const thumb = await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The crop could not be prepared.")), "image/jpeg", .8));
+    return { ...source, thumb, preview: await dataUrl(thumb) };
+  } finally { bitmap.close(); }
+}
+
+/** Native sliders work with touch, arrows and assistive technology; nothing saves until Apply, then Save. */
+export function cropEditor(host: HTMLElement, source: Prepared, apply: (photo: Prepared) => void, cancel: () => void): void {
+  let closed = false;
+  mount(host, html`<fieldset class="photo-crop"><legend>Crop thumbnail</legend><p>The full photo is kept. Adjust the frame, then apply it.</p>
+    <div class="photo-crop__image"><img src="${source.preview}" alt="Full photo with the selected crop frame" /><div class="photo-crop__frame" aria-hidden="true"></div></div>
+    ${(["width", "height", "x", "y"] as const).map((key) => html`<label>${{ width: "Crop width", height: "Crop height", x: "Horizontal position", y: "Vertical position" }[key]}<input type="range" data-crop="${key}" min="${key === "width" || key === "height" ? 10 : 0}" max="100" value="${key === "width" || key === "height" ? 100 : 0}" /><output></output></label>`)}
+    <p role="alert" hidden></p><div class="photo-actions"><button type="button" class="button button--primary" data-apply>Apply crop</button><button type="button" class="button button--secondary" data-reset>Reset crop</button><button type="button" class="button button--ghost" data-cancel-crop>Cancel crop</button></div></fieldset>`);
+  const editor = host.querySelector<HTMLFieldSetElement>("fieldset")!;
+  const preview = editor.querySelector<HTMLImageElement>("img")!;
+  void dataUrl(source.display).then((url) => { if (!closed && preview.isConnected) preview.src = url; }).catch(() => undefined);
+  const fields = Object.fromEntries([...host.querySelectorAll<HTMLInputElement>("[data-crop]")].map((field) => [field.dataset.crop!, field]));
+  const rect = () => ({ x: Number(fields.x!.value), y: Number(fields.y!.value), width: Number(fields.width!.value), height: Number(fields.height!.value) });
+  const draw = () => {
+    fields.x!.max = String(100 - Number(fields.width!.value)); fields.y!.max = String(100 - Number(fields.height!.value));
+    for (const field of Object.values(fields)) field.nextElementSibling!.textContent = `${field.value}%`;
+    const r = rect(); const frame = host.querySelector<HTMLElement>(".photo-crop__frame")!;
+    Object.assign(frame.style, { left: `${r.x}%`, top: `${r.y}%`, width: `${r.width}%`, height: `${r.height}%` });
+  };
+  host.querySelector("[data-reset]")!.addEventListener("click", () => { fields.width!.value = fields.height!.value = "100"; fields.x!.value = fields.y!.value = "0"; draw(); });
+  host.querySelector("[data-cancel-crop]")!.addEventListener("click", () => { closed = true; cancel(); });
+  editor.addEventListener("input", draw);
+  host.querySelector<HTMLButtonElement>("[data-apply]")!.addEventListener("click", async (event) => {
+    const button = event.currentTarget as HTMLButtonElement; button.disabled = true;
+    try { const next = await cropPhoto(source, rect()); if (!closed && editor.isConnected && host.contains(editor)) { closed = true; apply(next); } }
+    catch { const alert = host.querySelector<HTMLElement>("[role=alert]")!; alert.hidden = false; alert.textContent = "The crop could not be prepared. Your photo is unchanged."; }
+    finally { button.disabled = false; }
+  });
+  draw(); fields.width!.focus();
 }
 
 /**
@@ -166,6 +212,10 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   const { id: itemId, name, noun, endpoint } = options;
   let photo = options.photo;
   let staged: Prepared | null = null;
+  let originalStaged: Prepared | null = null;
+  let cropExisting = false;
+  let stagedVersion: string | null | undefined;
+  let cropping = false;
   let state: "" | "preparing" | "saving" | "removing" | "cleaning" = "";
   let confirming = false;
   let error = "";
@@ -183,7 +233,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   camera.setAttribute("aria-label", `Take a ${noun} of ${name}`);
   host.append(camera);
   let selection = 0;
-  const busy = () => state !== "";
+  const busy = () => state !== "" || cropping;
   /** The profile tile shows the cleaned picture when there is one. */
   const tileUrl = (id: string) => (photo?.cutout && photo.id === id ? shownUrl(photo, "thumb") : options.thumbUrl(id));
   const show = (picture: Html, buttons: Html) => { mount(tile, picture); mount(actions, buttons); };
@@ -198,10 +248,16 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   const draw = () => {
     const alert = error ? html`<p class="form-alert" role="alert">${icon("alert")}<span>${error}</span></p>` : "";
     if (state === "preparing") return show(html`<div class="photo-tile photo-tile--busy" role="status">Preparing the photo…</div>`, html``);
+    if (cropping && originalStaged) {
+      show(html`<div class="photo-tile photo-tile--preview"><img src="${staged!.preview}" alt="Current thumbnail preview" /></div>`, html``);
+      const revision = selection;
+      cropEditor(actions, originalStaged, (next) => { if (revision !== selection) return; staged = next; cropping = false; draw(); focus("[data-save]"); }, () => { cropping = false; draw(); focus("[data-crop-photo]"); });
+      return;
+    }
     if (staged) {
       return show(html`<div class="photo-tile photo-tile--preview"><img src="${staged.preview}" alt="Preview of the new ${noun} of ${name}" /></div>`, html`<div class="photo-actions"><button type="button" class="button button--primary button--sm" data-save ${busy() ? "disabled" : ""}>${state === "saving" ? "Saving…" : `Save ${noun}`}</button>
           <button type="button" class="button button--secondary button--sm" data-pick ${busy() ? "disabled" : ""}>Choose another</button><button type="button" class="button button--ghost button--sm" data-camera ${busy() ? "disabled" : ""}>Take photo</button>
-          <button type="button" class="button button--ghost button--sm" data-cancel ${busy() ? "disabled" : ""}>Cancel</button></div>${alert}`);
+          <button type="button" class="button button--secondary button--sm" data-crop-photo ${busy() ? "disabled" : ""}>Crop thumbnail</button><button type="button" class="button button--ghost button--sm" data-reset-photo ${busy() ? "disabled" : ""}>Reset thumbnail</button><button type="button" class="button button--ghost button--sm" data-cancel ${busy() ? "disabled" : ""}>Cancel</button></div>${alert}`);
     }
     if (!photo) {
       return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick aria-describedby="photo-hint-${itemId}">${options.visual ? itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual") : icon("camera")}<span>${options.visual ? "Upload photo" : `Add ${noun}`}</span></button>`,
@@ -213,7 +269,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       html`${confirming
         ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>
             <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : `Remove ${noun}`}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>`
-        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-remove>Remove</button>${cleanButton()}</div>${state === "cleaning" ? html`<p class="field__hint" role="status">Working on the picture…</p>` : ""}<p class="field__hint">${options.visual?.().visualType === "SYSTEM_ICON" ? "Your photo is saved. Select Real Photo to display it on the catalog." : options.hintHas}</p>`}${alert}`);
+        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button>${options.noun === "photo" ? html`<button type="button" class="button button--secondary button--sm" data-crop-existing>Crop thumbnail</button>` : ""}<button type="button" class="button button--ghost button--sm" data-remove>Remove</button>${cleanButton()}</div>${state === "cleaning" ? html`<p class="field__hint" role="status">Working on the picture…</p>` : ""}<p class="field__hint">${options.visual?.().visualType === "SYSTEM_ICON" ? "Your photo is saved. Select Real Photo to display it on the catalog." : options.hintHas}</p>`}${options.cleanup && !photo.cleanable && photo.cleanupReason ? html`<p class="field__hint" role="status">${photo.cleanupReason} The original photo is kept.</p>` : ""}${alert}`);
   };
   const focus = (selector: string) => host.querySelector<HTMLElement>(selector)?.focus();
 
@@ -221,6 +277,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     const file = chooser.files?.[0];
     chooser.value = "";
     if (!file) return;
+    const version = options.updatedAt?.();
     const revision = ++selection;
     state = "preparing";
     error = "";
@@ -229,7 +286,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     let preparationError = "";
     try { prepared = await preparePhoto(file); } catch (problem) { preparationError = problem instanceof Error ? problem.message : "This photo could not be used."; }
     if (revision !== selection || !host.isConnected) return;
-    staged = prepared;
+    if (prepared) { staged = originalStaged = prepared; cropExisting = false; stagedVersion = version; }
     error = preparationError;
     state = "";
     draw();
@@ -243,7 +300,8 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     state = "";
     if (problem instanceof ApiError && problem.status === 409) {
       toast(problem.message, "error");
-      staged = null;
+      staged = originalStaged = null;
+      cropExisting = false;
       confirming = false;
       error = "";
       draw();
@@ -260,7 +318,19 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     if (target.closest("[data-pick]")) input.click();
     else if (target.closest("[data-camera]")) camera.click();
     else if (target.closest("[data-view]") && photo) options.view(photo);
-    else if (target.closest("[data-cancel]")) { selection += 1; staged = null; error = ""; draw(); focus("[data-pick]"); }
+    else if (target.closest("[data-crop-photo]") && staged) { cropping = true; draw(); }
+    else if (target.closest("[data-reset-photo]") && originalStaged) { staged = originalStaged; draw(); focus("[data-save]"); }
+    else if (target.closest("[data-crop-existing]") && photo) {
+      const version = options.updatedAt?.(); const revision = ++selection; state = "preparing"; draw();
+      try {
+        const response = await fetch(photoUrl(photo.id, "display"), { credentials: "same-origin" });
+        if (!response.ok) throw new Error("The full photo could not be loaded. Your photo is unchanged.");
+        const display = await response.blob(); const prepared = await preparePhoto(new File([display], "original.jpg", { type: "image/jpeg" }));
+        if (revision !== selection || !host.isConnected) return;
+        staged = originalStaged = { ...prepared, display }; cropExisting = true; stagedVersion = version; cropping = true; state = ""; draw();
+      } catch (problem) { if (revision === selection) { state = ""; error = failure(problem); draw(); } }
+    }
+    else if (target.closest("[data-cancel]")) { selection += 1; staged = originalStaged = null; cropExisting = false; error = ""; draw(); focus("[data-pick]"); }
     else if (target.closest("[data-remove]")) { confirming = true; draw(); focus("[data-remove-confirmed]"); }
     else if (target.closest("[data-keep]")) { confirming = false; draw(); focus("[data-remove]"); }
     else if (target.closest("[data-save]") && staged) {
@@ -272,11 +342,13 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       form.set("thumb", staged.thumb, "thumb.jpg");
       form.set("expected", photo?.id ?? "");
       form.set("hash", staged.hash);
-      if (options.updatedAt) form.set("updatedAt", options.updatedAt() ?? "");
+      if (cropExisting) form.set("crop", "1");
+      if (options.updatedAt) form.set("updatedAt", stagedVersion ?? "");
       try {
         const saved = await api<{ photo: Photo }>(endpoint, { method: "PUT", body: form });
         photo = saved.photo;
-        staged = null;
+        staged = originalStaged = null;
+        cropExisting = false;
         state = "";
         draw();
         toast(`${noun === "photo" ? "Photo" : "Picture"} saved.`);

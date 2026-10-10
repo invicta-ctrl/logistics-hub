@@ -1,4 +1,7 @@
-import { expect, test, devices, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { chromium, expect, test, devices, type BrowserContext, type Page } from "@playwright/test";
 
 /*
  * V1.6 against a real Worker, D1 and R2 and the production build (service worker on). An Android tablet turns offline cataloguing on,
@@ -19,8 +22,11 @@ let context: BrowserContext;
 let page: Page;
 let shelf = "";
 
-async function tablet(browser: Browser) {
-  const made = await browser.newContext({ ...devices["Galaxy Tab S4"], baseURL: BASE });
+let profile = "";
+async function tablet() {
+  // Installation needs a normal profile; Chromium rejects installability in incognito contexts.
+  profile = mkdtempSync(join(tmpdir(), "logistics-pwa-"));
+  const made = await chromium.launchPersistentContext(profile, { ...devices["Galaxy Tab S4"], baseURL: BASE, headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
   return { context: made, page: await made.newPage() };
 }
 
@@ -75,8 +81,8 @@ async function capture(target: Page, options: { name: string; how: string; categ
 const rows = (target: Page) => target.locator("#cat-list .cat-row");
 
 test.describe.serial("the Catalog PWA", () => {
-  test.beforeAll(async ({ browser }) => {
-    ({ context, page } = await tablet(browser));
+  test.beforeAll(async () => {
+    ({ context, page } = await tablet());
     await signIn(page);
     // An open session is per person: one an earlier spec left open for this account would be resumed instead of started.
     const open = ((await (await page.request.get("/api/staff/catalogue")).json()) as { session: { id: string } | null }).session;
@@ -85,7 +91,7 @@ test.describe.serial("the Catalog PWA", () => {
     const room = await post({ name: "E2E V16 Store room", parentId: null });
     shelf = await post({ name: "E2E V16 Shelf A", parentId: room });
   });
-  test.afterAll(async () => { await context.close(); });
+  test.afterAll(async () => { await context?.close(); if (profile) rmSync(profile, { recursive: true, force: true }); });
 
   test("turns on for this device, opens and catalogues offline, and sends everything once when the connection is back", async () => {
     await page.goto("/staff/catalogue");
