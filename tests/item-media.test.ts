@@ -551,6 +551,7 @@ describe("thumbnail cropping", () => {
     const original = photoForm(null); original.set("hash", "0123456789abcdef");
     const first = (await (await put(null, ITEM, original)).json() as { photo: { id: string } }).photo.id;
     const before = await (await staff(`/api/staff/media/${first}/display`)).arrayBuffer();
+    sqlite.prepare("UPDATE items SET visual_type = 'SYSTEM_ICON', icon_key = 'tabler:scissors' WHERE id = ?").run(ITEM);
     const current = await (await staff(`/api/staff/items/${ITEM}`)).json() as { item: { updatedAt: string } };
     const crop = photoForm(first, jpeg({ width: 25, height: 25 }), jpeg({ width: 10, height: 10 }));
     crop.set("crop", "1"); crop.set("hash", "ffffffffffffffff"); crop.set("updatedAt", current.item.updatedAt);
@@ -559,6 +560,7 @@ describe("thumbnail cropping", () => {
     expect(second).not.toBe(first);
     expect(await (await staff(`/api/staff/media/${second}/display`)).arrayBuffer()).toEqual(before);
     expect(sqlite.prepare("SELECT dhash FROM item_media WHERE item_id = ?").get(ITEM)).toEqual({ dhash: "0123456789abcdef" });
+    expect(sqlite.prepare("SELECT visual_type, icon_key FROM items WHERE id = ?").get(ITEM)).toEqual({ visual_type: "SYSTEM_ICON", icon_key: "tabler:scissors" });
     expect((await put(first, ITEM, crop)).status).toBe(409);
     expect((await detail()).photo!.id).toBe(second);
   });

@@ -189,7 +189,7 @@ export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Acto
         : db.prepare("INSERT INTO item_media(item_id, media_id, width, height, created_at, created_by, dhash) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?9 WHERE NOT EXISTS (SELECT 1 FROM item_media WHERE item_id = ?1) AND (?7 = 0 OR EXISTS (SELECT 1 FROM items WHERE id = ?1 AND updated_at IS ?8))")
           .bind(itemId, mediaId, display.width, display.height, now, actor.accountId, Number(hasVersion), expectedVersion, hash),
       audit(db, actor.accountId, expected ? "ITEM_PHOTO_REPLACED" : "ITEM_PHOTO_ADDED", "ITEM", itemId, { mediaId }, true),
-      db.prepare("UPDATE items SET visual_type = 'PHOTO', updated_at = ? WHERE id = ? AND changes() > 0").bind(now, itemId),
+      db.prepare("UPDATE items SET visual_type = CASE WHEN ? = 1 THEN visual_type ELSE 'PHOTO' END, updated_at = ? WHERE id = ? AND changes() > 0").bind(Number(form.get("crop") === "1"), now, itemId),
       db.prepare(`${BUMP_REVISION} AND changes() > 0`)
     ]);
     if (!write!.meta.changes) throw new InputError(409, CHANGED);
