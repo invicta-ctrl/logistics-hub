@@ -158,6 +158,6 @@ describe("go to", () => {
   });
 
   it("only ever navigates to a Hub page", () => {
-    for (const shortcut of SHORTCUTS) expect(shortcut.href, shortcut.id).toMatch(/^\/staff\/[a-z/-]*(\?[A-Za-z]+=[A-Za-z_]+(&[A-Za-z]+=[A-Za-z_]+)*)?$/);
+    for (const shortcut of SHORTCUTS) expect(shortcut.href, shortcut.id).toMatch(/^\/staff\/[a-z/-]*(\?[A-Za-z]+=[A-Za-z_0-9]+(&[A-Za-z]+=[A-Za-z_0-9]+)*)?$/);
   });
 });

@@ -1,3 +1,4 @@
+import { currentItemSQL } from "./inventory";
 import { type IndexItem, type IndexKit, type IndexLink, type IndexPlace, type SearchIndex } from "./search";
 
 /*
@@ -11,7 +12,7 @@ export async function searchIndex(db: D1Database): Promise<SearchIndex> {
   const [items, places, kits, components, links] = await db.batch([
     db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.status, i.location_id AS placeId, i.icon_key AS iconKey,
         i.visual_type AS visualType, p.media_id AS photoId
-      FROM items i LEFT JOIN item_media p ON p.item_id = i.id ORDER BY i.name COLLATE NOCASE, i.id`),
+      FROM items i LEFT JOIN item_media p ON p.item_id = i.id WHERE ${currentItemSQL()} ORDER BY i.name COLLATE NOCASE, i.id`),
     db.prepare("SELECT id, name, parent_id AS parentId, active FROM locations ORDER BY name COLLATE NOCASE, id"),
     db.prepare("SELECT id, name, location_id AS placeId, active FROM kits ORDER BY name COLLATE NOCASE, id"),
     db.prepare("SELECT kit_id AS kitId, item_id AS itemId FROM kit_components ORDER BY kit_id, position"),

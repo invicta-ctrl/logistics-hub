@@ -1,4 +1,4 @@
-import { type Actor, BUMP_REVISION, InputError, audit, pathsOf, text, usablePlace } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, audit, pathsOf, text, usablePlace, currentItemSQL } from "./inventory";
 import { LOCATION_ID, MAX_DEPTH, type Place, VISIBILITIES, ancestry, cleanName, levelsBelow, placesOf, withinPlace } from "./location-tree";
 
 /*
@@ -20,7 +20,7 @@ type Row = { id: string; name: string; parentId: string | null; directions: stri
 export async function locationList(db: D1Database) {
   const { results } = await db.prepare(`SELECT l.id, l.name, l.parent_id AS parentId, l.directions, l.visibility, l.active, l.updated_at AS updatedAt,
       l.media_id AS photoId, l.media_width AS photoWidth, l.media_height AS photoHeight,
-      (SELECT COUNT(*) FROM items i WHERE i.location_id = l.id) AS itemCount,
+      (SELECT COUNT(*) FROM items i WHERE i.location_id = l.id AND ${currentItemSQL()}) AS itemCount,
       (SELECT COUNT(*) FROM location_reports r JOIN items i ON i.id = r.item_id WHERE r.resolved_at IS NULL AND i.location_id = l.id) AS openReports,
       (SELECT MAX(a.finished_at) FROM location_audits a WHERE a.location_id = l.id AND a.status = 'FINISHED') AS lastCheckedAt
     FROM locations l ORDER BY l.name COLLATE NOCASE, l.id`).all<Row & { itemCount: number; openReports: number; lastCheckedAt: string | null }>();
@@ -184,9 +184,9 @@ export async function moveItems(db: D1Database, actor: Actor, fromId: string, in
   const now = new Date().toISOString();
   const [, moved] = await placeGuard(db.batch([
     db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
-      SELECT lower(hex(randomblob(16))), ?1, ?2, 'ITEM_UPDATED', 'ITEM', i.id, json_object('storageLocation', json_object('from', ?3, 'to', ?4)) FROM items i WHERE i.location_id = ?5`)
+      SELECT lower(hex(randomblob(16))), ?1, ?2, 'ITEM_UPDATED', 'ITEM', i.id, json_object('storageLocation', json_object('from', ?3, 'to', ?4)) FROM items i WHERE i.location_id = ?5 AND ${currentItemSQL()}`)
       .bind(now, actor.accountId, paths.get(fromId)!, paths.get(toId)!, fromId),
-    db.prepare("UPDATE items SET location_id = ?, updated_at = ? WHERE location_id = ?").bind(toId, now, fromId),
+    db.prepare(`UPDATE items SET location_id = ?, updated_at = ? WHERE location_id = ? AND ${currentItemSQL("items.id")}`).bind(toId, now, fromId),
     audit(db, actor.accountId, "LOCATION_ITEMS_MOVED", "LOCATION", fromId, { to: toId, fromPath: paths.get(fromId), toPath: paths.get(toId) }, true),
     db.prepare(`${BUMP_REVISION} AND changes() > 0`)
   ]));

@@ -82,8 +82,8 @@ test.describe("Home", () => {
     await expect(page.locator("#home-lede")).toContainText("Nothing needs a person right now.");
   });
 
-  test("offers to continue only work that is really open, with a link straight back into it", async ({ page }) => {
-    await setup(page);
+  test("offers to continue open physical checks while cataloguing stays in Quick Catalog", async ({ page }) => {
+    await setup(page, { work: { catalogue: WORK.catalogue, checks: [] } });
     await page.goto("/staff/home");
     await expect(page.getByRole("heading", { level: 2, name: "Needs attention" })).toBeVisible();
     await expect(page.locator("#home-continue")).toBeHidden();
@@ -93,12 +93,9 @@ test.describe("Home", () => {
     await setup(other, { work: WORK });
     await other.goto("/staff/home");
     const resume = other.locator("#home-continue .home-row");
-    await expect(resume).toHaveCount(2);
-    await expect(resume.first()).toHaveAttribute("href", "/staff/catalogue?session=CS-00000000-0000-4000-8000-000000000001");
-    await expect(resume.first()).toContainText("Cataloguing at Sample Office › Cabinet 1");
-    await expect(resume.first()).toContainText("14 items added");
-    await expect(resume.nth(1)).toHaveAttribute("href", "/staff/catalogue?audit=LA-00000000-0000-4000-9000-000000000001");
-    await expect(resume.nth(1)).toContainText("Paused · 38 items expected");
+    await expect(resume).toHaveCount(1);
+    await expect(resume.first()).toHaveAttribute("href", "/staff/catalogue?audit=LA-00000000-0000-4000-9000-000000000001");
+    await expect(resume.first()).toContainText("Paused · 38 items expected");
   });
 
   test("gives administrators the two Administration pages and staff only the working ones", async ({ page }) => {
@@ -106,6 +103,7 @@ test.describe("Home", () => {
     await page.goto("/staff/home");
     const titles = page.locator(".home-side .home-row__title");
     await expect(titles).toHaveText(["Add items", "Lend or return", "Stock in or out", "Find a place", "Check a kit"]);
+    await expect(page.locator(".home-side").getByRole("link", { name: /^Add items/ })).toHaveAttribute("href", "/staff/items?add=1");
     const admin = await page.context().newPage();
     await setup(admin, { role: "OWNER" });
     await admin.goto("/staff/home");

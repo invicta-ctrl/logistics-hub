@@ -10,7 +10,7 @@ import { type Known as DuplicateKnown, type Match, possibleDuplicates } from "./
 import { cropEditor, preparePhoto, photoUrl, type Prepared } from "./item-photo";
 import { whenIdle } from "./pwa";
 import { catalogueShell } from "./catalogue-shell";
-import { ApiError, type Html, api, categoryName, dataUrl, emptyState, failure, html, icon, leave, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, toast, units } from "./ui";
+import { ApiError, type Html, api, categoryName, dataUrl, emptyState, expired, failure, html, icon, label, leave, live, mount, navigate, onLeave as onPageLeave, plural, preservingFocus, setMessage, toast, units } from "./ui";
 
 /*
  * The capture screen of a cataloguing session (/staff/catalogue?session=…): one form, kept on screen, that turns a thing on a shelf
@@ -33,7 +33,7 @@ function known(entry: Entry): Item {
   return {
     id: entry.itemId ?? `pending:${entry.id}`, name: String(body.name), aliases: text("aliases"), category: text("category") ?? UNSORTED_CATEGORY, unit: text("unit") ?? "piece",
     itemType: behaviour === "BORROW" ? "Loanable" : behaviour === "REVIEW_LATER" ? "NEEDS_REVIEW" : "Consumable", consumptionMode: behaviour === "GRADUAL" ? "OPEN_UNIT" : "WHOLE_UNIT",
-    stockArea: text("stockArea"), status: "ACTIVE", needsReview: true, model: text("model"), serialNumber: text("serialNumber"), photoHash: entry.photo?.hash ?? null,
+    stockArea: text("stockArea"), status: "ACTIVE", needsReview: !(body.direct === true && body.reviewed === true && behaviour !== "REVIEW_LATER"), model: text("model"), serialNumber: text("serialNumber"), photoHash: entry.photo?.hash ?? null,
     locationId: text("locationId"), onHand: Number(body.quantity)
   };
 }
@@ -41,35 +41,42 @@ function known(entry: Entry): Item {
 /** How many of each kind a list of captures holds, as the server counts a session. */
 const countsOf = (list: Entry[]) => list.reduce<Record<string, number>>((out, entry) => ({ ...out, [String(entry.body.behaviour)]: (out[String(entry.body.behaviour)] ?? 0) + 1 }), {});
 
-export async function captureScreen(who: Signed, sessionId: string): Promise<void> {
+export async function captureScreen(who: Signed, sessionId: string, direct?: { host: HTMLElement; onCleanup: (fn: () => void) => void; onDirty: (dirty: boolean) => void }): Promise<void> {
+  const onLeave = direct?.onCleanup ?? onPageLeave;
   const session = who.session;
   /** Whether the server can be reached: opened offline, it follows the connection from then on. */
   let online = who.mode !== "offline";
-  document.title = "Cataloguing · Catalog";
-  catalogueShell(who, html`<div class="cat" id="cat"><div class="skeleton skeleton--block"></div></div>`);
-  const root = document.querySelector<HTMLElement>("#cat")!;
+  if (!direct) {
+    document.title = "Cataloguing · Catalog";
+    catalogueShell(who, html`<div class="cat" id="cat"><div class="skeleton skeleton--block"></div></div>`);
+  }
+  const root = direct?.host ?? document.querySelector<HTMLElement>("#cat")!;
+  if (direct) root.classList.add("cat", "cat--direct");
   const { finishedView, signInHere } = await import("./catalogue-workspace");
 
   // What the server says about the session where it can be asked; otherwise what this device knows of it.
-  let record: SessionRecord | null = (await sessions()).find((each) => each.id === sessionId) ?? null;
+  let record: SessionRecord | null = direct ? null : (await sessions()).find((each) => each.id === sessionId) ?? null;
   let detail: Detail;
   try {
     if (record && (!online || !record.serverId)) detail = record.detail;
     else detail = await api<Detail>(`/api/staff/catalogue/sessions/${encodeURIComponent(record?.serverId ?? sessionId)}`);
   } catch (error) {
+    if (direct) throw error;
     if (!(record && error instanceof ApiError && error.status === 0)) {
       mount(root, emptyState("This cataloguing session could not be opened", record || online ? failure(error) : "It isn't saved on this device, so it opens only with a connection.", html`<a class="button button--secondary" href="/staff/catalogue" data-route>Back to Add items</a>`, "error", 1));
       return;
     }
     detail = record.detail;
   }
-  const here = async () => (await entries()).filter((entry) => entry.sessionId === sessionId);
+  if (!root.isConnected) return;
+  const here = async () => (await entries()).filter((entry) => entry.sessionId === sessionId && (!direct || entry.body.direct === true));
   if (record?.finishing) {
     const left = await here();
     finishedView(root, { ...detail, session: { ...detail.session, status: "FINISHED" }, counts: Object.entries(countsOf(left)).reduce((out, [key, n]) => ({ ...out, [key]: (out[key] ?? 0) + n }), { ...detail.counts }) }, left.length, false);
     return;
   }
   if (detail.session.status !== "ACTIVE" || !detail.session.mine) {
+    if (direct) throw new Error("Item creation could not be opened. Try again.");
     // Finished on another device: no longer this device's open session. Anything still here goes to a new one (catalogue-sync.ts).
     if (record && detail.session.mine) await ((await here()).length ? keepSession({ ...record, detail }) : dropSession(record.id));
     finishedView(root, detail, 0, who.mode === "signed-in");
@@ -77,13 +84,14 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   }
   // This device keeps the open session, so it reopens here without a connection; a start sent from here keeps the server's answer.
   record = { id: sessionId, owner: session.id, finishing: false, ...record, serverId: record?.serverId ?? (online ? detail.session.id : null), detail };
-  await keepSession(record);
+  if (!direct) await keepSession(record);
   /** This session as the device holds it now: sending updates it (the server's id) while this page is open. */
-  const stored = async () => (await sessions()).find((each) => each.id === sessionId) ?? null;
+  const stored = async () => direct ? record : (await sessions()).find((each) => each.id === sessionId) ?? null;
 
   let catalog: Snapshot | null = await snapshot();
   let list: PlaceList = placeList(catalog?.places ?? []);
-  let placeId = detail.session.locationId;
+  if (!root.isConnected) return;
+  let placeId = direct ? null : detail.session.locationId;
   let waiting: Entry[] = [];
   /** Everything this page has captured, as the lists and rules read items, until the saved catalog catches up with it. */
   const local = new Map<string, Item>();
@@ -123,11 +131,11 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   const canAddPlace = who.mode === "signed-in";
 
   mount(root, html`
-    <h1 class="visually-hidden">Cataloguing</h1>
+    <h1 class="visually-hidden">${direct ? "Item details" : "Cataloguing"}</h1>
     <p class="visually-hidden" id="cat-announce" role="status"></p>
     <input class="visually-hidden" type="file" id="cat-file" accept="image/jpeg,image/png,image/webp" capture="environment" tabindex="-1" aria-label="Take a photo" />
     <input class="visually-hidden" type="file" id="cat-library" accept="image/jpeg,image/png,image/webp" tabindex="-1" aria-label="Choose a photo or image file" />
-    <header class="cat-bar">
+    <header class="cat-bar" ${direct ? html`hidden` : ""}>
       <a class="button button--ghost button--sm" href="/staff/catalogue" data-route>${icon("back")}Add items</a>
       <div class="cat-bar__place"><span class="cat-bar__label">Cataloguing in</span>
         <button type="button" class="cat-place" id="cat-place" aria-expanded="false" aria-controls="cat-place-panel">${icon("pin")}<span id="cat-place-name"></span><span class="cat-place__change">Change</span></button></div>
@@ -136,7 +144,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     </header>
     <p class="cat-ready cat-offline" id="cat-offline" role="status" ${online ? html`hidden` : ""}>${icon("cloudOff")}<span><strong>Offline.</strong> Keep going: what you save stays on this device and is sent when you're back online.</span></p>
     <div class="cat-place-panel" id="cat-place-panel" hidden>
-      <div class="field"><label for="cat-place-select">Next items are in</label><select id="cat-place-select"></select></div>
+      <div class="field"><label for="cat-place-select">${direct ? "Where found" : "Next items are in"}</label><select id="cat-place-select"></select></div>
       ${canAddPlace ? html`<p><button type="button" class="text-link" data-new-place-toggle aria-expanded="false" aria-controls="cat-new-place">${icon("plus")} New place</button></p>
         <div id="cat-new-place"></div>` : html`<p class="field__hint">Adding a new place needs a connection and a sign-in.</p>`}
     </div>
@@ -155,7 +163,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
           <div class="cat-choices">${BEHAVIOURS.map((value, index) => html`<button type="button" class="cat-choice" data-behaviour="${value}" aria-pressed="false" aria-keyshortcuts="Alt+${index + 1}"><span class="cat-choice__title">${BEHAVIOUR_LABELS[value]}</span><span class="cat-choice__hint visually-hidden">${HINTS[value]}</span><span class="cat-choice__suggest" hidden>Suggested</span></button>`)}</div>
           <p class="cat-suggest" id="cat-why" aria-live="polite"></p>
         </fieldset>
-        <div class="cat-qty field"><label for="cat-qty">How many are here?</label>
+        <div class="cat-qty field"><label for="cat-qty">${direct ? "Opening quantity" : "How many are here?"}</label>
           <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One fewer">${icon("minus")}</button><input id="cat-qty" type="number" inputmode="numeric" min="0" max="100000" step="1" value="1" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div></div>
         <p class="cat-suggest" id="cat-draft" role="status"></p>
         <div class="field-grid">
@@ -176,12 +184,13 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
             <div class="field" id="cat-expiry-field" hidden><label for="cat-expiry">Earliest expiry <span class="field__optional">optional</span></label><input id="cat-expiry" type="date" /></div>
           </div>
           <div class="field"><label for="cat-notes">Notes <span class="field__optional">optional</span></label><textarea id="cat-notes" rows="2" maxlength="1000" autocapitalize="sentences" autocorrect="on" spellcheck="true"></textarea></div>
+          ${direct ? html`<label class="check-line"><input type="checkbox" id="cat-reviewed" />Details reviewed</label>` : ""}
         </details>
         <div class="form-alert" id="cat-alert" role="alert" hidden></div>
         <div class="cat-actions">
-          <button type="submit" class="button button--primary button--lg" id="cat-save">Save &amp; next ${icon("next")}</button>
+          <button type="submit" class="button button--primary button--lg" id="cat-save">${direct ? "Save item" : "Save & next"} ${icon(direct ? "check" : "next")}</button>
           <button type="button" class="button button--secondary" id="cat-save-clean" hidden>Save &amp; remove background</button>
-          <button type="button" class="button button--secondary" id="cat-like">Save, then add another like this</button>
+          <button type="button" class="button button--secondary" id="cat-like" ${direct ? html`hidden` : ""}>Save, then add another like this</button>
         </div>
         <p class="cat-keys visually-hidden" aria-hidden="true"><kbd>Ctrl</kbd> <kbd>Enter</kbd> save · <kbd>Alt</kbd> <kbd>1</kbd>–<kbd>4</kbd> how it is used · <kbd>Alt</kbd> <kbd>P</kbd> photo</p>
       </form>
@@ -193,9 +202,14 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   const field = (id: string) => $<HTMLInputElement>(`#${id}`);
   const value = (id: string) => field(id).value.trim();
   const sync = $("#cat-sync");
+  if (direct) {
+    const location = $("#cat-place-panel");
+    location.hidden = false;
+    $("#cat-more").querySelector("summary")!.after(location);
+  }
   // A new version of the app waits until nothing is being typed here (pwa.ts).
   whenIdle(() => root.isConnected && !value("cat-name") && !photo && !preparing);
-  onLeave(() => whenIdle(() => false));
+  onLeave(() => whenIdle(() => Boolean(direct)));
 
   const invalidateReview = () => {
     clearTimeout(reviewTimer);
@@ -211,6 +225,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   // Native fields emit input as they change; their later blur/change must not invalidate a displayed decision.
   form.addEventListener("input", (event) => {
     if ((event.target as HTMLElement).closest(".cat-ai, #cat-crop")) return;
+    direct?.onDirty(true);
+    if ((event.target as HTMLElement).id === "cat-reviewed") return;
     invalidateReview();
     scheduleReview();
   });
@@ -301,6 +317,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     placeId = id;
     scheduleReview();
     showPlace();
+    if (direct) { direct.onDirty(true); return; }
     panel.hidden = true;
     $("#cat-place").setAttribute("aria-expanded", "false");
     // Where a resumed session opens, here and on the server; every capture also names its own place, so a failure here loses nothing.
@@ -333,7 +350,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   const matchRows = (): Html => html`${matches.map((match) => {
     const item = everything().find((entry) => entry.id === match.id);
     const pending = match.id.startsWith("pending:");
-    return html`<li class="cat-dup__row"><span class="cat-dup__text"><strong>${item?.name ?? match.id}</strong><span>${match.reason}${item ? ` · ${item.onHand} ${units(item.onHand, item.unit)}` : ""}${item?.locationId ? ` · ${list.paths.get(item.locationId) ?? ""}` : ""}</span></span>
+    return html`<li class="cat-dup__row"><span class="cat-dup__text"><strong>${item?.name ?? match.id}</strong><span>${item && !pending ? `${item.id} · ${label(item.status)} · ` : ""}${match.reason}${item ? ` · ${item.onHand} ${units(item.onHand, item.unit)}` : ""}${item?.locationId ? ` · ${list.paths.get(item.locationId) ?? ""}` : ""}</span></span>
       ${pending ? html`<span class="muted">Just added</span>` : html`<span class="cat-dup__actions"><a class="text-link" href="/staff/items?item=${match.id}" target="_blank" rel="noopener">Open<span class="visually-hidden"> ${item?.name ?? match.id} (opens in a new tab)</span></a><a class="text-link" href="/staff/items?item=${match.id}" target="_blank" rel="noopener" data-use-existing="${item?.name ?? ""}">Use existing<span class="visually-hidden"> ${item?.name ?? match.id} instead of adding this one (opens in a new tab)</span></a></span>`}</li>`;
   })}`;
 
@@ -403,7 +420,11 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     mount($("#cat-units"), html`${(catalog?.units ?? []).map((unit) => html`<option value="${unit}">`)}`);
     const later = behaviour === "REVIEW_LATER";
     root.querySelectorAll<HTMLElement>("[data-optional]").forEach((element) => { element.hidden = !later; });
-    $("#cat-save").firstChild!.textContent = matches.length && armed ? "Save as a separate item " : "Save & next ";
+    $("#cat-save").firstChild!.textContent = matches.length && armed ? "Save as a separate item " : direct ? "Save item " : "Save & next ";
+    if (direct) {
+      field("cat-reviewed").disabled = later;
+      if (later) field("cat-reviewed").checked = false;
+    }
     drawCleanup();
   };
 
@@ -451,6 +472,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     if (existing) { const name = existing.dataset.useExisting; clear(false); toast(name ? `Not added. ${name} is open in a new tab to update.` : "Not added."); return; }
     const button = target.closest<HTMLElement>("[data-behaviour], [data-fill], [data-step], #cat-use-all");
     if (!button) return;
+    direct?.onDirty(true);
     invalidateReview();
     if (button.dataset.behaviour) choose(button.dataset.behaviour as Behaviour);
     else if (button.dataset.fill) { field(`cat-${button.dataset.fill}`).value = button.dataset.value ?? ""; armed = false; draw(); }
@@ -534,6 +556,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     const chosen = chooser.files?.[0];
     chooser.value = "";
     if (!chosen) return;
+    direct?.onDirty(true);
     const revision = ++photoRevision;
     invalidateReview();
     $("#cat-crop").hidden = true;
@@ -615,6 +638,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   const clear = (keepShared: boolean) => {
     const kept = keepShared ? { name: value("cat-name"), category: value("cat-category"), unit: value("cat-unit"), model: value("cat-model"), stock: $<HTMLSelectElement>("#cat-stock").value } : null;
     form.reset();
+    if (direct) placeId = null;
     draftId = crypto.randomUUID();
     invalidateReview();
     originalPhoto = null;
@@ -643,6 +667,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     setMessage($("#cat-alert"), "");
     drawPhoto();
     draw();
+    if (direct) { showPlace(); direct.onDirty(false); }
     field("cat-name").focus();
     if (keepShared) field("cat-name").select();
     if (keepShared) scheduleReview();
@@ -681,11 +706,12 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       id, behaviour, name, aliases: value("cat-aliases"), category: value("cat-category"), unit: value("cat-unit"), quantity, locationId: placeId || null, reorderThreshold,
       stockArea: $<HTMLSelectElement>("#cat-stock").value, model: value("cat-model"), serialNumber: value("cat-serial"), notes: value("cat-notes"),
       expiresOn: $<HTMLSelectElement>("#cat-stock").value === "Pantry" ? value("cat-expiry") : "",
+      ...(direct ? { direct: true, reviewed: field("cat-reviewed").checked } : {}),
       ...(reviewOffer && reviewDecision ? { aiFeedback: { offerId: reviewOffer.id, draftId, revision: reviewOffer.revision, ...reviewDecision } } : {}),
       photoHash: photo?.hash ?? "", acknowledged: matches.filter((match) => !match.id.startsWith("pending:")).map((match) => match.id)
     };
     const entry: Entry = {
-      id, sessionId, owner: session.id, body, photo: photo ? { display: photo.display, thumb: photo.thumb, hash: photo.hash, ...(photo.crop ? { crop: photo.crop } : {}) } : null, itemId: null, state: "waiting", message: null, matches: null,
+      id, sessionId, owner: session.id, body, photo: photo ? { display: photo.display, thumb: photo.thumb, ...(photo.detail ? { detail: photo.detail } : {}), hash: photo.hash, ...(photo.crop ? { crop: photo.crop } : {}) } : null, itemId: null, state: "waiting", message: null, matches: null,
       ...(photo && !photoChecked ? { recheck: true } : {}),
       ...(cleanBackground ? { cleanBackground: true } : {}),
       at: new Date().toISOString(), after: matches.filter((match) => match.id.startsWith("pending:")).map((match) => match.id.slice(8))
@@ -721,13 +747,17 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       if (root.isConnected) drawCleanup();
       // Written back from what is stored now, and only while still open here: a finish pressed meanwhile is never undone.
       const latest = await stored();
-      if (latest && !latest.finishing && detail.session.status === "ACTIVE") await keepSession(record = { ...latest, detail });
+      if (latest && !latest.finishing && detail.session.status === "ACTIVE") {
+        record = { ...latest, detail };
+        if (!direct) await keepSession(record);
+      }
     } catch { /* the next change tries again */ }
   }
 
   /** Neither a sign-in nor this device's offline access is valid any more: what is here waits on the device for the next sign-in. */
   const ended = async () => {
     await setAccess(null);
+    if (direct) return expired();
     navigate(signInHere(true), true);
   };
   const connected = (now: boolean) => {
@@ -743,6 +773,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   onLeave(() => { window.removeEventListener("online", onConnection); window.removeEventListener("offline", onConnection); });
 
   const refresh = async () => {
+    if (!root.isConnected) return;
     if (signedOut()) return ended();
     const now = await here();
     // Something reached the server: it can be reached again.
@@ -797,8 +828,10 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       ${who.mode === "signed-in" ? html`<a class="icon-button" href="/staff/items?item=${row.itemId}" target="_blank" rel="noopener" aria-label="Open ${row.name} (opens in a new tab)">${icon("external")}</a>` : ""}</span></li>`;
 
   function drawList(): void {
+    if (!root.isConnected) return;
     const queued = [...waiting].reverse();
-    const sent = detail.recent.filter((row) => !waiting.some((entry) => entry.id === row.captureId));
+    const sent = detail.recent.filter((row) => (!direct || local.has(row.captureId)) && !waiting.some((entry) => entry.id === row.captureId));
+    if (direct) $(".cat-recent").hidden = !queued.length && !sent.length;
     const holding = waiting.length;
     $("#cat-count").textContent = plural(detail.session.saved + waiting.filter((entry) => !entry.itemId).length, "item");
     const stopped = waiting.some((entry) => entry.state === "stopped");
@@ -809,7 +842,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     $("#cat-see").hidden = !((offline && holding) || stopped);
     preservingFocus($("#cat-list"), () => mount($("#cat-list"), queued.length || sent.length
       ? html`${!durable() && holding ? html`<p class="callout">${icon("alert")}<span>This browser cannot keep unsent items if the page closes. Stay on this page until they are saved.</span></p>` : ""}<ul class="cat-rows">${queued.map(queuedRow)}${sent.map(savedRow)}</ul>
-        ${detail.session.saved > sent.length ? html`<p class="muted">Showing the newest ${sent.length}. The others are saved; find them under Items.</p>` : ""}`
+        ${!direct && detail.session.saved > sent.length ? html`<p class="muted">Showing the newest ${sent.length}. The others are saved; find them under Items.</p>` : ""}`
       : html`<p class="muted">Nothing yet. The first item you save appears here.</p>`));
   }
 
@@ -834,6 +867,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       modelFromPhoto = false;
       $("#cat-crop").hidden = true;
       const body = entry.body;
+      if (direct) { placeId = typeof body.locationId === "string" ? body.locationId : null; field("cat-reviewed").checked = body.reviewed === true; showPlace(); direct.onDirty(true); }
       field("cat-name").value = String(body.name);
       behaviour = body.behaviour as Behaviour;
       field("cat-qty").value = String(body.quantity);
@@ -875,7 +909,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   /* ---------- Keys ---------- */
 
   const onKey = (event: KeyboardEvent) => {
-    if (document.querySelector("dialog[open]")) return;
+    const dialog = document.querySelector("dialog[open]");
+    if (dialog && !dialog.contains(root)) return;
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); if (!event.repeat) void submit(false); return; }
     const target = event.target as HTMLElement;
     if (event.key === "Enter" && target instanceof HTMLInputElement && form.contains(target) && !event.isComposing) {
@@ -900,6 +935,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   /* ---------- Finishing ---------- */
 
   $("#cat-finish").addEventListener("click", async () => {
+    if (direct) return;
     await syncNow();
     waiting = await here();
     const stopped = waiting.filter((entry) => entry.state === "stopped");
@@ -935,7 +971,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     if ((reviewOffer && reviewOffer.catalogRevision !== fresh.revision) || (requestingReview && catalog?.revision !== fresh.revision)) { invalidateReview(); scheduleReview(); }
     catalog = fresh;
     list = placeList(fresh.places);
-    if (placeId && !list.places.get(placeId)?.active) placeId = detail.session.locationId && list.places.get(detail.session.locationId)?.active ? detail.session.locationId : null;
+    if (placeId && !list.places.get(placeId)?.active) placeId = !direct && detail.session.locationId && list.places.get(detail.session.locationId)?.active ? detail.session.locationId : null;
     const selected = $<HTMLSelectElement>("#cat-place-select");
     showPlace();
     if (placeId) selected.value = placeId;
@@ -950,6 +986,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     onData: (data) => { const fresh = { ...data, fetchedAt: new Date().toISOString() }; void setSnapshot(fresh); takeCatalog(fresh); },
     onError: (error) => { if (error.status === 401) void ended(); }
   }) : null;
+  onLeave(() => poll?.stop());
 
   drawPhoto();
   if (catalog) takeCatalog(catalog); else showPlace();

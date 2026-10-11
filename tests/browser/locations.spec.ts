@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import type { Detail } from "../../src/catalogue-store";
 
 /* V1.4 on fictional data with the API mocked: the Items list by place at 600 items, the Locations page, and the Where is it? dialog. */
 
@@ -32,6 +33,11 @@ function item(index: number) {
   };
 }
 const ITEMS = Array.from({ length: 600 }, (_, index) => item(index));
+const CAPTURE_ID = "CS-00000000-0000-4000-8000-000000000001";
+const CAPTURE: Detail = {
+  session: { id: CAPTURE_ID, locationId: null, place: null, status: "ACTIVE", startedAt: "2026-10-03T00:00:00.000Z", finishedAt: null, saved: 0, reviewLater: 0, owner: session.displayName, mine: true },
+  counts: {}, recent: []
+};
 
 async function mock(page: Page) {
   await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(session) }));
@@ -39,6 +45,8 @@ async function mock(page: Page) {
   await page.route("**/api/staff/locations", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify({ revision: 1, locations: PLACES.map((entry) => ({ ...entry, itemCount: ITEMS.filter((it) => it.locationId === entry.id).length })) }) }));
   await page.route("**/api/staff/catalogue", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ session: null, others: [], reviewLater: { total: 0, items: [] } }) }));
   await page.route("**/api/staff/catalogue/snapshot", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ revision: 1, items: ITEMS, categories: ["FURNITURE", "SUPPLIES"], units: ["piece"], places: PLACES }) }));
+  await page.route("**/api/staff/catalogue/sessions", (route) => route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: CAPTURE_ID, resumed: false }) }));
+  await page.route(`**/api/staff/catalogue/sessions/${CAPTURE_ID}`, (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(CAPTURE) }));
   await page.route("**/api/staff/location-media/**", (route) => route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") }));
 }
 
@@ -88,20 +96,29 @@ test.describe("Items by place", () => {
     await expect(page.locator("tbody tr").first()).toContainText("Location reported");
   });
 
-  test("Add items pressed before the list has answered opens the unified place picker", async ({ page }) => {
-    // The Catalogue uses its own snapshot, so a slow Items answer cannot leave creation without places.
+  test("Add items pressed before the list has answered opens the form with optional places", async ({ page }) => {
+    // The capture form uses its own snapshot, so a slow Items answer cannot leave it without places.
     let answer!: () => void;
     const held = new Promise<void>((resolve) => { answer = resolve; });
     await page.route("**/api/staff/inventory", async (route) => { await held; await route.fallback(); });
     await page.goto("/staff/items");
-    await page.getByRole("link", { name: "Add items" }).click();
-    await expect(page.getByRole("heading", { name: "Add items", level: 1 })).toBeVisible();
-    answer();
-    const picker = page.getByLabel("Place", { exact: true });
-    await expect(picker).toBeVisible();
-    await expect(picker.locator("option")).toHaveCount(PLACES.length + 1);
-    await expect(picker.getByRole("option", { name: "Office › Storage Area › Cabinet 1 › Shelf 2", exact: true })).toHaveCount(1);
-    await expect(picker.getByRole("option", { name: "No place set", exact: true })).toHaveCount(1);
+    try {
+      await page.getByRole("button", { name: "Add items", exact: true }).click();
+      const sheet = page.getByRole("dialog", { name: "Add items", exact: true });
+      await expect(sheet.locator("#cat-form")).toBeVisible();
+      await expect(sheet.getByLabel("Name", { exact: true })).toBeFocused();
+      await expect(page.getByRole("button", { name: /^Start cataloguing|^Resume cataloguing/ })).toHaveCount(0);
+      const picker = sheet.getByLabel("Where found", { exact: true });
+      await expect(picker).toBeHidden();
+      await sheet.locator("#cat-more > summary").click();
+      await expect(picker).toBeVisible();
+      await expect(picker).toHaveValue("");
+      await expect(picker.locator("option")).toHaveCount(PLACES.length + 1);
+      await expect(picker.getByRole("option", { name: "Office › Storage Area › Cabinet 1 › Shelf 2", exact: true })).toHaveCount(1);
+      await expect(picker.getByRole("option", { name: "No place set", exact: true })).toHaveCount(1);
+    } finally {
+      answer();
+    }
   });
 
   test("on a phone and a tablet the place sits under the item name and nothing scrolls sideways", async ({ page }) => {

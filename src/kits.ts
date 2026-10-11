@@ -1,4 +1,4 @@
-import { type Actor, BUMP_REVISION, InputError, audit, pathsOf, text, usablePlace } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, audit, pathsOf, text, usablePlace, currentItemSQL } from "./inventory";
 import { CHECK_OUTCOMES, COMPONENT_STATE_LABELS, type CheckOutcome, type ComponentState, readComponent, readKit } from "./kit-policy";
 import { LOCATION_ID } from "./location-tree";
 
@@ -35,8 +35,8 @@ async function readComponents(db: D1Database, input: unknown): Promise<Component
     return { itemId, required };
   });
   if (list.length) {
-    const { results } = await db.prepare(`SELECT id FROM items WHERE id IN (${list.map(() => "?").join(",")})`).bind(...list.map((entry) => entry.itemId)).all<{ id: string }>();
-    if (results.length !== list.length) throw new InputError(400, "One of those items no longer exists. Reload and choose again.");
+    const { results } = await db.prepare(`SELECT id FROM items WHERE id IN (${list.map(() => "?").join(",")}) AND ${currentItemSQL("items.id")}`).bind(...list.map((entry) => entry.itemId)).all<{ id: string }>();
+    if (results.length !== list.length) throw new InputError(400, "One of those items is no longer in the current catalog. Reload and choose again.");
   }
   return list;
 }
@@ -62,6 +62,7 @@ async function guarded<T>(work: Promise<T>): Promise<T> {
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (/idx_kits_name|idx_kit_templates_name|UNIQUE constraint failed: index/i.test(message)) throw new InputError(409, "Another kit or template already has that name. Choose a different one.");
+    if (/NOT NULL constraint failed: kit_(?:template_)?components.item_id/.test(message)) throw new InputError(409, "A component was merged. Reload and choose the retained item.");
     if (message.includes("location_inactive")) throw new InputError(409, "That place is inactive, so a kit cannot be kept there. Choose another place.");
     throw error;
   }
@@ -201,7 +202,7 @@ const componentStatements = (db: D1Database, table: "kit_components" | "kit_temp
   const still = `EXISTS (SELECT 1 FROM ${guardTable} WHERE id = ?1 AND updated_at = ?2)`;
   return [
     db.prepare(`DELETE FROM ${table} WHERE ${column} = ?1 AND ${still}`).bind(owner, stamp),
-    ...list.map((entry, position) => db.prepare(`INSERT INTO ${table}(${column}, item_id, required, position) SELECT ?1, ?3, ?4, ?5 WHERE ${still}`).bind(owner, stamp, entry.itemId, entry.required, position))
+    ...list.map((entry, position) => db.prepare(`INSERT INTO ${table}(${column}, item_id, required, position) SELECT ?1, CASE WHEN ${currentItemSQL("?3")} THEN ?3 ELSE NULL END, ?4, ?5 WHERE ${still}`).bind(owner, stamp, entry.itemId, entry.required, position))
   ];
 };
 
@@ -226,7 +227,7 @@ export async function createKit(db: D1Database, actor: Actor, input: unknown) {
   const { id } = await allocate(db, "kits", "KIT", (id) => guarded(db.batch([
     db.prepare("INSERT INTO kits(id, name, description, location_id, template_id, active, created_at, created_by, updated_at, updated_by) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
       .bind(id, name, description, locationId, templateId, active ? 1 : 0, now, actor.accountId, now, actor.accountId),
-    ...list.map((entry, position) => db.prepare("INSERT INTO kit_components(kit_id, item_id, required, position) VALUES(?, ?, ?, ?)").bind(id, entry.itemId, entry.required, position)),
+    ...list.map((entry, position) => db.prepare(`INSERT INTO kit_components(kit_id, item_id, required, position) VALUES(?1, CASE WHEN ${currentItemSQL("?2")} THEN ?2 ELSE NULL END, ?3, ?4)`).bind(id, entry.itemId, entry.required, position)),
     audit(db, actor.accountId, "KIT_CREATED", "KIT", id, { name, locationId, templateId, components: list.length }),
     db.prepare(BUMP_REVISION)
   ])));
@@ -334,7 +335,7 @@ export async function createTemplate(db: D1Database, actor: Actor, input: unknow
   const now = new Date().toISOString();
   const { id } = await allocate(db, "kit_templates", "KTP", (id) => guarded(db.batch([
     db.prepare("INSERT INTO kit_templates(id, name, description, active, created_at, created_by, updated_at, updated_by) VALUES(?, ?, ?, ?, ?, ?, ?, ?)").bind(id, name, description, active ? 1 : 0, now, actor.accountId, now, actor.accountId),
-    ...list.map((entry, position) => db.prepare("INSERT INTO kit_template_components(template_id, item_id, required, position) VALUES(?, ?, ?, ?)").bind(id, entry.itemId, entry.required, position)),
+    ...list.map((entry, position) => db.prepare(`INSERT INTO kit_template_components(template_id, item_id, required, position) VALUES(?1, CASE WHEN ${currentItemSQL("?2")} THEN ?2 ELSE NULL END, ?3, ?4)`).bind(id, entry.itemId, entry.required, position)),
     audit(db, actor.accountId, "KIT_TEMPLATE_CREATED", "KIT", id, { name, components: list.length, fromKitId: body.fromKitId ?? null }),
     db.prepare(BUMP_REVISION)
   ])));

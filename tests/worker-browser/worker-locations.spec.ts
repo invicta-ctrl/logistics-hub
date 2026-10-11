@@ -103,25 +103,26 @@ test.describe.serial("smart locations", () => {
 
   test("an item is kept on a shelf, found by place and path, and reported without anything changing", async ({ page }) => {
     await signIn(page);
-    await page.getByRole("link", { name: "Add items" }).click();
-    await page.locator("#start-place").selectOption({ label: "Storage Area › Cabinet 1 › Shelf 2" });
-    await page.getByRole("button", { name: /^Start cataloguing/ }).click();
+    await page.getByRole("button", { name: "Add items", exact: true }).click();
+    const capture = page.getByRole("dialog", { name: "Add items", exact: true });
+    await expect(capture.locator("#cat-form")).toBeVisible();
     await page.locator("#cat-name").fill("E2E Stapler");
     await page.locator("#cat-category").fill("Office supplies");
     await page.locator("#cat-behaviour").getByRole("button", { name: /^Take/ }).click();
     await page.locator("#cat-unit").fill("piece");
     await page.locator("#cat-qty").fill("6");
-    await expect(page.locator("#cat-place-name")).toHaveText("Storage Area › Cabinet 1 › Shelf 2");
-    await page.locator("#cat-save").click();
+    await capture.locator("#cat-more > summary").click();
+    const initialPlace = capture.getByLabel("Where found", { exact: true });
+    await expect(initialPlace).toHaveValue("");
+    await initialPlace.selectOption({ label: "Storage Area › Cabinet 1 › Shelf 2" });
+    await expect(initialPlace.locator("option:checked")).toHaveText("Storage Area › Cabinet 1 › Shelf 2");
+    await expect(capture.locator("#cat-reviewed")).not.toBeChecked();
+    await capture.getByLabel("Details reviewed", { exact: true }).check();
+    await capture.getByRole("button", { name: "Save item", exact: true }).click();
     await expect(page.locator("#cat-list .cat-row").first().getByText("Saved", { exact: true })).toBeVisible();
-    page.once("dialog", (confirmation) => void confirmation.accept());
-    await page.locator("#cat-finish").click();
-    await expect(page.getByRole("heading", { name: "Cataloguing finished" })).toBeVisible();
-    await page.locator("#rev-go").click();
-    await expect(page.locator("#rev-text")).toContainText("1 item marked reviewed");
-    const inventory = await (await page.request.get("/api/staff/inventory")).json() as { items: Array<{ id: string; name: string }> };
+    const inventory = await (await page.request.get("/api/staff/inventory")).json() as { items: Array<{ id: string; name: string; needsReview: boolean; lendingAudience: string }> };
     const created = inventory.items.find((entry) => entry.name === "E2E Stapler");
-    expect(created).toBeDefined();
+    expect(created).toMatchObject({ needsReview: false, lendingAudience: "NOT_AVAILABLE_FOR_LENDING" });
     await page.goto(`/staff/items?item=${created!.id}`);
     await expect(page.getByRole("tablist", { name: "Item sections" })).toBeVisible();
     const item = page.getByRole("dialog", { name: "E2E Stapler" });

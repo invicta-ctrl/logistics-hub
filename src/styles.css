@@ -383,7 +383,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .catalogue__row:hover { background: var(--surface); }
 .catalogue__main { min-width: 0; }
 /* A public item thumbnail sits in the row's left margin; a list with any photo reserves that margin for every row. */
-.item-thumb { position: absolute; top: 50%; inset-inline-start: var(--space-3); width: 3rem; height: 3rem; margin-top: -1.5rem; border-radius: var(--radius); background: var(--subtle); object-fit: cover; }
+.item-thumb { position: absolute; top: 50%; inset-inline-start: var(--space-3); width: 3rem; height: 3rem; margin-top: -1.5rem; border-radius: var(--radius); background: var(--subtle); }
 .catalogue--photos .catalogue__row { padding-inline-start: calc(var(--space-3) + 3rem + var(--space-4)); }
 /* On the narrowest phones a smaller thumbnail leaves the name room to stay on two lines. */
 @media (max-width: 22.5rem) {
@@ -572,7 +572,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 
 /* Item photos (V1.2). Every image box has a fixed size, so rows and the profile never shift as pictures arrive. */
 .data-table--items td.col-item { position: relative; padding-left: calc(var(--space-4) + 2.5rem + var(--space-3)); }
-.thumb { position: absolute; top: 50%; left: var(--space-4); width: 2.5rem; height: 2.5rem; margin-top: -1.25rem; border-radius: var(--radius); background: var(--subtle); object-fit: cover; }
+.thumb { position: absolute; top: 50%; left: var(--space-4); width: 2.5rem; height: 2.5rem; margin-top: -1.25rem; border-radius: var(--radius); background: var(--subtle); }
 .thumb [data-photo] { cursor: zoom-in; }
 .profile { position: relative; display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--space-5); align-items: start; }
 .profile__photo { min-width: 0; }
@@ -614,7 +614,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .viewer__edit:hover { background: rgb(255 255 255 / 24%); }
 ::view-transition-group(root) { animation-duration: var(--dur-2); }
 ::view-transition-group(item-photo) { animation-duration: var(--dur-3); animation-timing-function: var(--ease); }
-::view-transition-old(item-photo), ::view-transition-new(item-photo) { height: 100%; object-fit: cover; overflow: clip; }
+::view-transition-old(item-photo), ::view-transition-new(item-photo) { height: 100%; object-fit: contain; overflow: clip; }
 
 /* Item sheet (side panel) */
 .sheet { width: min(100%, 42rem); height: 100%; max-width: none; max-height: none; margin: 0 0 0 auto; padding: 0; border: 0; background: var(--surface); box-shadow: var(--shadow-md); color: var(--text); }
@@ -1497,7 +1497,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .cat-form { gap: var(--space-5); background: transparent; padding: 0; border: 0; border-radius: 0; display: grid; }
 .cat-top { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--space-3); align-items: start; }
 .cat-photo-wrap { display: grid; gap: var(--space-1); justify-items: stretch; }
-.cat-photo { position: relative; display: grid; width: 6.5rem; aspect-ratio: 1; place-items: center; overflow: hidden; padding: 0; border: 1.5px dashed var(--line-field); border-radius: var(--radius); background: var(--subtle); color: var(--text-2); border-style: solid; border-color: var(--line); }
+.cat-photo { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); width: 6.5rem; aspect-ratio: 1; place-items: center; overflow: hidden; padding: 0; border: 1.5px dashed var(--line-field); border-radius: var(--radius); background: var(--subtle); color: var(--text-2); border-style: solid; border-color: var(--line); }
 .cat-photo:hover { border-color: var(--brand); background: var(--brand-tint); color: var(--brand); }
 .cat-photo:focus-visible { outline: none; box-shadow: var(--focus); }
 .cat-photo.has-photo { border-style: solid; border-color: var(--line-strong); }
@@ -1552,10 +1552,24 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .cat-keys { display: none; margin: 0; color: var(--text-3); font-size: var(--text-sm); }
 @media (hover: hover) and (pointer: fine) { .cat-keys { display: block; } }
 .cat-recent h2 { margin-bottom: var(--space-2); font-size: var(--text-lg); }
+/* Ordinary item creation uses the staff sheet; shelf sessions stay in Quick Catalog. */
+.cat--direct { padding: 0; }
+.cat--direct .cat-layout { grid-template-columns: minmax(0, 1fr); }
+.cat--direct .cat-form { gap: var(--space-4); }
+.cat--direct .cat-top { grid-template-columns: 5rem minmax(0, 1fr); }
+.cat--direct .cat-photo { width: 5rem; }
+.cat--direct .cat-photo-wrap { display: flex; flex-direction: column; align-items: stretch; }
+.cat--direct .cat-photo-wrap > .button { padding-inline: 0; white-space: normal; }
+.cat--direct .cat-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); border: 0; }
+.cat--direct .cat-choice { border: 1px solid var(--line); border-radius: var(--radius); }
+.cat--direct .cat-choice[aria-pressed="true"] { border-color: var(--brand); }
+.cat--direct .cat-place-panel { padding: 0; margin-bottom: var(--space-3); border: 0; }
+.cat--direct .cat-actions { padding-bottom: 0; }
+.sheet--add .sheet__body { padding-bottom: calc(var(--space-5) + var(--safe-bottom)); }
 .cat-rows { display: grid; gap: var(--space-2); }
 .cat-row { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; padding: var(--space-2) var(--space-3); border: 0; border-radius: 0; background: transparent; padding-inline: 0; border-bottom: 1px solid var(--line); }
 .cat-row.is-stopped { border-color: var(--line-bad); background: var(--bad-tint); }
-.cat-row__thumb { display: grid; width: 2.75rem; height: 2.75rem; place-items: center; overflow: hidden; border-radius: var(--radius); background: var(--subtle); object-fit: cover; }
+.cat-row__thumb { display: grid; width: 2.75rem; height: 2.75rem; place-items: center; overflow: hidden; border-radius: var(--radius); background: var(--subtle); object-fit: contain; }
 .cat-row__thumb--none .icon { --icon-size: var(--icon-md); color: var(--line-strong); }
 .cat-row__text { display: grid; min-width: 0; gap: .125rem; }
 .cat-row__text strong { overflow-wrap: anywhere; }

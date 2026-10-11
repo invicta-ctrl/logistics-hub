@@ -1,5 +1,5 @@
 import { BULK_LIMIT, STOCK_AREAS, UNSORTED_CATEGORY } from "./catalog-policy";
-import { type Actor, BUMP_REVISION, InputError, audit, guarded, pathsOf, text, usablePlace } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, audit, guarded, pathsOf, text, usablePlace, currentItemSQL } from "./inventory";
 import { LOCATION_ID } from "./location-tree";
 
 /*
@@ -47,7 +47,7 @@ export async function bulkUpdate(db: D1Database, actor: Actor, input: unknown) {
 
   const ids = [...wanted.keys()];
   const { results } = await db.prepare(`SELECT id, name, item_type AS itemType, category, stock_area AS stockArea, location_id AS locationId, needs_review AS needsReview, updated_at AS updatedAt
-    FROM items WHERE id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all<Row>();
+    FROM items WHERE id IN (${ids.map(() => "?").join(",")}) AND ${currentItemSQL("items.id")}`).bind(...ids).all<Row>();
   const rows = new Map(results.map((row) => [row.id, row]));
   const places = action === "MOVE" ? await pathsOf(db, [value, ...results.map((row) => row.locationId)]) : new Map<string, string>();
 
@@ -56,7 +56,7 @@ export async function bulkUpdate(db: D1Database, actor: Actor, input: unknown) {
   const writes: Array<{ row: Row; column: string; to: string | number; detail: Record<string, unknown> }> = [];
   for (const id of ids) {
     const row = rows.get(id);
-    if (!row) { skipped.push({ id, name: id, reason: "It no longer exists." }); continue; }
+    if (!row) { skipped.push({ id, name: id, reason: "It is no longer in the current catalog." }); continue; }
     if (row.updatedAt !== wanted.get(id)) { skipped.push({ id, name: row.name, reason: "Someone else changed it meanwhile." }); continue; }
     if (action === "MOVE") {
       if (row.locationId === value) unchanged += 1;
@@ -78,7 +78,7 @@ export async function bulkUpdate(db: D1Database, actor: Actor, input: unknown) {
     const now = new Date().toISOString();
     const batch = crypto.randomUUID();
     const statements = writes.flatMap(({ row, column, to, detail }) => [
-      db.prepare(`UPDATE items SET ${column} = ?, updated_at = ? WHERE id = ? AND updated_at IS ?`).bind(to, now, row.id, row.updatedAt),
+      db.prepare(`UPDATE items SET ${column} = ?, updated_at = ? WHERE id = ? AND updated_at IS ? AND ${currentItemSQL("items.id")}`).bind(to, now, row.id, row.updatedAt),
       audit(db, actor.accountId, "ITEM_UPDATED", "ITEM", row.id, { ...detail, bulk: { id: batch, items: writes.length } }, true)
     ]);
     const done = await guarded(db.batch([...statements, db.prepare(BUMP_REVISION)]));

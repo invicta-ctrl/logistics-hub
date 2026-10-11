@@ -9,8 +9,8 @@ import { aliasItems, catalogCoverage } from "./catalog-admin";
 import { insights, resumable } from "./home";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
-import { type ImagesRunner, acceptCutout, cleanupOn, cleanupStatus, cutoutPicture, hasCutoutThumb, hasCutout, makeCutout, removeCutout, setCleanup } from "./item-cutout";
-import { dropObjects, itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
+import { type ImagesRunner, acceptCutout, cleanupOn, cleanupStatus, cutoutPicture, hasCutout, makeCutout, removeCutout, setCleanup } from "./item-cutout";
+import { dropObjects, itemPhoto, photoDerivatives, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
 import { linkItems, linksOf, unlinkItems } from "./item-relations";
 import { checkKit, createKit, createTemplate, kitDetail, kitList, kitsOfItem, recentlyCatalogued, templateDetail, updateKit, updateTemplate } from "./kits";
 import { searchIndex } from "./search-index";
@@ -19,7 +19,7 @@ import { locationPicture, publicLocationPicture, putLocationPhoto, removeLocatio
 import { reportLocation, resolveReport } from "./location-reports";
 import { createLocation, deleteLocation, locationList, moveItems, updateLocation } from "./locations";
 import { openUnitAction } from "./open-units";
-import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, setAliases, staffInventory, updateItem } from "./inventory";
+import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, setAliases, staffInventory, updateItem, mergeItem, requireCurrentItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { eraseOldDetails, retentionPreview } from "./retention";
@@ -82,7 +82,7 @@ const LEASE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const leaseKey = (secret: string) => `catalogue-lease:${secret}`;
 /** Attention: "Keep both" on a possible duplicate found from a synced photo (ambient-assist.ts). */
 const KEEP_BOTH_PATH = /^\/api\/staff\/attention\/possible-duplicate\/(ITM-[A-Za-z0-9-]{1,24})$/;
-const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/cutout|\/location-report|\/visual)?$/;
+const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/cutout|\/location-report|\/visual|\/merge)?$/;
 const LOCATION_PATH = /^\/api\/staff\/locations\/(LOC-\d{4,})(\/photo|\/move-items)?$/;
 const RELATION_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})\/links(?:\/(ITM-[A-Za-z0-9-]{1,24}))?$/;
 const KIT_PATH = /^\/api\/staff\/kits\/(KIT-\d{4,})(\/photo|\/checks)?$/;
@@ -97,15 +97,15 @@ const AUDIT_PATH = /^\/api\/staff\/audits\/(LA-[0-9a-f-]{36})(\/observations|\/f
 const RESOLVE_PATH = /^\/api\/staff\/audits\/observations\/([0-9a-f-]{36})\/resolve$/;
 const ITEM_ID = /^ITM-[A-Za-z0-9-]{1,24}$/;
 const MEDIA_PATH = /^\/api\/staff\/media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
-/** The only public image address: a thumbnail, by id. The 1280 px size has no public address. */
-const PUBLIC_THUMB_PATH = /^\/api\/public\/media\/([0-9a-f-]{36})\/thumb$/;
+/** Only sanitized selected-crop derivatives are public; the uncropped display/full cutout remain staff-only. */
+const PUBLIC_THUMB_PATH = /^\/api\/public\/media\/([0-9a-f-]{36})\/(thumb|detail)$/;
 const LOAN_PATH = /^\/api\/staff\/loans\/(LN-[A-Za-z0-9-]{1,60})\/(return|photo|review)$/;
 const REORDER_PATH = /^\/api\/staff\/reorders\/(RO-[A-Za-z0-9-]{1,60})$/;
 const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|photo|identity)$/;
 /** A sync carries at most a few compressed photos; anything larger is not from the app. */
 const MAX_SYNC_BYTES = 12 * 1024 * 1024;
-/** One display JPEG and up to two small thumbnails, plus form framing. */
-const MAX_PHOTO_BODY = 1_500_000;
+/** One display, two small and two detail JPEGs, plus bounded form framing. */
+const MAX_PHOTO_BODY = 2_300_000;
 const PERSON_PATH = /^\/api\/staff\/admin\/directory\/(PER-[0-9a-f-]{36})(\/account|\/account\/new|\/access|\/usage|\/loans|\/activity|\/id|\/id\/front|\/id\/back|\/id\/thumb|\/id\/face|\/id\/derived)?$/;
 const ALIAS_PATH = /^\/api\/staff\/admin\/catalog\/aliases\/(ITM-[A-Za-z0-9-]{1,24})$/;
 const ACCOUNT_PATH = /^\/api\/staff\/admin\/accounts\/(ACC-[A-Za-z0-9-]{1,60})(\/password|\/sessions\/revoke)?$/;
@@ -467,7 +467,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   if (session?.[2] === "/unreviewed" && method === "GET") return json(await unreviewed(env.DB, session[1]!));
   if (session?.[2] === "/finish" && method === "POST") return json(await finishSession(env.DB, account, session[1]!));
   if (session?.[2] === "/captures" && method === "POST") {
-    const saved = await capture(env.DB, account, session[1]!, await body());
+    const saved = await capture(env.DB, account, session[1]!, await body(), !leased);
     return "duplicates" in saved ? json({ error: "This may already be in the catalog.", ...saved }, 409) : json(saved, saved.replayed ? 200 : 201);
   }
   if (path === "/api/staff/audits" && method === "GET") {
@@ -521,12 +521,14 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   const media = MEDIA_PATH.exec(path);
   if (media && method === "GET") return media[2] === "cutout" || media[2] === "pending" ? cutoutPicture(env.CATALOG_MEDIA, media[1]!, media[2] === "pending") : itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!, request.headers.get("if-none-match"));
   const match = ITEM_PATH.exec(path);
+  if (match && method !== "GET" && match[2] !== "/merge") await requireCurrentItem(env.DB, match[1]!);
+  if (match?.[2] === "/merge" && method === "POST") return json(await mergeItem(env.DB, account, match[1]!, await body()));
   if (match && !match[2] && method === "GET") {
     const [detail, freshness, kits, links] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!), linksOf(env.DB, match[1]!)]);
     // Whether this photo has a cleaned picture, and whether cleaning is offered at all (the Images binding is present).
-    const cleaned = detail.item.photo ? await hasCutout(env.CATALOG_MEDIA, detail.item.photo.id) : false;
+    const derivatives = detail.item.photo ? await photoDerivatives(env.CATALOG_MEDIA, detail.item.photo.id) : null;
     const photoCleanup = await photoCleanupState(env, account);
-    return json({ ...detail, item: { ...detail.item, photoCleanup, photo: detail.item.photo ? { ...detail.item.photo, cutout: cleaned, ...(cleaned ? { cutoutThumb: await hasCutoutThumb(env.CATALOG_MEDIA, detail.item.photo.id) } : {}), ...photoCleanup } : null }, freshness, kits, links });
+    return json({ ...detail, item: { ...detail.item, photoCleanup, photo: detail.item.photo ? { ...detail.item.photo, ...derivatives, ...photoCleanup } : null }, freshness, kits, links });
   }
   if (match && !match[2] && method === "PATCH") {
     const input = await body() as Record<string, unknown> | null;
@@ -536,7 +538,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   if (match?.[2] === "/movements" && method === "POST") return json(await recordMovement(env.DB, account, match[1]!, await body()));
   if (match?.[2] === "/location-report" && method === "POST") return json(await reportLocation(env.DB, account, match[1]!, await body()), 201);
   if (match?.[2] === "/photo" && method === "PUT") {
-    // Two small JPEGs: refuse a larger body before reading it into memory.
+    // Refuse an oversized bundle of display and selected-crop JPEGs before reading it.
     if (Number(request.headers.get("content-length")) > MAX_PHOTO_BODY) throw new InputError(413, "That photo is too large.");
     const form = await request.formData().catch(() => null);
     if (!form) throw new InputError(400, "Invalid photo form.");
@@ -547,14 +549,14 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     // first photo are saved. The save above has already answered; this cannot change it.
     // Then up to two earlier captures whose check could not run yet (AI was off, out of allowance or failing) get theirs.
     if (form.get("recheck") === "1" && form.get("expected") === "") await afterwards(recheckCapturedPhoto(env.DB, env.AI, env.CATALOG_MEDIA, match[1]!).then(() => recheckWaiting(env.DB, env.AI, env.CATALOG_MEDIA)));
-    return json({ photo: { ...saved.photo, ...await photoCleanupState(env, account) } });
+    return json({ updatedAt: saved.updatedAt, photo: { ...saved.photo, ...await photoCleanupState(env, account) } });
   }
   if (match?.[2] === "/photo" && method === "DELETE") return json(await removeItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
   if (match?.[2] === "/cutout" && method === "POST") {
     let form: FormData | undefined;
     let input: { expected?: unknown; accept?: unknown } | null;
     if (request.headers.get("content-type")?.startsWith("multipart/form-data")) {
-      if (Number(request.headers.get("content-length")) > 180_000) throw new InputError(413, "That thumbnail is too large.");
+      if (Number(request.headers.get("content-length")) > 600_000) throw new InputError(413, "Those thumbnails are too large.");
       form = await request.formData().catch(() => undefined);
       if (!form) throw new InputError(400, "Invalid thumbnail form.");
       input = { expected: form.get("expected"), accept: form.get("accept") === "1" };
@@ -693,7 +695,7 @@ async function route(request: Request, env: Env, url: URL, ctx?: ExecutionContex
   }
   const thumb = PUBLIC_THUMB_PATH.exec(path);
   if (thumb) {
-    return request.method === "GET" ? publicThumb(env.DB, env.CATALOG_MEDIA, thumb[1]!, request.headers.get("If-None-Match"), async () => await selfServiceState(env.DB) === "open") : json({ error: "Method not allowed." }, 405, { allow: "GET" });
+    return request.method === "GET" ? publicThumb(env.DB, env.CATALOG_MEDIA, thumb[1]!, request.headers.get("If-None-Match"), async () => await selfServiceState(env.DB) === "open", thumb[2] as "thumb" | "detail") : json({ error: "Method not allowed." }, 405, { allow: "GET" });
   }
   const locationPictureMatch = PUBLIC_LOCATION_MEDIA_PATH.exec(path);
   if (locationPictureMatch) {

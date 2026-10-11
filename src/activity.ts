@@ -330,6 +330,8 @@ function toEvent(row: Row): ActivityEvent {
       return kind === "RETURN" ? `${actor} confirmed ${what}; the loan is closed.` : `${actor} applied ${what} that was held for staff.`;
     },
     ITEM_CREATED: () => `${actor} added ${item} to the catalog${typeof details.catalogueSession === "string" ? " while cataloguing" : ""}.`,
+    ITEM_MERGED: () => `${actor} merged ${item} into ${String(details.targetName ?? details.targetId ?? "another item")}; its history was retained.`,
+    ITEM_MERGED_IN: () => `${actor} merged ${String(details.sourceName ?? details.sourceId ?? "an inactive duplicate")} into ${item}${typeof details.transferred === "number" ? `, transferring ${details.transferred} ${String(details.unit ?? "units")}` : ""}.`,
     CATALOGUE_STARTED: () => `${actor} started cataloguing${typeof details.place === "string" ? ` in ${details.place.slice(0, 200)}` : ""}.`,
     CATALOGUE_FINISHED: () => `${actor} finished cataloguing${typeof details.place === "string" ? ` in ${details.place.slice(0, 200)}` : ""}: ${typeof details.saved === "number" ? details.saved : "some"} items saved${typeof details.reviewLater === "number" && details.reviewLater ? `, ${details.reviewLater} to review later` : ""}.`,
     AUDIT_STARTED: () => `${actor} started checking ${place(details)}${typeof details.expected === "number" ? `: ${details.expected} ${details.expected === 1 ? "item" : "items"} expected there` : ""}.`,

@@ -1,5 +1,6 @@
 import { itemIconKey, resolveItemIcon } from "./item-icons";
 import { LOCATION_ID } from "./location-tree";
+import { MAX_LINKS } from "./relation-policy";
 import { formatItemName, UNSORTED_CATEGORY, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_AUDIENCES, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
 
 export class InputError extends Error {
@@ -108,7 +109,8 @@ export async function staffInventory(db: D1Database) {
       CASE WHEN i.location_id IS NULL AND trim(i.storage_location) <> '' THEN trim(i.storage_location) END AS legacyLocation,
       (SELECT o.condition FROM open_units o WHERE o.item_id = i.id AND o.closed_at IS NULL ORDER BY CASE o.condition WHEN 'LOW' THEN 0 WHEN 'HALF' THEN 1 WHEN 'PLENTY' THEN 2 ELSE 3 END LIMIT 1) AS openCondition,
       p.media_id AS photoId, p.dhash AS photoHash
-    FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id ORDER BY i.name COLLATE NOCASE`).all<StaffRow>();
+    FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id
+    WHERE ${currentItemSQL()} ORDER BY i.name COLLATE NOCASE`).all<StaffRow>();
   const items = results.map((row) => ({
     id: row.id, name: formatItemName(row.name), aliases: row.aliases, category: row.category, itemType: row.itemType, unit: row.unit, status: row.status,
     needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand, updatedAt: row.updatedAt,
@@ -160,8 +162,10 @@ export async function itemDetail(db: D1Database, id: string) {
   const found = item.results[0] as (ItemRow & { photoId: string | null; photoWidth: number | null; photoHeight: number | null } & Record<string, unknown>) | undefined;
   if (!found) throw new InputError(404, "Item not found.");
   const { photoId, photoWidth, photoHeight, ...row } = found;
+  const retained = await mergedInto(db, id);
   return {
     item: { ...row, name: formatItemName(row.name), needsReview: row.needsReview === 1, listed: isListedForLending(row), listingGaps: listingGaps(row), photo: photoId ? { id: photoId, width: photoWidth, height: photoHeight } : null },
+    ...(retained ? { mergedInto: retained } : {}),
     movements: movements.results,
     loans: loans.results,
     openUnits: units!.results,
@@ -316,6 +320,7 @@ const STALE = "Someone else changed this item while you were editing. Your chang
  * form can never silently overwrite another staff member's change.
  */
 export async function updateItem(db: D1Database, actor: Actor, id: string, parsed: ItemInput, expectedUpdatedAt: unknown) {
+  await requireCurrentItem(db, id);
   if (expectedUpdatedAt !== null && typeof expectedUpdatedAt !== "string") throw new InputError(400, "Missing item version. Reload the item and try again.");
   const current = await db.prepare(`SELECT ${EDITABLE.map(([key, column]) => `${column} AS ${key}`).join(", ")}, updated_at AS updatedAt FROM items WHERE id = ?`).bind(id).first<Record<string, unknown>>();
   if (!current) throw new InputError(404, "Item not found.");
@@ -331,7 +336,7 @@ export async function updateItem(db: D1Database, actor: Actor, id: string, parse
     : [key, { from: current[key], to: stored(input[key]) }];
   const now = new Date().toISOString();
   const [update] = await guarded(db.batch([
-    db.prepare(`UPDATE items SET ${changed.map(([, column]) => `${column} = ?`).join(", ")}, updated_at = ? WHERE id = ? AND updated_at IS ?`)
+    db.prepare(`UPDATE items SET ${changed.map(([, column]) => `${column} = ?`).join(", ")}, updated_at = ? WHERE id = ? AND updated_at IS ? AND ${currentItemSQL("items.id")}`)
       .bind(...changed.map(([key]) => stored(input[key])), now, id, expectedUpdatedAt),
     audit(db, actor.accountId, "ITEM_UPDATED", "ITEM", id, Object.fromEntries(changed.map(detail)), true),
     db.prepare(`${BUMP_REVISION} AND changes() > 0`)
@@ -345,6 +350,7 @@ export async function updateItem(db: D1Database, actor: Actor, id: string, parse
  * any edit, and the version check is the same, so two people cannot overwrite each other.
  */
 export async function setAliases(db: D1Database, actor: Actor, id: string, aliases: unknown, expectedUpdatedAt: unknown) {
+  await requireCurrentItem(db, id);
   if (expectedUpdatedAt !== null && typeof expectedUpdatedAt !== "string") throw new InputError(400, "Missing item version. Reload the item and try again.");
   const current = await db.prepare("SELECT name, aliases, updated_at AS updatedAt FROM items WHERE id = ?").bind(id).first<{ name: string; aliases: string | null; updatedAt: string | null }>();
   if (!current) throw new InputError(404, "Item not found.");
@@ -353,7 +359,7 @@ export async function setAliases(db: D1Database, actor: Actor, id: string, alias
   if (next === current.aliases) return { changed: 0, aliases: next, updatedAt: current.updatedAt };
   const now = new Date().toISOString();
   const [update] = await guarded(db.batch([
-    db.prepare("UPDATE items SET aliases = ?, updated_at = ? WHERE id = ? AND updated_at IS ?").bind(next, now, id, expectedUpdatedAt),
+    db.prepare(`UPDATE items SET aliases = ?, updated_at = ? WHERE id = ? AND updated_at IS ? AND ${currentItemSQL("items.id")}`).bind(next, now, id, expectedUpdatedAt),
     audit(db, actor.accountId, "ITEM_UPDATED", "ITEM", id, { aliases: { from: current.aliases, to: next } }, true),
     db.prepare(`${BUMP_REVISION} AND changes() > 0`)
   ]));
@@ -408,6 +414,7 @@ const MOVEMENTS = {
 } as const;
 
 export async function recordMovement(db: D1Database, actor: Actor, itemId: string, body: unknown) {
+  await requireCurrentItem(db, itemId);
   const record = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   const kind = choice(record, "kind", "movement", ["IN", "OUT", "COUNT"] as const);
   const quantity = whole(record, "quantity", kind === "COUNT" ? "Counted quantity" : "Quantity", kind === "COUNT" ? 0 : 1, 100_000);
@@ -435,7 +442,7 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
     // Guarded exactly like the count below (same balance, unused key), so both happen or neither does.
     statements.push(db.prepare(`UPDATE open_units SET closed_at = ?1, closed_by = ?2, close_kind = 'COUNTED', movement_id = ?3
       WHERE id IN (SELECT id FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY opened_at DESC, id DESC) AS n FROM open_units WHERE item_id = ?4 AND closed_at IS NULL) WHERE n > ?5)
-        AND (SELECT on_hand FROM inventory_balances WHERE id = ?4) = ?6 AND NOT EXISTS (SELECT 1 FROM inventory_movements WHERE idempotency_key = ?7)`)
+        AND (SELECT on_hand FROM inventory_balances WHERE id = ?4) = ?6 AND ${currentItemSQL("?4")} AND NOT EXISTS (SELECT 1 FROM inventory_movements WHERE idempotency_key = ?7)`)
       .bind(now, actor.accountId, movementId, itemId, quantity, expected, key),
     db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
       SELECT ?1, ?2, ?3, 'UNIT_RECONCILED', 'ITEM', ?4, json_object('closed', changes(), 'counted', ?5) WHERE changes() > 0`)
@@ -446,7 +453,7 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
   statements.push(
     db.prepare(`INSERT OR IGNORE INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, idempotency_key, notes, reason, status)
       SELECT ?2, ?3, '${movement.type}', '${movement.direction}', i.id, ABS(${movement.signed}), i.unit, ${movement.signed}, ?4, ?5, ?6, ?8, 'POSTED'
-      FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?7 AND ${movement.guard} AND (?9 IS NULL OR b.on_hand = ?9)`)
+      FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?7 AND ${currentItemSQL()} AND ${movement.guard} AND (?9 IS NULL OR b.on_hand = ?9)`)
       .bind(quantity, movementId, now, actor.accountId, key, note, itemId, reason, expected),
     // changes() still refers to the INSERT, so a retry or refused write leaves the revision untouched.
     db.prepare(`${BUMP_REVISION} AND changes() > 0`));
@@ -472,8 +479,141 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
     FROM inventory_movements m JOIN inventory_balances b ON b.id = m.item_id WHERE m.idempotency_key = ?`).bind(key).first<{ itemId: string; change: number; onHand: number }>();
   if (written?.itemId === itemId) return { onHand: written.onHand, change: written.change };
   if (written) throw new InputError(409, "That request was already used for another item. Please try again.");
+  await requireCurrentItem(db, itemId);
   const balance = await db.prepare("SELECT on_hand AS onHand FROM inventory_balances WHERE id = ?").bind(itemId).first<number>("onHand");
   if (balance === null) throw new InputError(404, "Item not found.");
   if (expected !== null && balance !== expected) throw new InputError(409, `Someone else just changed this item: ${balance} on hand now. Check the figure and save again.`);
   throw new InputError(409, `Only ${balance} on hand; cannot remove ${quantity}.`);
+}
+
+/** A merged source remains addressable for its history, but is no longer a current item. */
+export const currentItemSQL = (id = "i.id") => `NOT EXISTS (SELECT 1 FROM audit_log merged
+  WHERE merged.id = 'IM-' || ${id} AND merged.entity_type = 'ITEM' AND merged.entity_id = ${id} AND merged.action = 'ITEM_MERGED')`;
+
+export async function mergedInto(db: D1Database, id: string): Promise<{ id: string; name: string } | null> {
+  const found = await db.prepare(`SELECT t.id, t.name FROM audit_log a JOIN items t ON t.id = json_extract(a.details_json, '$.targetId')
+    WHERE a.id = ? AND a.entity_type = 'ITEM' AND a.action = 'ITEM_MERGED' ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1`)
+    .bind(`IM-${id}`).first<{ id: string; name: string }>();
+  return found ? { ...found, name: formatItemName(found.name) } : null;
+}
+
+export async function requireCurrentItem(db: D1Database, id: string): Promise<void> {
+  const retained = await mergedInto(db, id);
+  if (retained) throw new InputError(409, `This item was merged into ${retained.name} (${retained.id}). Open that item instead.`);
+}
+
+type MergeLink = { itemId: string; relatedId: string; kind: string; createdAt: string; createdBy: string | null };
+const MERGE_LINK_COLUMNS = "item_id AS itemId, related_id AS relatedId, kind, created_at AS createdAt, created_by AS createdBy";
+const MERGE_LINK_WHERE = "item_id IN (?1, ?2) OR related_id IN (?1, ?2)";
+// Rechecked in the first statement of the write batch, before the immutable merge record is inserted.
+const MERGE_BLOCKERS = [
+  { sql: "EXISTS (SELECT 1 FROM item_media m JOIN system_settings c ON c.key = 'cutout_claim:' || m.media_id WHERE m.item_id = ?1 AND c.updated_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 minute'))", reason: "Finish the inactive item's photo change before merging." },
+  { sql: "EXISTS (SELECT 1 FROM loans WHERE item_id IN (?1, ?2) AND status = 'OUT')", reason: "Return or close the open loans on these items first." },
+  { sql: "EXISTS (SELECT 1 FROM open_units WHERE item_id IN (?1, ?2) AND closed_at IS NULL)", reason: "Close the open units on these items first." },
+  { sql: "EXISTS (SELECT 1 FROM self_service_events WHERE item_id IN (?1, ?2) AND review IS NOT NULL AND resolved_at IS NULL)", reason: "Resolve the pending Self-Service records on these items first." },
+  { sql: `EXISTS (SELECT 1 FROM reorders WHERE item_id IN (?1, ?2) AND status IN (${OPEN_REORDERS}))`, reason: "Close the open restock entries on these items first." },
+  { sql: `EXISTS (SELECT 1 FROM location_audits a WHERE a.status <> 'FINISHED' AND
+      (a.location_id IN (WITH RECURSIVE above(id, parent_id) AS (
+        SELECT id, parent_id FROM locations WHERE id IN (SELECT location_id FROM items WHERE id IN (?1, ?2))
+        UNION SELECT l.id, l.parent_id FROM locations l JOIN above p ON p.parent_id = l.id) SELECT id FROM above)
+       OR EXISTS (SELECT 1 FROM location_audit_observations o WHERE o.audit_id = a.id AND o.item_id IN (?1, ?2))))`, reason: "Finish the active place checks involving these items first." },
+  { sql: "EXISTS (SELECT 1 FROM location_reports WHERE item_id IN (?1, ?2) AND resolved_at IS NULL)", reason: "Resolve the open location reports on these items first." },
+  { sql: "EXISTS (SELECT 1 FROM kit_components WHERE item_id = ?1) OR EXISTS (SELECT 1 FROM kit_template_components WHERE item_id = ?1)", reason: "Replace the inactive item in its kits and kit templates with the retained item first." }
+] as const;
+
+/** Explicit consolidation: balances transfer through the ledger; the source's evidence and old IDs are retained. */
+export async function mergeItem(db: D1Database, actor: Actor, targetId: string, input: unknown) {
+  const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const sourceId = body.sourceId;
+  if (typeof sourceId !== "string" || !/^ITM-[A-Za-z0-9-]{1,24}$/.test(sourceId) || sourceId === targetId) throw new InputError(400, "Choose a different inactive duplicate.");
+  if (body.confirmed !== true) throw new InputError(400, "Confirm which inactive duplicate to merge.");
+  const replay = async () => {
+    const retained = await mergedInto(db, sourceId);
+    if (!retained) return null;
+    if (retained.id !== targetId) throw new InputError(409, `That item was already merged into ${retained.name} (${retained.id}).`);
+    return { id: targetId, sourceId, merged: true, replayed: true };
+  };
+  const previous = await replay();
+  if (previous) return previous;
+  await requireCurrentItem(db, targetId);
+  for (const field of ["sourceUpdatedAt", "updatedAt"]) {
+    if (body[field] !== null && typeof body[field] !== "string") throw new InputError(400, "Reload both items before merging.");
+  }
+  const expectedSource = whole(body, "sourceOnHand", "Inactive item quantity", 0, 1_000_000);
+  const expectedTarget = whole(body, "targetOnHand", "Retained item quantity", 0, 1_000_000);
+  const [items, flags, relationships] = await db.batch([
+    db.prepare(`SELECT ${ITEM_COLUMNS} FROM items i LEFT JOIN inventory_balances b ON b.id = i.id WHERE i.id IN (?1, ?2)`).bind(sourceId, targetId),
+    db.prepare(`SELECT ${MERGE_BLOCKERS.map((block, n) => `(${block.sql}) AS b${n}`).join(", ")}`).bind(sourceId, targetId),
+    db.prepare(`SELECT ${MERGE_LINK_COLUMNS} FROM item_relationships WHERE ${MERGE_LINK_WHERE} ORDER BY item_id, related_id`).bind(sourceId, targetId)
+  ]);
+  const rows = items!.results as ItemRow[];
+  const source = rows.find((row) => row.id === sourceId);
+  const target = rows.find((row) => row.id === targetId);
+  if (!source || !target) throw new InputError(404, "One of these items was not found.");
+  if (source.status !== "INACTIVE" || target.status !== "ACTIVE") throw new InputError(409, "Merge an inactive duplicate into an active item.");
+  if (source.updatedAt !== body.sourceUpdatedAt || target.updatedAt !== body.updatedAt || source.onHand !== expectedSource || target.onHand !== expectedTarget) throw new InputError(409, "One of these items changed. Reload both items and confirm the quantities again.");
+  if (formatItemName(source.name).toLowerCase() !== formatItemName(target.name).toLowerCase()) throw new InputError(409, "These items no longer have the same name. Check the exact duplicate again.");
+  if (source.itemType !== target.itemType || source.unit.trim().toLowerCase() !== target.unit.trim().toLowerCase() || source.consumptionMode !== target.consumptionMode || (source.stockArea ?? "Inventory") !== (target.stockArea ?? "Inventory")) throw new InputError(409, "The items need the same type, unit, usage and stock area before their counts can be combined.");
+  for (const field of ["model", "serialNumber"] as const) {
+    if (source[field] && target[field] && source[field]!.trim().toLowerCase() !== target[field]!.trim().toLowerCase()) throw new InputError(409, `The ${field === "model" ? "models" : "serial numbers"} differ. Check that these are the same item before merging.`);
+  }
+  if (!Number.isInteger(source.onHand) || !Number.isInteger(target.onHand) || source.onHand < 0 || target.onHand < 0 || source.onHand + target.onHand > 1_000_000) throw new InputError(409, "Correct these item counts before merging.");
+  if (source.onHand > 0 && source.expiresOn !== target.expiresOn) throw new InputError(409, "The expiry dates differ. Align them before combining this stock.");
+  const blocked = flags!.results[0] as Record<string, number>;
+  const reasons = MERGE_BLOCKERS.filter((_, n) => blocked[`b${n}`]).map((block) => block.reason);
+  if (reasons.length) throw new InputError(409, reasons.join(" "));
+
+  const links = relationships!.results as MergeLink[];
+  const existing = links.filter((link) => link.itemId !== sourceId && link.relatedId !== sourceId);
+  const moved: MergeLink[] = [];
+  for (const link of links.filter((entry) => entry.itemId === sourceId || entry.relatedId === sourceId)) {
+    const next = { ...link, itemId: link.itemId === sourceId ? targetId : link.itemId, relatedId: link.relatedId === sourceId ? targetId : link.relatedId };
+    if (next.itemId === next.relatedId) continue;
+    const same = [...existing, ...moved].find((entry) => (entry.itemId === next.itemId && entry.relatedId === next.relatedId) || (entry.itemId === next.relatedId && entry.relatedId === next.itemId));
+    if (same) {
+      const symmetric = next.kind === "ALTERNATIVE" || next.kind === "USED_WITH";
+      if (same.kind !== next.kind || (!symmetric && (same.itemId !== next.itemId || same.relatedId !== next.relatedId))) throw new InputError(409, `The links to ${next.itemId === targetId ? next.relatedId : next.itemId} conflict. Choose the correct relationship before merging.`);
+    } else moved.push(next);
+  }
+  if (existing.length + moved.length > MAX_LINKS) throw new InputError(409, `The combined item would have more than ${MAX_LINKS} links. Remove unneeded links first.`);
+  // An unreviewed source must not add trusted aliases to a reviewed retained item.
+  const sourceAliases = target.needsReview === 1 || source.needsReview === 0 ? source.aliases : null;
+  const aliases = aliasList({ aliases: [target.aliases, sourceAliases].filter(Boolean).join(", ") }, target.name);
+  const signature = JSON.stringify(links.map((link) => [link.itemId, link.relatedId, link.kind, link.createdAt, link.createdBy]));
+  const now = new Date(Math.max(Date.now(), (Date.parse(source.updatedAt ?? "") || 0) + 1, (Date.parse(target.updatedAt ?? "") || 0) + 1)).toISOString();
+  const details = { targetId, targetName: target.name, sourceName: source.name, transferred: source.onHand, sourceOnHand: source.onHand, targetOnHand: target.onHand, unit: target.unit, priorLinks: links.filter((link) => link.itemId === sourceId || link.relatedId === sourceId) };
+  const guard = `EXISTS (SELECT 1 FROM items s JOIN items t ON t.id = ?2 JOIN inventory_balances sb ON sb.id = s.id JOIN inventory_balances tb ON tb.id = t.id
+      WHERE s.id = ?1 AND s.status = 'INACTIVE' AND t.status = 'ACTIVE' AND s.updated_at IS ?3 AND t.updated_at IS ?4
+        AND sb.on_hand = ?5 AND tb.on_hand = ?6 AND ${currentItemSQL("s.id")} AND ${currentItemSQL("t.id")})
+    AND ${MERGE_BLOCKERS.map((block) => `NOT (${block.sql})`).join(" AND ")}
+    AND (SELECT json_group_array(json_array(item_id, related_id, kind, created_at, created_by)) FROM
+      (SELECT item_id, related_id, kind, created_at, created_by FROM item_relationships WHERE ${MERGE_LINK_WHERE} ORDER BY item_id, related_id)) = ?7`;
+  const statements = [
+    // action is NOT NULL: any stale balance, version, link or outstanding work aborts the entire batch.
+    db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
+      SELECT ?8, ?9, ?10, CASE WHEN ${guard} THEN 'ITEM_MERGED' ELSE NULL END, 'ITEM', ?1, ?11`)
+      .bind(sourceId, targetId, source.updatedAt, target.updatedAt, source.onHand, target.onHand, signature, `IM-${sourceId}`, now, actor.accountId, JSON.stringify(details)),
+    db.prepare("UPDATE items SET status = 'INACTIVE', lending_audience = 'NOT_AVAILABLE_FOR_LENDING', updated_at = ? WHERE id = ?").bind(now, sourceId),
+    db.prepare("UPDATE items SET aliases = ?, updated_at = ? WHERE id = ?").bind(aliases, now, targetId),
+    db.prepare("DELETE FROM item_relationships WHERE item_id = ?1 OR related_id = ?1").bind(sourceId),
+    ...moved.map((link) => db.prepare("INSERT INTO item_relationships(item_id, related_id, kind, created_at, created_by) VALUES(?, ?, ?, ?, ?)").bind(link.itemId, link.relatedId, link.kind, link.createdAt, link.createdBy)),
+    audit(db, actor.accountId, "ITEM_MERGED_IN", "ITEM", targetId, { sourceId, sourceName: source.name, transferred: source.onHand, unit: target.unit, aliases: { from: target.aliases, to: aliases } })
+  ];
+  if (source.onHand > 0) {
+    for (const [id, kind, direction, delta] of [[sourceId, "STOCK_OUT", "OUT", -source.onHand], [targetId, "STOCK_IN", "IN", source.onHand]] as const) {
+      statements.push(db.prepare(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity,
+        related_entity_type, related_entity_id, actor_user_id, idempotency_key, notes, reason, status) VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'ITEM_MERGE', ?, ?, ?, ?, 'TRANSFERRED', 'POSTED')`)
+        .bind(`MOV-MERGE-${sourceId}-${direction}`, now, kind, direction, id, source.onHand, target.unit, delta, sourceId, actor.accountId, `merge:${sourceId}:${direction}`, direction === "OUT" ? `Merged into ${targetId}` : `Merged from ${sourceId}`));
+    }
+  }
+  statements.push(db.prepare(BUMP_REVISION));
+  try {
+    await db.batch(statements);
+  } catch (error) {
+    const repeated = await replay();
+    if (repeated) return repeated;
+    if (error instanceof Error && /NOT NULL constraint failed: audit_log.action|UNIQUE constraint failed: audit_log.id/i.test(error.message)) throw new InputError(409, "One of these items changed or has outstanding work. Reload both items and confirm again.");
+    throw error;
+  }
+  return { id: targetId, sourceId, merged: true, onHand: source.onHand + target.onHand, updatedAt: now };
 }

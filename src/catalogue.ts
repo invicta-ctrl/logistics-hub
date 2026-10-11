@@ -1,7 +1,7 @@
 import { captureFeedback } from "./ai-review";
 import { formatItemName, BEHAVIOURS, type Behaviour, UNSORTED_CATEGORY, UNSORTED_UNIT, behaviourFields } from "./catalog-policy";
 import { type Known, type Match, possibleDuplicates } from "./duplicates";
-import { type Actor, InputError, audit, createItem, distinct, parseItemInput, pathsOf, text, usablePlace } from "./inventory";
+import { type Actor, InputError, audit, createItem, distinct, parseItemInput, pathsOf, text, usablePlace, currentItemSQL } from "./inventory";
 import { LOCATION_ID } from "./location-tree";
 
 /*
@@ -42,18 +42,20 @@ async function ownSession(db: D1Database, actor: Actor, id: string): Promise<Ses
 /** A session as the browser sees it; `mine` says whether the reader may add to it. */
 const shown = ({ startedBy, ...row }: SessionRow, me: string) => ({ ...row, mine: startedBy === me });
 
-/** This person's open cataloguing session: what Catalogue resumes and what Home offers to continue. */
-export const openSession = (db: D1Database, actor: Actor) => db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.status = 'ACTIVE' AND s.started_by = ?`).bind(actor.accountId);
+/** Main item-entry batches are bookkeeping, rather than a shelf session to resume. */
+const QUICK_SESSION = "NOT EXISTS (SELECT 1 FROM audit_log origin WHERE origin.entity_type = 'CATALOGUE' AND origin.entity_id = s.id AND origin.action = 'CATALOGUE_STARTED' AND json_extract(origin.details_json, '$.direct') = 1)";
+/** This person's open Quick Catalog session. */
+export const openSession = (db: D1Database, actor: Actor) => db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.status = 'ACTIVE' AND s.started_by = ? AND ${QUICK_SESSION}`).bind(actor.accountId);
 
 /** What the Catalogue page opens with: your open session (if any), who else is cataloguing, and the items waiting for a decision. */
 export async function catalogueState(db: D1Database, actor: Actor) {
   const [mine, others, review, total] = await db.batch([
     openSession(db, actor),
-    db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.status = 'ACTIVE' AND s.started_by <> ? ORDER BY s.started_at LIMIT 10`).bind(actor.accountId),
+    db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.status = 'ACTIVE' AND s.started_by <> ? AND ${QUICK_SESSION} ORDER BY s.started_at LIMIT 10`).bind(actor.accountId),
     db.prepare(`SELECT i.id, i.name, c.created_at AS capturedAt, lp.path AS place, p.media_id AS photoId, b.on_hand AS onHand, i.unit FROM catalogue_captures c JOIN items i ON i.id = c.item_id
       LEFT JOIN location_paths lp ON lp.id = i.location_id LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN inventory_balances b ON b.id = i.id
-      WHERE i.item_type = 'NEEDS_REVIEW' ORDER BY c.created_at DESC, c.rowid DESC LIMIT ${REVIEW_LIST}`),
-    db.prepare("SELECT COUNT(*) AS total FROM catalogue_captures c JOIN items i ON i.id = c.item_id WHERE i.item_type = 'NEEDS_REVIEW'")
+      WHERE i.item_type = 'NEEDS_REVIEW' AND ${currentItemSQL()} ORDER BY c.created_at DESC, c.rowid DESC LIMIT ${REVIEW_LIST}`),
+    db.prepare(`SELECT COUNT(*) AS total FROM catalogue_captures c JOIN items i ON i.id = c.item_id WHERE i.item_type = 'NEEDS_REVIEW' AND ${currentItemSQL()}`)
   ]);
   return {
     session: mine!.results[0] ? shown(mine!.results[0] as SessionRow, actor.accountId) : null,
@@ -71,7 +73,7 @@ export async function sessionDetail(db: D1Database, actor: Actor, id: string) {
     db.prepare(`SELECT c.id AS captureId, c.behaviour, c.created_at AS capturedAt, i.id AS itemId, i.name, i.category, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.unit,
         i.stock_area AS stockArea, i.needs_review AS needsReview, b.on_hand AS onHand, lp.path AS place, p.media_id AS photoId
       FROM catalogue_captures c JOIN items i ON i.id = c.item_id LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN location_paths lp ON lp.id = c.location_id LEFT JOIN item_media p ON p.item_id = i.id
-      WHERE c.session_id = ? ORDER BY c.created_at DESC, c.rowid DESC LIMIT ${RECENT}`).bind(id)
+      WHERE c.session_id = ? AND ${currentItemSQL()} ORDER BY c.created_at DESC, c.rowid DESC LIMIT ${RECENT}`).bind(id)
   ]);
   const found = session!.results[0] as SessionRow | undefined;
   if (!found) throw new InputError(404, "Cataloguing session not found.");
@@ -92,7 +94,7 @@ export async function catalogueSnapshot(db: D1Database) {
   const [items, places] = await db.batch([
     db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.unit, i.stock_area AS stockArea, i.status, i.needs_review AS needsReview,
         i.model, i.serial_number AS serialNumber, i.location_id AS locationId, p.dhash AS photoHash, COALESCE(b.on_hand, 0) AS onHand
-      FROM items i LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN inventory_balances b ON b.id = i.id ORDER BY i.name COLLATE NOCASE, i.id`),
+      FROM items i LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN inventory_balances b ON b.id = i.id WHERE ${currentItemSQL()} ORDER BY i.name COLLATE NOCASE, i.id`),
     db.prepare("SELECT id, name, parent_id AS parentId, active, directions FROM locations ORDER BY name COLLATE NOCASE, id")
   ]);
   const rows = items!.results as Array<{ name: string; category: string; unit: string; needsReview: number }>;
@@ -112,7 +114,7 @@ export const capturedBy = (db: D1Database, accountId: string, itemId: string): P
 export async function unreviewed(db: D1Database, id: string) {
   if (!SESSION_ID.test(id)) throw new InputError(404, "Cataloguing session not found.");
   const { results } = await db.prepare(`SELECT i.id, i.updated_at AS updatedAt FROM catalogue_captures c JOIN items i ON i.id = c.item_id
-    WHERE c.session_id = ? AND i.needs_review = 1 AND i.item_type <> 'NEEDS_REVIEW' AND i.category <> '${UNSORTED_CATEGORY}' ORDER BY c.created_at, c.rowid LIMIT 1000`).bind(id).all();
+    WHERE c.session_id = ? AND ${currentItemSQL()} AND i.needs_review = 1 AND i.item_type <> 'NEEDS_REVIEW' AND i.category <> '${UNSORTED_CATEGORY}' ORDER BY c.created_at, c.rowid LIMIT 1000`).bind(id).all();
   return { items: results };
 }
 
@@ -125,7 +127,8 @@ export async function startSession(db: D1Database, actor: Actor, input: unknown)
   const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   if (body.id !== undefined && (typeof body.id !== "string" || !SESSION_ID.test(body.id))) throw new InputError(400, "That session id is not valid. Reload and try again.");
   const existing = await db.prepare("SELECT id FROM catalogue_sessions WHERE status = 'ACTIVE' AND started_by = ?").bind(actor.accountId).first<string>("id");
-  if (existing) return { id: existing, resumed: true };
+  const mainOrigin = existing && body.direct !== true && await db.prepare("SELECT 1 FROM audit_log WHERE entity_type = 'CATALOGUE' AND entity_id = ? AND action = 'CATALOGUE_STARTED' AND json_extract(details_json, '$.direct') = 1").bind(existing).first();
+  if (existing && !mainOrigin) return { id: existing, resumed: true };
   const locationId = placeId(body.locationId);
   await usablePlace(db, locationId);
   const used = typeof body.id === "string" ? await db.prepare("SELECT started_by FROM catalogue_sessions WHERE id = ?").bind(body.id).first<string>("started_by") : null;
@@ -134,10 +137,15 @@ export async function startSession(db: D1Database, actor: Actor, input: unknown)
   const id = typeof body.id === "string" && !used ? body.id : `CS-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   const place = locationId ? (await pathsOf(db, [locationId])).get(locationId) ?? null : null;
+  const closing = mainOrigin ? await ownSession(db, actor, existing!) : null;
   try {
     await db.batch([
+      ...(closing ? [
+        db.prepare("UPDATE catalogue_sessions SET status = 'FINISHED', finished_at = ?1, updated_at = ?1 WHERE id = ?2 AND status = 'ACTIVE'").bind(now, closing.id),
+        audit(db, actor.accountId, "CATALOGUE_FINISHED", "CATALOGUE", closing.id, { saved: closing.saved, reviewLater: closing.reviewLater, place: closing.place }, true)
+      ] : []),
       db.prepare("INSERT INTO catalogue_sessions(id, started_by, location_id, status, started_at, updated_at) VALUES(?, ?, ?, 'ACTIVE', ?, ?)").bind(id, actor.accountId, locationId, now, now),
-      audit(db, actor.accountId, "CATALOGUE_STARTED", "CATALOGUE", id, { place })
+      audit(db, actor.accountId, "CATALOGUE_STARTED", "CATALOGUE", id, { place, ...(body.direct === true ? { direct: true } : {}) })
     ]);
   } catch (error) {
     // Two devices starting at once: the database allows one open session each, so the second finds the first.
@@ -184,7 +192,7 @@ export type CaptureOutcome = Captured | { duplicates: Match[] };
  * behaviour is "Review later" is stored unclassified (type Unclassified, needs review) and so stays out of every public list until
  * someone decides. Possible duplicates are returned, not refused, unless the person has already seen them and said to save anyway.
  */
-export async function capture(db: D1Database, actor: Actor, sessionId: string, input: unknown): Promise<CaptureOutcome> {
+export async function capture(db: D1Database, actor: Actor, sessionId: string, input: unknown, canReview = false): Promise<CaptureOutcome> {
   const session = await ownSession(db, actor, sessionId);
   const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const requestId = body.id;
@@ -214,13 +222,13 @@ export async function capture(db: D1Database, actor: Actor, sessionId: string, i
     category: later && !text(body, "category", "Category", 100, false) ? UNSORTED_CATEGORY : body.category,
     unit: later && !text(body, "unit", "Unit", 30, false) ? UNSORTED_UNIT : body.unit,
     ...behaviourFields(decided), status: "ACTIVE", locationId, reorderThreshold: body.reorderThreshold ?? 0, expiresOn: body.expiresOn ?? "", lendingAudience: "NOT_AVAILABLE_FOR_LENDING",
-    // Captured at the shelf, but nobody has signed it off for Self-Service: "Mark reviewed" (or the Items form) does that.
-    needsReview: true
+    // Quick Catalog stays provisional; the direct Items form offers explicit full-sign-in review.
+    needsReview: !(canReview && body.direct === true && body.reviewed === true && !later)
   });
   const hash = typeof body.photoHash === "string" && /^[0-9a-f]{16}$/.test(body.photoHash) ? body.photoHash : null;
   const seen = acknowledged(body.acknowledged);
   const { results } = await db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.model, i.serial_number AS serialNumber, p.dhash AS photoHash, i.status
-    FROM items i LEFT JOIN item_media p ON p.item_id = i.id`).all<Known>();
+    FROM items i LEFT JOIN item_media p ON p.item_id = i.id WHERE ${currentItemSQL()}`).all<Known>();
   const matches = possibleDuplicates({ name: input2.name, category: input2.category, model: input2.model, serialNumber: input2.serialNumber, photoHash: hash }, results);
   if (matches.some((match) => !seen.includes(match.id))) return { duplicates: matches };
 
@@ -232,7 +240,9 @@ export async function capture(db: D1Database, actor: Actor, sessionId: string, i
       also: (itemId) => [
         db.prepare("INSERT INTO catalogue_captures(id, session_id, item_id, location_id, behaviour, acknowledged, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)")
           .bind(requestId, sessionId, itemId, locationId, decided, seen.length ? JSON.stringify(seen) : null, now),
-        db.prepare("UPDATE catalogue_sessions SET location_id = ?, updated_at = ? WHERE id = ?").bind(locationId, now, sessionId),
+        body.direct === true
+          ? db.prepare("UPDATE catalogue_sessions SET updated_at = ? WHERE id = ?").bind(now, sessionId)
+          : db.prepare("UPDATE catalogue_sessions SET location_id = ?, updated_at = ? WHERE id = ?").bind(locationId, now, sessionId),
         ...feedback(itemId)
       ]
     });

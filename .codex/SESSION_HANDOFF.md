@@ -6,10 +6,13 @@
 
 - **Repository:** `invicta-ctrl/logistics-hub`.
 - **Branch:** `slice/v1.16-ambient-core`, PR [#33](https://github.com/invicta-ctrl/logistics-hub/pull/33).
-- **Starting main:** `711547d41d4c560fe35d0d46de755f3e8718796c`. Re-read live refs before any merge or next implementation.
-- **Active writer:** UNKNOWN to this remote-documentation session. Owner said V1.15 writer lock lifted, but check `npm run agent:status` in authorized worktree and claim before writing code. Do not preempt any unreported local work.
+- **Verified runtime main:** `84f798fd0703dce4b0befa69c183ed04717ef4a8`, including V1.15 source `962c66e718bad84d29b8b470400753701d7f5cd2`. Source CI 38133613254 and main CI 38134402564 passed; main CodeQL/Workers Build passed. Refresh refs before integration.
+- **Active writer:** Codex verified and claimed the sole local writer lock. Root reconciles the existing branch with main; specialists remain read-only. Preserve unknown local `work` and verify actual lock status before takeover.
 
 ## Completed and accepted (documentation, not application implementation)
+
+- V1.15 CLOSED by the owner's current instruction: final follow-up on verified main, deployment/checks green, source slice deleted/pruned. Owner retains live/manual QA; no new provider outcome claimed.
+- Parent version V1.15; candidate version NONE; release type documentation-only. This governance/closure checkpoint does not increment product revision. Safe merge preserves both histories and the final V1.15 runtime/tests unchanged.
 
 - V1.16 detailed scope **OWNER ACCEPTED**, stored at `docs/specs/accepted/v1.16-ambient-intelligent-core.md`; implementation execution card at `docs/road-to-v2/v1.16-execution-card.md`.
 - Permanent independently shippable slice/green-main-merge rule: `AGENTS.md`, `.agents/PROJECT_POLICY.md`, `docs/SHARED_AGENT_WORKFLOW.md`.
@@ -21,7 +24,7 @@
 
 - No V1.16 runtime feature has been built or tested/deployed by this documentation session; version/changelog UI is specified, not live.
 - No paid AI, Cloudflare provider/data write, D1/R2 migration or production change authorized/executed through this documentation task.
-- No current local writer-lock, exact-head CI, configured Workers Build or actual deployed product version independently established by this remote session.
+- This reconciled documentation checkpoint still requires exact-head CI before PR #33 integration. Runtime is unchanged from verified main; no V1.16 deployed product version is claimed.
 - Never claim final V2 readiness or an independently released subversion without actual integration and deployment evidence.
 
 ## Next action / verification

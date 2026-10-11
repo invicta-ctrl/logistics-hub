@@ -53,7 +53,7 @@ export function ageOf(iso: string): string {
   if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
   return `on ${formatDate(iso.slice(0, 10))}`;
 }
-type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness; kits?: Array<{ id: string; name: string; active: boolean; required: number }>; links?: ItemLink[] };
+type Detail = { mergedInto?: { id: string; name: string } | null; item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness; kits?: Array<{ id: string; name: string; active: boolean; required: number }>; links?: ItemLink[] };
 type SortKey = "id" | "name" | "category" | "location" | "onHand";
 type Tab = "overview" | "loan" | "details" | "history";
 
@@ -409,6 +409,8 @@ function formatValue(field: string, value: unknown): string {
 /** Turns one audited catalog change into a headline staff can scan. */
 function eventTitle(event: CatalogEvent): string {
   if (event.action === "ITEM_CREATED") return "Item created";
+  if (event.action === "ITEM_MERGED") return "Duplicate merged";
+  if (event.action === "ITEM_MERGED_IN") return "Inactive duplicate merged in";
   const condition = (event.details.condition as Change | undefined)?.to;
   if (event.action === "UNIT_OPENED") return Number(event.details.alreadyOpen) > 0 ? `Another unit opened (${String(event.details.alreadyOpen)} already open)` : "Unit opened";
   if (event.action === "UNIT_USED") return "Use recorded";
@@ -455,7 +457,7 @@ export async function workspace(): Promise<void> {
           <p class="live-status" id="live-status">Connecting…</p>
           <a class="button button--secondary" href="/staff/locations" data-route>${icon("pin")}Locations</a>
           <a class="button button--secondary" href="/staff/kits" data-route>${icon("stack")}Kits</a>
-          <a class="button button--primary" id="add-items" href="/staff/catalogue" data-route>${icon("plus")}Add items</a>
+          <button type="button" class="button button--primary" id="add-items">${icon("plus")}Add items</button>
         </div>
       </header>
       <div class="views" id="views" role="group" aria-label="Item views"></div>
@@ -491,7 +493,7 @@ export async function workspace(): Promise<void> {
   let openId: string | null = null;
   let detail: Detail | null = null;
   let dirty = false;
-  let pendingItem = params.get("item");
+  let pendingItem = params.get("add") === "1" ? null : params.get("item");
   const pendingTab = (["overview", "loan", "details", "history"] as const).find((value) => value === params.get("tab")) ?? "overview";
   let shownIds: string[] = [];
   /** How many rows are drawn: the table grows by a page on request, so the page's size does not follow the catalog's (docs/PERFORMANCE_RELIABILITY_DOCTRINE.md). */
@@ -751,19 +753,27 @@ export async function workspace(): Promise<void> {
 
   /* ---------- Item sheet ---------- */
 
+  let addGeneration = 0;
+  const addCleanups: Array<() => void> = [];
+  const stopAdding = () => {
+    addGeneration += 1;
+    addCleanups.splice(0).forEach((cleanup) => cleanup());
+    sheet.classList.remove("sheet--add");
+  };
   const panel = createSheet(sheet, {
     dirty: () => dirty,
     onClose: () => {
+      stopAdding();
       document.querySelector(`tr[data-key="${CSS.escape(openId ?? "")}"]`)?.classList.remove("is-open");
       openId = null;
       detail = null;
       dirty = false;
-      writeParams({ item: null });
+      writeParams({ item: null, add: null });
     }
   });
   const discardOk = panel.discardOk;
   const closeSheet = () => panel.close(true);
-  onLeave(() => { dirty = false; });
+  onLeave(() => { stopAdding(); dirty = false; });
 
   function sheetShell(kicker: Html | string, title: string, body: Html): void {
     // Replacing the sheet's content (the loaded record after its placeholder) would drop keyboard focus onto the page behind.
@@ -774,6 +784,7 @@ export async function workspace(): Promise<void> {
 
   function openItem(id: string, tab: Tab = "overview"): void {
     if (openId !== id && !discardOk()) return;
+    stopAdding();
     dirty = false;
     document.querySelectorAll("tr.is-open").forEach((element) => element.classList.remove("is-open"));
     document.querySelector(`tr[data-key="${CSS.escape(id)}"]`)?.classList.add("is-open");
@@ -781,12 +792,52 @@ export async function workspace(): Promise<void> {
     detail = null;
     // A link or the search can open an item the table has not drawn yet; render() draws it.
     if (shownIds.indexOf(id) >= rowLimit) render();
-    writeParams({ item: id });
+    writeParams({ item: id, add: null });
     const item = inventory?.items.find((entry) => entry.id === id);
     sheetShell(id, item?.name ?? "Loading…", html`<div class="skeleton skeleton--block"></div>`);
     panel.open();
     void loadDetail(id, tab);
   }
+
+  function openAdd(): void {
+    if (!session || !discardOk()) return;
+    stopAdding();
+    const generation = addGeneration;
+    dirty = false;
+    openId = null;
+    detail = null;
+    pendingItem = null;
+    document.querySelectorAll("tr.is-open").forEach((element) => element.classList.remove("is-open"));
+    writeParams({ item: null, add: "1", tab: null });
+    sheet.classList.add("sheet--add");
+    sheetShell("", "Add items", html`<div id="direct-add"><div class="skeleton skeleton--block"></div></div>`);
+    panel.open();
+    const host = sheet.querySelector<HTMLElement>("#direct-add")!;
+    const current = () => generation === addGeneration && host.isConnected && sheet.open;
+    void (async () => {
+      try {
+        const { captureScreen } = await import("./catalogue-capture");
+        if (!current()) return;
+        const started = await api<{ id: string }>("/api/staff/catalogue/sessions", { method: "POST", body: JSON.stringify({ locationId: null, direct: true }) });
+        if (!current()) return;
+        const { startSending } = await import("./catalogue-sync");
+        if (!current()) return;
+        startSending({ owner: session.id, legacy: true });
+        await captureScreen({ mode: "signed-in", session, access: null }, started.id, {
+          host,
+          onCleanup: (cleanup) => { if (current()) addCleanups.push(cleanup); else cleanup(); },
+          onDirty: (next) => { if (current()) dirty = next; }
+        });
+      } catch (error) {
+        if (!current()) return;
+        if (error instanceof ApiError && error.status === 401) return expired();
+        mount(host, emptyState("Add items could not be opened", failure(error), html`<button type="button" class="button button--secondary" id="add-retry">Try again</button>`, "error", 2));
+        host.querySelector("#add-retry")!.addEventListener("click", openAdd);
+      }
+    })();
+  }
+  document.querySelector("#add-items")!.addEventListener("click", openAdd);
+  if (params.get("add") === "1") openAdd();
 
   async function fetchDetail(id: string): Promise<Detail | null> {
     const loaded = await api<Detail>(`/api/staff/items/${encodeURIComponent(id)}`);
@@ -993,12 +1044,15 @@ export async function workspace(): Promise<void> {
           ? Object.entries(event.details).filter(([field]) => FIELD_LABELS[field]).map(([field, value]) => html`<li><span>${FIELD_LABELS[field]}</span> ${formatValue(field, (value as Change).from)} → <strong>${formatValue(field, (value as Change).to)}</strong></li>`)
           : [];
         const opening = Number(event.details.openingQuantity ?? 0);
+        const mergeId = event.action === "ITEM_MERGED" ? event.details.targetId : event.action === "ITEM_MERGED_IN" ? event.details.sourceId : null;
+        const mergeName = event.action === "ITEM_MERGED" ? event.details.targetName : event.details.sourceName;
         // What was typed with a report or its resolution lives on the report; the history shows it where it happened.
         const report = reports.find((entry) => entry.id === event.details.reportId);
         const typed = event.action === "LOCATION_REPORTED" ? report?.note : event.action === "LOCATION_REPORT_RESOLVED" ? report?.resolutionNote : null;
         return { at: event.at, markup: html`<li class="history__item is-catalog">
           <div><p class="history__title">${eventTitle(event)}</p>
             <p class="history__meta"><time datetime="${event.at}">${formatDateTime(event.at)}</time> · ${event.actor ?? "System"}</p>
+            ${typeof mergeId === "string" ? html`<p class="history__note"><a class="text-link" href="/staff/items?item=${encodeURIComponent(mergeId)}" data-route>${event.action === "ITEM_MERGED" ? "Retained item" : "Merged from"}: ${String(mergeName ?? mergeId)} (${mergeId})</a></p>` : ""}
             ${changes.length ? html`<ul class="history__changes">${changes}</ul>` : event.action === "ITEM_CREATED" && opening > 0 ? html`<p class="history__note">Opening quantity ${opening}</p>` : typed ? html`<p class="history__note">${typed}</p>` : ""}</div></li>` };
       })
     ].sort((a, b) => b.at.localeCompare(a.at));
@@ -1009,6 +1063,19 @@ export async function workspace(): Promise<void> {
     detail = loaded;
     dirty = false;
     const { item } = loaded;
+    if (loaded.mergedInto) {
+      sheetShell(html`<span class="mono">${item.id}</span>`, item.name, html`
+        <p class="callout">Merged into <a class="text-link" href="/staff/items?item=${encodeURIComponent(loaded.mergedInto.id)}" data-route>${loaded.mergedInto.name} (${loaded.mergedInto.id})</a></p>
+        ${item.photo ? html`<button type="button" class="photo-tile" data-archived-photo aria-label="View retained photo"><img src="${photoUrl(item.photo.id, "thumb")}" alt="${item.name}" width="180" height="180"></button>` : ""}
+        <dl class="facts"><div><dt>Unit</dt><dd>${item.unit}</dd></div><div><dt>Where found</dt><dd>${item.location ?? "No place set"}</dd></div>
+          ${item.model ? html`<div><dt>Model</dt><dd>${item.model}</dd></div>` : ""}${item.serialNumber ? html`<div><dt>Serial number</dt><dd>${item.serialNumber}</dd></div>` : ""}</dl>
+        <h3 class="section-label">History</h3><ol class="history">${historyMarkup(loaded)}</ol>
+        <p><a class="text-link" href="/staff/activity?item=${item.id}" data-route>All activity for this item ${icon("arrow")}</a></p>`);
+      sheet.querySelector<HTMLButtonElement>("[data-archived-photo]")?.addEventListener("click", () => {
+        if (item.photo) void openViewer(shownUrl(item.photo, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLImageElement>("[data-archived-photo] img"), item.name, resolveItemIcon(item).key);
+      });
+      return;
+    }
     const lendable = item.itemType === PUBLIC_LENDING_ITEM_TYPE;
     const out = loaded.loans.filter((loan) => loan.status === "OUT").length;
     const tabs: Array<[Tab, string]> = [["overview", "Overview"], ...(lendable ? [["loan", out ? `Loan · ${out} out` : "Loan"] as [Tab, string]] : []), ["details", item.needsReview ? "Review & edit" : "Edit details"], ["history", "History"]];
@@ -1093,6 +1160,8 @@ export async function workspace(): Promise<void> {
     bindDetailsForm(item);
     photo = photoPanel(sheet.querySelector<HTMLElement>("#photo-panel")!, {
       visual: () => ({ ...detail!.item, photoId: detail!.item.photo?.id }), updatedAt: () => detail!.item.updatedAt,
+      // Rebase only our successful photo repair; another writer's detail changes still conflict.
+      repairVersion: (from, to) => { if (item.updatedAt === from) item.updatedAt = to; },
       id: item.id, name: item.name, photo: item.photo, noun: "photo", endpoint: `/api/staff/items/${encodeURIComponent(item.id)}/photo`, cleanup: `/api/staff/items/${encodeURIComponent(item.id)}/cutout`,
       cleanupState: () => detail?.item.photoCleanup,
       enableCleanup: async () => { await api("/api/staff/admin/cleanup", { method: "PATCH", body: JSON.stringify({ on: true }) }); await poll.refresh(); },
@@ -1137,7 +1206,7 @@ export async function workspace(): Promise<void> {
       <div class="form-section">
         <h3 class="form-section__title">Catalog</h3>
         ${text("name", "Name", item.name, html`required maxlength="120" autocomplete="off" autocapitalize="words" autocorrect="on" spellcheck="true"`)}
-        <p class="field__hint field__hint--warn" id="duplicate-hint" hidden></p>
+        <div class="field__hint field__hint--warn" id="duplicate-hint" hidden></div>
         ${item.itemType === "NEEDS_REVIEW" ? html`<div class="classify-hint" id="classify-hint" aria-live="polite"></div>` : ""}
         <div class="field-grid">
           ${text("category", "Category", item.category?.toUpperCase() === "UNSORTED" ? "" : item.category, html`required maxlength="100" autocomplete="off" autocorrect="on" spellcheck="true"`, "Letter case does not matter; an existing category is reused.")}
@@ -1233,7 +1302,7 @@ export async function workspace(): Promise<void> {
       const name = formatItemName(input.value);
       if (name !== input.value) { input.value = name; input.dispatchEvent(new Event("input", { bubbles: true })); }
     });
-    let intent = "save";
+    let mergeChoice: string | null = null;
     /*
      * An Unclassified item opened from Attention (or the list) shows the top suggestion for how it is used, with how sure it is and why.
      * It is only a button: nothing changes in the form until it is pressed, and nothing is saved until the form is.
@@ -1285,9 +1354,9 @@ export async function workspace(): Promise<void> {
       showClassification(values);
       const duplicate = form.querySelector<HTMLElement>("#duplicate-hint")!;
       const name = values.name.trim().toLowerCase();
-      const twin = name ? inventory?.items.find((entry) => entry.id !== item.id && entry.name.toLowerCase() === name) : undefined;
-      duplicate.hidden = !twin;
-      duplicate.textContent = twin ? `${twin.id} already uses this name. Check it is not the same item before saving.` : "";
+      const twins = name ? inventory?.items.filter((entry) => entry.id !== item.id && entry.name.trim().toLowerCase() === name) ?? [] : [];
+      duplicate.hidden = !twins.length;
+      mount(duplicate, html`${twins.map((twin) => html`<p><a class="text-link" href="/staff/items?item=${encodeURIComponent(twin.id)}" data-route>${twin.id}</a> · ${label(twin.status)}${twin.status === "INACTIVE" && values.status === "ACTIVE" ? html` <button type="button" class="text-link" data-merge="${twin.id}">Merge & remove duplicate</button>` : ""}</p>`)}`);
       const row = values.locationId ? rows.get(values.locationId) : undefined;
       mount(form.querySelector("#place-preview")!, row
         ? html`<p class="place-preview__path">${icon("pin")}<span>${paths.get(row.id)} · ${VISIBILITY_LABELS[row.visibility] ?? row.visibility}${row.photo ? " · has a picture" : ""}</span></p>${row.directions ? html`<p class="place-preview__directions">${row.directions}</p>` : ""}`
@@ -1343,12 +1412,19 @@ export async function workspace(): Promise<void> {
     });
     form.addEventListener("change", preview);
     form.addEventListener("click", (event) => {
-      const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[type=submit]");
-      if (button) intent = button.dataset.intent ?? "save";
+      const choice = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-merge]");
+      if (choice) {
+        mergeChoice = choice.dataset.merge ?? null;
+        form.requestSubmit();
+        mergeChoice = null;
+        return;
+      }
     });
     preview();
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null;
+      const intent = mergeChoice ? "merge" : submitter?.dataset.intent ?? "save";
       if (intent === "review-next") form.querySelector<HTMLInputElement>("input[name=reviewed]")!.checked = true;
       form.querySelectorAll("[aria-invalid]").forEach((element) => element.removeAttribute("aria-invalid"));
       const problems = invalidFields(form);
@@ -1360,15 +1436,32 @@ export async function workspace(): Promise<void> {
         problems[0]![0].focus();
         return;
       }
-      const buttons = [...form.querySelectorAll<HTMLButtonElement>("button[type=submit]")];
+      const sourceId = mergeChoice;
+      const source = sourceId ? inventory?.items.find((entry) => entry.id === sourceId && entry.status === "INACTIVE") : undefined;
+      const targetOnHand = detail?.item.id === item.id ? detail.item.onHand : item.onHand;
+      if (intent === "merge") {
+        if (!source || readDetails(form).status !== "ACTIVE") { setMessage(alert, "Reload and choose an inactive duplicate for this active item."); return; }
+        if (!window.confirm(`Save changes and merge ${source.id} into ${item.id}?\n\nStock: ${source.onHand} + ${targetOnHand} = ${source.onHand + targetOnHand} ${units(source.onHand + targetOnHand, readDetails(form).unit)}. Combine only separate stock.\n\nRemove ${source.id} from the catalogue; keep its history.`)) return;
+      }
+      let savedBeforeMerge = false;
+      const buttons = [...form.querySelectorAll<HTMLButtonElement>("button[type=submit], [data-merge]")];
       buttons.forEach((button) => { button.disabled = true; });
       setMessage(alert, "");
       try {
         const id = item.id!;
         // The queue is the list the reviewer was working through, captured before this save changes it.
         const queue = [...shownIds];
-        const result = await api<{ changed: number }>(`/api/staff/items/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ ...readDetails(form), updatedAt: item.updatedAt ?? null }) });
+        const result = await api<{ changed: number; updatedAt: string | null }>(`/api/staff/items/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ ...readDetails(form), updatedAt: item.updatedAt ?? null }) });
+        item.updatedAt = result.updatedAt;
         dirty = false;
+        if (intent === "merge" && source) {
+          savedBeforeMerge = true;
+          await api(`/api/staff/items/${encodeURIComponent(id)}/merge`, { method: "POST", body: JSON.stringify({ sourceId: source.id, sourceUpdatedAt: source.updatedAt, updatedAt: item.updatedAt, sourceOnHand: source.onHand, targetOnHand, confirmed: true }) });
+          await poll.refresh();
+          toast(`${source.id} merged into ${id}.`);
+          await loadDetail(id, "details");
+          return;
+        }
         await poll.refresh();
         if (intent === "review-next") {
           const next = queue.slice(queue.indexOf(id) + 1).find((candidate) => inventory?.items.find((entry) => entry.id === candidate)?.needsReview);
@@ -1381,7 +1474,7 @@ export async function workspace(): Promise<void> {
         await loadDetail(id, "details");
       } catch (error) {
         const stale = error instanceof ApiError && error.status === 409;
-        setMessage(alert, stale ? html`${failure(error)} <button type="button" class="text-link" data-reload>Load the latest details</button>` : failure(error));
+        setMessage(alert, stale ? html`${savedBeforeMerge ? "Details saved. " : ""}${failure(error)} <button type="button" class="text-link" data-reload>Load the latest details</button>` : `${savedBeforeMerge ? "Details saved. " : ""}${failure(error)}`);
         alert.querySelector("[data-reload]")?.addEventListener("click", () => { dirty = false; void loadDetail(item.id!, "details"); });
       } finally {
         buttons.forEach((button) => { button.disabled = false; });
