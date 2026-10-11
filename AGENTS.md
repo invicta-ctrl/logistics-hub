@@ -15,6 +15,12 @@ When the owner says `start RTV`, `start RTV3`, `continue RTV`, `continue RTV3`, 
 
 Product versions for Road to V3 remain **V2.1–V2.9** (RTV3-01–RTV3-09) then V3.0 GA. The owner explicitly placed **V1.16 Ambient Assist + Intelligent Core** immediately before Road to V3, despite the historical completed V2.0 baseline. V1.16 owns the first truthful deployed product-version/changelog display in the existing Administration → System > This version; V2.1/F4 must reuse and extend it, not build a second version display. V1.16's detailed implementation authority was explicitly accepted by the owner on 2026-10-11 at docs/specs/accepted/v1.16-ambient-intelligent-core.md.
 
+## Mandatory product subversions after merging to main (owner rule, 2026-10-11)
+
+**All agents must follow `docs/PRODUCT_VERSION_GOVERNANCE.md` without being reminded.** Base releases are `V<major>.<minor>` (example `V1.15`); each separately completed, verified, product-affecting revision **after that version was merged into main** automatically receives the next `V<major>.<minor>.<revision>`: `V1.15.1`, `V1.15.2`, `V1.15.3`, etc. Count **one per independently merged release**, not one per edit/commit/checkpoint; include all fixes in that revision's changelog. Do not increment for documentation-only work, failed/rejected work, or unreleased main-version slices. Verify the last actual release/current main, avoid collisions, preserve history; never backfill invented revision numbers.
+
+Every qualifying main merge must have a verified version identity, concise changelog/release record, tests, deployment evidence and truthful Administration > System display **once the accepted V1.16 version feature is actually deployed**. Until then record the revision in repository evidence without pretending the UI exists. Incomplete slices never merge or count as released. This is permanent, not V1.16-only; see detailed governing contract.
+
 ## Non-negotiables
 
 - Writable/local-preview worktree: `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`.
