@@ -1441,7 +1441,7 @@ export async function workspace(): Promise<void> {
       const targetOnHand = detail?.item.id === item.id ? detail.item.onHand : item.onHand;
       if (intent === "merge") {
         if (!source || readDetails(form).status !== "ACTIVE") { setMessage(alert, "Reload and choose an inactive duplicate for this active item."); return; }
-        if (!window.confirm(`Save changes and merge ${source.id} into ${item.id}?\n\nStock: ${source.onHand} + ${targetOnHand} = ${source.onHand + targetOnHand} ${item.unit}. Combine only separate stock.\n\nRemove ${source.id} from the catalogue; keep its history.`)) return;
+        if (!window.confirm(`Save changes and merge ${source.id} into ${item.id}?\n\nStock: ${source.onHand} + ${targetOnHand} = ${source.onHand + targetOnHand} ${units(source.onHand + targetOnHand, readDetails(form).unit)}. Combine only separate stock.\n\nRemove ${source.id} from the catalogue; keep its history.`)) return;
       }
       let savedBeforeMerge = false;
       const buttons = [...form.querySelectorAll<HTMLButtonElement>("button[type=submit], [data-merge]")];
