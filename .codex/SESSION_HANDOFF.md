@@ -1,17 +1,17 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
-## V1.16 planned consolidation / documentation-only remote checkpoint — 2026-10-11
+## V1.16 owner-accepted implementation handoff — 2026-10-11
 
 ~~~text
-STATUS: PROPOSED SPEC AND GOVERNANCE DOCS ONLY. V1.16 is NOT implemented, COMPLETE, merged to main, or deployed. Do not call this a shipped V1.16 product.
-BASE: main 711547d41d4c560fe35d0d46de755f3e8718796c (verified when branch was created; refresh actual refs before next action).
-BRANCH: slice/v1.16-ambient-core. Preserve it and all unknown local work. Owner says V1.15 is closed and writer lock lifted; future implementer still verifies and claims appropriate lock before editing.
-SPEC: docs/specs/proposed/v1.16-ambient-intelligent-core.md, owner acceptance pending. Accepted-spec gate is NOT waived by high-level chat direction.
-SCOPE: No-chat invisible assistance, independent deterministic operation under AI quota/outage, verified staff-correction learning, four-role evaluation, and actual deployed V1.16 label plus concise changelog in existing Administration/System. V2.1/F4 reuses version display; V2.1/F7 reuses validated router work only.
-DONE: Written proposed spec; updated AGENTS, policy, shared workflow, CLAUDE, Road-to-V3 AI baseline/README/release map/foundation/owner decisions, and proposed Product Reference description. Further docs may be updated in this checkpoint. All writes are documentation only.
-TESTS: No application tests run (no runtime files changed). Final docs diff/refs/privacy and remote checks remain to be inspected; do not report them passed without evidence.
-NEXT: Ask owner to explicitly accept the proposed spec as implementation baseline. Once accepted, reconcile current branch/ref and writer lock; implement the first independently complete vertical slice and verify. Commit/push every working checkpoint to active slice; merge/prune immediately when a slice is genuinely complete/green; do not deploy unverified changes. Version product label is last-release qualified, never guessed from branch name.
-STOP: No further implementation before accepted spec; preserve honest PROPOSED status instead of claiming full version completion.
+STATUS: OWNER ACCEPTED SCOPE; IMPLEMENTATION NOT STARTED. V1.16 is not COMPLETE, merged as a product release, or deployed. V2 final readiness remains OPEN.
+ACCEPTED SPEC: docs/specs/accepted/v1.16-ambient-intelligent-core.md. Owner explicitly approved on 2026-10-11 and specified that V1.16 must finish before V2 is declared genuinely complete and ready for V3. No need to request this specification acceptance again.
+BASE: remote main 711547d41d4c560fe35d0d46de755f3e8718796c at planning-branch creation; refresh current refs/CI/writer state before implementing.
+BRANCH: slice/v1.16-ambient-core has documentation/governance/acceptance work only. Preserve unknown local work. Green independently complete docs checkpoint may merge under normal gates but never label the product as V1.16 until actual full release qualification.
+WRITER: owner reports previous V1.15 writer lock lifted. This remote session could not check/claim the local lock. Future code writer must inspect and claim exact worktree writer authority before editing.
+DONE: Proposed detailed specification adopted as accepted; mapped V1.16 to final V2 readiness gate and V2.1 reuse of verified shared components. Updated policy banning incomplete release claims and requiring working checkpoints pushed to one slice and immediate green-slice integration into main.
+REMAINING: all S0–S5 source implementation, UI release version/changelog, AI fallback/degraded-mode tests, independent Intelligent Core regression, verified learning, role benchmark, production/owner QA and full release evidence. Nothing in this checkpoint demonstrates those outcomes.
+NEXT: verify main/branch/worktree/other writers, claim writer lock; implement smallest complete S0/S1 slice with acceptance tests. Push checkpoint commits on current slice branch, merge each independently functional verified-green slice into main, prune, and branch new slice from latest main; do not claim final V2 readiness prematurely.
+STOP: unverified lock, source, CI, deployment or critical data integrity prevents substantive changes; preserve accurate blocked handoff. No paid upgrades/provider writes without separate authority.
 ~~~
 
 
