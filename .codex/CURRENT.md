@@ -18,8 +18,8 @@
 
 ## Next safe action
 
-1. Refresh main, current refs, clean tree and writer ownership. The completed source branch is pruned; start the next bounded accepted V1.16 slice from fresh main only after claiming the lock.
-2. Finish the remaining A/S1 qualification gaps recorded in the execution card, then proceed through grounded hints, verified learning/evaluation, version metadata and full-version acceptance. Keep deterministic core actions independent; text roles remain REVIEW_ONLY.
+1. Active A2 slice: `slice/v1.16-assist-fallbacks`, base `a869be4c27b51cb29dc50b167a6ee0e4d6c13b5d`; Codex has claimed the writer lock. Read live refs for the checkpoint HEAD. Full baseline CI 38138146737 passed.
+2. Finish bounded provider timeout/late-reply and HTTP failure qualification, plus blocked-binding stock/count/lending proof. Frozen A2 contracts are in the execution card. Then proceed through grounded hints, verified learning/evaluation, version metadata and full-version acceptance. Keep deterministic core actions independent; text roles remain REVIEW_ONLY.
 3. Commit/push coherent checkpoints; merge each independently green slice, verify main deployment and prune it. V1.16 and final V2 readiness remain OPEN until every accepted gate qualifies.
 
 ## Historical continuity

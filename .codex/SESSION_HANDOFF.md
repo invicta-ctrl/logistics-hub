@@ -1,6 +1,6 @@
 # Session Handoff — Logistics Hub
 
-**State: V1.15 closed; first independent V1.16 slice A1 verified, integrated and deployment-confirmed, 2026-10-11. Full V1.16 remains OPEN.**
+**State: V1.15 closed; V1.16 A1 delivered; A2 provider fallback/core independence slice IN PROGRESS, 2026-10-11. Full V1.16 remains OPEN.**
 
 ## Exact source and ownership
 
@@ -32,7 +32,7 @@
 
 ## First next action
 
-Refresh main/refs and claim the free writer lock before a new slice. Finish the specific A/S1 qualification gaps in the execution card on one fresh slice; preserve deterministic manual work and REVIEW_ONLY text roles. Continue accepted B–E/S2–S5 only as independent complete outcomes. Push checkpoints, integrate each green slice, confirm deployment, prune; never label the full version COMPLETE while any accepted gate remains open.
+Active branch `slice/v1.16-assist-fallbacks` from verified main `a869be4c27b51cb29dc50b167a6ee0e4d6c13b5d` (full CI 38138146737 passed). Codex holds the writer lock; one read-only specialist supplied a `/tmp` patch for existing core cases. A2 implementation is in `ambient-assist.ts`/`ai-roles.ts`: shared 10-second deadline, bounded failure codes, unchanged API fallback/reservations. Existing adapter cases qualify HTTP failures and ignored late answers; existing Worker cases hold an AI binding and assert zero calls through stock/count/replay and loans/returns/audit. Local build/typecheck/diff passed; automatic exact-source CI, CodeQL and configured deployment remain pending. No local product/provider tests. Read live HEAD/checks before integration. Preserve deterministic manual work and REVIEW_ONLY text roles. Continue B–E/S2–S5 only as independent complete outcomes. Push checkpoints, integrate each green slice, confirm deployment, prune; never label the full version COMPLETE while any accepted gate remains open.
 
 ## Historical handoffs
 

@@ -1,6 +1,6 @@
 import type { ReviewProposal } from "./ai-review-types";
 export type { ReviewProposal } from "./ai-review-types";
-import { type AiRunner, BANDS, BREAKER_FAILURES, BREAKER_MS, CALL_TIMEOUT_MS, type Urgency, assistOn, reserve, spend } from "./ambient-assist";
+import { type AiRunner, BANDS, BREAKER_FAILURES, BREAKER_MS, type Urgency, assistOn, callFailure, callModel, reserve, spend } from "./ambient-assist";
 import { aiReplyText } from "./catalog-ai";
 import { words } from "./duplicates";
 
@@ -160,22 +160,16 @@ export async function runRole(db: D1Database, ai: AiRunner | undefined, role: Te
     const limits = ROLE_LIMITS[role];
     if (!await reserve(db, limits.reserve, urgency, now)) return done("ABSTAIN", "BUDGET");
     let reply: unknown;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      reply = await Promise.race([
-        ai.run(ROLE_MODELS[role], {
-          messages: [{ role: "system", content: task.system }, { role: "user", content: task.user }],
-          response_format: { type: "json_schema", json_schema: { type: "object", properties: { [task.field]: { type: ["string", "null"], enum: [...task.allowed, null] } }, required: [task.field], additionalProperties: false } },
-          max_tokens: limits.maxTokens, temperature: 0, ...(limits.thinkingOption ? { chat_template_kwargs: { enable_thinking: false } } : {})
-        }),
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), CALL_TIMEOUT_MS); })
-      ]);
-    } catch {
+      reply = await callModel(ai, ROLE_MODELS[role], {
+        messages: [{ role: "system", content: task.system }, { role: "user", content: task.user }],
+        response_format: { type: "json_schema", json_schema: { type: "object", properties: { [task.field]: { type: ["string", "null"], enum: [...task.allowed, null] } }, required: [task.field], additionalProperties: false } },
+        max_tokens: limits.maxTokens, temperature: 0, ...(limits.thinkingOption ? { chat_template_kwargs: { enable_thinking: false } } : {})
+      });
+    } catch (error) {
       breaker.failures += 1;
       if (breaker.failures >= BREAKER_FAILURES) { breaker.openUntil = now + BREAKER_MS; breaker.failures = 0; }
-      return done("UNAVAILABLE", "CALL_FAILED", null, limits.reserve);
-    } finally {
-      clearTimeout(timer);
+      return done("UNAVAILABLE", callFailure(error), null, limits.reserve);
     }
     breaker.failures = 0;
     const neurons = neuronsOf(reply, limits.reserve);

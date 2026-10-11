@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/worker";
-import { BANDS, PHOTO_MODEL, PHOTO_RESERVE, type AiRunner, bandOf, mayCall, neuronsToday, photoName, readPhotoName, readPhotoReading, resetBreaker } from "../src/ambient-assist";
+import { BANDS, CALL_TIMEOUT_MS, PHOTO_MODEL, PHOTO_RESERVE, type AiRunner, bandOf, mayCall, neuronsToday, photoName, readPhotoName, readPhotoReading, resetBreaker } from "../src/ambient-assist";
 import { attention } from "../src/attention";
 import { hashPassword } from "../src/session";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
@@ -42,7 +42,7 @@ beforeEach(async () => {
   owner = await seed("ACC-O", "owner.one", "OWNER");
   admin = await seed("ACC-A", "admin.one", "ADMIN");
 });
-afterEach(() => resetBreaker());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); resetBreaker(); });
 
 const PHOTO = jpeg({ width: 32, height: 24 });
 const nameOf = (bytes: Uint8Array = PHOTO, cookie = staff) => call("/api/staff/catalogue/photo-name", { method: "POST", headers: { origin, cookie, "content-type": "image/jpeg", "content-length": String(bytes.length) }, body: bytes as BlobPart });
@@ -123,15 +123,44 @@ describe("what a model is sent and what is kept", () => {
     for (const reply of [null, "nope", chat("not json"), { choices: [] }, chat("[\"hammer\"]")]) expect(readPhotoName(reply)).toBeNull();
   });
 
-  it("never sends what is not a JPEG, and a failing model opens the breaker after three tries", async () => {
+  it.each([[403, "ACCESS_DENIED"], [429, "RATE_LIMITED"], [500, "PROVIDER_ERROR"], [undefined, "CALL_FAILED"]] as const)("refuses non-JPEG media and falls back with a breaker for provider status %s", async (status, reason) => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     expect((await photoName(env.DB, env.AI, new TextEncoder().encode("GIF89a"), "USER")).outcome).toBe("NO_NAME");
     expect(sent).toHaveLength(0);
-    answer = () => { throw new Error("provider down"); };
-    for (let attempt = 0; attempt < 3; attempt += 1) expect((await photoName(env.DB, env.AI, PHOTO, "USER")).outcome).toBe("FAILED");
+    answer = () => { throw Object.assign(new Error("private provider response"), { status }); };
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      expect(await photoName(env.DB, env.AI, PHOTO, "USER")).toEqual({ name: null, outcome: "FAILED" });
+      expect(JSON.parse(log.mock.calls.at(-1)![0] as string)).toMatchObject({ assist: "PHOTO_NAME", outcome: "FAILED", reason, neurons: PHOTO_RESERVE });
+    }
     expect((await photoName(env.DB, env.AI, PHOTO, "USER")).outcome).toBe("BREAKER");
     expect(sent).toHaveLength(3);
     // A failed call may still have run: it is counted at its reserve.
     expect(await neuronsToday(env.DB)).toBe(3 * PHOTO_RESERVE);
+    expect(JSON.stringify(log.mock.calls)).not.toContain("private provider response");
+  });
+
+  it("abandons a slow photo once and ignores its late name and cost without resetting the breaker", async () => {
+    vi.useFakeTimers();
+    const now = Date.now();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    let finish!: (reply: unknown) => void;
+    let started!: () => void;
+    const called = new Promise<void>((resolve) => { started = resolve; });
+    answer = () => { started(); return new Promise<unknown>((resolve) => { finish = resolve; }); };
+    const pending = photoName(env.DB, env.AI, PHOTO, "USER", "PHOTO_NAME", now);
+    await called;
+    await vi.advanceTimersByTimeAsync(CALL_TIMEOUT_MS - 1);
+    expect(log).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pending).toEqual({ name: null, outcome: "FAILED" });
+    expect(JSON.parse(log.mock.calls.at(-1)![0] as string)).toMatchObject({ reason: "CALL_TIMEOUT", neurons: PHOTO_RESERVE });
+    answer = () => { throw new Error("down"); };
+    for (let index = 0; index < 2; index += 1) expect((await photoName(env.DB, env.AI, PHOTO, "USER", "PHOTO_NAME", now)).outcome).toBe("FAILED");
+    finish(chat('{"name":"late calculator"}', 0.1));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await neuronsToday(env.DB, now)).toBe(3 * PHOTO_RESERVE);
+    expect((await photoName(env.DB, env.AI, PHOTO, "USER", "PHOTO_NAME", now)).outcome).toBe("BREAKER");
+    expect(sent).toHaveLength(3);
   });
 
   it("lets only one of two calls that both see a count just under the stop line start (review on PR 22)", async () => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
@@ -131,6 +131,8 @@ describe("movement-derived inventory", () => {
   });
 
   it("records stock in, guarded stock out, and count adjustments as appended movements", async () => {
+    const run = vi.fn(() => new Promise<never>(() => {}));
+    env.AI = { run };
     const cookie = await signIn();
     const move = (body: object) => staff(cookie, "/api/staff/items/ITM-0001/movements", "POST", body);
     expect(await (await move({ kind: "IN", quantity: 3, reason: "DELIVERY", key: "stock-in-key-1" })).json()).toMatchObject({ onHand: 10 });
@@ -147,6 +149,7 @@ describe("movement-derived inventory", () => {
     ]);
     expect(() => sqlite.exec("UPDATE inventory_movements SET signed_quantity = 100")).toThrow(/append-only/);
     expect(() => sqlite.exec("DELETE FROM inventory_movements")).toThrow(/append-only/);
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("validates metadata edits and audits the change", async () => {
@@ -247,6 +250,8 @@ describe("Part 3 — stock and pantry", () => {
   });
 
   it("never lets stock go negative and counts a retried request once", async () => {
+    const run = vi.fn(() => new Promise<never>(() => {}));
+    env.AI = { run };
     const cookie = await signIn();
     const onHand = (await stock(cookie)).items.find((item) => item.id === "ITM-0003")!.onHand;
     const refused = await move(cookie, "ITM-0003", { kind: "OUT", quantity: onHand + 1, reason: "ISSUED" });
@@ -257,6 +262,7 @@ describe("Part 3 — stock and pantry", () => {
     expect(await (await staff(cookie, "/api/staff/items/ITM-0003/movements", "POST", body)).json()).toEqual({ onHand: onHand + 2, change: 2 });
     expect(sqlite.prepare("SELECT COUNT(*) AS total FROM inventory_movements WHERE idempotency_key = 'retry-stock-key-01'").get()).toEqual({ total: 1 });
     expect((await staff(cookie, "/api/staff/items/ITM-0004/movements", "POST", body)).status).toBe(409);
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("answers the Attention numbers from the catalog revision: a repeat costs a 304 until something is written", async () => {
@@ -410,6 +416,8 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
   });
 
   it("lends for individual use with a student ID and photo, takes it off the shelf, and never double-lends a retry", async () => {
+    const run = vi.fn(() => new Promise<never>(() => {}));
+    env.AI = { run };
     const cookie = await signIn();
     const itemId = await lendable(cookie, 5);
     expect((await lend(cookie, itemId, { borrowerName: "Test Borrower" })).status).toBe(400);
@@ -430,6 +438,7 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
     expect(refused.status).toBe(409);
     expect((await refused.json() as { error: string }).error).toBe("Only 3 on hand; cannot lend 4.");
     expect(photos.size).toBe(1);
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("lends for USC use with a reason, and lends only active Loanable items", async () => {
@@ -444,6 +453,8 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
   });
 
   it("returns a loan to the shelf, keeps damaged and lost items off it, and closes each loan once", async () => {
+    const run = vi.fn(() => new Promise<never>(() => {}));
+    env.AI = { run };
     const cookie = await signIn();
     const itemId = await lendable(cookie, 3);
     const ids = [];
@@ -469,6 +480,7 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
     expect(detail.loans).toHaveLength(3);
     expect(detail.movements.filter((movement) => movement.movementType.startsWith("LOAN")).map((movement) => movement.borrower)).toEqual(["Test Borrower A", "Test Borrower C", "Test Borrower B", "Test Borrower A"]);
     expect(detail.events.filter((event) => event.action.startsWith("LOAN")).map((event) => event.action)).toEqual(["LOAN_CLOSED", "LOAN_CLOSED", "LOAN_CLOSED", "LOAN_CREATED", "LOAN_CREATED", "LOAN_CREATED"]);
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("ranks borrowers separately for individual and USC use, per period", async () => {

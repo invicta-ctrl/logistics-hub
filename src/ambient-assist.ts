@@ -40,6 +40,31 @@ export type Urgency = "USER" | "BACKGROUND";
 export const PHOTO_RESERVE = 6;
 /** A call this slow is abandoned (one of 24 measured calls took 28 s); the person keeps typing meanwhile. */
 export const CALL_TIMEOUT_MS = 10_000;
+class ModelCallTimeout extends Error {}
+export type CallFailure = "CALL_TIMEOUT" | "ACCESS_DENIED" | "RATE_LIMITED" | "PROVIDER_ERROR" | "CALL_FAILED";
+
+/** Fixed diagnostics only. An opaque binding error stays generic; never read or log its message/body. */
+export function callFailure(error: unknown): CallFailure {
+  if (error instanceof ModelCallTimeout) return "CALL_TIMEOUT";
+  const status = error && typeof error === "object" ? (error as { status?: unknown }).status : null;
+  if (status === 403) return "ACCESS_DENIED";
+  if (status === 429) return "RATE_LIMITED";
+  if (typeof status === "number" && status >= 500 && status <= 599) return "PROVIDER_ERROR";
+  return "CALL_FAILED";
+}
+
+/** Abandon a slow call without processing its eventual answer. The binding need not support cancellation. */
+export async function callModel(ai: AiRunner, model: string, input: unknown): Promise<unknown> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      ai.run(model, input),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new ModelCallTimeout()), CALL_TIMEOUT_MS); })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 /** Consecutive failures that open the breaker, and how long it stays open. Per Worker instance: a restart simply tries again. */
 export const BREAKER_FAILURES = 3;
 export const BREAKER_MS = 10 * 60_000;
@@ -187,7 +212,7 @@ const base64 = (bytes: Uint8Array) => {
 };
 
 /** Aggregate only: the task, the outcome, the time and the cost. Never the photo or the answer. */
-const log = (task: string, outcome: PhotoOutcome, ms: number, neurons: number) => console.log(JSON.stringify({ assist: task, model: PHOTO_MODEL, outcome, ms, neurons }));
+const log = (task: string, outcome: PhotoOutcome, ms: number, neurons: number, reason?: CallFailure) => console.log(JSON.stringify({ assist: task, model: PHOTO_MODEL, outcome, ...(reason ? { reason } : {}), ms, neurons }));
 
 /**
  * Names the thing in a catalogue photo (a JPEG of at most `MAX_PHOTO_BYTES`), or answers null for any reason at all: the caller shows
@@ -196,7 +221,7 @@ const log = (task: string, outcome: PhotoOutcome, ms: number, neurons: number) =
 export const MAX_PHOTO_BYTES = 400_000;
 export async function photoName(db: D1Database, ai: AiRunner | undefined, jpeg: Uint8Array, urgency: Urgency, task = "PHOTO_NAME", now = Date.now()): Promise<{ name: string | null; outcome: PhotoOutcome; reading?: PhotoReading }> {
   const started = Date.now();
-  const done = (outcome: PhotoOutcome, name: string | null = null, neurons = 0, reading?: PhotoReading) => { log(task, outcome, Date.now() - started, neurons); return reading ? { name, outcome, reading } : { name, outcome }; };
+  const done = (outcome: PhotoOutcome, name: string | null = null, neurons = 0, reading?: PhotoReading, reason?: CallFailure) => { log(task, outcome, Date.now() - started, neurons, reason); return reading ? { name, outcome, reading } : { name, outcome }; };
   try {
     if (!ai) return done("UNAVAILABLE");
     if (!await assistOn(db)) return done("OFF");
@@ -206,21 +231,15 @@ export async function photoName(db: D1Database, ai: AiRunner | undefined, jpeg: 
     // have run, so it keeps the reserve.
     if (!await reserve(db, PHOTO_RESERVE, urgency, now)) return done("BUDGET");
     let reply: unknown;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      reply = await Promise.race([
-        ai.run(PHOTO_MODEL, {
-          messages: [{ role: "system", content: INSTRUCTION }, { role: "user", content: [{ type: "text", text: "What is this item?" }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64(jpeg)}` } }] }],
-          response_format: { type: "json_schema", json_schema: NAME_SCHEMA }, max_tokens: 64, temperature: 0, chat_template_kwargs: { enable_thinking: false }
-        }),
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), CALL_TIMEOUT_MS); })
-      ]);
-    } catch {
+      reply = await callModel(ai, PHOTO_MODEL, {
+        messages: [{ role: "system", content: INSTRUCTION }, { role: "user", content: [{ type: "text", text: "What is this item?" }, { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64(jpeg)}` } }] }],
+        response_format: { type: "json_schema", json_schema: NAME_SCHEMA }, max_tokens: 64, temperature: 0, chat_template_kwargs: { enable_thinking: false }
+      });
+    } catch (error) {
       breaker.failures += 1;
       if (breaker.failures >= BREAKER_FAILURES) { breaker.openUntil = now + BREAKER_MS; breaker.failures = 0; }
-      return done("FAILED", null, PHOTO_RESERVE);
-    } finally {
-      clearTimeout(timer);
+      return done("FAILED", null, PHOTO_RESERVE, undefined, callFailure(error));
     }
     breaker.failures = 0;
     const neurons = neuronsOf(reply);

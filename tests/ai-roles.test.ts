@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type RouteState, FACT_CODES, MAX_TERMS, ROLE_LIMITS, ROLE_MODELS, ROUTE_STATE, type TextRole, arbitrateTask, normalizeTask, readChoice, resetRoleBreakers, route, runRole, secondOpinionTask } from "../src/ai-roles";
-import { BANDS, type AiRunner, neuronsToday, resetBreaker } from "../src/ambient-assist";
+import { BANDS, CALL_TIMEOUT_MS, type AiRunner, neuronsToday, resetBreaker } from "../src/ambient-assist";
 import { migratedD1 } from "./d1-sqlite";
 
 /* Final Pass FP-D (mocked): the three text adapters, their limits and the router. No live call has been made. */
@@ -14,6 +14,7 @@ const SHADOW = { ...ROUTE_STATE };
 const active = () => { for (const role of Object.keys(ROUTE_STATE) as TextRole[]) ROUTE_STATE[role] = "ACTIVE_ELIGIBLE" as RouteState; };
 
 beforeEach(() => { Object.assign(ROUTE_STATE, SHADOW); db = migratedD1().d1; sent = []; answer = () => chat('{"term":"Stapler"}', 1.2); resetBreaker(); resetRoleBreakers(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe("the four roles", () => {
   it("maps each role to its accepted model, and starts every text role review-only", () => {
@@ -121,15 +122,35 @@ describe("running a role", () => {
     expect(await runRole(db, ai, "TEXT_NORMALIZE", task(), "USER", {})).toMatchObject({ reason: "SWITCHED_OFF" });
   });
 
-  it("keeps the reserve after a failure, opens that role's breaker after three, and leaves the other roles alone", async () => {
+  it.each([[403, "ACCESS_DENIED"], [429, "RATE_LIMITED"], [500, "PROVIDER_ERROR"], [undefined, "CALL_FAILED"]] as const)("keeps one reserve per failure for provider status %s and leaves other roles alone", async (status, reason) => {
     active();
-    answer = () => { throw new Error("down"); };
-    for (let index = 0; index < 3; index += 1) expect(await runRole(db, ai, "TEXT_NORMALIZE", task(), "USER", {})).toMatchObject({ outcome: "UNAVAILABLE", reason: "CALL_FAILED" });
+    answer = () => { throw Object.assign(new Error("private provider response"), { status }); };
+    for (let index = 0; index < 3; index += 1) expect(await runRole(db, ai, "TEXT_NORMALIZE", task(), "USER", {})).toMatchObject({ outcome: "UNAVAILABLE", reason, value: null, proposal: null, observed: null });
     expect(await runRole(db, ai, "TEXT_NORMALIZE", task(), "USER", {})).toMatchObject({ reason: "BREAKER_OPEN" });
     expect(sent).toHaveLength(3);
+    expect(await neuronsToday(db)).toBe(3 * ROLE_LIMITS.TEXT_NORMALIZE.reserve);
     answer = () => chat('{"id":"a"}', 2);
     const other = await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("x", [{ id: "a", name: "A" }, { id: "b", name: "B" }]), "USER", {});
     expect(other).toMatchObject({ outcome: "ANSWER", value: "a" });
+  });
+
+  it("bounds a review-only call and discards a late proposal and reported cost", async () => {
+    vi.useFakeTimers();
+    const now = Date.now();
+    let finish!: (reply: unknown) => void;
+    let started!: () => void;
+    const called = new Promise<void>((resolve) => { started = resolve; });
+    answer = () => { started(); return new Promise<unknown>((resolve) => { finish = resolve; }); };
+    const pending = runRole(db, ai, "TEXT_NORMALIZE", task(), "USER", { now });
+    await called;
+    await vi.advanceTimersByTimeAsync(CALL_TIMEOUT_MS);
+    const result = await pending;
+    expect(result).toMatchObject({ outcome: "UNAVAILABLE", reason: "CALL_TIMEOUT", value: null, proposal: null, observed: null, neurons: ROLE_LIMITS.TEXT_NORMALIZE.reserve });
+    finish(chat('{"term":"Stapler"}', 0.1));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(result.proposal).toBeNull();
+    expect(await neuronsToday(db, now)).toBe(ROLE_LIMITS.TEXT_NORMALIZE.reserve);
+    expect(sent).toHaveLength(1);
   });
 
   it("turns thinking off for the reasoning models", async () => {
