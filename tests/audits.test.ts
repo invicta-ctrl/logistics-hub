@@ -141,7 +141,7 @@ describe("observing", () => {
     expect([tape, glue, pens, label, stray].map((each) => [onHand(each), movementsOf(each), locationOf(each)])).toEqual(before);
     const shown = await detail(one, id);
     expect(shown.checked).toBe(4);
-    expect(shown.extras.map((entry) => [entry.outcome, entry.name]).sort()).toEqual([["FOUND_HERE", "Stray scissors"], ["UNLISTED", "Blue extension reel"]]);
+    expect(shown.extras.map((entry) => [entry.outcome, entry.name]).sort()).toEqual([["FOUND_HERE", "Stray Scissors"], ["UNLISTED", "Blue extension reel"]]);
     expect((await finish(one, id)).status).toBe(200);
     expect([tape, glue, pens, label, stray].map((each) => [onHand(each), movementsOf(each), locationOf(each)])).toEqual(before);
   });

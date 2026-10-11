@@ -138,12 +138,12 @@ describe("insights", () => {
     insert(40);
     const shown = await card("borrowed");
     expect(shown).toMatchObject({ title: "What equipment is borrowed most?", window: "Last 90 days", rule: "Items lent at least twice." });
-    expect(shown!.rows).toEqual([expect.objectContaining({ name: "Lent projector", href: `/staff/items?item=${lent}`, evidence: expect.stringContaining("Lent 2 times") })]);
+    expect(shown!.rows).toEqual([expect.objectContaining({ name: "Lent Projector", href: `/staff/items?item=${lent}`, evidence: expect.stringContaining("Lent 2 times") })]);
     // A loan from before the window is not evidence.
     const old = await item("Old tripod", 5, { itemType: "Loanable", lendingAudience: "STUDENTS_AND_USC_STAFF" });
     sqlite.prepare("INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, photo_key, status, movement_id, created_at, created_by) VALUES(?, ?, 1, 'INDIVIDUAL', 'Pat', 'TEST-0001', 'k', 'OUT', ?, ?, 'ACC-1')").run(`LN-${uuid()}`, old, insertMovement(old), daysAgo(120));
     sqlite.prepare("INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, photo_key, status, movement_id, created_at, created_by) VALUES(?, ?, 1, 'INDIVIDUAL', 'Pat', 'TEST-0001', 'k', 'OUT', ?, ?, 'ACC-1')").run(`LN-${uuid()}`, old, insertMovement(old), daysAgo(100));
-    expect((await card("borrowed"))!.rows.map((row) => row.name)).toEqual(["Lent projector"]);
+    expect((await card("borrowed"))!.rows.map((row) => row.name)).toEqual(["Lent Projector"]);
   });
 
   /** A movement row for a loan's NOT NULL link; its stock effect does not matter to these counts. */
@@ -164,13 +164,13 @@ describe("insights", () => {
     await move(rare, { kind: "OUT", quantity: 90, reason: "CONSUMED" });
     const shown = (await card("used"))!;
     expect(shown).toMatchObject({ window: "Last 30 days", advisory: true });
-    expect(shown.rows.map((row) => row.name)).toEqual(["Fast paper", "Slow glue"]);
+    expect(shown.rows.map((row) => row.name)).toEqual(["Fast Paper", "Slow Glue"]);
     expect(shown.rows[0]!.evidence).toBe("55 reams taken out, 2 times. 45 left; the reorder level is 10.");
     expect(shown.rows[1]!.evidence).toContain("no reorder level is set");
     // Taken out before the window is not evidence.
     const stale = await item("Stale glue", 100);
     for (const days of [45, 50]) sqlite.prepare("INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, status) VALUES(?, ?, 'STOCK_OUT', 'OUT', ?, 9, 'piece', -9, 'POSTED')").run(`MV-${uuid()}`, daysAgo(days), stale);
-    expect((await card("used"))!.rows.map((row) => row.name)).toEqual(["Fast paper", "Slow glue"]);
+    expect((await card("used"))!.rows.map((row) => row.name)).toEqual(["Fast Paper", "Slow Glue"]);
   });
 
   it("names the items that were restocked more than once, ignoring dismissed requests, as advice only", async () => {
@@ -181,7 +181,7 @@ describe("insights", () => {
     reorder(pens, "DISMISSED", 20); reorder(pens, "DISMISSED", 10);
     const shown = (await card("short"))!;
     expect(shown).toMatchObject({ advisory: true, window: "Last 90 days" });
-    expect(shown.rows).toEqual([expect.objectContaining({ name: "Short tape", evidence: expect.stringContaining("A restock was requested 2 times") })]);
+    expect(shown.rows).toEqual([expect.objectContaining({ name: "Short Tape", evidence: expect.stringContaining("A restock was requested 2 times") })]);
     expect(shown.rows[0]!.evidence).toContain("The reorder level is 3.");
   });
 
@@ -222,7 +222,7 @@ describe("insights", () => {
     expect(await card("corrections")).toBeUndefined();
     await edit({ itemType: "Consumable", lendingAudience: "NOT_AVAILABLE_FOR_LENDING" });
     const shown = (await card("corrections"))!;
-    expect(shown.rows).toEqual([expect.objectContaining({ name: "Wavering marker", href: `/staff/items?item=${id}&tab=history`, evidence: expect.stringContaining("Its use was changed 2 times") })]);
+    expect(shown.rows).toEqual([expect.objectContaining({ name: "Wavering Marker", href: `/staff/items?item=${id}&tab=history`, evidence: expect.stringContaining("Its use was changed 2 times") })]);
     expect(shown.rows[0]!.evidence).toContain("Now: Take.");
   });
 
@@ -246,7 +246,7 @@ describe("insights", () => {
     for (const days of [2, 3]) sqlite.prepare("INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, photo_key, status, movement_id, created_at, created_by) VALUES(?, ?, 1, 'INDIVIDUAL', 'Secret Borrower', 'TEST-0001', 'k', 'OUT', ?, ?, 'ACC-1')").run(`LN-${uuid()}`, lent, insertMovement(lent), daysAgo(days));
     const before = tableSizes();
     const text = JSON.stringify(await insights()) + JSON.stringify(await resumable());
-    expect(text).toContain("Private lens");
+    expect(text).toContain("Private Lens");
     for (const secret of ["Secret Borrower", "Staff One", "staff.one", "ACC-1"]) expect(text).not.toContain(secret);
     expect(tableSizes()).toEqual(before);
   });

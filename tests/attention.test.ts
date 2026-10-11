@@ -283,8 +283,8 @@ describe("kits", () => {
     const kit = (await json<{ id: string }>(response)).id;
     const [entry] = await entriesFor("KIT_REPLENISH", "Mending kit");
     expect(entry).toMatchObject({ source: "Kits", urgency: "SOON", href: `/staff/kits?kit=${kit}`, action: "Open the kit", since: null });
-    expect(entry!.why).toContain("Kit needles");
-    expect(entry!.why).not.toContain("Kit thread");
+    expect(entry!.why).toContain("Kit Needles");
+    expect(entry!.why).not.toContain("Kit Thread");
     await move(needles, { kind: "IN", quantity: 5, reason: "DELIVERY" });
     expect(await entriesFor("KIT_REPLENISH", "Mending kit")).toEqual([]);
   });
@@ -351,7 +351,7 @@ describe("Self-Service", () => {
     phone("a", "ERROR").run(uuid(), 3, id, new Date().toISOString(), "ERROR");
     sqlite.prepare(`INSERT INTO location_reports(id, item_id, kind, source, client_tag, created_at, reporter_name) VALUES(?, ?, 'CANT_FIND', 'SELF_SERVICE', 'tag', ?, 'Pat')`).run(uuid(), id, new Date().toISOString());
     const session = await json<{ selfServiceReviews: number }>(as(one, "/api/staff/session"));
-    const entries = (await inbox()).entries.filter((entry) => entry.source === "Self-Service" && entry.title.includes("Badge item"));
+    const entries = (await inbox()).entries.filter((entry) => entry.source === "Self-Service" && entry.title.includes("Badge Item"));
     expect(session.selfServiceReviews).toBe(2);
     expect(entries.map((entry) => entry.reason).sort()).toEqual(["PHONE_RECORD", "PHONE_REPORT"]);
     expect(entries.find((entry) => entry.reason === "PHONE_REPORT")!.why).toBe("Someone using Self-Service could not find it.");
@@ -494,8 +494,8 @@ describe("Identity needs review", () => {
     expect(sqlite.prepare("SELECT * FROM self_service_events WHERE id = ?").get(confirmed)).toEqual(before);
     const feed = await json<{ events: Array<{ type: string; summary: string }> }>(as(one, "/api/staff/activity?limit=20&source=PHONE"));
     expect(feed.events.map((event) => event.summary).sort()).toEqual([
-      "Staff One confirmed the identity on a phone take of A-Identity item.",
-      "Staff Two ignored the identity on a phone take of A-Identity item."
+      "Staff One confirmed the identity on a phone take of A-Identity Item.",
+      "Staff Two ignored the identity on a phone take of A-Identity Item."
     ]);
   });
 
