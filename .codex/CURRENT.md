@@ -1,14 +1,16 @@
 # Current Work Pointer — Logistics Hub
 
-## V1.16 documentation/specification checkpoint — 2026-10-11 (PROPOSED, NOT IMPLEMENTED)
+## V1.16 owner-accepted implementation scope — 2026-10-11 (NOT IMPLEMENTED)
 
-OWNER INTENT: V1.15 is closed; owner states writer lock is lifted. New owner-directed pre-roadmap V1.16 scope: invisible Ambient Assist, fully independent Intelligent Core, verified correction learning, safe four-model evaluation, and a verified deployed product-version/changelog in the existing Administration > System. Explicit no-incomplete-release and verified-checkpoint-to-main rules are updated in AGENTS.md, policy and shared workflow.
+OWNER ACCEPTED: “I approve, after v1.16. V2 will be genuinely complete and ready to proceed with v3 roadmap.” The detailed V1.16 specification is accepted at docs/specs/accepted/v1.16-ambient-intelligent-core.md. This is the final V2 completion release gate before V2.1–V3.0; historic V2.0 completion records are preserved unchanged.
 
-GITHUB BRANCH: slice/v1.16-ambient-core, created from main 711547d41d4c560fe35d0d46de755f3e8718796c. Documentation-only commits on this slice; no runtime change, deployment, migration, provider use or product version activation has been performed. Existing Road-to-V3 V2.1–V2.9 then V3.0 remains unchanged. The historical V2.0 release record remains unchanged.
+GITHUB: initial main baseline 711547d41d4c560fe35d0d46de755f3e8718796c; active documentation-only branch slice/v1.16-ambient-core. No application code changed for V1.16, tests/provider calls/deployment/migrations not run, and V1.16/V2 final readiness NOT COMPLETE. At next continuation verify latest actual refs/branch status; do not rely on this historical SHA for mutation.
 
-SPEC STATUS: docs/specs/proposed/v1.16-ambient-intelligent-core.md is a detailed candidate, **NOT owner-accepted**. Substantive code and architecture changes are blocked on explicit owner acceptance/filing under accepted specs; a future writer must check actual refs/lock/status and claim the approved single writer lock. GitHub remote planning updates do not themselves prove local writer-lock ownership.
+WRITER: owner says V1.15 completed and lock lifted. Remote GitHub docs do not establish local worktree cleanliness or exclusive lock ownership. Before substantive code, verify repository state/other writers and claim the standard local writer lock.
 
-NEXT: Obtain acceptance of the exact proposed V1.16 scope or a named amendment; verify repository current HEAD/writer and run normal implementation in independently complete slices. Each coherent working checkpoint is tested and pushed to the one slice branch; each independently working green slice is merged to main and deployed/verified immediately, then pruned. Do not describe V1.16 as complete until the entire accepted release passes and deployed Administration version/changelog is verified. Exact commit/ref and GitHub CI must be rechecked before mutation. Preserve all prior handoff records and unknown local work.
+SCOPE: invisible nonblocking Ambient Assist; independently functional deterministic Intelligent Core; versioned learning from verified staff corrections; conditional four-model evaluation; authenticated Administration > System deployed product-version/changelog with build identity preserved. Keep V2.1–V2.9 and V3.0 milestone sequence and no-incomplete-version rules intact.
+
+NEXT: begin S0 baseline/writer verification, then S1 AI-independent critical path on the accepted specification. Every working checkpoint is committed/pushed to one current slice. Each independently complete slice merges to verified main and prunes immediately; remaining implementation starts from new main. V1.16 completion and V2 final readiness require every accepted criterion, real deployed version/changelog, CI, safeguards and owner QA.
 
 
 
