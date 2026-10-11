@@ -595,9 +595,42 @@ describe("review-only AI offers and correction evidence", () => {
     for (const extra of [{ offerId: crypto.randomUUID() }, { draftId: crypto.randomUUID() }, { revision: 99 }]) {
       expect((await save(session, shot(shelf, { aiFeedback: decision(offer, "KEEP", extra) }))).status).toBe(201);
     }
+    for (const failure of ["offer", "revision"] as const) {
+      const fresh = await ask(session, failure === "offer" ? 2 : 3);
+      const prepare = env.DB.prepare.bind(env.DB);
+      let failedReads = 0;
+      const unavailable = async () => { failedReads += 1; throw new Error("Optional AI lookup unavailable"); };
+      const lookup = vi.spyOn(env.DB, "prepare").mockImplementation((sql) => {
+        const statement = prepare(sql);
+        if (failure === "offer" && sql === "SELECT value FROM system_settings WHERE key = ?") {
+          const bind = statement.bind.bind(statement);
+          statement.bind = (...args) => {
+            const bound = bind(...args);
+            if (args[0] === "ai_review_offer:ACC-1") bound.first = unavailable;
+            return bound;
+          };
+        } else if (failure === "revision" && sql === "SELECT value FROM catalog_revision WHERE id = 1") statement.first = unavailable;
+        return statement;
+      });
+      try {
+        const before = count("items");
+        const body = shot(shelf, { aiFeedback: decision(fresh, "REJECT") });
+        const response = await save(session, body);
+        expect(response.status).toBe(201);
+        const saved = await response.json() as { id: string };
+        const replay = await save(session, body);
+        expect(replay.status).toBe(200);
+        expect(await replay.json()).toMatchObject({ id: saved.id, replayed: true });
+        expect(failedReads).toBe(1);
+        expect(count("items")).toBe(before + 1);
+        expect(onHand(saved.id)).toBe(3);
+        expect(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE item_id = ? AND movement_type = 'OPENING_BALANCE'").get(saved.id)).toEqual({ n: 1 });
+        expect(feedbackCount()).toBe(0);
+      } finally { lookup.mockRestore(); }
+    }
     const secondSession = await begin(shelf, otherCookie);
     expect((await save(secondSession, shot(shelf, { aiFeedback: decision(offer) }), otherCookie)).status).toBe(201);
-    const fresh = await ask(session, 2);
+    const fresh = await ask(session, 4);
     const current = sqlite.prepare("SELECT value FROM system_settings WHERE key = 'ai_review_offer:ACC-1'").get() as { value: string };
     sqlite.prepare("UPDATE system_settings SET value = ? WHERE key = 'ai_review_offer:ACC-1'").run(JSON.stringify({ ...JSON.parse(current.value), expiresAt: 0 }));
     expect((await save(session, shot(shelf, { aiFeedback: decision(fresh) }))).status).toBe(201);

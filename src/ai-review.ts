@@ -98,9 +98,11 @@ export async function captureFeedback(db: D1Database, actor: Actor, sessionId: s
   const empty = () => [];
   const feedback = body.aiFeedback as { offerId?: unknown; draftId?: unknown; revision?: unknown; decision?: unknown; correction?: unknown } | null;
   if (!feedback || !["KEEP", "REJECT", "CORRECT"].includes(String(feedback.decision))) return empty;
-  const current = await stored(db, actor);
+  const current = await stored(db, actor).catch(() => null);
   const offer = current?.offer;
-  if (!offer || !offer.proposal || offer.actor !== actor.accountId || offer.sessionId !== sessionId || offer.id !== feedback.offerId || offer.draftId !== feedback.draftId || offer.revision !== feedback.revision || offer.expiresAt <= Date.now() || offer.catalogRevision !== await catalogRevision(db)) return empty;
+  if (!offer || !offer.proposal || offer.actor !== actor.accountId || offer.sessionId !== sessionId || offer.id !== feedback.offerId || offer.draftId !== feedback.draftId || offer.revision !== feedback.revision || offer.expiresAt <= Date.now()) return empty;
+  const revision = await catalogRevision(db).catch(() => null);
+  if (revision === null || offer.catalogRevision !== revision) return empty;
   const correction = typeof feedback.correction === "string" ? feedback.correction.trim().slice(0, 120) : "";
   let target: Outcome | undefined;
   if (feedback.decision === "CORRECT" && normalized(correction) !== normalized(offer.label ?? "")) {

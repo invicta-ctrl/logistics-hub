@@ -17,6 +17,7 @@ export type Sender = { owner: string; legacy: boolean };
 const events = new EventTarget();
 let sender: Sender | null = null;
 let running: Promise<void> | null = null;
+let cleaning = false;
 let again = false;
 let timer = 0;
 let listening = false;
@@ -164,9 +165,44 @@ async function finishedElsewhere(entry: Entry, target: string): Promise<boolean>
   return true;
 }
 
+/** Optional cleanup never holds the capture/check sender; a busy cleaner leaves an explicit later action. */
+function cleanSavedPhoto(itemId: string, photo: Photo, sending: Sender, updatedAt?: string | null): void {
+  const current = () => !ended && sending.legacy && sender?.legacy === true && sender.owner === sending.owner;
+  const later = () => { if (current()) toast("Item and photo saved. Open the item to remove its background."); };
+  const clean = async () => {
+    if (!current()) return;
+    if (cleaning) { later(); return; }
+    cleaning = true;
+    const controller = new AbortController();
+    let deadline = 0;
+    try {
+      const fault = await Promise.race([
+        removePhotoBackground(`/api/staff/items/${itemId}/cutout`, photo.id, { signal: controller.signal, canContinue: current, updatedAt }),
+        new Promise<never>((_, reject) => {
+          deadline = window.setTimeout(() => { controller.abort(); reject(new Error("Cleanup timed out.")); }, 60_000);
+        })
+      ]);
+      if (current()) toast(fault ? `${fault} Item and original photo saved.` : "Item saved. Background removed.");
+    } catch {
+      if (current()) toast("Item and photo saved. Background removal could not be confirmed; open the item to try again.");
+    } finally {
+      window.clearTimeout(deadline);
+      controller.abort();
+      cleaning = false;
+    }
+  };
+  if (navigator.locks) void navigator.locks.request("logistics-hub-catalogue-cleanup", { ifAvailable: true }, (lock) => {
+    if (lock) return clean();
+    later();
+  }).catch(later);
+  else void clean();
+}
+
 async function send(entry: Entry): Promise<void> {
   const sending = sender;
   let savedPhoto: Photo | null = null;
+  let savedVersion: string | null | undefined;
+  let cleanAfterSave = false;
   if (!entry.itemId) {
     let target: string | undefined;
     try {
@@ -194,7 +230,9 @@ async function send(entry: Entry): Promise<void> {
     // Not checked when it was taken (offline, or the check failed): the server checks it once, after this first photo is saved.
     if (entry.recheck) form.set("recheck", "1");
     try {
-      savedPhoto = (await api<{ photo: Photo }>(`/api/staff/items/${entry.itemId}/photo`, { method: "PUT", body: form, ...within(90_000) })).photo;
+      const saved = await api<{ photo: Photo; updatedAt?: string | null }>(`/api/staff/items/${entry.itemId}/photo`, { method: "PUT", body: form, ...within(90_000) });
+      savedPhoto = saved.photo;
+      savedVersion = saved.updatedAt;
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
       if (error.status === 401) { ended = true; return; }
@@ -212,18 +250,12 @@ async function send(entry: Entry): Promise<void> {
     // Consume intent before the provider request. A reload or another tab cannot spend again after a cosmetic failure.
     const claimed = await claimPhotoCleanup(entry.id);
     if (!savedPhoto) toast("Item saved. Open it to check the current photo and remove its background.");
-    else if (!claimed || sender !== sending || !sending?.legacy) toast("Item and photo saved. Open the item to remove its background.");
+    else if (!claimed || ended || !sending?.legacy || sender?.legacy !== true || sender.owner !== sending.owner) toast("Item and photo saved. Open the item to remove its background.");
     else if (!savedPhoto.cleanable) toast(`Item and photo saved. ${savedPhoto.cleanupReason || "Background removal is unavailable right now."}`);
-    else {
-      try {
-        const fault = await removePhotoBackground(`/api/staff/items/${entry.itemId}/cutout`, savedPhoto.id);
-        toast(fault ? `${fault} Item and original photo saved.` : "Item saved. Background removed.");
-      } catch {
-        toast("Item and photo saved. Background removal could not be confirmed; open the item to try again.");
-      }
-    }
+    else cleanAfterSave = true;
   }
   await drop(entry.id);
+  if (cleanAfterSave && savedPhoto && entry.itemId && sending) cleanSavedPhoto(entry.itemId, savedPhoto, sending, savedVersion);
 }
 
 /**

@@ -1142,6 +1142,8 @@ for (const outcome of ["valid", "cleanup fails", "upload conflicts"] as const) {
     let accepted = false;
     let releasePhoto: () => void = () => {};
     const photoHeld = new Promise<void>((resolve) => { releasePhoto = resolve; });
+    let releaseCleanup: () => void = () => {};
+    const cleanupHeld = new Promise<void>((resolve) => { releaseCleanup = resolve; });
 
     // Hold the upload response so the test proves Catalogue cleared/queued immediately, before cleanup.
     await page.route("**/api/staff/items/ITM-*/photo", async (route) => {
@@ -1175,6 +1177,7 @@ for (const outcome of ["valid", "cleanup fails", "upload conflicts"] as const) {
       expect(method).toBe("POST");
       expect(body?.expected).toBe(mediaId);
       if (body?.accept === true) accepted = true;
+      else await cleanupHeld;
       await route.fulfill({ json: body?.accept === true ? { cutout: true } : { pending: true } });
     });
     await begin(page, server);
@@ -1219,12 +1222,27 @@ for (const outcome of ["valid", "cleanup fails", "upload conflicts"] as const) {
       })).toBe(0);
 
       if (outcome === "valid") {
+        await expect.poll(() => calls.length).toBe(1);
+        expect(accepted).toBe(false);
+        await name(page).fill("Fictional next item");
+        await pick(page, "Not sure").click();
+        await page.locator("#cat-save").click();
+        await expect.poll(() => server.state.captures.length).toBe(2);
+        await page.evaluate(async () => {
+          const modulePath = "/src/catalogue-sync.ts";
+          const { syncNow } = await import(modulePath) as typeof import("../../src/catalogue-sync");
+          await syncNow();
+        });
+        expect(accepted).toBe(false);
+        releaseCleanup();
+        await expect.poll(() => accepted).toBe(true);
         expect(calls).toEqual([
           { method: "POST", body: { expected: mediaId } },
           { method: "POST", body: { expected: mediaId, accept: true } }
         ]);
         expect(accepted).toBe(true);
       } else if (outcome === "cleanup fails") {
+        await expect.poll(() => calls.length).toBe(1);
         expect(calls).toEqual([{ method: "POST", body: { expected: mediaId } }]);
         expect(accepted).toBe(false);
         expect(server.state.photos).toHaveLength(1); // original saved; no second photo write or delete
@@ -1244,13 +1262,13 @@ for (const outcome of ["valid", "cleanup fails", "upload conflicts"] as const) {
       await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
       expect(calls).toHaveLength(expectedCalls);
       expect(photoWrites).toHaveLength(1);
-      expect(server.state.captures).toHaveLength(1);
+      expect(server.state.captures).toHaveLength(outcome === "valid" ? 2 : 1);
       expect(currentPhotoReads).toBe(0);
       page.once("dialog", (dialog) => dialog.accept());
       await page.getByRole("button", { name: "Finish", exact: true }).click();
       await expect.poll(() => server.state.finished).toBe(true);
       expect(calls).toHaveLength(expectedCalls);
-    } finally { releasePhoto(); }
+    } finally { releasePhoto(); releaseCleanup(); }
   });
 }
 
@@ -1325,15 +1343,20 @@ test("a late AI response cannot overwrite a staff edit; offline saving is indepe
   await begin(page, server);
   await name(page).fill("Staplr");
   await expect.poll(() => requested).toBe(true);
-  await name(page).fill("Staff owns this name"); release();
-  await expect.poll(() => completed).toBe(true);
-  await expect(page.locator("#cat-ai")).not.toContainText("AI suggestion");
-  await expect(name(page)).toHaveValue("Staff owns this name");
-  await pick(page, "Not sure").click();
-  await page.context().setOffline(true);
-  await page.locator("#cat-save").click();
-  await expect(name(page)).toHaveValue("");
-  await expect(rows(page)).toHaveCount(1);
+  try {
+    await name(page).fill("Staff owns this name");
+    await pick(page, "Not sure").click();
+    await page.context().setOffline(true);
+    await page.locator("#cat-save").click();
+    await expect(name(page)).toHaveValue("");
+    await expect(rows(page)).toHaveCount(1);
+    expect(completed).toBe(false);
+    release();
+    await expect.poll(() => completed).toBe(true);
+    await expect(page.locator("#cat-ai")).not.toContainText("AI suggestion");
+    await expect(name(page)).toHaveValue("");
+    expect(server.state.captures).toHaveLength(0);
+  } finally { release(); }
 });
 
 test("crop Apply, Reset and Cancel keep the full photo and identity", async ({ page }) => {

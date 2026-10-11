@@ -187,10 +187,10 @@ export function cropEditor(host: HTMLElement, source: Prepared, apply: (photo: P
  * Judges the pending cut the Worker just made (not yet the item's picture) by drawing it small and reading its alpha channel (the Worker cannot afford to decode
  * it). Answers null for a real cutout, or the sentence that says why not. A picture that cannot be loaded is not a cutout either.
  */
-async function cutoutFault(id: string, pending = true): Promise<{ fault: string | null; thumb?: Blob; detail?: Blob; source?: string }> {
+async function cutoutFault(id: string, pending = true, signal?: AbortSignal): Promise<{ fault: string | null; thumb?: Blob; detail?: Blob; source?: string }> {
   let source: string | undefined;
   try {
-    const response = await fetch(`/api/staff/media/${id}/${pending ? "pending" : "cutout"}`, { credentials: "same-origin", cache: "no-store" });
+    const response = await fetch(`/api/staff/media/${id}/${pending ? "pending" : "cutout"}`, { credentials: "same-origin", cache: "no-store", signal });
     if (!response.ok) return { fault: "The cleaned picture could not be loaded." };
     source = response.headers.get("etag") ?? undefined;
     const bitmap = await createImageBitmap(await response.blob());
@@ -209,27 +209,31 @@ async function cutoutFault(id: string, pending = true): Promise<{ fault: string 
   } catch { return { fault: "The cleaned picture could not be checked.", source }; }
 }
 
-async function acceptThumbnail(endpoint: string, photoId: string, thumb: Blob, source?: string, pending = false, detail?: Blob, version?: string | null): Promise<{ updatedAt?: string }> {
+async function acceptThumbnail(endpoint: string, photoId: string, thumb: Blob, source?: string, pending = false, detail?: Blob, version?: string | null, signal?: AbortSignal): Promise<{ updatedAt?: string }> {
   const form = new FormData(); form.set("expected", photoId); form.set("accept", "1"); form.set("thumb", thumb, "thumb.jpg");
   if (detail) form.set("detail", detail, "detail.jpg");
   if (source) form.set("source", source);
   form.set("pending", pending ? "1" : "0");
   if (version !== undefined) form.set("updatedAt", version ?? "");
-  const saved = await api<{ updatedAt?: string }>(endpoint, { method: "POST", body: form });
+  const saved = await api<{ updatedAt?: string }>(endpoint, { method: "POST", body: form, signal });
   refreshItemThumbnail(photoId);
   return saved;
 }
 
 /** A pending cut becomes live only after the browser has checked its transparency. */
-export async function removePhotoBackground(endpoint: string, photoId: string): Promise<string | null> {
-  const made = await api<{ pending?: boolean; cutout?: boolean }>(endpoint, { method: "POST", body: JSON.stringify({ expected: photoId }) });
+export async function removePhotoBackground(endpoint: string, photoId: string, options: { signal?: AbortSignal; canContinue?: () => boolean; updatedAt?: string | null } = {}): Promise<string | null> {
+  const guard = () => { if (options.signal?.aborted || options.canContinue?.() === false) throw new Error("Background cleanup stopped."); };
+  guard();
+  const made = await api<{ pending?: boolean; cutout?: boolean }>(endpoint, { method: "POST", body: JSON.stringify({ expected: photoId }), signal: options.signal });
+  guard();
   if (made.pending || made.cutout) {
-    const checked = await cutoutFault(photoId, Boolean(made.pending));
+    const checked = await cutoutFault(photoId, Boolean(made.pending), options.signal);
+    guard();
     if (checked.fault || !checked.thumb) {
-      if (made.pending && checked.source) await api(`${endpoint}?expected=${photoId}&pending=${encodeURIComponent(checked.source)}`, { method: "DELETE" });
+      if (made.pending && checked.source) await api(`${endpoint}?expected=${photoId}&pending=${encodeURIComponent(checked.source)}`, { method: "DELETE", signal: options.signal });
       return checked.fault ?? "The cleaned thumbnail could not be prepared.";
     }
-    await acceptThumbnail(endpoint, photoId, checked.thumb, checked.source, Boolean(made.pending), checked.detail);
+    await acceptThumbnail(endpoint, photoId, checked.thumb, checked.source, Boolean(made.pending), checked.detail, options.updatedAt, options.signal);
   } else throw new Error("Background removal could not be confirmed.");
   return null;
 }
