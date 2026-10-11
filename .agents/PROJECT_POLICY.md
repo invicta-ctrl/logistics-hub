@@ -79,6 +79,12 @@ Never delete an unmerged branch until unique commits are checked and its work is
 
 Temporary exception, accepted 2026-10-02 (`docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`): one branch, `ops/cloud-production-runner`, may exist beside the frozen V1.2 branch to build the Cloud Operations lane. It is merged to `main` and deleted before V1.2 is integrated; the budget above is unchanged afterwards.
 
+## Automatic post-release revision identity — owner mandate (2026-10-11)
+
+The single normative procedure is `docs/PRODUCT_VERSION_GOVERNANCE.md`; AGENTS.md, CLAUDE.md and shared handoffs must enforce it. A main product release is `Vx.xx`. After it has actually merged, **each new independently complete, tested, merged product-affecting fix or improvement** to that release is `Vx.xx.1`, then `Vx.xx.2`, `Vx.xx.3` and so on. One verified merge/release equals one increment, regardless of checkpoint count; separately merged fixes count separately. Documentation-only changes, failed attempts and incomplete slices do not increment. A future unreleased main version is not eligible for patch numbering.
+
+Before integration determine the candidate from the highest **verified** patch of the targeted release line, reconcile current main/deployed state and any in-flight work, and verify no duplicate identifier. Document each release and its user-facing changelog; when the accepted Administration version display exists, show only the verified running build's version and revision notes. Missing or contradictory release evidence is UNKNOWN and must be resolved, never guessed. A version number never authorizes otherwise restricted implementation, production writes or unsafe merges.
+
 ## Shared-agent execution
 
 Authoritative local worktree:
