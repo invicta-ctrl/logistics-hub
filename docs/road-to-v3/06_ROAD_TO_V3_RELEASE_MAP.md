@@ -4,6 +4,7 @@ Owner amendment (2026-10-11): `RTV3-01`–`RTV3-09` are stable **internal milest
 
 | Product version | Internal milestone | Standalone outcome |
 |---|---|---|
+| **V1.16** (pre-roadmap, proposed) | — | Ambient Assist + Intelligent Core consolidation and truthful Administration product version/changelog; owner-directed out-of-sequence identifier after historical V2.0, does not renumber V2.1–V3.0; not released until verified | 
 | **V2.0** | Existing shipped baseline | Logistics Hub + Ambient Assist; historical handoff in `docs/road-to-v2/releases/v2.0.md` |
 | **V2.1** | `RTV3-01` | Foundation & Operability, including **visible deployed product version** in Administration → System |
 | **V2.2** | `RTV3-02` | Event & Demand Orchestration, independent of Promise |
