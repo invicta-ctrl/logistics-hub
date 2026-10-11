@@ -1,48 +1,39 @@
 # Session Handoff — Logistics Hub
 
-**State: V1.16 A1 source implementation, 2026-10-11. Not a completed V1.16 product release.**
+**State: V1.15 closed; first independent V1.16 slice A1 verified, integrated and deployment-confirmed, 2026-10-11. Full V1.16 remains OPEN.**
 
-## Active slice
+## Exact source and ownership
 
 - **Repository:** `invicta-ctrl/logistics-hub`.
-- **Branch:** `slice/v1.16-enrichment-isolation`, first independently useful A1 implementation slice.
-- **Base:** `179435fdd7f2a9b0aa21a5c956f0c0bc12a41fa7`; PR [#33](https://github.com/invicta-ctrl/logistics-hub/pull/33) merged, planning branch deleted/pruned. Exact-head PR CI 38135247650 passed; actual main Workers Build 114459855837 and CodeQL 38135957767 passed. Documentation-only integration preserved V1.15 runtime/tests.
-- **Verified runtime main:** `84f798fd0703dce4b0befa69c183ed04717ef4a8`, including V1.15 source `962c66e718bad84d29b8b470400753701d7f5cd2`. Source CI 38133613254 and main CI 38134402564 passed; main CodeQL/Workers Build passed. Refresh refs before integration.
-- **Active writer:** Codex verified and claimed the sole local writer lock. Root reconciles the existing branch with main; specialists remain read-only. Preserve unknown local `work` and verify actual lock status before takeover.
+- **A1 base / rollback source:** `179435fdd7f2a9b0aa21a5c956f0c0bc12a41fa7` (accepted planning PR #33 merged/pruned; V1.15 runtime retained).
+- **A1 source / merged main:** `4511614c7b7fe18acfe7e0806399582c02b40516`; PR [#34](https://github.com/invicta-ctrl/logistics-hub/pull/34) merged at that commit. Source slice `slice/v1.16-enrichment-isolation` deleted locally/remotely and pruned.
+- **Records checkpoint:** documentation-only follow-up from that verified main. Read live refs for its HEAD; application/test/config content remains identical to the proven A1 source. No further product-version increment.
+- **Writer:** root Codex was the sole tracked writer; supporting agents stayed read-only. Root yields after the final records checkpoint. Verify actual lock before takeover; preserve unknown local `work`.
 
-## Completed and accepted (documentation, not application implementation)
+## Delivered independent behavior
 
-- V1.15 CLOSED by the owner's current instruction: final follow-up on verified main, deployment/checks green, source slice deleted/pruned. Owner retains live/manual QA; no new provider outcome claimed.
-- Parent version V1.15; candidate version NONE; release type documentation-only. This governance/closure checkpoint does not increment product revision. Safe merge preserves both histories and the final V1.15 runtime/tests unchanged.
+- `src/catalogue-sync.ts` / `src/item-photo.ts`: durably saved captures leave the queue before optional cleanup. Separate available cross-tab lock, local single-flight and 60-second abort deadline keep cleanup off the core capture/check sender. Original-photo fallback and explicit later action remain when busy or unavailable. Intent is consumed once; accept only the saved photo, unchanged item revision and current fully signed-in owner.
+- `src/ai-review.ts`: unavailable stored-offer/catalogue-revision reads omit optional feedback evidence. Valid feedback retains the atomic manual capture/audit transaction and idempotent replay; core transaction failures are not swallowed.
+- Existing catalogue/browser fixtures verify capture completion and a second save while cleanup is held, offline saving before a late AI reply followed by one replay, and one opening movement during optional feedback lookup failures. Existing valid-feedback atomicity/rollback assertions remain. The observed unrelated card-tab wait now uses its existing visible-profile assertion, retaining URL/card checks.
 
-- V1.16 detailed scope **OWNER ACCEPTED**, stored at `docs/specs/accepted/v1.16-ambient-intelligent-core.md`; implementation execution card at `docs/road-to-v2/v1.16-execution-card.md`.
-- Permanent independently shippable slice/green-main-merge rule: `AGENTS.md`, `.agents/PROJECT_POLICY.md`, `docs/SHARED_AGENT_WORKFLOW.md`.
-- Post-release automatic subversion policy: `docs/PRODUCT_VERSION_GOVERNANCE.md`. One separately merged, verified post-release product change increments `Vx.xx.N` once; no speculation/backfilling.
-- Road-to-V3 product sequence remains V2.1–V2.9 then V3.0; internal RTV3 aliases remain stable. V1.16 is the final V2 completion gate.
-- Documentation audit/cleanup on this branch removes legacy operational instructions and consolidates current pointers; authoritative historical accepted specifications, release records, migration evidence and visual research remain preserved.
+## Verification and deployment evidence
 
-## A1 contract and checkpoint gates
+- Local `npm run build` (Wrangler types, three TypeScript targets, Vite), diff check and staged privacy scan passed; zero secret/private-roster matches in 1024 tracked files.
+- Exact source full CI [38136947614](https://github.com/invicta-ctrl/logistics-hub/actions/runs/38136947614) SUCCESS: build/unit, performance smoke, privacy, browser and Worker integration. CodeQL 38136947607 SUCCESS.
+- Actual merged main CodeQL 38137698654 SUCCESS and Workers Build 114464986328 SUCCESS. Main source is the same exact SHA validated by the full source CI; automatic push CI is a repeat of that source, not separate model-quality evidence.
+- V1.15 closure is recorded in `docs/road-to-v2/releases/v1.15-final-pass.md`; final source/main checks and configured deployment passed. PR #33 documentation main CI 38135957807 also passed.
+- Owner retains live/manual QA. No new production data/provider operation, paid model, migration or real-photo accuracy claim. No Cloudflare credentials or environment change needed for the existing automatic main deployment.
 
-- Changed source: `src/catalogue-sync.ts`, `src/item-photo.ts`, `src/ai-review.ts`; update only affected existing catalogue/browser regression fixtures.
-- Saved captures leave the durable queue before bounded, separately locked optional cleanup. Consume intent once; retain original-photo fallback; same-owner, saved-photo and item-revision guards prevent stale acceptance. Manual saving omits unavailable optional feedback lookups while preserving valid feedback's atomic capture/audit transaction.
-- Parent V1.15; candidate V1.16 is unreleased. This accepted future-version slice does not invent a post-release number or change current product identity. No migration/dependency/model activation/provider probe; prior verified main is the rollback identity.
-- Local `npm run build` (Wrangler types, three TypeScript targets, Vite) and `git diff --check` passed. Privacy and exact pushed-source CI/CodeQL/Workers Build are checkpoint gates; integration/deployment remain pending. Owner retains live/manual QA; no local product/provider test run requested.
-- First pushed checkpoint `5affc10ab7532506b798f57700b6d330e7bd02f7`: unit/build/privacy, CodeQL 38136434385 and Workers Build passed. CI 38136348498 browser checks failed on two changed-fixture assumptions and an unrelated card-tab navigation timeout. Fixes explicitly disconnect the mocked capture endpoint, verify reconnect saves the staff-owned name once, and select the original saved row separately from the newer review-later row. Card-tab readiness now uses its existing visible-profile assertion, preserving URL/card checks. Product source is unchanged; require fresh checkpoint CI before merging.
+## Version and remaining scope
 
-## NOT completed
+- **PARENT VERSION:** V1.15. **CANDIDATE VERSION:** V1.16, unreleased. **RELEASE TYPE:** independently complete slice of the accepted future main version; this follow-up is documentation-only. Neither mints a historical patch number or prematurely releases V1.16.
+- Accepted scope: `docs/specs/accepted/v1.16-ambient-intelligent-core.md`; canonical execution/evidence card: `docs/road-to-v2/v1.16-execution-card.md`. Permanent release numbering: `docs/PRODUCT_VERSION_GOVERNANCE.md`.
+- **NOT completed:** all of A's degraded-mode/router qualification, contextual hints, verified learning/model evaluation, artifact-bound Administration version/changelog, full V1.16 acceptance and final V2 readiness. No V3 implementation authorized by this slice.
 
-- A1 source has not yet passed its checkpoint checks/integration. Remaining V1.16 contextual hints, verified learning/evaluation, version/changelog UI and full degraded-mode qualification remain OPEN.
-- No paid AI, Cloudflare provider/data write, D1/R2 migration or production change authorized/executed through this documentation task.
-- PR #33 is integrated and pruned; no V1.16 deployed product-version label is claimed by that documentation checkpoint or this unfinished A1.
-- Never claim final V2 readiness or an independently released subversion without actual integration and deployment evidence.
+## First next action
 
-## Next action / verification
-
-1. Finish the bounded A1 source/fixture change, verify build/typecheck/diff/privacy and push a coherent checkpoint to the single slice. Await exact-head automatic CI/CodeQL/Workers Build; do not weaken atomicity/denial assertions to pass.
-2. Only once A1 is independently green, integrate it into fresh main, verify actual configured deployment and prune the proven-merged branch. Remaining full-version gates in the execution card stay OPEN.
-3. Save working source checkpoints to the single slice; merge each independently complete accepted and verified slice into main. Never call the full version COMPLETE before all its gates pass.
-4. Handoff any blocker with exact SHA/status, evidence, ownership and smallest next action.
+Refresh main/refs and claim the free writer lock before a new slice. Finish the specific A/S1 qualification gaps in the execution card on one fresh slice; preserve deterministic manual work and REVIEW_ONLY text roles. Continue accepted B–E/S2–S5 only as independent complete outcomes. Push checkpoints, integrate each green slice, confirm deployment, prune; never label the full version COMPLETE while any accepted gate remains open.
 
 ## Historical handoffs
 
-The former 196 KB cumulative completed-task history is retrievable at [the pre-cleanup Git revision](https://github.com/invicta-ctrl/logistics-hub/blob/aa09900827a94e0931a33416f70c3ae4c7e6bcf9/.codex/SESSION_HANDOFF.md). It contains many older “WAITING” and “IN PROGRESS” phrases that **do not apply to current work**. For audited outcomes, prefer `docs/road-to-v2/releases/` and accepted specs.
+The former cumulative history is retrievable at [the pre-cleanup revision](https://github.com/invicta-ctrl/logistics-hub/blob/aa09900827a94e0931a33416f70c3ae4c7e6bcf9/.codex/SESSION_HANDOFF.md). Older “WAITING” and “IN PROGRESS” statements do not apply to current work; use release evidence and accepted specs.
