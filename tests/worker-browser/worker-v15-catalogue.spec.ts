@@ -63,7 +63,7 @@ test("a cataloguing session on a shelf: mixed items, a dropped connection, a dup
   await page.context().setOffline(false);
   await page.evaluate(() => window.dispatchEvent(new Event("online")));
   await expect(rows.first().getByText("Saved", { exact: true })).toBeVisible();
-  await expect.poll(async () => (await named(page, "E2E Duct tape")).length).toBe(1);
+  await expect.poll(async () => (await named(page, "E2E Duct Tape")).length).toBe(1);
 
   // A look-alike is shown first; the second press makes a separate item.
   await page.getByLabel("Name", { exact: true }).fill("e2e hammer");
@@ -72,10 +72,10 @@ test("a cataloguing session on a shelf: mixed items, a dropped connection, a dup
   await page.getByLabel("Category").fill("E2E TOOLS");
   await page.getByLabel("Counted in").fill("piece");
   await page.getByRole("button", { name: "Save & next" }).click();
-  expect(await named(page, "e2e hammer")).toHaveLength(0);
+  expect(await named(page, "e2e Hammer")).toHaveLength(0);
   await page.getByRole("button", { name: "Save as a separate item" }).click();
   await expect(rows.first().getByText("Saved", { exact: true })).toBeVisible();
-  await expect.poll(async () => (await named(page, "e2e hammer")).length).toBe(1);
+  await expect.poll(async () => (await named(page, "e2e Hammer")).length).toBe(1);
 
   await capture(page, { name: "E2E Mystery crate", how: "Not sure", more: 2 });
   await expect(rows.first().getByText("Review later", { exact: true })).toBeVisible();
@@ -90,7 +90,7 @@ test("a cataloguing session on a shelf: mixed items, a dropped connection, a dup
   expect(hammer).toMatchObject({ itemType: "Loanable", onHand: 2, locationId: shelf, needsReview: true, category: "E2E TOOLS" });
   expect(hammer.photoId).not.toBeNull();
   expect(items.find((item) => item.name === "E2E Gloves")).toMatchObject({ itemType: "Consumable", onHand: 5 });
-  expect(items.find((item) => item.name === "E2E Mystery crate")).toMatchObject({ itemType: "NEEDS_REVIEW", onHand: 3, needsReview: true, category: "UNSORTED" });
+  expect(items.find((item) => item.name === "E2E Mystery Crate")).toMatchObject({ itemType: "NEEDS_REVIEW", onHand: 3, needsReview: true, category: "UNSORTED" });
   // Nothing from the shelf is public yet, the unclassified crate least of all.
   const publicCatalog = JSON.stringify(await (await page.request.get("/api/public/catalog")).json());
   const phoneCatalog = JSON.stringify(await (await page.request.get("/api/self-service/catalog")).json());
@@ -104,7 +104,7 @@ test("a cataloguing session on a shelf: mixed items, a dropped connection, a dup
   await expect(page.locator("#rev-text")).toContainText("4 items marked reviewed");
   const after = await inventory(page);
   expect(after.filter((item) => item.name.toLowerCase().startsWith("e2e") && item.itemType !== "NEEDS_REVIEW").every((item) => !item.needsReview)).toBe(true);
-  expect(after.find((item) => item.name === "E2E Mystery crate")!.needsReview).toBe(true);
+  expect(after.find((item) => item.name === "E2E Mystery Crate")!.needsReview).toBe(true);
   // Reviewed consumables now reach the phone; the unclassified crate still does not.
   expect(JSON.stringify(await (await page.request.get("/api/self-service/catalog")).json())).toContain("E2E Gloves");
   expect(JSON.stringify(await (await page.request.get("/api/self-service/catalog")).json())).not.toContain("E2E Mystery");

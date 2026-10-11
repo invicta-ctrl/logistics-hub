@@ -90,7 +90,7 @@ test.describe("a durable write is acknowledged at once and confirmed only after 
   });
 
   test("loans: lending an item, then taking it back", async ({ page, baseURL }) => {
-    const name = `Held loan ${Date.now() % 100000}`;
+    const name = `Held Loan ${Date.now() % 100000}`;
     const id = await makeItem(page, baseURL!, { name, itemType: "Loanable" });
     await page.goto(`/staff/items?item=${id}`);
     await page.getByRole("tab", { name: "Loan" }).click();

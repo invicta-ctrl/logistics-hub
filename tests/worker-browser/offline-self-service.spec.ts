@@ -168,7 +168,7 @@ test.describe.serial("offline self-service", () => {
     await take(page, "Bottled Water", 2, "Juan Dela Cruz");
     await expect(page.getByRole("link", { name: /Offline · 1 waiting/ })).toBeVisible();
 
-    await openItem(page, "Cotton - roll", "Borrow");
+    await openItem(page, "Cotton - Roll", "Borrow");
     // The phone remembered who took the water, so the borrow only asks for its photo.
     await expect(page.locator(".ss-who")).toContainText("Juan Dela Cruz");
     await expect(page.locator(".ss-who")).toContainText("ID 21000115");
@@ -188,7 +188,7 @@ test.describe.serial("offline self-service", () => {
     expect(await localState(page)).toEqual({ states: ["pending", "pending"], photos: 2 });
 
     await page.getByRole("link", { name: /^Return/ }).click();
-    await page.getByRole("link", { name: /Cotton - roll/ }).first().click();
+    await page.getByRole("link", { name: /Cotton - Roll/ }).first().click();
     await page.getByRole("button", { name: "Review and return" }).click();
     await expect(page.getByText("Take a photo of the item you are returning.")).toBeVisible();
     await attachPhoto(page);
@@ -223,7 +223,7 @@ test.describe.serial("offline self-service", () => {
 
     // Staff look at the photo and confirm it is back: only then does the loan close and stock return.
     await staff.goto("/staff/self-service");
-    await expect(staff.getByRole("img", { name: /Photo sent with the return of Cotton - roll/ })).toBeVisible();
+    await expect(staff.getByRole("img", { name: /Photo sent with the return of Cotton - Roll/ })).toBeVisible();
     await staff.getByRole("button", { name: /Confirm returned/ }).click();
     await expect(staff.getByText("Confirmed: the loan is closed.")).toBeVisible();
     expect((await item(COTTON)).onHand).toBe(cottonBefore);
@@ -302,7 +302,7 @@ test.describe.serial("offline self-service", () => {
     await staff.goto("/staff/self-service?view=activity");
     await expect(staff.getByRole("heading", { name: "Self-Service" })).toBeVisible();
     await expect(staff.locator("#ss-results")).toContainText("Juan Dela Cruz");
-    await expect(staff.locator("#ss-results")).toContainText("Cotton - roll");
+    await expect(staff.locator("#ss-results")).toContainText("Cotton - Roll");
     // A person reads the reference from their receipt; staff find the record by typing it, in any case and with or without the dash.
     const week = await (await staff.request.get("/api/staff/self-service")).json() as { recent: Array<{ id: string; type: string; itemId: string }> };
     const borrow = week.recent.find((entry) => entry.type === "BORROW" && entry.itemId === COTTON)!;
