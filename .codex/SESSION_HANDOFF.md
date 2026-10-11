@@ -1,5 +1,14 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Direct Add items and thumbnail fit — active, 2026-10-11
+
+~~~text
+BRANCH: slice/v1.15-direct-add-and-thumbnails from verified main 711547d41d4c560fe35d0d46de755f3e8718796c. Codex holds sole writer lock; read-only delegates propose /tmp patches only. Preserve unknown work.
+OWNER: Thumbnails still clip. Main Add items must open the familiar improved staff item sheet directly with optional location; session Start/Resume/place chooser stays in separate Quick Catalog PWA. One creation action/form, preserving photo/file/camera/AI assistance and explicit human review.
+CHECKPOINT: Shared item image grid bounded to box size; all item/capture thumbnails contain the whole saved crop. Direct entry remains to implement. Main captures must not overwrite PWA placement or local resume records.
+GATES: Owner owns manual/live QA. Build/typecheck, privacy/diff, maintain affected existing fixtures and existing automatic CI. No new tests/provider probes/credentials/schema/dependencies. Push coherent checkpoints, integrate fully green source to main, verify configured Workers Build, prune slice and yield. Historical completion blocks below are superseded for this newly reported correction.
+~~~
+
 ## Owner thumbnail, phone and item-entry corrections — complete, 2026-10-11
 
 ~~~text

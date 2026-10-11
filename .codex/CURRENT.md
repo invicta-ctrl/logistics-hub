@@ -1,5 +1,13 @@
 # Current Work Pointer — Logistics Hub
 
+## Direct Add items and thumbnail fit — active, 2026-10-11
+
+STATUS: Owner-reported correction on `slice/v1.15-direct-add-and-thumbnails`, based on verified main `711547d41d4c560fe35d0d46de755f3e8718796c`. Codex is sole tracked writer; delegated agents propose bounded patches in /tmp. Unknown local `work` is preserved. The current owner instruction supersedes the earlier choice to send main Add items through the Quick Catalog chooser.
+
+SCOPE: Fit complete cropped/cleaned photos in every item thumbnail. Restore a direct, improved staff creation sheet from Items/Home/search, with optional placement under Advanced details. Keep start/resume/place sessions in the separate Quick Catalog PWA and preserve its selected place/local record. Reuse capture/photo/AI/queue safeguards; no schema, dependency, migration or automatic trust change. Live/manual QA stays with the owner. Push coherent checkpoints, complete relevant build/privacy/diff and automatic CI, then integrate green source to main and prune/yield. No provider probe or credentials are needed.
+
+CHECKPOINT: Shared image grid now fits each fixed thumbnail box; item and capture photos use contain. Direct item entry implementation is next. The historical completion blocks below describe the previous accepted scope, not this newly reported correction.
+
 ## Owner thumbnail, phone and item-entry corrections — complete, 2026-10-11
 
 STATUS: The owner's accepted thumbnail/information-density corrections and unified item entry are complete. Verified source `e48ce7d3452aad18d2946f124e187d8111050f15` includes the earlier main source `3a495d62dbe951b9e5e0cff01384e8c11c0070e4` and preserves owner documentation main `bf36ee3b09efccf8d80ab02c21ff8e76c00c4e7b`. This records-only checkpoint closes the follow-up for authorized main integration, slice pruning and lock yield. Actual refs establish completion of those Git actions; do not recreate a merged slice. Unknown local `work` is preserved. The accepted photo amendment supersedes the original-only thumbnail policy.
