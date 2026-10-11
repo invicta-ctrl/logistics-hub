@@ -1,5 +1,7 @@
 # Migration Status — 2026-09-28
 
+**HISTORICAL MIGRATION SNAPSHOT (2026-09-28), NOT LIVE PRODUCTION STATE.** Do not infer current migrations, stock totals, staff import completion, rollback health or deployed code from this page. Use live D1 migration status, the Cloud Operations lane, `docs/DEPLOYMENT.md`, current release records and actual provider checks.
+
 This is the record of the original V1 data migration as it stood on 2026-09-28. The current production migration level is in `docs/DATA_ARCHITECTURE.md` ("Production migration level").
 
 ## Inventory
