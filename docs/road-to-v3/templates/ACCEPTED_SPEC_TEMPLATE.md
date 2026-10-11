@@ -8,6 +8,9 @@ Owner:
 Date:
 Base commit:
 Release:
+Product release version (V2.1–V2.9 / V3.0):
+Stable milestone ID (RTV3-01–RTV3-09 / GA):
+Deployment metadata source and Administration version acceptance (V2.1+):
 
 ## Outcome
 <One coherent user/operational outcome>

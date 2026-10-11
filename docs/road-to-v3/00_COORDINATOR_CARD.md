@@ -33,10 +33,15 @@ This is the **only command-dispatch procedure** for Codex, Claude, Forge, and in
 
 ### Recognized commands
 
+Product version resolution: `V2.1`–`V2.9` map to existing internal milestones `RTV3-01`–`RTV3-09`, per `06_ROAD_TO_V3_RELEASE_MAP.md`. `V3.0` is GA. Product versions are user-facing release numbers, while RTV3 IDs continue identifying files/tasks. Treat historical V3.1–V3.7 as obsolete version labels.
+
+
 - `start RTV`, `start RTV3`, `begin RTV`: reconcile actual repository state, then begin the **earliest eligible accepted** Road-to-V3 milestone or safely resume an already active accepted RTV slice.
 - `start RTV3-XX`: target that milestone only, provided its predecessor, owner amendment, and accepted spec gates are satisfied; otherwise prepare the missing spec or report the exact blocked gate. Do not implement a successor early.
+- `start V2.1` through `start V2.9`: resolve the requested product version to its matching RTV3 milestone, then apply the exact same authority, writer and acceptance gates.
 - `continue RTV`, `continue RTV3`, `resume RTV`: resume the **specific active accepted RTV task** recorded in repository continuity, without restarting completed work. If no active RTV task exists, perform the `start RTV` readiness procedure.
 - `continue RTV3-XX`: resume that milestone if authoritative status says it is active; otherwise apply its start gates without pretending it has started.
+- `continue V2.1` through `continue V2.9`: resolve to RTV3 milestone; resume only the genuinely active accepted task, without restarting completed work.
 - A generic `start` or `continue` with clear RTV context uses these same rules; without clear context, never use a historical Road-to-V2 runner as the default.
 
 ### Deterministic dispatcher

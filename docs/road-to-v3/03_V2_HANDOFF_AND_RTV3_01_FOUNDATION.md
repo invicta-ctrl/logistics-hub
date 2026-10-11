@@ -1,4 +1,4 @@
-# V2 Handoff and RTV3-01 Foundation
+# V2.0 Handoff and V2.1 (RTV3-01) Foundation
 
 This file fixes the former circular gate.
 
@@ -28,6 +28,8 @@ V2.0 is **not required** to invent:
 Those belong to RTV3-01.
 
 ## 2. RTV3-01 purpose
+
+**Planned product release: V2.1.** `RTV3-01` remains the stable internal milestone name.
 
 RTV3-01 turns the inherited V2 system into a measured, observable, recoverable, Road-to-V3-ready platform.
 
@@ -63,6 +65,9 @@ RTV3-01 is limited to these eight implementation packets:
 - correlation/request ID;
 - structured log field contract;
 - deployment/version identity;
+- **Owner-required V2.1 Administration version display:** reuse the existing Administration → System `This version` panel. Current code (`src/admin-system.ts`, `src/system-status.ts`, `vite.config.ts`) shows the 12-hex build fingerprint, commit and built-at time. Add a separate prominent **Product version: V2.1** from the *actual deployed* build/release metadata. Preserve `build.json.version` as the build/PWA fingerprint and preserve existing Commit/Built details. Prefer extending the existing governed System endpoint and build metadata; do not create another panel or publicly expose `/build.json`;
+- keep product release labels repeatable for V2.2–V2.9 and V3.0; malformed/missing version metadata must show Unknown rather than a guessed release, and rollback must reflect the running version;
+- verify the label in the deployed V2.1 Administration UI (phone/desktop, authorized and denied access), and distinguish production identity from local/source build identity;
 - typed failure classes;
 - D1/R2/provider failure visibility;
 - user-support reference where useful.
@@ -119,6 +124,7 @@ RTV3-01 is complete only when:
 - accepted budgets are derived from measurement rather than invented;
 - 1×/10×/100× fixtures exist and have named activity assumptions;
 - correlation/logging contract is implemented and tested;
+- Administration → System shows correct **V2.1 product version**, separately from build fingerprint, commit and timestamp, based on verified deployed metadata; missing/mismatched metadata fails honestly, access controls and rollback behavior are covered;
 - operational tooling fails closed where required;
 - offline poison-record behavior is visible, exportable, retryable, and non-blocking;
 - restore proof validates representative business data and R2 evidence;

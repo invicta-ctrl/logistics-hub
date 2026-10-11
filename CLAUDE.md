@@ -34,6 +34,8 @@ The planning package is `docs/road-to-v3/` (milestones RTV3-01 to RTV3-09, then 
 
 For owner shorthand `start RTV` / `continue RTV` (including named milestones), run the command dispatch in `docs/road-to-v3/00_COORDINATOR_CARD.md` after repository-authority checks. The legacy Road-to-V2 `start`/`continue` runner below applies only to actual historical Road-to-V2 branches and does not authorize V3 work. Carry each milestone's scoped code-quality, modularization, architecture, performance, and security deliverables in the same verified release rather than deferring them to RTV3-09.
 
+The public Road-to-V3 product versions are **V2.1–V2.9** (internal RTV3-01–RTV3-09 aliases) followed by V3.0 GA. `start/continue V2.x` follows the same coordinator gates. The first release V2.1 F4 adds the actual deployed product-version label to Administration → System without replacing technical build data.
+
 Before Road to V3: the V1.15 Final Pass (four-model Ambient Intelligence in Add items, Earl's accepted amendment, slices FP-A to FP-F) runs first. It is additional V1.15 work on `main`, not V2.1 and not V3; its authority and blocker are in `.codex/CURRENT.md`.
 
 ## Road-to-V2 branch runner

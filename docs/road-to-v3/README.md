@@ -1,31 +1,29 @@
 # Logistics Hub — Final Road to V3
-## Product baseline V2.0 → Road-to-V3 milestones RTV3-01…RTV3-09 → Product release V3.0
+## Product versions V2.0 → V2.1–V2.9 → V3.0 (RTV3 IDs remain internal aliases)
 
 **Status:** FINAL OWNER ROADMAP BASELINE  
 **Repository:** `invicta-ctrl/logistics-hub`  
 **Roadmap type:** Post-V2 planning and execution baseline  
 **AI baseline:** V2.0 already includes Ambient Assist. Road-to-V3 extends that platform instead of introducing AI for the first time.
 
-## Naming rule
+## Naming rule — owner amended 2026-10-11
 
-Product versions and roadmap milestones are intentionally separate:
+**Road to V3 means product V2.0 → V2.1–V2.9 → V3.0.** Internal milestone IDs `RTV3-01`–`RTV3-09` remain stable aliases for existing documentation, accepted specs, coordinator commands and release records.
 
-```text
-V2.0        = product baseline: COMPLETE and verified on 2026-10-08 (handoff: docs/road-to-v2/releases/v2.0.md, "Handoff to Road to V3")
-RTV3-01     = Road-to-V3 Foundation & Operability milestone
-RTV3-02     = Event & Demand Orchestration
-RTV3-03     = Resource Promise & Fulfillment
-RTV3-04     = Mission Control & Human Operations
-RTV3-05     = Procurement & Replenishment
-RTV3-06     = Lifecycle, Recovery & Zero-Loss
-RTV3-07     = Predictive & Preventive Operations
-RTV3-08     = Operational Memory & Succession
-RTV3-09     = V3 Qualification / Release Candidate
-V3.0        = General Availability / product promotion
-```
+| Product version | Internal milestone | Capability |
+|---|---|---|
+| **V2.1** | `RTV3-01` | Foundation & Operability |
+| **V2.2** | `RTV3-02` | Event & Demand Orchestration |
+| **V2.3** | `RTV3-03` | Resource Promise & Fulfillment |
+| **V2.4** | `RTV3-04` | Mission Control & Human Operations |
+| **V2.5** | `RTV3-05` | Procurement & Replenishment |
+| **V2.6** | `RTV3-06` | Lifecycle, Recovery & Zero-Loss |
+| **V2.7** | `RTV3-07` | Predictive & Preventive Operations |
+| **V2.8** | `RTV3-08` | Operational Memory & Succession |
+| **V2.9** | `RTV3-09` | Qualification / Release Candidate |
+| **V3.0** | GA | General Availability |
 
-`RTV3-*` identifiers are program milestones, not semver product releases.  
-Do not call RTV3-01 "V2.1" and do not call RTV3-09 "V2.9".
+The first Road-to-V3 release, **V2.1 / RTV3-01**, must add an actual deployed product version to the existing **Administration → System** panel; preserve Build, Commit and Built metadata. Subsequent releases must reflect their verified deployed product version. V3.1–V3.7 labels found in historical drafts do not schedule releases beyond V3.0.
 
 ## How to use this package
 

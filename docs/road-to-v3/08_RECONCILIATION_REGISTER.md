@@ -25,7 +25,7 @@ Status values: `OPEN`, `IN_PROGRESS`, `CLOSED`, `ACCEPTED_RISK`, `SUPERSEDED`.
 | R-017 | No V2-feature decommissioning policy | mandatory cutover/decommission section per superseding milestone | All milestone owners | CLOSED | 2026-10-08 |
 | R-018 | Monolithic roadmap violated context economy | split package + coordinator/release cards/templates | Roadmap owner | CLOSED | 2026-10-08 |
 | R-019 | `Optional intelligence later` stale after V1.15 | Ambient Assist is V2 baseline; RTV3-07 is predictive/preventive expansion | AI owner | CLOSED | 2026-10-08 |
-| R-020 | V2.1–V2.9 naming made shipped/planned `V2` ambiguous | Use non-semver Road-to-V3 IDs RTV3-01…RTV3-09; reserve V3.0 for GA | Roadmap owner | CLOSED | 2026-10-08 |
+| R-020 | Early concern: V2.1–V2.9 naming might confuse a V2.0 baseline with future releases | Original RTV3-only naming decision superseded by explicit 2026-10-11 owner amendment. Stable RTV3 IDs preserved while public versions run V2.1–V2.9; see R-036 | Roadmap owner | SUPERSEDED | 2026-10-11 |
 | R-021 | Delete-before-adding doctrine lost in split | Restored optimization ladder + DAMP/YAGNI rule | Architecture owner | CLOSED | 2026-10-08 |
 | R-022 | Standing anti-pattern list lost | Restored explicit anti-pattern section | Architecture owner | CLOSED | 2026-10-08 |
 | R-023 | Denial-test requirement lost | Restored mandatory negative/failure tests | Security owner | CLOSED | 2026-10-08 |
@@ -41,6 +41,9 @@ Status values: `OPEN`, `IN_PROGRESS`, `CLOSED`, `ACCEPTED_RISK`, `SUPERSEDED`.
 | R-033 | V2.0 status was "pending truthful handoff/verification" | Handoff recorded against `03` §1: `docs/road-to-v2/releases/v2.0.md`, "Handoff to Road to V3"; evidence `docs/road-to-v2/evidence/v2.0-production-readiness.md` | Roadmap owner (Earl) | CLOSED | 2026-10-08 |
 | R-034 | `02` §2 lists Granite, Gemma, Qwen and GLM as the "current V2 role set", and §6 says "normal target around 8,000". V2.0 ships one model, `@cf/google/gemma-4-26b-a4b-it`, for two tasks (PHOTO_NAME, PHOTO_RECHECK); Granite, Qwen and GLM were not built (V1.15 record). The code's daily bands are conserve 6,500, reserve 8,000, critical 9,000, stop 9,500 (`src/ambient-assist.ts`). Impact: none on V2; a thread reading `02` alone would assume roles that do not exist. | Repository truth wins. The V1.15 Final Pass, queued before RTV3-01, is to add the Granite, Qwen and GLM routes; once it lands, reconcile `02` with what it actually promoted, and RTV3-01 F7 re-derives the quota from measurement (`03` §8). Next action: re-check after the final pass | RTV3-01 coordinator | OPEN | 2026-10-08 |
 | R-035 | `03` §7 orders F7 (Ambient Assist hardening) beside F2–F4, before F5 (measurement), but §8 has F7 re-derive the AI quota from provider/resource measurements that F5 records ("F5 records provider/resource measurements needed by F7"). Followed literally, F7 closes before its inputs exist and the provisional 8,000/9,500 values survive unmeasured. Found by review on PR 25. | Split F7 when RTV3-01's spec is written: F7a takes every F7 deliverable except the quota numbers (shared task/model registry, router contracts, schema validation, privacy allowlists, circuit breaker, provider/model replacement procedure, aggregate observability, failure/fallback tests) and runs after F1 as §7 says; its aggregate observability is what lets F5 measure AI use. F7b (the quota half of "quota/circuit breaker": re-deriving the bands, §8) runs after F5's provider measurements and before F6/F8 closure. All eight F7 deliverables stay in scope. The frozen package text is not edited; the accepted RTV3-01 spec carries the split. Next action: include F7a/F7b in the RTV3-01 spec | RTV3-01 coordinator | OPEN | 2026-10-08 |
+
+| R-036 | Owner explicitly specifies product V2.1–V2.9 (then V3.0), replacing old V3.1–V3.7 release naming | Map product releases one-to-one to stable RTV3 milestone IDs; record accepted owner decision without rewriting historical files | Roadmap owner | CLOSED | 2026-10-11 |
+| R-037 | Administration System labels a build hash "Version" rather than separately showing the current product version | Require V2.1 / RTV3-01 F4 to add truthful deployed product-version metadata and display to existing System section, preserving build/commit, permission/unknown/rollback tests | V2.1 F4 | CLOSED | 2026-10-11 |
 
 ## Status evidence rules
 
@@ -98,17 +101,19 @@ Required:
 
 Historical roadmap identifiers are retired for new work but preserved for searchability.
 
-| Historical original | Intermediate revision | Current authoritative milestone |
+| Historical original | Former intermediate label | Current milestone (product version) |
 |---|---|---|
-| old `V3.0 Foundation` | `V2.1` | **RTV3-01 Foundation & Operability** |
-| old `V3.1 Event/Demand` | `V2.2` | **RTV3-02 Event & Demand** |
-| old `V3.2 Resource Promise` | `V2.3` | **RTV3-03 Resource Promise** |
-| old `V3.3 Mission/Human Ops` | `V2.4` | **RTV3-04 Mission & Human Ops** |
-| old `V3.4 Procurement` | `V2.5` | **RTV3-05 Procurement** |
-| old `V3.5 Lifecycle` | `V2.6` | **RTV3-06 Lifecycle/Zero-Loss** |
-| old `V3.6 Predict/Prevent` | `V2.7` | **RTV3-07 Predict/Prevent** |
-| old `V3.7 Memory/Succession` | `V2.8` | **RTV3-08 Memory/Succession** |
-| old `V3.8 Qualification` | `V2.9` | **RTV3-09 Qualification/RC** |
+| old `V3.0 Foundation` | `V2.1` | **RTV3-01 / V2.1 Foundation & Operability** |
+| old `V3.1 Event/Demand` | `V2.2` | **RTV3-02 / V2.2 Event & Demand** |
+| old `V3.2 Resource Promise` | `V2.3` | **RTV3-03 / V2.3 Resource Promise** |
+| old `V3.3 Mission/Human Ops` | `V2.4` | **RTV3-04 / V2.4 Mission & Human Ops** |
+| old `V3.4 Procurement` | `V2.5` | **RTV3-05 / V2.5 Procurement** |
+| old `V3.5 Lifecycle` | `V2.6` | **RTV3-06 / V2.6 Lifecycle/Zero-Loss** |
+| old `V3.6 Predict/Prevent` | `V2.7` | **RTV3-07 / V2.7 Predict/Prevent** |
+| old `V3.7 Memory/Succession` | `V2.8` | **RTV3-08 / V2.8 Memory/Succession** |
+| old `V3.8 Qualification` | `V2.9` | **RTV3-09 / V2.9 Qualification/RC** |
 | — | `V3.0 GA` | **V3.0 General Availability** |
 
 When a historical document uses an old identifier, translate it through this table before acting.
+
+Stable RTV3 identifiers remain valid agent/file references. The V2.x labels in the same table are now owner-approved **product versions**, and are shown on the live site only after their corresponding release has been verified/deployed. No historical V2.0 or V1.x release record is rewritten.

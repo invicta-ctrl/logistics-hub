@@ -4,7 +4,7 @@ The authoritative package is the directory `LOGISTICS_HUB_ROAD_TO_V3_FINAL/`.
 
 The corrected chronology is:
 
-**V2.0 product baseline → RTV3-01…RTV3-09 roadmap milestones → V3.0 product GA**
+**V2.0 product baseline → V2.1–V2.9 releases (RTV3-01…RTV3-09 stable milestone IDs) → V3.0 product GA**
 
 Key reconciliation decisions:
 
@@ -33,4 +33,4 @@ Recommended Claude Project configuration:
 
 Use the ready-to-paste project goal in `CLAUDE_PROJECT_GOAL.md`.
 
-Road-to-V3 milestone IDs are intentionally non-semver so `V2` never ambiguously means both the shipped baseline and future program work.
+Owner amendment 2026-10-11: intermediate product versions are **V2.1–V2.9** while milestone IDs remain RTV3-01–RTV3-09. V2.1 F4 must show the true deployed product version in the existing Administration → System view separately from the build fingerprint. Product release labels advance only with accepted verified deployments.

@@ -39,19 +39,19 @@ Obey the higher authority and record conflicts. Do not create another boot seque
 
 ```text
 V2.0        Product baseline
-RTV3-01     Foundation & Operability
-RTV3-02     Event & Demand
-RTV3-03     Resource Promise
-RTV3-04     Mission & Human Operations
-RTV3-05     Procurement
-RTV3-06     Lifecycle & Zero-Loss
-RTV3-07     Predict & Prevent
-RTV3-08     Memory & Succession
-RTV3-09     V3 Qualification / RC
+V2.1 / RTV3-01     Foundation & Operability + Administration product-version display
+V2.2 / RTV3-02     Event & Demand Orchestration
+V2.3 / RTV3-03     Resource Promise & Fulfillment
+V2.4 / RTV3-04     Mission Control & Human Operations
+V2.5 / RTV3-05     Procurement & Replenishment
+V2.6 / RTV3-06     Lifecycle, Recovery & Zero-Loss
+V2.7 / RTV3-07     Predictive & Preventive Operations
+V2.8 / RTV3-08     Operational Memory & Succession
+V2.9 / RTV3-09     Qualification / Release Candidate
 V3.0        Product GA
 ```
 
-RTV3 IDs are roadmap milestones, not semver. Until repository authority closes V2.0, Road-to-V3 work is preparation only unless explicitly authorized.
+RTV3 IDs are stable internal milestone aliases, not product semver. **V2.1–V2.9** are the owner-approved actual Road-to-V3 product releases. V3.0 remains GA. Never claim a planned version is deployed before verified promotion; existing spec and owner acceptance gates remain mandatory.
 
 ## 3. Coordinator scope
 

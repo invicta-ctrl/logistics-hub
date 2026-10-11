@@ -13,6 +13,8 @@ Authority: Earl current instruction -> accepted spec/amendment -> verified repos
 
 When the owner says `start RTV`, `start RTV3`, `continue RTV`, `continue RTV3`, or names an `RTV3-XX` milestone, Codex, Claude, and Forge must use the **single normative** entry point in `docs/road-to-v3/00_COORDINATOR_CARD.md` ("Owner command entry point") after following the authority chain above. Do not invoke the historical Road-to-V2 branch runner. A short command never waives an accepted specification, owner acceptance gate, writer lock, production preflight, migration controls, or the one-slice branch policy. Architectural and security corrections needed for a milestone ship with that milestone under `docs/road-to-v3/01_ENGINEERING_CONSTITUTION.md`.
 
+Product versions for Road to V3 are **V2.1–V2.9**, one-to-one with RTV3-01–RTV3-09, then V3.0 GA. `start/continue V2.x` resolves through the same Coordinator Card. V2.1 F4 includes a truthful deployed product-version label in the existing Administration → System view, separately from the build hash.
+
 ## Non-negotiables
 
 - Writable/local-preview worktree: `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`.

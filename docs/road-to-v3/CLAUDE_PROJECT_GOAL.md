@@ -17,9 +17,7 @@ Optimize for:
 - small durable changes;
 - repository-backed handoffs so Codex can continue without Claude chat history.
 
-Roadmap identifiers are non-semver milestones:
-V2.0 product baseline → RTV3-01 Foundation → RTV3-02 Event & Demand → RTV3-03 Resource Promise → RTV3-04 Mission/Human Operations → RTV3-05 Procurement → RTV3-06 Lifecycle/Zero-Loss → RTV3-07 Predict/Prevent → RTV3-08 Memory/Succession → RTV3-09 Qualification → V3.0 product promotion.
-Do not rename RTV3 milestones as V2.x product versions.
+Owner-accepted product sequence: **V2.0 → V2.1 → V2.2 → V2.3 → V2.4 → V2.5 → V2.6 → V2.7 → V2.8 → V2.9 → V3.0**. `RTV3-01`–`RTV3-09` are stable internal milestone aliases for V2.1–V2.9, not conflicting release numbers. Map them through `06_ROAD_TO_V3_RELEASE_MAP.md`; accept `start/continue V2.x` and `start/continue RTV` via the same Coordinator Card. **V2.1 F4** must show the actual deployed product version in Administration → System alongside, not instead of, the current build/commit metadata.
 
 Ambient Assist already exists in V2.0. Do not treat AI as a future bolt-on. Preserve the deterministic-first architecture:
 - local/deterministic core first;
