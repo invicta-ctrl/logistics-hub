@@ -263,11 +263,11 @@ describe("capturing an item", () => {
     const shelf = await place("Shelf 2");
     const session = await begin(shelf);
     const { id } = await (await save(session, shot(shelf, { name: "Printer ink" }))).json() as { id: string };
-    expect(JSON.stringify(await (await call("/api/self-service/catalog")).json())).not.toContain("Printer ink");
+    expect(JSON.stringify(await (await call("/api/self-service/catalog")).json())).not.toContain("Printer Ink");
     const version = row(id).updated_at;
     const reviewed = await (await staff("/api/staff/items/bulk", "POST", { action: "REVIEWED", items: [{ id, updatedAt: version }] })).json();
     expect(reviewed).toMatchObject({ applied: 1 });
-    expect(JSON.stringify(await (await call("/api/self-service/catalog")).json())).toContain("Printer ink");
+    expect(JSON.stringify(await (await call("/api/self-service/catalog")).json())).toContain("Printer Ink");
   });
   it("needs a category and a unit unless it is review-later, and a place and a quantity always", async () => {
     const shelf = await place("Shelf 2");
