@@ -1,5 +1,7 @@
 # Deployment and access — Logistics Hub on Cloudflare
 
+**LIVE-STATE SAFETY NOTE (2026-10-11 documentation audit):** This runbook includes dated launch and version-specific migration/deployment instructions retained as historical evidence. Before performing production changes, verify the actual Cloudflare Build/Deploy settings, current `main` and deploy SHA, active production migration level, Cloud Operations manifest, permission, preflight and rollback. Historical “today”, “pending migration” or historical branch steps are NOT current execution authority. Follow `AGENTS.md`, the Cloud Operations amendment and `docs/DOCUMENTATION_STATUS.md`.
+
 There is **one deployment path** (the Owner Console's *Deploy verified main*) and **one credential path** (the site's Administration page, or the Owner Console, both using the site's authenticated Admin API). Nothing else is supported.
 
 | Resource | Name |
@@ -132,9 +134,9 @@ npx wrangler d1 migrations apply DB --remote       # applies it once
 
 Then, read-only: `SELECT COUNT(*) FROM item_media` is 0; `sqlite_master` lists `item_media`; `SELECT COUNT(*) FROM d1_migrations` is one more than before; the item, movement and on-hand counts are unchanged. Only then merge the V1.2 branch to `main`. Rollback before the merge: the migration only adds an empty table, so `DROP TABLE item_media` (while it is empty) or the Time Travel bookmark undoes it; an empty bucket can simply stay. After the merge, photos live in the bucket under `items/<id>/display` and `items/<id>/thumb`, and `item_media` is the only thing that refers to them. Redeploying the previous `main` leaves them untouched, because that code ignores them; restoring D1 to an earlier bookmark would leave unreferenced files in the bucket, which are harmless and invisible. After the deploy: open an item in Items, add a photo, check the list shows its thumbnail and the photo opens large, then remove it and read the three entries in Activity.
 
-## Deploys from CI (R9; switched off until Earl enables it)
+## CI deploy-gate switch-over (R9; historical setup instructions — verify current settings)
 
-Today Workers Builds deploys every push to `main`, even one whose CI fails (finding R9 of `docs/specs/accepted/2026-10-03-review-hardening-amendment.md`). `.github/workflows/deploy.yml` replaces that with a deploy of only a commit on `main` whose CI passed. It is **pending owner configuration**: nothing in the repository can switch Workers Builds off, so R9 is not fixed until the steps below are done.
+**As recorded when R9 was written (2026-10-03),** Workers Builds deployed every push to `main`, even one whose CI failed (finding R9 of `docs/specs/accepted/2026-10-03-review-hardening-amendment.md`). `.github/workflows/deploy.yml` replaces that with a deploy of only a commit on `main` whose CI passed. **Do not infer today's state from this historical note.** Verify the actual current Workers Builds/CI deploy switch, GitHub environment, `DEPLOY_FROM_CI` and workflow runs before treating R9 as pending or fixed. Nothing in this file is evidence that the switch-over has since occurred.
 
 What the workflow does once on:
 - **After CI on `main`:** it runs only when CI concluded `success` for a push to `main` in this repository. A failed, cancelled or skipped run never reaches the job. It checks out that exact commit and deploys only if it is still `main`'s head (an older green run never replaces a newer commit).
@@ -147,7 +149,7 @@ Owner steps to switch it on, in order:
 1. **Token.** The `production` environment's `CLOUDFLARE_API_TOKEN` must also allow *Workers Scripts: Edit* (it already reads D1 for Cloud Operations). Widen it, or replace it with one that has both.
 2. **Dry run.** Add the repository variable `DEPLOY_FROM_CI` = `dry-run` (Settings → Secrets and variables → Actions → Variables). Each green CI run on `main` then runs the whole path, but `wrangler deploy --dry-run` uploads nothing, so it is safe while Workers Builds still deploys.
    - **Expect:** a run after a green CI. No Deploy job after a failed or cancelled CI (two quick pushes cancel the first CI run).
-   - **Expect:** the gate refuses while `0022` and `0023` are not applied in production, then passes once the next release's Cloud Operations run applies them.
+   - **Expect:** the gate refuses when **any migration carried by the exact build is pending** in actual production D1, then passes only after the approved Cloud Operations lane applies it. Historical migrations `0022` and `0023` are not assumed pending.
 3. **Switch over.** Turn off Workers Builds' automatic production deploys for `main` (Cloudflare dashboard → Workers & Pages → `logistics-hub` → Settings → Builds), then set `DEPLOY_FROM_CI` = `true`. Push the next commit and check:
    - one Deploy run;
    - `npx wrangler deployments list` shows `ci <commit>`;
