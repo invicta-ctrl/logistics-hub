@@ -1,4 +1,6 @@
-# RTV3-08 — Operational Memory & Succession
+# V2.8 (RTV3-08) — Operational Memory & Succession
+
+**Release identity:** planned product **V2.8**; stable internal milestone **RTV3-08**. Historical V3.x roadmap names are retired. Verify deployment identity before announcing the release; ship required architecture, modularization, and security improvements within this same release (Engineering Constitution §2A).
 
 ## Outcome
 Preserve institutional continuity across semester/year turnover without making generated memory authoritative truth.

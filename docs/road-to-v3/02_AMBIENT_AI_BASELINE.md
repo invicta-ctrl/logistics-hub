@@ -1,5 +1,7 @@
 # Ambient Assist Baseline and Road-to-V3 AI Architecture
 
+**Current owner-approved naming:** V2.1–V2.9 are the Road-to-V3 product releases, corresponding one-to-one to stable internal RTV3-01–RTV3-09 milestone IDs. V3.0 follows qualification. The labels below refer to planned scopes, not currently deployed versions; see `06_ROAD_TO_V3_RELEASE_MAP.md`.
+
 ## 1. Architectural position
 
 Ambient Assist is inherited from V2.0.
@@ -60,7 +62,7 @@ then calls the ordinary domain endpoint.
 
 ## 5. Road-to-V3 evolution
 
-### RTV3-01
+### V2.1 (RTV3-01)
 Harden the AI platform:
 - one task registry/router;
 - schema validation;
@@ -72,40 +74,40 @@ Harden the AI platform:
 - evaluation harness;
 - model replacement procedure.
 
-### RTV3-02
+### V2.2 (RTV3-02)
 Event/Demand:
 - parse or normalize already-entered event requirements;
 - identify ambiguity;
 - suggest allowed field mappings;
 - never invent event needs.
 
-### RTV3-03
+### V2.3 (RTV3-03)
 Resource Promise:
 - rank already-valid fulfillment alternatives;
 - explain conflicts;
 - never create or approve a Promise autonomously.
 
-### RTV3-04
+### V2.4 (RTV3-04)
 Mission/Human Operations:
 - summarize blockers;
 - explain handovers;
 - identify responsibility gaps from explicit role/state data;
 - never assign staff, infer location, or alter permission.
 
-### RTV3-05
+### V2.5 (RTV3-05)
 Procurement:
 - compare bounded existing supplier/quote information when authorized;
 - normalize descriptions;
 - explain discrepancies;
 - never originate a purchase need, choose a supplier autonomously, or approve spending.
 
-### RTV3-06
+### V2.6 (RTV3-06)
 Lifecycle:
 - explain anomalies and reconciliation conflicts;
 - propose review categories;
 - never rewrite movement/audit truth.
 
-### RTV3-07
+### V2.7 (RTV3-07)
 Predictive & Preventive:
 This is where genuinely forward-looking intelligence is introduced:
 - demand forecasting;
@@ -126,14 +128,14 @@ bounded forecasting/scoring
 AI interpretation only when it adds measured value
 ```
 
-### RTV3-08
+### V2.8 (RTV3-08)
 Operational Memory:
 - concise State-of-Logistics synthesis;
 - turnover/handover summaries;
 - institutional-memory assistance;
 - privacy-preserving aggregation.
 
-### RTV3-09
+### V2.9 (RTV3-09)
 Qualification:
 prove:
 - AI off;

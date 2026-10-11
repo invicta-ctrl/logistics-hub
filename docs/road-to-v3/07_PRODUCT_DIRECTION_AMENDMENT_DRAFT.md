@@ -1,11 +1,13 @@
 # Draft Owner Amendment — Road-to-V3 Product Direction
 
 **Status:** PRE-DRAFT FOR OWNER ACCEPTANCE  
+
+**Product release mapping (2026-10-11):** V2.1 / RTV3-01 prepares this amendment. Acceptance is required before implementation of V2.2 / RTV3-02 and its successors through V2.8 / RTV3-08. The RTV3 IDs are stable internal milestone names, not product V3.x releases. This text remains PRE-DRAFT until separately approved.
 **Purpose:** Remove an ownerless future gate. This file is prepared during RTV3-01 so a future DOL administration can review/sign rather than author the direction from scratch.
 
 ## Owner decision requested
 
-Authorize Road-to-V3 to introduce the following new domains after RTV3-01:
+Authorize Road-to-V3 to introduce the following new domains after **V2.1 (RTV3-01)**:
 
 - Event & Demand Orchestration;
 - Resource Promise & Fulfillment;
@@ -34,7 +36,7 @@ The problem domains return only through new current-platform designs using:
 
 The legacy Request Center remains retired.
 
-RTV3-02 introduces a **new Event & Demand Orchestration domain** because the organization still needs a way to express and steward logistics demand. It must not import obsolete UI structure, legacy truth stores, or old coupling.
+V2.2 (RTV3-02) introduces a **new Event & Demand Orchestration domain** because the organization still needs a way to express and steward logistics demand. It must not import obsolete UI structure, legacy truth stores, or old coupling.
 
 ## AI authorization principle
 

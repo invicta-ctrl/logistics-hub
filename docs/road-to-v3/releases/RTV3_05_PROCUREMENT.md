@@ -1,4 +1,6 @@
-# RTV3-05 — Procurement & Replenishment
+# V2.5 (RTV3-05) — Procurement & Replenishment
+
+**Release identity:** planned product **V2.5**; stable internal milestone **RTV3-05**. Historical V3.x roadmap names are retired. Verify deployment identity before announcing the release; ship required architecture, modularization, and security improvements within this same release (Engineering Constitution §2A).
 
 ## Outcome
 Close an authorized resource gap from sourcing through receiving into existing stock truth.

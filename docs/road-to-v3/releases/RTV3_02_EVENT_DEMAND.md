@@ -1,4 +1,6 @@
-# RTV3-02 — Event & Demand Orchestration
+# V2.2 (RTV3-02) — Event & Demand Orchestration
+
+**Release identity:** planned product **V2.2**; stable internal milestone **RTV3-02**. Historical V3.x roadmap names are retired. Verify deployment identity before announcing the release; ship required architecture, modularization, and security improvements within this same release (Engineering Constitution §2A).
 
 ## Gate
 Requires:

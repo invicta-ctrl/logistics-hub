@@ -1,4 +1,6 @@
-# RTV3-04 — Mission Control & Human Operations
+# V2.4 (RTV3-04) — Mission Control & Human Operations
+
+**Release identity:** planned product **V2.4**; stable internal milestone **RTV3-04**. Historical V3.x roadmap names are retired. Verify deployment identity before announcing the release; ship required architecture, modularization, and security improvements within this same release (Engineering Constitution §2A).
 
 ## Outcome
 Provide a single operational workspace for executing a logistics goal and routing responsibility.

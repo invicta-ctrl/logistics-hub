@@ -1,7 +1,10 @@
 # Task <ID>
 
-## Milestone
-RTV3-xx — <name>
+## Release and milestone
+Product version: V2.x (from the owner-approved V2.1–V2.9 map; not historical V3.x)
+Stable internal milestone: RTV3-XX — <name>
+
+Resolve both labels through `docs/road-to-v3/06_ROAD_TO_V3_RELEASE_MAP.md`. Never infer deployment/promotion from a planned label.
 
 ## Goal
 <one bounded outcome>

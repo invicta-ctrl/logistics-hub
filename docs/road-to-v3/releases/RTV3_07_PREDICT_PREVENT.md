@@ -1,4 +1,6 @@
-# RTV3-07 — Predictive & Preventive Operations
+# V2.7 (RTV3-07) — Predictive & Preventive Operations
+
+**Release identity:** planned product **V2.7**; stable internal milestone **RTV3-07**. Historical V3.x roadmap names are retired. Verify deployment identity before announcing the release; ship required architecture, modularization, and security improvements within this same release (Engineering Constitution §2A).
 
 ## Outcome
 Use accumulated structured truth to identify preventable shortages, conflicts, and operational risks before they become incidents.

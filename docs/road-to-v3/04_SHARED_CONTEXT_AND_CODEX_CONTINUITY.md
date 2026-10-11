@@ -2,6 +2,8 @@
 
 The repository is the continuity authority.
 
+**Version continuity:** every new Road-to-V3 handoff records the planned/verified **product version (V2.1–V2.9)** and its stable **RTV3-XX milestone ID** together. Previous `V3.1–V3.7` roadmap versions are historical only. The coordinator maps `start/continue V2.x` and `start/continue RTV3-XX` to the same accepted task; see `06_ROAD_TO_V3_RELEASE_MAP.md`.
+
 Claude Project memory, thread history, and Codex chat history are conveniences, not durable project state.
 
 ## 1. Required continuity files
@@ -38,6 +40,8 @@ Every implementation lane records:
 TASK:
 STATUS:
 ACTIVE RELEASE:
+PRODUCT VERSION:
+INTERNAL RTV3 MILESTONE:
 ACCEPTED SPEC:
 BASE COMMIT:
 BRANCH / WORKTREE:

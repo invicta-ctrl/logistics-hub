@@ -1,8 +1,8 @@
-# Claude Code — Logistics Hub Road to V2
+# Claude Code — Logistics Hub shared agent guidance (V2 baseline → Road to V3)
 
 Read `AGENTS.md` and its required authority chain first.
 
-This file is shared: every Road-to-V2 branch carries the same copy. Change it on the earliest branch the change applies to, then let forward propagation (below) carry it to every later branch.
+The Road-to-V2 guidance below is retained as historical branch-era context. New Road-to-V3 work follows the live single-slice branch policy in `AGENTS.md`, the owner-approved V2.1–V2.9 release map, and the sole normative RTV command dispatcher in `docs/road-to-v3/00_COORDINATOR_CARD.md`. Do not activate the old forward-propagation runner on new work.
 
 ## Road-to-V2 order
 Version order is execution order. Each branch's spec under `docs/specs/accepted/road-to-v2/` names its predecessor.
@@ -36,7 +36,7 @@ For owner shorthand `start RTV` / `continue RTV` (including named milestones), r
 
 The public Road-to-V3 product versions are **V2.1–V2.9** (internal RTV3-01–RTV3-09 aliases) followed by V3.0 GA. `start/continue V2.x` follows the same coordinator gates. The first release V2.1 F4 adds the actual deployed product-version label to Administration → System without replacing technical build data.
 
-Before Road to V3: the V1.15 Final Pass (four-model Ambient Intelligence in Add items, Earl's accepted amendment, slices FP-A to FP-F) runs first. It is additional V1.15 work on `main`, not V2.1 and not V3; its authority and blocker are in `.codex/CURRENT.md`.
+Historical V1.15 Final Pass work remains V2 legacy scope, not V2.1 or V3. Verify its **current** status against actual Git refs, `.codex/CURRENT.md`, and `.codex/SESSION_HANDOFF.md`; do not assume it is still queued or completed solely because this guidance says so. A live V1.15 writer/slice must be reconciled and yielded before a V2.1 implementation writer starts.
 
 ## Road-to-V2 branch runner
 When the current branch starts with `road-to-v2/v1.`, it is an owner-authorized Road-to-V2 implementation branch. The other Road-to-V2 branches were pre-created by Earl and are exempt from the old one-active-branch *count* rule. Never delete, prune or rewrite them. Only the branch currently being implemented has an active writer; the only other change any branch receives is forward propagation.

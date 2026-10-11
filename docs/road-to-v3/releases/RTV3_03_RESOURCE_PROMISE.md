@@ -1,4 +1,6 @@
-# RTV3-03 — Resource Promise & Fulfillment
+# V2.3 (RTV3-03) — Resource Promise & Fulfillment
+
+**Release identity:** planned product **V2.3**; stable internal milestone **RTV3-03**. Historical V3.x roadmap names are retired. Verify deployment identity before announcing the release; ship required architecture, modularization, and security improvements within this same release (Engineering Constitution §2A).
 
 ## Outcome
 Convert demand into a time-aware, explainable resource plan.
