@@ -2,7 +2,7 @@
 
 This file fixes the former circular gate.
 
-**Owner's V1.16 pre-roadmap direction (2026-10-11):** V1.16 is an additional proposed Ambient Assist + Intelligent Core consolidation release before V2.1, despite the historical V2.0 close. It does not remove F7 measurement, routing, privacy, fallback or qualification gates. V2.1 F4 must reuse verified V1.16 version/changelog metadata rather than introducing a parallel identity system. Record which V1.16 checks were actually proven; do not assume a proposed feature is shipped. The existing Road-to-V3 product sequence remains V2.1–V2.9 and V3.0.
+**Owner-accepted V1.16 pre-roadmap direction (2026-10-11):** V1.16 is an additional accepted Ambient Assist + Intelligent Core consolidation release before V2.1, despite the historical V2.0 close. It does not remove F7 measurement, routing, privacy, fallback or qualification gates. V2.1 F4 must reuse verified V1.16 version/changelog metadata rather than introducing a parallel identity system. Record which V1.16 checks were actually proven; do not assume a proposed feature is shipped. The existing Road-to-V3 product sequence remains V2.1–V2.9 and V3.0.
 
 ## 1. V2.0 handoff asks only what V2 can truthfully verify
 
@@ -67,7 +67,7 @@ RTV3-01 is limited to these eight implementation packets:
 - correlation/request ID;
 - structured log field contract;
 - deployment/version identity;
-- **Owner-amended V1.16 → V2.1 version display:** if V1.16 is accepted, completed and verified first, it owns the first product version/changelog implementation; F4 reuses and qualifies the existing Administration → System `This version` panel. Current code (`src/admin-system.ts`, `src/system-status.ts`, `vite.config.ts`) shows the 12-hex build fingerprint, commit and built-at time. Add a separate prominent **Product version: V2.1** from the *actual deployed* build/release metadata. Preserve `build.json.version` as the build/PWA fingerprint and preserve existing Commit/Built details. Prefer extending the existing governed System endpoint and build metadata; do not create another panel or publicly expose `/build.json`;
+- **Owner-amended V1.16 → V2.1 version display:** once the accepted V1.16 scope is completed and verified, it owns the first product version/changelog implementation; F4 reuses and qualifies the existing Administration → System `This version` panel. Current code (`src/admin-system.ts`, `src/system-status.ts`, `vite.config.ts`) shows the 12-hex build fingerprint, commit and built-at time. Add a separate prominent **Product version: V2.1** from the *actual deployed* build/release metadata. Preserve `build.json.version` as the build/PWA fingerprint and preserve existing Commit/Built details. Prefer extending the existing governed System endpoint and build metadata; do not create another panel or publicly expose `/build.json`;
 - keep product release labels repeatable for V2.2–V2.9 and V3.0; malformed/missing version metadata must show Unknown rather than a guessed release, and rollback must reflect the running version;
 - verify the label in the deployed V2.1 Administration UI (phone/desktop, authorized and denied access), and distinguish production identity from local/source build identity;
 - typed failure classes;
