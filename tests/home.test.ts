@@ -259,6 +259,6 @@ describe("insights", () => {
     }
     const shown = (await card("used"))!;
     expect(shown.rows).toHaveLength(5);
-    expect(shown.rows[0]!.name).toBe("Busy item 7");
+    expect(shown.rows[0]!.name).toBe("Busy Item 7");
   });
 });
