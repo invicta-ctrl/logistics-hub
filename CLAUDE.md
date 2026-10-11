@@ -2,6 +2,9 @@
 
 Read `AGENTS.md` and its required authority chain first.
 
+**Permanent owner-directed version policy (2026-10-11):** All Claude Code sessions and delegated agents MUST follow `docs/PRODUCT_VERSION_GOVERNANCE.md` and the mandatory subsection in AGENTS.md. Once a main version `Vx.xx` has been released/merged, independently complete, verified product fixes merged into main automatically become `Vx.xx.1`, `Vx.xx.2`, etc. Count verified released slices, not commits or checkpoints; documentation-only/incomplete work does not increment. Reconcile prior release evidence, record each revision/changelog and expose the actual running version in the existing Administration > System once implemented. This instruction applies to V1.15 historical revisions, V1.16 after its real release, and every V2.x/V3.x release. Never fabricate backfilled patch numbers or call a pending candidate released.
+
+
 The Road-to-V2 guidance below is retained as historical branch-era context. New Road-to-V3 work follows the live single-slice branch policy in `AGENTS.md`, the owner-approved V2.1–V2.9 release map, and the sole normative RTV command dispatcher in `docs/road-to-v3/00_COORDINATOR_CARD.md`. Do not activate the old forward-propagation runner on new work.
 
 ## Road-to-V2 order
