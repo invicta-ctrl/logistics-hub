@@ -1,103 +1,30 @@
-# Claude Code — Logistics Hub shared agent guidance (V2 baseline → Road to V3)
+# Claude Code — Logistics Hub (current operating instructions)
 
-Read `AGENTS.md` and its required authority chain first.
+**Current and authoritative.** This file intentionally contains no historical Road-to-V2 branch runner or forward-propagation instructions.
 
-**Permanent owner-directed version policy (2026-10-11):** All Claude Code sessions and delegated agents MUST follow `docs/PRODUCT_VERSION_GOVERNANCE.md` and the mandatory subsection in AGENTS.md. Once a main version `Vx.xx` has been released/merged, independently complete, verified product fixes merged into main automatically become `Vx.xx.1`, `Vx.xx.2`, etc. Count verified released slices, not commits or checkpoints; documentation-only/incomplete work does not increment. Reconcile prior release evidence, record each revision/changelog and expose the actual running version in the existing Administration > System once implemented. This instruction applies to V1.15 historical revisions, V1.16 after its real release, and every V2.x/V3.x release. Never fabricate backfilled patch numbers or call a pending candidate released.
+## Required entry sequence
 
+1. Read `AGENTS.md` and follow its authority order.
+2. Read `.agents/PROJECT_POLICY.md`, `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md` and `docs/SHARED_AGENT_WORKFLOW.md`.
+3. Read the **active accepted** specification/amendment, verified repository state, release record, and task-specific policies. If any source conflicts, resolve by the repository authority chain; don't use an older chat, stale plan or superseded proposal as permission.
+4. Before modifying source, verify current worktree, remote refs, uncommitted changes and exact writer lock; claim the sole writer lock according to the shared workflow. Never use a second writable branch or infer that a disconnected writer has yielded.
 
-The Road-to-V2 guidance below is retained as historical branch-era context. New Road-to-V3 work follows the live single-slice branch policy in `AGENTS.md`, the owner-approved V2.1–V2.9 release map, and the sole normative RTV command dispatcher in `docs/road-to-v3/00_COORDINATOR_CARD.md`. Do not activate the old forward-propagation runner on new work.
+## Active release boundary — 2026-10-11
 
-## Road-to-V2 order
-Version order is execution order. Each branch's spec under `docs/specs/accepted/road-to-v2/` names its predecessor.
+- **V1.15 is historically closed.** Do not restart the old Road-to-V2 branch runner. Completed releases V1.1–V1.15, previous migrations and production operations remain auditable under `docs/road-to-v2/releases/` and `docs/specs/accepted/`.
+- **V1.16 Ambient Assist + Intelligent Core is owner-accepted but not yet an implemented release.** The sole active source of detailed scope is `docs/specs/accepted/v1.16-ambient-intelligent-core.md` and its execution card `docs/road-to-v2/v1.16-execution-card.md`. Its completion and deployed confirmation are required before declaring final V2 readiness for the V3 roadmap.
+- **V3 roadmap:** V2.1–V2.9 (stable internal aliases RTV3-01–RTV3-09), then V3.0. For `start/continue RTV` and `start/continue V2.x`, use only `docs/road-to-v3/00_COORDINATOR_CARD.md` and its gates. V2.1/F4 reuses the product-version/changelog implementation from completed V1.16, never duplicates it.
+- **Automatic version revisions:** `docs/PRODUCT_VERSION_GOVERNANCE.md` is mandatory. A completed main release `Vx.xx` followed by a separately merged verified product change becomes `Vx.xx.1`, `Vx.xx.2`, etc. Count independently released changes, not checkpoints. Do not invent historical patch versions or mark an unreleased version complete.
 
-| Version | Branch | Slice |
-|---|---|---|
-| V1.1 | `road-to-v2/v1.1-experience-foundation` | Experience foundation and navigation |
-| V1.2 | `road-to-v2/v1.2-item-profiles-media` | Item profiles and media |
-| V1.3 | `road-to-v2/v1.3-staff-directory` | USC Staff Directory |
-| V1.4 | `road-to-v2/v1.4-smart-locations` | Smart locations and wayfinding |
-| V1.5 | `road-to-v2/v1.5-rapid-catalogue` | Rapid Catalogue (online-first) and bulk operations |
-| V1.6 | `road-to-v2/v1.6-catalog-pwa` | Staff Catalog PWA and offline cataloguing |
-| V1.7 | `road-to-v2/v1.7-physical-inventory` | Physical inventory and location audits |
-| V1.8 | `road-to-v2/v1.8-kits-containers` | Kits and structured containers |
-| V1.9 | `road-to-v2/v1.9-self-service-2` | Self-Service 2.0 |
-| V1.10 | `road-to-v2/v1.10-attention-automation` | Attention and operational automation |
-| V1.11 | `road-to-v2/v1.11-intelligent-search` | Intelligent search and relationships |
-| V1.12 | `road-to-v2/v1.12-operations-home` | Operations home and practical insights |
-| V1.13 | `road-to-v2/v1.13-admin-control` | Administration and system control |
-| V1.14 | `road-to-v2/v1.14-offline-performance` | Offline, performance and reliability hardening |
-| V1.15 | `road-to-v2/v1.15-v2-consolidation` | V2 consolidation |
+## Permanent engineering and release rules
 
-The order was re-sequenced on 2026-10-02 (accepted amendment `docs/specs/accepted/road-to-v2/2026-10-02-roadmap-amendments.md`).
+- One active writer and one `slice/*` branch. Checkpoint each coherent working increment to the active branch; on passing independent acceptance and exact-head CI, merge the complete slice promptly to updated `main`, verify configured deployment and prune only confirmed-integrated refs. Incomplete functionality stays off main and is reported truthfully.
+- Never deliver or describe an incomplete version as a finished product. Required correctness/security/denial/performance/browser checks, production preflight, backups, rollback and owner gates are not waived by the words `start`, `finish` or `continue`.
+- D1 structured business truth, R2 governed media, movement-derived stock, server-enforced permissions, append-only audit, safe offline recovery and deterministic-first intelligent features are invariant. Ambient AI is optional and must not block core work or receive forbidden private data.
+- Avoid new speculative dependencies, duplicate caches/registries, obsolete execution paths or a second source of truth. Design for one-person operations, usable phones, accessible interaction and concise staff-facing copy.
+- Record exact branch/HEAD, completed versus incomplete work, meaningful test evidence, next action and named writer in `.codex/SESSION_HANDOFF.md` before yielding.
+- Production and migration work follows `docs/DEPLOYMENT.md`, `docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`, `ops/releases/` and the protected operations lane. No bypass by older Road-to-V2 instructions.
 
-Road to V2 is closed: V2.0 is complete (`docs/road-to-v2/releases/v2.0.md`) and every Road-to-V2 branch is merged and deleted, so the runner and forward-propagation rules below apply to no branch today.
+## Historical material
 
-## Road to V3 (prepared 2026-10-08, not started)
-The planning package is `docs/road-to-v3/` (milestones RTV3-01 to RTV3-09, then V3.0). Its boot sequence is `docs/road-to-v3/00_COORDINATOR_CARD.md`; repository authority outranks the package, and differences are recorded in its `08_RECONCILIATION_REGISTER.md`. Nothing may start until Earl accepts the milestone's spec under `docs/specs/accepted/road-to-v3/`; RTV3-02 and later also need the accepted Product Direction Amendment. Branches follow `AGENTS.md` (one slice branch at a time, merged and deleted when green). Current state: `.codex/CURRENT.md`.
-
-For owner shorthand `start RTV` / `continue RTV` (including named milestones), run the command dispatch in `docs/road-to-v3/00_COORDINATOR_CARD.md` after repository-authority checks. The legacy Road-to-V2 `start`/`continue` runner below applies only to actual historical Road-to-V2 branches and does not authorize V3 work. Carry each milestone's scoped code-quality, modularization, architecture, performance, and security deliverables in the same verified release rather than deferring them to RTV3-09.
-
-The public Road-to-V3 product versions are **V2.1–V2.9** (internal RTV3-01–RTV3-09 aliases) followed by V3.0 GA. `start/continue V2.x` follows the same coordinator gates. **Owner amendment 2026-10-11:** Before Road-to-V3 V2.1, V1.16 is the explicitly requested Ambient Assist + Intelligent Core consolidation. It is a new owner-directed pre-roadmap release despite the already-complete historical V2.0 baseline; do not rewrite V2.0's release evidence. The V1.16 scope is accepted at docs/specs/accepted/v1.16-ambient-intelligent-core.md and was explicitly accepted by the owner on 2026-10-11; implementation remains subject to writer/production and verification gates. V1.16 moves the genuine deployed version and concise changelog into the existing Administration → System > This version panel while preserving the build hash/commit/date/migrations. V2.1 F4 subsequently **reuses** this implementation and extends diagnostics, rather than duplicating the version surface.
-
-**No-incomplete-product rule:** Never show the owner an unfinished version as a finished product. For each independently complete green slice, commit/push on its single active branch, merge into updated main, verify CI and configured deployment, prune the integrated slice, then start remaining version work from current main. Checkpoints which are coherent and working must be committed/pushed to the active slice and precisely handed off; incomplete slices never merge. Product version/changelog describes actual deployed scope, never speculative work.
-
-Historical V1.15 Final Pass work remains V2 legacy scope, not V2.1 or V3. Verify its **current** status against actual Git refs, `.codex/CURRENT.md`, and `.codex/SESSION_HANDOFF.md`; do not assume it is still queued or completed solely because this guidance says so. A live V1.15 writer/slice must be reconciled and yielded before a V2.1 implementation writer starts.
-
-## Road-to-V2 branch runner
-When the current branch starts with `road-to-v2/v1.`, it is an owner-authorized Road-to-V2 implementation branch. The other Road-to-V2 branches were pre-created by Earl and are exempt from the old one-active-branch *count* rule. Never delete, prune or rewrite them. Only the branch currently being implemented has an active writer; the only other change any branch receives is forward propagation.
-
-Find the one accepted spec under `docs/specs/accepted/road-to-v2/` whose `BRANCH` line exactly matches the current branch. That spec is the active implementation authority for this branch. Older `.codex/CURRENT*` records may still describe the V1 release-close state; once this branch passes its predecessor/start gate, the matching Road-to-V2 spec controls the slice.
-
-## Forward propagation (Earl, 2026-10-02)
-Every time a Road-to-V2 branch receives new commits, bring every **succeeding** branch up to date, in order. Never update a preceding branch from a later one.
-1. Merge the updated branch into the next branch in the table (`git merge`, no rebase), then merge that branch into the one after it, and so on through V1.15. Use a merge commit message such as `merge: bring road-to-v2/v1.N forward`.
-2. On a `CLAUDE.md` conflict, keep the incoming copy. It is the same shared file, coming from an earlier branch.
-3. Resolve any other conflict by keeping both sides' intent. If a later branch has started its own implementation and the two sides change the same logic, stop and report rather than guess.
-4. Never force-push, rebase or reset these branches. Push each one with a normal push before moving to the next.
-5. A spec's start-gate wording "safely rebase onto latest main" is satisfied by merging `origin/main` into the branch. The branch already carries its predecessors through propagation, so no history is rewritten.
-
-## Release records and owner actions (Earl, 2026-10-02)
-`docs/road-to-v2/releases/<version>.md` separates what the agent finished from what only Earl can do.
-- `STATUS: COMPLETE` means scope, tests, evidence and review are green on the branch.
-- `INTEGRATION:` is either `MERGED <commit>` or `WAITING ON OWNER ACTIONS`.
-- `OWNER_ACTIONS:` lists each production or private step with its exact command, its preflight and backup, its rollback, and how to verify it. Examples: applying a D1 migration before merging (`docs/DEPLOYMENT.md`), creating an R2 bucket, or importing private data. Write `none` when there are none.
-- A successor's predecessor gate passes when the predecessor's record says `STATUS: COMPLETE` on `main`, or on the predecessor branch with `INTEGRATION: WAITING ON OWNER ACTIONS`. The successor builds on the predecessor branch (already propagated) and records which owner actions are still pending. It must never depend on a pending owner action having happened, for example on production data that has not been imported yet.
-- Once Earl completes the owner actions, integrate the waiting branches to `main` in version order.
-
-## Standing release authority (Earl, 2026-10-05)
-Earl has given standing authority for these, so do not ask first:
-- Run **Production operations** `preflight` and `prepare` for a release (`gh workflow run production-ops.yml --ref main -f release=<vX> -f expected_sha=<full head> -f mode=<preflight|prepare>`; `prepare` also takes `-f "confirm=PREPARE <vX> <sha>"`). A run waits at `waiting` for Earl's required-reviewer approval in GitHub; that approval is his and is never given by an agent. Do not push to the release branch while a prepare is pending, because `expected_sha` must stay its head. Read the run's own log for `PREFLIGHT_OK` / `READY_TO_MERGE`; a verbal "it's done" is not evidence.
-- Merge a release to `main` when it is genuinely OK: CI green on its head, `prepare` reported `READY_TO_MERGE`, predecessors integrated, no owner action pending. Then verify `main`'s CI and deploy, propagate forward through V1.15 and report.
-- Fix problems that come up (conflicts of form, flaky or Windows-only test failures, stale pointers) and carry on. Stop and report only for risk of production data loss, failed integrity gates, or merge conflicts where two sides change the same logic.
-- When a release is finished, tell Earl that it is merged, propagated and verified, and which branches are genuinely safe to delete. Delete only branches verified as integrated, and never a successor that has not merged.
-
-## Short control phrases
-Earl may send only a short command.
-
-### `start`, `begin`, or `continue`
-Treat it as authorization to execute/resume the complete accepted slice, not merely to plan it.
-1. Inspect repo state, current branch/head, remote state, active writer state where accessible, and unknown work.
-2. Fetch latest `origin/main` and the predecessor branch; verify the predecessor gate (see Release records). If the predecessor is not complete, stop without partial implementation and state the exact blocker.
-3. Safely bring the current branch onto the latest verified main by merge. Never force away unknown remote commits or discard unknown work.
-4. Claim/yield the repository writer lock when the execution environment exposes it. Preserve the single-writer rule during implementation.
-5. Implement the accepted scope end-to-end in coherent checkpoints. No placeholder UI, unused future architecture, dead buttons, speculative compatibility layers or unneeded dependencies.
-6. Use subagents for bounded research, read-only review, testing or visual critique when useful; maintain one implementation writer.
-7. Run verification appropriate to impact, commit/push working checkpoints, and propagate each pushed checkpoint forward.
-
-### `complete` or `finish`
-Treat it as authorization to finish every remaining acceptance criterion for the current version and integrate normal code changes once green.
-1. Reconcile implemented behavior against every acceptance criterion and inspect the complete diff.
-2. Finish missing scope; remove dead/obsolete paths created by the slice.
-3. Run typecheck, relevant unit/integration tests, build, privacy/secret scan, browser/E2E, accessibility and migration/data verification when applicable. CI (`.github/workflows/ci.yml`) must be green on the final commit.
-4. For any user-visible change, complete the spec's visual-research evidence: research current external references, render the real application, capture responsive screenshots, inspect them with the agent's visual capabilities, and iterate on visual defects. Code inspection alone cannot approve visual quality. Start from `npm run evidence -- --out <dir> --base <predecessor>` and extend `--pages` for the slice's new surfaces.
-5. Create the required `docs/road-to-v2/releases/<version>.md` completion record with final commit, verification, migrations, visual evidence, known limitations, `STATUS: COMPLETE`, `INTEGRATION:` and `OWNER_ACTIONS:`.
-6. Commit and push the finished branch, then propagate it forward. Earl's `finish` authorizes normal integration to `main` after all gates are green and no owner action is pending. Never auto-apply a production D1 migration, destructive provider operation, or irreversible data change without the exact accepted migration/backup/rollback authority required by project policy.
-7. A completed branch may be pruned only after verified integration according to repository policy.
-
-## Visual-quality rule
-For visual work, "the CSS/code is cleaner" is not evidence that the result looks better. Use current web/design references plus rendered screenshot/vision review. Prefer official design systems, accessibility guidance, real inventory/admin products and measured performance data. Record what was learned and why it fits Logistics Hub rather than copying another product.
-
-## Product rule
-Keep the product sophisticated underneath and obvious on top. Every new capability must reduce user decisions, reduce staff work, improve accountability, or improve operational visibility without sacrificing speed, privacy or maintainability.
-
-Catalog intelligence and semantic hardening (accepted amendment `docs/specs/accepted/road-to-v2/2026-10-04-catalog-intelligence-semantic-hardening-amendment.md`, Earl, 2026-10-04) applies to V1.6–V1.15: built-in deterministic intelligence stays authoritative, external AI stays optional and is limited to V1.11's off-by-default Workers AI second opinion, suggestions show evidence tiers and reasons rather than percentages, and visible copy uses one term per concept (amendment §4). Each slice's own item is in its spec under "Catalog intelligence amendment".
+The removed legacy instructions are retained in Git history at [the pre-cleanup `CLAUDE.md`](https://github.com/invicta-ctrl/logistics-hub/blob/aa09900827a94e0931a33416f70c3ae4c7e6bcf9/CLAUDE.md). Historical instructions do **not** govern new work. See `docs/DOCUMENTATION_STATUS.md` for the documentation authority map.
