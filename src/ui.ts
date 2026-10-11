@@ -94,8 +94,22 @@ export function itemVisual(item: VisualItem, url: (id: string) => string, classN
   return html`<span class="item-visual ${className}">${raw(itemIconSvg(key))}${visual.type === "PHOTO"
     ? html`<img class="item-visual__photo" data-item-photo data-photo="${visual.photoId}" src="${url(visual.photoId)}" alt="${meaningful ? `Photo of ${item.name}` : ""}" width="160" height="160" loading="lazy" decoding="async" />` : ""}</span>`;
 }
+const thumbnailVersions = new Map<string, number>();
+export const itemThumbnailUrl = (id: string, scope: "staff" | "public" = "public") =>
+  `/api/${scope}/media/${id}/thumb?v=2${thumbnailVersions.has(id) ? `&r=${thumbnailVersions.get(id)}` : ""}`;
+
+/** Refresh already-visible photos after changing a cutout without replacing its media id. */
+export function refreshItemThumbnail(id: string): void {
+  thumbnailVersions.set(id, (thumbnailVersions.get(id) ?? 0) + 1);
+  for (const image of document.querySelectorAll<HTMLImageElement>("img")) {
+    const path = new URL(image.src, location.href).pathname;
+    if (path === `/api/staff/media/${id}/thumb`) image.src = itemThumbnailUrl(id, "staff");
+    else if (path === `/api/public/media/${id}/thumb`) image.src = itemThumbnailUrl(id);
+  }
+}
+
 export const thumbImg = (item: VisualItem & { photo?: string | null }): Html =>
-  itemVisual({ ...item, photoId: item.photo }, (id) => `/api/public/media/${id}/thumb`, "item-thumb");
+  itemVisual({ ...item, photoId: item.photo }, itemThumbnailUrl, "item-thumb");
 
 // Resource events do not bubble. Capture lets redraws share one fallback handler without per-row listeners.
 document.addEventListener("load", (event) => {

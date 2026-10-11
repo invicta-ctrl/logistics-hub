@@ -162,7 +162,7 @@ async function judge(page: Page, name: string, insets: { top: number; bottom: nu
 async function formItems(browser: Browser, baseURL: string): Promise<Record<"TAKE" | "BORROW" | "USE", string>> {
   const context = await browser.newContext({ baseURL });
   try {
-    const find = async () => ((await (await context.request.get("/api/self-service/catalog")).json()) as { items: { id: string; name: string; action: string }[] }).items.filter((item) => item.name.startsWith("Phone check"));
+    const find = async () => ((await (await context.request.get("/api/self-service/catalog")).json()) as { items: { id: string; name: string; action: string }[] }).items.filter((item) => item.name.startsWith("Phone Check"));
     let items = await find();
     if (new Set(items.map((item) => item.action)).size < 3) {
       await context.newPage().then((page) => page.goto("/staff"));

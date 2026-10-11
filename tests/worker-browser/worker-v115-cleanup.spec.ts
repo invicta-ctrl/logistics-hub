@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
-import { type Page, expect, test } from "@playwright/test";
+import { type Page, type Request, expect, test } from "@playwright/test";
 
 // A completed cleanup starts a profile refresh; let its route handler finish before disposing the request context.
 test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: "wait" }); });
@@ -35,7 +35,26 @@ const tiny = (opaque: boolean) => {
 /** What Cloudflare Images returned for tests/fixtures/cutout-source-320x240.jpg on 2026-10-08 (segment=foreground): a real cutout. */
 const providerCutout = readFileSync(new URL("../fixtures/cutout-provider-320x240.png", import.meta.url));
 
-type Setup = { id: string; photoId: string; state: { cleaned: boolean; posted: unknown[]; deletes: number } };
+const CUTOUT_ETAG = '"fixture-cutout"';
+const thumbnailSrc = (id: string, revision = 0) => `/api/staff/media/${id}/thumb?v=2${revision ? `&r=${revision}` : ""}`;
+type CleanupBody = { expected: string; accept?: true };
+type Setup = { id: string; photoId: string; state: { cleaned: boolean; thumb: Buffer | null; posted: CleanupBody[]; deletes: number } };
+
+async function cleanupRequest(request: Request): Promise<{ body: CleanupBody; thumb?: Buffer }> {
+  const contentType = request.headers()["content-type"] ?? "";
+  if (!contentType.startsWith("multipart/form-data")) return { body: request.postDataJSON() };
+  const form = await new Response(new Uint8Array(request.postDataBuffer()!), { headers: { "content-type": contentType } }).formData();
+  expect(form.get("expected")).toEqual(expect.any(String));
+  expect(form.get("accept")).toBe("1");
+  expect(form.get("source")).toBe(CUTOUT_ETAG);
+  expect(form.get("pending")).toBe("1");
+  const thumb = form.get("thumb");
+  expect(thumb).toBeInstanceOf(Blob);
+  expect((thumb as Blob).type).toBe("image/jpeg");
+  const bytes = Buffer.from(await (thumb as Blob).arrayBuffer());
+  expect(bytes.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+  return { body: { expected: form.get("expected") as string, accept: true }, thumb: bytes };
+}
 
 /** Signs in, makes an item with a photo, and stands in for the Images binding: the Worker answers cleanup as if it were on, and `cutoutBody` is the picture served. */
 async function itemWithPhoto(page: Page, baseURL: string, cutoutBody: Buffer): Promise<Setup> {
@@ -50,27 +69,36 @@ async function itemWithPhoto(page: Page, baseURL: string, cutoutBody: Buffer): P
   } });
   expect(created.status()).toBe(201);
   const { id } = await created.json();
-  const state = { cleaned: false, posted: [] as unknown[], deletes: 0 };
+  const state = { cleaned: false, thumb: null as Buffer | null, posted: [] as CleanupBody[], deletes: 0 };
   await page.route(new RegExp(`/api/staff/items/${id}(/photo)?$`), async (route) => {
     if (route.request().method() === "DELETE") return route.fallback();
     const real = await route.fetch();
     const body = await real.json();
     const { photo } = body.item ?? body;
     const photoCleanup = { cleanable: true, canEnable: false, cleanupReason: "" };
-    const marked = photo ? { ...photo, ...photoCleanup, cutout: state.cleaned } : null;
+    const marked = photo ? { ...photo, ...photoCleanup, cutout: state.cleaned, cutoutThumb: state.cleaned } : null;
     await route.fulfill({ response: real, json: body.item ? { ...body, item: { ...body.item, photoCleanup, photo: marked } } : { photo: marked } });
   });
   await page.route(`**/api/staff/items/${id}/cutout**`, async (route) => {
     if (route.request().method() === "POST") {
-      const sent = route.request().postDataJSON() as { accept?: boolean };
+      const { body: sent, thumb } = await cleanupRequest(route.request());
       state.posted.push(sent);
       // A new cut waits as pending; only the browser's accept makes it the item's picture.
-      if (sent.accept) state.cleaned = true;
+      if (sent.accept) { state.cleaned = true; state.thumb = thumb!; }
       await route.fulfill({ json: sent.accept ? { cutout: true } : { pending: true } });
     }
-    else { state.deletes += 1; state.cleaned = false; await route.fulfill({ json: { cutout: false } }); }
+    else {
+      const query = new URL(route.request().url()).searchParams;
+      expect(query.get("expected")).toBe(state.posted.at(-1)?.expected);
+      if (query.has("pending")) expect(query.get("pending")).toBe(CUTOUT_ETAG);
+      else { state.cleaned = false; state.thumb = null; }
+      state.deletes += 1;
+      await route.fulfill({ json: { cutout: state.cleaned } });
+    }
   });
-  await page.route(/\/api\/staff\/media\/[^/]+\/(cutout|pending)$/, (route) => route.fulfill({ body: cutoutBody, contentType: "image/png" }));
+  await page.route(/\/api\/staff\/media\/[^/]+\/(cutout|pending)$/, (route) => route.fulfill({ body: cutoutBody, contentType: "image/png", headers: { etag: CUTOUT_ETAG } }));
+  await page.route(/\/api\/staff\/media\/[^/]+\/thumb\?v=2(?:&r=\d+)?$/, (route) => state.cleaned && state.thumb
+    ? route.fulfill({ body: state.thumb, contentType: "image/jpeg" }) : route.fallback());
   await page.goto(`/staff/items?item=${id}`);
   const panel = page.locator("#photo-panel");
   await expect(panel.getByRole("button", { name: "Remove background" })).toHaveCount(0);
@@ -83,25 +111,30 @@ async function itemWithPhoto(page: Page, baseURL: string, cutoutBody: Buffer): P
   await panel.getByRole("button", { name: "Save photo" }).click();
   await expect(panel.locator("[data-tile] .item-visual--loaded img")).toBeVisible();
   const photoId = (await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id as string;
-  await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", `/api/staff/media/${photoId}/thumb`);
+  await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", thumbnailSrc(photoId));
+  await panel.locator("[data-view]").click();
+  await page.locator("dialog.viewer").getByRole("button", { name: "Edit photo", exact: true }).click();
+  await expect(page.locator("dialog.viewer")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => !history.state?.viewer)).toBe(true);
   return { id, photoId, state };
 }
 
 test("picture cleanup: remove the background, see the cleaned picture, go back to the original", async ({ page, baseURL }) => {
   const { photoId, state } = await itemWithPhoto(page, baseURL!, providerCutout);
+  const original = await (await page.request.get(`/api/staff/media/${photoId}/display`)).body();
   const panel = page.locator("#photo-panel");
   await panel.getByRole("button", { name: "Remove background" }).click();
   await expect(panel.getByRole("button", { name: "Use original" })).toBeVisible();
   expect(state.posted).toEqual([{ expected: photoId }, { expected: photoId, accept: true }]);
-  await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", `/api/staff/media/${photoId}/cutout`);
-  await expect(page.getByText("The original photo is kept.")).toBeVisible();
+  await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", thumbnailSrc(photoId, 1));
+  expect(await (await page.request.get(`/api/staff/media/${photoId}/display`)).body()).toEqual(original);
   // Focus lands on the button that now undoes it.
   await expect(panel.getByRole("button", { name: "Use original" })).toBeFocused();
 
   await panel.getByRole("button", { name: "Use original" }).click();
   await expect(panel.getByRole("button", { name: "Remove background" })).toBeVisible();
   expect(state.deletes).toBe(1);
-  await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", `/api/staff/media/${photoId}/thumb`);
+  await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", thumbnailSrc(photoId, 2));
 });
 
 test("a cut that is not a real cutout is undone at once and the original stays", async ({ page, baseURL }) => {
@@ -114,7 +147,7 @@ test("a cut that is not a real cutout is undone at once and the original stays",
   expect(state.posted).toEqual([{ expected: photoId }]);
   expect(state.deletes).toBe(1);
   await expect(panel.getByRole("button", { name: "Remove background" })).toBeVisible();
-  await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", `/api/staff/media/${photoId}/thumb`);
+  await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", thumbnailSrc(photoId));
 });
 
 async function replacement(page: Page) {
@@ -149,18 +182,23 @@ test("a replacement saves before cleanup, cleans its new media id and preserves 
   const { id, photoId, state } = await itemWithPhoto(page, baseURL!, providerCutout);
   let original: Buffer | null = null;
   await page.route(`**/api/staff/items/${id}/cutout**`, async (route) => {
-    const sent = route.request().postDataJSON(); state.posted.push(sent);
+    const { body: sent, thumb } = await cleanupRequest(route.request()); state.posted.push(sent);
     if (!sent.accept) original = await (await page.request.get(`/api/staff/media/${sent.expected}/display`)).body();
-    else state.cleaned = true;
+    else { state.cleaned = true; state.thumb = thumb!; }
     await route.fulfill({ json: sent.accept ? { cutout: true } : { pending: true } });
   });
   await replacement(page); await page.getByRole("button", { name: "Save & remove background", exact: true }).click();
+  await expect(page.getByText("Background removed.", { exact: true })).toBeVisible();
+  await page.locator("#photo-panel [data-view]").click();
+  await page.locator("dialog.viewer").getByRole("button", { name: "Edit photo", exact: true }).click();
+  await expect(page.locator("dialog.viewer")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => !history.state?.viewer)).toBe(true);
   await expect(page.getByRole("button", { name: "Use original", exact: true })).toBeVisible();
   const next = (await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id;
   expect(next).not.toBe(photoId);
   expect(state.posted).toEqual([{ expected: next }, { expected: next, accept: true }]);
   expect(await (await page.request.get(`/api/staff/media/${next}/display`)).body()).toEqual(original);
-  await expect(page.locator("#photo-panel [data-tile] img").first()).toHaveAttribute("src", `/api/staff/media/${next}/cutout`);
+  await expect(page.locator("#photo-panel [data-tile] img").first()).toHaveAttribute("src", thumbnailSrc(next, 1));
 });
 
 for (const failure of ["save conflict", "cleanup unavailable"] as const) test(`replacement ${failure} keeps an original and never cleans a conflicting save`, async ({ page, baseURL }) => {
@@ -173,7 +211,7 @@ for (const failure of ["save conflict", "cleanup unavailable"] as const) test(`r
   const next = (await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id;
   expect(next === photoId).toBe(failure === "save conflict");
   expect(state.posted).toHaveLength(failure === "save conflict" ? 0 : 1);
-  await expect(page.locator("#photo-panel [data-tile] img").first()).toHaveAttribute("src", `/api/staff/media/${next}/thumb`);
+  await expect(page.locator("#photo-panel [data-tile] img").first()).toHaveAttribute("src", thumbnailSrc(next));
 });
 
 test("the cleaned picture opens large over the dark overlay with its edges intact", async ({ page, baseURL }, info) => {

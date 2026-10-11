@@ -9,7 +9,7 @@ import { type Readiness, applyUpdate, canPromptInstall, hasUpdate, isStandalone,
 import { ancestry, placesOf, type ReportKind } from "./location-tree";
 import { type GroupId, GROUPS, behaviourLine, conciseLocation, frequentItems, groupName, groupOf, grouped, isGroup, matching } from "./self-service-browse";
 import { type Step, openWhereIsIt } from "./where-is-it";
-import { ApiError, CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, keepFailure, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, itemVisual, units } from "./ui";
+import { ApiError, CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, keepFailure, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, itemVisual, itemThumbnailUrl, units } from "./ui";
 
 /*
  * Self-Service (/self-service): what a student or staff member sees after scanning the QR code
@@ -211,7 +211,7 @@ function refreshRegions(): void {
 /* ---------- Items: pictures, availability, where ---------- */
 
 const visual = (item: CatalogItem, className: string, meaningful = false): Html =>
-  itemVisual({ ...item, photoId: item.photo }, (id) => `/api/public/media/${id}/thumb`, className, meaningful);
+  itemVisual({ ...item, photoId: item.photo }, itemThumbnailUrl, className, meaningful);
 
 function countBadge(item: CatalogItem, available: number): Html {
   if (available <= 0) return html`<span class="ss-count ss-count--out">None left</span>`;

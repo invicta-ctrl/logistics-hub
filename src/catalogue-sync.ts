@@ -183,6 +183,7 @@ async function send(entry: Entry): Promise<void> {
     form.set("thumb", entry.photo.thumb, "thumb.jpg");
     form.set("expected", "");
     form.set("hash", entry.photo.hash);
+    if (entry.photo.crop) form.set("cropRect", JSON.stringify(entry.photo.crop));
     // Not checked when it was taken (offline, or the check failed): the server checks it once, after this first photo is saved.
     if (entry.recheck) form.set("recheck", "1");
     try {
@@ -209,7 +210,7 @@ async function send(entry: Entry): Promise<void> {
     else {
       try {
         const fault = await removePhotoBackground(`/api/staff/items/${entry.itemId}/cutout`, savedPhoto.id);
-        toast(fault ? `${fault} Item and original photo saved.` : "Item saved. Background removed in its photo viewer; the original is kept.");
+        toast(fault ? `${fault} Item and original photo saved.` : "Item saved. Background removed.");
       } catch {
         toast("Item and photo saved. Background removal could not be confirmed; open the item to try again.");
       }

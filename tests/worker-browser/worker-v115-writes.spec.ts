@@ -74,6 +74,7 @@ test.describe("a durable write is acknowledged at once and confirmed only after 
     const id = await makeItem(page, baseURL!, { name: `Held save ${Date.now() % 100000}`, itemType: "Loanable" });
     await page.goto(`/staff/items?item=${id}`);
     await page.getByRole("tab", { name: "Edit details" }).click();
+    await page.locator("#item-advanced > summary").click();
     await page.getByLabel(/^Internal notes/).fill("Kept on the second shelf");
     const hold = await holdWrites(page, (url, method) => url.pathname === `/api/staff/items/${id}` && method !== "GET");
     const save = page.getByRole("button", { name: "Save changes" });

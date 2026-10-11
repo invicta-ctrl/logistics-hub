@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const username = process.env.E2E_USERNAME!;
 const password = process.env.E2E_PASSWORD!;
+const thumbnailSrc = (id: string) => `/api/staff/media/${id}/thumb?v=2`;
 
 async function signIn(page: Page) {
   await page.goto("/staff");
@@ -72,6 +73,7 @@ test("staff publish and stock changes reach an open public page live", async ({ 
   await page.getByRole("searchbox", { name: "Search items" }).fill("Bluetooth Microphone");
   await page.getByRole("button", { name: "Bluetooth Microphone" }).click();
   await page.getByRole("tab", { name: "Review & edit" }).click();
+  await page.locator("#item-advanced > summary").click();
   await page.getByLabel("Shown to").selectOption("STUDENTS_AND_USC_STAFF");
   await page.getByLabel("Details reviewed and verified").check();
   await expect(page.getByText(/Will appear on the public Lending Hub/)).toBeVisible();
@@ -338,6 +340,7 @@ test("migrated review: fill the gaps, mark reviewed, and move to the next record
   await sheet.getByRole("button", { name: "Add place" }).click();
   await expect(page.getByText("Place added.")).toBeVisible();
   await expect(sheet.getByRole("combobox", { name: /^Place/ })).toHaveValue(/^LOC-\d{4}$/);
+  await sheet.locator("#item-advanced > summary").click();
   await sheet.getByLabel("Other names").fill("e2e alias, E2E ALIAS");
   await sheet.getByLabel("Borrow or take").selectOption("Take (Consumable)");
   // Choosing it lists the item, so staff do not set the audience separately.
@@ -373,6 +376,7 @@ test("create, warn on a duplicate name, then deactivate without deleting", async
   await expect(sheet.getByLabel("Shown to")).toHaveValue("STUDENTS_AND_USC_STAFF");
   await expect(sheet.getByLabel("Borrow or take").locator("option")).toHaveText(["Borrow (Loanable)", "Take (Consumable)"]);
   await sheet.getByLabel("Borrow or take").selectOption("Borrow (Loanable)");
+  await sheet.locator("#item-advanced > summary").click();
   await sheet.getByLabel("Opening quantity").fill("3");
   await page.getByRole("button", { name: "Create item" }).click();
   await expect(page.getByText(/Item ITM-\d+ created\./)).toBeVisible();
@@ -380,6 +384,7 @@ test("create, warn on a duplicate name, then deactivate without deleting", async
   await expect(page.locator(".profile__meta").first()).toContainText("Office Equipment and Supplies");
 
   await page.getByRole("tab", { name: "Edit details" }).click();
+  await sheet.locator("#item-advanced > summary").click();
   await sheet.getByLabel("Status", { exact: true }).selectOption("INACTIVE");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Changes saved.")).toBeVisible();
@@ -707,12 +712,13 @@ test("open units: opt in, open, use, mark low, open another, mark empty, close b
   await sheet.getByLabel("Name", { exact: true }).fill("E2E Copy Paper");
   await sheet.getByLabel("Category", { exact: true }).fill("school supplies");
   await sheet.getByLabel("Unit", { exact: true }).fill("ream");
-  await expect(sheet.getByLabel("How is this item normally used?")).toBeHidden();
+  await expect(sheet.getByLabel("How is it used?")).toBeHidden();
   await sheet.getByLabel("Borrow or take").selectOption("Take (Consumable)");
+  await sheet.locator("#item-advanced > summary").click();
   await sheet.getByLabel("Shown to").selectOption("NOT_AVAILABLE_FOR_LENDING");
   // Every item starts as Whole unit; staff opt in.
-  await expect(sheet.getByLabel("How is this item normally used?")).toHaveValue("WHOLE_UNIT");
-  await sheet.getByLabel("How is this item normally used?").selectOption("OPEN_UNIT");
+  await expect(sheet.getByLabel("How is it used?")).toHaveValue("WHOLE_UNIT");
+  await sheet.getByLabel("How is it used?").selectOption("OPEN_UNIT");
   await sheet.getByLabel("Opening quantity").fill("8");
   await page.getByRole("button", { name: "Create item" }).click();
   await expect(page.getByLabel("Quantity on hand")).toHaveValue("8");
@@ -731,10 +737,10 @@ test("open units: opt in, open, use, mark low, open another, mark empty, close b
 
   // Changing how it is used is refused while a unit is open.
   await page.getByRole("tab", { name: "Edit details" }).click();
-  await sheet.getByLabel("How is this item normally used?").selectOption("WHOLE_UNIT");
+  await sheet.getByLabel("How is it used?").selectOption("WHOLE_UNIT");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(sheet.locator("#details-alert")).toContainText("This item has open units");
-  await sheet.getByLabel("How is this item normally used?").selectOption("OPEN_UNIT");
+  await sheet.getByLabel("How is it used?").selectOption("OPEN_UNIT");
   await page.getByRole("tab", { name: "Overview" }).click();
 
   // A second unit is allowed, after a warning.
@@ -830,20 +836,20 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   const cameraInput = panel.locator("input[type=file][capture=environment]");
   await expect(libraryInput).toHaveCount(1);
   await expect(cameraInput).toHaveCount(1);
-  await expect(panel.getByRole("button", { name: "Upload photo" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
   await expect(sheet.locator(".profile__stock")).toContainText("on hand");
 
   // Something that is not a picture is refused in words, and nothing is shown or saved.
   await libraryInput.setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("not an image") });
   await expect(panel.getByRole("alert")).toContainText("JPEG, PNG or WebP");
-  await expect(panel.getByRole("button", { name: "Upload photo" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
   expect(await detail()).toBeNull();
 
   // A photo taken sideways: the preview comes first, and Cancel saves nothing.
   await cameraInput.setInputFiles({ name: "camera.jpg", mimeType: "image/jpeg", buffer: phonePhoto(6) });
   await expect(panel.getByRole("img", { name: "Preview of the new photo of Scissors" })).toBeVisible();
   await panel.getByRole("button", { name: "Cancel" }).click();
-  await expect(panel.getByRole("button", { name: "Upload photo" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
   expect(await detail()).toBeNull();
   await cameraInput.setInputFiles({ name: "camera.jpg", mimeType: "image/jpeg", buffer: phonePhoto(6) });
   await panel.getByRole("button", { name: "Save photo" }).click();
@@ -905,7 +911,7 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   // The list shows the small variant, only for rows near the screen, and the thumbnail opens the viewer too.
   await sheet.getByRole("button", { name: "Close" }).click();
   const row = page.locator('tr[data-key="ITM-0262"]');
-  await expect(row.locator(".thumb [data-item-photo]")).toHaveAttribute("src", `/api/staff/media/${photo.id}/thumb`);
+  await expect(row.locator(".thumb [data-item-photo]")).toHaveAttribute("src", thumbnailSrc(photo.id));
   await expect(row.locator(".thumb [data-item-photo]")).toHaveAttribute("loading", "lazy");
   await expect(row.locator(".thumb [data-item-photo]")).toHaveCSS("width", "40px");
   // Decorative beside the name (the same photo opens from the profile), so screen readers hear the name once.
@@ -920,6 +926,10 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
 
   // Replace: a new photo takes the place, and the old address stops working.
   await row.getByRole("button", { name: "Scissors" }).click();
+  await panel.locator("[data-view]").click();
+  await viewer.getByRole("button", { name: "Edit photo", exact: true }).click();
+  await expect(viewer).toHaveCount(0);
+  await settled();
   await expect(panel.getByRole("button", { name: "Change photo" })).toBeVisible();
   // Opening the picker and walking away from it must leave the profile open (the picker's own cancel must not close the sheet).
   await panel.getByRole("button", { name: "Change photo" }).click();
@@ -934,7 +944,11 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   expect(replaced.id).not.toBe(photo.id);
   expect(replaced.width).toBeGreaterThan(replaced.height);
   expect((await page.request.get(`/api/staff/media/${photo.id}/thumb`)).status()).toBe(404);
-  await expect(row.locator(".thumb [data-item-photo]")).toHaveAttribute("src", `/api/staff/media/${replaced.id}/thumb`);
+  await expect(row.locator(".thumb [data-item-photo]")).toHaveAttribute("src", thumbnailSrc(replaced.id));
+  await panel.locator("[data-view]").click();
+  await viewer.getByRole("button", { name: "Edit photo", exact: true }).click();
+  await expect(viewer).toHaveCount(0);
+  await settled();
 
   // Remove asks first; Keep changes nothing.
   await panel.getByRole("button", { name: "Remove", exact: true }).click();
@@ -944,7 +958,7 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await panel.getByRole("button", { name: "Remove", exact: true }).click();
   await panel.getByRole("button", { name: "Remove photo" }).click();
   await expect(page.getByText("Photo removed.")).toBeVisible();
-  await expect(panel.getByRole("button", { name: "Upload photo" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
   expect(await detail()).toBeNull();
   expect((await page.request.get(`/api/staff/media/${replaced.id}/display`)).status()).toBe(404);
   await expect(row.locator(".thumb .item-icon")).toBeVisible();
@@ -965,7 +979,7 @@ test("item photos: a photo someone else added meanwhile is never overwritten, an
   await page.goto("/staff/items?item=ITM-0263");
   const sheet = page.getByRole("dialog", { name: "Scotch Tape" });
   const panel = sheet.locator("#photo-panel");
-  await expect(panel.getByRole("button", { name: "Upload photo" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
   await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "mine.jpg", mimeType: "image/jpeg", buffer: phonePhoto(1) });
   await expect(panel.getByRole("img", { name: /Preview of the new photo/ })).toBeVisible();
   // Meanwhile a colleague adds one through the same endpoint.
@@ -988,6 +1002,10 @@ test("item photos: a photo someone else added meanwhile is never overwritten, an
   await expect(panel.getByRole("img", { name: /Preview of the new photo/ })).toHaveCount(0);
   const item = await (await page.request.get("/api/staff/items/ITM-0263")).json() as { item: { photo: { id: string } } };
   expect(item.item.photo.id).toBe(theirId);
+  await panel.locator("[data-view]").click();
+  await page.locator("dialog.viewer").getByRole("button", { name: "Edit photo", exact: true }).click();
+  await expect(page.locator("dialog.viewer")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => !history.state?.viewer)).toBe(true);
   await expect(panel.getByRole("button", { name: "Change photo" })).toBeVisible();
 
   // A 320 px phone, with the photo: every control is named, and nothing scrolls sideways.
@@ -1019,7 +1037,7 @@ test("item photos: an open profile follows a photo someone else changed, so its 
   const replaced = await page.request.put("/api/staff/items/ITM-0263/photo", { headers: { origin: baseURL! }, multipart: {
     display: { name: "display.jpg", mimeType: "image/jpeg", buffer: bytes }, thumb: { name: "thumb.jpg", mimeType: "image/jpeg", buffer: bytes }, expected: current } });
   const next = (await replaced.json() as { photo: { id: string } }).photo.id;
-  await expect(shown).toHaveAttribute("src", `/api/staff/media/${next}/thumb`, { timeout: 30_000 });
+  await expect(shown).toHaveAttribute("src", thumbnailSrc(next), { timeout: 30_000 });
   await sheet.locator("#photo-panel [data-view]").click();
   const viewer = page.getByRole("dialog", { name: "Photo of Scotch Tape" });
   await expect(viewer).toBeVisible();

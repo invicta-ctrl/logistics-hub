@@ -1,4 +1,4 @@
-import { devices, expect, test, type Page, type Route } from "@playwright/test";
+import { devices, expect, test, type Page, type Request, type Route } from "@playwright/test";
 
 /* V1.5 Rapid Catalogue on fictional data with a small stateful server behind the API: sessions, captures, photos and bulk edits. */
 
@@ -196,7 +196,7 @@ test.describe("capturing a mixed shelf", () => {
     await page.getByRole("button", { name: "Save & next" }).click();
     await expect(name(page)).toBeFocused();
     await expect(name(page)).toHaveValue("");
-    await expect(rows(page).first()).toContainText("whiteboard marker blue");
+    await expect(rows(page).first()).toContainText("Whiteboard Marker Blue");
     await expect(rows(page).first()).toContainText("2 pieces");
     await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
     expect(server.state.captures[0]).toMatchObject({ behaviour: "CONSUME", quantity: 2, locationId: "LOC-0003", category: "OFFICE SUPPLIES", unit: "piece" });
@@ -239,7 +239,7 @@ test.describe("capturing a mixed shelf", () => {
     await expect(page.getByRole("button", { name: "Save as a separate item" })).toBeFocused();
     await page.getByRole("button", { name: "Save as a separate item" }).click();
     await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
-    expect(server.state.captures[0]).toMatchObject({ name: "stapler", acknowledged: ["ITM-0002"] });
+    expect(server.state.captures[0]).toMatchObject({ name: "Stapler", acknowledged: ["ITM-0002"] });
   });
 
   test("an item saved a moment ago is noticed as a possible match before the server's list has caught up", async ({ page }) => {
@@ -252,7 +252,7 @@ test.describe("capturing a mixed shelf", () => {
     await page.getByRole("button", { name: "Save & next" }).click();
     await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
     await name(page).fill("paper trimmer");
-    await expect(page.getByRole("group", { name: "Possible matches" })).toContainText("Paper trimmer");
+    await expect(page.getByRole("group", { name: "Possible matches" })).toContainText("Paper Trimmer");
   });
 
   test("tapping a category or unit chip fills exactly that value, spaces and all", async ({ page }) => {
@@ -303,11 +303,11 @@ test("a look-alike of an item saved a moment ago on this page is saved as a sepa
     if (press === 1) await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
   }
   // The first item is on the server now: it is named by its item, and the second press saves past it.
-  await expect(page.getByRole("group", { name: "Possible matches" })).toContainText("Label maker");
+  await expect(page.getByRole("group", { name: "Possible matches" })).toContainText("Label Maker");
   await page.getByRole("button", { name: "Save as a separate item" }).click();
   await expect.poll(() => server.state.captures.length).toBe(2);
   await expect(bar(page)).toHaveText("All saved");
-  expect(server.state.captures.map((entry) => entry.name)).toEqual(["Label maker", "label maker"]);
+  expect(server.state.captures.map((entry) => entry.name)).toEqual(["Label Maker", "Label Maker"]);
   expect(server.state.captures[1]!.acknowledged).toEqual([server.state.captures[0]!.itemId]);
 });
 
@@ -326,7 +326,7 @@ test.describe("saving survives a dropped connection", () => {
     expect(server.state.captures).toHaveLength(0);
     // The page is reloaded while offline: the item is still there, waiting.
     await page.reload();
-    await expect(rows(page).first()).toContainText("Label printer");
+    await expect(rows(page).first()).toContainText("Label Printer");
     await expect(rows(page).first()).toContainText("Not saved yet");
     server.state.fail = "";
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
@@ -382,7 +382,7 @@ test.describe("photo suggestions (ambient assist)", () => {
     await begin(page, server);
     await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
     await expect(name(page)).toHaveValue("Stapler");
-    await expect(page.locator("#cat-name-hint")).toHaveText("Suggested from the photo. Check it, or type over it.");
+    await expect(page.locator("#cat-name-hint")).toHaveText("Suggested from photo");
     await expect(page.locator("#cat-dup")).toContainText("This may already be in the catalog.");
     await expect(page.locator("#cat-dup")).toContainText("Same name");
     // The person's own words win, and the hint goes with the suggestion.
@@ -395,7 +395,7 @@ test.describe("photo suggestions (ambient assist)", () => {
     await page.getByRole("button", { name: "Save & next" }).click();
     await page.getByRole("button", { name: "Save as a separate item" }).click();
     await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
-    expect(server.state.captures[0]).toMatchObject({ name: "Long-reach stapler", acknowledged: ["ITM-0002"] });
+    expect(server.state.captures[0]).toMatchObject({ name: "Long-reach Stapler", acknowledged: ["ITM-0002"] });
     // Checked while it was taken: nothing is left to check after sync.
     expect(server.state.photos).toEqual([expect.objectContaining({ recheck: false })]);
     expect(server.state.photoAsks).toBe(1);
@@ -464,7 +464,7 @@ test.describe("photo suggestions (ambient assist)", () => {
     // The field is under "More details": it opens by itself and says where the value came from.
     await expect(page.locator("#cat-model")).toBeVisible();
     await expect(page.locator("#cat-model")).toHaveValue("HD-10");
-    await expect(page.locator("#cat-model-hint")).toContainText("Read from the photo");
+    await expect(page.locator("#cat-model-hint")).toContainText("From photo");
     await page.locator("#cat-model").fill("HD-10N");
     await expect(page.locator("#cat-model-hint")).toBeEmpty();
     await page.locator("#cat-file").setInputFiles({ name: "second.png", mimeType: "image/png", buffer: PNG });
@@ -605,13 +605,13 @@ test.describe("when the sign-in ends or the session is gone", () => {
     await page.route("**/api/staff/catalogue/sessions", (route) => { started.push(route.request().postDataJSON() as Record<string, unknown>); return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: NEXT, resumed: false }) }); });
     await page.route(`**/api/staff/catalogue/sessions/${NEXT}/captures`, (route) => { saved.push(route.request().postDataJSON() as Record<string, unknown>); return route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: "ITM-2000", captureId: "x", replayed: false }) }); });
     await page.goto("/staff/catalogue");
-    await expect(page.locator(".cat-held")).toContainText("Whiteboard eraser");
+    await expect(page.locator(".cat-held")).toContainText("Whiteboard Eraser");
     server.state.fail = "";
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
     await expect(page.locator(".cat-held")).toHaveCount(0);
     // The new session was proposed under the finished one's id; the server answered with a new one, and the item went there once.
     expect(started).toEqual([{ id: SESSION_ID, locationId: "LOC-0003" }]);
-    expect(saved.map((body) => body.name)).toEqual(["Whiteboard eraser"]);
+    expect(saved.map((body) => body.name)).toEqual(["Whiteboard Eraser"]);
     await page.reload();
     await expect(page.locator(".cat-held")).toHaveCount(0);
   });
@@ -922,7 +922,7 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     await page.getByRole("button", { name: "Finish" }).click();
     await expect(page.getByRole("heading", { name: "Cataloguing finished" })).toBeVisible();
     await expect.poll(() => server.state.finished).toBe(true);
-    expect(server.state.captures.map((entry) => entry.name)).toEqual(["Paper cutter"]);
+    expect(server.state.captures.map((entry) => entry.name)).toEqual(["Paper Cutter"]);
   });
 
   test("turning it off asks first and ends it on the server", async ({ page }) => {
@@ -1034,7 +1034,7 @@ for (const decision of ["Keep", "Reject", "Correct"] as const) {
     await page.getByLabel("Counted in").fill("piece");
     await expect(page.getByRole("button", { name: "Review AI suggestion", exact: true })).toHaveCount(0);
     await expect(page.locator("#cat-ai")).toContainText("AI suggestion");
-    await expect(name(page)).toHaveValue("Unknown marker");
+    await expect(name(page)).toHaveValue("Unknown Marker");
     await page.locator("#cat-ai").getByRole("button", { name: decision, exact: true }).click();
     if (decision === "Correct") {
       const target = server.state.items.find((item) => item.name.includes("Whiteboard"))!;
@@ -1043,7 +1043,7 @@ for (const decision of ["Keep", "Reject", "Correct"] as const) {
       await expect(name(page)).toHaveValue(target.name);
     }
     if (decision === "Keep") await expect(name(page)).toHaveValue("Whiteboard Marker Black");
-    if (decision === "Reject") await expect(name(page)).toHaveValue("Unknown marker");
+    if (decision === "Reject") await expect(name(page)).toHaveValue("Unknown Marker");
     await expect(page.locator("#cat-ai")).toContainText("Save the item");
     await page.locator("#cat-save").click();
     if (!server.state.captures.length) await page.locator("#cat-save").click();
@@ -1113,6 +1113,23 @@ for (const outcome of ["FAILED", "NO_NAME"] as const) test(`photo reading ${outc
   expect(asks).toBe(1);
 });
 
+const CUTOUT_ETAG = '"fixture-cutout"';
+async function cleanupRequest(request: Request): Promise<{ expected: string; accept?: true }> {
+  const contentType = request.headers()["content-type"] ?? "";
+  if (!contentType.startsWith("multipart/form-data")) return request.postDataJSON();
+  const form = await new Response(new Uint8Array(request.postDataBuffer()!), { headers: { "content-type": contentType } }).formData();
+  expect(form.get("expected")).toEqual(expect.any(String));
+  expect(form.get("accept")).toBe("1");
+  expect(form.get("source")).toBe(CUTOUT_ETAG);
+  expect(form.get("pending")).toBe("1");
+  const thumb = form.get("thumb");
+  expect(thumb).toBeInstanceOf(Blob);
+  expect((thumb as Blob).type).toBe("image/jpeg");
+  const bytes = Buffer.from(await (thumb as Blob).arrayBuffer());
+  expect(bytes.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+  return { expected: form.get("expected") as string, accept: true };
+}
+
 for (const outcome of ["valid", "cleanup fails", "upload conflicts"] as const) {
   test(`Catalogue Save & remove background: ${outcome} is one-shot and preserves saving`, async ({ page }) => {
     const server = serve(page, { active: true, photoCleanup: { cleanable: true, canEnable: false, cleanupReason: "" } });
@@ -1149,16 +1166,16 @@ for (const outcome of ["valid", "cleanup fails", "upload conflicts"] as const) {
     });
     await page.route("**/api/staff/items/ITM-*/cutout**", async (route) => {
       const method = route.request().method();
-      const body = method === "POST" ? route.request().postDataJSON() : null;
+      const body = method === "POST" ? await cleanupRequest(route.request()) : null;
       calls.push({ method, body });
       if (outcome === "cleanup fails") {
         await route.fulfill({ status: 503, json: { error: "Picture cleanup is resting after errors. Try again in a few minutes." } });
         return;
       }
       expect(method).toBe("POST");
-      expect(body.expected).toBe(mediaId);
-      if (body.accept === true) accepted = true;
-      await route.fulfill({ json: body.accept === true ? { cutout: true } : { pending: true } });
+      expect(body?.expected).toBe(mediaId);
+      if (body?.accept === true) accepted = true;
+      await route.fulfill({ json: body?.accept === true ? { cutout: true } : { pending: true } });
     });
     await begin(page, server);
     const pending = Buffer.from(await page.evaluate(() => {
@@ -1168,7 +1185,7 @@ for (const outcome of ["valid", "cleanup fails", "upload conflicts"] as const) {
       draw.fillStyle = "#9a2537"; draw.fillRect(0, 0, 8, 16);
       return canvas.toDataURL("image/png").split(",")[1]!;
     }), "base64");
-    await page.route(`**/api/staff/media/${mediaId}/pending`, (route) => route.fulfill({ contentType: "image/png", body: pending }));
+    await page.route(`**/api/staff/media/${mediaId}/pending`, (route) => route.fulfill({ contentType: "image/png", headers: { etag: CUTOUT_ETAG }, body: pending }));
     await page.locator("#cat-library").setInputFiles({ name: "fictional-toolbox.png", mimeType: "image/png", buffer: PNG });
     await expect(page.locator("#cat-photo img")).toBeVisible();
     const saveClean = page.getByRole("button", { name: "Save & remove background", exact: true });
@@ -1192,7 +1209,7 @@ for (const outcome of ["valid", "cleanup fails", "upload conflicts"] as const) {
       await expect.poll(() => photoWrites.length).toBe(1);
       expect(calls).toHaveLength(0);
       expect(server.state.captures).toHaveLength(1);
-      expect(server.state.captures[0]).toMatchObject({ name: "Fictional green toolbox", behaviour: "BORROW" });
+      expect(server.state.captures[0]).toMatchObject({ name: "Fictional Green Toolbox", behaviour: "BORROW" });
       releasePhoto();
       await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
       await expect.poll(async () => page.evaluate(async () => {

@@ -248,12 +248,12 @@ describe("capturing an item", () => {
     const { id } = await (await save(session, shot(shelf, { behaviour: "REVIEW_LATER", name: "Black cable thing", category: "", unit: "", quantity: 7 }))).json() as { id: string };
     expect(row(id)).toMatchObject({ category: "UNSORTED", unit: "piece", item_type: "NEEDS_REVIEW", needs_review: 1, lending_audience: "NOT_AVAILABLE_FOR_LENDING" });
     expect(onHand(id)).toBe(7);
-    expect(JSON.stringify(await (await call("/api/public/catalog")).json())).not.toContain("Black cable thing");
-    expect(JSON.stringify(await (await call("/api/self-service/catalog")).json())).not.toContain("Black cable thing");
+    expect(JSON.stringify(await (await call("/api/public/catalog")).json())).not.toContain("Black Cable Thing");
+    expect(JSON.stringify(await (await call("/api/self-service/catalog")).json())).not.toContain("Black Cable Thing");
     // Even the most permissive settings cannot publish it while it is unclassified.
     sqlite.prepare("UPDATE items SET lending_audience = 'STUDENTS_AND_USC_STAFF', needs_review = 0 WHERE id = ?").run(id);
-    expect(JSON.stringify(await (await call("/api/public/catalog")).json())).not.toContain("Black cable thing");
-    expect(JSON.stringify(await (await call("/api/self-service/catalog")).json())).not.toContain("Black cable thing");
+    expect(JSON.stringify(await (await call("/api/public/catalog")).json())).not.toContain("Black Cable Thing");
+    expect(JSON.stringify(await (await call("/api/self-service/catalog")).json())).not.toContain("Black Cable Thing");
     const inventory = await (await staff("/api/staff/inventory")).json() as { categories: string[] };
     expect(inventory.categories).not.toContain("UNSORTED");
     const state = await (await staff("/api/staff/catalogue")).json() as { reviewLater: { total: number; items: Array<{ id: string; place: string }> } };
@@ -581,7 +581,7 @@ describe("review-only AI offers and correction evidence", () => {
     const { reviewProposals } = await import("../src/ai-review");
     expect((await reviewProposals(env.DB)).proposals).toEqual([]);
     sqlite.prepare("UPDATE items SET needs_review = 0 WHERE id = ?").run(saved.id);
-    expect((await reviewProposals(env.DB)).proposals[0]).toMatchObject({ observed: "staplr", support: 1, actors: 1, target: { name: "Staple remover" } });
+    expect((await reviewProposals(env.DB)).proposals[0]).toMatchObject({ observed: "staplr", support: 1, actors: 1, target: { name: "Staple Remover" } });
   });
   it("rolls feedback back with a refused capture", async () => {
     seed(); const shelf = await place("AI test shelf"); const session = await begin(shelf); const offer = await ask(session);
@@ -617,7 +617,7 @@ describe("review-only AI offers and correction evidence", () => {
     seed(); const shelf = await place("AI test shelf"); const session = await begin(shelf); const other = await begin(shelf, otherCookie);
     for (const [who, targetSession, revision] of [[cookie, session, 1], [cookie, session, 2], [otherCookie, other, 1]] as const) {
       const offer = await ask(targetSession, revision, "Staplr", who);
-      const response = await save(targetSession, shot(shelf, { name: "Staple remover", category: "TOOLS", behaviour: "BORROW", acknowledged: (sqlite.prepare("SELECT id FROM items WHERE name = 'Staple remover'").all() as { id: string }[]).map((item) => item.id), aiFeedback: decision(offer) }), who);
+      const response = await save(targetSession, shot(shelf, { name: "Staple remover", category: "TOOLS", behaviour: "BORROW", acknowledged: (sqlite.prepare("SELECT id FROM items WHERE name = 'Staple remover' COLLATE NOCASE").all() as { id: string }[]).map((item) => item.id), aiFeedback: decision(offer) }), who);
       expect(response.status).toBe(201);
       sqlite.prepare("UPDATE items SET needs_review = 0 WHERE id = ?").run((await response.json() as { id: string }).id);
     }

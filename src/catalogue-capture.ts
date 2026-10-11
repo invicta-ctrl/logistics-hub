@@ -87,7 +87,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   let waiting: Entry[] = [];
   /** Everything this page has captured, as the lists and rules read items, until the saved catalog catches up with it. */
   const local = new Map<string, Item>();
-  let photo: { display: Blob; thumb: Blob; preview: string; hash: string } | null = null;
+  let photo: Prepared | null = null;
   let originalPhoto: Prepared | null = null;
   let draftId = crypto.randomUUID();
   let draftRevision = 0;
@@ -363,9 +363,10 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     }
     drawDraft(raw);
     const hint = $("#cat-name-hint");
-    mount(hint, nameFromPhoto ? html`${icon("camera")}Suggested from the photo. Check it, or type over it.` : html`A temporary name is fine if you are not sure.`);
+    mount(hint, nameFromPhoto ? html`${icon("camera")}Suggested from photo` : html``);
+    hint.classList.toggle("visually-hidden", !nameFromPhoto);
     hint.classList.toggle("cat-name-hint--photo", nameFromPhoto);
-    mount($("#cat-model-hint"), modelFromPhoto ? html`${icon("camera")}Read from the photo. Check it, or type over it.` : html``);
+    mount($("#cat-model-hint"), modelFromPhoto ? html`${icon("camera")}From photo` : html``);
     if (!matches.length) armed = false;
     drawMatches();
     for (const button of root.querySelectorAll<HTMLButtonElement>("[data-behaviour]")) {
@@ -673,7 +674,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       photoHash: photo?.hash ?? "", acknowledged: matches.filter((match) => !match.id.startsWith("pending:")).map((match) => match.id)
     };
     const entry: Entry = {
-      id, sessionId, owner: session.id, body, photo: photo ? { display: photo.display, thumb: photo.thumb, hash: photo.hash } : null, itemId: null, state: "waiting", message: null, matches: null,
+      id, sessionId, owner: session.id, body, photo: photo ? { display: photo.display, thumb: photo.thumb, hash: photo.hash, ...(photo.crop ? { crop: photo.crop } : {}) } : null, itemId: null, state: "waiting", message: null, matches: null,
       ...(photo && !photoChecked ? { recheck: true } : {}),
       ...(cleanBackground ? { cleanBackground: true } : {}),
       at: new Date().toISOString(), after: matches.filter((match) => match.id.startsWith("pending:")).map((match) => match.id.slice(8))

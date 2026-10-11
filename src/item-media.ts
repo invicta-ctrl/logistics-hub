@@ -1,3 +1,4 @@
+import type { PhotoCrop } from "./catalog-draft";
 import { isListedForLending, selfServiceAction } from "./catalog-policy";
 import { type Actor, BUMP_REVISION, InputError, audit } from "./inventory";
 
@@ -5,6 +6,19 @@ export const MEDIA_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 /** The browser makes both variants (src/item-photo.ts); these are the Worker's ceilings, not the sizes it expects. */
 export const VARIANTS = { display: { edge: 1600, bytes: 1_000_000 }, thumb: { edge: 480, bytes: 150_000 } } as const;
 export type Variant = keyof typeof VARIANTS;
+
+function cropMetadata(form: FormData): Record<string, string> | undefined {
+  const value = form.get("cropRect");
+  if (value === null) return;
+  let crop: PhotoCrop | null = null;
+  try { if (typeof value === "string") crop = JSON.parse(value || "null") as PhotoCrop | null; }
+  catch { throw new InputError(400, "The crop is not valid. Choose it again."); }
+  if (!crop || ![crop.x, crop.y, crop.width, crop.height].every((number) => typeof number === "number" && Number.isFinite(number)) ||
+      crop.x < 0 || crop.y < 0 || crop.width < 1 || crop.height < 1 || crop.x + crop.width > 100.001 || crop.y + crop.height > 100.001) {
+    throw new InputError(400, "The crop is not valid. Choose it again.");
+  }
+  return { cropRect: JSON.stringify({ x: crop.x, y: crop.y, width: crop.width, height: crop.height }) };
+}
 
 /** Item photos and location pictures share the catalog bucket, each under its own prefix. */
 export const key = (mediaId: string, variant: Variant, folder: "items" | "locations" | "kits" = "items") => `${folder}/${mediaId}/${variant}`;
@@ -144,7 +158,7 @@ export const CHANGED = "Someone else changed this photo. Reload to see the lates
 export async function dropObjects(bucket: R2Bucket, mediaId: string, folder: "items" | "locations" | "kits" = "items"): Promise<void> {
   // An item photo may also have a cleaned picture (src/item-cutout.ts); it goes with the photo.
   if (folder === "items") {
-    for (const name of ["cutout", "cutout-pending"]) await bucket.delete(`items/${mediaId}/${name}`).catch(() => { console.error("media_cleanup_failed", { mediaId, variant: name }); });
+    for (const name of ["cutout", "cutout-pending", "cutout-thumb"]) await bucket.delete(`items/${mediaId}/${name}`).catch(() => { console.error("media_cleanup_failed", { mediaId, variant: name }); });
   }
   await Promise.all((Object.keys(VARIANTS) as Variant[]).map((variant) => bucket.delete(key(mediaId, variant, folder)).catch(() => {
     console.error("media_cleanup_failed", { mediaId, variant });
@@ -174,6 +188,16 @@ export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Acto
   const display = await readVariant(form, "display");
   const thumb = await readVariant(form, "thumb");
   const hash = photoHash(form);
+  const customMetadata = cropMetadata(form);
+  const cleaned = form.get("crop") === "1" && expected ? await bucket.get(`items/${expected}/cutout`) : null;
+  let cleanedThumb: Awaited<ReturnType<typeof readVariant>> | null = null;
+  if (cleaned) {
+    const value = form.get("cutoutThumb");
+    if (!(value instanceof File)) throw new InputError(409, "This photo was cleaned meanwhile. Reload it before cropping.");
+    const cleanForm = new FormData(); cleanForm.set("thumb", value);
+    cleanedThumb = await readVariant(cleanForm, "thumb");
+    if (Math.max(cleanedThumb.width, cleanedThumb.height) > 320) throw new InputError(400, "The cleaned thumbnail is too large.");
+  }
   const item = await db.prepare("SELECT updated_at AS updatedAt FROM items WHERE id = ?").bind(itemId).first<{ updatedAt: string | null }>();
   if (!item) throw new InputError(404, "Item not found.");
   if (hasVersion && item.updatedAt !== expectedVersion) throw new InputError(409, CHANGED);
@@ -181,7 +205,11 @@ export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Acto
   const now = new Date(Math.max(Date.now(), Date.parse(item.updatedAt ?? "") + 1 || 0)).toISOString();
   try {
     await bucket.put(key(mediaId, "display"), display.bytes, { httpMetadata: { contentType: "image/jpeg" } });
-    await bucket.put(key(mediaId, "thumb"), thumb.bytes, { httpMetadata: { contentType: "image/jpeg" } });
+    await bucket.put(key(mediaId, "thumb"), thumb.bytes, { httpMetadata: { contentType: "image/jpeg" }, customMetadata });
+    if (cleaned && cleanedThumb) {
+      await bucket.put(`items/${mediaId}/cutout`, cleaned.body, { httpMetadata: { contentType: "image/png" } });
+      await bucket.put(`items/${mediaId}/cutout-thumb`, cleanedThumb.bytes, { httpMetadata: { contentType: "image/jpeg" }, customMetadata: cleaned.httpEtag ? { source: cleaned.httpEtag } : undefined });
+    }
     const [write] = await db.batch([
       expected
         ? db.prepare("UPDATE item_media SET media_id = ?, width = ?, height = ?, created_at = ?, created_by = ?, dhash = ? WHERE item_id = ? AND media_id = ? AND (? = 0 OR EXISTS (SELECT 1 FROM items WHERE id = item_id AND updated_at IS ?))")
@@ -201,7 +229,7 @@ export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Acto
     throw error;
   }
   if (expected) await dropObjects(bucket, expected);
-  return { photo: { id: mediaId, width: display.width, height: display.height } };
+  return { photo: { id: mediaId, width: display.width, height: display.height, ...(cleaned ? { cutout: true, cutoutThumb: true } : {}) } };
 }
 
 /** Removes the profile photo the client saw: the reference first, then its files. */
@@ -218,16 +246,23 @@ export async function removeItemPhoto(db: D1Database, bucket: R2Bucket, actor: A
   return { photo: null };
 }
 
-/**
- * Streams one variant to a signed-in staff member. The id is random and a replacement gets a new one, so the bytes
- * behind a URL never change and a browser may keep them for a day (a list of photos then costs no requests);
- * "private" keeps shared caches out, and a day bounds how long a removed photo can linger in a browser.
- */
-export async function itemPhoto(bucket: R2Bucket, mediaId: string, variant: string): Promise<Response> {
+/** The original display is immutable; the thumbnail revalidates because cleanup can change it under the same id. */
+async function cleanedThumbnail(bucket: R2Bucket, mediaId: string): Promise<R2ObjectBody | null> {
+  const source = await bucket.head(`items/${mediaId}/cutout`);
+  if (!source) return null;
+  const thumb = await bucket.get(`items/${mediaId}/cutout-thumb`);
+  return thumb && (!source.httpEtag || thumb.customMetadata?.source === source.httpEtag) ? thumb : null;
+}
+
+export async function itemPhoto(bucket: R2Bucket, mediaId: string, variant: string, ifNoneMatch: string | null = null): Promise<Response> {
   if (!MEDIA_ID.test(mediaId) || !Object.hasOwn(VARIANTS, variant)) throw new InputError(404, "Not found.");
-  const object = await bucket.get(key(mediaId, variant as Variant));
+  const cleaned = variant === "thumb" ? await cleanedThumbnail(bucket, mediaId) : null;
+  const object = cleaned ?? await bucket.get(key(mediaId, variant as Variant));
   if (!object) throw new InputError(404, "Not found.");
-  return new Response(object.body, { headers: { "content-type": "image/jpeg", "cache-control": "private, max-age=86400" } });
+  const headers = { "content-type": "image/jpeg", "cache-control": variant === "thumb" ? "private, no-cache" : "private, max-age=86400",
+    etag: object.httpEtag ?? `"${mediaId}-${cleaned ? "cleaned" : variant}"` };
+  if (ifNoneMatch?.replace(/^W\//, "") === headers.etag) return new Response(null, { status: 304, headers });
+  return new Response(object.body, { headers });
 }
 
 /**
@@ -235,8 +270,8 @@ export async function itemPhoto(bucket: R2Bucket, mediaId: string, variant: stri
  * It answers only while the id is the item's selected current photo AND a public list actually shows the item: the Lending Hub
  * lists it, or Self-Service offers it and is open (the same policy functions the two catalogs use). So a removed or
  * replaced photo, an unlisted item, the 1280 px display size and any guessed id all answer 404, and nothing but the id
- * is read from the request. An hour in a browser's cache bounds how long a removed photo can linger on a phone that
- * already loaded it.
+ * is read from the request. The selected 320 px thumbnail revalidates after cleanup or restoring the original;
+ * the full cutout never has a public address.
  */
 export async function publicThumb(db: D1Database, bucket: R2Bucket, mediaId: string, ifNoneMatch: string | null, selfServiceOpen: () => Promise<boolean>): Promise<Response> {
   if (!MEDIA_ID.test(mediaId)) throw new InputError(404, "Not found.");
@@ -244,9 +279,10 @@ export async function publicThumb(db: D1Database, bucket: R2Bucket, mediaId: str
     FROM item_media m JOIN items i ON i.id = m.item_id WHERE m.media_id = ? AND i.visual_type IS NOT 'SYSTEM_ICON'`).bind(mediaId).first<{ itemType: string; lendingAudience: string; status: string; needsReview: number; consumptionMode: string }>();
   const shown = Boolean(item) && (isListedForLending(item!) || (Boolean(selfServiceAction(item!)) && await selfServiceOpen()));
   if (!shown) throw new InputError(404, "Not found.");
-  const headers = { "cache-control": "public, max-age=3600", etag: `"${mediaId}"` };
-  if (ifNoneMatch?.replace(/^W\//, "") === headers.etag) return new Response(null, { status: 304, headers });
-  const object = await bucket.get(key(mediaId, "thumb"));
+  const cleaned = await cleanedThumbnail(bucket, mediaId);
+  const object = cleaned ?? await bucket.get(key(mediaId, "thumb"));
   if (!object) throw new InputError(404, "Not found.");
+  const headers = { "cache-control": "public, no-cache", etag: object.httpEtag ?? `"${mediaId}-${cleaned ? "cleaned" : "thumb"}"` };
+  if (ifNoneMatch?.replace(/^W\//, "") === headers.etag) return new Response(null, { status: 304, headers });
   return new Response(object.body, { headers: { ...headers, "content-type": "image/jpeg" } });
 }

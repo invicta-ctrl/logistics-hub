@@ -31,7 +31,7 @@ test("review offers respect the owner switch and manual captures still save once
   await page.getByLabel("Counted in").fill("piece");
   await page.locator("#cat-save").click();
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue("");
-  await expect.poll(async () => ((await (await page.request.get("/api/staff/inventory")).json()).items as { name: string }[]).filter((item) => item.name === "AI review manual capture").length).toBe(1);
+  await expect.poll(async () => ((await (await page.request.get("/api/staff/inventory")).json()).items as { name: string }[]).filter((item) => item.name === "AI Review Manual Capture").length).toBe(1);
   const proposals = await page.request.get("/api/staff/admin/catalog/proposals");
   expect(proposals.status()).toBe(200);
   expect(await proposals.json()).toMatchObject({ proposals: [], window: 200 });

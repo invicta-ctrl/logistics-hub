@@ -516,13 +516,13 @@ test("activity: without scroll observation the button still loads older entries,
 /* Public item photos (docs/specs/accepted/2026-10-03-public-item-photos-amendment.md): thumbnails in both lists and the Self-Service sheet. */
 const PIXEL = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 const thumbsServed = async (page: import("@playwright/test").Page) => {
-  await page.route("**/api/public/media/*/thumb", (route) => route.fulfill({ contentType: "image/png", headers: { "cache-control": "public, max-age=3600" }, body: PIXEL }));
+  await page.route("**/api/public/media/*/thumb?v=2*", (route) => route.fulfill({ contentType: "image/png", headers: { "cache-control": "public, max-age=3600" }, body: PIXEL }));
 };
 const nameLeft = (page: import("@playwright/test").Page, selector: string) => page.locator(selector).evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().left)));
 
 test("a failed public photo reveals the bundled icon without changing its frame", async ({ page }) => {
   await page.route("**/api/public/catalog", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...catalog, items: catalog.items.map((item) => ({ ...item, photo: "00000000-0000-4000-8000-000000000000" })) }) }));
-  await page.route("**/api/public/media/*/thumb", (route) => route.abort());
+  await page.route("**/api/public/media/*/thumb?v=2*", (route) => route.abort());
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/lending");
   await expect(page.locator(".item-thumb").first()).toBeVisible();

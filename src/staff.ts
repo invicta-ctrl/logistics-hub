@@ -1139,7 +1139,7 @@ export async function workspace(): Promise<void> {
       <div class="form-section">
         <h3 class="form-section__title">Catalog</h3>
         ${text("name", "Name", item.name, html`required maxlength="120" autocomplete="off" autocapitalize="words" autocorrect="on" spellcheck="true"`)}
-        <div id="suggested-visual" class="visual-suggestion" aria-live="polite"></div>
+        <div id="suggested-visual" class="visual-suggestion" aria-live="polite" ${creating ? "" : html`hidden`}></div>
         ${creating ? html`<div class="field"><label for="f-iconKey">System icon</label><select id="f-iconKey" name="iconKey"><option value="">Use suggested icon</option>${ITEM_ICONS.map((entry) => html`<option value="tabler:${entry.key}">${entry.label}</option>`)}</select><p class="field__hint">Optional. A suggestion is already selected; you can upload a real photo after creating the item.</p></div>` : ""}
         <p class="field__hint field__hint--warn" id="duplicate-hint" hidden></p>
         ${!creating && item.itemType === "NEEDS_REVIEW" ? html`<div class="classify-hint" id="classify-hint" aria-live="polite"></div>` : ""}

@@ -1,6 +1,6 @@
 import type { Account } from "./accounts";
-import { type Actor, InputError, audit } from "./inventory";
-import { MEDIA_ID, expectedPhoto, key } from "./item-media";
+import { type Actor, BUMP_REVISION, InputError, audit } from "./inventory";
+import { MEDIA_ID, expectedPhoto, key, readVariant } from "./item-media";
 
 /*
  * Background removal for an item's profile photo (Final Pass amendment, FP-E). Cloudflare Images cuts the foreground out of the stored
@@ -60,10 +60,17 @@ export async function setCleanup(db: D1Database, actor: Account, input: unknown)
 }
 
 export const cutoutKey = (mediaId: string) => `items/${mediaId}/cutout`;
+export const cutoutThumbKey = (mediaId: string) => `items/${mediaId}/cutout-thumb`;
 /** A new cut waits here until the browser has judged it; nothing serves it as the item's picture and a closed tab leaves nothing live. */
 export const claimKey = (mediaId: string) => `cutout_claim:${mediaId}`;
 /** A claim older than this is a request that died; it no longer blocks (the provider timeout is 20 s). */
 const CLAIM_MS = 60_000;
+async function claimCutout(db: D1Database, mediaId: string, now = Date.now()): Promise<void> {
+  const claim = await db.prepare(`INSERT INTO system_settings(key, value, updated_at) VALUES(?1, '1', ?2)
+    ON CONFLICT(key) DO UPDATE SET updated_at = ?2 WHERE updated_at < ?3`)
+    .bind(claimKey(mediaId), new Date(now).toISOString(), new Date(now - CLAIM_MS).toISOString()).run();
+  if (!claim.meta.changes) throw new InputError(409, "This photo is already being changed. Give it a moment.");
+}
 export const pendingKey = (mediaId: string) => `items/${mediaId}/cutout-pending`;
 const monthKey = (now: number) => `image_cutouts:${new Date(now).toISOString().slice(0, 7)}`;
 
@@ -142,10 +149,7 @@ export async function makeCutout(db: D1Database, bucket: R2Bucket, images: Image
   if (!source) throw new InputError(404, "Photo not found.");
   // One cut at a time per photo, claimed in a single statement: a second tab asking now would otherwise spend a second transformation and
   // could overwrite the pending bytes after the first browser had judged them.
-  const claim = await db.prepare(`INSERT INTO system_settings(key, value, updated_at) VALUES(?1, '1', ?2)
-    ON CONFLICT(key) DO UPDATE SET updated_at = ?2 WHERE updated_at < ?3`)
-    .bind(claimKey(mediaId), new Date(now).toISOString(), new Date(now - CLAIM_MS).toISOString()).run();
-  if (!claim.meta.changes) throw new InputError(409, "This photo is already being cleaned. Give it a moment.");
+  await claimCutout(db, mediaId, now);
   try {
     // Look again now that the photo is ours: another request may have finished between the first look and the claim.
     if (await hasCutout(bucket, mediaId)) return { cutout: true };
@@ -193,36 +197,78 @@ async function cutAndHold(db: D1Database, bucket: R2Bucket, images: ImagesRunner
  * The browser looked at the pending cut and found a real cutout: make it the item's cleaned picture. Safe to repeat (a cut already
  * accepted answers the same). Sends nothing to the provider and spends nothing.
  */
-export async function acceptCutout(db: D1Database, bucket: R2Bucket, actor: Actor, itemId: string, expected: unknown) {
+export async function acceptCutout(db: D1Database, bucket: R2Bucket, actor: Actor, itemId: string, expected: unknown, form?: FormData) {
   const mediaId = expectedPhoto(expected);
   if (!mediaId) throw new InputError(400, "Reload the item and try again.");
-  const current = await db.prepare("SELECT media_id AS mediaId, width, height FROM item_media WHERE item_id = ?").bind(itemId).first<{ mediaId: string; width: number; height: number }>();
-  if (!current || current.mediaId !== mediaId) throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again.");
-  const pending = await bucket.get(pendingKey(mediaId));
-  if (!pending) {
-    if (await hasCutout(bucket, mediaId)) return { cutout: true };
-    throw new InputError(404, "There is no cleaned picture waiting. Try removing the background again.");
+  await claimCutout(db, mediaId);
+  try {
+    const current = await db.prepare("SELECT media_id AS mediaId, width, height FROM item_media WHERE item_id = ?").bind(itemId).first<{ mediaId: string; width: number; height: number }>();
+    if (!current || current.mediaId !== mediaId) throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again.");
+    const pending = form?.get("pending") === "0" ? null : await bucket.get(pendingKey(mediaId));
+    const source = pending ?? await bucket.get(cutoutKey(mediaId));
+    if (!source) throw new InputError(404, "There is no cleaned picture waiting. Try removing the background again.");
+    if (form && source.httpEtag && form.get("source") !== source.httpEtag) throw new InputError(409, "The cleaned photo changed. Reload it before saving the thumbnail.");
+    const thumb = form ? await readVariant(form, "thumb") : null;
+    if (thumb && Math.max(thumb.width, thumb.height) > 320) throw new InputError(400, "The cleaned thumbnail is too large.");
+    // An accepted photo made by an older page can gain its small thumbnail without another provider call.
+    if (!pending && !thumb) return { cutout: true };
+    if (pending) {
+      const bytes = new Uint8Array(await new Response(pending.body).arrayBuffer());
+      checkCutoutShape(bytes, current);
+      await bucket.put(cutoutKey(mediaId), bytes, { httpMetadata: { contentType: "image/png" } });
+    }
+    if (thumb) await bucket.put(cutoutThumbKey(mediaId), thumb.bytes, { httpMetadata: { contentType: "image/jpeg" }, customMetadata: source.httpEtag ? { source: source.httpEtag } : undefined });
+    const still = await db.prepare("SELECT 1 FROM item_media WHERE item_id = ? AND media_id = ?").bind(itemId, mediaId).first();
+    if (!still) {
+      await Promise.all([bucket.delete(cutoutKey(mediaId)), bucket.delete(cutoutThumbKey(mediaId))]);
+      throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again.");
+    }
+    await bucket.delete(pendingKey(mediaId)).catch(() => undefined);
+    await db.batch([
+      ...(pending ? [audit(db, actor.accountId, "ITEM_CUTOUT_ADDED", "ITEM", itemId, { mediaId })] : []),
+      db.prepare("UPDATE items SET updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM item_media WHERE item_id = ? AND media_id = ?)").bind(new Date().toISOString(), itemId, itemId, mediaId),
+      db.prepare(`${BUMP_REVISION} AND changes() > 0`)
+    ]);
+    return { cutout: true };
+  } finally {
+    await db.prepare("DELETE FROM system_settings WHERE key = ?").bind(claimKey(mediaId)).run().catch(() => undefined);
   }
-  const bytes = new Uint8Array(await new Response(pending.body).arrayBuffer());
-  checkCutoutShape(bytes, current);
-  await bucket.put(cutoutKey(mediaId), bytes, { httpMetadata: { contentType: "image/png" } });
-  await bucket.delete(pendingKey(mediaId)).catch(() => undefined);
-  await db.batch([audit(db, actor.accountId, "ITEM_CUTOUT_ADDED", "ITEM", itemId, { mediaId })]);
-  return { cutout: true };
 }
 
 /** Goes back to the original photo: deletes the cleaned picture only. Safe to repeat. */
-export async function removeCutout(db: D1Database, bucket: R2Bucket, actor: Actor, itemId: string, expected: unknown) {
+export async function removeCutout(db: D1Database, bucket: R2Bucket, actor: Actor, itemId: string, expected: unknown, pendingSource: string | null = null) {
   const mediaId = expectedPhoto(expected);
   if (!mediaId) throw new InputError(400, "Reload the item and try again.");
-  const current = await db.prepare("SELECT media_id AS mediaId FROM item_media WHERE item_id = ?").bind(itemId).first<{ mediaId: string }>();
-  if (!current || current.mediaId !== mediaId) throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again.");
-  await bucket.delete(pendingKey(mediaId)).catch(() => undefined);
-  if (await bucket.head(cutoutKey(mediaId))) {
-    await bucket.delete(cutoutKey(mediaId));
-    await db.batch([audit(db, actor.accountId, "ITEM_CUTOUT_REMOVED", "ITEM", itemId, { mediaId })]);
+  await claimCutout(db, mediaId);
+  try {
+    const current = await db.prepare("SELECT media_id AS mediaId FROM item_media WHERE item_id = ?").bind(itemId).first<{ mediaId: string }>();
+    if (!current || current.mediaId !== mediaId) throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again.");
+    if (pendingSource !== null) {
+      const pending = await bucket.head(pendingKey(mediaId));
+      if (!pending || pending.httpEtag !== pendingSource || await hasCutout(bucket, mediaId)) throw new InputError(409, "The cleaned photo changed. Reload it before trying again.");
+      await bucket.delete(pendingKey(mediaId));
+      return { cutout: false };
+    }
+    await bucket.delete(pendingKey(mediaId)).catch(() => undefined);
+    await bucket.delete(cutoutThumbKey(mediaId));
+    if (await bucket.head(cutoutKey(mediaId))) {
+      await bucket.delete(cutoutKey(mediaId));
+      await db.batch([
+        audit(db, actor.accountId, "ITEM_CUTOUT_REMOVED", "ITEM", itemId, { mediaId }),
+        db.prepare("UPDATE items SET updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM item_media WHERE item_id = ? AND media_id = ?)").bind(new Date().toISOString(), itemId, itemId, mediaId),
+        db.prepare(`${BUMP_REVISION} AND changes() > 0`)
+      ]);
+    }
+    return { cutout: false };
+  } finally {
+    await db.prepare("DELETE FROM system_settings WHERE key = ?").bind(claimKey(mediaId)).run().catch(() => undefined);
   }
-  return { cutout: false };
+}
+
+/** A derivative is selected only while it belongs to the live accepted full cutout. */
+export async function hasCutoutThumb(bucket: R2Bucket, mediaId: string): Promise<boolean> {
+  const [source, thumb] = await Promise.all([bucket.head(cutoutKey(mediaId)), bucket.head(cutoutThumbKey(mediaId))]);
+  return Boolean(source && thumb && (!source.httpEtag || thumb.customMetadata?.source === source.httpEtag));
 }
 
 /** Whether a photo has a cleaned picture, for the item's detail. */
@@ -238,5 +284,7 @@ export async function cutoutPicture(bucket: R2Bucket, mediaId: string, pending =
   if (!MEDIA_ID.test(mediaId)) throw new InputError(404, "Not found.");
   const object = await bucket.get(pending ? pendingKey(mediaId) : cutoutKey(mediaId));
   if (!object) throw new InputError(404, "Not found.");
-  return new Response(object.body, { headers: { "content-type": "image/png", "cache-control": "private, no-cache" } });
+  const thumb = await bucket.head(key(mediaId, "thumb"));
+  return new Response(object.body, { headers: { "content-type": "image/png", "cache-control": "private, no-cache", ...(object.httpEtag ? { etag: object.httpEtag } : {}),
+    ...(thumb?.customMetadata?.cropRect ? { "x-photo-crop": thumb.customMetadata.cropRect } : {}) } });
 }

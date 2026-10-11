@@ -1,7 +1,7 @@
 import "./search-palette.css";
 import { RELATION_WORDS } from "./relation-policy";
 import { type GoHit, type ItemHit, type KitHit, type PersonHit, type PlaceHit, type Prepared, type SearchIndex, type Why, MIN_QUERY, prepare, queryWords, searchCatalog, searchShortcuts } from "./search";
-import { ApiError, type Html, type IconName, categoryName, html, icon, itemVisual, mount, navigate } from "./ui";
+import { ApiError, type Html, type IconName, categoryName, html, icon, itemVisual, itemThumbnailUrl, mount, navigate } from "./ui";
 
 /*
  * Global search (V1.11): one dialog for the whole staff workspace, opened from the top bar or with Ctrl+K (⌘K on a Mac). It is the
@@ -130,7 +130,7 @@ function itemOption(hit: ItemHit, tokens: string[]): Option {
   const detail = joined(item.status === "INACTIVE" && "Inactive", ...reasonAndPlace(hit.why, hit.place));
   return {
     id: `palette-item-${item.id}`, href: `/staff/items?item=${encodeURIComponent(item.id)}`, label: spoken(item.name, "item", detail),
-    body: row(itemVisual(item, (id) => `/api/staff/media/${id}/thumb`, "palette__thumb"), highlight(item.name, tokens), detail, "Item")
+    body: row(itemVisual(item, (id) => itemThumbnailUrl(id, "staff"), "palette__thumb"), highlight(item.name, tokens), detail, "Item")
   };
 }
 

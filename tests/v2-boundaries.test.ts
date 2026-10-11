@@ -27,6 +27,8 @@ function anyKeyBucket(name: Bucket): R2Bucket {
       reads.push({ bucket: name, key });
       return { body: new Blob([name]).stream(), httpMetadata: { contentType: "image/jpeg" } };
     },
+    // These boundary fixtures contain ordinary photos, without accepted cutouts.
+    head: async () => null,
     put: async () => undefined,
     delete: async () => undefined,
     list: async () => ({ objects: [], truncated: false })
@@ -57,7 +59,7 @@ function seedPointers() {
 
 /** Every route that streams private media, the bucket it must read, and who may open it. */
 const PRIVATE: Array<{ path: string; bucket: Bucket; adminOnly: boolean; cache: string }> = [
-  { path: `/api/staff/media/${UUID}/thumb`, bucket: "CATALOG_MEDIA", adminOnly: false, cache: "private, max-age=86400" },
+  { path: `/api/staff/media/${UUID}/thumb`, bucket: "CATALOG_MEDIA", adminOnly: false, cache: "private, no-cache" },
   { path: `/api/staff/location-media/${UUID}/thumb`, bucket: "CATALOG_MEDIA", adminOnly: false, cache: "private, max-age=86400" },
   { path: `/api/staff/kit-media/${UUID}/thumb`, bucket: "CATALOG_MEDIA", adminOnly: false, cache: "private, max-age=86400" },
   { path: "/api/staff/loans/LN-BOUNDARY/photo", bucket: "EVIDENCE", adminOnly: false, cache: "private, no-store" },

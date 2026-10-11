@@ -43,9 +43,12 @@ test("search opens an item, and a link made on its record is found from the othe
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/staff\/items\?item=ITM-0135$/);
   const sheet = page.getByRole("dialog", { name: "Bond Paper - A4" });
-  await expect(sheet.getByRole("heading", { name: "Linked items" })).toBeVisible();
   // The record's focus survives its content loading, so the keyboard starts inside the sheet.
   await expect.poll(() => page.evaluate(() => Boolean(document.activeElement?.closest("dialog.sheet")))).toBe(true);
+
+  await sheet.getByRole("tab", { name: /^(Edit details|Review & edit)$/ }).click();
+  await sheet.locator("#item-advanced > summary").click();
+  await expect(sheet.getByRole("heading", { name: "Linked items" })).toBeVisible();
 
   // Link it: used with a stapler.
   await sheet.getByRole("button", { name: "Link an item" }).click();
@@ -72,6 +75,8 @@ test("search opens an item, and a link made on its record is found from the othe
   await page.keyboard.press("Escape");
   await page.goto(`/staff/items?item=${otherId}`);
   const other = page.getByRole("dialog", { name: otherName });
+  await other.getByRole("tab", { name: /^(Edit details|Review & edit)$/ }).click();
+  await other.locator("#item-advanced > summary").click();
   await other.getByRole("button", { name: "Remove the link: Used with Bond Paper - A4" }).click();
   await expect(other.locator(".item-links__row")).toHaveCount(0);
 });

@@ -111,6 +111,7 @@ test.describe.serial("smart locations", () => {
     await form.getByLabel("Unit").fill("piece");
     await form.getByRole("combobox", { name: /^Place/ }).selectOption({ label: "Storage Area › Cabinet 1 › Shelf 2" });
     await expect(form.locator("#place-preview")).toContainText("Storage Area › Cabinet 1 › Shelf 2");
+    await form.locator("#item-advanced > summary").click();
     await form.getByLabel("Opening quantity").fill("6");
     await form.getByLabel("Shown to").selectOption("NOT_AVAILABLE_FOR_LENDING");
     await form.getByRole("button", { name: "Create item" }).click();

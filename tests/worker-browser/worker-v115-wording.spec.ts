@@ -123,7 +123,7 @@ test("no page shows an enum name, Title Case label or “verified” claim at ph
   // One item of each way of getting something: its page and the form that asks who is borrowing, taking or using it.
   const { items } = await (await page.request.get("/api/self-service/catalog")).json() as { items: { id: string; name: string; action: string }[] };
   for (const action of ["BORROW", "TAKE", "USE"]) {
-    const item = items.find((candidate) => candidate.name.startsWith("Wording check") && candidate.action === action);
+    const item = items.find((candidate) => candidate.name.startsWith("Wording Check") && candidate.action === action);
     expect(item, `a ${action} item to read`).toBeTruthy();
     await visit(`/self-service?do=item&item=${item!.id}`);
     await visit(`/self-service?do=${action.toLowerCase()}&item=${item!.id}`);

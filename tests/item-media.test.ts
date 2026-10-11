@@ -390,13 +390,13 @@ describe("removing a photo", () => {
 });
 
 describe("serving a photo", () => {
-  it("streams either variant to a signed-in staff member with a day-long private cache", async () => {
+  it("streams the private display and revalidates the mutable thumbnail", async () => {
     const id = await add();
     for (const variant of ["display", "thumb"]) {
       const response = await staff(`/api/staff/media/${id}/${variant}`);
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("image/jpeg");
-      expect(response.headers.get("cache-control")).toBe("private, max-age=86400");
+      expect(response.headers.get("cache-control")).toBe(variant === "thumb" ? "private, no-cache" : "private, max-age=86400");
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
       expect([...new Uint8Array(await response.arrayBuffer()).subarray(0, 2)]).toEqual([0xff, 0xd8]);
     }
@@ -431,7 +431,7 @@ describe("public thumbnails (the Lending Hub and Self-Service show an item's pho
     const response = await thumb(id);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("image/jpeg");
-    expect(response.headers.get("cache-control")).toBe("public, max-age=3600");
+    expect(response.headers.get("cache-control")).toBe("public, no-cache");
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(media.objects.get(`items/${id}/thumb`)!.bytes);
     // The browser's copy is revalidated cheaply, and a stale validator never gets a 304 for a different photo.
     const tag = response.headers.get("etag")!;
@@ -520,7 +520,7 @@ describe("public thumbnails (the Lending Hub and Self-Service show an item's pho
     const id = await add();
     expect((await call(`/api/staff/media/${id}/thumb`)).status).toBe(401);
     expect((await staff(`/api/staff/media/${id}/display`)).status).toBe(200);
-    expect((await staff(`/api/staff/media/${id}/thumb`)).headers.get("cache-control")).toBe("private, max-age=86400");
+    expect((await staff(`/api/staff/media/${id}/thumb`)).headers.get("cache-control")).toBe("private, no-cache");
   });
 });
 

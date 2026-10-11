@@ -25,7 +25,7 @@ test("with every photo and optional panel failing, staff and students still do t
   test.setTimeout(150_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page);
-  const name = `Optional check lamp ${Date.now() % 100000}`;
+  const name = `Optional Check Lamp ${Date.now() % 100000}`;
   const created = await page.request.post("/api/staff/items", { headers: { origin: baseURL! }, data: {
     name, aliases: "", category: "Miscellaneous", itemType: "Loanable", unit: "piece", status: "ACTIVE", locationId: null,
     reorderThreshold: 0, lendingAudience: "STUDENTS_AND_USC_STAFF", needsReview: false, notes: "", openingQuantity: 5

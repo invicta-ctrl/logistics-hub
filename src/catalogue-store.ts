@@ -1,5 +1,5 @@
 import type { Place } from "./location-tree";
-import type { PhotoCleanup } from "./catalog-draft";
+import type { PhotoCleanup, PhotoCrop } from "./catalog-draft";
 
 /*
  * What this device holds for cataloguing, in IndexedDB. No DOM: the service worker reads it too.
@@ -25,7 +25,7 @@ export type Entry = {
   owner?: string;
   /** The capture request as it will be sent. */
   body: Record<string, unknown>;
-  photo: { display: Blob; thumb: Blob; hash: string } | null;
+  photo: { display: Blob; thumb: Blob; hash: string; crop?: PhotoCrop } | null;
   /** Known once the server has saved the record; the photo (if any) is what is still to send. */
   itemId: string | null;
   /** waiting: will be (re)sent; stopped: the server refused it and a person must decide. */

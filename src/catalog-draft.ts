@@ -167,3 +167,4 @@ export const isStale = (resultRevision: number, currentRevision: number): boolea
 /** Photo reading distinguishes an answered photo from a temporary service failure. */
 export type PhotoOutcome = "NAMED" | "NO_NAME" | "OFF" | "UNAVAILABLE" | "BUDGET" | "BREAKER" | "FAILED";
 export type PhotoCleanup = { cleanable?: boolean; cleanupReason?: string; canEnable?: boolean };
+export type PhotoCrop = { x: number; y: number; width: number; height: number };

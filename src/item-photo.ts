@@ -1,11 +1,11 @@
 import { cutoutProblem, cutoutShares } from "./cutout-share";
-import type { PhotoCleanup } from "./catalog-draft";
+import type { PhotoCleanup, PhotoCrop } from "./catalog-draft";
 export type { PhotoCleanup } from "./catalog-draft";
 import { type VisualItem, itemIconSvg } from "./item-icons";
-import { ApiError, type Html, api, dataUrl, failure, html, icon, jpegOf, itemVisual, mount, raw, reducedMotion, toast } from "./ui";
+import { ApiError, type Html, api, dataUrl, failure, html, icon, jpegOf, itemVisual, itemThumbnailUrl, refreshItemThumbnail, mount, raw, reducedMotion, toast } from "./ui";
 
 /** `cutout`: a cleaned picture (background removed) is kept beside the original. `cleanable`: the Worker can make one (src/item-cutout.ts). */
-export type Photo = { id: string; width: number; height: number; cutout?: boolean; cleanable?: boolean; cleanupReason?: string };
+export type Photo = { id: string; width: number; height: number; cutout?: boolean; cutoutThumb?: boolean; cleanable?: boolean; cleanupReason?: string };
 type Size = "thumb" | "display";
 
 /** Long sides of the two variants every photo is stored as: lists and the profile use the small one, the viewer the large one. */
@@ -13,9 +13,9 @@ const EDGES = { display: 1280, thumb: 320 } as const;
 /** The Worker refuses a variant over 1 MB, so a noisy photo is re-encoded harder before it is sent. */
 const QUALITIES = [0.82, 0.6, 0.4];
 
-export const photoUrl = (id: string, size: Size) => `/api/staff/media/${id}/${size}`;
+export const photoUrl = (id: string, size: Size) => size === "thumb" ? itemThumbnailUrl(id, "staff") : `/api/staff/media/${id}/${size}`;
 /** The picture an item shows: its cleaned cutout when it has one, else the original at `size`. */
-export const shownUrl = (photo: Photo, size: Size) => (photo.cutout ? `/api/staff/media/${photo.id}/cutout` : photoUrl(photo.id, size));
+export const shownUrl = (photo: Photo, size: Size) => (size === "display" && photo.cutout ? `/api/staff/media/${photo.id}/cutout` : photoUrl(photo.id, size));
 
 /** Decorative fixed-size item visual; only loaded real photos open the viewer. */
 export const rowThumb = (item: VisualItem): Html => itemVisual(item, (id) => photoUrl(id, "thumb"), "thumb");
@@ -48,7 +48,7 @@ function dhashOf(bitmap: ImageBitmap): string {
  * rotation to the pixels, and re-drawing on a canvas leaves no EXIF or location behind; the original never leaves
  * the device. A browser that cannot decode the file refuses it rather than sending it as it is.
  */
-export type Prepared = { display: Blob; thumb: Blob; preview: string; hash: string };
+export type Prepared = { display: Blob; thumb: Blob; preview: string; hash: string; crop?: PhotoCrop; cleanDisplay?: Blob; cutoutThumb?: Blob };
 export async function preparePhoto(file: File): Promise<Prepared> {
   if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("Choose a JPEG, PNG or WebP photo.");
   if (file.size === 0 || file.size > 20_000_000) throw new Error("Choose a photo smaller than 20 MB.");
@@ -57,27 +57,40 @@ export async function preparePhoto(file: File): Promise<Prepared> {
   try {
     let display = await jpegOf(bitmap, EDGES.display, QUALITIES[0]!);
     for (const quality of QUALITIES.slice(1)) if (display.size > 900_000) display = await jpegOf(bitmap, EDGES.display, quality);
-    return { display, thumb: await jpegOf(bitmap, EDGES.thumb, 0.8), preview: await dataUrl(display), hash: dhashOf(bitmap) };
+    const thumb = await jpegOf(bitmap, EDGES.thumb, 0.8);
+    return { display, thumb, preview: await dataUrl(thumb), hash: dhashOf(bitmap) };
   } finally { bitmap.close(); }
 }
 
-/** Crop only the thumbnail; the sanitized display and its identity remain untouched. */
-export async function cropPhoto(source: Prepared, rect: { x: number; y: number; width: number; height: number }): Promise<Prepared> {
+const FULL_CROP: PhotoCrop = { x: 0, y: 0, width: 100, height: 100 };
+
+/** A small JPEG keeps the Worker's existing metadata stripping; transparency is composited over white here. */
+async function thumbnailOf(bitmap: ImageBitmap, rect: PhotoCrop = FULL_CROP): Promise<Blob> {
+  const width = Math.max(1, Math.round(bitmap.width * Math.min(100, Math.max(1, rect.width)) / 100));
+  const height = Math.max(1, Math.round(bitmap.height * Math.min(100, Math.max(1, rect.height)) / 100));
+  const x = Math.max(0, Math.min(bitmap.width - width, Math.round(bitmap.width * rect.x / 100)));
+  const y = Math.max(0, Math.min(bitmap.height - height, Math.round(bitmap.height * rect.y / 100)));
+  const scale = Math.min(1, EDGES.thumb / Math.max(width, height));
+  const canvas = Object.assign(document.createElement("canvas"), { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) });
+  const context = canvas.getContext("2d")!;
+  context.fillStyle = "#fff"; context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(bitmap, x, y, width, height, 0, 0, canvas.width, canvas.height);
+  return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The thumbnail could not be prepared.")), "image/jpeg", .8));
+}
+
+/** Crop both thumbnails, retaining the sanitized display/hash and any accepted full cutout. */
+export async function cropPhoto(source: Prepared, rect: PhotoCrop): Promise<Prepared> {
   const bitmap = await createImageBitmap(source.display);
+  let clean: ImageBitmap | null = null;
   try {
-    const width = Math.max(1, Math.round(bitmap.width * Math.min(100, Math.max(1, rect.width)) / 100));
-    const height = Math.max(1, Math.round(bitmap.height * Math.min(100, Math.max(1, rect.height)) / 100));
-    const x = Math.max(0, Math.min(bitmap.width - width, Math.round(bitmap.width * rect.x / 100)));
-    const y = Math.max(0, Math.min(bitmap.height - height, Math.round(bitmap.height * rect.y / 100)));
-    const scale = Math.min(1, 320 / Math.max(width, height));
-    const canvas = Object.assign(document.createElement("canvas"), { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) });
-    canvas.getContext("2d")!.drawImage(bitmap, x, y, width, height, 0, 0, canvas.width, canvas.height);
-    const thumb = await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The crop could not be prepared.")), "image/jpeg", .8));
-    return { ...source, thumb, preview: await dataUrl(thumb) };
-  } finally { bitmap.close(); }
+    const thumb = await thumbnailOf(bitmap, rect);
+    if (source.cleanDisplay) clean = await createImageBitmap(source.cleanDisplay);
+    const cutoutThumb = clean ? await thumbnailOf(clean, rect) : undefined;
+    return { ...source, thumb, crop: { ...rect }, cutoutThumb, preview: await dataUrl(cutoutThumb ?? thumb) };
+  } finally { bitmap.close(); clean?.close(); }
 }
 
-/** Drag the frame or its corners; only the thumbnail changes after Apply, then Save. */
+/** Drag the frame or its corners; Apply changes the thumbnail while retaining the full photo. */
 export function cropEditor(host: HTMLElement, source: Prepared, apply: (photo: Prepared) => void, cancel: () => void): void {
   let closed = false;
   let preparing = false;
@@ -168,29 +181,45 @@ export function cropEditor(host: HTMLElement, source: Prepared, apply: (photo: P
  * Judges the pending cut the Worker just made (not yet the item's picture) by drawing it small and reading its alpha channel (the Worker cannot afford to decode
  * it). Answers null for a real cutout, or the sentence that says why not. A picture that cannot be loaded is not a cutout either.
  */
-async function cutoutFault(id: string): Promise<string | null> {
+async function cutoutFault(id: string, pending = true): Promise<{ fault: string | null; thumb?: Blob; source?: string }> {
+  let source: string | undefined;
   try {
-    const response = await fetch(`/api/staff/media/${id}/pending`, { credentials: "same-origin", cache: "no-store" });
-    if (!response.ok) return "The cleaned picture could not be loaded.";
+    const response = await fetch(`/api/staff/media/${id}/${pending ? "pending" : "cutout"}`, { credentials: "same-origin", cache: "no-store" });
+    if (!response.ok) return { fault: "The cleaned picture could not be loaded." };
+    source = response.headers.get("etag") ?? undefined;
     const bitmap = await createImageBitmap(await response.blob());
     try {
       const scale = Math.min(1, 160 / Math.max(bitmap.width, bitmap.height));
       const canvas = Object.assign(document.createElement("canvas"), { width: Math.max(1, Math.round(bitmap.width * scale)), height: Math.max(1, Math.round(bitmap.height * scale)) });
       const context = canvas.getContext("2d", { willReadFrequently: true })!;
       context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      return cutoutProblem(cutoutShares(context.getImageData(0, 0, canvas.width, canvas.height).data));
+      const fault = cutoutProblem(cutoutShares(context.getImageData(0, 0, canvas.width, canvas.height).data));
+      if (fault) return { fault, source };
+      const crop = response.headers.get("x-photo-crop");
+      return { fault: null, thumb: await thumbnailOf(bitmap, crop ? JSON.parse(crop) as PhotoCrop : FULL_CROP), source };
     } finally { bitmap.close(); }
-  } catch { return "The cleaned picture could not be checked."; }
+  } catch { return { fault: "The cleaned picture could not be checked.", source }; }
+}
+
+async function acceptThumbnail(endpoint: string, photoId: string, thumb: Blob, source?: string, pending = false): Promise<void> {
+  const form = new FormData(); form.set("expected", photoId); form.set("accept", "1"); form.set("thumb", thumb, "thumb.jpg");
+  if (source) form.set("source", source);
+  form.set("pending", pending ? "1" : "0");
+  await api(endpoint, { method: "POST", body: form });
+  refreshItemThumbnail(photoId);
 }
 
 /** A pending cut becomes live only after the browser has checked its transparency. */
 export async function removePhotoBackground(endpoint: string, photoId: string): Promise<string | null> {
   const made = await api<{ pending?: boolean; cutout?: boolean }>(endpoint, { method: "POST", body: JSON.stringify({ expected: photoId }) });
-  if (made.pending) {
-    const fault = await cutoutFault(photoId);
-    if (fault) { await api(`${endpoint}?expected=${photoId}`, { method: "DELETE" }); return fault; }
-    await api(endpoint, { method: "POST", body: JSON.stringify({ expected: photoId, accept: true }) });
-  } else if (!made.cutout) throw new Error("Background removal could not be confirmed.");
+  if (made.pending || made.cutout) {
+    const checked = await cutoutFault(photoId, Boolean(made.pending));
+    if (checked.fault || !checked.thumb) {
+      if (made.pending && checked.source) await api(`${endpoint}?expected=${photoId}&pending=${encodeURIComponent(checked.source)}`, { method: "DELETE" });
+      return checked.fault ?? "The cleaned thumbnail could not be prepared.";
+    }
+    await acceptThumbnail(endpoint, photoId, checked.thumb, checked.source, Boolean(made.pending));
+  } else throw new Error("Background removal could not be confirmed.");
   return null;
 }
 
@@ -329,7 +358,12 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     if (cropping && originalStaged) {
       show(html`<div class="photo-tile photo-tile--preview"><img src="${staged!.preview}" alt="Current thumbnail preview" /></div>`, html``);
       const revision = selection;
-      cropEditor(actions, originalStaged, (next) => { if (revision !== selection) return; staged = next; cropping = false; draw(); focus("[data-save]"); }, () => { cropping = false; draw(); focus("[data-crop-photo]"); });
+      cropEditor(actions, originalStaged, (next) => {
+        if (revision !== selection) return;
+        staged = next; cropping = false; draw();
+        if (cropExisting) host.querySelector<HTMLButtonElement>("[data-save]")?.click();
+        else focus("[data-save]");
+      }, () => { cropping = false; draw(); focus("[data-crop-photo]"); });
       return;
     }
     if (staged) {
@@ -399,8 +433,8 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     try {
       let fault: string | null = null;
       if (cleaning) fault = await removePhotoBackground(options.cleanup, photo.id);
-      else await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" });
-      photo = { ...photo, cutout: cleaning && !fault };
+      else { await api(`${options.cleanup}?expected=${photo.id}`, { method: "DELETE" }); refreshItemThumbnail(photo.id); }
+      photo = { ...photo, cutout: cleaning && !fault, cutoutThumb: cleaning && !fault };
       state = "";
       draw();
       if (fault) { error = `${fault} The original photo is still in use.`; draw(); focus("[data-clean]"); return; }
@@ -433,7 +467,12 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       try {
         const response = await fetch(photoUrl(photo.id, "display"), { credentials: "same-origin" });
         if (!response.ok) throw new Error("The full photo could not be loaded. Your photo is unchanged.");
-        const display = await response.blob(); const prepared = await preparePhoto(new File([display], "original.jpg", { type: "image/jpeg" }));
+        const display = await response.blob(); let prepared = await preparePhoto(new File([display], "original.jpg", { type: "image/jpeg" }));
+        if (photo.cutout) {
+          const clean = await fetch(shownUrl(photo, "display"), { credentials: "same-origin", cache: "no-store" });
+          if (!clean.ok) throw new Error("The cleaned photo could not be loaded. Your photo is unchanged.");
+          prepared = await cropPhoto({ ...prepared, cleanDisplay: await clean.blob() }, FULL_CROP);
+        }
         if (revision !== selection || !host.isConnected) return;
         staged = originalStaged = { ...prepared, display }; cropExisting = true; stagedVersion = version; cropping = true; state = ""; draw();
       } catch (problem) { if (revision === selection) { state = ""; error = failure(problem); draw(); } }
@@ -451,6 +490,8 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       form.set("thumb", staged.thumb, "thumb.jpg");
       form.set("expected", photo?.id ?? "");
       form.set("hash", staged.hash);
+      if (staged.crop) form.set("cropRect", JSON.stringify(staged.crop));
+      if (staged.cutoutThumb) form.set("cutoutThumb", staged.cutoutThumb, "thumb.jpg");
       if (cropExisting) form.set("crop", "1");
       if (options.updatedAt) form.set("updatedAt", stagedVersion ?? "");
       try {
@@ -458,9 +499,14 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
         photo = saved.photo;
         staged = originalStaged = null;
         cropExisting = false;
-        if (cleanAfterSave && options.cleanup && photo.cleanable) { await changeBackground(true); return; }
+        if (cleanAfterSave && options.cleanup && photo.cleanable) {
+          await changeBackground(true);
+          if (photo?.cutout) { editing = noun !== "photo"; draw(); focus("[data-view]"); }
+          return;
+        }
         state = "";
         if (cleanAfterSave) error = photo.cleanupReason || "Background removal is unavailable. The saved original photo is kept.";
+        editing = noun !== "photo";
         draw();
         toast(`${noun === "photo" ? "Photo" : "Picture"} saved.`);
         void Promise.resolve(options.changed(photo)).catch(() => undefined);
@@ -488,7 +534,21 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     }
   });
 
+  let thumbnailRepair: string | null = null;
+  const repairThumbnail = async () => {
+    if (!photo?.cutout || photo.cutoutThumb !== false || !options.cleanup || busy() || staged || thumbnailRepair === photo.id) return;
+    const expected = photo.id; thumbnailRepair = expected; state = "cleaning"; draw();
+    try {
+      const checked = await cutoutFault(expected, false);
+      if (checked.fault || !checked.thumb) throw new Error(checked.fault ?? "The cleaned thumbnail could not be prepared.");
+      await acceptThumbnail(options.cleanup, expected, checked.thumb, checked.source);
+      if (photo?.id === expected) photo = { ...photo, cutoutThumb: true };
+      state = ""; draw(); await Promise.resolve(options.changed(photo));
+    } catch (problem) { await failed(problem); }
+  };
+
   draw();
+  void repairThumbnail();
   return { render: (next) => {
     if (busy() || staged) return;
     selection += 1;
@@ -497,6 +557,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     // A refresh of the same original must not erase a failed cleanup's explanation.
     if (photo?.id !== next?.id) error = "";
     photo = next; confirming = false; draw();
+    void repairThumbnail();
     if (held) focus(`[${held}]`);
   } };
 }

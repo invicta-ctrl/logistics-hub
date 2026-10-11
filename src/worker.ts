@@ -9,7 +9,7 @@ import { aliasItems, catalogCoverage } from "./catalog-admin";
 import { insights, resumable } from "./home";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
-import { type ImagesRunner, acceptCutout, cleanupOn, cleanupStatus, cutoutPicture, hasCutout, makeCutout, removeCutout, setCleanup } from "./item-cutout";
+import { type ImagesRunner, acceptCutout, cleanupOn, cleanupStatus, cutoutPicture, hasCutoutThumb, hasCutout, makeCutout, removeCutout, setCleanup } from "./item-cutout";
 import { dropObjects, itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
 import { linkItems, linksOf, unlinkItems } from "./item-relations";
 import { checkKit, createKit, createTemplate, kitDetail, kitList, kitsOfItem, recentlyCatalogued, templateDetail, updateKit, updateTemplate } from "./kits";
@@ -104,8 +104,8 @@ const REORDER_PATH = /^\/api\/staff\/reorders\/(RO-[A-Za-z0-9-]{1,60})$/;
 const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|photo|identity)$/;
 /** A sync carries at most a few compressed photos; anything larger is not from the app. */
 const MAX_SYNC_BYTES = 12 * 1024 * 1024;
-/** An item photo upload is a 1 MB and a 150 KB JPEG plus form framing. */
-const MAX_PHOTO_BODY = 1_300_000;
+/** One display JPEG and up to two small thumbnails, plus form framing. */
+const MAX_PHOTO_BODY = 1_500_000;
 const PERSON_PATH = /^\/api\/staff\/admin\/directory\/(PER-[0-9a-f-]{36})(\/account|\/account\/new|\/access|\/usage|\/loans|\/activity|\/id|\/id\/front|\/id\/back|\/id\/thumb|\/id\/face|\/id\/derived)?$/;
 const ALIAS_PATH = /^\/api\/staff\/admin\/catalog\/aliases\/(ITM-[A-Za-z0-9-]{1,24})$/;
 const ACCOUNT_PATH = /^\/api\/staff\/admin\/accounts\/(ACC-[A-Za-z0-9-]{1,60})(\/password|\/sessions\/revoke)?$/;
@@ -519,14 +519,14 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     return json(await createItem(env.DB, account, parseItemInput(input), opening), 201);
   }
   const media = MEDIA_PATH.exec(path);
-  if (media && method === "GET") return media[2] === "cutout" || media[2] === "pending" ? cutoutPicture(env.CATALOG_MEDIA, media[1]!, media[2] === "pending") : itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!);
+  if (media && method === "GET") return media[2] === "cutout" || media[2] === "pending" ? cutoutPicture(env.CATALOG_MEDIA, media[1]!, media[2] === "pending") : itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!, request.headers.get("if-none-match"));
   const match = ITEM_PATH.exec(path);
   if (match && !match[2] && method === "GET") {
     const [detail, freshness, kits, links] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!), linksOf(env.DB, match[1]!)]);
     // Whether this photo has a cleaned picture, and whether cleaning is offered at all (the Images binding is present).
     const cleaned = detail.item.photo ? await hasCutout(env.CATALOG_MEDIA, detail.item.photo.id) : false;
     const photoCleanup = await photoCleanupState(env, account);
-    return json({ ...detail, item: { ...detail.item, photoCleanup, photo: detail.item.photo ? { ...detail.item.photo, cutout: cleaned, ...photoCleanup } : null }, freshness, kits, links });
+    return json({ ...detail, item: { ...detail.item, photoCleanup, photo: detail.item.photo ? { ...detail.item.photo, cutout: cleaned, ...(cleaned ? { cutoutThumb: await hasCutoutThumb(env.CATALOG_MEDIA, detail.item.photo.id) } : {}), ...photoCleanup } : null }, freshness, kits, links });
   }
   if (match && !match[2] && method === "PATCH") {
     const input = await body() as Record<string, unknown> | null;
@@ -551,15 +551,23 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   }
   if (match?.[2] === "/photo" && method === "DELETE") return json(await removeItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
   if (match?.[2] === "/cutout" && method === "POST") {
-    const input = await body() as { expected?: unknown; accept?: unknown } | null;
-    // `accept` is the browser's verdict on a pending cut; without it the request makes (or finds) one. Both need the owner's switch.
+    let form: FormData | undefined;
+    let input: { expected?: unknown; accept?: unknown } | null;
+    if (request.headers.get("content-type")?.startsWith("multipart/form-data")) {
+      if (Number(request.headers.get("content-length")) > 180_000) throw new InputError(413, "That thumbnail is too large.");
+      form = await request.formData().catch(() => undefined);
+      if (!form) throw new InputError(400, "Invalid thumbnail form.");
+      input = { expected: form.get("expected"), accept: form.get("accept") === "1" };
+    } else input = await body() as { expected?: unknown; accept?: unknown } | null;
+    // Repairing an already accepted photo's thumbnail sends nothing to Images, even with the switch off.
     if (input?.accept === true) {
-      if (!await cleanupOn(env.DB)) throw new InputError(503, "Picture cleanup is turned off.");
-      return json(await acceptCutout(env.DB, env.CATALOG_MEDIA, account, match[1]!, input.expected));
+      if (!await cleanupOn(env.DB) && !(typeof input.expected === "string" && await hasCutout(env.CATALOG_MEDIA, input.expected))) throw new InputError(503, "Picture cleanup is turned off.");
+      return json(await acceptCutout(env.DB, env.CATALOG_MEDIA, account, match[1]!, input.expected, form));
     }
+    if (form) throw new InputError(400, "Confirm the cleaned thumbnail before saving it.");
     return json(await makeCutout(env.DB, env.CATALOG_MEDIA, env.IMAGES, account, match[1]!, input?.expected));
   }
-  if (match?.[2] === "/cutout" && method === "DELETE") return json(await removeCutout(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
+  if (match?.[2] === "/cutout" && method === "DELETE") return json(await removeCutout(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected"), url.searchParams.get("pending")));
   if (match?.[2] === "/open-units" && method === "POST") return json(await openUnitAction(env.DB, account, match[1]!, await body()));
   if (match?.[2] === "/loans" && method === "POST") {
     const form = await request.formData().catch(() => null);

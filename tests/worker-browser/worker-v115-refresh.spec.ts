@@ -126,7 +126,7 @@ test.describe("a background refresh keeps what the page shows", () => {
     await page.waitForLoadState("networkidle").catch(() => undefined);
     const first = await page.locator("#main-content .row-link").first().innerText();
     await watchLoaders(page);
-    const name = `Refresh check ${Date.now() % 100000}`;
+    const name = `Refresh Check ${Date.now() % 100000}`;
     const created = await page.request.post("/api/staff/items", { headers: { origin: baseURL! }, data: {
       name, aliases: "", category: "Miscellaneous", itemType: "Loanable", unit: "piece", status: "ACTIVE", locationId: null,
       reorderThreshold: 0, lendingAudience: "STUDENTS_AND_USC_STAFF", needsReview: false, notes: "", openingQuantity: 1

@@ -13,13 +13,13 @@ type StoredOffer = ReviewOffer & { actor: string; sessionId: string };
 const key = (actor: Actor) => `ai_review_offer:${actor.accountId}`;
 const normalized = (name: string) => words(name).join(" ");
 const names = (item: Reviewed) => [item.name, ...(item.aliases ?? "").split(/[;,\n]/)].map(normalized);
-const outcome = (item: Pick<Reviewed, "name" | "category" | "unit" | "itemType" | "consumptionMode">): Outcome => ({ name: item.name, category: item.category, unit: item.unit, behaviour: behaviourOf(item)! });
+const outcome = (item: Pick<Reviewed, "name" | "category" | "unit" | "itemType" | "consumptionMode">): Outcome => ({ name: formatItemName(item.name), category: item.category, unit: item.unit, behaviour: behaviourOf(item)! });
 const same = (a: Outcome, b: Outcome) => formatItemName(a.name) === formatItemName(b.name) && a.category === b.category && a.unit === b.unit && a.behaviour === b.behaviour;
 async function reviewed(db: D1Database): Promise<Reviewed[]> {
   const { results } = await db.prepare("SELECT id, name, aliases, category, unit, item_type AS itemType, consumption_mode AS consumptionMode, stock_area AS stockArea, status, needs_review AS needsReview FROM items WHERE status = 'ACTIVE' AND needs_review = 0 AND item_type <> 'NEEDS_REVIEW' ORDER BY id LIMIT 1000").all<Omit<Reviewed, "needsReview"> & { needsReview: number }>();
   // A full evidence window is incomplete: abstain globally rather than ask AI about an exact item outside it.
   if (results.length === 1000) throw new InputError(503, "AI review is unavailable for this catalogue size. Saving manually still works.");
-  return results.map((item) => ({ ...item, needsReview: item.needsReview === 0 ? false : true })).filter(verified);
+  return results.map((item) => ({ ...item, name: formatItemName(item.name), needsReview: item.needsReview === 0 ? false : true })).filter(verified);
 }
 async function stored(db: D1Database, actor: Actor): Promise<{ raw: string; offer: StoredOffer } | null> {
   const raw = await db.prepare("SELECT value FROM system_settings WHERE key = ?").bind(key(actor)).first<string>("value");
@@ -103,7 +103,7 @@ export async function captureFeedback(db: D1Database, actor: Actor, sessionId: s
   if (!offer || !offer.proposal || offer.actor !== actor.accountId || offer.sessionId !== sessionId || offer.id !== feedback.offerId || offer.draftId !== feedback.draftId || offer.revision !== feedback.revision || offer.expiresAt <= Date.now() || offer.catalogRevision !== await catalogRevision(db)) return empty;
   const correction = typeof feedback.correction === "string" ? feedback.correction.trim().slice(0, 120) : "";
   let target: Outcome | undefined;
-  if (feedback.decision === "CORRECT" && correction !== offer.label) {
+  if (feedback.decision === "CORRECT" && normalized(correction) !== normalized(offer.label ?? "")) {
     try { target = (await reviewed(db)).map(outcome).find((target) => normalized(target.name) === normalized(correction) && same(saved, target)); }
     catch { /* Optional learning evidence never blocks a manual save. */ }
   }
@@ -123,8 +123,9 @@ export async function reviewProposals(db: D1Database): Promise<{ proposals: Know
   for (const row of results) {
     const evidence = JSON.parse(row.details) as { captureId: string; decision: string; observed: string; correction: Outcome | null; knowledgeVersion: number };
     if (evidence.decision !== "CORRECT" || !evidence.correction || evidence.knowledgeVersion !== KNOWLEDGE_VERSION || !verified({ ...row, needsReview: row.needsReview === 0 ? false : true }) || !same(evidence.correction, outcome(row))) continue;
-    const groupKey = JSON.stringify([evidence.observed, evidence.correction]);
-    const group = groups.get(groupKey) ?? { observed: evidence.observed, target: evidence.correction, captures: new Set(), actors: new Set() };
+    const target = { ...evidence.correction, name: formatItemName(evidence.correction.name) };
+    const groupKey = JSON.stringify([evidence.observed, target]);
+    const group = groups.get(groupKey) ?? { observed: evidence.observed, target, captures: new Set(), actors: new Set() };
     group.captures.add(evidence.captureId); group.actors.add(row.actor); groups.set(groupKey, group);
   }
   const proposals: KnowledgeProposal[] = [];
