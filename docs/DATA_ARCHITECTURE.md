@@ -1,6 +1,6 @@
 # Data architecture — Logistics Hub
 
-STATUS: ACTIVE DOCTRINE (Earl, 2026-10-03). Applies to `main` and every Road-to-V2 slice unless an accepted spec overrides a rule.
+STATUS: ACTIVE DOCTRINE (Earl, 2026-10-03), inherited by V1.16 and Road to V3 unless a later owner-accepted specification explicitly overrides a rule. The production migration count later in this document is a dated release snapshot; live D1/Cloud Operations evidence controls current deployment.
 It describes the architecture that exists and the rules for extending it. It is not a replacement design.
 
 ## The three invariants
