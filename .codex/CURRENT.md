@@ -1,5 +1,17 @@
 # Current Work Pointer — Logistics Hub
 
+## V1.16 documentation/specification checkpoint — 2026-10-11 (PROPOSED, NOT IMPLEMENTED)
+
+OWNER INTENT: V1.15 is closed; owner states writer lock is lifted. New owner-directed pre-roadmap V1.16 scope: invisible Ambient Assist, fully independent Intelligent Core, verified correction learning, safe four-model evaluation, and a verified deployed product-version/changelog in the existing Administration > System. Explicit no-incomplete-release and verified-checkpoint-to-main rules are updated in AGENTS.md, policy and shared workflow.
+
+GITHUB BRANCH: slice/v1.16-ambient-core, created from main 711547d41d4c560fe35d0d46de755f3e8718796c. Documentation-only commits on this slice; no runtime change, deployment, migration, provider use or product version activation has been performed. Existing Road-to-V3 V2.1–V2.9 then V3.0 remains unchanged. The historical V2.0 release record remains unchanged.
+
+SPEC STATUS: docs/specs/proposed/v1.16-ambient-intelligent-core.md is a detailed candidate, **NOT owner-accepted**. Substantive code and architecture changes are blocked on explicit owner acceptance/filing under accepted specs; a future writer must check actual refs/lock/status and claim the approved single writer lock. GitHub remote planning updates do not themselves prove local writer-lock ownership.
+
+NEXT: Obtain acceptance of the exact proposed V1.16 scope or a named amendment; verify repository current HEAD/writer and run normal implementation in independently complete slices. Each coherent working checkpoint is tested and pushed to the one slice branch; each independently working green slice is merged to main and deployed/verified immediately, then pruned. Do not describe V1.16 as complete until the entire accepted release passes and deployed Administration version/changelog is verified. Exact commit/ref and GitHub CI must be rechecked before mutation. Preserve all prior handoff records and unknown local work.
+
+
+
 ## Owner thumbnail, phone and item-entry corrections — complete, 2026-10-11
 
 STATUS: The owner's accepted thumbnail/information-density corrections and unified item entry are complete. Verified source `e48ce7d3452aad18d2946f124e187d8111050f15` includes the earlier main source `3a495d62dbe951b9e5e0cff01384e8c11c0070e4` and preserves owner documentation main `bf36ee3b09efccf8d80ab02c21ff8e76c00c4e7b`. This records-only checkpoint closes the follow-up for authorized main integration, slice pruning and lock yield. Actual refs establish completion of those Git actions; do not recreate a merged slice. Unknown local `work` is preserved. The accepted photo amendment supersedes the original-only thumbnail policy.
