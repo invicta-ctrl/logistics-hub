@@ -172,3 +172,10 @@ Stop the affected task if:
 - external action status is unknown after interruption.
 
 Do not broaden scope to work around a stop condition.
+
+## Pre-roadmap V1.16 gate — owner direction 2026-10-11
+
+- When owner specifies V1.16, treat it as the owner-directed **pre-Road-to-V3 Ambient Assist + Intelligent Core consolidation**, not RTV3-01/V2.1 and not an unverified V3 feature.
+- Read the proposed V1.16 specification at docs/specs/proposed/v1.16-ambient-intelligent-core.md and obtain explicit acceptance into the accepted-spec location before substantial implementation; review actual main/current writer state and do not preempt a writer.
+- The user's completion rule applies throughout: push coherent verified checkpoints on the sole slice branch; merge independently complete, accepted, green slices promptly to main; prune only proven merged slices; never present incomplete functionality as a completed version. The V1.16 release identity and changelog must correspond to the deployed artifact.
+- If V1.16 ships first, V2.1/F4 and F7 reuse its demonstrated implementation/evidence while still meeting all their remaining independent foundation gates. Do not create duplicate version panels or AI routers.
