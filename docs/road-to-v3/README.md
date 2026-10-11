@@ -23,9 +23,11 @@
 | **V2.9** | `RTV3-09` | Qualification / Release Candidate |
 | **V3.0** | GA | General Availability |
 
-**Pre-roadmap V1.16 owner direction (2026-10-11):** the owner requested a standalone Ambient Assist + Intelligent Core consolidation release after closing V1.15 and before V2.1. It does not renumber the completed historical V2.0 baseline or the accepted V2.1–V3.0 roadmap. Its proposed implementation authority is docs/specs/proposed/v1.16-ambient-intelligent-core.md (not accepted or shipped at the time of this documentation checkpoint).
+**Pre-roadmap V1.16 owner-accepted direction (2026-10-11):** the owner requested a standalone Ambient Assist + Intelligent Core consolidation release after closing V1.15 and before V2.1. It does not renumber the completed historical V2.0 baseline or the accepted V2.1–V3.0 roadmap. Its detailed implementation authority was owner-accepted on 2026-10-11 at docs/specs/accepted/v1.16-ambient-intelligent-core.md. Acceptance does not mean the release has shipped.
 
 V1.16 **owns first implementation** of a genuine product-version label and concise deployed changelog in the existing Administration → System > This version, preserving Build, Commit, Built and Migrations. **V2.1 / RTV3-01 F4 inherits and verifies** that functionality (including honest unknown/rollback behavior), adding its own operability work without a duplicate panel. Subsequent releases update verified deployed product identity. V3.1–V3.7 historical labels do not schedule releases beyond V3.0.
+
+**Final V2 readiness gate:** V2 is genuinely complete and ready to proceed to the V3 roadmap only after V1.16's complete accepted scope is verified, merged and deployed, the V1.16 Administration version/changelog is inspected, and remaining owner QA is resolved or explicitly accepted. Historical V2.0 evidence remains unchanged.
 
 **No incomplete release doctrine:** all working checkpoints are committed/pushed to the sole active slice branch; merge each independently complete, fully verified slice to updated main promptly, then prune and start the next slice from main. Do not label incomplete or future work as released.
 
