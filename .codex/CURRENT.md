@@ -1,5 +1,12 @@
 # Current Work Pointer — Logistics Hub
 
+## Mandatory automatic subversion policy — documentation checkpoint 2026-10-11
+
+OWNER RULE: main versions are `Vx.xx`; after the base main release has merged, each independently complete, verified product-affecting follow-up merged to main must use the next `Vx.xx.1`, `Vx.xx.2`, etc. Distinct released fixes count separately, not individual commits/checkpoints. Documentation-only changes do not count. Full authoritative procedure: `docs/PRODUCT_VERSION_GOVERNANCE.md`, referenced by AGENTS.md, CLAUDE.md, project policy and shared workflow. No automatic backfill of historical V1.15 revisions without Git/CI/deployment evidence. V1.16 remains an unreleased accepted main version until its full release gates pass; do not claim V1.16.1 prematurely.
+
+STATE: These are documentation/policy commits on the existing `slice/v1.16-ambient-core` branch. No product code, version UI or deployed artifact has changed through this subversion-governance work. Preserve existing V1.16 implementation handoff and active writer checks. Next writer follows accepted V1.16 scope and new version policy; do not claim CI/main integration absent fresh evidence.
+
+
 ## V1.16 owner-accepted implementation scope — 2026-10-11 (NOT IMPLEMENTED)
 
 OWNER ACCEPTED: “I approve, after v1.16. V2 will be genuinely complete and ready to proceed with v3 roadmap.” The detailed V1.16 specification is accepted at docs/specs/accepted/v1.16-ambient-intelligent-core.md. This is the final V2 completion release gate before V2.1–V3.0; historic V2.0 completion records are preserved unchanged.
