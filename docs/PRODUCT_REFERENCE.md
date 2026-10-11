@@ -321,3 +321,10 @@ Each Part must work end to end without depending on a later Part.
 - A green slice is merged to `main` immediately, and the slice branch is deleted.
 - **Production deploys only from `main`.** Cloudflare Workers Builds deploys each push to `main` automatically, but it does **not** apply D1 migrations. A `main` that adds a migration needs that migration applied to production first (it must be safe for the code already live), then the push. A `main` that adds a binding (such as the R2 bucket) needs the resource created first, or the deploy fails. The Owner Console's *Deploy verified main* (`docs/DEPLOYMENT.md`) remains the gated path with a Time Travel bookmark and a Worker rollback id.
 - Production and provider writes need Earl's explicit authority.
+
+
+## Proposed V1.16 — Ambient Assist + Intelligent Core (NOT YET A SHIPPED FEATURE)
+
+Owner requested this pre-roadmap release on 2026-10-11; candidate authority is docs/specs/proposed/v1.16-ambient-intelligent-core.md. This section is **not** current behavior or an availability claim. V1.16 should keep all normal Inventory, Stock, Catalogue, Search, Lending, Home, Attention and Administration tasks usable with all AI disabled, exhausted, unavailable or late. Optional background AI enriches only authorized, current, verified context; never triggers a separate conversation, blocks saving or changes authoritative quantity/approval truth. Human-reviewed corrections may improve future approved aliases, rule packs and evaluation evidence, never self-modify in production.
+
+V1.16's proposed existing Administration > System > This version update adds a verified deployed product label and concise what's-new summary while preserving build fingerprint, commit, built timestamp and migrations; unknown metadata must be displayed honestly and prior builds must retain prior version on rollback. After implementation and release verification, replace this proposed section with actual shipped behavior and link to the completed V1.16 release record. Future V2.1 reuses the same metadata route.
