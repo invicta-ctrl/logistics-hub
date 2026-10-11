@@ -935,7 +935,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     if ((reviewOffer && reviewOffer.catalogRevision !== fresh.revision) || (requestingReview && catalog?.revision !== fresh.revision)) { invalidateReview(); scheduleReview(); }
     catalog = fresh;
     list = placeList(fresh.places);
-    if (!placeId || !list.places.get(placeId)?.active) placeId = detail.session.locationId && list.places.get(detail.session.locationId)?.active ? detail.session.locationId : null;
+    if (placeId && !list.places.get(placeId)?.active) placeId = detail.session.locationId && list.places.get(detail.session.locationId)?.active ? detail.session.locationId : null;
     const selected = $<HTMLSelectElement>("#cat-place-select");
     showPlace();
     if (placeId) selected.value = placeId;
