@@ -14,7 +14,7 @@ Before creating a thread or editing code:
 5. Read repository project-policy/agent-governance files.
 6. Read `.codex/CURRENT.md`.
 7. Read `.codex/SESSION_HANDOFF.md`.
-8. Use `.codex/CURRENT.md` and `.codex/SESSION_HANDOFF.md` as the only live current-task pointers; old `.codex/CURRENT_TASK.md` was retired as stale.
+8. Consult `docs/DOCUMENTATION_STATUS.md` if a legacy pointer or draft appears to conflict with current records.
 9. Read the accepted specification/amendment for the active release.
 10. Read the active release record and relevant migrations.
 11. Read this package's active release card only after the higher-authority sources above.
