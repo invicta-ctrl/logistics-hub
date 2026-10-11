@@ -2,14 +2,14 @@
 
 **Current owner-approved naming:** V2.1–V2.9 are the Road-to-V3 product releases, corresponding one-to-one to stable internal RTV3-01–RTV3-09 milestone IDs. V3.0 follows qualification. The labels below refer to planned scopes, not currently deployed versions; see `06_ROAD_TO_V3_RELEASE_MAP.md`.
 
-## V1.16 pre-roadmap consolidation — owner requested 2026-10-11, specification proposed
+## V1.16 pre-roadmap consolidation — owner accepted 2026-10-11, implementation pending
 
 - **Intent:** make the existing deterministic Intelligent Core and four-model Ambient Assist complementary, not mutually dependent. Normal staff never need an AI conversation, a special AI screen or provider awareness; authorized Administration still discloses AI status and data policy.
 - **Failure:** core catalogue, Stock, Search, Lending, Activity, Attention and permissions remain functional at 0 available Neurons, missing binding, timeouts, 403/429, invalid model output, offline operation and cancelled/stale tasks. Optional inference never gates user actions or writes stock truth.
 - **Learning:** use only explicit verified human corrections and current approved records for scoped evidence, bounded measurement and versioned administrator-reviewed knowledge proposals. No self-training, automatic prompt/policy rewrite or staff scoring.
 - **Models:** retain Gemma/Granite/Qwen/GLM roles until role-specific, held-out Free-plan performance warrants an owner-approved switch. Deterministic first; one model normally; GLM exceptionally; no quota burn for its own sake.
-- **Delivery:** V1.16 proposed detailed spec: docs/specs/proposed/v1.16-ambient-intelligent-core.md. Only accepted, implemented, verified V1.16 capabilities count as predecessor baseline when V2.1 begins. F7 retains all independent hardening/evidence requirements not already met with proof.
-- **Release:** do not describe V1.16 as complete unless all its accepted work, CI, deployed identity and evidence are verified. Each independently complete slice can reach main, but no unfinished slice can.
+- **Delivery:** V1.16 owner-accepted detailed spec: docs/specs/accepted/v1.16-ambient-intelligent-core.md. Only accepted, implemented, verified V1.16 capabilities count as predecessor baseline when V2.1 begins. F7 retains all independent hardening/evidence requirements not already met with proof.
+- **Release:** V1.16 is the final V2 readiness release. Do not declare V1.16 or V2 final readiness complete until all accepted work, CI, deployed identity and evidence are verified. Each independently complete slice can reach main, but no unfinished slice can.
 
 ## 1. Architectural position
 
