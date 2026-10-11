@@ -17,7 +17,7 @@ Optimize for:
 - small durable changes;
 - repository-backed handoffs so Codex can continue without Claude chat history.
 
-Owner-accepted product sequence: **V2.0 → V2.1 → V2.2 → V2.3 → V2.4 → V2.5 → V2.6 → V2.7 → V2.8 → V2.9 → V3.0**. `RTV3-01`–`RTV3-09` are stable internal milestone aliases for V2.1–V2.9, not conflicting release numbers. Map them through `06_ROAD_TO_V3_RELEASE_MAP.md`; accept `start/continue V2.x` and `start/continue RTV` via the same Coordinator Card. **V2.1 F4** must show the actual deployed product version in Administration → System alongside, not instead of, the current build/commit metadata.
+Owner-accepted product sequence: **V2.0 → V2.1 → V2.2 → V2.3 → V2.4 → V2.5 → V2.6 → V2.7 → V2.8 → V2.9 → V3.0**. `RTV3-01`–`RTV3-09` are stable internal milestone aliases for V2.1–V2.9, not conflicting release numbers. Map them through `06_ROAD_TO_V3_RELEASE_MAP.md`; accept `start/continue V2.x` and `start/continue RTV` via the same Coordinator Card. **V1.16** owns the first implemented, verified product-version/changelog display in Administration → System; **V2.1 F4** must reuse it and qualify its own deployed release identity alongside, not instead of, existing build/commit metadata.
 
 Ambient Assist already exists in V2.0. Do not treat AI as a future bolt-on. Preserve the deterministic-first architecture:
 - local/deterministic core first;
