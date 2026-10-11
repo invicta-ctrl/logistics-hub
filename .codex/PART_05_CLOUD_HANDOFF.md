@@ -1,5 +1,7 @@
 # Part 5 Cloud Handoff — Logistics Hub (WIP branch, not for merge)
 
+**HISTORICAL BRANCH HANDOFF — CLOSED.** The WIP activity branch and sequential instructions below describe October 1, not the current Git branch/writer. Current work is exclusively in `.codex/CURRENT.md` and `.codex/SESSION_HANDOFF.md`. Never restart a Part 5 branch from this handoff.
+
 INTENT: let Claude Cloud or any cloud agent continue Part 5 from a portable GitHub branch.
 OBJECTIVE: finish Part 5 core (Activity + safe exports) from Stage 5.1 (code complete, not accepted) through 5.2 UI, 5.3 CSV and 5.4 polish, then Part 5B only after Part 5 core is merged.
 TARGET: repository `invicta-ctrl/logistics-hub`; WIP branch `handoff/part-05-activity-cloud` (pushed by Harbor from the local `slice/part-05-activity` with an explicit refspec; the cloud agent works directly on this branch and treats it as the one active slice).
