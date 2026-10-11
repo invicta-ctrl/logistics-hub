@@ -1259,7 +1259,8 @@ for (const outcome of ["valid", "cleanup fails", "upload conflicts"] as const) {
         await syncNow(); await syncNow();
       });
       await page.reload();
-      await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
+      await expect(rows(page).filter({ hasText: "Fictional Green Toolbox" }).getByText("Saved", { exact: true })).toBeVisible();
+      if (outcome === "valid") await expect(rows(page).filter({ hasText: "Fictional Next Item" }).getByText("Review later", { exact: true })).toBeVisible();
       expect(calls).toHaveLength(expectedCalls);
       expect(photoWrites).toHaveLength(1);
       expect(server.state.captures).toHaveLength(outcome === "valid" ? 2 : 1);
@@ -1346,16 +1347,29 @@ test("a late AI response cannot overwrite a staff edit; offline saving is indepe
   try {
     await name(page).fill("Staff owns this name");
     await pick(page, "Not sure").click();
+    server.state.fail = "drop"; // Routed fixtures must explicitly refuse writes even when the browser is offline.
     await page.context().setOffline(true);
     await page.locator("#cat-save").click();
     await expect(name(page)).toHaveValue("");
     await expect(rows(page)).toHaveCount(1);
+    await expect(rows(page).first()).toContainText("Not saved yet");
     expect(completed).toBe(false);
     release();
     await expect.poll(() => completed).toBe(true);
     await expect(page.locator("#cat-ai")).not.toContainText("AI suggestion");
     await expect(name(page)).toHaveValue("");
     expect(server.state.captures).toHaveLength(0);
+    server.state.fail = "";
+    await page.context().setOffline(false);
+    await page.evaluate(async () => {
+      const modulePath = "/src/catalogue-sync.ts";
+      const { startSending, syncNow } = await import(modulePath) as typeof import("../../src/catalogue-sync");
+      startSending({ owner: "ACC-staff", legacy: true });
+      await syncNow(); await syncNow();
+    });
+    await expect.poll(() => server.state.captures.length).toBe(1);
+    expect(server.state.captures[0]).toMatchObject({ name: "Staff Owns This Name", behaviour: "REVIEW_LATER" });
+    await expect(rows(page).first().getByText("Review later", { exact: true })).toBeVisible();
   } finally { release(); }
 });
 

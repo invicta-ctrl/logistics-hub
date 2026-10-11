@@ -27,6 +27,7 @@
 - Saved captures leave the durable queue before bounded, separately locked optional cleanup. Consume intent once; retain original-photo fallback; same-owner, saved-photo and item-revision guards prevent stale acceptance. Manual saving omits unavailable optional feedback lookups while preserving valid feedback's atomic capture/audit transaction.
 - Parent V1.15; candidate V1.16 is unreleased. This accepted future-version slice does not invent a post-release number or change current product identity. No migration/dependency/model activation/provider probe; prior verified main is the rollback identity.
 - Local `npm run build` (Wrangler types, three TypeScript targets, Vite) and `git diff --check` passed. Privacy and exact pushed-source CI/CodeQL/Workers Build are checkpoint gates; integration/deployment remain pending. Owner retains live/manual QA; no local product/provider test run requested.
+- First pushed checkpoint `5affc10ab7532506b798f57700b6d330e7bd02f7`: unit/build/privacy, CodeQL 38136434385 and Workers Build passed. CI 38136348498 browser checks failed on two changed-fixture assumptions and an unrelated card-tab navigation timeout. Fixes explicitly disconnect the mocked capture endpoint, verify reconnect saves the staff-owned name once, and select the original saved row separately from the newer review-later row. Product source is unchanged; require fresh checkpoint CI before merging.
 
 ## NOT completed
 
