@@ -1,5 +1,16 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Automatic Vx.xx.xx subversion governance — 2026-10-11 documentation checkpoint
+
+~~~text
+OWNER INSTRUCTION: Any independently complete product-affecting fix or improvement after its Vx.xx base version was merged to main automatically receives the next Vx.xx.1, Vx.xx.2, etc. No repeated owner reminder. This applies to every active or future model/agent.
+CANONICAL GOVERNANCE: docs/PRODUCT_VERSION_GOVERNANCE.md. Normative references added to AGENTS.md, .agents/PROJECT_POLICY.md, CLAUDE.md, docs/SHARED_AGENT_WORKFLOW.md and the Road-to-V3 coordinator. V1.16 accepted spec and owner decision updated. Version increments by verified main-integrated release, not by commit/checkpoint; documentation-only revisions do not consume a product version.
+CURRENT BRANCH: slice/v1.16-ambient-core based on main 711547d41d4c560fe35d0d46de755f3e8718796c. This checkpoint changes documentation/governance only; actual product V1.16 code, Administration runtime version display and subversion auto-numbering automation are not implemented or deployed by this change.
+VERIFICATION: GitHub file reads and main-versus-slice compare of documentation changes; live local writer lock/build and exact-head CI have not been verified in this context. PR #33 is the existing governance/spec pull request. Recheck exact latest HEAD/CI, writer ownership and current main before merge. No incomplete product should be called COMPLETE.
+NEXT: After CI/security/diff/active-writer checks are green, integrate the independently complete docs checkpoint under existing policy; then continue V1.16 accepted implementation in a fresh slice from main. Make future release records and deployed Administration version/changelog conform to the new subversion governance. Historical V1.15 numbering requires actual Git/CI/deployment reconciliation rather than guessing.
+~~~
+
+
 ## V1.16 owner-accepted implementation handoff — 2026-10-11
 
 ~~~text
