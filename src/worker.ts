@@ -536,7 +536,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   if (match?.[2] === "/movements" && method === "POST") return json(await recordMovement(env.DB, account, match[1]!, await body()));
   if (match?.[2] === "/location-report" && method === "POST") return json(await reportLocation(env.DB, account, match[1]!, await body()), 201);
   if (match?.[2] === "/photo" && method === "PUT") {
-    // Two small JPEGs: refuse a larger body before reading it into memory.
+    // Refuse an oversized bundle of display and selected-crop JPEGs before reading it.
     if (Number(request.headers.get("content-length")) > MAX_PHOTO_BODY) throw new InputError(413, "That photo is too large.");
     const form = await request.formData().catch(() => null);
     if (!form) throw new InputError(400, "Invalid photo form.");
@@ -547,7 +547,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     // first photo are saved. The save above has already answered; this cannot change it.
     // Then up to two earlier captures whose check could not run yet (AI was off, out of allowance or failing) get theirs.
     if (form.get("recheck") === "1" && form.get("expected") === "") await afterwards(recheckCapturedPhoto(env.DB, env.AI, env.CATALOG_MEDIA, match[1]!).then(() => recheckWaiting(env.DB, env.AI, env.CATALOG_MEDIA)));
-    return json({ photo: { ...saved.photo, ...await photoCleanupState(env, account) } });
+    return json({ updatedAt: saved.updatedAt, photo: { ...saved.photo, ...await photoCleanupState(env, account) } });
   }
   if (match?.[2] === "/photo" && method === "DELETE") return json(await removeItemPhoto(env.DB, env.CATALOG_MEDIA, account, match[1]!, url.searchParams.get("expected")));
   if (match?.[2] === "/cutout" && method === "POST") {

@@ -201,10 +201,17 @@ async function cutAndHold(db: D1Database, bucket: R2Bucket, images: ImagesRunner
 export async function acceptCutout(db: D1Database, bucket: R2Bucket, actor: Actor, itemId: string, expected: unknown, form?: FormData) {
   const mediaId = expectedPhoto(expected);
   if (!mediaId) throw new InputError(400, "Reload the item and try again.");
+  const hasVersion = Boolean(form?.has("updatedAt"));
+  const expectedVersion = form?.get("updatedAt") || null;
+  if (expectedVersion !== null && typeof expectedVersion !== "string") throw new InputError(400, "Reload the item and try again.");
   await claimCutout(db, mediaId);
   try {
     const current = await db.prepare("SELECT media_id AS mediaId, width, height FROM item_media WHERE item_id = ?").bind(itemId).first<{ mediaId: string; width: number; height: number }>();
     if (!current || current.mediaId !== mediaId) throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again.");
+    if (hasVersion) {
+      const item = await db.prepare("SELECT updated_at AS updatedAt FROM items WHERE id = ?").bind(itemId).first<{ updatedAt: string | null }>();
+      if (!item || item.updatedAt !== expectedVersion) throw new InputError(409, "Someone else changed this item. Reload before repairing its thumbnail.");
+    }
     const pending = form?.get("pending") === "0" ? null : await bucket.get(pendingKey(mediaId));
     const source = pending ?? await bucket.get(cutoutKey(mediaId));
     if (!source) throw new InputError(404, "There is no cleaned picture waiting. Try removing the background again.");
@@ -228,12 +235,20 @@ export async function acceptCutout(db: D1Database, bucket: R2Bucket, actor: Acto
       throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again.");
     }
     await bucket.delete(pendingKey(mediaId)).catch(() => undefined);
-    await db.batch([
+    const now = new Date(Math.max(Date.now(), Date.parse(expectedVersion ?? "") + 1 || 0)).toISOString();
+    const update = db.prepare("UPDATE items SET updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM item_media WHERE item_id = ? AND media_id = ?) AND (? = 0 OR updated_at IS ?)")
+      .bind(now, itemId, itemId, mediaId, Number(hasVersion), expectedVersion);
+    const changed = await db.batch(hasVersion ? [
+      update,
+      ...(pending ? [audit(db, actor.accountId, "ITEM_CUTOUT_ADDED", "ITEM", itemId, { mediaId }, true)] : []),
+      db.prepare(`${BUMP_REVISION} AND changes() > 0`)
+    ] : [
       ...(pending ? [audit(db, actor.accountId, "ITEM_CUTOUT_ADDED", "ITEM", itemId, { mediaId })] : []),
-      db.prepare("UPDATE items SET updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM item_media WHERE item_id = ? AND media_id = ?)").bind(new Date().toISOString(), itemId, itemId, mediaId),
+      update,
       db.prepare(`${BUMP_REVISION} AND changes() > 0`)
     ]);
-    return { cutout: true };
+    if (hasVersion && !changed[0]!.meta.changes) throw new InputError(409, "Someone else changed this item. Reload before repairing its thumbnail.");
+    return { cutout: true, ...(hasVersion ? { updatedAt: now } : {}) };
   } finally {
     await db.prepare("DELETE FROM system_settings WHERE key = ?").bind(claimKey(mediaId)).run().catch(() => undefined);
   }

@@ -209,13 +209,15 @@ async function cutoutFault(id: string, pending = true): Promise<{ fault: string 
   } catch { return { fault: "The cleaned picture could not be checked.", source }; }
 }
 
-async function acceptThumbnail(endpoint: string, photoId: string, thumb: Blob, source?: string, pending = false, detail?: Blob): Promise<void> {
+async function acceptThumbnail(endpoint: string, photoId: string, thumb: Blob, source?: string, pending = false, detail?: Blob, version?: string | null): Promise<{ updatedAt?: string }> {
   const form = new FormData(); form.set("expected", photoId); form.set("accept", "1"); form.set("thumb", thumb, "thumb.jpg");
   if (detail) form.set("detail", detail, "detail.jpg");
   if (source) form.set("source", source);
   form.set("pending", pending ? "1" : "0");
-  await api(endpoint, { method: "POST", body: form });
+  if (version !== undefined) form.set("updatedAt", version ?? "");
+  const saved = await api<{ updatedAt?: string }>(endpoint, { method: "POST", body: form });
   refreshItemThumbnail(photoId);
+  return saved;
 }
 
 /** A pending cut becomes live only after the browser has checked its transparency. */
@@ -549,11 +551,12 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   let thumbnailRepair: string | null = null;
   const repairThumbnail = async () => {
     if (!photo?.cutout || photo.cutoutThumb !== false || !options.cleanup || busy() || staged || thumbnailRepair === photo.id) return;
-    const expected = photo.id; thumbnailRepair = expected; state = "cleaning"; draw();
+    const expected = photo.id; const version = options.updatedAt?.(); thumbnailRepair = expected; state = "cleaning"; draw();
     try {
       const checked = await cutoutFault(expected, false);
       if (checked.fault || !checked.thumb) throw new Error(checked.fault ?? "The cleaned thumbnail could not be prepared.");
-      await acceptThumbnail(options.cleanup, expected, checked.thumb, checked.source, false, checked.detail);
+      const saved = await acceptThumbnail(options.cleanup, expected, checked.thumb, checked.source, false, checked.detail, version);
+      if (version !== undefined && typeof saved.updatedAt === "string") options.repairVersion?.(version, saved.updatedAt);
       if (photo?.id === expected) photo = { ...photo, cutoutThumb: true };
       state = ""; draw(); await Promise.resolve(options.changed(photo));
     } catch (problem) { await failed(problem); }
