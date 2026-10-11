@@ -9,6 +9,8 @@ Read, in order:
 
 Authority: Earl current instruction -> accepted spec/amendment -> verified repository state -> Context Vault.
 
+Documentation map: `docs/DOCUMENTATION_STATUS.md`. `.codex/CURRENT.md` and `.codex/SESSION_HANDOFF.md` are the **only live task pointers**; historical Part briefs, older `proposed` drafts, and old release plans must never restart a closed task. Preserve accepted specs, release/migration evidence and rollback provenance. The retired Road-to-V2 multi-branch runner is not active.
+
 ## Road-to-V3 command routing
 
 When the owner says `start RTV`, `start RTV3`, `continue RTV`, `continue RTV3`, or names an `RTV3-XX` milestone, Codex, Claude, and Forge must use the **single normative** entry point in `docs/road-to-v3/00_COORDINATOR_CARD.md` ("Owner command entry point") after following the authority chain above. Do not invoke the historical Road-to-V2 branch runner. A short command never waives an accepted specification, owner acceptance gate, writer lock, production preflight, migration controls, or the one-slice branch policy. Architectural and security corrections needed for a milestone ship with that milestone under `docs/road-to-v3/01_ENGINEERING_CONSTITUTION.md`.
