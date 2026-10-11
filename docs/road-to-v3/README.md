@@ -23,7 +23,11 @@
 | **V2.9** | `RTV3-09` | Qualification / Release Candidate |
 | **V3.0** | GA | General Availability |
 
-The first Road-to-V3 release, **V2.1 / RTV3-01**, must add an actual deployed product version to the existing **Administration → System** panel; preserve Build, Commit and Built metadata. Subsequent releases must reflect their verified deployed product version. V3.1–V3.7 labels found in historical drafts do not schedule releases beyond V3.0.
+**Pre-roadmap V1.16 owner direction (2026-10-11):** the owner requested a standalone Ambient Assist + Intelligent Core consolidation release after closing V1.15 and before V2.1. It does not renumber the completed historical V2.0 baseline or the accepted V2.1–V3.0 roadmap. Its proposed implementation authority is docs/specs/proposed/v1.16-ambient-intelligent-core.md (not accepted or shipped at the time of this documentation checkpoint).
+
+V1.16 **owns first implementation** of a genuine product-version label and concise deployed changelog in the existing Administration → System > This version, preserving Build, Commit, Built and Migrations. **V2.1 / RTV3-01 F4 inherits and verifies** that functionality (including honest unknown/rollback behavior), adding its own operability work without a duplicate panel. Subsequent releases update verified deployed product identity. V3.1–V3.7 historical labels do not schedule releases beyond V3.0.
+
+**No incomplete release doctrine:** all working checkpoints are committed/pushed to the sole active slice branch; merge each independently complete, fully verified slice to updated main promptly, then prune and start the next slice from main. Do not label incomplete or future work as released.
 
 ## How to use this package
 
