@@ -171,6 +171,10 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
             <div class="field"><label for="cat-stock">Stock area</label><select id="cat-stock"><option value="Inventory">General stock</option><option value="Pantry">Pantry</option></select></div>
             <div class="field"><label for="cat-aliases">Other names <span class="field__optional">optional</span></label><input id="cat-aliases" maxlength="300" autocomplete="off" autocapitalize="words" autocorrect="on" spellcheck="true" /></div>
           </div>
+          <div class="field-grid">
+            <div class="field"><label for="cat-reorder">Reorder level</label><input id="cat-reorder" type="number" min="0" max="100000" step="1" inputmode="numeric" value="0" /></div>
+            <div class="field" id="cat-expiry-field" hidden><label for="cat-expiry">Earliest expiry <span class="field__optional">optional</span></label><input id="cat-expiry" type="date" /></div>
+          </div>
           <div class="field"><label for="cat-notes">Notes <span class="field__optional">optional</span></label><textarea id="cat-notes" rows="2" maxlength="1000" autocapitalize="sentences" autocorrect="on" spellcheck="true"></textarea></div>
         </details>
         <div class="form-alert" id="cat-alert" role="alert" hidden></div>
@@ -283,8 +287,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   /* ---------- Places ---------- */
 
   const showPlace = () => {
-    $("#cat-place-name").textContent = (placeId ? list.paths.get(placeId) : null) ?? detail.session.place ?? "Choose a place";
-    mount($("#cat-place-select"), placeOptions(list, placeId));
+    $("#cat-place-name").textContent = placeId ? list.paths.get(placeId) ?? detail.session.place ?? "Choose a place" : "No place set";
+    mount($("#cat-place-select"), html`<option value="" ${placeId ? "" : html`selected`}>No place set</option>${placeOptions(list, placeId)}`);
   };
   const panel = $("#cat-place-panel");
   $("#cat-place").addEventListener("click", () => {
@@ -301,7 +305,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     $("#cat-place").setAttribute("aria-expanded", "false");
     // Where a resumed session opens, here and on the server; every capture also names its own place, so a failure here loses nothing.
     const latest = (await stored()) ?? record!;
-    record = { ...latest, detail: { ...latest.detail, session: { ...latest.detail.session, locationId: id, place: list.paths.get(id) ?? null } } };
+    record = { ...latest, detail: { ...latest.detail, session: { ...latest.detail.session, locationId: id || null, place: list.paths.get(id) ?? null } } };
     await keepSession(record);
     if (online && record.serverId) void api(`/api/staff/catalogue/sessions/${record.serverId}`, { method: "PATCH", body: JSON.stringify({ locationId: id }) }).catch(() => undefined);
     field("cat-name").focus();
@@ -348,6 +352,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   /** Conflicting fields are shown with both options and their reasons, but never filled in by a tap on "Use these" or highlighted as the answer. */
   const settled = <T extends { tier: string }>(hint: T | undefined) => hint && hint.tier !== "CONFLICTING" ? hint : undefined;
   const draw = () => {
+    $("#cat-expiry-field").hidden = $<HTMLSelectElement>("#cat-stock").value !== "Pantry";
     const name = value("cat-name");
     const items = everything();
     const raw = suggest(name, items, recent());
@@ -417,6 +422,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     if (quantityEdited) own("quantity", field("cat-qty").value);
     own("category", value("cat-category"));
     own("unit", value("cat-unit"));
+    own("expiry", value("cat-expiry"));
+    own("reorder", value("cat-reorder"));
     if (behaviour) own("behaviour", behaviour);
     const draft = composeDraft({ revision: photoRevision, typed, edited, suggestions: raw, photo: { name: photoName, model: modelFromPhoto ? value("cat-model") : null }, session: {}, defaultQuantity: 1 });
     // Only what nothing has been offered for: a suggestion or a split is already named above ("Maybe: …", "Choose one"), and category and unit are optional under "Review later".
@@ -595,6 +602,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
 
   const invalid = (id: string, message: string) => {
     const element = id === "cat-behaviour" ? $("#cat-behaviour") : field(id);
+    const advanced = element.closest<HTMLDetailsElement>("details");
+    if (advanced) advanced.open = true;
     // A fieldset cannot be invalid; the group is marked by a class and the message is read from the alert.
     if (id === "cat-behaviour") element.classList.add("is-invalid"); else element.setAttribute("aria-invalid", "true");
     setMessage($("#cat-alert"), message);
@@ -655,7 +664,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       if (!value("cat-category")) return invalid("cat-category", "Choose a category, or Not sure to decide later.");
       if (!value("cat-unit")) return invalid("cat-unit", "Say what it is counted in, such as piece, box or ream.");
     }
-    if (!placeId) return invalid("cat-name", "Choose the place you are cataloguing.");
+    const reorderThreshold = Number(value("cat-reorder") || 0);
+    if (!Number.isInteger(reorderThreshold) || reorderThreshold < 0 || reorderThreshold > 100_000) return invalid("cat-reorder", "Reorder level must be a whole number from 0 to 100000.");
     draw();
     // The possible matches are shown first; the next press says "a different one".
     if (matches.length && !armed) {
@@ -668,8 +678,9 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
     submitting = true;
     const id = crypto.randomUUID();
     const body: Record<string, unknown> = {
-      id, behaviour, name, aliases: value("cat-aliases"), category: value("cat-category"), unit: value("cat-unit"), quantity, locationId: placeId,
+      id, behaviour, name, aliases: value("cat-aliases"), category: value("cat-category"), unit: value("cat-unit"), quantity, locationId: placeId || null, reorderThreshold,
       stockArea: $<HTMLSelectElement>("#cat-stock").value, model: value("cat-model"), serialNumber: value("cat-serial"), notes: value("cat-notes"),
+      expiresOn: $<HTMLSelectElement>("#cat-stock").value === "Pantry" ? value("cat-expiry") : "",
       ...(reviewOffer && reviewDecision ? { aiFeedback: { offerId: reviewOffer.id, draftId, revision: reviewOffer.revision, ...reviewDecision } } : {}),
       photoHash: photo?.hash ?? "", acknowledged: matches.filter((match) => !match.id.startsWith("pending:")).map((match) => match.id)
     };
@@ -832,6 +843,8 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       field("cat-serial").value = String(body.serialNumber ?? "");
       field("cat-aliases").value = String(body.aliases ?? "");
       field("cat-notes").value = String(body.notes ?? "");
+      field("cat-reorder").value = String(body.reorderThreshold ?? 0);
+      field("cat-expiry").value = String(body.expiresOn ?? "");
       $<HTMLSelectElement>("#cat-stock").value = String(body.stockArea ?? "Inventory");
       originalPhoto = null;
       photo = entry.photo ? { ...entry.photo, preview: thumbs.get(entry.id) ?? "" } : null;

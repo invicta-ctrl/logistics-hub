@@ -52,7 +52,6 @@ export async function catalogueWorkspace(): Promise<void> {
   onLeave(() => whenIdle(() => false));
   catalogueShell(who, html`<div id="cat-start" aria-busy="true"><div class="skeleton skeleton--block"></div></div>`, html`
     <h1>Add items</h1>
-    <p class="cg-hero__lead">Walk a shelf with a phone or tablet: photo, name, how it is used, how many, next.</p>
     ${who.mode === "offline" ? html`<p class="cg-mode" role="status">${icon("cloudOff")}<span><strong>You're offline.</strong> You can keep cataloguing on this device until ${day(who.access.expiresAt)}. What you save here is sent when you're back online.</span></p>` : ""}
     ${who.mode === "lease" ? html`<p class="cg-mode" role="status">${icon("user")}<span><strong>You're signed out.</strong> This device can still catalogue for you until ${day(who.access.expiresAt)}, and sends what you save. Sign in again for Items, Stock and the rest.</span> <a class="cg-mode__action" href="${signInHere()}" data-route>Sign in</a></p>` : ""}`);
   const root = document.querySelector<HTMLElement>("#cat-start")!;
@@ -89,7 +88,6 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
   const list = placeList(places);
   const records = await sessions();
   const mine = current(records, who.session.id, state?.session ?? null);
-  const active = places.filter((place) => place.active);
   const choice = remembered() && list.places.get(remembered()!)?.active ? remembered() : null;
   const online = who.mode !== "offline";
   mount(root, html`
@@ -100,16 +98,14 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
         <p class="card__text">${plural(mine.saved, "item")} saved${mine.reviewLater ? `, ${mine.reviewLater} to review later` : ""}. Started ${formatDateTime(mine.startedAt)}. It stays open on every device you sign in on until you finish it.</p>
         <div class="where__buttons"><a class="button button--primary button--lg" href="/staff/catalogue?session=${mine.id}" data-route>Resume cataloguing ${icon("next")}</a></div>
       </section>`
-      : active.length ? html`<section class="card cat-card" aria-labelledby="start-title">
+      : html`<section class="card cat-card" aria-labelledby="start-title">
         <div class="card__head"><h2 id="start-title">Start cataloguing</h2></div>
-        <p class="card__text">Choose where you are standing. It stays chosen for every item until you change it, and what each item is used for is still your call, one at a time.</p>
-        <div class="field"><label for="start-place">Place</label><select id="start-place">${placeOptions(list, choice)}</select></div>
+        <div class="field"><label for="start-place">Place <span class="field__optional">optional</span></label><select id="start-place"><option value="" ${choice ? "" : html`selected`}>No place set</option>${placeOptions(list, choice)}</select></div>
         ${who.mode === "signed-in" ? html`<p><button type="button" class="text-link" data-new-place-toggle aria-expanded="false" aria-controls="start-new">${icon("plus")} New place</button></p>
           <div id="start-new">${newPlaceForm(list, choice)}</div>` : html`<p class="field__hint">Adding a new place needs a connection and a sign-in.</p>`}
         <div class="form-alert" id="start-alert" role="alert" hidden></div>
         <div class="where__buttons"><button class="button button--primary button--lg" type="button" id="start-go">Start cataloguing ${icon("next")}</button></div>
-      </section>`
-      : html`<section class="card cat-card">${emptyState("Add a place first", "Cataloguing records where each item is kept. Add the shelf or cabinet you are standing at, then start.", who.mode === "signed-in" ? html`<a class="button button--primary" href="/staff/locations" data-route>${icon("pin")}Add a place</a>` : "", "", 2)}</section>`}
+      </section>`}
     <div id="cat-checks"></div>
     <div id="cat-device"></div>
     ${state && who.mode === "signed-in" && state.others.length ? html`<section class="cat-others" aria-labelledby="others-title"><h2 id="others-title">Cataloguing now</h2>
@@ -128,7 +124,7 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
   void checksCard(root.querySelector<HTMLElement>("#cat-checks")!, who, places);
   // Offline, the note above says all there is to say about this device, and installing needs a connection.
   if (who.mode !== "offline") void deviceCard(root.querySelector<HTMLElement>("#cat-device")!, who);
-  if (mine || !active.length) return;
+  if (mine) return;
 
   const select = root.querySelector<HTMLSelectElement>("#start-place")!;
   const alert = root.querySelector<HTMLElement>("#start-alert")!;
@@ -164,7 +160,7 @@ async function start(who: Signed, placeId: string, place: string | null): Promis
     return started.id;
   }
   const id = `CS-${crypto.randomUUID()}`;
-  const detail: Detail = { session: { id, locationId: placeId, place, status: "ACTIVE", startedAt: new Date().toISOString(), finishedAt: null, saved: 0, reviewLater: 0, owner: who.session.displayName, mine: true }, counts: {}, recent: [] };
+  const detail: Detail = { session: { id, locationId: placeId || null, place, status: "ACTIVE", startedAt: new Date().toISOString(), finishedAt: null, saved: 0, reviewLater: 0, owner: who.session.displayName, mine: true }, counts: {}, recent: [] };
   await keepSession({ id, owner: who.session.id, serverId: null, detail, finishing: false });
   return id;
 }

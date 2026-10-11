@@ -1,4 +1,4 @@
-import { ITEM_ICONS, itemIconSvg, resolveItemIcon, suggestItemIcon } from "./item-icons";
+import { resolveItemIcon } from "./item-icons";
 import { itemVisualControl } from "./item-visual-control";
 import type { DepartmentCode } from "./directory-policy";
 import { suggest, type Suggestion } from "./catalogue-suggest";
@@ -455,8 +455,7 @@ export async function workspace(): Promise<void> {
           <p class="live-status" id="live-status">Connecting…</p>
           <a class="button button--secondary" href="/staff/locations" data-route>${icon("pin")}Locations</a>
           <a class="button button--secondary" href="/staff/kits" data-route>${icon("stack")}Kits</a>
-          <a class="button button--secondary" href="/staff/catalogue" data-route>${icon("camera")}Add items</a>
-          <button class="button button--primary" type="button" id="new-item">${icon("plus")}New item</button>
+          <a class="button button--primary" id="add-items" href="/staff/catalogue" data-route>${icon("plus")}Add items</a>
         </div>
       </header>
       <div class="views" id="views" role="group" aria-label="Item views"></div>
@@ -749,7 +748,6 @@ export async function workspace(): Promise<void> {
     if (selecting && sheet.open) closeSheet();
     render();
   });
-  document.querySelector("#new-item")!.addEventListener("click", openNew);
 
   /* ---------- Item sheet ---------- */
 
@@ -1125,7 +1123,7 @@ export async function workspace(): Promise<void> {
       html`<option value="${place.id}" ${place.id === selected ? html`selected` : ""}>${paths.get(place.id)}</option>`)}`;
   }
 
-  function detailsFormMarkup(item: Partial<DetailItem>, creating = false): Html {
+  function detailsFormMarkup(item: DetailItem): Html {
     const options = (values: readonly string[], current: string | undefined) => values.map((value) => html`<option value="${value}" ${value === current ? html`selected` : ""}>${label(value)}</option>`);
     // Unclassified is offered only while a migrated record still is; staff choose Loanable or Consumable.
     const types = ITEM_TYPES.filter((type) => type !== "NEEDS_REVIEW" || item.itemType === "NEEDS_REVIEW");
@@ -1133,16 +1131,14 @@ export async function workspace(): Promise<void> {
     const hintMarkup = (id: string, hint: string) => hint ? html`<p class="visually-hidden" id="f-${id}-hint">${hint}</p>` : "";
     const text = (id: string, title: string, value: unknown, attributes: Html | string = "", hint = "", optional = false) => html`<div class="field"><label for="f-${id}">${title}${optional ? html` <span class="field__optional">optional</span>` : ""}</label><input id="f-${id}" name="${id}" value="${value ?? ""}" ${attributes} ${hinted(id, hint)} />${hintMarkup(id, hint)}</div>`;
     const number = (id: string, title: string, value: unknown, max: number, hint = "") => html`<div class="field"><label for="f-${id}">${title}</label><input id="f-${id}" name="${id}" type="number" inputmode="numeric" min="0" max="${max}" step="1" value="${value ?? 0}" ${hinted(id, hint)} />${hintMarkup(id, hint)}</div>`;
-    const reviewing = !creating && item.needsReview === true;
+    const reviewing = item.needsReview === true;
     return html`<form id="details-form" class="form" novalidate>
       ${reviewing ? html`<div class="callout callout--review">${icon("info")}<div><p><strong>Reviewing a migrated record.</strong> Check each detail against the physical item, fill in what is missing, then mark it reviewed.</p><div id="review-checklist">${checklist(reviewChecklist(item as Item))}</div></div></div>` : ""}
       <div class="form-section">
         <h3 class="form-section__title">Catalog</h3>
         ${text("name", "Name", item.name, html`required maxlength="120" autocomplete="off" autocapitalize="words" autocorrect="on" spellcheck="true"`)}
-        <div id="suggested-visual" class="visual-suggestion" aria-live="polite" ${creating ? "" : html`hidden`}></div>
-        ${creating ? html`<div class="field"><label for="f-iconKey">System icon</label><select id="f-iconKey" name="iconKey"><option value="">Use suggested icon</option>${ITEM_ICONS.map((entry) => html`<option value="tabler:${entry.key}">${entry.label}</option>`)}</select><p class="field__hint">Optional. A suggestion is already selected; you can upload a real photo after creating the item.</p></div>` : ""}
         <p class="field__hint field__hint--warn" id="duplicate-hint" hidden></p>
-        ${!creating && item.itemType === "NEEDS_REVIEW" ? html`<div class="classify-hint" id="classify-hint" aria-live="polite"></div>` : ""}
+        ${item.itemType === "NEEDS_REVIEW" ? html`<div class="classify-hint" id="classify-hint" aria-live="polite"></div>` : ""}
         <div class="field-grid">
           ${text("category", "Category", item.category?.toUpperCase() === "UNSORTED" ? "" : item.category, html`required maxlength="100" autocomplete="off" autocorrect="on" spellcheck="true"`, "Letter case does not matter; an existing category is reused.")}
           <div class="field"><label for="f-itemType">Borrow or take</label><select id="f-itemType" name="itemType">${types.map((type) => html`<option value="${type}" ${type === (item.itemType ?? "Loanable") ? html`selected` : ""}>${TYPE_CHOICES[type] ?? label(type)}</option>`)}</select></div>
@@ -1153,7 +1149,7 @@ export async function workspace(): Promise<void> {
           <div class="field"><label for="f-locationId">Place <span class="field__optional">optional</span></label>
             <select id="f-locationId" name="locationId"><option value="">No place set</option>${placeOptions(item.locationId ?? null)}</select></div>
         </div>
-        ${!creating && !item.locationId && item.legacyLocation ? html`<div class="callout">${icon("info")}<p>This item’s location was typed earlier as <strong>${item.legacyLocation}</strong>. Choose the matching place, or add it below; the typed text is kept as it was.</p></div>` : ""}
+        ${!item.locationId && item.legacyLocation ? html`<div class="callout">${icon("info")}<p>This item’s location was typed earlier as <strong>${item.legacyLocation}</strong>. Choose the matching place, or add it below; the typed text is kept as it was.</p></div>` : ""}
         <div class="place-extra"><div class="place-preview" id="place-preview" aria-live="polite"></div>
           <p><button type="button" class="text-link" data-new-place aria-expanded="false" aria-controls="place-new">${icon("plus")} New place</button></p>
           <div class="place-new" id="place-new" hidden>
@@ -1181,22 +1177,20 @@ export async function workspace(): Promise<void> {
           <div class="field"><label for="f-stockArea">Stock area</label><select id="f-stockArea" name="stockArea">${options(STOCK_AREAS, item.stockArea ?? "Inventory")}</select></div>
           <div class="field" data-expiry ${(item.stockArea ?? "Inventory") === "Pantry" ? "" : html`hidden`}><label for="f-expiresOn">Earliest expiry <span class="field__optional">optional</span></label><input id="f-expiresOn" name="expiresOn" type="date" value="${item.expiresOn ?? ""}" /></div>
         </div>
-        ${creating ? number("openingQuantity", "Opening quantity", 0, 100_000, "Recorded as the item's first movement.") : ""}
       </div>
       <div class="form-section">
         <h3 class="form-section__title">Availability</h3>
-        <div class="field"><label for="f-lendingAudience">Shown to</label><select id="f-lendingAudience" name="lendingAudience">${options(LENDING_AUDIENCES, item.lendingAudience ?? (creating ? "STUDENTS_AND_USC_STAFF" : "NOT_AVAILABLE_FOR_LENDING"))}</select></div>
+        <div class="field"><label for="f-lendingAudience">Shown to</label><select id="f-lendingAudience" name="lendingAudience">${options(LENDING_AUDIENCES, item.lendingAudience ?? "NOT_AVAILABLE_FOR_LENDING")}</select></div>
         <div class="listing-status" id="listing-preview" aria-live="polite"></div>
       </div>
-      ${creating ? "" : html`<div class="item-visual-control" id="item-visual-control"></div><div id="item-links"></div>`}
+      <div class="item-visual-control" id="item-visual-control"></div><div id="item-links"></div>
       </div></details>
       <div class="form-section form-section--last">
-        <label class="checkbox"><input type="checkbox" name="reviewed" ${item.needsReview === false || creating ? html`checked` : ""} /><span>Details reviewed and verified</span></label>
+        <label class="checkbox"><input type="checkbox" name="reviewed" ${item.needsReview === false ? html`checked` : ""} /><span>Details reviewed and verified</span></label>
       </div>
       <div class="form-alert" id="details-alert" role="alert" hidden></div>
       <div class="form-actions form-actions--sticky">
-        ${creating ? html`<button class="button button--primary" type="submit">Create item</button>`
-          : reviewing ? html`<button class="button button--secondary" type="submit" data-intent="save">Save</button><button class="button button--primary" type="submit" data-intent="review-next">Mark reviewed &amp; next ${icon("next")}</button>`
+        ${reviewing ? html`<button class="button button--secondary" type="submit" data-intent="save">Save</button><button class="button button--primary" type="submit" data-intent="review-next">Mark reviewed &amp; next ${icon("next")}</button>`
           : html`<button class="button button--primary" type="submit" data-intent="save">Save changes</button>`}
       </div>
     </form>`;
@@ -1210,8 +1204,7 @@ export async function workspace(): Promise<void> {
       itemType: String(values.get("itemType")), status: String(values.get("status")), locationId: String(values.get("locationId") ?? ""),
       reorderThreshold: whole("reorderThreshold"), lendingAudience: String(values.get("lendingAudience")),
       needsReview: values.get("reviewed") !== "on", notes: String(values.get("notes") ?? ""), model: String(values.get("model") ?? ""), serialNumber: String(values.get("serialNumber") ?? ""),
-      stockArea: String(values.get("stockArea") ?? "Inventory"), expiresOn: String(values.get("expiresOn") ?? ""), consumptionMode: String(values.get("consumptionMode") ?? "WHOLE_UNIT"),
-      ...(values.has("openingQuantity") ? { openingQuantity: whole("openingQuantity"), iconKey: String(values.get("iconKey") ?? "") || null } : {})
+      stockArea: String(values.get("stockArea") ?? "Inventory"), expiresOn: String(values.get("expiresOn") ?? ""), consumptionMode: String(values.get("consumptionMode") ?? "WHOLE_UNIT")
     };
   }
 
@@ -1232,10 +1225,9 @@ export async function workspace(): Promise<void> {
     return problems;
   }
 
-  function bindDetailsForm(item: Partial<DetailItem> & { id?: string }): void {
+  function bindDetailsForm(item: DetailItem): void {
     const form = sheet.querySelector<HTMLFormElement>("#details-form")!;
     const alert = form.querySelector<HTMLDivElement>("#details-alert")!;
-    const creating = !item.id;
     form.querySelector<HTMLInputElement>("#f-name")!.addEventListener("blur", (event) => {
       const input = event.target as HTMLInputElement;
       const name = formatItemName(input.value);
@@ -1280,8 +1272,6 @@ export async function workspace(): Promise<void> {
     });
     const preview = () => {
       const values = readDetails(form);
-      const suggested = suggestItemIcon(values).key;
-      mount(form.querySelector("#suggested-visual")!, html`${raw(itemIconSvg(suggested))}<span>Suggested visual · ${ITEM_ICONS.find((entry) => entry.key === suggested)!.label}</span>`);
       const gaps = listingGaps(values);
       const element = form.querySelector("#listing-preview")!;
       element.className = `listing-status ${gaps.length ? "" : "is-listed"}`;
@@ -1374,14 +1364,6 @@ export async function workspace(): Promise<void> {
       buttons.forEach((button) => { button.disabled = true; });
       setMessage(alert, "");
       try {
-        if (creating) {
-          const { id: created } = await api<{ id: string }>("/api/staff/items", { method: "POST", body: JSON.stringify(readDetails(form)) });
-          dirty = false;
-          toast(`Item ${created} created.`);
-          await poll.refresh();
-          openItem(created);
-          return;
-        }
         const id = item.id!;
         // The queue is the list the reviewer was working through, captured before this save changes it.
         const queue = [...shownIds];
@@ -1407,24 +1389,4 @@ export async function workspace(): Promise<void> {
     });
   }
 
-  let waitingForList = false;
-  async function openNew(): Promise<void> {
-    if (waitingForList || !discardOk()) return;
-    // The page draws before its first answer, and the form's places and duplicate-name check come from that answer:
-    // a form opened earlier offered no place to choose. Wait for it once instead.
-    if (!inventory) {
-      waitingForList = true;
-      try { await poll.refresh(); } finally { waitingForList = false; }
-      // Left meanwhile, or a sheet opened while waiting (the item the address names, or one tapped): that is the newer choice.
-      if (!sheet.isConnected || sheet.open) return;
-    }
-    dirty = false;
-    openId = null;
-    detail = null;
-    writeParams({ item: null });
-    sheetShell("New item", "Add an item", detailsFormMarkup({ needsReview: false }, true));
-    panel.open();
-    bindDetailsForm({ needsReview: false });
-    sheet.querySelector<HTMLInputElement>("#f-name")!.focus();
-  }
 }

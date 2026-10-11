@@ -25,7 +25,8 @@ const SESSION_COLUMNS = `s.id, s.location_id AS locationId, lp.path AS place, s.
   (SELECT COUNT(*) FROM catalogue_captures c WHERE c.session_id = s.id AND c.behaviour = 'REVIEW_LATER') AS reviewLater
   FROM catalogue_sessions s JOIN staff_accounts a ON a.id = s.started_by LEFT JOIN location_paths lp ON lp.id = s.location_id`;
 
-function placeId(value: unknown): string {
+function placeId(value: unknown): string | null {
+  if (value === null || value === "") return null;
   if (typeof value !== "string" || !LOCATION_ID.test(value)) throw new InputError(400, "Choose the place you are cataloguing.");
   return value;
 }
@@ -132,7 +133,7 @@ export async function startSession(db: D1Database, actor: Actor, input: unknown)
   // A proposed session already finished (here or on another device) cannot take more captures: a new one does.
   const id = typeof body.id === "string" && !used ? body.id : `CS-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
-  const place = (await pathsOf(db, [locationId])).get(locationId) ?? null;
+  const place = locationId ? (await pathsOf(db, [locationId])).get(locationId) ?? null : null;
   try {
     await db.batch([
       db.prepare("INSERT INTO catalogue_sessions(id, started_by, location_id, status, started_at, updated_at) VALUES(?, ?, ?, 'ACTIVE', ?, ?)").bind(id, actor.accountId, locationId, now, now),
@@ -212,7 +213,7 @@ export async function capture(db: D1Database, actor: Actor, sessionId: string, i
     // An unknown category or unit is only allowed for a record that waits for review, and says so.
     category: later && !text(body, "category", "Category", 100, false) ? UNSORTED_CATEGORY : body.category,
     unit: later && !text(body, "unit", "Unit", 30, false) ? UNSORTED_UNIT : body.unit,
-    ...behaviourFields(decided), status: "ACTIVE", locationId, reorderThreshold: 0, lendingAudience: "NOT_AVAILABLE_FOR_LENDING",
+    ...behaviourFields(decided), status: "ACTIVE", locationId, reorderThreshold: body.reorderThreshold ?? 0, expiresOn: body.expiresOn ?? "", lendingAudience: "NOT_AVAILABLE_FOR_LENDING",
     // Captured at the shelf, but nobody has signed it off for Self-Service: "Mark reviewed" (or the Items form) does that.
     needsReview: true
   });
