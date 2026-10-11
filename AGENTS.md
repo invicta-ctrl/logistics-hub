@@ -13,7 +13,7 @@ Authority: Earl current instruction -> accepted spec/amendment -> verified repos
 
 When the owner says `start RTV`, `start RTV3`, `continue RTV`, `continue RTV3`, or names an `RTV3-XX` milestone, Codex, Claude, and Forge must use the **single normative** entry point in `docs/road-to-v3/00_COORDINATOR_CARD.md` ("Owner command entry point") after following the authority chain above. Do not invoke the historical Road-to-V2 branch runner. A short command never waives an accepted specification, owner acceptance gate, writer lock, production preflight, migration controls, or the one-slice branch policy. Architectural and security corrections needed for a milestone ship with that milestone under `docs/road-to-v3/01_ENGINEERING_CONSTITUTION.md`.
 
-Product versions for Road to V3 are **V2.1–V2.9**, one-to-one with RTV3-01–RTV3-09, then V3.0 GA. `start/continue V2.x` resolves through the same Coordinator Card. V2.1 F4 includes a truthful deployed product-version label in the existing Administration → System view, separately from the build hash.
+Product versions for Road to V3 remain **V2.1–V2.9** (RTV3-01–RTV3-09) then V3.0 GA. The owner explicitly placed **V1.16 Ambient Assist + Intelligent Core** immediately before Road to V3, despite the historical completed V2.0 baseline. V1.16 owns the first truthful deployed product-version/changelog display in the existing Administration → System > This version; V2.1/F4 must reuse and extend it, not build a second version display. V1.16's detailed implementation authority is pending owner acceptance at docs/specs/proposed/v1.16-ambient-intelligent-core.md.
 
 ## Non-negotiables
 
@@ -25,6 +25,7 @@ Product versions for Road to V3 are **V2.1–V2.9**, one-to-one with RTV3-01–R
 - `main` is always the latest verified working product.
 - At most one active short-lived `slice/<part>-<scope>` branch.
 - A finished green slice is merged to `main` immediately and its branch is deleted/pruned.
+- **Never present an incomplete version or product as completed or deployed.** Preserve incomplete work only on the active slice, label it accurately in handoffs, and never ship broken dependencies, fake working buttons or missing primary workflows. Every coherent working checkpoint must be tested, committed and pushed to the single current slice branch; do not hold progress only in a cloud session. As soon as a slice is independently usable and all its accepted gates are green, merge that slice to updated `main`, verify CI/deployment, prune the integrated branch, then continue remaining version work on a new slice from updated `main`. The product release/version label changes only after the full version actually qualifies and is deployed. Incomplete checkpoints never go to `main`.
 - Never put a knowingly broken/incomplete slice on `main`.
 - Preserve unknown work; no destructive reset/clean/history rewrite.
 - Public repo: no staff/borrower PII, credentials, provider IDs, private exports, or private evidence.
