@@ -7,7 +7,7 @@ Operations system for the HAU-USC Department of Logistics.
 - **Staff:** an Inventory + Catalog workspace with a live table, views (Needs review, Ready to list, Low stock, Inactive…), search across names, other names, IDs, categories and locations, and an item sheet for stock movements, catalog and lending settings, migrated-record review, and a readable change history.
 - **Stack:** semantic HTML, CSS, TypeScript modules, Vite, one Cloudflare Worker, and D1. No SPA framework.
 
-Read `AGENTS.md`, then `.codex/CURRENT.md`, before changing anything. `docs/PRODUCT_REFERENCE.md` describes the whole product.
+Read `AGENTS.md` and its required policy/handoff chain before changing anything. The [documentation authority map](docs/DOCUMENTATION_STATUS.md) distinguishes current instructions from historical evidence. `docs/PRODUCT_REFERENCE.md` describes the product.
 
 ## How it works
 
