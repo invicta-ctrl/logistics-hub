@@ -1,6 +1,6 @@
 # Road to V2 — accepted amendments, 2026-10-02
 
-STATUS: ACCEPTED BY OWNER (Earl, 2026-10-02, replying to the V1.1 proposal `docs/specs/proposed/2026-10-02-road-to-v2-roadmap-amendments.md`)
+STATUS: ACCEPTED BY OWNER (Earl, 2026-10-02, replying to the V1.1 proposal [historical superseded proposal](https://github.com/invicta-ctrl/logistics-hub/blob/711547d41d4c560fe35d0d46de755f3e8718796c/docs/specs/proposed/2026-10-02-road-to-v2-roadmap-amendments.md))
 APPLIES TO: every Road-to-V2 branch; the shared `CLAUDE.md` carries the operating rules.
 
 ## Decisions
