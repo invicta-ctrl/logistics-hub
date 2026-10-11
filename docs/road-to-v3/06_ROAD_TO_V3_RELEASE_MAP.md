@@ -5,7 +5,7 @@ Owner amendment (2026-10-11): `RTV3-01`–`RTV3-09` are stable **internal milest
 | Product version | Internal milestone | Standalone outcome |
 |---|---|---|
 | **V2.0** | Existing shipped baseline | Logistics Hub + Ambient Assist; historical handoff in `docs/road-to-v2/releases/v2.0.md` |
-| **V1.16** (pre-roadmap, proposed) | — | Ambient Assist + Intelligent Core consolidation and truthful Administration product version/changelog; owner-directed out-of-sequence identifier after historical V2.0, does not renumber V2.1–V3.0; not released until verified |
+| **V1.16** (owner-accepted, unreleased) | — | Ambient Assist + Intelligent Core consolidation and truthful Administration product version/changelog; owner-directed out-of-sequence identifier after historical V2.0, does not renumber V2.1–V3.0; not released until verified |
 | **V2.1** | `RTV3-01` | Foundation & Operability, including qualification/reuse of V1.16's actual deployed product-version/changelog display in Administration → System |
 | **V2.2** | `RTV3-02` | Event & Demand Orchestration, independent of Promise |
 | **V2.3** | `RTV3-03` | Resource Promise & Fulfillment, time-aware availability and planning |
@@ -26,7 +26,7 @@ Owner amendment (2026-10-11): `RTV3-01`–`RTV3-09` are stable **internal milest
 - Because RTV3-03–RTV3-08 depend on domains introduced after RTV3-02, the amendment gate is transitive.
 - RTV3-09 requires all intended RTV3-01–RTV3-08 milestones to be complete.
 - V3.0 requires RTV3-09 acceptance.
-- V1.16 implements the product-version/changelog display if accepted and shipped; V2.1/RTV3-01 F4 must reuse it and verify its **actual deployed product version** in Administration → System separately from the existing build fingerprint. Each later release must update this same view upon verified deployment.
+- V1.16 implements the product-version/changelog display when completed and shipped; V2.1/RTV3-01 F4 must reuse it and verify its **actual deployed product version** in Administration → System separately from the existing build fingerprint. Each later release must update this same view upon verified deployment.
 
 Future-milestone research/spec preparation may occur in parallel when it does not mutate shared truth or presume unaccepted product scope.
 
