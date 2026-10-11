@@ -1,5 +1,21 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## V1.16 planned consolidation / documentation-only remote checkpoint — 2026-10-11
+
+~~~text
+STATUS: PROPOSED SPEC AND GOVERNANCE DOCS ONLY. V1.16 is NOT implemented, COMPLETE, merged to main, or deployed. Do not call this a shipped V1.16 product.
+BASE: main 711547d41d4c560fe35d0d46de755f3e8718796c (verified when branch was created; refresh actual refs before next action).
+BRANCH: slice/v1.16-ambient-core. Preserve it and all unknown local work. Owner says V1.15 is closed and writer lock lifted; future implementer still verifies and claims appropriate lock before editing.
+SPEC: docs/specs/proposed/v1.16-ambient-intelligent-core.md, owner acceptance pending. Accepted-spec gate is NOT waived by high-level chat direction.
+SCOPE: No-chat invisible assistance, independent deterministic operation under AI quota/outage, verified staff-correction learning, four-role evaluation, and actual deployed V1.16 label plus concise changelog in existing Administration/System. V2.1/F4 reuses version display; V2.1/F7 reuses validated router work only.
+DONE: Written proposed spec; updated AGENTS, policy, shared workflow, CLAUDE, Road-to-V3 AI baseline/README/release map/foundation/owner decisions, and proposed Product Reference description. Further docs may be updated in this checkpoint. All writes are documentation only.
+TESTS: No application tests run (no runtime files changed). Final docs diff/refs/privacy and remote checks remain to be inspected; do not report them passed without evidence.
+NEXT: Ask owner to explicitly accept the proposed spec as implementation baseline. Once accepted, reconcile current branch/ref and writer lock; implement the first independently complete vertical slice and verify. Commit/push every working checkpoint to active slice; merge/prune immediately when a slice is genuinely complete/green; do not deploy unverified changes. Version product label is last-release qualified, never guessed from branch name.
+STOP: No further implementation before accepted spec; preserve honest PROPOSED status instead of claiming full version completion.
+~~~
+
+
+
 ## Owner thumbnail, phone and item-entry corrections — complete, 2026-10-11
 
 ~~~text
