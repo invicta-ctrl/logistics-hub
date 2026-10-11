@@ -112,6 +112,15 @@ Baseline:
 
 A green slice is merged to `main` immediately. A partially working slice stays off `main`.
 
+### Owner's explicit completion and checkpoint contract (2026-10-11)
+
+- Under **no circumstance** claim or present an unfinished version, broken workflow, or incomplete product as finished. State unresolved work accurately in the active-branch handoff, not in a false release claim.
+- Push each coherent, reviewed, working checkpoint to the one active slice branch, after focused verification; preserve exact commits and next action. Do not leave useful safe progress invisible to the shared worktree.
+- Merge **every independently complete and verified slice** into updated `main` as soon as it meets its own accepted acceptance criteria and exact-head checks, verify production/build and prune only confirmed-integrated slice branches. Subsequent slices branch from the new `main`; there is still only one active writable slice branch.
+- Never merge a partial feature, future-required button or incomplete release into `main`. The release version/changelog must describe the **verified running artifact**, not the intended future work.
+- Owner's proposed V1.16 Ambient Assist + Intelligent Core work is pre-Road-to-V3; its implementation requires the accepted V1.16 specification. Its release identity will be implemented in the existing Administration > System view and carried into V2.1 rather than duplicated.
+
+
 ## Migration
 
 - Current Production spreadsheet remains migration source evidence.
