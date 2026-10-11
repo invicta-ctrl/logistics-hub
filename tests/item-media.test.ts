@@ -220,7 +220,7 @@ describe("adding a photo", () => {
     expect(actions()).toEqual(["ITEM_PHOTO_ADDED"]);
     expect(revision()).toBe(before + 1);
     expect((await listed()).photoId).toBe(photo.id);
-    expect((await detail()).photo).toEqual({ id: photo.id, width: 40, height: 30, cutout: false, cleanable: false, canEnable: false, cleanupReason: "Background removal is unavailable right now." });
+    expect((await detail()).photo).toEqual({ id: photo.id, width: 40, height: 30, detail: false, cutout: false, cleanable: false, canEnable: false, cleanupReason: "Background removal is unavailable right now." });
   });
 
   it("stores the cleaned bytes, never what the client sent", async () => {

@@ -1142,6 +1142,8 @@ export async function workspace(): Promise<void> {
     bindDetailsForm(item);
     photo = photoPanel(sheet.querySelector<HTMLElement>("#photo-panel")!, {
       visual: () => ({ ...detail!.item, photoId: detail!.item.photo?.id }), updatedAt: () => detail!.item.updatedAt,
+      // Rebase only our successful photo repair; another writer's detail changes still conflict.
+      repairVersion: (from, to) => { if (item.updatedAt === from) item.updatedAt = to; },
       id: item.id, name: item.name, photo: item.photo, noun: "photo", endpoint: `/api/staff/items/${encodeURIComponent(item.id)}/photo`, cleanup: `/api/staff/items/${encodeURIComponent(item.id)}/cutout`,
       cleanupState: () => detail?.item.photoCleanup,
       enableCleanup: async () => { await api("/api/staff/admin/cleanup", { method: "PATCH", body: JSON.stringify({ on: true }) }); await poll.refresh(); },

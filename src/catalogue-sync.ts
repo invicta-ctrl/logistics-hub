@@ -187,6 +187,7 @@ async function send(entry: Entry): Promise<void> {
     const form = new FormData();
     form.set("display", entry.photo.display, "display.jpg");
     form.set("thumb", entry.photo.thumb, "thumb.jpg");
+    if (entry.photo.detail) form.set("detail", entry.photo.detail, "detail.jpg");
     form.set("expected", "");
     form.set("hash", entry.photo.hash);
     if (entry.photo.crop) form.set("cropRect", JSON.stringify(entry.photo.crop));

@@ -328,7 +328,7 @@
 .ss-list--photos li { content-visibility: auto; contain-intrinsic-size: auto 3.875rem; }
 
 /* ---------- The item's page ---------- */
-.ss-item__visual { display: grid; width: min(100%, 15rem); aspect-ratio: 1; margin-inline: auto; border-radius: var(--radius-lg); view-transition-name: ss-visual; }
+.ss-item__visual { display: grid; width: min(100%, 15rem, var(--item-photo-edge, 15rem)); aspect-ratio: 1; margin-inline: auto; border-radius: var(--radius-lg); view-transition-name: ss-visual; }
 .ss-item__type { color: var(--accent-line); font-size: .6875rem; font-weight: 600; letter-spacing: .14em; text-align: center; text-transform: uppercase; }
 .ss-item__how { color: var(--text-2); font-size: var(--text-base); line-height: 1.5; }
 .ss-item .ss-where { margin: 0; }

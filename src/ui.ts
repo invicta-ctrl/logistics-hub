@@ -95,16 +95,18 @@ export function itemVisual(item: VisualItem, url: (id: string) => string, classN
     ? html`<img class="item-visual__photo" data-item-photo data-photo="${visual.photoId}" src="${url(visual.photoId)}" alt="${meaningful ? `Photo of ${item.name}` : ""}" width="160" height="160" loading="lazy" decoding="async" />` : ""}</span>`;
 }
 const thumbnailVersions = new Map<string, number>();
-export const itemThumbnailUrl = (id: string, scope: "staff" | "public" = "public") =>
-  `/api/${scope}/media/${id}/thumb?v=2${thumbnailVersions.has(id) ? `&r=${thumbnailVersions.get(id)}` : ""}`;
+export const itemThumbnailUrl = (id: string, scope: "staff" | "public" = "public", size: "thumb" | "detail" = "thumb") =>
+  `/api/${scope}/media/${id}/${size}?v=2${thumbnailVersions.has(id) ? `&r=${thumbnailVersions.get(id)}` : ""}`;
 
 /** Refresh already-visible photos after changing a cutout without replacing its media id. */
 export function refreshItemThumbnail(id: string): void {
   thumbnailVersions.set(id, (thumbnailVersions.get(id) ?? 0) + 1);
   for (const image of document.querySelectorAll<HTMLImageElement>("img")) {
     const path = new URL(image.src, location.href).pathname;
-    if (path === `/api/staff/media/${id}/thumb`) image.src = itemThumbnailUrl(id, "staff");
-    else if (path === `/api/public/media/${id}/thumb`) image.src = itemThumbnailUrl(id);
+    for (const scope of ["staff", "public"] as const) {
+      if (path === `/api/${scope}/media/${id}/thumb`) image.src = itemThumbnailUrl(id, scope);
+      else if (path === `/api/${scope}/media/${id}/detail`) image.src = itemThumbnailUrl(id, scope, "detail");
+    }
   }
 }
 
@@ -114,12 +116,19 @@ export const thumbImg = (item: VisualItem & { photo?: string | null }): Html =>
 // Resource events do not bubble. Capture lets redraws share one fallback handler without per-row listeners.
 document.addEventListener("load", (event) => {
   const image = event.target;
-  if (image instanceof HTMLImageElement && image.hasAttribute("data-item-photo")) image.parentElement?.classList.add("item-visual--loaded");
+  if (image instanceof HTMLImageElement && image.hasAttribute("data-item-photo")) {
+    const frame = image.parentElement;
+    frame?.classList.add("item-visual--loaded");
+    if (frame?.classList.contains("ss-item__visual")) {
+      frame.style.setProperty("--item-photo-edge", `${Math.max(image.naturalWidth, image.naturalHeight) / (window.devicePixelRatio || 1)}px`);
+    }
+  }
 }, true);
 document.addEventListener("error", (event) => {
   const image = event.target;
   if (image instanceof HTMLImageElement && image.hasAttribute("data-item-photo")) {
     image.parentElement?.classList.remove("item-visual--loaded");
+    if (image.parentElement?.classList.contains("ss-item__visual")) image.parentElement.style.removeProperty("--item-photo-edge");
     image.remove();
   }
 }, true);

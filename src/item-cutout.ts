@@ -61,6 +61,7 @@ export async function setCleanup(db: D1Database, actor: Account, input: unknown)
 
 export const cutoutKey = (mediaId: string) => `items/${mediaId}/cutout`;
 export const cutoutThumbKey = (mediaId: string) => `items/${mediaId}/cutout-thumb`;
+export const cutoutDetailKey = (mediaId: string) => `items/${mediaId}/cutout-detail`;
 /** A new cut waits here until the browser has judged it; nothing serves it as the item's picture and a closed tab leaves nothing live. */
 export const claimKey = (mediaId: string) => `cutout_claim:${mediaId}`;
 /** A claim older than this is a request that died; it no longer blocks (the provider timeout is 20 s). */
@@ -209,6 +210,7 @@ export async function acceptCutout(db: D1Database, bucket: R2Bucket, actor: Acto
     if (!source) throw new InputError(404, "There is no cleaned picture waiting. Try removing the background again.");
     if (form && source.httpEtag && form.get("source") !== source.httpEtag) throw new InputError(409, "The cleaned photo changed. Reload it before saving the thumbnail.");
     const thumb = form ? await readVariant(form, "thumb") : null;
+    const detail = form?.has("detail") ? await readVariant(form, "detail") : null;
     if (thumb && Math.max(thumb.width, thumb.height) > 320) throw new InputError(400, "The cleaned thumbnail is too large.");
     // An accepted photo made by an older page can gain its small thumbnail without another provider call.
     if (!pending && !thumb) return { cutout: true };
@@ -218,9 +220,11 @@ export async function acceptCutout(db: D1Database, bucket: R2Bucket, actor: Acto
       await bucket.put(cutoutKey(mediaId), bytes, { httpMetadata: { contentType: "image/png" } });
     }
     if (thumb) await bucket.put(cutoutThumbKey(mediaId), thumb.bytes, { httpMetadata: { contentType: "image/jpeg" }, customMetadata: source.httpEtag ? { source: source.httpEtag } : undefined });
+    if (detail) await bucket.put(cutoutDetailKey(mediaId), detail.bytes, { httpMetadata: { contentType: "image/jpeg" }, customMetadata: source.httpEtag ? { source: source.httpEtag } : undefined });
+    else if (pending) await bucket.delete(cutoutDetailKey(mediaId));
     const still = await db.prepare("SELECT 1 FROM item_media WHERE item_id = ? AND media_id = ?").bind(itemId, mediaId).first();
     if (!still) {
-      await Promise.all([bucket.delete(cutoutKey(mediaId)), bucket.delete(cutoutThumbKey(mediaId))]);
+      await Promise.all([bucket.delete(cutoutKey(mediaId)), bucket.delete(cutoutThumbKey(mediaId)), bucket.delete(cutoutDetailKey(mediaId))]);
       throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again.");
     }
     await bucket.delete(pendingKey(mediaId)).catch(() => undefined);
@@ -251,6 +255,7 @@ export async function removeCutout(db: D1Database, bucket: R2Bucket, actor: Acto
     }
     await bucket.delete(pendingKey(mediaId)).catch(() => undefined);
     await bucket.delete(cutoutThumbKey(mediaId));
+    await bucket.delete(cutoutDetailKey(mediaId));
     if (await bucket.head(cutoutKey(mediaId))) {
       await bucket.delete(cutoutKey(mediaId));
       await db.batch([

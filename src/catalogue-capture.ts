@@ -10,7 +10,7 @@ import { type Known as DuplicateKnown, type Match, possibleDuplicates } from "./
 import { cropEditor, preparePhoto, photoUrl, type Prepared } from "./item-photo";
 import { whenIdle } from "./pwa";
 import { catalogueShell } from "./catalogue-shell";
-import { ApiError, type Html, api, categoryName, dataUrl, emptyState, expired, failure, html, icon, leave, live, mount, navigate, onLeave as onPageLeave, plural, preservingFocus, setMessage, toast, units } from "./ui";
+import { ApiError, type Html, api, categoryName, dataUrl, emptyState, expired, failure, html, icon, label, leave, live, mount, navigate, onLeave as onPageLeave, plural, preservingFocus, setMessage, toast, units } from "./ui";
 
 /*
  * The capture screen of a cataloguing session (/staff/catalogue?session=…): one form, kept on screen, that turns a thing on a shelf
@@ -350,7 +350,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
   const matchRows = (): Html => html`${matches.map((match) => {
     const item = everything().find((entry) => entry.id === match.id);
     const pending = match.id.startsWith("pending:");
-    return html`<li class="cat-dup__row"><span class="cat-dup__text"><strong>${item?.name ?? match.id}</strong><span>${match.reason}${item ? ` · ${item.onHand} ${units(item.onHand, item.unit)}` : ""}${item?.locationId ? ` · ${list.paths.get(item.locationId) ?? ""}` : ""}</span></span>
+    return html`<li class="cat-dup__row"><span class="cat-dup__text"><strong>${item?.name ?? match.id}</strong><span>${item && !pending ? `${item.id} · ${label(item.status)} · ` : ""}${match.reason}${item ? ` · ${item.onHand} ${units(item.onHand, item.unit)}` : ""}${item?.locationId ? ` · ${list.paths.get(item.locationId) ?? ""}` : ""}</span></span>
       ${pending ? html`<span class="muted">Just added</span>` : html`<span class="cat-dup__actions"><a class="text-link" href="/staff/items?item=${match.id}" target="_blank" rel="noopener">Open<span class="visually-hidden"> ${item?.name ?? match.id} (opens in a new tab)</span></a><a class="text-link" href="/staff/items?item=${match.id}" target="_blank" rel="noopener" data-use-existing="${item?.name ?? ""}">Use existing<span class="visually-hidden"> ${item?.name ?? match.id} instead of adding this one (opens in a new tab)</span></a></span>`}</li>`;
   })}`;
 
@@ -711,7 +711,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
       photoHash: photo?.hash ?? "", acknowledged: matches.filter((match) => !match.id.startsWith("pending:")).map((match) => match.id)
     };
     const entry: Entry = {
-      id, sessionId, owner: session.id, body, photo: photo ? { display: photo.display, thumb: photo.thumb, hash: photo.hash, ...(photo.crop ? { crop: photo.crop } : {}) } : null, itemId: null, state: "waiting", message: null, matches: null,
+      id, sessionId, owner: session.id, body, photo: photo ? { display: photo.display, thumb: photo.thumb, ...(photo.detail ? { detail: photo.detail } : {}), hash: photo.hash, ...(photo.crop ? { crop: photo.crop } : {}) } : null, itemId: null, state: "waiting", message: null, matches: null,
       ...(photo && !photoChecked ? { recheck: true } : {}),
       ...(cleanBackground ? { cleanBackground: true } : {}),
       at: new Date().toISOString(), after: matches.filter((match) => match.id.startsWith("pending:")).map((match) => match.id.slice(8))

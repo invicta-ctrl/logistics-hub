@@ -9,8 +9,8 @@ import { aliasItems, catalogCoverage } from "./catalog-admin";
 import { insights, resumable } from "./home";
 import { capture, capturedBy, catalogueSnapshot, catalogueState, finishSession, sessionDetail, setSessionPlace, startSession, unreviewed } from "./catalogue";
 import { updateItemVisual } from "./item-visuals";
-import { type ImagesRunner, acceptCutout, cleanupOn, cleanupStatus, cutoutPicture, hasCutoutThumb, hasCutout, makeCutout, removeCutout, setCleanup } from "./item-cutout";
-import { dropObjects, itemPhoto, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
+import { type ImagesRunner, acceptCutout, cleanupOn, cleanupStatus, cutoutPicture, hasCutout, makeCutout, removeCutout, setCleanup } from "./item-cutout";
+import { dropObjects, itemPhoto, photoDerivatives, publicThumb, putItemPhoto, removeItemPhoto } from "./item-media";
 import { linkItems, linksOf, unlinkItems } from "./item-relations";
 import { checkKit, createKit, createTemplate, kitDetail, kitList, kitsOfItem, recentlyCatalogued, templateDetail, updateKit, updateTemplate } from "./kits";
 import { searchIndex } from "./search-index";
@@ -97,15 +97,15 @@ const AUDIT_PATH = /^\/api\/staff\/audits\/(LA-[0-9a-f-]{36})(\/observations|\/f
 const RESOLVE_PATH = /^\/api\/staff\/audits\/observations\/([0-9a-f-]{36})\/resolve$/;
 const ITEM_ID = /^ITM-[A-Za-z0-9-]{1,24}$/;
 const MEDIA_PATH = /^\/api\/staff\/media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
-/** The only public image address: a thumbnail, by id. The 1280 px size has no public address. */
-const PUBLIC_THUMB_PATH = /^\/api\/public\/media\/([0-9a-f-]{36})\/thumb$/;
+/** Only sanitized selected-crop derivatives are public; the uncropped display/full cutout remain staff-only. */
+const PUBLIC_THUMB_PATH = /^\/api\/public\/media\/([0-9a-f-]{36})\/(thumb|detail)$/;
 const LOAN_PATH = /^\/api\/staff\/loans\/(LN-[A-Za-z0-9-]{1,60})\/(return|photo|review)$/;
 const REORDER_PATH = /^\/api\/staff\/reorders\/(RO-[A-Za-z0-9-]{1,60})$/;
 const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|photo|identity)$/;
 /** A sync carries at most a few compressed photos; anything larger is not from the app. */
 const MAX_SYNC_BYTES = 12 * 1024 * 1024;
-/** One display JPEG and up to two small thumbnails, plus form framing. */
-const MAX_PHOTO_BODY = 1_500_000;
+/** One display, two small and two detail JPEGs, plus bounded form framing. */
+const MAX_PHOTO_BODY = 2_300_000;
 const PERSON_PATH = /^\/api\/staff\/admin\/directory\/(PER-[0-9a-f-]{36})(\/account|\/account\/new|\/access|\/usage|\/loans|\/activity|\/id|\/id\/front|\/id\/back|\/id\/thumb|\/id\/face|\/id\/derived)?$/;
 const ALIAS_PATH = /^\/api\/staff\/admin\/catalog\/aliases\/(ITM-[A-Za-z0-9-]{1,24})$/;
 const ACCOUNT_PATH = /^\/api\/staff\/admin\/accounts\/(ACC-[A-Za-z0-9-]{1,60})(\/password|\/sessions\/revoke)?$/;
@@ -524,9 +524,9 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   if (match && !match[2] && method === "GET") {
     const [detail, freshness, kits, links] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!), linksOf(env.DB, match[1]!)]);
     // Whether this photo has a cleaned picture, and whether cleaning is offered at all (the Images binding is present).
-    const cleaned = detail.item.photo ? await hasCutout(env.CATALOG_MEDIA, detail.item.photo.id) : false;
+    const derivatives = detail.item.photo ? await photoDerivatives(env.CATALOG_MEDIA, detail.item.photo.id) : null;
     const photoCleanup = await photoCleanupState(env, account);
-    return json({ ...detail, item: { ...detail.item, photoCleanup, photo: detail.item.photo ? { ...detail.item.photo, cutout: cleaned, ...(cleaned ? { cutoutThumb: await hasCutoutThumb(env.CATALOG_MEDIA, detail.item.photo.id) } : {}), ...photoCleanup } : null }, freshness, kits, links });
+    return json({ ...detail, item: { ...detail.item, photoCleanup, photo: detail.item.photo ? { ...detail.item.photo, ...derivatives, ...photoCleanup } : null }, freshness, kits, links });
   }
   if (match && !match[2] && method === "PATCH") {
     const input = await body() as Record<string, unknown> | null;
@@ -554,7 +554,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     let form: FormData | undefined;
     let input: { expected?: unknown; accept?: unknown } | null;
     if (request.headers.get("content-type")?.startsWith("multipart/form-data")) {
-      if (Number(request.headers.get("content-length")) > 180_000) throw new InputError(413, "That thumbnail is too large.");
+      if (Number(request.headers.get("content-length")) > 600_000) throw new InputError(413, "Those thumbnails are too large.");
       form = await request.formData().catch(() => undefined);
       if (!form) throw new InputError(400, "Invalid thumbnail form.");
       input = { expected: form.get("expected"), accept: form.get("accept") === "1" };
@@ -693,7 +693,7 @@ async function route(request: Request, env: Env, url: URL, ctx?: ExecutionContex
   }
   const thumb = PUBLIC_THUMB_PATH.exec(path);
   if (thumb) {
-    return request.method === "GET" ? publicThumb(env.DB, env.CATALOG_MEDIA, thumb[1]!, request.headers.get("If-None-Match"), async () => await selfServiceState(env.DB) === "open") : json({ error: "Method not allowed." }, 405, { allow: "GET" });
+    return request.method === "GET" ? publicThumb(env.DB, env.CATALOG_MEDIA, thumb[1]!, request.headers.get("If-None-Match"), async () => await selfServiceState(env.DB) === "open", thumb[2] as "thumb" | "detail") : json({ error: "Method not allowed." }, 405, { allow: "GET" });
   }
   const locationPictureMatch = PUBLIC_LOCATION_MEDIA_PATH.exec(path);
   if (locationPictureMatch) {

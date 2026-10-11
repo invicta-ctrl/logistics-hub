@@ -211,7 +211,7 @@ function refreshRegions(): void {
 /* ---------- Items: pictures, availability, where ---------- */
 
 const visual = (item: CatalogItem, className: string, meaningful = false): Html =>
-  itemVisual({ ...item, photoId: item.photo }, itemThumbnailUrl, className, meaningful);
+  itemVisual({ ...item, photoId: item.photo }, (id) => itemThumbnailUrl(id, "public", meaningful ? "detail" : "thumb"), className, meaningful);
 
 function countBadge(item: CatalogItem, available: number): Html {
   if (available <= 0) return html`<span class="ss-count ss-count--out">None left</span>`;

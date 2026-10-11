@@ -6,10 +6,10 @@ export const MEDIA_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 /** The browser makes both variants (src/item-photo.ts); these are the Worker's ceilings, not the sizes it expects. */
 export const VARIANTS = { display: { edge: 1600, bytes: 1_000_000 }, thumb: { edge: 480, bytes: 150_000 } } as const;
 export type Variant = keyof typeof VARIANTS;
+const DETAIL = { edge: 960, bytes: 400_000 } as const;
 
-function cropMetadata(form: FormData): Record<string, string> | undefined {
-  const value = form.get("cropRect");
-  if (value === null) return;
+function cropOf(value: unknown): PhotoCrop | undefined {
+  if (value === null || value === undefined) return;
   let crop: PhotoCrop | null = null;
   try { if (typeof value === "string") crop = JSON.parse(value || "null") as PhotoCrop | null; }
   catch { throw new InputError(400, "The crop is not valid. Choose it again."); }
@@ -17,11 +17,16 @@ function cropMetadata(form: FormData): Record<string, string> | undefined {
       crop.x < 0 || crop.y < 0 || crop.width < 1 || crop.height < 1 || crop.x + crop.width > 100.001 || crop.y + crop.height > 100.001) {
     throw new InputError(400, "The crop is not valid. Choose it again.");
   }
-  return { cropRect: JSON.stringify({ x: crop.x, y: crop.y, width: crop.width, height: crop.height }) };
+  return { x: crop.x, y: crop.y, width: crop.width, height: crop.height };
+}
+
+function cropMetadata(form: FormData): Record<string, string> | undefined {
+  const crop = cropOf(form.get("cropRect"));
+  return crop ? { cropRect: JSON.stringify(crop) } : undefined;
 }
 
 /** Item photos and location pictures share the catalog bucket, each under its own prefix. */
-export const key = (mediaId: string, variant: Variant, folder: "items" | "locations" | "kits" = "items") => `${folder}/${mediaId}/${variant}`;
+export const key = (mediaId: string, variant: Variant | "detail", folder: "items" | "locations" | "kits" = "items") => `${folder}/${mediaId}/${variant}`;
 const u16 = (bytes: Uint8Array, at: number) => (bytes[at]! << 8) | bytes[at + 1]!;
 
 /** The EXIF orientation of an APP1 payload, or 1 when it has none or cannot be read. */
@@ -66,8 +71,8 @@ function tablesFit(bytes: Uint8Array, marker: number, at: number, end: number): 
  * makes. A photo that still carries a rotation is refused (the browser applies it to the pixels before encoding); so
  * is anything not 8-bit, grey or YCbCr.
  */
-export function cleanJpeg(bytes: Uint8Array, variant: Variant): { bytes: Uint8Array; width: number; height: number } {
-  return checkJpeg(bytes, `${variant} photo`, VARIANTS[variant].edge);
+export function cleanJpeg(bytes: Uint8Array, variant: Variant | "detail"): { bytes: Uint8Array; width: number; height: number } {
+  return checkJpeg(bytes, `${variant} photo`, (variant === "detail" ? DETAIL : VARIANTS[variant]).edge);
 }
 
 /** cleanJpeg for any browser-made JPEG: `label` names it in a refusal ("front scan"), `edge` is its longest allowed side. */
@@ -129,11 +134,11 @@ export function checkJpeg(bytes: Uint8Array, label: string, edge: number): { byt
   return { bytes: out, width, height };
 }
 
-export async function readVariant(form: FormData, variant: Variant) {
-  const value = form.get(variant);
+export async function readVariant(form: FormData, variant: Variant | "detail", field: string = variant) {
+  const value = form.get(field);
   if (!(value instanceof File) || value.size === 0) throw new InputError(400, `The ${variant} photo is missing.`);
   if (value.type !== "image/jpeg") throw new InputError(400, `The ${variant} photo must be a JPEG image.`);
-  if (value.size > VARIANTS[variant].bytes) throw new InputError(400, `The ${variant} photo is too large.`);
+  if (value.size > (variant === "detail" ? DETAIL : VARIANTS[variant]).bytes) throw new InputError(400, `The ${variant} photo is too large.`);
   return cleanJpeg(new Uint8Array(await value.arrayBuffer()), variant);
 }
 
@@ -158,7 +163,7 @@ export const CHANGED = "Someone else changed this photo. Reload to see the lates
 export async function dropObjects(bucket: R2Bucket, mediaId: string, folder: "items" | "locations" | "kits" = "items"): Promise<void> {
   // An item photo may also have a cleaned picture (src/item-cutout.ts); it goes with the photo.
   if (folder === "items") {
-    for (const name of ["cutout", "cutout-pending", "cutout-thumb"]) await bucket.delete(`items/${mediaId}/${name}`).catch(() => { console.error("media_cleanup_failed", { mediaId, variant: name }); });
+    for (const name of ["detail", "cutout", "cutout-pending", "cutout-thumb", "cutout-detail"]) await bucket.delete(`items/${mediaId}/${name}`).catch(() => { console.error("media_cleanup_failed", { mediaId, variant: name }); });
   }
   await Promise.all((Object.keys(VARIANTS) as Variant[]).map((variant) => bucket.delete(key(mediaId, variant, folder)).catch(() => {
     console.error("media_cleanup_failed", { mediaId, variant });
@@ -187,16 +192,20 @@ export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Acto
   if (expectedVersion !== null && typeof expectedVersion !== "string") throw new InputError(400, "Reload the item and try again.");
   const display = await readVariant(form, "display");
   const thumb = await readVariant(form, "thumb");
+  const detail = form.has("detail") ? await readVariant(form, "detail") : null;
   const hash = photoHash(form);
   const customMetadata = cropMetadata(form);
   const cleaned = form.get("crop") === "1" && expected ? await bucket.get(`items/${expected}/cutout`) : null;
   let cleanedThumb: Awaited<ReturnType<typeof readVariant>> | null = null;
+  let cleanedDetail: Awaited<ReturnType<typeof readVariant>> | null = null;
   if (cleaned) {
+    if (form.has("cleanSource") && cleaned.httpEtag && form.get("cleanSource") !== cleaned.httpEtag) throw new InputError(409, CHANGED);
     const value = form.get("cutoutThumb");
     if (!(value instanceof File)) throw new InputError(409, "This photo was cleaned meanwhile. Reload it before cropping.");
     const cleanForm = new FormData(); cleanForm.set("thumb", value);
     cleanedThumb = await readVariant(cleanForm, "thumb");
     if (Math.max(cleanedThumb.width, cleanedThumb.height) > 320) throw new InputError(400, "The cleaned thumbnail is too large.");
+    if (form.has("cutoutDetail")) cleanedDetail = await readVariant(form, "detail", "cutoutDetail");
   }
   const item = await db.prepare("SELECT updated_at AS updatedAt FROM items WHERE id = ?").bind(itemId).first<{ updatedAt: string | null }>();
   if (!item) throw new InputError(404, "Item not found.");
@@ -206,9 +215,11 @@ export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Acto
   try {
     await bucket.put(key(mediaId, "display"), display.bytes, { httpMetadata: { contentType: "image/jpeg" } });
     await bucket.put(key(mediaId, "thumb"), thumb.bytes, { httpMetadata: { contentType: "image/jpeg" }, customMetadata });
+    if (detail) await bucket.put(key(mediaId, "detail"), detail.bytes, { httpMetadata: { contentType: "image/jpeg" }, customMetadata });
     if (cleaned && cleanedThumb) {
       await bucket.put(`items/${mediaId}/cutout`, cleaned.body, { httpMetadata: { contentType: "image/png" } });
       await bucket.put(`items/${mediaId}/cutout-thumb`, cleanedThumb.bytes, { httpMetadata: { contentType: "image/jpeg" }, customMetadata: cleaned.httpEtag ? { source: cleaned.httpEtag } : undefined });
+      if (cleanedDetail) await bucket.put(`items/${mediaId}/cutout-detail`, cleanedDetail.bytes, { httpMetadata: { contentType: "image/jpeg" }, customMetadata: cleaned.httpEtag ? { source: cleaned.httpEtag } : undefined });
     }
     const [write] = await db.batch([
       expected
@@ -229,7 +240,8 @@ export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Acto
     throw error;
   }
   if (expected) await dropObjects(bucket, expected);
-  return { photo: { id: mediaId, width: display.width, height: display.height, ...(cleaned ? { cutout: true, cutoutThumb: true } : {}) } };
+  return { updatedAt: now, photo: { id: mediaId, width: display.width, height: display.height, ...(detail ? { detail: true } : {}), ...(customMetadata?.cropRect ? { crop: cropOf(customMetadata.cropRect) } : {}),
+    ...(cleaned ? { cutout: true, cutoutThumb: true, ...(cleanedDetail ? { cutoutDetail: true } : {}) } : {}) } };
 }
 
 /** Removes the profile photo the client saw: the reference first, then its files. */
@@ -247,40 +259,56 @@ export async function removeItemPhoto(db: D1Database, bucket: R2Bucket, actor: A
 }
 
 /** The original display is immutable; the thumbnail revalidates because cleanup can change it under the same id. */
-async function cleanedThumbnail(bucket: R2Bucket, mediaId: string): Promise<R2ObjectBody | null> {
+async function cleanedThumbnail(bucket: R2Bucket, mediaId: string, size: "thumb" | "detail" = "thumb"): Promise<R2ObjectBody | null> {
   const source = await bucket.head(`items/${mediaId}/cutout`);
   if (!source) return null;
-  const thumb = await bucket.get(`items/${mediaId}/cutout-thumb`);
-  return thumb && (!source.httpEtag || thumb.customMetadata?.source === source.httpEtag) ? thumb : null;
+  for (const variant of size === "detail" ? ["detail", "thumb"] : ["thumb"]) {
+    const image = await bucket.get(`items/${mediaId}/cutout-${variant}`);
+    if (image && (!source.httpEtag || image.customMetadata?.source === source.httpEtag)) return image;
+  }
+  return null;
+}
+
+/** Staff can regenerate a missing detail derivative only when the selected crop has recorded bounds. */
+export async function photoDerivatives(bucket: R2Bucket, mediaId: string) {
+  const [thumb, detail, source, cutoutThumb, cutoutDetail] = await Promise.all([
+    bucket.head(key(mediaId, "thumb")), bucket.head(key(mediaId, "detail")), bucket.head(`items/${mediaId}/cutout`),
+    bucket.head(`items/${mediaId}/cutout-thumb`), bucket.head(`items/${mediaId}/cutout-detail`)
+  ]);
+  let crop: PhotoCrop | undefined;
+  try { crop = cropOf(thumb?.customMetadata?.cropRect); } catch { /* Legacy/corrupt bounds never authorize a larger image. */ }
+  const matches = (image: R2Object | null) => Boolean(source && image && (!source.httpEtag || image.customMetadata?.source === source.httpEtag));
+  return { detail: Boolean(detail), ...(crop ? { crop } : {}), cutout: Boolean(source),
+    ...(source ? { cutoutThumb: matches(cutoutThumb), cutoutDetail: matches(cutoutDetail) } : {}) };
 }
 
 export async function itemPhoto(bucket: R2Bucket, mediaId: string, variant: string, ifNoneMatch: string | null = null): Promise<Response> {
-  if (!MEDIA_ID.test(mediaId) || !Object.hasOwn(VARIANTS, variant)) throw new InputError(404, "Not found.");
-  const cleaned = variant === "thumb" ? await cleanedThumbnail(bucket, mediaId) : null;
-  const object = cleaned ?? await bucket.get(key(mediaId, variant as Variant));
+  if (!MEDIA_ID.test(mediaId) || (variant !== "detail" && !Object.hasOwn(VARIANTS, variant))) throw new InputError(404, "Not found.");
+  const cleaned = variant === "thumb" || variant === "detail" ? await cleanedThumbnail(bucket, mediaId, variant) : null;
+  const object = cleaned ?? await bucket.get(key(mediaId, variant as Variant | "detail")) ?? (variant === "detail" ? await bucket.get(key(mediaId, "thumb")) : null);
   if (!object) throw new InputError(404, "Not found.");
-  const headers = { "content-type": "image/jpeg", "cache-control": variant === "thumb" ? "private, no-cache" : "private, max-age=86400",
+  const headers = { "content-type": "image/jpeg", "cache-control": variant === "display" ? "private, max-age=86400" : "private, no-cache",
     etag: object.httpEtag ?? `"${mediaId}-${cleaned ? "cleaned" : variant}"` };
   if (ifNoneMatch?.replace(/^W\//, "") === headers.etag) return new Response(null, { status: 304, headers });
   return new Response(object.body, { headers });
 }
 
 /**
- * The one public image route: the small thumbnail of an item's current photo, for the Lending Hub and Self-Service lists.
+ * Public item derivatives: the small list thumbnail and larger selected-crop detail JPEG.
  * It answers only while the id is the item's selected current photo AND a public list actually shows the item: the Lending Hub
  * lists it, or Self-Service offers it and is open (the same policy functions the two catalogs use). So a removed or
  * replaced photo, an unlisted item, the 1280 px display size and any guessed id all answer 404, and nothing but the id
- * is read from the request. The selected 320 px thumbnail revalidates after cleanup or restoring the original;
- * the full cutout never has a public address.
+ * is read from the request. Both selected derivatives revalidate after cleanup or restoring the original.
+ * Missing detail pixels fall back to the selected small thumbnail; the display/full cutout have no public address.
  */
-export async function publicThumb(db: D1Database, bucket: R2Bucket, mediaId: string, ifNoneMatch: string | null, selfServiceOpen: () => Promise<boolean>): Promise<Response> {
+export async function publicThumb(db: D1Database, bucket: R2Bucket, mediaId: string, ifNoneMatch: string | null, selfServiceOpen: () => Promise<boolean>, size: "thumb" | "detail" = "thumb"): Promise<Response> {
   if (!MEDIA_ID.test(mediaId)) throw new InputError(404, "Not found.");
   const item = await db.prepare(`SELECT i.item_type AS itemType, i.lending_audience AS lendingAudience, i.status AS status, i.needs_review AS needsReview, i.consumption_mode AS consumptionMode
     FROM item_media m JOIN items i ON i.id = m.item_id WHERE m.media_id = ? AND i.visual_type IS NOT 'SYSTEM_ICON'`).bind(mediaId).first<{ itemType: string; lendingAudience: string; status: string; needsReview: number; consumptionMode: string }>();
   const shown = Boolean(item) && (isListedForLending(item!) || (Boolean(selfServiceAction(item!)) && await selfServiceOpen()));
   if (!shown) throw new InputError(404, "Not found.");
-  const cleaned = await cleanedThumbnail(bucket, mediaId);
-  const object = cleaned ?? await bucket.get(key(mediaId, "thumb"));
+  const cleaned = await cleanedThumbnail(bucket, mediaId, size);
+  const object = cleaned ?? await bucket.get(key(mediaId, size)) ?? (size === "detail" ? await bucket.get(key(mediaId, "thumb")) : null);
   if (!object) throw new InputError(404, "Not found.");
   const headers = { "cache-control": "public, no-cache", etag: object.httpEtag ?? `"${mediaId}-${cleaned ? "cleaned" : "thumb"}"` };
   if (ifNoneMatch?.replace(/^W\//, "") === headers.etag) return new Response(null, { status: 304, headers });
