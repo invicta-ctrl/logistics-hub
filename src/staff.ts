@@ -1356,7 +1356,7 @@ export async function workspace(): Promise<void> {
       const name = values.name.trim().toLowerCase();
       const twins = name ? inventory?.items.filter((entry) => entry.id !== item.id && entry.name.trim().toLowerCase() === name) ?? [] : [];
       duplicate.hidden = !twins.length;
-      mount(duplicate, html`${twins.map((twin) => html`<p><a class="text-link" href="/staff/items?item=${encodeURIComponent(twin.id)}" data-route>${twin.id}</a> · ${twin.status === "INACTIVE" ? "Inactive" : "Active"}${twin.status === "INACTIVE" && values.status === "ACTIVE" ? html` <button type="button" class="text-link" data-merge="${twin.id}">Merge & remove duplicate</button>` : ""}</p>`)}`);
+      mount(duplicate, html`${twins.map((twin) => html`<p><a class="text-link" href="/staff/items?item=${encodeURIComponent(twin.id)}" data-route>${twin.id}</a> · ${label(twin.status)}${twin.status === "INACTIVE" && values.status === "ACTIVE" ? html` <button type="button" class="text-link" data-merge="${twin.id}">Merge & remove duplicate</button>` : ""}</p>`)}`);
       const row = values.locationId ? rows.get(values.locationId) : undefined;
       mount(form.querySelector("#place-preview")!, row
         ? html`<p class="place-preview__path">${icon("pin")}<span>${paths.get(row.id)} · ${VISIBILITY_LABELS[row.visibility] ?? row.visibility}${row.photo ? " · has a picture" : ""}</span></p>${row.directions ? html`<p class="place-preview__directions">${row.directions}</p>` : ""}`
