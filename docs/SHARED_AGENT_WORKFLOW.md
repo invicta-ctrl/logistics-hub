@@ -38,6 +38,12 @@ Forbidden as permanent workflow:
 - `claude/*`
 - parallel feature branches for the same Part
 
+## Mandatory revision number for post-release changes
+
+Read `docs/PRODUCT_VERSION_GOVERNANCE.md` before a change to any main-merged product version. A base release uses `Vx.xx`; its independently completed follow-up fixes/improvements merged to main become `Vx.xx.1`, `Vx.xx.2`, etc. One released, verified slice = one increment; do not count commits or intermediate pushed checkpoints. Several separately merged fixes produce several successive revisions; several fixes intentionally bundled into one independently shipped slice produce one revision with all fixes listed. Documentation-only governance, unsuccessful work and unmerged changes do not consume a revision.
+
+At slice start read last proven main-merged release, targeted release line, existing revision records and actual deployed version if available. Track next patch as **candidate** in handoff, not a released claim. Before merging refresh main and version history to prevent duplicates. After all green gates, commit/push, integrate and verify main/production, record the final version, concise changelog, exact SHA/CI/rollback and Administration version UI when available; prune the merged branch. For a new main version not yet delivered, do not invent its patch series. Never invent historical `V1.15.N` from commit counts.
+
 ## Starting a slice
 
 When idle, shared workspace should be on `main`.
