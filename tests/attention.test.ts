@@ -23,7 +23,7 @@ type Summary = { needsAction: number; bySource: Record<string, number> };
 const inbox = (cookie = one) => json<Inbox>(as(cookie, "/api/staff/attention"));
 const summary = (cookie = one) => json<Summary>(as(cookie, "/api/staff/attention/summary"));
 /** The entries of one reason about the item with this name (the seeded catalog has many others). */
-const entriesFor = async (reason: string, title: string) => (await inbox()).entries.filter((entry) => entry.reason === reason && entry.title.includes(title));
+const entriesFor = async (reason: string, title: string) => (await inbox()).entries.filter((entry) => entry.reason === reason && entry.title.toLowerCase().includes(title.toLowerCase()));
 const total = async (reason: string) => (await inbox()).groups.find((group) => group.reason === reason)!.total;
 
 beforeEach(async () => {
@@ -114,7 +114,7 @@ describe("loans", () => {
     expect(await entriesFor("LOAN_OVERDUE", "Overdue table")).toEqual([]);
     sqlite.prepare("UPDATE loans SET return_by = ? WHERE id = ?").run(officeDaysAgo(3), id);
     const [entry] = await entriesFor("LOAN_OVERDUE", "Overdue table");
-    expect(entry).toMatchObject({ title: "A-Overdue table × 2", source: "Loans", urgency: "NOW", href: `/staff/loans?loan=${id}`, action: "Open the loan" });
+    expect(entry).toMatchObject({ title: "A-Overdue Table × 2", source: "Loans", urgency: "NOW", href: `/staff/loans?loan=${id}`, action: "Open the loan" });
     expect(entry!.why).toContain("Ben Reyes");
     expect(entry!.why).toContain("3 days ago");
     expect((await close(id, { outcome: "RETURNED" })).status).toBe(200);
@@ -152,7 +152,7 @@ describe("loans", () => {
     expect((await as(two, `/api/staff/loans/${damaged.id}/review`, "POST")).status).toBe(200);
     expect(sqlite.prepare("SELECT COUNT(*) AS n, MIN(actor_user_id) AS actor FROM audit_log WHERE action = 'LOAN_REVIEWED'").get()).toEqual({ n: 1, actor: "ACC-1" });
     const feed = await json<{ events: Array<{ type: string; summary: string }> }>(as(one, "/api/staff/activity?limit=20"));
-    expect(feed.events.find((event) => event.type === "LOAN_REVIEWED")?.summary).toBe("Staff One reviewed the damaged return of A-Damaged tripod.");
+    expect(feed.events.find((event) => event.type === "LOAN_REVIEWED")?.summary).toBe("Staff One reviewed the damaged return of A-Damaged Tripod.");
   });
 
   it("reviews only a damaged or lost return, and only one that exists", async () => {

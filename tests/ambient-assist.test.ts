@@ -201,7 +201,7 @@ describe("one check after an offline capture syncs", () => {
     expect((await upload(mine, true)).status).toBe(200);
     expect(sent).toHaveLength(1);
     const [entry] = await possible();
-    expect(entry).toMatchObject({ title: "Black tool", source: "Catalog", urgency: "LATER", href: `/staff/items?item=${mine}`, keepBoth: { itemId: mine } });
+    expect(entry).toMatchObject({ title: "Black Tool", source: "Catalog", urgency: "LATER", href: `/staff/items?item=${mine}`, keepBoth: { itemId: mine } });
     expect(entry!.why).toContain("Its photo looks like Hammer");
     // The repeat of a lost upload answer is refused and checks nothing again.
     expect((await upload(mine, true)).status).toBe(409);
@@ -261,7 +261,7 @@ describe("one check after an offline capture syncs", () => {
     await upload(await capture("Red tool"), true);
     expect(sent).toHaveLength(3);
     expect(waiting()).toEqual([]);
-    expect((await possible()).map((entry) => entry.title).sort()).toEqual(["Black tool", "Grey tool", "Red tool"]);
+    expect((await possible()).map((entry) => entry.title).sort()).toEqual(["Black Tool", "Grey Tool", "Red Tool"]);
     await upload(await capture("Blue thing"), true);
     expect(sent).toHaveLength(4);
   });
