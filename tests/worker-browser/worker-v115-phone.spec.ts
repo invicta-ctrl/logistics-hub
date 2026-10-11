@@ -147,9 +147,10 @@ async function judge(page: Page, name: string, insets: { top: number; bottom: nu
   await dialog.evaluate((element) => { for (const node of [element, ...element.querySelectorAll<HTMLElement>("*")]) if (node.scrollHeight > node.clientHeight && /auto|scroll/.test(getComputedStyle(node).overflowY)) node.scrollTop = node.scrollHeight; });
   const lowest = await dialog.evaluate((element) => {
     let found: { top: number; bottom: number; text: string } | null = null;
-    for (const control of element.querySelectorAll<HTMLElement>("button, a[href], input:not([type=hidden]), select, textarea")) {
+    for (const control of element.querySelectorAll<HTMLElement>("button, a[href], input:not([type=hidden]), select, textarea, summary")) {
       const box = control.getBoundingClientRect();
-      if (!box.width || !box.height || getComputedStyle(control).visibility === "hidden" || control.closest("[hidden]")) continue;
+      // Closed details content can retain layout boxes; only its summary is a visible control.
+      if (!box.width || !box.height || getComputedStyle(control).visibility === "hidden" || control.closest("[hidden], details:not([open]) > :not(summary)")) continue;
       if (!found || box.bottom > found.bottom) found = { top: box.top, bottom: box.bottom, text: (control.innerText || control.getAttribute("aria-label") || control.id || control.tagName).trim().slice(0, 30) };
     }
     return found;
@@ -218,6 +219,9 @@ for (const [label, size, zoom] of [["390 px", { width: 390, height: 844 }, "100%
     await page.goto("/staff/items");
     await page.locator("#new-item").click();
     await judge(page, "New item", SAFE);
+    await page.locator("#item-advanced > summary").click();
+    await expect(page.locator("#item-advanced")).toHaveAttribute("open", "");
+    await judge(page, "New item with advanced details", SAFE);
     await page.keyboard.press("Escape");
     await page.goto("/staff/items?item=ITM-0135");
     await judge(page, "An item", SAFE);

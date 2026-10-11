@@ -1621,7 +1621,9 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .profile:has(.photo-crop), .profile:has([data-save]) { grid-template-columns: minmax(0, 1fr); }
 .profile:has(.photo-crop) > [data-tile] { display: none; }
 .profile:has(.photo-crop) .profile__actions { justify-items: stretch; }
-.profile:has(.photo-crop) .profile__info, .profile:has([data-save]) .profile__info { display: none; }
+/* Location and kit panels keep their photo actions inside the info column. */
+.profile:has(.photo-crop, [data-save]) .profile__info:not(:has([data-actions])) { display: none; }
+.profile:has(.photo-crop, [data-save]) .profile__info:has([data-actions]) > :not([data-actions]) { display: none; }
 .profile:has([data-save]) > [data-tile] { max-width: 10rem; }
 
 /* Select mode in Items (src/bulk-select.ts) */

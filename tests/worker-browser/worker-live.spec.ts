@@ -85,7 +85,10 @@ test("staff publish and stock changes reach an open public page live", async ({ 
 
   await expect(page.getByRole("tab", { name: "Edit details" })).toBeVisible();
   await page.getByRole("tab", { name: "Overview" }).click();
-  await expect(page.getByRole("heading", { name: "Listed on the Lending Hub" })).toBeVisible();
+  await page.locator("#panel-overview").getByText("Availability & record", { exact: true }).click();
+  const listing = page.locator("#panel-overview").getByRole("link", { name: /^View/ });
+  await expect(listing).toBeVisible();
+  await expect(listing).toHaveAttribute("href", "/lending?q=Bluetooth%20Microphone");
   // The figure itself is the editor; a change needs a reason before it saves.
   const total = page.getByLabel("Quantity on hand");
   await expect(total).toHaveValue("1");
