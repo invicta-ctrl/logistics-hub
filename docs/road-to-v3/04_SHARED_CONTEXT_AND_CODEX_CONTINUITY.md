@@ -12,7 +12,6 @@ Use the repository's existing conventions, especially:
 
 - `.codex/CURRENT.md`
 - `.codex/SESSION_HANDOFF.md`
-- `.codex/CURRENT_TASK.md` when present
 - accepted specifications/amendments
 - release records
 - migration records
@@ -67,8 +66,8 @@ Codex should be able to resume from this state without asking the owner to recon
 When handing work from Claude to Codex:
 
 1. ensure coherent code is committed or clearly preserved on the authorized task branch;
-2. update `.codex/CURRENT_TASK.md` with the next exact action;
-3. update `.codex/SESSION_HANDOFF.md` with the state above;
+2. update `.codex/CURRENT.md` with the one current work pointer and next exact action;
+3. update `.codex/SESSION_HANDOFF.md` with the bounded handoff state above;
 4. include the active accepted-spec path;
 5. include exact files/contracts in scope;
 6. include unrun tests;
