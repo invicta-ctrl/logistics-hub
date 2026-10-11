@@ -116,3 +116,11 @@ Historical roadmap identifiers are retired for new work but preserved for search
 When a historical document uses an old identifier, translate it through this table before acting.
 
 Stable RTV3 identifiers remain valid agent/file references. The V2.x labels in the same table are now owner-approved **product versions**, and are shown on the live site only after their corresponding release has been verified/deployed. No historical V2.0 or V1.x release record is rewritten.
+
+
+## Pre-roadmap V1.16 reconciliation — owner direction 2026-10-11
+
+- **R-V116-01 / OPEN until accepted and shipped:** V1.16 is now an explicitly owner-requested pre-Road-to-V3 release, despite V2.0 already being the historical shipped baseline. Preserve V2.0 historical evidence; keep V2.1–V3.0 roadmap sequence unchanged. Proposed specification: docs/specs/proposed/v1.16-ambient-intelligent-core.md.
+- **R-V116-02 / PLANNED TRANSFER:** Administration > System first truthful product-version/changelog implementation moves from V2.1 F4 into V1.16. Once V1.16 is verifiably shipped, mark that portion of F4 inherited; F4 continues provider/diagnostics/unknown/rollback verification without duplicate metadata.
+- **R-V116-03 / PLANNED PARTIAL OVERLAP:** V1.16 may implement common Ambient router/failure isolation/learning. V2.1 F7 must reconcile implemented code and test evidence and retain all unproven platform hardening/usage measurements. Never mark F7 complete by document assertion.
+- **R-V116-04 / OWNER RELEASE CONTRACT:** Working checkpoint -> verified commit/push on active slice; independently complete and green slice -> main/deploy verification -> prune; incomplete version stays explicitly pending and off main. Do not misrepresent any pending feature as shipped.
