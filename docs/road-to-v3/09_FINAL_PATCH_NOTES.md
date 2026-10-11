@@ -1,5 +1,7 @@
 # Final Patch Notes — Structure Freeze Pass
 
+**HISTORICAL STRUCTURE-FREEZE EVIDENCE, NOT LIVE RELEASE AUTHORITY.** Later owner-approved V1.16 moved the first Administration version/changelog implementation from V2.1 F4 to V1.16. Current rules: `docs/road-to-v3/README.md`, `06_ROAD_TO_V3_RELEASE_MAP.md`, accepted V1.16 spec and `docs/DOCUMENTATION_STATUS.md`.
+
 ## 2026-10-11 naming audit addendum (later owner decision)
 
 The original structure-freeze decisions below remain **historical**. The owner subsequently chose the Road-to-V3 product sequence **V2.0 → V2.1–V2.9 → V3.0**, retaining `RTV3-01`–`RTV3-09` as internal milestone IDs. The operative mapping is `06_ROAD_TO_V3_RELEASE_MAP.md`; the first release V2.1 / RTV3-01 F4 adds a truthful deployed product version to the existing Administration → System status. All eight active feature/qualification cards, the AI evolution headings, Product Direction Amendment draft, and task/handoff templates carry the mapping. Old `V3.1–V3.7` strings in the identifier reconciliation register or previously accepted V1.15 scope documents are **deliberately retained as historical evidence**, not actionable future release labels. Do not rewrite accepted historical specifications or Git history to erase their context.
