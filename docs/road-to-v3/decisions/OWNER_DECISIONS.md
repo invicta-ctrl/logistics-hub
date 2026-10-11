@@ -36,10 +36,10 @@ Owner acceptance is required before RTV3-02 implementation.
 - Highest thread effort reserved for genuinely complex/critical work.
 
 
-## V1.16 pre-roadmap owner direction — 2026-10-11 (acceptance of detailed spec pending)
+## V1.16 pre-roadmap owner approval — 2026-10-11 (release implementation pending)
 
 - The owner explicitly requested a **V1.16** release after closing V1.15, before progressing into Road to V3. V2.0's historical handoff is not rewritten; Road-to-V3 still uses V2.1–V2.9 then V3.0.
 - Requested V1.16 objective: invisible Ambient Assist and independent deterministic Intelligent Core, quiet safe learning from verified staff corrections, model routing/evaluation, no AI-chat dependency, total normal-workflow continuity under exhaustion and outage.
 - Requested existing Administration > System > This version enhancements: show actual deployed **product version** and a short **verified release changelog** as well as technical build fingerprint, commit, built time and migration state. This is moved forward from V2.1 F4; future V2.1 must reuse it.
 - Owner's durable release rule: never represent an incomplete product/version as complete; push working checkpoints to the single active slice; merge each independently usable, verified complete slice into updated main promptly, prune its integrated branch, then start the next slice from updated main. Keep blocked/unfinished work accurately in handoff and off main.
-- The detailed candidate specification is docs/specs/proposed/v1.16-ambient-intelligent-core.md. **This record captures the owner's direction, not approval of unreviewed technical details or evidence of implementation.** Substantial implementation awaits accepted-spec status and writer-lock governance.
+- The detailed implementation specification at docs/specs/accepted/v1.16-ambient-intelligent-core.md was explicitly accepted by the owner on 2026-10-11: “I approve, after v1.16. V2 will be genuinely complete and ready to proceed with v3 roadmap.” This authorizes in-scope work subject to writer lock, normal verification and production safeguards, but is not evidence of a completed release. Final V2 readiness requires V1.16 complete, merged and deployed with qualified evidence.
