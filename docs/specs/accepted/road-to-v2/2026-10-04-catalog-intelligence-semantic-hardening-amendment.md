@@ -2,7 +2,7 @@
 
 STATUS: ACCEPTED BY OWNER (Earl, 2026-10-04, accepting revision 2 of the proposal with the decisions in §17)
 DATE: 2026-10-04
-SUPERSEDES: `docs/specs/proposed/2026-10-04-catalog-intelligence-semantic-hardening.md` (revision 1, kept as history).
+SUPERSEDES: [historical superseded proposal](https://github.com/invicta-ctrl/logistics-hub/blob/711547d41d4c560fe35d0d46de755f3e8718796c/docs/specs/proposed/2026-10-04-catalog-intelligence-semantic-hardening.md) (revision 1, kept as history).
 APPLIES TO: Road-to-V2 V1.6, V1.8, V1.9, V1.10, V1.11, V1.12, V1.13 and V1.15. V1.7 and V1.14 receive clarifications only, no new scope.
 INTENT: Make catalog classification smarter by extending the deterministic suggestion engine already shipped in V1.5, and reduce visible semantic/UI noise, without any external AI dependency. An optional Workers AI second opinion is allowed in V1.11 under strict conditions (§13).
 PREDECESSOR CONTEXT: V1.5 Rapid Catalogue is COMPLETE and merged to `main`.
