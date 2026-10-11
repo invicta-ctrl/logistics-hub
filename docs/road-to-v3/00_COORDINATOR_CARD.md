@@ -173,6 +173,10 @@ Stop the affected task if:
 
 Do not broaden scope to work around a stop condition.
 
+## Automatic subversion numbering for all releases — owner rule 2026-10-11
+
+For any revision **after a main product release has merged**, enforce `docs/PRODUCT_VERSION_GOVERNANCE.md`: base `Vx.xx`; successive independently verified/merged product changes `Vx.xx.1`, `Vx.xx.2`, etc. Check exact released parent/current main/deployment, assign next verified number only at qualified release, record changelog and Administration current-artifact identity once supported. Do not count checkpoints, failed work, document-only updates or an unfinished base release. Missing historical release evidence blocks fabricated patch numbering. The existing V2.1–V3.0 roadmap main release identifiers do not change; their later hotfixes use the third component.
+
 ## Pre-roadmap V1.16 gate — owner-accepted 2026-10-11
 
 - When owner specifies V1.16, treat it as the owner-directed **pre-Road-to-V3 Ambient Assist + Intelligent Core consolidation**, not RTV3-01/V2.1 and not an unverified V3 feature.
