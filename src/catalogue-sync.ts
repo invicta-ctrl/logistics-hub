@@ -155,7 +155,7 @@ async function finishedElsewhere(entry: Entry, target: string): Promise<boolean>
   const detail = await api<Detail>(`/api/staff/catalogue/sessions/${target}`, within(20_000)).catch(() => null);
   if (detail?.session.status !== "FINISHED") return false;
   if (entry.body.direct === true) {
-    const started = await api<{ id: string }>("/api/staff/catalogue/sessions", { method: "POST", body: JSON.stringify({ locationId: null }), ...within(20_000) });
+    const started = await api<{ id: string }>("/api/staff/catalogue/sessions", { method: "POST", body: JSON.stringify({ locationId: null, direct: true }), ...within(20_000) });
     await settle(entry, { sessionId: started.id });
     return true;
   }

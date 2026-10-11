@@ -816,7 +816,7 @@ export async function workspace(): Promise<void> {
       try {
         const { captureScreen } = await import("./catalogue-capture");
         if (!current()) return;
-        const started = await api<{ id: string }>("/api/staff/catalogue/sessions", { method: "POST", body: JSON.stringify({ locationId: null }) });
+        const started = await api<{ id: string }>("/api/staff/catalogue/sessions", { method: "POST", body: JSON.stringify({ locationId: null, direct: true }) });
         if (!current()) return;
         const { startSending } = await import("./catalogue-sync");
         if (!current()) return;

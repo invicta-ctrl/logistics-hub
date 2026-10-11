@@ -42,14 +42,16 @@ async function ownSession(db: D1Database, actor: Actor, id: string): Promise<Ses
 /** A session as the browser sees it; `mine` says whether the reader may add to it. */
 const shown = ({ startedBy, ...row }: SessionRow, me: string) => ({ ...row, mine: startedBy === me });
 
-/** This person's open cataloguing session: what Catalogue resumes and what Home offers to continue. */
-export const openSession = (db: D1Database, actor: Actor) => db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.status = 'ACTIVE' AND s.started_by = ?`).bind(actor.accountId);
+/** Main item-entry batches are bookkeeping, rather than a shelf session to resume. */
+const QUICK_SESSION = "NOT EXISTS (SELECT 1 FROM audit_log origin WHERE origin.entity_type = 'CATALOGUE' AND origin.entity_id = s.id AND origin.action = 'CATALOGUE_STARTED' AND json_extract(origin.details_json, '$.direct') = 1)";
+/** This person's open Quick Catalog session. */
+export const openSession = (db: D1Database, actor: Actor) => db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.status = 'ACTIVE' AND s.started_by = ? AND ${QUICK_SESSION}`).bind(actor.accountId);
 
 /** What the Catalogue page opens with: your open session (if any), who else is cataloguing, and the items waiting for a decision. */
 export async function catalogueState(db: D1Database, actor: Actor) {
   const [mine, others, review, total] = await db.batch([
     openSession(db, actor),
-    db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.status = 'ACTIVE' AND s.started_by <> ? ORDER BY s.started_at LIMIT 10`).bind(actor.accountId),
+    db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.status = 'ACTIVE' AND s.started_by <> ? AND ${QUICK_SESSION} ORDER BY s.started_at LIMIT 10`).bind(actor.accountId),
     db.prepare(`SELECT i.id, i.name, c.created_at AS capturedAt, lp.path AS place, p.media_id AS photoId, b.on_hand AS onHand, i.unit FROM catalogue_captures c JOIN items i ON i.id = c.item_id
       LEFT JOIN location_paths lp ON lp.id = i.location_id LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN inventory_balances b ON b.id = i.id
       WHERE i.item_type = 'NEEDS_REVIEW' ORDER BY c.created_at DESC, c.rowid DESC LIMIT ${REVIEW_LIST}`),
@@ -125,7 +127,8 @@ export async function startSession(db: D1Database, actor: Actor, input: unknown)
   const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   if (body.id !== undefined && (typeof body.id !== "string" || !SESSION_ID.test(body.id))) throw new InputError(400, "That session id is not valid. Reload and try again.");
   const existing = await db.prepare("SELECT id FROM catalogue_sessions WHERE status = 'ACTIVE' AND started_by = ?").bind(actor.accountId).first<string>("id");
-  if (existing) return { id: existing, resumed: true };
+  const mainOrigin = existing && body.direct !== true && await db.prepare("SELECT 1 FROM audit_log WHERE entity_type = 'CATALOGUE' AND entity_id = ? AND action = 'CATALOGUE_STARTED' AND json_extract(details_json, '$.direct') = 1").bind(existing).first();
+  if (existing && !mainOrigin) return { id: existing, resumed: true };
   const locationId = placeId(body.locationId);
   await usablePlace(db, locationId);
   const used = typeof body.id === "string" ? await db.prepare("SELECT started_by FROM catalogue_sessions WHERE id = ?").bind(body.id).first<string>("started_by") : null;
@@ -134,10 +137,15 @@ export async function startSession(db: D1Database, actor: Actor, input: unknown)
   const id = typeof body.id === "string" && !used ? body.id : `CS-${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   const place = locationId ? (await pathsOf(db, [locationId])).get(locationId) ?? null : null;
+  const closing = mainOrigin ? await ownSession(db, actor, existing!) : null;
   try {
     await db.batch([
+      ...(closing ? [
+        db.prepare("UPDATE catalogue_sessions SET status = 'FINISHED', finished_at = ?1, updated_at = ?1 WHERE id = ?2 AND status = 'ACTIVE'").bind(now, closing.id),
+        audit(db, actor.accountId, "CATALOGUE_FINISHED", "CATALOGUE", closing.id, { saved: closing.saved, reviewLater: closing.reviewLater, place: closing.place }, true)
+      ] : []),
       db.prepare("INSERT INTO catalogue_sessions(id, started_by, location_id, status, started_at, updated_at) VALUES(?, ?, ?, 'ACTIVE', ?, ?)").bind(id, actor.accountId, locationId, now, now),
-      audit(db, actor.accountId, "CATALOGUE_STARTED", "CATALOGUE", id, { place })
+      audit(db, actor.accountId, "CATALOGUE_STARTED", "CATALOGUE", id, { place, ...(body.direct === true ? { direct: true } : {}) })
     ]);
   } catch (error) {
     // Two devices starting at once: the database allows one open session each, so the second finds the first.
