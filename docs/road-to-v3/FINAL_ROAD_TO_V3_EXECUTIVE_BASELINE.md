@@ -1,5 +1,7 @@
 # Logistics Hub — Final Road to V3 Executive Baseline
 
+**Current gate (owner-accepted 2026-10-11):** V1.16 is the final V2 completion release before V2.1/RTV3-01 may start. Its accepted specification is `docs/specs/accepted/v1.16-ambient-intelligent-core.md`; no complete V1.16 implementation or final V2 readiness may be inferred from acceptance alone. The product roadmap remains V2.1–V2.9 then V3.0. See `docs/DOCUMENTATION_STATUS.md` for live documentation authority.
+
 The authoritative package is the directory `LOGISTICS_HUB_ROAD_TO_V3_FINAL/`.
 
 The corrected chronology is:
