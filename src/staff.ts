@@ -53,7 +53,7 @@ export function ageOf(iso: string): string {
   if (days < 60) return `${Math.floor(days / 7)} weeks ago`;
   return `on ${formatDate(iso.slice(0, 10))}`;
 }
-type Detail = { item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness; kits?: Array<{ id: string; name: string; active: boolean; required: number }>; links?: ItemLink[] };
+type Detail = { mergedInto?: { id: string; name: string } | null; item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness; kits?: Array<{ id: string; name: string; active: boolean; required: number }>; links?: ItemLink[] };
 type SortKey = "id" | "name" | "category" | "location" | "onHand";
 type Tab = "overview" | "loan" | "details" | "history";
 
@@ -409,6 +409,8 @@ function formatValue(field: string, value: unknown): string {
 /** Turns one audited catalog change into a headline staff can scan. */
 function eventTitle(event: CatalogEvent): string {
   if (event.action === "ITEM_CREATED") return "Item created";
+  if (event.action === "ITEM_MERGED") return "Duplicate merged";
+  if (event.action === "ITEM_MERGED_IN") return "Inactive duplicate merged in";
   const condition = (event.details.condition as Change | undefined)?.to;
   if (event.action === "UNIT_OPENED") return Number(event.details.alreadyOpen) > 0 ? `Another unit opened (${String(event.details.alreadyOpen)} already open)` : "Unit opened";
   if (event.action === "UNIT_USED") return "Use recorded";
@@ -1042,12 +1044,15 @@ export async function workspace(): Promise<void> {
           ? Object.entries(event.details).filter(([field]) => FIELD_LABELS[field]).map(([field, value]) => html`<li><span>${FIELD_LABELS[field]}</span> ${formatValue(field, (value as Change).from)} → <strong>${formatValue(field, (value as Change).to)}</strong></li>`)
           : [];
         const opening = Number(event.details.openingQuantity ?? 0);
+        const mergeId = event.action === "ITEM_MERGED" ? event.details.targetId : event.action === "ITEM_MERGED_IN" ? event.details.sourceId : null;
+        const mergeName = event.action === "ITEM_MERGED" ? event.details.targetName : event.details.sourceName;
         // What was typed with a report or its resolution lives on the report; the history shows it where it happened.
         const report = reports.find((entry) => entry.id === event.details.reportId);
         const typed = event.action === "LOCATION_REPORTED" ? report?.note : event.action === "LOCATION_REPORT_RESOLVED" ? report?.resolutionNote : null;
         return { at: event.at, markup: html`<li class="history__item is-catalog">
           <div><p class="history__title">${eventTitle(event)}</p>
             <p class="history__meta"><time datetime="${event.at}">${formatDateTime(event.at)}</time> · ${event.actor ?? "System"}</p>
+            ${typeof mergeId === "string" ? html`<p class="history__note"><a class="text-link" href="/staff/items?item=${encodeURIComponent(mergeId)}" data-route>${event.action === "ITEM_MERGED" ? "Retained item" : "Merged from"}: ${String(mergeName ?? mergeId)} (${mergeId})</a></p>` : ""}
             ${changes.length ? html`<ul class="history__changes">${changes}</ul>` : event.action === "ITEM_CREATED" && opening > 0 ? html`<p class="history__note">Opening quantity ${opening}</p>` : typed ? html`<p class="history__note">${typed}</p>` : ""}</div></li>` };
       })
     ].sort((a, b) => b.at.localeCompare(a.at));
@@ -1058,6 +1063,19 @@ export async function workspace(): Promise<void> {
     detail = loaded;
     dirty = false;
     const { item } = loaded;
+    if (loaded.mergedInto) {
+      sheetShell(html`<span class="mono">${item.id}</span>`, item.name, html`
+        <p class="callout">Merged into <a class="text-link" href="/staff/items?item=${encodeURIComponent(loaded.mergedInto.id)}" data-route>${loaded.mergedInto.name} (${loaded.mergedInto.id})</a></p>
+        ${item.photo ? html`<button type="button" class="photo-tile" data-archived-photo aria-label="View retained photo"><img src="${photoUrl(item.photo.id, "thumb")}" alt="${item.name}" width="180" height="180"></button>` : ""}
+        <dl class="facts"><div><dt>Unit</dt><dd>${item.unit}</dd></div><div><dt>Where found</dt><dd>${item.location ?? "No place set"}</dd></div>
+          ${item.model ? html`<div><dt>Model</dt><dd>${item.model}</dd></div>` : ""}${item.serialNumber ? html`<div><dt>Serial number</dt><dd>${item.serialNumber}</dd></div>` : ""}</dl>
+        <h3 class="section-label">History</h3><ol class="history">${historyMarkup(loaded)}</ol>
+        <p><a class="text-link" href="/staff/activity?item=${item.id}" data-route>All activity for this item ${icon("arrow")}</a></p>`);
+      sheet.querySelector<HTMLButtonElement>("[data-archived-photo]")?.addEventListener("click", () => {
+        if (item.photo) void openViewer(shownUrl(item.photo, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLImageElement>("[data-archived-photo] img"), item.name, resolveItemIcon(item).key);
+      });
+      return;
+    }
     const lendable = item.itemType === PUBLIC_LENDING_ITEM_TYPE;
     const out = loaded.loans.filter((loan) => loan.status === "OUT").length;
     const tabs: Array<[Tab, string]> = [["overview", "Overview"], ...(lendable ? [["loan", out ? `Loan · ${out} out` : "Loan"] as [Tab, string]] : []), ["details", item.needsReview ? "Review & edit" : "Edit details"], ["history", "History"]];
@@ -1188,7 +1206,7 @@ export async function workspace(): Promise<void> {
       <div class="form-section">
         <h3 class="form-section__title">Catalog</h3>
         ${text("name", "Name", item.name, html`required maxlength="120" autocomplete="off" autocapitalize="words" autocorrect="on" spellcheck="true"`)}
-        <p class="field__hint field__hint--warn" id="duplicate-hint" hidden></p>
+        <div class="field__hint field__hint--warn" id="duplicate-hint" hidden></div>
         ${item.itemType === "NEEDS_REVIEW" ? html`<div class="classify-hint" id="classify-hint" aria-live="polite"></div>` : ""}
         <div class="field-grid">
           ${text("category", "Category", item.category?.toUpperCase() === "UNSORTED" ? "" : item.category, html`required maxlength="100" autocomplete="off" autocorrect="on" spellcheck="true"`, "Letter case does not matter; an existing category is reused.")}
@@ -1284,7 +1302,7 @@ export async function workspace(): Promise<void> {
       const name = formatItemName(input.value);
       if (name !== input.value) { input.value = name; input.dispatchEvent(new Event("input", { bubbles: true })); }
     });
-    let intent = "save";
+    let mergeChoice: string | null = null;
     /*
      * An Unclassified item opened from Attention (or the list) shows the top suggestion for how it is used, with how sure it is and why.
      * It is only a button: nothing changes in the form until it is pressed, and nothing is saved until the form is.
@@ -1336,9 +1354,9 @@ export async function workspace(): Promise<void> {
       showClassification(values);
       const duplicate = form.querySelector<HTMLElement>("#duplicate-hint")!;
       const name = values.name.trim().toLowerCase();
-      const twin = name ? inventory?.items.find((entry) => entry.id !== item.id && entry.name.toLowerCase() === name) : undefined;
-      duplicate.hidden = !twin;
-      duplicate.textContent = twin ? `${twin.id} already uses this name. Check it is not the same item before saving.` : "";
+      const twins = name ? inventory?.items.filter((entry) => entry.id !== item.id && entry.name.trim().toLowerCase() === name) ?? [] : [];
+      duplicate.hidden = !twins.length;
+      mount(duplicate, html`${twins.map((twin) => html`<p><a class="text-link" href="/staff/items?item=${encodeURIComponent(twin.id)}" data-route>${twin.id}</a> · ${twin.status === "INACTIVE" ? "Inactive" : "Active"}${twin.status === "INACTIVE" && values.status === "ACTIVE" ? html` <button type="button" class="text-link" data-merge="${twin.id}">Merge & remove duplicate</button>` : ""}</p>`)}`);
       const row = values.locationId ? rows.get(values.locationId) : undefined;
       mount(form.querySelector("#place-preview")!, row
         ? html`<p class="place-preview__path">${icon("pin")}<span>${paths.get(row.id)} · ${VISIBILITY_LABELS[row.visibility] ?? row.visibility}${row.photo ? " · has a picture" : ""}</span></p>${row.directions ? html`<p class="place-preview__directions">${row.directions}</p>` : ""}`
@@ -1394,12 +1412,19 @@ export async function workspace(): Promise<void> {
     });
     form.addEventListener("change", preview);
     form.addEventListener("click", (event) => {
-      const button = (event.target as HTMLElement).closest<HTMLButtonElement>("button[type=submit]");
-      if (button) intent = button.dataset.intent ?? "save";
+      const choice = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-merge]");
+      if (choice) {
+        mergeChoice = choice.dataset.merge ?? null;
+        form.requestSubmit();
+        mergeChoice = null;
+        return;
+      }
     });
     preview();
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null;
+      const intent = mergeChoice ? "merge" : submitter?.dataset.intent ?? "save";
       if (intent === "review-next") form.querySelector<HTMLInputElement>("input[name=reviewed]")!.checked = true;
       form.querySelectorAll("[aria-invalid]").forEach((element) => element.removeAttribute("aria-invalid"));
       const problems = invalidFields(form);
@@ -1411,15 +1436,32 @@ export async function workspace(): Promise<void> {
         problems[0]![0].focus();
         return;
       }
-      const buttons = [...form.querySelectorAll<HTMLButtonElement>("button[type=submit]")];
+      const sourceId = mergeChoice;
+      const source = sourceId ? inventory?.items.find((entry) => entry.id === sourceId && entry.status === "INACTIVE") : undefined;
+      const targetOnHand = detail?.item.id === item.id ? detail.item.onHand : item.onHand;
+      if (intent === "merge") {
+        if (!source || readDetails(form).status !== "ACTIVE") { setMessage(alert, "Reload and choose an inactive duplicate for this active item."); return; }
+        if (!window.confirm(`Save changes and merge ${source.id} into ${item.id}?\n\nStock: ${source.onHand} + ${targetOnHand} = ${source.onHand + targetOnHand} ${item.unit}. Combine only separate stock.\n\nRemove ${source.id} from the catalogue; keep its history.`)) return;
+      }
+      let savedBeforeMerge = false;
+      const buttons = [...form.querySelectorAll<HTMLButtonElement>("button[type=submit], [data-merge]")];
       buttons.forEach((button) => { button.disabled = true; });
       setMessage(alert, "");
       try {
         const id = item.id!;
         // The queue is the list the reviewer was working through, captured before this save changes it.
         const queue = [...shownIds];
-        const result = await api<{ changed: number }>(`/api/staff/items/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ ...readDetails(form), updatedAt: item.updatedAt ?? null }) });
+        const result = await api<{ changed: number; updatedAt: string | null }>(`/api/staff/items/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ ...readDetails(form), updatedAt: item.updatedAt ?? null }) });
+        item.updatedAt = result.updatedAt;
         dirty = false;
+        if (intent === "merge" && source) {
+          savedBeforeMerge = true;
+          await api(`/api/staff/items/${encodeURIComponent(id)}/merge`, { method: "POST", body: JSON.stringify({ sourceId: source.id, sourceUpdatedAt: source.updatedAt, updatedAt: item.updatedAt, sourceOnHand: source.onHand, targetOnHand, confirmed: true }) });
+          await poll.refresh();
+          toast(`${source.id} merged into ${id}.`);
+          await loadDetail(id, "details");
+          return;
+        }
         await poll.refresh();
         if (intent === "review-next") {
           const next = queue.slice(queue.indexOf(id) + 1).find((candidate) => inventory?.items.find((entry) => entry.id === candidate)?.needsReview);
@@ -1432,7 +1474,7 @@ export async function workspace(): Promise<void> {
         await loadDetail(id, "details");
       } catch (error) {
         const stale = error instanceof ApiError && error.status === 409;
-        setMessage(alert, stale ? html`${failure(error)} <button type="button" class="text-link" data-reload>Load the latest details</button>` : failure(error));
+        setMessage(alert, stale ? html`${savedBeforeMerge ? "Details saved. " : ""}${failure(error)} <button type="button" class="text-link" data-reload>Load the latest details</button>` : `${savedBeforeMerge ? "Details saved. " : ""}${failure(error)}`);
         alert.querySelector("[data-reload]")?.addEventListener("click", () => { dirty = false; void loadDetail(item.id!, "details"); });
       } finally {
         buttons.forEach((button) => { button.disabled = false; });

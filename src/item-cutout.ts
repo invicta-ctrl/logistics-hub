@@ -1,5 +1,5 @@
 import type { Account } from "./accounts";
-import { type Actor, BUMP_REVISION, InputError, audit } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, audit, requireCurrentItem } from "./inventory";
 import { MEDIA_ID, expectedPhoto, key, readVariant } from "./item-media";
 
 /*
@@ -152,6 +152,7 @@ export async function makeCutout(db: D1Database, bucket: R2Bucket, images: Image
   // could overwrite the pending bytes after the first browser had judged them.
   await claimCutout(db, mediaId, now);
   try {
+    await requireCurrentItem(db, itemId);
     // Look again now that the photo is ours: another request may have finished between the first look and the claim.
     if (await hasCutout(bucket, mediaId)) return { cutout: true };
     if (await bucket.head(pendingKey(mediaId)).catch(() => null)) return { pending: true };
@@ -206,6 +207,7 @@ export async function acceptCutout(db: D1Database, bucket: R2Bucket, actor: Acto
   if (expectedVersion !== null && typeof expectedVersion !== "string") throw new InputError(400, "Reload the item and try again.");
   await claimCutout(db, mediaId);
   try {
+    await requireCurrentItem(db, itemId);
     const current = await db.prepare("SELECT media_id AS mediaId, width, height FROM item_media WHERE item_id = ?").bind(itemId).first<{ mediaId: string; width: number; height: number }>();
     if (!current || current.mediaId !== mediaId) throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again.");
     if (hasVersion) {
@@ -260,6 +262,7 @@ export async function removeCutout(db: D1Database, bucket: R2Bucket, actor: Acto
   if (!mediaId) throw new InputError(400, "Reload the item and try again.");
   await claimCutout(db, mediaId);
   try {
+    await requireCurrentItem(db, itemId);
     const current = await db.prepare("SELECT media_id AS mediaId FROM item_media WHERE item_id = ?").bind(itemId).first<{ mediaId: string }>();
     if (!current || current.mediaId !== mediaId) throw new InputError(409, "Someone else changed this photo. Reload to see the latest, then try again.");
     if (pendingSource !== null) {

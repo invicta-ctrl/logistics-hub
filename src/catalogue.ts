@@ -1,7 +1,7 @@
 import { captureFeedback } from "./ai-review";
 import { formatItemName, BEHAVIOURS, type Behaviour, UNSORTED_CATEGORY, UNSORTED_UNIT, behaviourFields } from "./catalog-policy";
 import { type Known, type Match, possibleDuplicates } from "./duplicates";
-import { type Actor, InputError, audit, createItem, distinct, parseItemInput, pathsOf, text, usablePlace } from "./inventory";
+import { type Actor, InputError, audit, createItem, distinct, parseItemInput, pathsOf, text, usablePlace, currentItemSQL } from "./inventory";
 import { LOCATION_ID } from "./location-tree";
 
 /*
@@ -54,8 +54,8 @@ export async function catalogueState(db: D1Database, actor: Actor) {
     db.prepare(`SELECT ${SESSION_COLUMNS} WHERE s.status = 'ACTIVE' AND s.started_by <> ? AND ${QUICK_SESSION} ORDER BY s.started_at LIMIT 10`).bind(actor.accountId),
     db.prepare(`SELECT i.id, i.name, c.created_at AS capturedAt, lp.path AS place, p.media_id AS photoId, b.on_hand AS onHand, i.unit FROM catalogue_captures c JOIN items i ON i.id = c.item_id
       LEFT JOIN location_paths lp ON lp.id = i.location_id LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN inventory_balances b ON b.id = i.id
-      WHERE i.item_type = 'NEEDS_REVIEW' ORDER BY c.created_at DESC, c.rowid DESC LIMIT ${REVIEW_LIST}`),
-    db.prepare("SELECT COUNT(*) AS total FROM catalogue_captures c JOIN items i ON i.id = c.item_id WHERE i.item_type = 'NEEDS_REVIEW'")
+      WHERE i.item_type = 'NEEDS_REVIEW' AND ${currentItemSQL()} ORDER BY c.created_at DESC, c.rowid DESC LIMIT ${REVIEW_LIST}`),
+    db.prepare(`SELECT COUNT(*) AS total FROM catalogue_captures c JOIN items i ON i.id = c.item_id WHERE i.item_type = 'NEEDS_REVIEW' AND ${currentItemSQL()}`)
   ]);
   return {
     session: mine!.results[0] ? shown(mine!.results[0] as SessionRow, actor.accountId) : null,
@@ -73,7 +73,7 @@ export async function sessionDetail(db: D1Database, actor: Actor, id: string) {
     db.prepare(`SELECT c.id AS captureId, c.behaviour, c.created_at AS capturedAt, i.id AS itemId, i.name, i.category, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.unit,
         i.stock_area AS stockArea, i.needs_review AS needsReview, b.on_hand AS onHand, lp.path AS place, p.media_id AS photoId
       FROM catalogue_captures c JOIN items i ON i.id = c.item_id LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN location_paths lp ON lp.id = c.location_id LEFT JOIN item_media p ON p.item_id = i.id
-      WHERE c.session_id = ? ORDER BY c.created_at DESC, c.rowid DESC LIMIT ${RECENT}`).bind(id)
+      WHERE c.session_id = ? AND ${currentItemSQL()} ORDER BY c.created_at DESC, c.rowid DESC LIMIT ${RECENT}`).bind(id)
   ]);
   const found = session!.results[0] as SessionRow | undefined;
   if (!found) throw new InputError(404, "Cataloguing session not found.");
@@ -94,7 +94,7 @@ export async function catalogueSnapshot(db: D1Database) {
   const [items, places] = await db.batch([
     db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.unit, i.stock_area AS stockArea, i.status, i.needs_review AS needsReview,
         i.model, i.serial_number AS serialNumber, i.location_id AS locationId, p.dhash AS photoHash, COALESCE(b.on_hand, 0) AS onHand
-      FROM items i LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN inventory_balances b ON b.id = i.id ORDER BY i.name COLLATE NOCASE, i.id`),
+      FROM items i LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN inventory_balances b ON b.id = i.id WHERE ${currentItemSQL()} ORDER BY i.name COLLATE NOCASE, i.id`),
     db.prepare("SELECT id, name, parent_id AS parentId, active, directions FROM locations ORDER BY name COLLATE NOCASE, id")
   ]);
   const rows = items!.results as Array<{ name: string; category: string; unit: string; needsReview: number }>;
@@ -114,7 +114,7 @@ export const capturedBy = (db: D1Database, accountId: string, itemId: string): P
 export async function unreviewed(db: D1Database, id: string) {
   if (!SESSION_ID.test(id)) throw new InputError(404, "Cataloguing session not found.");
   const { results } = await db.prepare(`SELECT i.id, i.updated_at AS updatedAt FROM catalogue_captures c JOIN items i ON i.id = c.item_id
-    WHERE c.session_id = ? AND i.needs_review = 1 AND i.item_type <> 'NEEDS_REVIEW' AND i.category <> '${UNSORTED_CATEGORY}' ORDER BY c.created_at, c.rowid LIMIT 1000`).bind(id).all();
+    WHERE c.session_id = ? AND ${currentItemSQL()} AND i.needs_review = 1 AND i.item_type <> 'NEEDS_REVIEW' AND i.category <> '${UNSORTED_CATEGORY}' ORDER BY c.created_at, c.rowid LIMIT 1000`).bind(id).all();
   return { items: results };
 }
 
@@ -228,7 +228,7 @@ export async function capture(db: D1Database, actor: Actor, sessionId: string, i
   const hash = typeof body.photoHash === "string" && /^[0-9a-f]{16}$/.test(body.photoHash) ? body.photoHash : null;
   const seen = acknowledged(body.acknowledged);
   const { results } = await db.prepare(`SELECT i.id, i.name, i.aliases, i.category, i.model, i.serial_number AS serialNumber, p.dhash AS photoHash, i.status
-    FROM items i LEFT JOIN item_media p ON p.item_id = i.id`).all<Known>();
+    FROM items i LEFT JOIN item_media p ON p.item_id = i.id WHERE ${currentItemSQL()}`).all<Known>();
   const matches = possibleDuplicates({ name: input2.name, category: input2.category, model: input2.model, serialNumber: input2.serialNumber, photoHash: hash }, results);
   if (matches.some((match) => !seen.includes(match.id))) return { duplicates: matches };
 

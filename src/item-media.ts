@@ -1,6 +1,6 @@
 import type { PhotoCrop } from "./catalog-draft";
 import { isListedForLending, selfServiceAction } from "./catalog-policy";
-import { type Actor, BUMP_REVISION, InputError, audit } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, audit, currentItemSQL } from "./inventory";
 
 export const MEDIA_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** The browser makes both variants (src/item-photo.ts); these are the Worker's ceilings, not the sizes it expects. */
@@ -223,9 +223,9 @@ export async function putItemPhoto(db: D1Database, bucket: R2Bucket, actor: Acto
     }
     const [write] = await db.batch([
       expected
-        ? db.prepare("UPDATE item_media SET media_id = ?, width = ?, height = ?, created_at = ?, created_by = ?, dhash = ? WHERE item_id = ? AND media_id = ? AND (? = 0 OR EXISTS (SELECT 1 FROM items WHERE id = item_id AND updated_at IS ?))")
+        ? db.prepare(`UPDATE item_media SET media_id = ?, width = ?, height = ?, created_at = ?, created_by = ?, dhash = ? WHERE item_id = ? AND media_id = ? AND ${currentItemSQL("item_media.item_id")} AND (? = 0 OR EXISTS (SELECT 1 FROM items WHERE id = item_id AND updated_at IS ?))`)
           .bind(mediaId, display.width, display.height, now, actor.accountId, hash, itemId, expected, Number(hasVersion), expectedVersion)
-        : db.prepare("INSERT INTO item_media(item_id, media_id, width, height, created_at, created_by, dhash) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?9 WHERE NOT EXISTS (SELECT 1 FROM item_media WHERE item_id = ?1) AND (?7 = 0 OR EXISTS (SELECT 1 FROM items WHERE id = ?1 AND updated_at IS ?8))")
+        : db.prepare(`INSERT INTO item_media(item_id, media_id, width, height, created_at, created_by, dhash) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?9 WHERE ${currentItemSQL("?1")} AND NOT EXISTS (SELECT 1 FROM item_media WHERE item_id = ?1) AND (?7 = 0 OR EXISTS (SELECT 1 FROM items WHERE id = ?1 AND updated_at IS ?8))`)
           .bind(itemId, mediaId, display.width, display.height, now, actor.accountId, Number(hasVersion), expectedVersion, hash),
       audit(db, actor.accountId, expected ? "ITEM_PHOTO_REPLACED" : "ITEM_PHOTO_ADDED", "ITEM", itemId, { mediaId }, true),
       db.prepare("UPDATE items SET visual_type = CASE WHEN ? = 1 THEN visual_type ELSE 'PHOTO' END, updated_at = ? WHERE id = ? AND changes() > 0").bind(Number(form.get("crop") === "1"), now, itemId),
@@ -249,7 +249,7 @@ export async function removeItemPhoto(db: D1Database, bucket: R2Bucket, actor: A
   const mediaId = expectedPhoto(expected);
   if (!mediaId) throw new InputError(400, "Reload the item and try again.");
   const [removal] = await db.batch([
-    db.prepare("DELETE FROM item_media WHERE item_id = ? AND media_id = ?").bind(itemId, mediaId),
+    db.prepare(`DELETE FROM item_media WHERE item_id = ? AND media_id = ? AND ${currentItemSQL("item_media.item_id")}`).bind(itemId, mediaId),
     audit(db, actor.accountId, "ITEM_PHOTO_REMOVED", "ITEM", itemId, { mediaId }, true),
     db.prepare(`${BUMP_REVISION} AND changes() > 0`)
   ]);

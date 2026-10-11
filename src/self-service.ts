@@ -3,7 +3,7 @@ import { formatItemName, IDENTITY_RULE_KEY, LOAN_OUTCOMES, type ReviewReason, SE
 import { throttled } from "./accounts";
 import { ancestry, pathOf, placesOf } from "./location-tree";
 import { sharedPlaces } from "./locations";
-import { type Actor, BUMP_REVISION, COUNT_TOLERANCE_DAYS, HISTORY_ORDER, InputError, catalogRevision, countAwareStatus, guarded } from "./inventory";
+import { type Actor, BUMP_REVISION, COUNT_TOLERANCE_DAYS, HISTORY_ORDER, InputError, catalogRevision, countAwareStatus, guarded, currentItemSQL, requireCurrentItem } from "./inventory";
 import { LOAN_ID, type LoanDetails, SELF_SERVICE_ACTOR, cleanText, closeStatements, dropUnusedPhoto, lendStatements, loanDetails, officeDay, readPhoto } from "./loans";
 
 /*
@@ -217,7 +217,7 @@ function eventRow(db: D1Database, event: SelfServiceEvent, batch: Batch, effect:
   return db.prepare(`INSERT INTO self_service_events(id, device_id, seq, event_type, item_id, quantity, person_name, student_id, purpose, reason,
       return_outcome, note, return_by, loan_event_id, photo_key, device_time, sent_at, occurred_at, received_at, client_tag, catalog_revision,
       loan_id, movement_id, applied, review)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)`)
+    VALUES (?1, ?2, ?3, ?4, CASE WHEN ?24 = 0 OR ${currentItemSQL("?5")} THEN ?5 ELSE NULL END, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)`)
     .bind(event.id, batch.deviceId, event.seq, event.type, event.itemId, event.quantity, event.personName, event.loan?.studentId ?? event.studentId,
       event.loan?.purpose ?? null, event.loan?.reason ?? null, event.outcome, event.note, event.loan?.returnBy ?? null, event.loanEventId, effect.photoKey ?? null,
       event.deviceTime, batch.sentAt, event.occurredAt, batch.receivedAt, batch.clientTag, event.catalogRevision,
@@ -258,7 +258,7 @@ async function hold(db: D1Database, event: SelfServiceEvent, batch: Batch, revie
 function takeStatement(db: D1Database, movementId: string, eventId: string, itemId: string, quantity: number, at: string): D1PreparedStatement {
   return db.prepare(`INSERT INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity,
       related_entity_type, related_entity_id, actor_user_id, idempotency_key, reason, status)
-    SELECT ?1, ?2, 'STOCK_OUT', 'OUT', i.id, ?3, i.unit, -?3, 'SELF_SERVICE', ?4, '${SELF_SERVICE_ACTOR}', ?5, 'CONSUMED', ${countAwareStatus("i.id", "?2")}
+    SELECT ?1, ?2, 'STOCK_OUT', 'OUT', CASE WHEN ${currentItemSQL()} THEN i.id ELSE NULL END, ?3, i.unit, -?3, 'SELF_SERVICE', ?4, '${SELF_SERVICE_ACTOR}', ?5, 'CONSUMED', ${countAwareStatus("i.id", "?2")}
     FROM items i WHERE i.id = ?6`).bind(movementId, at, quantity, eventId, `ss:${eventId}`, itemId);
 }
 
@@ -565,6 +565,7 @@ export async function resolveReview(db: D1Database, bucket: R2Bucket, actor: Act
     if (!event.applied && event.photoKey) await bucket.delete(event.photoKey);
     return { resolved: true };
   }
+  await requireCurrentItem(db, event.itemId);
   if (event.applied) throw new InputError(409, "This record was already applied. Dismiss the review once checked.");
   const movementId = `MOV-${crypto.randomUUID()}`;
 

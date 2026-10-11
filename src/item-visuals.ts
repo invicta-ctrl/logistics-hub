@@ -1,8 +1,9 @@
 import { itemIconKey } from "./item-icons";
-import { type Actor, BUMP_REVISION, InputError, audit } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, audit, currentItemSQL, requireCurrentItem } from "./inventory";
 
 /** A visual edit has the same item version guard as Details; a stored photo is retained when choosing an icon. */
 export async function updateItemVisual(db: D1Database, actor: Actor, id: string, body: unknown) {
+  await requireCurrentItem(db, id);
   if (!body || typeof body !== "object") throw new InputError(400, "Invalid item visual.");
   const input = body as Record<string, unknown>;
   if (input.visualType !== "SYSTEM_ICON" && input.visualType !== "PHOTO") throw new InputError(400, "Choose System Icon or Real Photo.");
@@ -19,7 +20,7 @@ export async function updateItemVisual(db: D1Database, actor: Actor, id: string,
   const now = new Date(Math.max(Date.now(), Date.parse(current.updatedAt ?? "") + 1 || 0)).toISOString();
   const [write] = await db.batch([
     db.prepare(`UPDATE items SET visual_type = ?, icon_key = ?, updated_at = ? WHERE id = ? AND updated_at IS ?
-      AND (? <> 'PHOTO' OR EXISTS (SELECT 1 FROM item_media WHERE item_id = items.id))`)
+      AND ${currentItemSQL("items.id")} AND (? <> 'PHOTO' OR EXISTS (SELECT 1 FROM item_media WHERE item_id = items.id))`)
       .bind(input.visualType, iconKey, now, id, input.updatedAt, input.visualType),
     audit(db, actor.accountId, "ITEM_VISUAL_CHANGED", "ITEM", id, { visualType: { from: current.visualType, to: input.visualType }, iconKey: { from: current.iconKey, to: iconKey } }, true),
     db.prepare(`${BUMP_REVISION} AND changes() > 0`)

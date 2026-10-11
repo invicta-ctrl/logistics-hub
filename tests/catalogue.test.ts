@@ -458,7 +458,7 @@ describe("bulk edits", () => {
     expect((await staff("/api/staff/items/bulk", "POST", { action: "MOVE", value: one, items: [] })).status).toBe(400);
     expect((await staff("/api/staff/items/bulk", "POST", { action: "MOVE", value: one, items: Array.from({ length: 51 }, (_, n) => ({ id: `ITM-${n}`, updatedAt: null })) })).status).toBe(400);
     expect((await staff("/api/staff/items/bulk", "POST", { action: "DELETE", items: list })).status).toBe(400);
-    expect(await bulk({ action: "MOVE", value: one, items: [{ id: "ITM-9998", updatedAt: null }] })).toMatchObject({ skipped: [{ id: "ITM-9998", reason: "It no longer exists." }] });
+    expect(await bulk({ action: "MOVE", value: one, items: [{ id: "ITM-9998", updatedAt: null }] })).toMatchObject({ skipped: [{ id: "ITM-9998", reason: "It is no longer in the current catalog." }] });
   });
   it("is for signed-in Logistics staff only", async () => {
     expect((await call("/api/staff/items/bulk", { method: "POST", headers: { origin, "content-type": "application/json" }, body: "{}" })).status).toBe(401);

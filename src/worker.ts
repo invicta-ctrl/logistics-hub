@@ -19,7 +19,7 @@ import { locationPicture, publicLocationPicture, putLocationPhoto, removeLocatio
 import { reportLocation, resolveReport } from "./location-reports";
 import { createLocation, deleteLocation, locationList, moveItems, updateLocation } from "./locations";
 import { openUnitAction } from "./open-units";
-import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, setAliases, staffInventory, updateItem } from "./inventory";
+import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, setAliases, staffInventory, updateItem, mergeItem, requireCurrentItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { eraseOldDetails, retentionPreview } from "./retention";
@@ -82,7 +82,7 @@ const LEASE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const leaseKey = (secret: string) => `catalogue-lease:${secret}`;
 /** Attention: "Keep both" on a possible duplicate found from a synced photo (ambient-assist.ts). */
 const KEEP_BOTH_PATH = /^\/api\/staff\/attention\/possible-duplicate\/(ITM-[A-Za-z0-9-]{1,24})$/;
-const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/cutout|\/location-report|\/visual)?$/;
+const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/cutout|\/location-report|\/visual|\/merge)?$/;
 const LOCATION_PATH = /^\/api\/staff\/locations\/(LOC-\d{4,})(\/photo|\/move-items)?$/;
 const RELATION_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})\/links(?:\/(ITM-[A-Za-z0-9-]{1,24}))?$/;
 const KIT_PATH = /^\/api\/staff\/kits\/(KIT-\d{4,})(\/photo|\/checks)?$/;
@@ -521,6 +521,8 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   const media = MEDIA_PATH.exec(path);
   if (media && method === "GET") return media[2] === "cutout" || media[2] === "pending" ? cutoutPicture(env.CATALOG_MEDIA, media[1]!, media[2] === "pending") : itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!, request.headers.get("if-none-match"));
   const match = ITEM_PATH.exec(path);
+  if (match && method !== "GET" && match[2] !== "/merge") await requireCurrentItem(env.DB, match[1]!);
+  if (match?.[2] === "/merge" && method === "POST") return json(await mergeItem(env.DB, account, match[1]!, await body()));
   if (match && !match[2] && method === "GET") {
     const [detail, freshness, kits, links] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!), linksOf(env.DB, match[1]!)]);
     // Whether this photo has a cleaned picture, and whether cleaning is offered at all (the Images binding is present).

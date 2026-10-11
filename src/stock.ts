@@ -1,7 +1,7 @@
 import { SENTINEL, utc } from "./activity";
 import { OPEN_REORDER_STATUSES } from "./catalog-policy";
 import { locationList } from "./locations";
-import { type Actor, BUMP_REVISION, HISTORY_ORDER, InputError, actorName, audit, staffInventory } from "./inventory";
+import { type Actor, BUMP_REVISION, HISTORY_ORDER, InputError, actorName, audit, staffInventory, currentItemSQL, requireCurrentItem } from "./inventory";
 
 const OPEN = [...OPEN_REORDER_STATUSES].map((status) => `'${status}'`).join(",");
 const REORDER_ID = /^RO-[A-Za-z0-9-]{1,60}$/;
@@ -71,6 +71,7 @@ export async function openReorder(db: D1Database, actor: Actor, body: unknown) {
   const record = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   if (typeof record.itemId !== "string" || !ITEM_ID.test(record.itemId)) throw new InputError(400, "Choose an item.");
   const itemId = record.itemId;
+  await requireCurrentItem(db, itemId);
   const quantity = desired(record.desiredQuantity);
   const note = noteText(record.note);
   const item = await db.prepare("SELECT status FROM items WHERE id = ?").bind(itemId).first<string>("status");
@@ -81,11 +82,12 @@ export async function openReorder(db: D1Database, actor: Actor, body: unknown) {
   try {
     await db.batch([
       db.prepare(`INSERT INTO reorders(id, item_id, status, desired_quantity, note, created_at, created_by, updated_at, updated_by)
-        VALUES(?, ?, 'NEEDS_RESTOCK', ?, ?, ?, ?, ?, ?)`).bind(id, itemId, quantity, note, now, actor.accountId, now, actor.accountId),
+        VALUES(?1, CASE WHEN ${currentItemSQL("?2")} THEN ?2 ELSE NULL END, 'NEEDS_RESTOCK', ?3, ?4, ?5, ?6, ?7, ?8)`).bind(id, itemId, quantity, note, now, actor.accountId, now, actor.accountId),
       audit(db, actor.accountId, "REORDER_OPENED", "ITEM", itemId, { desiredQuantity: quantity, note }),
       db.prepare(BUMP_REVISION)
     ]);
   } catch (error) {
+    if (error instanceof Error && error.message.includes("NOT NULL constraint failed: reorders.item_id")) throw new InputError(409, "This item was merged. Open the retained item instead.");
     // The one-open-entry index turns a duplicate into a constraint failure.
     if (error instanceof Error && /UNIQUE/i.test(error.message)) throw new InputError(409, "This item is already on the restock list.");
     throw error;

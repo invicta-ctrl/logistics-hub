@@ -1,4 +1,4 @@
-import { type Actor, BUMP_REVISION, InputError, actorName, audit } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, actorName, audit, currentItemSQL } from "./inventory";
 import { MAX_LINKS, RELATION_KINDS, RELATION_WORDS, type RelationKind, type RelationSide } from "./relation-policy";
 
 /*
@@ -27,11 +27,11 @@ export async function linksOf(db: D1Database, itemId: string) {
 }
 
 async function names(db: D1Database, itemId: string, otherId: string) {
-  const { results } = await db.prepare("SELECT id, name FROM items WHERE id IN (?, ?)").bind(itemId, otherId).all<{ id: string; name: string }>();
+  const { results } = await db.prepare(`SELECT id, name FROM items WHERE id IN (?, ?) AND ${currentItemSQL("items.id")}`).bind(itemId, otherId).all<{ id: string; name: string }>();
   const name = results.find((row) => row.id === itemId)?.name;
   const other = results.find((row) => row.id === otherId)?.name;
   if (!name) throw new InputError(404, "Item not found.");
-  if (!other) throw new InputError(404, "The other item was not found.");
+  if (!other) throw new InputError(404, "The other item is no longer in the current catalog.");
   return { name, other };
 }
 
@@ -53,7 +53,7 @@ export async function linkItems(db: D1Database, actor: Actor, itemId: string, in
   try {
     // Written only while both items are under the cap, so two people linking at once cannot pass it.
     [inserted] = await db.batch([
-      db.prepare(`INSERT INTO item_relationships(item_id, related_id, kind, created_at, created_by) SELECT ?1, ?2, ?3, ?4, ?5
+      db.prepare(`INSERT INTO item_relationships(item_id, related_id, kind, created_at, created_by) SELECT CASE WHEN ${currentItemSQL("?1")} AND ${currentItemSQL("?2")} THEN ?1 ELSE NULL END, ?2, ?3, ?4, ?5
         WHERE (SELECT COUNT(*) FROM item_relationships WHERE item_id = ?1) + (SELECT COUNT(*) FROM item_relationships WHERE related_id = ?1) < ?6
           AND (SELECT COUNT(*) FROM item_relationships WHERE item_id = ?2) + (SELECT COUNT(*) FROM item_relationships WHERE related_id = ?2) < ?6`)
         .bind(from, to, kind, now, actor.accountId, MAX_LINKS),
@@ -61,6 +61,7 @@ export async function linkItems(db: D1Database, actor: Actor, itemId: string, in
       db.prepare(BUMP_REVISION)
     ]) as [D1Result];
   } catch (error) {
+    if (error instanceof Error && error.message.includes("NOT NULL constraint failed: item_relationships.item_id")) throw new InputError(409, "One of these items was merged. Reload and choose the retained item.");
     if (error instanceof Error && /UNIQUE constraint failed|PRIMARY KEY/i.test(error.message)) throw new InputError(409, "These two items are already linked. Remove that link first to change how they relate.");
     throw error;
   }
