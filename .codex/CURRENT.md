@@ -1,5 +1,13 @@
 # Current Work Pointer — Logistics Hub
 
+## Owner thumbnail and phone refinement — active, 2026-10-11
+
+SLICE: `slice/v1.15-thumbnail-and-mobile-refinement`, based on main `26af1c8762ad85f420425a3aa4a3a2f922ba5184`. Codex is the sole tracked writer; delegated work is read-only with proposed patches in /tmp. The latest accepted photo amendment records the owner's new corrections and supersedes the original-only thumbnail presentation.
+
+IMPLEMENTED LOCALLY: Picture actions through the viewer's Edit photo or upload; icon controls and linking under Edit details > Advanced details; icon picker hidden for Real photo; physical count hidden until quantity editing; less explanatory/empty copy, compact phone profile, full-width photo editor and wider desktop sheet. Shared conservative name capitalization on save/read/photo prefill, preserving brands/acronyms/models; native spelling/autocorrect on descriptive inputs. UI/name build/typecheck passed, with no product tests or provider calls.
+
+NEXT: Finish the cropped/cleaned shared-thumbnail pipeline, preserving originals and accepted cleanup through recropping and refreshing cached thumbnails. Keep/push coherent checkpoints, integrate the complete buildable slice into main, prune and yield. Owner reports actual crop/background removal work and owns live testing; do not seek credentials, environment editing or rerun manual product tests. Preserve unknown local `work` branch. No schema/dependency/migration or production data mutation.
+
 ## V1.15/V2 implementation complete — owner validation handoff, 2026-10-10
 
 STATUS: Accepted V1.15/V2 features and implementation are complete. The owner explicitly said, “No need to test it, I will test it.” Remaining live validation is owner-owned; no agent implementation or testing work remains pending. This direction supersedes the historical live-check blockers and credential requests below. Respond to owner-reported bugs or new scope when requested.

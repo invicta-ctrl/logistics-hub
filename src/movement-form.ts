@@ -52,7 +52,7 @@ export function quantityEditor(prefix: string): Html {
       <div class="form-alert" role="alert" hidden data-alert></div>
       <div class="form-actions"><button class="button button--primary" type="submit" data-submit>Save</button><button class="button button--ghost" type="button" data-cancel>Cancel</button></div>
     </div>
-    <button type="button" class="text-link qty-editor__count" data-count hidden>${icon("check")}Confirm a physical count</button>`;
+    <button type="button" class="text-link qty-editor__count" data-count hidden>${icon("check")}Confirm physical count</button>`;
 }
 
 /**
@@ -77,6 +77,7 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
   let base = 0;
   let targetId: string | null = null;
   let counting = false;
+  let editing = false;
   let reorderId: string | null = null;
   let wanted: string | null = null;
   let shownReasons = "";
@@ -109,11 +110,11 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
       : total === null ? html`<span class="is-error">Enter a whole number, or +5 / −2 to add or remove.</span>`
       : !valid ? html`<span class="is-error">${total < 0 ? `Only ${base} on hand; it cannot go below 0.` : `At most ${MAX.toLocaleString()}.`}</span>`
       : delta ? html`<span class="${delta > 0 ? "is-up" : "is-down"}">${signed(delta)}</span> ${base} → <strong>${total}</strong>${stale}`
-      : counting ? html`Matches the record. Confirming logs the count; the quantity stays ${base}.${stale}` : stale);
+      : counting ? html`Count: ${base}${stale}` : stale);
     input.classList.toggle("is-edited", dirty());
     const open = valid && (delta !== 0 || counting);
     details.hidden = !open;
-    countButton.hidden = open || !valid;
+    countButton.hidden = open || !valid || !editing;
     if (!open) return;
     const direction = delta > 0 ? "up" : delta < 0 ? "down" : "same";
     if (shownReasons !== direction) {
@@ -142,6 +143,7 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
   const reset = (to = options.target()?.onHand ?? 0) => {
     base = to;
     counting = false;
+    editing = false;
     reorderId = null;
     wanted = null;
     shownReasons = "";
@@ -167,7 +169,11 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
     update();
   });
   form.addEventListener("change", update);
-  input.addEventListener("focus", () => input.select());
+  input.addEventListener("focus", () => { editing = true; input.select(); update(); });
+  form.addEventListener("focusout", (event) => {
+    if (event.relatedTarget instanceof Node && form.contains(event.relatedTarget)) return;
+    if (!dirty()) { editing = false; update(); }
+  });
   input.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && dirty()) { event.preventDefault(); event.stopPropagation(); reset(base); return; }
     const step = event.key === "ArrowUp" ? 1 : event.key === "ArrowDown" ? -1 : 0;

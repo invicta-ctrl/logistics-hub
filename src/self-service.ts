@@ -1,5 +1,5 @@
 import { resolveItemIcon } from "./item-icons";
-import { IDENTITY_RULE_KEY, LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, SELF_SERVICE_RECORD_VERSION, SELF_SERVICE_STUDENT_ID, STUDENT_ID_PATTERN, selfServiceAction } from "./catalog-policy";
+import { formatItemName, IDENTITY_RULE_KEY, LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, SELF_SERVICE_RECORD_VERSION, SELF_SERVICE_STUDENT_ID, STUDENT_ID_PATTERN, selfServiceAction } from "./catalog-policy";
 import { throttled } from "./accounts";
 import { ancestry, pathOf, placesOf } from "./location-tree";
 import { sharedPlaces } from "./locations";
@@ -74,7 +74,7 @@ export async function selfServiceCatalog(db: D1Database) {
     const place = row.locationId && shared.has(row.locationId) ? row.locationId : null;
     for (const step of ancestry(known, place)) used.add(step.id);
     return [{
-      id: row.id, name: row.name, aliases: row.aliases, category: row.category, unit: row.unit, area: row.area === "Pantry" ? "Pantry" : "Inventory", action,
+      id: row.id, name: formatItemName(row.name), aliases: row.aliases, category: row.category, unit: row.unit, area: row.area === "Pantry" ? "Pantry" : "Inventory", action,
       available: Math.max(0, row.onHand), location: pathOf(known, place), locationId: place, audience: action === "BORROW" ? row.lendingAudience : null, photo: row.visualType === "SYSTEM_ICON" ? null : row.photo, iconKey: resolveItemIcon(row).key
     }];
   });

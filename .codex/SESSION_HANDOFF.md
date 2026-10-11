@@ -1,5 +1,15 @@
 # Session Handoff — Shared Codex / Claude Worktree
 
+## Owner thumbnail and phone correction — active, 2026-10-11
+
+~~~text
+BRANCH: slice/v1.15-thumbnail-and-mobile-refinement, based on main 26af1c8762ad85f420425a3aa4a3a2f922ba5184. Codex sole writer; delegated proposals in /tmp only. Unknown work branch preserved.
+DONE LOCALLY: Quieter item/Catalogue forms; picture controls via viewer Edit photo/upload; icons and links under Edit details > Advanced details; Real photo hides icon picking; quantity focus exposes physical count; compact phone profile, full-width picture actions, wider desktop sheet. Conservative name capitalization in shared save/read/photo paths and AI correction equality; native descriptive-text autocorrect/spellcheck, model/serial unchanged. Build/typecheck and diff pass. No product test rerun/provider call.
+REMAINING: Shared cropped/cleaned thumbnails and revalidation, retaining original variants and accepted cutout across recropping without spending another transformation. Coherent checkpoint pushes/main integration, prune and yield after completion.
+OWNER: Actual crop and background removal work per owner, who will test the new correction. Existing original-only thumbnail policy is superseded by the latest accepted amendment. Do not seek credentials/dashboard editing or repeat manual product tests.
+ROLLBACK: Slice baseline 26af1c8762ad85f420425a3aa4a3a2f922ba5184, new code reverts only. No schema/dependency/migration or production data mutation.
+~~~
+
 ## V1.15/V2 implementation complete — owner validation handoff, 2026-10-10
 
 ~~~text

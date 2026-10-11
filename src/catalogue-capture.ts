@@ -5,7 +5,7 @@ import { suggest, verified } from "./catalogue-suggest";
 import { type Detail, type Entry, type SessionRecord, type Snapshot, type SnapshotItem, drop, dropSession, durable, entries, keep, keepSession, sessions, setAccess, setSnapshot, snapshot } from "./catalogue-store";
 import { type PlaceList, bindNewPlace, newPlaceForm, placeList, placeOptions, refreshParents } from "./catalogue-places";
 import { onSyncChange, savedItem, signedOut, syncNow } from "./catalogue-sync";
-import { BEHAVIOURS, BEHAVIOUR_LABELS, type Behaviour, UNSORTED_CATEGORY } from "./catalog-policy";
+import { formatItemName, BEHAVIOURS, BEHAVIOUR_LABELS, type Behaviour, UNSORTED_CATEGORY } from "./catalog-policy";
 import { type Known as DuplicateKnown, type Match, possibleDuplicates } from "./duplicates";
 import { cropEditor, preparePhoto, photoUrl, type Prepared } from "./item-photo";
 import { whenIdle } from "./pwa";
@@ -144,7 +144,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
       <form class="cat-form" id="cat-form" novalidate aria-label="Add an item">
         <div class="cat-top">
           <div class="cat-photo-wrap"><button type="button" class="cat-photo" id="cat-photo" aria-label="Choose photo or file"><span class="cat-photo__empty">${icon("camera")}<span>Choose photo</span></span></button><button type="button" class="button button--ghost button--sm cat-photo__choose" id="cat-camera-button">Take photo</button><button type="button" class="button button--ghost button--sm" id="cat-crop-button" hidden>Crop thumbnail</button></div>
-          <div class="field cat-name"><label for="cat-name">Name</label><input id="cat-name" maxlength="120" autocomplete="off" autocapitalize="sentences" spellcheck="false" enterkeyhint="next" placeholder="What is it?" aria-describedby="cat-name-hint" /><p class="field__hint" id="cat-name-hint">A temporary name is fine if you are not sure.</p></div>
+          <div class="field cat-name"><label for="cat-name">Name</label><input id="cat-name" maxlength="120" autocomplete="off" autocapitalize="words" autocorrect="on" spellcheck="true" enterkeyhint="next" placeholder="What is it?" aria-describedby="cat-name-hint" /><p class="visually-hidden" id="cat-name-hint">A temporary name is fine if you are not sure.</p></div>
         </div>
         <div id="cat-crop" hidden></div>
         <div id="cat-photo-status" class="field__hint" role="status" hidden></div>
@@ -152,7 +152,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
         <section class="cat-ai" aria-label="AI suggestions" hidden><div id="cat-ai" aria-live="polite"></div></section>
         <div class="cat-dup" id="cat-dup" aria-live="polite"></div>
         <fieldset class="cat-behaviour" id="cat-behaviour"><legend>How is it used?</legend>
-          <div class="cat-choices">${BEHAVIOURS.map((value, index) => html`<button type="button" class="cat-choice" data-behaviour="${value}" aria-pressed="false" aria-keyshortcuts="Alt+${index + 1}"><span class="cat-choice__title">${BEHAVIOUR_LABELS[value]}</span><span class="cat-choice__hint">${HINTS[value]}</span><span class="cat-choice__suggest" hidden>Suggested</span></button>`)}</div>
+          <div class="cat-choices">${BEHAVIOURS.map((value, index) => html`<button type="button" class="cat-choice" data-behaviour="${value}" aria-pressed="false" aria-keyshortcuts="Alt+${index + 1}"><span class="cat-choice__title">${BEHAVIOUR_LABELS[value]}</span><span class="cat-choice__hint visually-hidden">${HINTS[value]}</span><span class="cat-choice__suggest" hidden>Suggested</span></button>`)}</div>
           <p class="cat-suggest" id="cat-why" aria-live="polite"></p>
         </fieldset>
         <div class="cat-qty field"><label for="cat-qty">How many are here?</label>
@@ -162,16 +162,16 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
           <div class="field"><label for="cat-category">Category <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-category" list="cat-categories" maxlength="100" autocomplete="off" /><datalist id="cat-categories"></datalist><div class="cat-chips" id="cat-category-chips"></div></div>
           <div class="field"><label for="cat-unit">Counted in <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-unit" list="cat-units" maxlength="30" autocomplete="off" placeholder="piece, box, ream" /><datalist id="cat-units"></datalist><div class="cat-chips" id="cat-unit-chips"></div></div>
         </div>
-        <details class="cat-more" id="cat-more"><summary>More details</summary>
+        <details class="cat-more" id="cat-more"><summary>Advanced details</summary>
           <div class="field-grid">
-            <div class="field"><label for="cat-model">Model <span class="field__optional">optional</span></label><input id="cat-model" maxlength="80" autocomplete="off" aria-describedby="cat-model-hint" /><p class="cat-name-hint cat-name-hint--photo" id="cat-model-hint" aria-live="polite"></p></div>
+            <div class="field"><label for="cat-model">Model <span class="field__optional">optional</span></label><input id="cat-model" maxlength="80" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="cat-model-hint" /><p class="cat-name-hint cat-name-hint--photo" id="cat-model-hint" aria-live="polite"></p></div>
             <div class="field"><label for="cat-serial">Serial number <span class="field__optional">optional</span></label><input id="cat-serial" maxlength="80" autocomplete="off" autocapitalize="characters" spellcheck="false" /></div>
           </div>
           <div class="field-grid">
             <div class="field"><label for="cat-stock">Stock area</label><select id="cat-stock"><option value="Inventory">General stock</option><option value="Pantry">Pantry</option></select></div>
-            <div class="field"><label for="cat-aliases">Other names <span class="field__optional">optional</span></label><input id="cat-aliases" maxlength="300" autocomplete="off" /></div>
+            <div class="field"><label for="cat-aliases">Other names <span class="field__optional">optional</span></label><input id="cat-aliases" maxlength="300" autocomplete="off" autocapitalize="words" autocorrect="on" spellcheck="true" /></div>
           </div>
-          <div class="field"><label for="cat-notes">Notes <span class="field__optional">optional</span></label><textarea id="cat-notes" rows="2" maxlength="1000"></textarea></div>
+          <div class="field"><label for="cat-notes">Notes <span class="field__optional">optional</span></label><textarea id="cat-notes" rows="2" maxlength="1000" autocapitalize="sentences" autocorrect="on" spellcheck="true"></textarea></div>
         </details>
         <div class="form-alert" id="cat-alert" role="alert" hidden></div>
         <div class="cat-actions">
@@ -179,7 +179,7 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
           <button type="button" class="button button--secondary" id="cat-save-clean" hidden>Save &amp; remove background</button>
           <button type="button" class="button button--secondary" id="cat-like">Save, then add another like this</button>
         </div>
-        <p class="cat-keys" aria-hidden="true"><kbd>Ctrl</kbd> <kbd>Enter</kbd> save · <kbd>Alt</kbd> <kbd>1</kbd>–<kbd>4</kbd> how it is used · <kbd>Alt</kbd> <kbd>P</kbd> photo</p>
+        <p class="cat-keys visually-hidden" aria-hidden="true"><kbd>Ctrl</kbd> <kbd>Enter</kbd> save · <kbd>Alt</kbd> <kbd>1</kbd>–<kbd>4</kbd> how it is used · <kbd>Alt</kbd> <kbd>P</kbd> photo</p>
       </form>
       <section class="cat-recent" aria-labelledby="cat-recent-title"><h2 id="cat-recent-title">Just added</h2><div id="cat-list"></div></section>
     </div>`);
@@ -585,6 +585,10 @@ export async function captureScreen(who: Signed, sessionId: string): Promise<voi
   };
   field("cat-model").addEventListener("input", () => { modelEdited = true; modelFromPhoto = false; draw(); });
   field("cat-name").addEventListener("input", () => { nameEdited = true; if (nameFromPhoto) { nameFromPhoto = false; draw(); } });
+  field("cat-name").addEventListener("blur", () => {
+    const input = field("cat-name"); const name = formatItemName(input.value);
+    if (name !== input.value) { input.value = name; input.dispatchEvent(new Event("input", { bubbles: true })); }
+  });
 
   /* ---------- Saving ---------- */
 

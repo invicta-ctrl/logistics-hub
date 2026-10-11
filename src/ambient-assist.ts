@@ -1,3 +1,4 @@
+import { formatItemName } from "./catalog-policy";
 import type { Account } from "./accounts";
 import { possibleDuplicates, type Known as DuplicateKnown } from "./duplicates";
 import { type Actor, InputError, audit } from "./inventory";
@@ -154,7 +155,7 @@ export function readPhotoName(reply: unknown): string | null {
   if (typeof raw !== "string") return null;
   const name = raw.normalize("NFKC").replace(/[^\p{L}\p{N}\s'&/-]/gu, " ").replace(/\s+/g, " ").trim();
   if (name.length < 2 || name.length > 48 || name.split(" ").length > 5 || !/\p{L}/u.test(name) || PEOPLE.test(name) || COMMANDLIKE.test(name)) return null;
-  return name.replace(/(^|\s)(\p{Ll})/gu, (_, space: string, letter: string) => space + letter.toUpperCase());
+  return formatItemName(name);
 }
 
 /** Words that would turn printed text into a command if anything ever treated it as one: such a reading is dropped. */

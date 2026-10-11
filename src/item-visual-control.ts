@@ -23,21 +23,21 @@ export function itemVisualControl(host: HTMLElement, current: () => EditableVisu
     const suggestion = suggestItemIcon(item).key;
     const hasPhoto = Boolean(item.photoId);
     const photoActive = hasPhoto && item.visualType !== "SYSTEM_ICON";
+    if (photoActive) picking = false;
     mount(host, html`<h3 class="form-section__title">Item picture</h3>
       <div class="photo-actions" role="group" aria-label="Item picture type">
         <button type="button" class="button button--secondary button--sm" data-visual-mode="SYSTEM_ICON" aria-pressed="${!photoActive}">System icon</button>
         <button type="button" class="button button--secondary button--sm" data-visual-mode="PHOTO" aria-pressed="${photoActive}">Real photo</button>
       </div>
-      <p class="field__hint">${photoActive ? "The selected photo appears first. This icon remains its fallback." : "This icon appears on the catalog. You can keep it or choose another."}</p>
+      <div ${photoActive ? html`hidden` : ""}>
       <p class="visual-suggestion">${raw(itemIconSvg(selected))}<span>${ITEM_ICONS.find((icon) => icon.key === selected)!.label}${item.iconKey ? " · chosen icon" : " · automatic"}</span></p>
-      ${selected !== suggestion ? html`<p class="field__hint">Suggested: ${ITEM_ICONS.find((icon) => icon.key === suggestion)!.label}</p>` : ""}
       <div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-choose-icon aria-expanded="${picking}">Choose another icon</button>
-        <button type="button" class="button button--ghost button--sm" data-auto-icon>Use suggested icon</button></div>
+        ${item.iconKey || selected !== suggestion ? html`<button type="button" class="button button--ghost button--sm" data-auto-icon>Use suggested icon</button>` : ""}</div>
       <div class="icon-picker" ${picking ? "" : html`hidden`}><label class="field-label" for="item-icon-search">Find a system icon</label>
         <input id="item-icon-search" type="search" value="${query}" placeholder="Paper, cleaning, cable…" autocomplete="off" />
-        <div class="icon-choices" data-icon-choices role="group" aria-label="System icons"></div></div>
+        <div class="icon-choices" data-icon-choices role="group" aria-label="System icons"></div></div></div>
       <p class="form-alert" role="alert" ${error ? "" : html`hidden`}>${error}</p>`);
-    choices();
+    if (picking) choices();
     if (searchFocused) host.querySelector<HTMLInputElement>("#item-icon-search")?.focus({ preventScroll: true });
   };
   const save = async (visualType: "SYSTEM_ICON" | "PHOTO", iconKey: string | null) => {
@@ -53,10 +53,11 @@ export function itemVisualControl(host: HTMLElement, current: () => EditableVisu
       await refresh();
       toast("Item visual saved.");
     } catch (problem) { error = failure(problem); await refresh(); }
-    finally { busy = false; render(); host.querySelector<HTMLButtonElement>("[data-choose-icon]")?.focus({ preventScroll: true }); }
+    finally { busy = false; render(); host.querySelector<HTMLButtonElement>(current().photoId && current().visualType !== "SYSTEM_ICON" ? "[data-visual-mode=PHOTO]" : "[data-choose-icon]")?.focus({ preventScroll: true }); }
   };
   host.addEventListener("input", (event) => {
     if ((event.target as HTMLElement).id !== "item-icon-search") return;
+    event.stopPropagation();
     query = (event.target as HTMLInputElement).value;
     choices();
   });
@@ -70,7 +71,7 @@ export function itemVisualControl(host: HTMLElement, current: () => EditableVisu
     else if (button.dataset.visualMode === "SYSTEM_ICON") void save("SYSTEM_ICON", item.iconKey ?? null);
     else if (button.dataset.visualMode === "PHOTO") {
       if (item.photoId) void save("PHOTO", item.iconKey ?? null);
-      else host.closest("#photo-panel")?.querySelector<HTMLButtonElement>("[data-pick]")?.click();
+      else host.closest(".sheet")?.querySelector<HTMLButtonElement>("#photo-panel [data-pick]")?.click();
     }
   });
   render();

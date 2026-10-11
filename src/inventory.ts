@@ -1,6 +1,6 @@
 import { itemIconKey, resolveItemIcon } from "./item-icons";
 import { LOCATION_ID } from "./location-tree";
-import { UNSORTED_CATEGORY, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_AUDIENCES, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
+import { formatItemName, UNSORTED_CATEGORY, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, LENDING_AUDIENCES, MOVEMENT_REASONS, OPEN_REORDER_STATUSES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_AUDIENCES, STOCK_AREAS, isListedForLending, listingGaps } from "./catalog-policy";
 
 export class InputError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
@@ -82,7 +82,7 @@ export async function publicCatalog(db: D1Database) {
     ORDER BY i.name COLLATE NOCASE`).bind(...LISTABLE_ITEM_TYPES, ...audiences).all<ItemRow & { photoId: string | null }>();
   const items = results.filter(isListedForLending).map((row) => ({
     id: row.id,
-    name: row.name,
+    name: formatItemName(row.name),
     category: row.category,
     unit: row.unit,
     itemType: row.itemType,
@@ -110,7 +110,7 @@ export async function staffInventory(db: D1Database) {
       p.media_id AS photoId, p.dhash AS photoHash
     FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id ORDER BY i.name COLLATE NOCASE`).all<StaffRow>();
   const items = results.map((row) => ({
-    id: row.id, name: row.name, aliases: row.aliases, category: row.category, itemType: row.itemType, unit: row.unit, status: row.status,
+    id: row.id, name: formatItemName(row.name), aliases: row.aliases, category: row.category, itemType: row.itemType, unit: row.unit, status: row.status,
     needsReview: row.needsReview === 1, lendingAudience: row.lendingAudience, onHand: row.onHand, updatedAt: row.updatedAt,
     reorderThreshold: row.reorderThreshold, locationId: row.locationId, legacyLocation: row.legacyLocation, openReports: row.openReports, listed: isListedForLending(row),
     stockArea: row.stockArea, expiresOn: row.expiresOn, lastCountedAt: row.lastCountedAt, reorderStatus: row.reorderStatus, onLoan: row.onLoan,
@@ -161,7 +161,7 @@ export async function itemDetail(db: D1Database, id: string) {
   if (!found) throw new InputError(404, "Item not found.");
   const { photoId, photoWidth, photoHeight, ...row } = found;
   return {
-    item: { ...row, needsReview: row.needsReview === 1, listed: isListedForLending(row), listingGaps: listingGaps(row), photo: photoId ? { id: photoId, width: photoWidth, height: photoHeight } : null },
+    item: { ...row, name: formatItemName(row.name), needsReview: row.needsReview === 1, listed: isListedForLending(row), listingGaps: listingGaps(row), photo: photoId ? { id: photoId, width: photoWidth, height: photoHeight } : null },
     movements: movements.results,
     loans: loans.results,
     openUnits: units!.results,
@@ -217,7 +217,7 @@ function aliasList(body: Record<string, unknown>, name: string): string | null {
 export function parseItemInput(body: unknown): ItemInput {
   if (!body || typeof body !== "object") throw new InputError(400, "Invalid item details.");
   const record = body as Record<string, unknown>;
-  const name = text(record, "name", "Name", 120, true)!;
+  const name = formatItemName(text(record, "name", "Name", 120, true)!);
   const input: ItemInput = {
     name,
     aliases: aliasList(record, name),

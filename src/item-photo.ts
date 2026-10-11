@@ -88,7 +88,7 @@ export function cropEditor(host: HTMLElement, source: Prepared, apply: (photo: P
   let drag: { pointer: number; handle: Handle; x: number; y: number; rect: Rect; bounds: DOMRect } | null = null;
   const hintId = `photo-crop-hint-${crypto.randomUUID()}`;
   mount(host, html`<fieldset class="photo-crop"><legend>Crop thumbnail</legend>
-    <p id="${hintId}">Drag a corner to crop. Drag inside the frame to move it.<span class="visually-hidden"> Arrow keys adjust the focused control. Hold Shift for a larger step.</span></p>
+    <p id="${hintId}" class="visually-hidden">Drag a corner to crop. Drag inside the frame to move it. Arrow keys adjust the focused control. Hold Shift for a larger step.</p>
     <div class="photo-crop__stage"><div class="photo-crop__image"><img alt="Full photo with the selected crop frame" draggable="false" />
       <div class="photo-crop__frame" hidden><button type="button" class="photo-crop__move" data-crop-handle="move" aria-label="Move crop frame" aria-describedby="${hintId}"><span class="photo-crop__grid" aria-hidden="true"></span></button>
         ${(["nw", "ne", "sw", "se"] as const).map((handle) => html`<button type="button" class="photo-crop__handle photo-crop__handle--${handle}" data-crop-handle="${handle}" aria-label="Resize crop from ${{ nw: "top left", ne: "top right", sw: "bottom left", se: "bottom right" }[handle]}" aria-describedby="${hintId}"></button>`)}
@@ -218,13 +218,14 @@ function morph(from: HTMLElement | null, to: HTMLElement | null, update: () => v
  * thumbnail it grows from, looked up again on closing because a live list may have redrawn it meanwhile. `url` is the
  * large image, `description` its alternative text ("Photo of Stapler") and `caption` the line under it.
  */
-export async function openViewer(url: string, description: string, source: () => HTMLElement | null, caption = description, fallbackKey?: string): Promise<void> {
+export async function openViewer(url: string, description: string, source: () => HTMLElement | null, caption = description, fallbackKey?: string, edit?: () => void): Promise<void> {
   if (document.querySelector("dialog.viewer")) return;
   const opener = document.activeElement as HTMLElement | null;
   const dialog = document.createElement("dialog");
   dialog.className = "viewer";
   dialog.setAttribute("aria-label", description);
   mount(dialog, html`<button class="viewer__close icon-button" type="button" data-close aria-label="Close photo">${icon("close")}</button>
+    ${edit ? html`<button class="viewer__edit button button--sm" type="button" data-edit-photo>${icon("camera")}Edit photo</button>` : ""}
     <figure class="viewer__figure" data-backdrop><img class="viewer__image" src="${url}" alt="${description}" /><figcaption>${caption}</figcaption></figure>`);
   document.body.append(dialog);
   const image = dialog.querySelector("img")!;
@@ -240,11 +241,13 @@ export async function openViewer(url: string, description: string, source: () =>
   // The large image is ready before it grows, so the movement never ends in a blank frame.
   await Promise.race([image.decode().catch(() => undefined), new Promise((resolve) => window.setTimeout(resolve, 400))]);
   let entryGone = false;
+  let editRequested = false;
   const requestClose = () => { if (dialog.open) morph(image, source(), () => dialog.close()); };
   const onBack = () => { entryGone = true; if (dialog.open) dialog.close(); };
   dialog.addEventListener("cancel", (event) => { event.preventDefault(); requestClose(); });
   dialog.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
+    if (target.closest("[data-edit-photo]")) { editRequested = true; requestClose(); return; }
     if (target === dialog || target.hasAttribute("data-backdrop") || target.closest("[data-close]")) requestClose();
   });
   dialog.addEventListener("close", () => {
@@ -253,6 +256,7 @@ export async function openViewer(url: string, description: string, source: () =>
     // Closed with Escape or a tap: take the viewer's history entry back. Closed with Back it is already gone.
     if (!entryGone && window.history.state?.viewer) window.history.back();
     if (opener?.isConnected) opener.focus({ preventScroll: true });
+    if (editRequested) edit?.();
   });
   window.history.pushState({ viewer: true }, "");
   window.addEventListener("popstate", onBack);
@@ -278,8 +282,8 @@ export type PhotoSubject = {
  * `[data-tile]` for the picture and a `[data-actions]` beside it for the buttons. `refresh` re-reads the record after
  * another person changed the picture first; `changed` runs after every save.
  */
-export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: string; name: string; photo: Photo | null; /** Item photos only: the route that cleans (POST) and restores (DELETE) the background, e.g. /api/staff/items/ITM-0001/cutout. */ cleanup?: string; cleanupState?: () => PhotoCleanup | undefined; enableCleanup?: () => Promise<void>; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo) => void; visual?: () => VisualItem; updatedAt?: () => string | null }): PhotoPanel {
-  const { id: itemId, name, noun, endpoint } = options;
+export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: string; name: string; photo: Photo | null; /** Item photos only: the route that cleans (POST) and restores (DELETE) the background, e.g. /api/staff/items/ITM-0001/cutout. */ cleanup?: string; cleanupState?: () => PhotoCleanup | undefined; enableCleanup?: () => Promise<void>; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo, edit?: () => void) => void; visual?: () => VisualItem; updatedAt?: () => string | null }): PhotoPanel {
+  const { name, noun, endpoint } = options;
   let photo = options.photo;
   let staged: Prepared | null = null;
   let originalStaged: Prepared | null = null;
@@ -288,6 +292,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   let cropping = false;
   let state: "" | "preparing" | "saving" | "removing" | "cleaning" = "";
   let confirming = false;
+  let editing = noun !== "photo";
   let error = "";
   const tile = host.querySelector<HTMLElement>("[data-tile]")!;
   const actions = host.querySelector<HTMLElement>("[data-actions]")!;
@@ -309,7 +314,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   const show = (picture: Html, buttons: Html) => { mount(tile, picture); mount(actions, buttons); };
   const cleanupState = (): PhotoCleanup | null | undefined => options.cleanupState?.() ?? photo;
   const enableButton = (): Html => cleanupState()?.canEnable && options.enableCleanup ? html`<button type="button" class="button button--secondary button--sm" data-enable-cleanup ${busy() ? "disabled" : ""}>Enable background removal</button>` : html``;
-  const cleanupHint = (): Html => options.cleanup && cleanupState()?.cleanupReason ? html`<p class="field__hint" role="status">${cleanupState()!.cleanupReason} The original photo is kept.</p>` : html``;
+  const cleanupHint = (): Html => options.cleanup && cleanupState()?.cleanupReason ? html`<p class="field__hint" role="status">${cleanupState()!.cleanupReason}</p>` : html``;
 
   /** Item photos only: remove the background, or go back to the original. The original photo is never changed by either. */
   const cleanButton = (): Html => {
@@ -331,19 +336,19 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       return show(html`<div class="photo-tile photo-tile--preview"><img src="${staged.preview}" alt="Preview of the new ${noun} of ${name}" /></div>`, html`<div class="photo-actions"><button type="button" class="button button--primary button--sm" data-save ${busy() ? "disabled" : ""}>${state === "saving" ? "Saving…" : `Save ${noun}`}</button>
           ${options.cleanup ? html`<button type="button" class="button button--secondary button--sm" data-save-clean ${busy() || !cleanupState()?.cleanable ? "disabled" : ""}>Save &amp; remove background</button>${enableButton()}` : ""}
           <button type="button" class="button button--secondary button--sm" data-pick ${busy() ? "disabled" : ""}>Choose another</button><button type="button" class="button button--ghost button--sm" data-camera ${busy() ? "disabled" : ""}>Take photo</button>
-          <button type="button" class="button button--secondary button--sm" data-crop-photo ${busy() ? "disabled" : ""}>Crop thumbnail</button><button type="button" class="button button--ghost button--sm" data-reset-photo ${busy() ? "disabled" : ""}>Reset thumbnail</button><button type="button" class="button button--ghost button--sm" data-cancel ${busy() ? "disabled" : ""}>Cancel</button></div>${cleanupHint()}${alert}`);
+          <button type="button" class="button button--secondary button--sm" data-crop-photo ${busy() ? "disabled" : ""}>Crop thumbnail</button>${staged.thumb !== originalStaged?.thumb ? html`<button type="button" class="button button--ghost button--sm" data-reset-photo ${busy() ? "disabled" : ""}>Reset crop</button>` : ""}<button type="button" class="button button--ghost button--sm" data-cancel ${busy() ? "disabled" : ""}>Cancel</button></div>${cleanupHint()}${alert}`);
     }
     if (!photo) {
-      return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick aria-describedby="photo-hint-${itemId}">${options.visual ? itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual") : icon("camera")}<span>${options.visual ? "Upload photo" : `Add ${noun}`}</span></button>`,
-        html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>Choose photo or file</button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button>${enableButton()}</div><p class="field__hint" id="photo-hint-${itemId}">${options.hintAdd}</p>${cleanupHint()}${alert}`);
+      return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick>${options.visual ? itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual") : icon("camera")}<span>${options.visual ? "Add photo" : `Add ${noun}`}</span></button>`,
+        html`<div class="photo-actions"><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button></div>${alert}`);
     }
     show(options.visual && options.visual().visualType === "SYSTEM_ICON"
-      ? html`<div class="photo-tile">${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}</div>`
+      ? html`<button type="button" class="photo-tile" data-view aria-label="View saved ${noun} of ${name}">${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}</button>`
       : html`<button type="button" class="photo-tile" data-view aria-label="View ${noun} of ${name}">${options.visual ? itemVisual({ ...options.visual(), photoId: photo.id }, tileUrl, "profile-visual", true) : html`<img src="${tileUrl(photo.id)}" alt="" width="160" height="160" />`}</button>`,
-      html`${confirming
+      html`${!editing ? alert : html`${confirming
         ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>
             <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : `Remove ${noun}`}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>`
-        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button>${options.noun === "photo" ? html`<button type="button" class="button button--secondary button--sm" data-crop-existing>Crop thumbnail</button>` : ""}<button type="button" class="button button--ghost button--sm" data-remove>Remove</button>${cleanButton()}</div>${state === "cleaning" ? html`<p class="field__hint" role="status">Working on the picture…</p>` : ""}<p class="field__hint">${options.visual?.().visualType === "SYSTEM_ICON" ? "Your photo is saved. Select Real Photo to display it on the catalog." : options.hintHas}</p>`}${cleanupHint()}${alert}`);
+        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button>${options.noun === "photo" ? html`<button type="button" class="button button--secondary button--sm" data-crop-existing>Crop thumbnail</button>` : ""}<button type="button" class="button button--ghost button--sm" data-remove>Remove</button>${cleanButton()}${noun === "photo" ? html`<button type="button" class="button button--ghost button--sm" data-close-photo-editor>Done</button>` : ""}</div>${state === "cleaning" ? html`<p class="field__hint" role="status">Working…</p>` : ""}`}${cleanupHint()}${alert}`}`);
   };
   const focus = (selector: string) => host.querySelector<HTMLElement>(selector)?.focus();
 
@@ -399,7 +404,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       state = "";
       draw();
       if (fault) { error = `${fault} The original photo is still in use.`; draw(); focus("[data-clean]"); return; }
-      toast(cleaning ? "Background removed. The original photo is kept." : "Using the original photo.");
+      toast(cleaning ? "Background removed." : "Using the original photo.");
       focus(cleaning ? "[data-original]" : "[data-clean]");
     } catch (problem) {
       await failed(problem);
@@ -411,7 +416,8 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     if (busy()) return;
     if (target.closest("[data-pick]")) input.click();
     else if (target.closest("[data-camera]")) camera.click();
-    else if (target.closest("[data-view]") && photo) options.view(photo);
+    else if (target.closest("[data-view]") && photo) options.view(photo, noun === "photo" ? () => { if (!host.isConnected || busy()) return; editing = true; draw(); focus("[data-crop-existing]"); } : undefined);
+    else if (target.closest("[data-close-photo-editor]")) { editing = false; confirming = false; draw(); focus("[data-view]"); }
     else if (target.closest("[data-enable-cleanup]") && cleanupState()?.canEnable && options.enableCleanup) {
       state = "cleaning"; error = ""; draw();
       try {

@@ -1,6 +1,6 @@
 import { arbitrateTask, normalizeTask, route, runRole, secondOpinionTask, type FactCode } from "./ai-roles";
 import { neuronsToday, type AiRunner } from "./ambient-assist";
-import { behaviourOf } from "./catalog-policy";
+import { behaviourOf, formatItemName } from "./catalog-policy";
 import { suggest, verified, type Known } from "./catalogue-suggest";
 import { words } from "./duplicates";
 import { audit, catalogRevision, InputError, type Actor } from "./inventory";
@@ -14,7 +14,7 @@ const key = (actor: Actor) => `ai_review_offer:${actor.accountId}`;
 const normalized = (name: string) => words(name).join(" ");
 const names = (item: Reviewed) => [item.name, ...(item.aliases ?? "").split(/[;,\n]/)].map(normalized);
 const outcome = (item: Pick<Reviewed, "name" | "category" | "unit" | "itemType" | "consumptionMode">): Outcome => ({ name: item.name, category: item.category, unit: item.unit, behaviour: behaviourOf(item)! });
-const same = (a: Outcome, b: Outcome) => a.name === b.name && a.category === b.category && a.unit === b.unit && a.behaviour === b.behaviour;
+const same = (a: Outcome, b: Outcome) => formatItemName(a.name) === formatItemName(b.name) && a.category === b.category && a.unit === b.unit && a.behaviour === b.behaviour;
 async function reviewed(db: D1Database): Promise<Reviewed[]> {
   const { results } = await db.prepare("SELECT id, name, aliases, category, unit, item_type AS itemType, consumption_mode AS consumptionMode, stock_area AS stockArea, status, needs_review AS needsReview FROM items WHERE status = 'ACTIVE' AND needs_review = 0 AND item_type <> 'NEEDS_REVIEW' ORDER BY id LIMIT 1000").all<Omit<Reviewed, "needsReview"> & { needsReview: number }>();
   // A full evidence window is incomplete: abstain globally rather than ask AI about an exact item outside it.

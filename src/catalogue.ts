@@ -1,5 +1,5 @@
 import { captureFeedback } from "./ai-review";
-import { BEHAVIOURS, type Behaviour, UNSORTED_CATEGORY, UNSORTED_UNIT, behaviourFields } from "./catalog-policy";
+import { formatItemName, BEHAVIOURS, type Behaviour, UNSORTED_CATEGORY, UNSORTED_UNIT, behaviourFields } from "./catalog-policy";
 import { type Known, type Match, possibleDuplicates } from "./duplicates";
 import { type Actor, InputError, audit, createItem, distinct, parseItemInput, pathsOf, text, usablePlace } from "./inventory";
 import { LOCATION_ID } from "./location-tree";
@@ -57,7 +57,7 @@ export async function catalogueState(db: D1Database, actor: Actor) {
   return {
     session: mine!.results[0] ? shown(mine!.results[0] as SessionRow, actor.accountId) : null,
     others: (others!.results as SessionRow[]).map((row) => shown(row, actor.accountId)),
-    reviewLater: { total: (total!.results[0] as { total: number }).total, items: review!.results }
+    reviewLater: { total: (total!.results[0] as { total: number }).total, items: (review!.results as Array<{ name: string } & Record<string, unknown>>).map((row) => ({ ...row, name: formatItemName(row.name) })) }
   };
 }
 
@@ -77,7 +77,7 @@ export async function sessionDetail(db: D1Database, actor: Actor, id: string) {
   return {
     session: shown(found, actor.accountId),
     counts: Object.fromEntries((counts!.results as Array<{ behaviour: string; n: number }>).map((row) => [row.behaviour, row.n])),
-    recent: recent!.results
+    recent: (recent!.results as Array<{ name: string } & Record<string, unknown>>).map((row) => ({ ...row, name: formatItemName(row.name) }))
   };
 }
 
@@ -94,9 +94,9 @@ export async function catalogueSnapshot(db: D1Database) {
       FROM items i LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN inventory_balances b ON b.id = i.id ORDER BY i.name COLLATE NOCASE, i.id`),
     db.prepare("SELECT id, name, parent_id AS parentId, active, directions FROM locations ORDER BY name COLLATE NOCASE, id")
   ]);
-  const rows = items!.results as Array<{ category: string; unit: string; needsReview: number }>;
+  const rows = items!.results as Array<{ name: string; category: string; unit: string; needsReview: number }>;
   return {
-    items: rows.map((row) => ({ ...row, needsReview: row.needsReview === 0 ? false : true })),
+    items: rows.map((row) => ({ ...row, name: formatItemName(row.name), needsReview: row.needsReview === 0 ? false : true })),
     categories: distinct(rows.map((row) => row.category).filter((category) => category !== UNSORTED_CATEGORY)),
     units: distinct(rows.map((row) => row.unit)),
     places: (places!.results as Array<{ active: number }>).map((row) => ({ ...row, active: row.active === 1 }))

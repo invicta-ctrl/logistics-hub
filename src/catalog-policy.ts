@@ -1,4 +1,15 @@
 // Shared by the Worker (validation, public filtering) and the browser (labels).
+/** Capitalize lowercase words while keeping brand casing, acronyms and model tokens. */
+export function formatItemName(value: string): string {
+  return value.trim().replace(/\s+/gu, " ").replace(/\S+/gu, (part) => {
+    if (/[\p{N}_/+-]/u.test(part) || part !== part.toLowerCase()) return part;
+    return part.replace(/\p{Ll}/u, (letter) => {
+      const upper = letter.toUpperCase();
+      return upper.length === letter.length ? upper : letter;
+    });
+  });
+}
+
 /** An item is Loanable or Consumable. NEEDS_REVIEW marks a migrated record nobody has classified yet. */
 export const ITEM_TYPES = ["Loanable", "Consumable", "NEEDS_REVIEW"] as const;
 export const ITEM_STATUSES = ["ACTIVE", "VERIFY", "INACTIVE"] as const;

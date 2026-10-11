@@ -2,7 +2,7 @@ import { ITEM_ICONS, itemIconSvg, resolveItemIcon, suggestItemIcon } from "./ite
 import { itemVisualControl } from "./item-visual-control";
 import type { DepartmentCode } from "./directory-policy";
 import { suggest, type Suggestion } from "./catalogue-suggest";
-import { BEHAVIOUR_LABELS, type Behaviour, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, behaviourFields, listingGaps, stockState } from "./catalog-policy";
+import { formatItemName, BEHAVIOUR_LABELS, type Behaviour, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, behaviourFields, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type Photo, type PhotoCleanup, type PhotoPanel, openViewer, photoPanel, photoUrl, rowThumb, shownUrl } from "./item-photo";
@@ -905,7 +905,7 @@ export async function workspace(): Promise<void> {
     const state = stockState(item);
     const out = loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
     return html`${tracksOpenUnits(item) || openUnits.length ? html`<span class="quantity__sealed">${sealedLine(item.onHand, openUnits.length, worstCondition(openUnits))}</span>` : ""}${state === "OUT" ? html`<span class="tag tag--bad">Out of stock</span>` : state === "LOW" ? html`<span class="tag tag--warn">Low stock</span>` : item.reorderThreshold > 0 ? html`<span class="tag tag--ok">Above reorder level</span>` : ""}
-      <span>${item.reorderThreshold > 0 ? `Reorder level ${item.reorderThreshold}` : "No reorder level set"}</span>
+      ${item.reorderThreshold > 0 ? html`<span>Reorder level ${item.reorderThreshold}</span>` : ""}
       ${out ? html`<button type="button" class="text-link" data-goto="loan">${out} more on loan</button>` : ""}`;
   }
 
@@ -941,17 +941,17 @@ export async function workspace(): Promise<void> {
       <dl class="facts">
         <div><dt>Unit</dt><dd>${item.unit}</dd></div>
         <div><dt>Status</dt><dd>${label(item.status)}${item.needsReview ? "" : html` · Reviewed`}</dd></div>
-        <div><dt>Other names</dt><dd>${item.aliases ?? html`<span class="muted">None</span>`}</dd></div>
+        ${item.aliases ? html`<div><dt>Other names</dt><dd>${item.aliases}</dd></div>` : ""}
       </dl>
       <div id="reports-card">${reportsCard(detail)}</div>
-      <div id="item-links"></div>
+      <details class="advanced-details"><summary>Availability &amp; record</summary><div class="advanced-details__body">
       <section class="card ${gaps.length ? "" : "card--ok"}" aria-labelledby="lending-title">
         <div class="card__head"><h3 id="lending-title">${gaps.length ? "Not on the Lending Hub" : "Listed on the Lending Hub"}</h3>${gaps.length ? "" : html`<a class="text-link" href="/lending?q=${encodeURIComponent(item.name)}" target="_blank" rel="noopener">View ${icon("external")}<span class="visually-hidden">(opens in a new tab)</span></a>`}</div>
         ${gaps.length
           ? html`<p class="card__text">Still needed before it can be listed:</p>${checklist(gaps.map((gap) => [gap, false]))}`
-          : html`<p class="card__text">${label(item.lendingAudience)}. The public page shows live availability.</p>`}
+          : html`<p class="card__text">${label(item.lendingAudience)}</p>`}
       </section>
-      <p class="provenance">${origin}</p>`;
+      <p class="provenance">${origin}</p></div></details>`;
   }
 
   let stockForm: ReturnType<typeof bindQuantityEditor> | null = null;
@@ -1016,7 +1016,7 @@ export async function workspace(): Promise<void> {
     const tabs: Array<[Tab, string]> = [["overview", "Overview"], ...(lendable ? [["loan", out ? `Loan · ${out} out` : "Loan"] as [Tab, string]] : []), ["details", item.needsReview ? "Review & edit" : "Edit details"], ["history", "History"]];
     if (tab === "loan" && !lendable) tab = "overview";
     sheetShell(html`<span class="mono">${item.id}</span>`, item.name, html`
-      <section class="profile" id="photo-panel" aria-label="Item profile"><div class="profile__photo" data-tile></div><div class="profile__info"><div id="profile-info">${profileInfo(loaded)}</div><div class="profile__actions" data-actions></div><div class="item-visual-control" id="item-visual-control"></div></div></section>
+      <section class="profile" id="photo-panel" aria-label="Item profile"><div class="profile__photo" data-tile></div><div class="profile__info"><div id="profile-info">${profileInfo(loaded)}</div></div><div class="profile__actions" data-actions></div></section>
       <div class="tabs" role="tablist" aria-label="Item sections">
         ${tabs.map(([key, text]) => html`<button type="button" role="tab" id="tab-${key}" aria-controls="panel-${key}" aria-selected="${key === tab}" tabindex="${key === tab ? 0 : -1}">${text}</button>`)}
       </div>
@@ -1101,7 +1101,7 @@ export async function workspace(): Promise<void> {
       thumbUrl: (id) => photoUrl(id, "thumb"),
       hintAdd: "Everyone sees this photo on the Lending Hub and Self-Service. Show the item itself, not people or documents.",
       hintHas: "Everyone sees this photo on the Lending Hub and Self-Service. The large version stays staff-only.", removeNote: "The item keeps its stock and history.",
-      view: (shown) => void openViewer(shownUrl(shown, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLElement>("#photo-panel [data-view] img"), item.name, resolveItemIcon(detail!.item).key),
+      view: (shown, edit) => void openViewer(shownUrl(shown, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLElement>("#photo-panel [data-view] img"), item.name, resolveItemIcon(detail!.item).key, edit),
       changed: async (next) => { if (detail?.item.id === item.id) detail = { ...detail, item: { ...detail.item, photo: next } }; await refreshStock(item.id); await poll.refresh(); },
       // Someone else changed the photo first: show theirs, and the list with it.
       refresh: async () => { await refreshStock(item.id); await poll.refresh(); }
@@ -1130,7 +1130,7 @@ export async function workspace(): Promise<void> {
     // Unclassified is offered only while a migrated record still is; staff choose Loanable or Consumable.
     const types = ITEM_TYPES.filter((type) => type !== "NEEDS_REVIEW" || item.itemType === "NEEDS_REVIEW");
     const hinted = (id: string, hint: string) => hint ? html`aria-describedby="f-${id}-hint"` : "";
-    const hintMarkup = (id: string, hint: string) => hint ? html`<p class="field__hint" id="f-${id}-hint">${hint}</p>` : "";
+    const hintMarkup = (id: string, hint: string) => hint ? html`<p class="visually-hidden" id="f-${id}-hint">${hint}</p>` : "";
     const text = (id: string, title: string, value: unknown, attributes: Html | string = "", hint = "", optional = false) => html`<div class="field"><label for="f-${id}">${title}${optional ? html` <span class="field__optional">optional</span>` : ""}</label><input id="f-${id}" name="${id}" value="${value ?? ""}" ${attributes} ${hinted(id, hint)} />${hintMarkup(id, hint)}</div>`;
     const number = (id: string, title: string, value: unknown, max: number, hint = "") => html`<div class="field"><label for="f-${id}">${title}</label><input id="f-${id}" name="${id}" type="number" inputmode="numeric" min="0" max="${max}" step="1" value="${value ?? 0}" ${hinted(id, hint)} />${hintMarkup(id, hint)}</div>`;
     const reviewing = !creating && item.needsReview === true;
@@ -1138,22 +1138,20 @@ export async function workspace(): Promise<void> {
       ${reviewing ? html`<div class="callout callout--review">${icon("info")}<div><p><strong>Reviewing a migrated record.</strong> Check each detail against the physical item, fill in what is missing, then mark it reviewed.</p><div id="review-checklist">${checklist(reviewChecklist(item as Item))}</div></div></div>` : ""}
       <div class="form-section">
         <h3 class="form-section__title">Catalog</h3>
-        ${text("name", "Name", item.name, html`required maxlength="120" autocomplete="off"`)}
+        ${text("name", "Name", item.name, html`required maxlength="120" autocomplete="off" autocapitalize="words" autocorrect="on" spellcheck="true"`)}
         <div id="suggested-visual" class="visual-suggestion" aria-live="polite"></div>
         ${creating ? html`<div class="field"><label for="f-iconKey">System icon</label><select id="f-iconKey" name="iconKey"><option value="">Use suggested icon</option>${ITEM_ICONS.map((entry) => html`<option value="tabler:${entry.key}">${entry.label}</option>`)}</select><p class="field__hint">Optional. A suggestion is already selected; you can upload a real photo after creating the item.</p></div>` : ""}
         <p class="field__hint field__hint--warn" id="duplicate-hint" hidden></p>
-        ${text("aliases", "Other names", item.aliases, html`maxlength="300" autocomplete="off"`, "Names people also use for it, separated by commas. Search finds these too.", true)}
         ${!creating && item.itemType === "NEEDS_REVIEW" ? html`<div class="classify-hint" id="classify-hint" aria-live="polite"></div>` : ""}
         <div class="field-grid">
-          ${text("category", "Category", item.category?.toUpperCase() === "UNSORTED" ? "" : item.category, html`required maxlength="100" autocomplete="off"`, "Letter case does not matter; an existing category is reused.")}
-          <div class="field"><label for="f-itemType">Borrow or take</label><select id="f-itemType" name="itemType" aria-describedby="f-itemType-hint">${types.map((type) => html`<option value="${type}" ${type === (item.itemType ?? "Loanable") ? html`selected` : ""}>${TYPE_CHOICES[type] ?? label(type)}</option>`)}</select><p class="field__hint" id="f-itemType-hint">Your choice sets everything else: Borrow is lent and comes back; Take is used up and never returned. Both appear on the Lending Hub and on phones.</p></div>
+          ${text("category", "Category", item.category?.toUpperCase() === "UNSORTED" ? "" : item.category, html`required maxlength="100" autocomplete="off" autocorrect="on" spellcheck="true"`, "Letter case does not matter; an existing category is reused.")}
+          <div class="field"><label for="f-itemType">Borrow or take</label><select id="f-itemType" name="itemType">${types.map((type) => html`<option value="${type}" ${type === (item.itemType ?? "Loanable") ? html`selected` : ""}>${TYPE_CHOICES[type] ?? label(type)}</option>`)}</select></div>
         </div>
-        <div class="field" data-consumption ${(item.itemType ?? "Loanable") === "Consumable" ? "" : html`hidden`}><label for="f-consumptionMode">How is this item normally used?</label><select id="f-consumptionMode" name="consumptionMode" aria-describedby="f-consumptionMode-hint">${options(CONSUMPTION_MODES, item.consumptionMode ?? "WHOLE_UNIT")}</select><p class="field__hint" id="f-consumptionMode-hint">Open and use gradually suits reams, bottles, rolls and boxes: staff open one unit at a time and mark it empty when it runs out. Stock is still counted in whole units.</p></div>
+        <div class="field" data-consumption ${(item.itemType ?? "Loanable") === "Consumable" ? "" : html`hidden`}><label for="f-consumptionMode">How is it used?</label><select id="f-consumptionMode" name="consumptionMode">${options(CONSUMPTION_MODES, item.consumptionMode ?? "WHOLE_UNIT")}</select></div>
         <div class="field-grid">
           ${text("unit", "Unit", item.unit, html`required maxlength="30" autocomplete="off" placeholder="piece, box, pack"`, "Singular, as counted.")}
           <div class="field"><label for="f-locationId">Place <span class="field__optional">optional</span></label>
-            <select id="f-locationId" name="locationId" aria-describedby="f-locationId-hint"><option value="">No place set</option>${placeOptions(item.locationId ?? null)}</select>
-            <p class="field__hint" id="f-locationId-hint">Where staff find it. Directions and the picture belong to the place, so every item kept there shares them.</p></div>
+            <select id="f-locationId" name="locationId"><option value="">No place set</option>${placeOptions(item.locationId ?? null)}</select></div>
         </div>
         ${!creating && !item.locationId && item.legacyLocation ? html`<div class="callout">${icon("info")}<p>This item’s location was typed earlier as <strong>${item.legacyLocation}</strong>. Choose the matching place, or add it below; the typed text is kept as it was.</p></div>` : ""}
         <div class="place-extra"><div class="place-preview" id="place-preview" aria-live="polite"></div>
@@ -1163,29 +1161,35 @@ export async function workspace(): Promise<void> {
               <div class="field"><label for="np-parent">Inside</label><select id="np-parent"></select></div></div>
             <p class="form-alert" id="np-alert" role="alert" hidden></p>
             <div class="where__buttons"><button type="button" class="button button--secondary button--sm" data-np-add>Add place</button><button type="button" class="button button--ghost button--sm" data-np-cancel>Cancel</button></div></div></div>
+      </div>
+      <details class="advanced-details" id="item-advanced"><summary>Advanced details</summary><div class="advanced-details__body">
+      <div class="form-section">
+        ${text("aliases", "Other names", item.aliases, html`maxlength="300" autocomplete="off" autocapitalize="words" autocorrect="on" spellcheck="true" placeholder="Separate names with commas"`, "", true)}
         <div class="field-grid">
-          ${text("model", "Model", item.model, html`maxlength="80" autocomplete="off"`, "", true)}
+          ${text("model", "Model", item.model, html`maxlength="80" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"`, "", true)}
           ${text("serialNumber", "Serial number", item.serialNumber, html`maxlength="80" autocomplete="off" spellcheck="false"`, "", true)}
         </div>
-        <div class="field"><label for="f-notes">Internal notes <span class="field__optional">optional</span></label><textarea id="f-notes" name="notes" maxlength="1000" rows="3">${item.notes ?? ""}</textarea></div>
+        <div class="field"><label for="f-notes">Internal notes <span class="field__optional">optional</span></label><textarea id="f-notes" name="notes" maxlength="1000" rows="3" autocapitalize="sentences" autocorrect="on" spellcheck="true">${item.notes ?? ""}</textarea></div>
       </div>
       <div class="form-section">
         <h3 class="form-section__title">Stock settings</h3>
         <div class="field-grid">
-          <div class="field"><label for="f-status">Status</label><select id="f-status" name="status" aria-describedby="f-status-hint">${options(ITEM_STATUSES, item.status ?? "ACTIVE")}</select><p class="field__hint" id="f-status-hint">Inactive items leave the Lending Hub. Nothing is deleted.</p></div>
+          <div class="field"><label for="f-status">Status</label><select id="f-status" name="status">${options(ITEM_STATUSES, item.status ?? "ACTIVE")}</select></div>
           ${number("reorderThreshold", "Reorder level", item.reorderThreshold, 100_000, "Low stock at or below this. 0 turns it off.")}
         </div>
         <div class="field-grid">
-          <div class="field"><label for="f-stockArea">Stock area</label><select id="f-stockArea" name="stockArea" aria-describedby="f-stockArea-hint">${options(STOCK_AREAS, item.stockArea ?? "Inventory")}</select><p class="field__hint" id="f-stockArea-hint">Pantry items appear in Stock → Pantry.</p></div>
-          <div class="field" data-expiry ${(item.stockArea ?? "Inventory") === "Pantry" ? "" : html`hidden`}><label for="f-expiresOn">Earliest expiry <span class="field__optional">optional</span></label><input id="f-expiresOn" name="expiresOn" type="date" value="${item.expiresOn ?? ""}" aria-describedby="f-expiresOn-hint" /><p class="field__hint" id="f-expiresOn-hint">The soonest date on the shelf.</p></div>
+          <div class="field"><label for="f-stockArea">Stock area</label><select id="f-stockArea" name="stockArea">${options(STOCK_AREAS, item.stockArea ?? "Inventory")}</select></div>
+          <div class="field" data-expiry ${(item.stockArea ?? "Inventory") === "Pantry" ? "" : html`hidden`}><label for="f-expiresOn">Earliest expiry <span class="field__optional">optional</span></label><input id="f-expiresOn" name="expiresOn" type="date" value="${item.expiresOn ?? ""}" /></div>
         </div>
         ${creating ? number("openingQuantity", "Opening quantity", 0, 100_000, "Recorded as the item's first movement.") : ""}
       </div>
       <div class="form-section">
-        <h3 class="form-section__title">Public Lending Hub</h3>
-        <div class="field"><label for="f-lendingAudience">Shown to</label><select id="f-lendingAudience" name="lendingAudience" aria-describedby="f-lendingAudience-hint">${options(LENDING_AUDIENCES, item.lendingAudience ?? (creating ? "STUDENTS_AND_USC_STAFF" : "NOT_AVAILABLE_FOR_LENDING"))}</select><p class="field__hint" id="f-lendingAudience-hint">Who sees it on the public page. Loans themselves are recorded in the Loan tab.</p></div>
+        <h3 class="form-section__title">Availability</h3>
+        <div class="field"><label for="f-lendingAudience">Shown to</label><select id="f-lendingAudience" name="lendingAudience">${options(LENDING_AUDIENCES, item.lendingAudience ?? (creating ? "STUDENTS_AND_USC_STAFF" : "NOT_AVAILABLE_FOR_LENDING"))}</select></div>
         <div class="listing-status" id="listing-preview" aria-live="polite"></div>
       </div>
+      ${creating ? "" : html`<div class="item-visual-control" id="item-visual-control"></div><div id="item-links"></div>`}
+      </div></details>
       <div class="form-section form-section--last">
         <label class="checkbox"><input type="checkbox" name="reviewed" ${item.needsReview === false || creating ? html`checked` : ""} /><span>Details reviewed and verified</span></label>
       </div>
@@ -1232,6 +1236,11 @@ export async function workspace(): Promise<void> {
     const form = sheet.querySelector<HTMLFormElement>("#details-form")!;
     const alert = form.querySelector<HTMLDivElement>("#details-alert")!;
     const creating = !item.id;
+    form.querySelector<HTMLInputElement>("#f-name")!.addEventListener("blur", (event) => {
+      const input = event.target as HTMLInputElement;
+      const name = formatItemName(input.value);
+      if (name !== input.value) { input.value = name; input.dispatchEvent(new Event("input", { bubbles: true })); }
+    });
     let intent = "save";
     /*
      * An Unclassified item opened from Attention (or the list) shows the top suggestion for how it is used, with how sure it is and why.
@@ -1356,6 +1365,8 @@ export async function workspace(): Promise<void> {
       if (problems.length) {
         problems.forEach(([element]) => element.setAttribute("aria-invalid", "true"));
         setMessage(alert, problems.map(([, message]) => message).join(" "));
+        const hiddenDetails = problems[0]![0].closest<HTMLDetailsElement>("details");
+        if (hiddenDetails) hiddenDetails.open = true;
         problems[0]![0].focus();
         return;
       }
