@@ -352,7 +352,7 @@ test.describe("saving survives a dropped connection", () => {
     await page.evaluate(() => window.dispatchEvent(new Event("online")));
     await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
     expect(server.state.captures).toHaveLength(1);
-    expect(server.state.items.filter((entry) => entry.name === "Hole punch")).toHaveLength(1);
+    expect(server.state.items.filter((entry) => entry.name === "Hole Punch")).toHaveLength(1);
   });
 
   test("a photo is sent after the record; if it fails it is kept and retried", async ({ page }) => {
@@ -387,7 +387,7 @@ test.describe("photo suggestions (ambient assist)", () => {
     await expect(page.locator("#cat-dup")).toContainText("Same name");
     // The person's own words win, and the hint goes with the suggestion.
     await name(page).fill("Long-reach stapler");
-    await expect(page.locator("#cat-name-hint")).toHaveText("A temporary name is fine if you are not sure.");
+    await expect(page.locator("#cat-name-hint")).toBeEmpty();
     await expect(page.locator("#cat-dup")).toContainText("Looks like it in the photo");
     await pick(page, "Borrow").click();
     await page.getByLabel("Category").fill("EQUIPMENT");
@@ -424,7 +424,7 @@ test.describe("photo suggestions (ambient assist)", () => {
     await page.locator("#cat-file").setInputFiles({ name: "shelf.png", mimeType: "image/png", buffer: PNG });
     await expect.poll(() => server.state.photoAsks).toBe(1);
     await expect(name(page)).toHaveValue("Mystery adapter");
-    await expect(page.locator("#cat-name-hint")).toHaveText("A temporary name is fine if you are not sure.");
+    await expect(page.locator("#cat-name-hint")).toBeEmpty();
     await expect(page.locator("#cat-dup")).toBeEmpty();
   });
 
@@ -448,7 +448,7 @@ test.describe("photo suggestions (ambient assist)", () => {
     await (await response).finished();
     await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
     await expect(name(page)).toHaveValue("");
-    await expect(page.locator("#cat-name-hint")).toHaveText("A temporary name is fine if you are not sure.");
+    await expect(page.locator("#cat-name-hint")).toBeEmpty();
   });
 
   test("the model read from the photo fills an empty Model field, and typing there keeps it the person's", async ({ page }) => {
