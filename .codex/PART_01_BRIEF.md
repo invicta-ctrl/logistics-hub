@@ -27,7 +27,7 @@ Work only in the Part 1 worktree:
 2. `.agents/PROJECT_POLICY.md`
 3. `.codex/CURRENT.md`
 4. `.codex/CURRENT_TASK.md`
-5. `.codex/CURRENT_HANDOFF.md`
+5. `.codex/SESSION_HANDOFF.md`
 6. accepted spec named above
 7. `migrations/0001_core.sql`, `migrations/0002_inventory_seed.sql`
 8. `data/migration/inventory.production.json`, `inventory-reconciliation.json`
