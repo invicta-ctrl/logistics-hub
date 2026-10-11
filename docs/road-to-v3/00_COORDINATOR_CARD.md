@@ -14,7 +14,7 @@ Before creating a thread or editing code:
 5. Read repository project-policy/agent-governance files.
 6. Read `.codex/CURRENT.md`.
 7. Read `.codex/SESSION_HANDOFF.md`.
-8. Read `.codex/CURRENT_TASK.md` when present.
+8. Use `.codex/CURRENT.md` and `.codex/SESSION_HANDOFF.md` as the only live current-task pointers; old `.codex/CURRENT_TASK.md` was retired as stale.
 9. Read the accepted specification/amendment for the active release.
 10. Read the active release record and relevant migrations.
 11. Read this package's active release card only after the higher-authority sources above.
@@ -48,7 +48,7 @@ Product version resolution: `V2.1`–`V2.9` map to existing internal milestones 
 
 1. Execute the boot sequence in §1. Confirm exact repository, `origin/main` HEAD, current branch/worktree and dirty files, remote slice branches, current writer lock, accepted specs, active task, release evidence, and historical versus current handoff. The latest verified Git state outranks stale narrative headings. An inaccessible lock/status is UNKNOWN, not free.
 2. If a non-RTV slice is already active or a different agent holds the writer lock, **do not interfere**: no second writable branch or main edit, no branch deletion, no takeover. Report the owner and safe next step; bounded read-only RTV preparation is permitted.
-3. Identify the active RTV task, if any, from `.codex/CURRENT.md`, `.codex/CURRENT_TASK.md` if present, `.codex/SESSION_HANDOFF.md`, the accepted spec and release record, verified against Git branches/commits. Do not restart a merged slice or assume a release is complete based on a stale pointer.
+3. Identify the active RTV task, if any, from `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md`, the accepted spec and release record, verified against Git branches/commits. Do not restart a merged slice or assume a release is complete based on a stale pointer.
 4. If no active RTV task, select the earliest eligible milestone in `06_ROAD_TO_V3_RELEASE_MAP.md`. RTV3-01 requires the truthful V2 handoff and its own owner-accepted milestone specification. RTV3-02 and subsequent domain milestones additionally require the accepted Product Direction Amendment; successor prerequisites and P0 gates still apply. A roadmap card or draft is **not** an accepted implementation spec.
 5. If the selected spec/amendment is missing, draft the smallest owner-reviewable specification using `templates/ACCEPTED_SPEC_TEMPLATE.md`, identify required decisions, and **stop before modifying implementation**. A shorthand command does not sign a spec, grant a production approval, or silently broaden scope.
 6. Once authorized, use the **single** `slice/<part>-<scope>` branch based on current verified `main` and claim the writer lock using repository workflow. Do not create simultaneous V3 version branches or writable subagent worktrees unless a later accepted governance amendment explicitly permits them. Parallel reviewers/researchers may remain read-only.
