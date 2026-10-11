@@ -166,12 +166,12 @@ test.describe("starting and resuming", () => {
     await expect(name(page)).toBeFocused();
   });
 
-  test("the Items page offers the Catalogue", async ({ page }) => {
+  test("Quick Catalog opens its place picker directly", async ({ page }) => {
     const server = serve(page);
     await server.ready;
-    await page.goto("/staff/items");
-    await page.getByRole("link", { name: "Add items" }).click();
+    await page.goto("/staff/catalogue");
     await expect(page.getByRole("heading", { name: "Add items", level: 1 })).toBeVisible();
+    await expect(page.getByLabel("Place", { exact: true })).toBeVisible();
   });
 });
 

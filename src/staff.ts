@@ -455,7 +455,7 @@ export async function workspace(): Promise<void> {
           <p class="live-status" id="live-status">Connecting…</p>
           <a class="button button--secondary" href="/staff/locations" data-route>${icon("pin")}Locations</a>
           <a class="button button--secondary" href="/staff/kits" data-route>${icon("stack")}Kits</a>
-          <a class="button button--primary" id="add-items" href="/staff/catalogue" data-route>${icon("plus")}Add items</a>
+          <button type="button" class="button button--primary" id="add-items">${icon("plus")}Add items</button>
         </div>
       </header>
       <div class="views" id="views" role="group" aria-label="Item views"></div>
@@ -491,7 +491,7 @@ export async function workspace(): Promise<void> {
   let openId: string | null = null;
   let detail: Detail | null = null;
   let dirty = false;
-  let pendingItem = params.get("item");
+  let pendingItem = params.get("add") === "1" ? null : params.get("item");
   const pendingTab = (["overview", "loan", "details", "history"] as const).find((value) => value === params.get("tab")) ?? "overview";
   let shownIds: string[] = [];
   /** How many rows are drawn: the table grows by a page on request, so the page's size does not follow the catalog's (docs/PERFORMANCE_RELIABILITY_DOCTRINE.md). */
@@ -751,19 +751,27 @@ export async function workspace(): Promise<void> {
 
   /* ---------- Item sheet ---------- */
 
+  let addGeneration = 0;
+  const addCleanups: Array<() => void> = [];
+  const stopAdding = () => {
+    addGeneration += 1;
+    addCleanups.splice(0).forEach((cleanup) => cleanup());
+    sheet.classList.remove("sheet--add");
+  };
   const panel = createSheet(sheet, {
     dirty: () => dirty,
     onClose: () => {
+      stopAdding();
       document.querySelector(`tr[data-key="${CSS.escape(openId ?? "")}"]`)?.classList.remove("is-open");
       openId = null;
       detail = null;
       dirty = false;
-      writeParams({ item: null });
+      writeParams({ item: null, add: null });
     }
   });
   const discardOk = panel.discardOk;
   const closeSheet = () => panel.close(true);
-  onLeave(() => { dirty = false; });
+  onLeave(() => { stopAdding(); dirty = false; });
 
   function sheetShell(kicker: Html | string, title: string, body: Html): void {
     // Replacing the sheet's content (the loaded record after its placeholder) would drop keyboard focus onto the page behind.
@@ -774,6 +782,7 @@ export async function workspace(): Promise<void> {
 
   function openItem(id: string, tab: Tab = "overview"): void {
     if (openId !== id && !discardOk()) return;
+    stopAdding();
     dirty = false;
     document.querySelectorAll("tr.is-open").forEach((element) => element.classList.remove("is-open"));
     document.querySelector(`tr[data-key="${CSS.escape(id)}"]`)?.classList.add("is-open");
@@ -781,12 +790,52 @@ export async function workspace(): Promise<void> {
     detail = null;
     // A link or the search can open an item the table has not drawn yet; render() draws it.
     if (shownIds.indexOf(id) >= rowLimit) render();
-    writeParams({ item: id });
+    writeParams({ item: id, add: null });
     const item = inventory?.items.find((entry) => entry.id === id);
     sheetShell(id, item?.name ?? "Loading…", html`<div class="skeleton skeleton--block"></div>`);
     panel.open();
     void loadDetail(id, tab);
   }
+
+  function openAdd(): void {
+    if (!session || !discardOk()) return;
+    stopAdding();
+    const generation = addGeneration;
+    dirty = false;
+    openId = null;
+    detail = null;
+    pendingItem = null;
+    document.querySelectorAll("tr.is-open").forEach((element) => element.classList.remove("is-open"));
+    writeParams({ item: null, add: "1", tab: null });
+    sheet.classList.add("sheet--add");
+    sheetShell("", "Add items", html`<div id="direct-add"><div class="skeleton skeleton--block"></div></div>`);
+    panel.open();
+    const host = sheet.querySelector<HTMLElement>("#direct-add")!;
+    const current = () => generation === addGeneration && host.isConnected && sheet.open;
+    void (async () => {
+      try {
+        const { captureScreen } = await import("./catalogue-capture");
+        if (!current()) return;
+        const started = await api<{ id: string }>("/api/staff/catalogue/sessions", { method: "POST", body: JSON.stringify({ locationId: null }) });
+        if (!current()) return;
+        const { startSending } = await import("./catalogue-sync");
+        if (!current()) return;
+        startSending({ owner: session.id, legacy: true });
+        await captureScreen({ mode: "signed-in", session, access: null }, started.id, {
+          host,
+          onCleanup: (cleanup) => { if (current()) addCleanups.push(cleanup); else cleanup(); },
+          onDirty: (next) => { if (current()) dirty = next; }
+        });
+      } catch (error) {
+        if (!current()) return;
+        if (error instanceof ApiError && error.status === 401) return expired();
+        mount(host, emptyState("Add items could not be opened", failure(error), html`<button type="button" class="button button--secondary" id="add-retry">Try again</button>`, "error", 2));
+        host.querySelector("#add-retry")!.addEventListener("click", openAdd);
+      }
+    })();
+  }
+  document.querySelector("#add-items")!.addEventListener("click", openAdd);
+  if (params.get("add") === "1") openAdd();
 
   async function fetchDetail(id: string): Promise<Detail | null> {
     const loaded = await api<Detail>(`/api/staff/items/${encodeURIComponent(id)}`);

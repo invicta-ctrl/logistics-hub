@@ -4,8 +4,8 @@ import { ApiError, type Html, type IconName, api, emptyState, expired, failure, 
 
 /*
  * Home (/staff/home): where staff start. It answers "what should I do next?" from three things that already exist: what needs a person
- * (the same numbers as the bell, from the staff bar's Attention summary, so nothing is asked twice), your own unfinished cataloguing or
- * place check, and a few links for the work staff start most. Practical insights come last and arrive after the page is drawn, so
+ * (the same numbers as the bell, from the staff bar's Attention summary, so nothing is asked twice), your own unfinished
+ * place checks, and a few links for the work staff start most. Practical insights come last and arrive after the page is drawn, so
  * they can be slow or fail without ever holding up the rest. Nothing here is stored, and nothing here changes a record.
  */
 
@@ -19,7 +19,7 @@ type Insights = { asOf: string; cards: InsightCard[]; completeness: Completeness
 
 /** The work staff start most, in working order. Everyone sees these; administrators also see the two Administration pages. */
 const ACTIONS: ReadonlyArray<{ href: string; icon: IconName; title: string; detail: string; admin?: true }> = [
-  { href: "/staff/catalogue", icon: "plus", title: "Add items", detail: "Catalogue a shelf, or check a place" },
+  { href: "/staff/items?add=1", icon: "plus", title: "Add items", detail: "Create an item" },
   { href: "/staff/loans", icon: "swap", title: "Lend or return", detail: "Loans out and back in" },
   { href: "/staff/stock", icon: "stack", title: "Stock in or out", detail: "Deliveries, takes and counts" },
   { href: "/staff/locations", icon: "pin", title: "Find a place", detail: "Where things are kept" },
@@ -58,12 +58,6 @@ function attentionMarkup(groups: AttentionGroup[]): Html {
 
 function continueMarkup(work: Resumable): Html {
   const rows: Html[] = [];
-  if (work.catalogue) {
-    const { id, place, saved, startedAt } = work.catalogue;
-    rows.push(html`<li><a class="home-row" href="/staff/catalogue?session=${id}" data-route>
-      <span class="home-row__text"><span class="home-row__title">Cataloguing${place ? ` at ${place}` : ""}</span><span class="home-row__meta">${saved ? `${plural(saved, "item")} added` : "Nothing added yet"} · started ${ageOf(startedAt)}</span></span>
-      <span class="home-row__go">Resume ${icon("next")}</span></a></li>`);
-  }
   for (const check of work.checks) {
     rows.push(html`<li><a class="home-row" href="/staff/catalogue?audit=${check.id}" data-route>
       <span class="home-row__text"><span class="home-row__title">Check of ${check.place ?? "a place"}</span><span class="home-row__meta">${check.status === "PAUSED" ? "Paused" : "Open"} · ${plural(check.expected, "item")} expected · last worked on ${ageOf(check.updatedAt)}</span></span>
@@ -154,7 +148,7 @@ export async function homeWorkspace(): Promise<void> {
   live<Resumable>("/api/staff/home", {
     interval: 30_000,
     onData: (work) => {
-      const any = Boolean(work.catalogue) || work.checks.length > 0;
+      const any = work.checks.length > 0;
       continueBox.hidden = !any;
       if (any) mount(document.querySelector("#home-continue-body")!, continueMarkup(work));
     },

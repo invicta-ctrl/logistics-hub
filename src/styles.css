@@ -1497,7 +1497,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .cat-form { gap: var(--space-5); background: transparent; padding: 0; border: 0; border-radius: 0; display: grid; }
 .cat-top { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--space-3); align-items: start; }
 .cat-photo-wrap { display: grid; gap: var(--space-1); justify-items: stretch; }
-.cat-photo { position: relative; display: grid; width: 6.5rem; aspect-ratio: 1; place-items: center; overflow: hidden; padding: 0; border: 1.5px dashed var(--line-field); border-radius: var(--radius); background: var(--subtle); color: var(--text-2); border-style: solid; border-color: var(--line); }
+.cat-photo { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); width: 6.5rem; aspect-ratio: 1; place-items: center; overflow: hidden; padding: 0; border: 1.5px dashed var(--line-field); border-radius: var(--radius); background: var(--subtle); color: var(--text-2); border-style: solid; border-color: var(--line); }
 .cat-photo:hover { border-color: var(--brand); background: var(--brand-tint); color: var(--brand); }
 .cat-photo:focus-visible { outline: none; box-shadow: var(--focus); }
 .cat-photo.has-photo { border-style: solid; border-color: var(--line-strong); }
@@ -1552,6 +1552,20 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .cat-keys { display: none; margin: 0; color: var(--text-3); font-size: var(--text-sm); }
 @media (hover: hover) and (pointer: fine) { .cat-keys { display: block; } }
 .cat-recent h2 { margin-bottom: var(--space-2); font-size: var(--text-lg); }
+/* Ordinary item creation uses the staff sheet; shelf sessions stay in Quick Catalog. */
+.cat--direct { padding: 0; }
+.cat--direct .cat-layout { grid-template-columns: minmax(0, 1fr); }
+.cat--direct .cat-form { gap: var(--space-4); }
+.cat--direct .cat-top { grid-template-columns: 5rem minmax(0, 1fr); }
+.cat--direct .cat-photo { width: 5rem; }
+.cat--direct .cat-photo-wrap { display: flex; flex-direction: column; align-items: stretch; }
+.cat--direct .cat-photo-wrap > .button { padding-inline: 0; white-space: normal; }
+.cat--direct .cat-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); border: 0; }
+.cat--direct .cat-choice { border: 1px solid var(--line); border-radius: var(--radius); }
+.cat--direct .cat-choice[aria-pressed="true"] { border-color: var(--brand); }
+.cat--direct .cat-place-panel { padding: 0; margin-bottom: var(--space-3); border: 0; }
+.cat--direct .cat-actions { padding-bottom: 0; }
+.sheet--add .sheet__body { padding-bottom: calc(var(--space-5) + var(--safe-bottom)); }
 .cat-rows { display: grid; gap: var(--space-2); }
 .cat-row { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) auto; gap: var(--space-3); align-items: start; padding: var(--space-2) var(--space-3); border: 0; border-radius: 0; background: transparent; padding-inline: 0; border-bottom: 1px solid var(--line); }
 .cat-row.is-stopped { border-color: var(--line-bad); background: var(--bad-tint); }

@@ -5,7 +5,7 @@
 ~~~text
 BRANCH: slice/v1.15-direct-add-and-thumbnails from verified main 711547d41d4c560fe35d0d46de755f3e8718796c. Codex holds sole writer lock; read-only delegates propose /tmp patches only. Preserve unknown work.
 OWNER: Thumbnails still clip. Main Add items must open the familiar improved staff item sheet directly with optional location; session Start/Resume/place chooser stays in separate Quick Catalog PWA. One creation action/form, preserving photo/file/camera/AI assistance and explicit human review.
-CHECKPOINT: Shared item image grid bounded to box size; all item/capture thumbnails contain the whole saved crop. Direct entry remains to implement. Main captures must not overwrite PWA placement or local resume records.
+CHECKPOINT: Thumbnail fit bf1543f is pushed. Direct staff sheet is implemented with shared photo/AI capture and durable queue. Main Items button and Home/search items?add=1 open directly; catalogue Resume removed from Home. Optional Where found and unchecked Details reviewed are under Advanced details. Full-sign-in human review only, never Not sure or AI auto-trust. Main capture/retry leaves PWA selected place/local resume intact; sheet close disposes poll/listeners and invalidates pending photo/AI. Existing fixtures adapted without adding cases. Build/typecheck passed; final pushed checkpoint CI remains the integration gate.
 GATES: Owner owns manual/live QA. Build/typecheck, privacy/diff, maintain affected existing fixtures and existing automatic CI. No new tests/provider probes/credentials/schema/dependencies. Push coherent checkpoints, integrate fully green source to main, verify configured Workers Build, prune slice and yield. Historical completion blocks below are superseded for this newly reported correction.
 ~~~
 

@@ -184,7 +184,7 @@ export type CaptureOutcome = Captured | { duplicates: Match[] };
  * behaviour is "Review later" is stored unclassified (type Unclassified, needs review) and so stays out of every public list until
  * someone decides. Possible duplicates are returned, not refused, unless the person has already seen them and said to save anyway.
  */
-export async function capture(db: D1Database, actor: Actor, sessionId: string, input: unknown): Promise<CaptureOutcome> {
+export async function capture(db: D1Database, actor: Actor, sessionId: string, input: unknown, canReview = false): Promise<CaptureOutcome> {
   const session = await ownSession(db, actor, sessionId);
   const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const requestId = body.id;
@@ -214,8 +214,8 @@ export async function capture(db: D1Database, actor: Actor, sessionId: string, i
     category: later && !text(body, "category", "Category", 100, false) ? UNSORTED_CATEGORY : body.category,
     unit: later && !text(body, "unit", "Unit", 30, false) ? UNSORTED_UNIT : body.unit,
     ...behaviourFields(decided), status: "ACTIVE", locationId, reorderThreshold: body.reorderThreshold ?? 0, expiresOn: body.expiresOn ?? "", lendingAudience: "NOT_AVAILABLE_FOR_LENDING",
-    // Captured at the shelf, but nobody has signed it off for Self-Service: "Mark reviewed" (or the Items form) does that.
-    needsReview: true
+    // Quick Catalog stays provisional; the direct Items form offers explicit full-sign-in review.
+    needsReview: !(canReview && body.direct === true && body.reviewed === true && !later)
   });
   const hash = typeof body.photoHash === "string" && /^[0-9a-f]{16}$/.test(body.photoHash) ? body.photoHash : null;
   const seen = acknowledged(body.acknowledged);
@@ -232,7 +232,9 @@ export async function capture(db: D1Database, actor: Actor, sessionId: string, i
       also: (itemId) => [
         db.prepare("INSERT INTO catalogue_captures(id, session_id, item_id, location_id, behaviour, acknowledged, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)")
           .bind(requestId, sessionId, itemId, locationId, decided, seen.length ? JSON.stringify(seen) : null, now),
-        db.prepare("UPDATE catalogue_sessions SET location_id = ?, updated_at = ? WHERE id = ?").bind(locationId, now, sessionId),
+        body.direct === true
+          ? db.prepare("UPDATE catalogue_sessions SET updated_at = ? WHERE id = ?").bind(now, sessionId)
+          : db.prepare("UPDATE catalogue_sessions SET location_id = ?, updated_at = ? WHERE id = ?").bind(locationId, now, sessionId),
         ...feedback(itemId)
       ]
     });

@@ -129,6 +129,7 @@ const acknowledged = (entry: Entry): string[] => [...new Set([
  * must wait (below).
  */
 async function serverSession(entry: Entry): Promise<string | null> {
+  if (entry.body.direct === true) return entry.sessionId;
   const record = (await sessions()).find((each) => each.id === entry.sessionId);
   if (!record) return entry.sessionId;
   if (record.serverId) return record.serverId;
@@ -153,6 +154,11 @@ async function serverSession(entry: Entry): Promise<string | null> {
 async function finishedElsewhere(entry: Entry, target: string): Promise<boolean> {
   const detail = await api<Detail>(`/api/staff/catalogue/sessions/${target}`, within(20_000)).catch(() => null);
   if (detail?.session.status !== "FINISHED") return false;
+  if (entry.body.direct === true) {
+    const started = await api<{ id: string }>("/api/staff/catalogue/sessions", { method: "POST", body: JSON.stringify({ locationId: null }), ...within(20_000) });
+    await settle(entry, { sessionId: started.id });
+    return true;
+  }
   const record = (await sessions()).find((each) => each.id === entry.sessionId);
   await keepSession({ ...(record ?? { id: entry.sessionId, owner: sender!.owner, detail, finishing: false }), serverId: null });
   return true;

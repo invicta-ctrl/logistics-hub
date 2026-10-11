@@ -467,7 +467,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   if (session?.[2] === "/unreviewed" && method === "GET") return json(await unreviewed(env.DB, session[1]!));
   if (session?.[2] === "/finish" && method === "POST") return json(await finishSession(env.DB, account, session[1]!));
   if (session?.[2] === "/captures" && method === "POST") {
-    const saved = await capture(env.DB, account, session[1]!, await body());
+    const saved = await capture(env.DB, account, session[1]!, await body(), !leased);
     return "duplicates" in saved ? json({ error: "This may already be in the catalog.", ...saved }, 409) : json(saved, saved.replayed ? 200 : 201);
   }
   if (path === "/api/staff/audits" && method === "GET") {
