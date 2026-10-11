@@ -46,3 +46,10 @@ The repository is the continuity authority. After each coherent checkpoint, pres
 Do not load the entire Road-to-V3 package into every thread. Use the coordinator card, engineering constitution, active release card, accepted spec, and only the task-specific context required.
 
 Successors complement predecessors; they never rescue them. Each release must remain complete and supportable if the roadmap stops there.
+
+
+### Owner-directed V1.16 gate (2026-10-11)
+
+V1.16 is an explicitly requested pre-Road-to-V3 Ambient Assist + Intelligent Core release, even though historical V2.0 is already closed. The full technical scope remains **proposed** under docs/specs/proposed/v1.16-ambient-intelligent-core.md until accepted. Do not initiate substantial V1.16 coding or mislabel it completed before its authority/verification gates. The first deployed product version and changelog belongs in the existing Administration > System > This version, not a new tab; V2.1/F4 inherits this functionality. Keep Road-to-V3 V2.1–V3.0 numbering unchanged.
+
+Never present an incomplete release as complete. Every coherent working checkpoint goes to the one active slice branch. Independently complete green slices promptly integrate to main with verified CI/deployment; remaining work resumes from updated main on a new slice after pruning the integrated one.
