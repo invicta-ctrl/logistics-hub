@@ -17,6 +17,24 @@ Every release must remain useful if no later release is ever built.
 Successors may automate, compose, explain, or accelerate predecessors.
 They may not rescue an incomplete predecessor.
 
+
+## 2A. Version-aligned architecture, code quality and security delivery
+
+For **every** RTV3 milestone, code-quality, modularization, security, data integrity, performance, reliability, accessibility and maintainability improvements needed by its accepted feature scope are part of **that same milestone's implementation and release acceptance**. RTV3-01 establishes foundational controls; RTV3-02–RTV3-08 evolve them alongside each domain; RTV3-09 qualifies the integrated system and must not become a deferred architecture-fix sprint.
+
+The accepted milestone spec must include a baseline and a bounded engineering-delivery matrix identifying:
+- existing modules, contracts, data ownership and security boundaries affected;
+- necessary simplification, cohesion/modularization, obsolete-code removal and dependency reductions;
+- necessary authorization, privacy, input validation, negative tests and operational security;
+- D1/R2 correctness, indexes, concurrency, idempotency, migration and rollback as applicable;
+- performance, observability, offline/recovery, accessibility and browser behavior as applicable;
+- packet ownership, specific acceptance criteria, evidence and any justified `N/A` items.
+
+Plan, implement, test, review and ship each required correction **with the corresponding user-facing capability**. Do not call the milestone COMPLETE while a known required engineering correction remains unresolved or depends on a future release. Defer only clearly nonessential work through a recorded owner-approved scope/risk decision, without breaking predecessor independence or critical safety gates.
+
+Refactoring is **not** a standing license for wholesale rewrites. First remove/merge/reuse existing code; create new abstractions only when the accepted slice needs them and they measurably clarify or harden the system. Preserve known-good behavior, repository branch/writer policy, authoritative D1/R2/ledger invariants, and rollback safety. Record before/after evidence or honestly mark any unmeasurable claim.
+
+
 ## 3. Write correctness
 
 Do not mix atomicity, concurrency, and idempotency into one ladder.

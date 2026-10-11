@@ -15,6 +15,19 @@ Release:
 ## In scope
 - ...
 
+## Version-aligned engineering delivery (mandatory for this milestone)
+Ship necessary improvements with this release, not in a later cleanup or RTV3-09. Refer to Engineering Constitution §2A.
+- affected code paths / current baseline:
+- module ownership, cohesion, API/contracts and simplification:
+- obsolete paths/duplicate code to remove:
+- security/permissions/privacy/negative cases:
+- D1/R2 data truth, migrations, concurrency, idempotency:
+- performance/observability/offline/recovery/accessibility (as applicable):
+- bounded packet owners, acceptance tests and evidence per item:
+- justified non-applicable items (N/A with reason):
+- architecture/security defects that block release completion:
+
+
 ## Explicitly out of scope
 - ...
 

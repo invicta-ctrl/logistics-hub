@@ -29,6 +29,13 @@ Do not call RTV3-01 "V2.1" and do not call RTV3-09 "V2.9".
 
 ## How to use this package
 
+### Short commands — Codex and Claude
+
+When Earl says `start RTV` or `continue RTV` (including `RTV3-XX`), **both agents use** `00_COORDINATOR_CARD.md` → **Owner command entry point** after checking `AGENTS.md` and actual repository state. The command is not a blanket authorization to implement without an accepted spec or to preempt another active writer. Missing specs go to owner acceptance first; already completed work must not be rerun.
+
+Every RTV3 release includes the **code-quality, architecture, security, performance and modularization work required for that release**. The acceptance template and release record must prove these items shipped with the corresponding functionality (Engineering Constitution §2A). RTV3-09 validates integration, rather than rescuing unfinished engineering work.
+
+
 Do **not** load the entire package into every agent.
 
 The coordinator starts with:

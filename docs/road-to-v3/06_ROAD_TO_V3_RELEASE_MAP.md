@@ -25,3 +25,23 @@
 - V3.0 requires RTV3-09 acceptance.
 
 Future-milestone research/spec preparation may occur in parallel when it does not mutate shared truth or presume unaccepted product scope.
+
+
+## Architecture and security ship with each milestone
+
+The feature outcome and **its required architectural improvements** are one acceptance unit, not separate follow-up versions. The owner-accepted per-milestone specification must bind code quality, module ownership, obsolete-path retirement, authorization/privacy, database integrity, performance/reliability and appropriate regression/denial tests to the same release. See `01_ENGINEERING_CONSTITUTION.md` §2A, `templates/ACCEPTED_SPEC_TEMPLATE.md` and the release record template.
+
+| Milestone | Engineering improvements delivered in the same milestone |
+|---|---|
+| RTV3-01 | measured platform baseline, operability/observability, critical code/security defects, CI/supply-chain safety, offline/recovery and Ambient Assist contracts |
+| RTV3-02 | cohesive event/requirement domain, API/validation contracts, steward permissions, provenance, bounded event queries, replay-safe writes |
+| RTV3-03 | Promise/availability boundary, concurrency and uniqueness constraints, time-window query/index efficiency, inventory authority separation |
+| RTV3-04 | Mission/Human Operations boundaries, server-composed permission-filtered workspace reads, frontend split/refresh discipline and safe handovers |
+| RTV3-05 | procurement/receiving transactions, audited approval boundaries, supplier/query performance, governed R2 evidence and no duplicate stock truth |
+| RTV3-06 | lifecycle transition correctness, immutable ledger preservation, idempotent returns/recovery, bounded reconciliation and retired dead paths |
+| RTV3-07 | isolated explainable analytics, scheduled/bounded computation, advisory-only access, cache/projection rebuildability and off-switch failures |
+| RTV3-08 | privacy-filtered historical projections, bounded reports, retention, source-linked memory and role continuity |
+| RTV3-09 | integrated qualification of all previously shipped engineering criteria; **no postponed feature or architectural rescue work** |
+
+**Sizing:** nine RTV3 milestones are not nine Git slices. One active `slice/*` branch is permitted at a time under current repository governance; each accepted milestone ordinarily contains 6–10 bounded packets (RTV3-01 defines eight). The final Git slice count is set by accepted specs and safe integration boundaries, not guessed from the number of milestones.
+
