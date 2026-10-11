@@ -224,6 +224,8 @@ for (const [label, size, zoom] of [["390 px", { width: 390, height: 844 }, "100%
     await judge(page, "New item with advanced details", SAFE);
     await page.keyboard.press("Escape");
     await page.goto("/staff/items?item=ITM-0135");
+    // The loading sheet replaces its header when the item detail arrives.
+    await expect(page.getByRole("tablist", { name: "Item sections" })).toBeVisible();
     await judge(page, "An item", SAFE);
     await page.keyboard.press("Escape");
     await page.goto("/staff/admin/staff");
