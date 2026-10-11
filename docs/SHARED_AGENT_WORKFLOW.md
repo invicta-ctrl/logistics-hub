@@ -4,6 +4,8 @@
 
 **One writable worktree + optional detached read-only specialist worktrees + one active slice branch + one writer + small verified commits + immediate merge to main when green + prune the finished branch.**
 
+**Owner release doctrine (2026-10-11):** Never present an incomplete product/version as complete. Coherent working checkpoints are committed and pushed to the single active slice branch. After its own accepted scope, verification and exact-head CI pass, an independently usable slice merges immediately to updated main, its deployment is verified, and the branch is pruned. Resume version-level work using a new slice branched from the latest main. Never publish a partially functional capability to main or falsely advertise its version in Administration. A blocked slice remains transparently recorded in handoff; do not silently truncate scope to claim completion.
+
 ## Workspace
 
 Codex, Claude, and Forge use the writable/local-preview worktree:
