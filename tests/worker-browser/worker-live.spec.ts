@@ -15,6 +15,23 @@ async function signIn(page: Page) {
   await expect(page.getByRole("heading", { name: "Items" })).toBeVisible();
 }
 
+async function finishCaptureAndOpen(page: Page, name: string) {
+  await expect(page.locator("#cat-list .cat-row", { hasText: name }).getByText("Saved", { exact: true })).toBeVisible();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.locator("#cat-finish").click();
+  await expect(page.getByRole("heading", { name: "Cataloguing finished" })).toBeVisible();
+  await expect(page.locator("#rev-go")).toHaveText("Mark 1 item reviewed");
+  await page.locator("#rev-go").click();
+  await expect(page.locator("#rev-text")).toContainText("1 item marked reviewed");
+  const { items } = await (await page.request.get("/api/staff/inventory")).json() as {
+    items: Array<{ id: string; name: string; needsReview: boolean; lendingAudience: string }>;
+  };
+  const item = items.find((item) => item.name === name);
+  expect(item).toMatchObject({ needsReview: false, lendingAudience: "NOT_AVAILABLE_FOR_LENDING" });
+  await page.goto(`/staff/items?item=${item!.id}`);
+  await expect(page.getByRole("tablist", { name: "Item sections" })).toBeVisible();
+}
+
 test("public Lending Hub fails closed on freshly migrated data", async ({ page, request }) => {
   const catalog = await (await request.get("/api/public/catalog")).json() as { items: unknown[] };
   expect(catalog.items).toEqual([]);
@@ -369,20 +386,21 @@ test("migrated review: fill the gaps, mark reviewed, and move to the next record
 
 test("create, warn on a duplicate name, then deactivate without deleting", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("button", { name: "New item" }).click();
-  const sheet = page.getByRole("dialog");
-  await sheet.getByLabel("Name", { exact: true }).fill("detergent bar");
-  await expect(page.getByText("ITM-0001 already uses this name.")).toBeVisible();
-  await sheet.getByLabel("Name", { exact: true }).fill("E2E Extension Cord");
-  await sheet.getByLabel("Category", { exact: true }).fill("office equipment and supplies");
-  await sheet.getByLabel("Unit", { exact: true }).fill("piece");
-  await expect(sheet.getByLabel("Shown to")).toHaveValue("STUDENTS_AND_USC_STAFF");
-  await expect(sheet.getByLabel("Borrow or take").locator("option")).toHaveText(["Borrow (Loanable)", "Take (Consumable)"]);
-  await sheet.getByLabel("Borrow or take").selectOption("Borrow (Loanable)");
-  await sheet.locator("#item-advanced > summary").click();
-  await sheet.getByLabel("Opening quantity").fill("3");
-  await page.getByRole("button", { name: "Create item" }).click();
-  await expect(page.getByText(/Item ITM-\d+ created\./)).toBeVisible();
+  await page.getByRole("link", { name: "Add items", exact: true }).click();
+  await page.locator("#start-place").selectOption("");
+  await page.getByRole("button", { name: /^Start cataloguing/ }).click();
+  await expect(page.locator("#cat-form")).toBeVisible();
+  await page.locator("#cat-name").fill("detergent bar");
+  await expect(page.locator("#cat-dup")).toContainText("This may already be in the catalog.");
+  await expect(page.locator("#cat-dup").getByRole("link", { name: /^Open Detergent Bar/ })).toHaveAttribute("href", "/staff/items?item=ITM-0001");
+  await page.locator("#cat-name").fill("E2E Extension Cord");
+  await page.getByRole("button", { name: /^Borrow & return/ }).click();
+  await page.locator("#cat-category").fill("office equipment and supplies");
+  await page.locator("#cat-unit").fill("piece");
+  await page.locator("#cat-qty").fill("3");
+  await page.locator("#cat-save").click();
+  await finishCaptureAndOpen(page, "E2E Extension Cord");
+  const sheet = page.getByRole("dialog", { name: "E2E Extension Cord" });
   await expect(page.getByLabel("Quantity on hand")).toHaveValue("3");
   await expect(page.locator(".profile__meta").first()).toContainText("Office Equipment and Supplies");
 
@@ -449,7 +467,7 @@ test("staff workspace fits a 320 px phone", async ({ page }) => {
   // At 200% text the account button, every section and the page's primary action stay reachable on screen.
   await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
   expect(await page.evaluate(onScreen)).toBeTruthy();
-  expect(await page.evaluate(() => document.querySelector("#new-item")!.getBoundingClientRect().right <= window.innerWidth)).toBeTruthy();
+  expect(await page.evaluate(() => document.querySelector("#add-items")!.getBoundingClientRect().right <= window.innerWidth)).toBeTruthy();
   await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
   await page.locator("tbody .row-link").first().click();
   await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
@@ -710,20 +728,22 @@ test("activity export: the filtered list as a safe CSV file, audited for the own
 
 test("open units: opt in, open, use, mark low, open another, mark empty, close by a count, and read it all in History and Activity", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("button", { name: "New item" }).click();
-  const sheet = page.getByRole("dialog");
-  await sheet.getByLabel("Name", { exact: true }).fill("E2E Copy Paper");
-  await sheet.getByLabel("Category", { exact: true }).fill("school supplies");
-  await sheet.getByLabel("Unit", { exact: true }).fill("ream");
-  await expect(sheet.getByLabel("How is it used?")).toBeHidden();
-  await sheet.getByLabel("Borrow or take").selectOption("Take (Consumable)");
-  await sheet.locator("#item-advanced > summary").click();
-  await sheet.getByLabel("Shown to").selectOption("NOT_AVAILABLE_FOR_LENDING");
-  // Every item starts as Whole unit; staff opt in.
-  await expect(sheet.getByLabel("How is it used?")).toHaveValue("WHOLE_UNIT");
-  await sheet.getByLabel("How is it used?").selectOption("OPEN_UNIT");
-  await sheet.getByLabel("Opening quantity").fill("8");
-  await page.getByRole("button", { name: "Create item" }).click();
+  await page.getByRole("link", { name: "Add items", exact: true }).click();
+  await page.locator("#start-place").selectOption("");
+  await page.getByRole("button", { name: /^Start cataloguing/ }).click();
+  await expect(page.locator("#cat-form")).toBeVisible();
+  await page.locator("#cat-name").fill("E2E Copy Paper");
+  await page.locator("#cat-category").fill("school supplies");
+  await page.locator("#cat-unit").fill("ream");
+  await page.locator("#cat-behaviour").getByRole("button", { name: /^Take / }).click();
+  await expect(page.locator("#cat-behaviour").getByRole("button", { name: /^Take / })).toHaveAttribute("aria-pressed", "true");
+  // Taking whole units and gradually using an open unit remain separate choices.
+  await expect(page.getByRole("button", { name: /^Use gradually/ })).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: /^Use gradually/ }).click();
+  await page.locator("#cat-qty").fill("8");
+  await page.locator("#cat-save").click();
+  await finishCaptureAndOpen(page, "E2E Copy Paper");
+  const sheet = page.getByRole("dialog", { name: "E2E Copy Paper" });
   await expect(page.getByLabel("Quantity on hand")).toHaveValue("8");
 
   const units = sheet.locator("#open-units");
@@ -780,7 +800,8 @@ test("open units: opt in, open, use, mark low, open another, mark empty, close b
   const id = (await page.locator(".sheet__kicker .mono").textContent())!;
   await page.goto(`/staff/activity?item=${id}`);
   const rows = page.locator(".activity-row");
-  await expect(rows).toHaveCount(9);
+  await expect(rows).toHaveCount(10);
+  await expect(rows.filter({ hasText: "review flag" })).toHaveCount(1);
   await expect(rows.nth(1)).toContainText("E2E Staff's count closed 1 open ream of E2E Copy Paper no longer on the shelf.");
   await expect(rows.nth(2)).toContainText("E2E Staff marked an open ream of E2E Copy Paper empty: 7 reams on hand.");
   await expect(rows.nth(2)).toContainText("8 → 7 reams");

@@ -37,6 +37,8 @@ async function mock(page: Page) {
   await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(session) }));
   await page.route("**/api/staff/inventory", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify({ revision: 1, items: ITEMS, categories: ["FURNITURE", "SUPPLIES"], units: ["piece"], locations: PLACES }) }));
   await page.route("**/api/staff/locations", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify({ revision: 1, locations: PLACES.map((entry) => ({ ...entry, itemCount: ITEMS.filter((it) => it.locationId === entry.id).length })) }) }));
+  await page.route("**/api/staff/catalogue", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ session: null, others: [], reviewLater: { total: 0, items: [] } }) }));
+  await page.route("**/api/staff/catalogue/snapshot", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ revision: 1, items: ITEMS, categories: ["FURNITURE", "SUPPLIES"], units: ["piece"], places: PLACES }) }));
   await page.route("**/api/staff/location-media/**", (route) => route.fulfill({ contentType: "image/png", body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") }));
 }
 
@@ -86,31 +88,20 @@ test.describe("Items by place", () => {
     await expect(page.locator("tbody tr").first()).toContainText("Location reported");
   });
 
-  test("New item pressed before the list has answered waits for it, so the form still offers every place", async ({ page }) => {
-    // The page draws at once; a slow first answer used to leave the form with no place to choose, even after it arrived.
+  test("Add items pressed before the list has answered opens the unified place picker", async ({ page }) => {
+    // The Catalogue uses its own snapshot, so a slow Items answer cannot leave creation without places.
     let answer!: () => void;
     const held = new Promise<void>((resolve) => { answer = resolve; });
     await page.route("**/api/staff/inventory", async (route) => { await held; await route.fallback(); });
     await page.goto("/staff/items");
-    await page.getByRole("button", { name: "New item" }).click();
+    await page.getByRole("link", { name: "Add items" }).click();
+    await expect(page.getByRole("heading", { name: "Add items", level: 1 })).toBeVisible();
     answer();
-    const form = page.getByRole("dialog", { name: "Add an item" });
-    await expect(form.getByRole("combobox", { name: /^Place/ }).getByRole("option", { name: "Office › Storage Area › Cabinet 1 › Shelf 2" })).toHaveCount(1);
-    await expect(form.getByLabel("Name", { exact: true })).toBeFocused();
-  });
-
-  test("an item that opens while New item waits for the list keeps its sheet (review on PR 24)", async ({ page }) => {
-    let answer!: () => void;
-    const held = new Promise<void>((resolve) => { answer = resolve; });
-    await page.route("**/api/staff/inventory", async (route) => { await held; await route.fallback(); });
-    // The address names an item, which opens as soon as the list answers: the New item pressed before it is then stale.
-    await page.goto("/staff/items?item=ITM-0002");
-    await page.getByRole("button", { name: "New item" }).click();
-    answer();
-    await expect(page.getByRole("dialog", { name: "Sample Item 2" })).toBeVisible();
-    await page.waitForTimeout(500);
-    await expect(page.getByRole("dialog", { name: "Sample Item 2" })).toBeVisible();
-    await expect(page.getByRole("dialog", { name: "Add an item" })).toHaveCount(0);
+    const picker = page.getByLabel("Place", { exact: true });
+    await expect(picker).toBeVisible();
+    await expect(picker.locator("option")).toHaveCount(PLACES.length + 1);
+    await expect(picker.getByRole("option", { name: "Office › Storage Area › Cabinet 1 › Shelf 2", exact: true })).toHaveCount(1);
+    await expect(picker.getByRole("option", { name: "No place set", exact: true })).toHaveCount(1);
   });
 
   test("on a phone and a tablet the place sits under the item name and nothing scrolls sideways", async ({ page }) => {

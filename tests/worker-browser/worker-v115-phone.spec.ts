@@ -217,12 +217,11 @@ for (const [label, size, zoom] of [["390 px", { width: 390, height: 844 }, "100%
     await judge(page, "Update stock", SAFE);
     await page.keyboard.press("Escape");
     await page.goto("/staff/items");
-    await page.locator("#new-item").click();
-    await judge(page, "New item", SAFE);
-    await page.locator("#item-advanced > summary").click();
-    await expect(page.locator("#item-advanced")).toHaveAttribute("open", "");
-    await judge(page, "New item with advanced details", SAFE);
-    await page.keyboard.press("Escape");
+    const addItems = page.getByRole("link", { name: "Add items", exact: true });
+    await expect(addItems).toHaveCount(1);
+    await expect(addItems).toHaveAttribute("href", "/staff/catalogue");
+    await addItems.click();
+    await expect(page.getByRole("heading", { name: "Add items", exact: true })).toBeVisible();
     await page.goto("/staff/items?item=ITM-0135");
     // The loading sheet replaces its header when the item detail arrives.
     await expect(page.getByRole("tablist", { name: "Item sections" })).toBeVisible();

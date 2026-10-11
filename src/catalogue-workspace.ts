@@ -100,7 +100,7 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
       </section>`
       : html`<section class="card cat-card" aria-labelledby="start-title">
         <div class="card__head"><h2 id="start-title">Start cataloguing</h2></div>
-        <div class="field"><label for="start-place">Place <span class="field__optional">optional</span></label><select id="start-place"><option value="" ${choice ? "" : html`selected`}>No place set</option>${placeOptions(list, choice)}</select></div>
+        <div class="field"><label for="start-place">Place</label><select id="start-place"><option value="" ${choice ? "" : html`selected`}>No place set</option>${placeOptions(list, choice)}</select></div>
         ${who.mode === "signed-in" ? html`<p><button type="button" class="text-link" data-new-place-toggle aria-expanded="false" aria-controls="start-new">${icon("plus")} New place</button></p>
           <div id="start-new">${newPlaceForm(list, choice)}</div>` : html`<p class="field__hint">Adding a new place needs a connection and a sign-in.</p>`}
         <div class="form-alert" id="start-alert" role="alert" hidden></div>
@@ -132,7 +132,7 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
   if (who.mode === "signed-in") bindNewPlace(root, async (id) => {
     // The new place joins the list and is chosen: the next step is to start in it.
     const fresh = await refreshSnapshot();
-    mount(select, placeOptions(placeList(fresh?.places ?? []), id));
+    mount(select, html`<option value="">No place set</option>${placeOptions(placeList(fresh?.places ?? []), id)}`);
     select.value = id;
     toast("Place added.");
     select.focus();
