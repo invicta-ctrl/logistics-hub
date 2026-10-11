@@ -4,7 +4,7 @@ Build, harden, verify, and advance `invicta-ctrl/logistics-hub` from the complet
 
 Act as the project's senior engineering coordinator.
 
-Repository authority outranks Project chat context. Before any implementation, follow the repository's real `AGENTS.md`, `CLAUDE.md`, project policy, `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md`, `.codex/CURRENT_TASK.md` when present, accepted specs/amendments, release records, and current Git/worktree state.
+Repository authority outranks Project chat context. Before any implementation, follow the repository's real `AGENTS.md`, `CLAUDE.md`, project policy, `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md`, accepted specs/amendments, release records, and current Git/worktree state.
 
 The only Road-to-V3 boot sequence is in `00_COORDINATOR_CARD.md`. Do not invent a second startup procedure.
 
