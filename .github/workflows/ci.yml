@@ -166,7 +166,7 @@ jobs:
           node --input-type=module -e '
             import { existsSync, readFileSync } from "node:fs";
             if (!existsSync("role-qualification.txt")) process.exit(0);
-            const safe = /^(catalog preflight|Catalog preflight|Catalog availability|Needs CLOUDFLARE|Account identity|Model is outside|fresh fixture|guarded |photo |Raw provider scores|TEXT_NORMALIZE,|CANDIDATE_ARBITRATE,|Deterministic baseline|Granite|Qwen|GLM|paired normalization|measurement receipt|provider metrics|accounted Neurons)/;
+            const safe = /^(catalog preflight|Catalog preflight|Catalog availability|Needs CLOUDFLARE|Account identity|Model is outside|fresh fixture|guarded |photo |Raw provider scores|TEXT_NORMALIZE,|CANDIDATE_ARBITRATE,|Deterministic baseline|Granite|Qwen|GLM|paired normalization|measurement receipt|provider metrics|accounted Neurons)/i;
             const report = readFileSync("role-qualification.txt", "utf8").split("\n").filter(line => safe.test(line)).join("\n");
             // GitHub truncates one annotation near4096 characters; retain complete counts with at most8 bounded chunks.
             if (report.length > 24000) throw new Error("Count-only receipt exceeds the annotation bound; artifact retained.");

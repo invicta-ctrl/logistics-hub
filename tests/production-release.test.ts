@@ -681,7 +681,7 @@ describe("bounded qualification receipts", () => {
 
   it("publishes complete escaped counts in bounded annotations and refuses excess instead of silently truncating", () => {
     const dir = temp("lh-receipt-publish-"), script = command("Publish the bounded count-only receipt");
-    const report = `photo cases ${JSON.stringify({ markers: "%0A%\r", counts: "x".repeat(11000) })}\nphoto receipt {"complete":false,"stopped":"TEST_ONLY"}`;
+    const report = `photo cases ${JSON.stringify({ markers: "%0A%\r", counts: "x".repeat(11000) })}\nphoto receipt {"complete":false,"stopped":"TEST_ONLY"}\nPhoto source/prepare validation failed. No inference was sent.`;
     fs.writeFileSync(path.join(dir, "role-qualification.txt"), `DO_NOT_PUBLISH_THIS_LINE\n${report}\n`);
     const result = execute(script, dir);
     expect(result.status, result.stderr).toBe(0);
