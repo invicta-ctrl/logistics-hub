@@ -28,3 +28,8 @@ Read the directly verified matrix in `docs/road-to-v2/evidence/v1.16-release-qua
 Only after all agent-executable gates pass may status become AWAITING_OWNER_ACCEPTANCE and the owner be asked for final V1.16 acceptance. Only explicit final approval permits product-release.json promotion. Then qualify exact release source, integrate, verify the actual production artifact and Administration version/changelog, record RELEASED_VERIFIED and close. Until then V1.16/final V2 readiness stay OPEN; no V2.1. If interrupted, finish a safe verified checkpoint, record exact HEAD/results/first command and yield the lock.
 
 Authority: accepted V1.16 specification, execution card, product-version governance and latest owner release request. Historical V1.15/V2.0 evidence is preserved.
+
+
+### Workflow contract correction checkpoint
+
+Source `dd75547f03457c87973c389d3e43559ca17d0c63` PR40: full CI38210131289/38210313980 failed only the existing all-CI-file production-credential assertion; CodeQL38210314007 and PR Worker integration passed. Final source adds strict manual-job isolation checks while preserving the original prohibition for ordinary regression jobs and every other unapproved workflow. Full production-release/evaluation unit cases56/56 pass; final full source CI must rerun before integration. Provider measurement is still zero/UNMEASURED, no promotion or production data change.

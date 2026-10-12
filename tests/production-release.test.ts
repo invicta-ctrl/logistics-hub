@@ -616,6 +616,27 @@ describe("the manifest and the workflow", () => {
         expect(text.match(/^\s*npx wrangler .*$/gm)?.map((line) => line.trim())).toEqual(["npx wrangler deploy --dry-run", "npx wrangler deploy --message \"${message:0:100}\"", "npx wrangler rollback \"$TARGET\" --message \"${REASON:0:100}\" --yes"]);
         continue;
       }
+      if (file === "ci.yml" && text.includes("\n  role-qualification:")) {
+        // Accepted V1.16 permits a manual provider benchmark; ordinary regression jobs still never receive production credentials.
+        const start = text.indexOf("\n  role-qualification:");
+        const ordinary = text.slice(0, start), qualification = text.slice(start);
+        expect(ordinary).not.toMatch(/production-release|migrations apply|CLOUDFLARE_API_TOKEN|environment:\s*production/);
+        expect([...text.matchAll(/^  ([\w-]+):\n    (?:if|runs-on):/gm)].map((match) => match[1])).toEqual(["checks", "worker-e2e", "role-qualification"]);
+        expect(ordinary.match(/if: github.event_name != 'workflow_dispatch'/g)).toHaveLength(2);
+        expect(qualification).toContain("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'");
+        expect(qualification).toContain("environment: production");
+        expect(qualification).toContain("persist-credentials: false");
+        expect(qualification).toContain('expected !== process.env.GITHUB_SHA || checked !== expected || current !== expected');
+        expect(qualification).toContain('"ls-remote", "origin", "refs/heads/main"');
+        expect([...qualification.matchAll(/\$\{\{\s*secrets\.([A-Z_]+)\s*\}\}/g)].map((match) => match[1]).sort()).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"]);
+        expect(qualification.slice(0, qualification.indexOf("- name: Measure existing roles"))).not.toContain("secrets.");
+        expect(qualification.slice(qualification.indexOf("- uses: actions/upload-artifact"))).not.toContain("secrets.");
+        expect(qualification).toContain("node scripts/evaluate-roles.mjs --fixtures tests/fixtures/v116-role-heldout.json --challenger qwen --granite 60 --qwen 60 --glm 5 --stop-neurons 400");
+        expect(qualification).not.toMatch(/production-release|migrations apply|wrangler|d1 (execute|export)|r2 bucket|continue-on-error/);
+        expect(qualification).toContain('exit "$qualification_status"');
+        expect(qualification).toContain("path: role-qualification.txt");
+        continue;
+      }
       expect(text, file).not.toMatch(/production-release|migrations apply|CLOUDFLARE_API_TOKEN|environment:\s*production/);
     }
     const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
