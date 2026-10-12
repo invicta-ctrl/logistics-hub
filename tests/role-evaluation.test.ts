@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { absentNames, baselineAnswer, closest, isAmbiguous, passes, score, similarity, splitOf, variantsOf } from "../src/role-evaluation";
@@ -99,6 +99,43 @@ describe("bounded fresh provider evaluation", () => {
     for (const args of [["--dry", "--granite", "NaN"], ["--dry", "--stop-neurons", "-1"], ["--dry", "--fixtures"], ["--dry", "--challenger", "paid-model"]]) {
       expect(run(args).status).toBe(1);
     }
+  });
+
+  it("refuses unreviewed file egress and reads one bounded descriptor snapshot despite a replaced pathname", () => {
+    const dir = mkdtempSync(join(tmpdir(), "role-fixture-"));
+    const path = join(dir, "fixture.json"), preload = join(dir, "snapshot.mjs");
+    const original = readFileSync("tests/fixtures/v116-role-heldout.json");
+    const changed = JSON.parse(original.toString());
+    changed.nameCases[0].name = "DO_NOT_SEND_PRIVATE_TEST_DATA";
+    writeFileSync(path, JSON.stringify(changed));
+    writeFileSync(preload, `globalThis.fetch = async () => { console.log('UNAUTHORIZED_EGRESS'); throw new Error(); };`);
+    try {
+      const input = [...flags]; input[input.indexOf("--fixtures") + 1] = path;
+      const refused = run(input, preload);
+      expect(refused.status).toBe(2);
+      expect(refused.stderr).toContain("Unreviewed fixture bytes");
+      expect(refused.stdout).not.toContain("UNAUTHORIZED_EGRESS");
+      expect(refused.stdout).not.toContain("DO_NOT_SEND_PRIVATE_TEST_DATA");
+      writeFileSync(path, original);
+      writeFileSync(preload, `
+        import fs from 'node:fs';
+        const open = fs.openSync;
+        fs.openSync = function (name, ...args) {
+          const fd = open.call(this, name, ...args);
+          if (name === ${JSON.stringify(path)}) {
+            fs.unlinkSync(name); fs.writeFileSync(name, ${JSON.stringify(JSON.stringify(changed))});
+            console.log('CONTROLLED_PATH_REPLACEMENT');
+          }
+          return fd;
+        };
+        globalThis.fetch = async () => { throw new Error('unexpected dry egress'); };
+      `);
+      const snapshot = run(["--dry", ...input], preload);
+      expect(snapshot.status).toBe(0);
+      expect(snapshot.stdout).toContain("CONTROLLED_PATH_REPLACEMENT");
+      expect(snapshot.stdout).toContain("72d23615672d32fddca71650bd02ea48952df1e8f88556cb4748de97ef404297");
+      expect(snapshot.stdout).toContain("baseline answered 36 (precision 100%)");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
   it("keeps valid abstention, invalid output and failures distinct; caps paired calls and refuses partial measurements", () => {

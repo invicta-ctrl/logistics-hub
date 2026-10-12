@@ -33,3 +33,8 @@ Authority: accepted V1.16 specification, execution card, product-version governa
 ### Workflow contract correction checkpoint
 
 Source `dd75547f03457c87973c389d3e43559ca17d0c63` PR40: full CI38210131289/38210313980 failed only the existing all-CI-file production-credential assertion; CodeQL38210314007 and PR Worker integration passed. Final source adds strict manual-job isolation checks while preserving the original prohibition for ordinary regression jobs and every other unapproved workflow. Full production-release/evaluation unit cases56/56 pass; final full source CI must rerun before integration. Provider measurement is still zero/UNMEASURED, no promotion or production data change.
+
+
+### Combined CodeQL and controlled failure checkpoint
+
+Source45975 full PR regression CI38211511945 passed and CodeQL workflow38211511992 passed, but combined CodeQL check114686667350 FAILED (fixture stat/read race; intended file egress warning). This is not a security-passing source. Duplicate push38211508259 failed a missed staff-bundle fault injection (89Worker cases passed). Current repair uses a bounded same-descriptor snapshot and approved-public fixture digest before any outbound request;12 role-evaluation cases pass including no-egress and pathname replacement. Scoped intended-transfer annotation is justified in the qualification record; require actual combined CodeQL success before integration. The bundle probe installs failure before navigation in a dedicated SW-blocked context;5/5 repeated real-Worker cases pass, all assertions retained. Final source is not yet integrated; still one active slice/writer, no real inference or product identity promotion.

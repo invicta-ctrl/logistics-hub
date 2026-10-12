@@ -56,12 +56,26 @@ const { outputFiles } = await build({
 });
 const m = await import(`data:text/javascript;base64,${Buffer.from(outputFiles[0].text).toString("base64")}`);
 let fixture = null, fixtureHash = null;
+const PUBLIC_FIXTURE_SHA256 = "72d23615672d32fddca71650bd02ea48952df1e8f88556cb4748de97ef404297";
 if (fixturePath) {
   try {
-    if (!fs.statSync(fixturePath).isFile() || fs.statSync(fixturePath).size > 512_000) throw new Error();
-    const bytes = fs.readFileSync(fixturePath);
-    fixture = JSON.parse(bytes);
+    const fd = fs.openSync(fixturePath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    let bytes;
+    try {
+      if (!fs.fstatSync(fd).isFile()) throw new Error();
+      const buffer = Buffer.alloc(512_001);
+      let count = 0;
+      while (count < buffer.length) {
+        const read = fs.readSync(fd, buffer, count, buffer.length - count, count);
+        if (!read) break;
+        count += read;
+      }
+      if (count > 512_000) throw new Error();
+      bytes = buffer.subarray(0, count);
+    } finally { fs.closeSync(fd); }
     fixtureHash = createHash("sha256").update(bytes).digest("hex");
+    if (!dry && fixtureHash !== PUBLIC_FIXTURE_SHA256) { console.error("Unreviewed fixture bytes. No inference was sent."); process.exit(2); }
+    fixture = JSON.parse(bytes);
     if (!fixture || typeof fixture !== "object" || typeof fixture.fixtureVersion !== "string" || !fixture.fixtureVersion.trim() || fixture.fixtureVersion.length > 80
       || !Array.isArray(fixture.nameCases) || !fixture.nameCases.length || fixture.nameCases.length > 150) throw new Error();
     const ids = new Set();
@@ -146,6 +160,7 @@ async function ask(role, task, challengerCall = false) {
   try {
     const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/ai/run/${model}`, {
       method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, signal: AbortSignal.timeout(10000),
+      // lgtm[js/file-access-to-http] Only SHA256-verified public fixture bytes reach inference; private or changed files are refused before any request.
       body: JSON.stringify({ messages: [{ role: "system", content: task.system }, { role: "user", content: task.user }],
         response_format: { type: "json_schema", json_schema: { type: "object", properties: { [task.field]: { type: ["string", "null"], enum: [...task.allowed, null] } }, required: [task.field], additionalProperties: false } },
         max_tokens: m.ROLE_LIMITS[role].maxTokens, temperature: 0, ...(limit.thinkingOption ? { chat_template_kwargs: { enable_thinking: false } } : {}) })

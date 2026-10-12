@@ -33,20 +33,24 @@ test("public Lending Hub fails closed on freshly migrated data", async ({ page, 
   await expect(page.getByRole("heading", { name: "No items are open for borrowing yet" })).toBeVisible();
 });
 
-test("failed staff bundle reloads once when the server is reachable", async ({ page, request }) => {
-  expect((await request.get("/build.json")).status()).toBe(404);
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Borrow equipment from the USC Department of Logistics" })).toBeVisible();
-  let failed = false;
-  await page.route("**/assets/staff-*.js", (route) => {
-    if (failed) return route.continue();
-    failed = true;
-    return route.abort("failed");
-  });
-  await page.getByRole("contentinfo").getByRole("link", { name: "Staff sign in" }).click();
-  await expect(page.getByRole("textbox", { name: "Username" })).toBeVisible();
-  expect(failed).toBe(true);
-  expect(await page.evaluate(() => sessionStorage.getItem("reloaded-for-update"))).toBeNull();
+test("failed staff bundle reloads once when the server is reachable", async ({ browser, request, baseURL }) => {
+  const context = await browser.newContext({ serviceWorkers: "block", baseURL });
+  const page = await context.newPage();
+  try {
+    expect((await request.get("/build.json")).status()).toBe(404);
+    let failed = false;
+    await page.route("**/assets/staff-*.js", (route) => {
+      if (failed) return route.continue();
+      failed = true;
+      return route.abort("failed");
+    });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Borrow equipment from the USC Department of Logistics" })).toBeVisible();
+    await page.getByRole("contentinfo").getByRole("link", { name: "Staff sign in" }).click();
+    await expect(page.getByRole("textbox", { name: "Username" })).toBeVisible();
+    expect(failed).toBe(true);
+    expect(await page.evaluate(() => sessionStorage.getItem("reloaded-for-update"))).toBeNull();
+  } finally { await context.close(); }
 });
 
 test("staff pages and every staff write reject anonymous and cross-site callers", async ({ page, request, baseURL }) => {
