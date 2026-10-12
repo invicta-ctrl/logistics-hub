@@ -111,7 +111,8 @@ describe("the V1.11 second opinion stays a measurement", () => {
   it("the Workers AI binding stays inside bounded adapters and the audited review boundary", () => {
     expect(readFileSync("wrangler.jsonc", "utf8")).toMatch(/"ai"\s*:\s*\{\s*"binding"\s*:\s*"AI"\s*\}/);
     const sources = readdirSync("src").filter((file) => /\.ts$/.test(file));
-    expect(sources.filter((file) => /\bai\.run\(|\.AI\.run\(/.test(readFileSync(`src/${file}`, "utf8")))).toEqual(["ai-roles.ts", "ambient-assist.ts"]);
+    // Photo and text adapters now share one bounded call site; no other module may invoke the binding directly.
+    expect(sources.filter((file) => /\bai\.run\(|\.AI\.run\(/.test(readFileSync(`src/${file}`, "utf8")))).toEqual(["ambient-assist.ts"]);
     // Staff text requests enter only through the server-issued review boundary. Trusted activation still needs its benchmark gate.
     expect(sources.filter((file) => readFileSync(`src/${file}`, "utf8").includes("./ai-roles"))).toEqual(["ai-review.ts"]);
     expect(sources.filter((file) => /env\.AI\b/.test(readFileSync(`src/${file}`, "utf8")))).toEqual(["worker.ts"]);

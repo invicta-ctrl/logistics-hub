@@ -1,6 +1,6 @@
 # Session Handoff — Logistics Hub
 
-**State: V1.15 closed; V1.16 A1 delivered; A2 provider fallback/core independence slice IN PROGRESS, 2026-10-11. Full V1.16 remains OPEN.**
+**State: V1.15 closed; V1.16 A1 delivered; A2 provider fallback/core independence slice IN PROGRESS, 2026-10-12. Full V1.16 remains OPEN.**
 
 ## Exact source and ownership
 
@@ -31,6 +31,8 @@
 - **NOT completed:** all of A's degraded-mode/router qualification, contextual hints, verified learning/model evaluation, artifact-bound Administration version/changelog, full V1.16 acceptance and final V2 readiness. No V3 implementation authorized by this slice.
 
 ## First next action
+
+Checkpoint `b2be5512c4dcd506e53c7e3604270e228b4ebb51`, PR #36: CI 38139248148 found only the existing source-boundary expectation still listing two direct AI call sites. That case now requires the single shared bounded call site, retaining every route/review restriction. Worker integration, CodeQL 38139248131 and Workers Build 114469680858 passed that checkpoint. Full CI on the corrected checkpoint is required before merging.
 
 Active branch `slice/v1.16-assist-fallbacks` from verified main `a869be4c27b51cb29dc50b167a6ee0e4d6c13b5d` (full CI 38138146737 passed). Codex holds the writer lock; one read-only specialist supplied a `/tmp` patch for existing core cases. A2 implementation is in `ambient-assist.ts`/`ai-roles.ts`: shared 10-second deadline, bounded failure codes, unchanged API fallback/reservations. Existing adapter cases qualify HTTP failures and ignored late answers; existing Worker cases hold an AI binding and assert zero calls through stock/count/replay and loans/returns/audit. Local build/typecheck/diff passed; automatic exact-source CI, CodeQL and configured deployment remain pending. No local product/provider tests. Read live HEAD/checks before integration. Preserve deterministic manual work and REVIEW_ONLY text roles. Continue B–E/S2–S5 only as independent complete outcomes. Push checkpoints, integrate each green slice, confirm deployment, prune; never label the full version COMPLETE while any accepted gate remains open.
 
