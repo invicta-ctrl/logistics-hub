@@ -29,6 +29,7 @@ concurrency:
 jobs:
   checks:
     if: github.event_name != 'workflow_dispatch'
+    name: ${{ github.event_name == 'workflow_dispatch' && 'qualification-no-checks' || 'checks' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -56,6 +57,7 @@ jobs:
 
   worker-e2e:
     if: github.event_name != 'workflow_dispatch'
+    name: ${{ github.event_name == 'workflow_dispatch' && 'qualification-no-worker-e2e' || 'worker-e2e' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

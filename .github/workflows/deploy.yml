@@ -1,4 +1,4 @@
-# Production deploys from GitHub, only of a commit on main whose CI passed (R9; accepted amendment
+# Production deploys from GitHub, only of a commit on main whose CI and exact-source CodeQL passed (R9; accepted amendment
 # docs/specs/accepted/2026-10-03-review-hardening-amendment.md, H8). Runbook: docs/DEPLOYMENT.md, "Deploys from CI".
 #
 # The automatic path is OFF until Earl switches it on with the repository variable DEPLOY_FROM_CI:
@@ -36,7 +36,7 @@ on:
         required: true
         type: string
       override_ci:
-        description: "deploy only, emergencies: allow a commit whose CI has not passed (the migration gate still applies)"
+        description: "deploy only, emergencies: allow a commit whose CI has not passed (CodeQL and migration gates still apply)"
         required: false
         type: boolean
         default: false
@@ -48,6 +48,7 @@ on:
 permissions:
   contents: read
   actions: read
+  checks: read
 
 concurrency:
   group: production-deploy
@@ -134,6 +135,13 @@ jobs:
         run: |
           npm ci --prefix ops
           npm ci --prefix release
+      - name: Require this source's CodeQL analysis and combined security check
+        if: steps.order.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.pick.outputs.sha }}
+        run: node ops/scripts/ops/deploy-gate.mjs --github-sha "$SHA" --github-repo "$REPO"
       - name: Refuse while production lacks a migration this commit carries
         if: steps.order.outputs.skip != 'true'
         env:
@@ -143,7 +151,9 @@ jobs:
       - name: Build
         if: steps.order.outputs.skip != 'true'
         working-directory: release
-        run: npm run build
+        env:
+          RELEASE_SHA: ${{ steps.pick.outputs.sha }}
+        run: GITHUB_SHA="$RELEASE_SHA" npm run build
       - name: Deploy
         if: steps.order.outputs.skip != 'true'
         working-directory: release
