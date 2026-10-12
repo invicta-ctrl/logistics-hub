@@ -14,7 +14,7 @@ on:
         required: true
         type: string
       receipt_run:
-        description: Optional read-only recovery of the completed V1.16 text qualification run 38215952629 (no inference)
+        description: Optional read-only recovery of a recorded V1.16 qualification receipt (no inference)
         required: false
         default: ""
         type: string
@@ -117,7 +117,7 @@ jobs:
         if: inputs.receipt_run == '' && inputs.qualification_task == 'fresh'
       - run: npx playwright install --with-deps chromium
         if: inputs.receipt_run == '' && inputs.qualification_task == 'fresh'
-      - name: Recover the completed public qualification receipt without inference
+      - name: Recover a recorded public qualification receipt without inference
         if: inputs.receipt_run != '' || inputs.qualification_task != 'fresh'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -126,14 +126,21 @@ jobs:
           node --input-type=module -e '
             import { execFileSync } from "node:child_process";
             import { readFileSync, writeFileSync } from "node:fs";
+            import { createHash } from "node:crypto";
             const run = process.env.RECEIPT_RUN;
-            if (run !== "38215952629") throw new Error("Only the recorded V1.16 receipt is authorized.");
+            const receipts = {
+              "38215952629": { sha: "3615f97eec335216b7ef5fb3d0ff198bdd44797c", result: "success", digests: ["72d23615672d32fddca71650bd02ea48952df1e8f88556cb4748de97ef404297"] },
+              "38320413046": { sha: "eb512c9bcde7cbedbc8da844a27d99ffeab1e09e", result: "failure", digests: ["da86911b98bf97973e0b5c38b1706ff9c235146986307fef86696095f0f81467", "fc57239292b72193ef2059ef317fbfac0a3469b74d83e5d8ac56ba3ff587f5ee"] }
+            };
+            if (!Object.hasOwn(receipts, run)) throw new Error("Only recorded V1.16 receipts are authorized.");
+            const expected = receipts[run];
             const source = JSON.parse(execFileSync("gh", ["api", `repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${run}`], { encoding: "utf8" }));
-            if (source.head_sha !== "3615f97eec335216b7ef5fb3d0ff198bdd44797c" || source.head_branch !== "main" || source.event !== "workflow_dispatch" || source.path !== ".github/workflows/ci.yml" || source.status !== "completed" || source.conclusion !== "success") throw new Error("Qualification receipt source mismatch.");
+            if (source.head_sha !== expected.sha || source.head_branch !== "main" || source.event !== "workflow_dispatch" || source.path !== ".github/workflows/ci.yml" || source.status !== "completed" || source.conclusion !== expected.result) throw new Error("Qualification receipt source mismatch.");
             execFileSync("gh", ["run", "download", run, "--repo", process.env.GITHUB_REPOSITORY, "--name", "v116-role-qualification", "--dir", "qualification-receipt"], { stdio: "ignore" });
             const receipt = readFileSync("qualification-receipt/role-qualification.txt");
-            if (receipt.byteLength > 128000 || !receipt.toString("utf8").includes("72d23615672d32fddca71650bd02ea48952df1e8f88556cb4748de97ef404297")) throw new Error("Unrecognized qualification receipt.");
-            writeFileSync("role-qualification.txt", receipt);
+            if (receipt.byteLength > 128000 || expected.digests.some(digest => !receipt.toString("utf8").includes(digest))) throw new Error("Unrecognized qualification receipt.");
+            const provenance = { run, source: source.head_sha, result: source.conclusion, bytes: receipt.byteLength, sha256: createHash("sha256").update(receipt).digest("hex"), additionalInferenceCalls: 0 };
+            writeFileSync("role-qualification.txt", Buffer.concat([Buffer.from(`measurement receipt source ${JSON.stringify(provenance)}\n`), receipt]));
           '
       - name: Measure fresh guarded roles and licensed photos
         if: inputs.receipt_run == '' && inputs.qualification_task == 'fresh'
@@ -161,7 +168,13 @@ jobs:
             if (!existsSync("role-qualification.txt")) process.exit(0);
             const safe = /^(catalog preflight|Catalog preflight|Catalog availability|Needs CLOUDFLARE|Account identity|Model is outside|fresh fixture|guarded |photo |Raw provider scores|TEXT_NORMALIZE,|CANDIDATE_ARBITRATE,|Deterministic baseline|Granite|Qwen|GLM|paired normalization|measurement receipt|provider metrics|accounted Neurons)/;
             const report = readFileSync("role-qualification.txt", "utf8").split("\n").filter(line => safe.test(line)).join("\n");
-            if (report) console.log(`::notice title=V1.16 qualification::${report.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A")}`);
+            // GitHub truncates one annotation near4096 characters; retain complete counts with at most8 bounded chunks.
+            if (report.length > 24000) throw new Error("Count-only receipt exceeds the annotation bound; artifact retained.");
+            const parts = Math.ceil(report.length / 3000);
+            for (let index = 0; index < parts; index += 1) {
+              const chunk = report.slice(index * 3000, (index + 1) * 3000);
+              console.log(`::notice title=V1.16 qualification ${index + 1}/${parts}::${chunk.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A")}`);
+            }
           '
       - uses: actions/upload-artifact@v4
         if: always()

@@ -644,10 +644,12 @@ describe("the manifest and the workflow", () => {
         expect(qualification).toContain("path: role-qualification.txt");
         const recovery = qualification.slice(qualification.indexOf("- name: Recover"), qualification.indexOf("- name: Measure"));
         expect(recovery).toContain("if: inputs.receipt_run != ''");
-        expect(recovery).toContain('run !== "38215952629"');
-        expect(recovery).toContain('source.head_sha !== "3615f97eec335216b7ef5fb3d0ff198bdd44797c"');
+        expect(recovery).toContain('!Object.hasOwn(receipts, run)');
+        expect(recovery).toContain('"38215952629": { sha: "3615f97eec335216b7ef5fb3d0ff198bdd44797c", result: "success"');
+        expect(recovery).toContain('"38320413046": { sha: "eb512c9bcde7cbedbc8da844a27d99ffeab1e09e", result: "failure"');
+        expect(recovery).toContain('source.head_sha !== expected.sha');
         expect(recovery).toContain('source.event !== "workflow_dispatch"');
-        expect(recovery).toContain('source.conclusion !== "success"');
+        expect(recovery).toContain('source.conclusion !== expected.result');
         expect(recovery).toContain('source.path !== ".github/workflows/ci.yml"');
         expect(recovery).not.toContain("secrets.");
         expect(recovery).not.toMatch(/evaluate-roles|fetch\(|ai\/run/);
@@ -662,6 +664,80 @@ describe("the manifest and the workflow", () => {
     }
     const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
     for (const [name, command] of Object.entries(pkg.scripts)) if (!/^(ops:release|admin)$/.test(name)) expect(command, name).not.toMatch(/migrations apply DB --remote|production-release/);
+  });
+});
+
+describe("bounded qualification receipts", () => {
+  const command = (name: string) => {
+    const ci = fs.readFileSync(".github/workflows/ci.yml", "utf8");
+    const start = ci.indexOf(`      - name: ${name}`), end = ci.indexOf("\n      - ", start + 1);
+    const block = ci.slice(start, end).match(/        run: \|\n([\s\S]*)/)?.[1];
+    if (!block) throw new Error("Qualification command missing");
+    return block.split("\n").map((line) => line.replace(/^          /, "")).join("\n");
+  };
+  const execute = (script: string, cwd: string, env = {}) => spawnSync("bash", ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", script], {
+    cwd, encoding: "utf8", timeout: 10_000, env: { ...process.env, ...env },
+  });
+
+  it("publishes complete escaped counts in bounded annotations and refuses excess instead of silently truncating", () => {
+    const dir = temp("lh-receipt-publish-"), script = command("Publish the bounded count-only receipt");
+    const report = `photo cases ${JSON.stringify({ markers: "%0A%\r", counts: "x".repeat(11000) })}\nphoto receipt {"complete":false,"stopped":"TEST_ONLY"}`;
+    fs.writeFileSync(path.join(dir, "role-qualification.txt"), `DO_NOT_PUBLISH_THIS_LINE\n${report}\n`);
+    const result = execute(script, dir);
+    expect(result.status, result.stderr).toBe(0);
+    const notices = result.stdout.trim().split("\n");
+    expect(notices.length).toBeGreaterThan(1);
+    expect(notices.length).toBeLessThanOrEqual(8);
+    const restored = notices.map((line, index) => {
+      expect(line).toMatch(new RegExp(`^::notice title=V1.16 qualification ${index + 1}/${notices.length}::`));
+      const body = line.split("::").slice(2).join("::");
+      expect(body.length).toBeLessThan(4096);
+      return body.replace(/%0A/g, "\n").replace(/%0D/g, "\r").replace(/%25/g, "%");
+    }).join("");
+    expect(restored).toBe(report);
+    expect(result.stdout).not.toContain("DO_NOT_PUBLISH_THIS_LINE");
+    fs.writeFileSync(path.join(dir, "role-qualification.txt"), `photo cases ${"x".repeat(24000)}`);
+    const excessive = execute(script, dir);
+    expect(excessive.status).not.toBe(0);
+    expect(excessive.stdout).not.toContain("::notice");
+    expect(excessive.stderr).toContain("artifact retained");
+  });
+
+  it("recovers only the recorded immutable failed source, retaining failure provenance with no inference", () => {
+    const script = command("Recover a recorded public qualification receipt without inference");
+    const fixture = "da86911b98bf97973e0b5c38b1706ff9c235146986307fef86696095f0f81467\nfc57239292b72193ef2059ef317fbfac0a3469b74d83e5d8ac56ba3ff587f5ee\nphoto receipt {\"complete\":false}";
+    const exercise = (scenario: string, requested = "38320413046") => {
+      const dir = temp("lh-receipt-recover-");
+      fs.writeFileSync(path.join(dir, "fixture"), fixture);
+      fs.writeFileSync(path.join(dir, "gh"), `#!/usr/bin/env node
+const fs = require("fs"), args = process.argv.slice(2);
+fs.appendFileSync("requests.jsonl", JSON.stringify(args) + "\\n");
+if (args[0] === "api") {
+  process.stdout.write(JSON.stringify({head_sha:process.env.SCENARIO === "wrong-source" ? "0".repeat(40) : "eb512c9bcde7cbedbc8da844a27d99ffeab1e09e",head_branch:"main",event:"workflow_dispatch",path:".github/workflows/ci.yml",status:"completed",conclusion:process.env.SCENARIO === "wrong-result" ? "success" : "failure"}));
+} else if (args[0] === "run" && args[1] === "download") {
+  fs.mkdirSync("qualification-receipt"); fs.copyFileSync("fixture","qualification-receipt/role-qualification.txt");
+} else process.exit(1);
+`, { mode: 0o700 });
+      const result = execute(script, dir, { PATH: `${dir}${path.delimiter}${process.env.PATH}`, GITHUB_REPOSITORY: "invicta-ctrl/logistics-hub", RECEIPT_RUN: requested, SCENARIO: scenario });
+      return { dir, result };
+    };
+    const accepted = exercise("recorded");
+    expect(accepted.result.status, accepted.result.stderr).toBe(0);
+    const recovered = fs.readFileSync(path.join(accepted.dir, "role-qualification.txt"), "utf8");
+    const provenance = JSON.parse(recovered.split("\n")[0].slice("measurement receipt source ".length));
+    expect(provenance).toMatchObject({run:"38320413046",source:"eb512c9bcde7cbedbc8da844a27d99ffeab1e09e",result:"failure",additionalInferenceCalls:0,sha256:sha256(Buffer.from(fixture))});
+    expect(recovered).toContain(fixture);
+    for (const scenario of ["wrong-source", "wrong-result"]) {
+      const refused = exercise(scenario);
+      expect(refused.result.status).not.toBe(0);
+      expect(fs.readFileSync(path.join(refused.dir, "requests.jsonl"), "utf8")).not.toContain('"download"');
+      expect(fs.existsSync(path.join(refused.dir, "role-qualification.txt"))).toBe(false);
+    }
+    for (const requested of ["toString", "1"]) {
+      const refused = exercise("recorded", requested);
+      expect(refused.result.status).not.toBe(0);
+      expect(fs.existsSync(path.join(refused.dir, "requests.jsonl"))).toBe(false);
+    }
   });
 });
 
