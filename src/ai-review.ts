@@ -1,4 +1,4 @@
-import { arbitrateTask, normalizeTask, route, runRole, secondOpinionTask, type FactCode } from "./ai-roles";
+import { arbitrateTask, normalizeTask, route, runRole, secondOpinionTask, ROLE_LIMITS, ROLE_MODELS, type FactCode, type TextRole, type RoleOutcome } from "./ai-roles";
 import { neuronsToday, type AiRunner } from "./ambient-assist";
 import { behaviourOf, formatItemName } from "./catalog-policy";
 import { suggest, verified, type Known } from "./catalogue-suggest";
@@ -6,10 +6,10 @@ import { words } from "./duplicates";
 import { audit, catalogRevision, InputError, type Actor } from "./inventory";
 import { KNOWLEDGE_VERSION } from "./item-knowledge";
 
-import type { ReviewOffer, KnowledgeProposal, ReviewOutcome as Outcome } from "./ai-review-types";
+import type { ReviewOffer, KnowledgeProposal, ReviewStats, ReviewOutcome as Outcome } from "./ai-review-types";
 
 type Reviewed = Known & { id: string };
-type StoredOffer = ReviewOffer & { actor: string; sessionId: string };
+type StoredOffer = ReviewOffer & { actor: string; sessionId: string; modelVersion: string | null; knowledgeVersion: number };
 const key = (actor: Actor) => `ai_review_offer:${actor.accountId}`;
 const normalized = (name: string) => words(name).join(" ");
 const names = (item: Reviewed) => [item.name, ...(item.aliases ?? "").split(/[;,\n]/)].map(normalized);
@@ -26,7 +26,7 @@ async function stored(db: D1Database, actor: Actor): Promise<{ raw: string; offe
   if (!raw) return null;
   try { return { raw, offer: JSON.parse(raw) as StoredOffer }; } catch { return null; }
 }
-const publicOffer = ({ actor: _actor, sessionId: _session, ...offer }: StoredOffer): ReviewOffer => offer;
+const publicOffer = ({ actor: _actor, sessionId: _session, modelVersion: _modelVersion, knowledgeVersion: _knowledgeVersion, ...offer }: StoredOffer): ReviewOffer => offer;
 
 async function digestId(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
@@ -42,9 +42,12 @@ export async function offerReview(db: D1Database, ai: AiRunner | undefined, acto
   if (session.owner !== actor.accountId) throw new InputError(403, "Start your own cataloguing session.");
   if (session.status !== "ACTIVE") throw new InputError(409, "This cataloguing session is finished.");
   const previous = await stored(db, actor);
-  if (previous?.offer.draftId === body.draftId && previous.offer.sessionId === sessionId && previous.offer.revision >= Number(body.revision)) return publicOffer(previous.offer);
+  if (previous?.offer.draftId === body.draftId && previous.offer.sessionId === sessionId && previous.offer.revision >= Number(body.revision)) {
+    const current = previous.offer.knowledgeVersion === KNOWLEDGE_VERSION && (!previous.offer.proposal || previous.offer.modelVersion === ROLE_MODELS[previous.offer.proposal.role]);
+    return publicOffer(current ? previous.offer : { ...previous.offer, proposal: null, label: null, reason: "STALE_POLICY" });
+  }
   const revision = await catalogRevision(db);
-  const claim: StoredOffer = { id: `AR-${await digestId(JSON.stringify([actor.accountId, sessionId, body.draftId, body.revision]))}`, actor: actor.accountId, sessionId, draftId: body.draftId, revision: Number(body.revision), catalogRevision: revision, observed: body.name.trim(), expiresAt: Date.now() + 30 * 60_000, proposal: null, label: null, reason: "PENDING" };
+  const claim: StoredOffer = { id: `AR-${await digestId(JSON.stringify([actor.accountId, sessionId, body.draftId, body.revision]))}`, actor: actor.accountId, sessionId, draftId: body.draftId, revision: Number(body.revision), catalogRevision: revision, observed: body.name.trim(), expiresAt: Date.now() + 30 * 60_000, proposal: null, label: null, modelVersion: null, knowledgeVersion: KNOWLEDGE_VERSION, reason: "PENDING" };
   const raw = JSON.stringify(claim);
   const now = new Date().toISOString();
   const [, claimed] = await db.batch([
@@ -57,6 +60,7 @@ export async function offerReview(db: D1Database, ai: AiRunner | undefined, acto
       .bind(key(actor), raw, now, actor.accountId, previous?.raw ?? null)
   ]);
   if (!claimed!.meta.changes) return publicOffer((await stored(db, actor))?.offer ?? { ...claim, reason: "UNAVAILABLE" });
+  let measured: { role: TextRole; version: string; outcome: RoleOutcome; neurons: number | null; ms: number } | null = null;
   try {
     const items = await reviewed(db);
     const wanted = normalized(claim.observed);
@@ -78,7 +82,10 @@ export async function offerReview(db: D1Database, ai: AiRunner | undefined, acto
     claim.reason = exactMatch ? "EXACT_MATCH" : "NO_RELEVANT_EVIDENCE";
     if (role) {
       const task = role === "CANDIDATE_ARBITRATE" ? arbitrateTask(claim.observed, candidates) : role === "TEXT_NORMALIZE" ? normalizeTask(claim.observed, terms, [...priority]) : secondOpinionTask(conflict);
+      const started = Date.now();
       const answer = await runRole(db, ai, role, task, "USER");
+      measured = { role, version: answer.version, outcome: answer.outcome, neurons: answer.neurons, ms: Date.now() - started };
+      claim.modelVersion = answer.version;
       claim.proposal = answer.proposal;
       claim.reason = answer.reason;
       claim.label = answer.proposal?.field === "id" ? candidates.find((item) => item.id === answer.proposal!.value)?.name ?? null : answer.proposal?.value ?? null;
@@ -87,7 +94,7 @@ export async function offerReview(db: D1Database, ai: AiRunner | undefined, acto
   if (claim.catalogRevision !== await catalogRevision(db)) { claim.proposal = null; claim.label = null; claim.reason = "STALE_CATALOGUE"; }
   await db.batch([
     db.prepare("UPDATE system_settings SET value = ? WHERE key = ? AND value = ?").bind(JSON.stringify(claim), key(actor), raw),
-    audit(db, actor.accountId, "AI_REVIEW_RESOLVED", "CATALOGUE", claim.id, { draftId: claim.draftId, revision: claim.revision, catalogRevision: revision, role: claim.proposal?.role ?? null, reason: claim.reason }, true)
+    audit(db, actor.accountId, "AI_REVIEW_RESOLVED", "CATALOGUE", claim.id, { draftId: claim.draftId, revision: claim.revision, catalogRevision: revision, role: measured?.role ?? null, version: measured?.version ?? null, outcome: measured?.outcome ?? null, ms: measured?.ms ?? null, neurons: measured?.neurons ?? null, knowledgeVersion: KNOWLEDGE_VERSION, reason: claim.reason }, true)
   ]);
   const latest = await stored(db, actor);
   return publicOffer(latest!.offer);
@@ -101,6 +108,7 @@ export async function captureFeedback(db: D1Database, actor: Actor, sessionId: s
   const current = await stored(db, actor).catch(() => null);
   const offer = current?.offer;
   if (!offer || !offer.proposal || offer.actor !== actor.accountId || offer.sessionId !== sessionId || offer.id !== feedback.offerId || offer.draftId !== feedback.draftId || offer.revision !== feedback.revision || offer.expiresAt <= Date.now()) return empty;
+  if (offer.knowledgeVersion !== KNOWLEDGE_VERSION || offer.modelVersion !== ROLE_MODELS[offer.proposal.role]) return empty;
   const revision = await catalogRevision(db).catch(() => null);
   if (revision === null || offer.catalogRevision !== revision) return empty;
   const correction = typeof feedback.correction === "string" ? feedback.correction.trim().slice(0, 120) : "";
@@ -113,17 +121,34 @@ export async function captureFeedback(db: D1Database, actor: Actor, sessionId: s
     SELECT ?, ?, 'AI_REVIEW_FEEDBACK', 'CATALOGUE', ?, ?, ? WHERE EXISTS (SELECT 1 FROM system_settings WHERE key = ? AND value = ?)
     AND (SELECT value FROM catalog_revision WHERE id = 1) = ?
     AND NOT EXISTS (SELECT 1 FROM audit_log WHERE entity_type = 'CATALOGUE' AND entity_id = ? AND action = 'AI_REVIEW_FEEDBACK')`)
-    .bind(crypto.randomUUID(), actor.accountId, offer.id, JSON.stringify({ captureId: body.id, itemId, decision: feedback.decision, role: offer.proposal!.role, observed: normalized(offer.observed), saved, correction: target ?? null, knowledgeVersion: KNOWLEDGE_VERSION }), new Date().toISOString(), key(actor), current!.raw, offer.catalogRevision + 1, offer.id)];
+    .bind(crypto.randomUUID(), actor.accountId, offer.id, JSON.stringify({ captureId: body.id, itemId, decision: feedback.decision, role: offer.proposal!.role, version: offer.modelVersion ?? null, observed: normalized(offer.observed), saved, correction: target ?? null, knowledgeVersion: KNOWLEDGE_VERSION }), new Date().toISOString(), key(actor), current!.raw, offer.catalogRevision + 1, offer.id)];
 }
 
 /** Indexed audit tail, then a bounded join; kept guesses and unreviewed captures never vote. */
-export async function reviewProposals(db: D1Database): Promise<{ proposals: KnowledgeProposal[]; window: number }> {
-  const { results } = await db.prepare(`SELECT a.actor_user_id AS actor, a.details_json AS details, i.name, i.category, i.unit, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.stock_area AS stockArea, i.status, i.needs_review AS needsReview
+export async function reviewProposals(db: D1Database): Promise<{ proposals: KnowledgeProposal[]; metrics: ReviewStats[]; window: number }> {
+  const { results } = await db.prepare(`SELECT a.action, a.actor_user_id AS actor, a.details_json AS details, i.name, i.category, i.unit, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.stock_area AS stockArea, i.status, i.needs_review AS needsReview
     FROM (SELECT action, actor_user_id, details_json FROM audit_log WHERE entity_type = 'CATALOGUE' ORDER BY created_at DESC, rowid DESC LIMIT 200) a
-    LEFT JOIN items i ON i.id = json_extract(a.details_json, '$.itemId') WHERE a.action = 'AI_REVIEW_FEEDBACK'`).all<{ actor: string; details: string } & Omit<Reviewed, "needsReview"> & { needsReview: number }>();
+    LEFT JOIN items i ON i.id = json_extract(a.details_json, '$.itemId') WHERE a.action IN ('AI_REVIEW_FEEDBACK', 'AI_REVIEW_RESOLVED')`).all<{ action: string; actor: string; details: string } & Omit<Reviewed, "needsReview"> & { needsReview: number }>();
+  const metrics: ReviewStats[] = (Object.keys(ROLE_LIMITS) as TextRole[]).map((role) => ({ role, answered: 0, abstained: 0, unavailable: 0, dropped: 0, kept: 0, rejected: 0, corrected: 0, timed: 0, totalMs: 0, neurons: 0 }));
   const groups = new Map<string, { observed: string; target: Outcome; captures: Set<string>; actors: Set<string> }>();
   for (const row of results) {
-    const evidence = JSON.parse(row.details) as { captureId: string; decision: string; observed: string; correction: Outcome | null; knowledgeVersion: number };
+    const evidence = JSON.parse(row.details) as { captureId: string; decision: string; observed: string; correction: Outcome | null; knowledgeVersion: number; role?: string; version?: string; outcome?: string; reason?: string; ms?: number; neurons?: number };
+    const metric = metrics.find((entry) => entry.role === evidence.role);
+    if (metric && evidence.knowledgeVersion === KNOWLEDGE_VERSION && evidence.version === ROLE_MODELS[metric.role]) {
+      if (row.action === "AI_REVIEW_RESOLVED" && ["ANSWER", "ABSTAIN", "UNAVAILABLE"].includes(evidence.outcome ?? "")) {
+        if (evidence.reason === "STALE_CATALOGUE") metric.dropped += 1;
+        else if (evidence.outcome === "ANSWER") metric.answered += 1;
+        else if (evidence.outcome === "ABSTAIN") metric.abstained += 1;
+        else metric.unavailable += 1;
+        if (typeof evidence.ms === "number" && Number.isFinite(evidence.ms) && evidence.ms >= 0) { metric.timed += 1; metric.totalMs += evidence.ms; }
+        if (typeof evidence.neurons === "number" && Number.isFinite(evidence.neurons) && evidence.neurons >= 0) metric.neurons += evidence.neurons;
+      } else if (row.action === "AI_REVIEW_FEEDBACK") {
+        if (evidence.decision === "KEEP") metric.kept += 1;
+        else if (evidence.decision === "REJECT") metric.rejected += 1;
+        else if (evidence.decision === "CORRECT") metric.corrected += 1;
+      }
+    }
+    if (row.action !== "AI_REVIEW_FEEDBACK") continue;
     if (evidence.decision !== "CORRECT" || !evidence.correction || evidence.knowledgeVersion !== KNOWLEDGE_VERSION || !verified({ ...row, needsReview: row.needsReview === 0 ? false : true }) || !same(evidence.correction, outcome(row))) continue;
     const target = { ...evidence.correction, name: formatItemName(evidence.correction.name) };
     const groupKey = JSON.stringify([evidence.observed, target]);
@@ -147,7 +172,7 @@ export async function reviewProposals(db: D1Database): Promise<{ proposals: Know
     const decisions = new Map((await db.batch<{ id: string; decision: "APPROVE" | "REJECT" }>(statements)).flatMap((result) => result.results).map((row) => [row.id, row.decision]));
     for (const proposal of proposals) proposal.decision = decisions.get(proposal.id) ?? null;
   }
-  return { proposals: proposals.sort((a, b) => b.support - a.support || a.id.localeCompare(b.id)), window: 200 };
+  return { proposals: proposals.sort((a, b) => b.support - a.support || a.id.localeCompare(b.id)), metrics, window: 200 };
 }
 
 export async function decideKnowledge(db: D1Database, actor: Actor, input: unknown) {
@@ -155,10 +180,13 @@ export async function decideKnowledge(db: D1Database, actor: Actor, input: unkno
   if (!body || typeof body.id !== "string" || !/^KP-[0-9a-f]{64}$/.test(body.id) || !["APPROVE", "REJECT"].includes(String(body.decision))) throw new InputError(400, "Choose a proposal and approve or reject it.");
   const previous = await db.prepare("SELECT details_json FROM audit_log WHERE entity_type = 'CATALOGUE' AND entity_id = ? AND action = 'AI_KNOWLEDGE_DECIDED' ORDER BY created_at, rowid LIMIT 1").bind(body.id).first<string>("details_json");
   if (previous) return JSON.parse(previous);
+  const revision = await catalogRevision(db);
   const proposal = (await reviewProposals(db)).proposals.find((proposal) => proposal.id === body.id);
   if (!proposal || proposal.support < 3 || proposal.actors < 2 || proposal.conflicts) throw new InputError(409, "This proposal needs three reviewed corrections from at least two staff, without conflicting evidence.");
-  const details = { ...proposal, decision: body.decision, status: body.decision === "APPROVE" ? "AWAITING_CODE_REVIEW" : "REJECTED" };
+  const details = { ...proposal, catalogRevision: revision, decision: body.decision, status: body.decision === "APPROVE" ? "AWAITING_CODE_REVIEW" : "REJECTED" };
   await db.prepare(`INSERT INTO audit_log(id, actor_user_id, action, entity_type, entity_id, details_json, created_at) SELECT ?, ?, 'AI_KNOWLEDGE_DECIDED', 'CATALOGUE', ?, ?, ?
-    WHERE NOT EXISTS (SELECT 1 FROM audit_log WHERE entity_type = 'CATALOGUE' AND entity_id = ? AND action = 'AI_KNOWLEDGE_DECIDED')`).bind(crypto.randomUUID(), actor.accountId, body.id, JSON.stringify(details), new Date().toISOString(), body.id).run();
-  return JSON.parse((await db.prepare("SELECT details_json FROM audit_log WHERE entity_type = 'CATALOGUE' AND entity_id = ? AND action = 'AI_KNOWLEDGE_DECIDED' ORDER BY created_at, rowid LIMIT 1").bind(body.id).first<string>("details_json"))!);
+    WHERE (SELECT value FROM catalog_revision WHERE id = 1) = ? AND NOT EXISTS (SELECT 1 FROM audit_log WHERE entity_type = 'CATALOGUE' AND entity_id = ? AND action = 'AI_KNOWLEDGE_DECIDED')`).bind(crypto.randomUUID(), actor.accountId, body.id, JSON.stringify(details), new Date().toISOString(), revision, body.id).run();
+  const decision = await db.prepare("SELECT details_json FROM audit_log WHERE entity_type = 'CATALOGUE' AND entity_id = ? AND action = 'AI_KNOWLEDGE_DECIDED' ORDER BY created_at, rowid LIMIT 1").bind(body.id).first<string>("details_json");
+  if (!decision) throw new InputError(409, "The catalogue changed. Refresh the proposals before deciding.");
+  return JSON.parse(decision);
 }

@@ -8,10 +8,12 @@
 - **V1.16 A1 delivered/pruned:** `4511614c7b7fe18acfe7e0806399582c02b40516`, PR #34; full CI 38136947614, source/main CodeQL and actual main Workers Build 114464986328 passed. Capture/photo saving leaves the durable queue before optional cleanup; unavailable optional feedback cannot reject manual saving.
 - **V1.16 A2 delivered/pruned:** source/main `65397388b5c88c713a3fa0ae567317ef4d1d4ed0`, PR #36. Full source CI 38187507116, CodeQL 38187507098; actual main CodeQL 38188178668 and Workers Build 114615134853 passed. Shared ten-second AI deadline, safe failure codes, ignored late replies and unchanged quota reserves; existing stock/count/loan/replay/return cases assert zero inference with a blocked binding.
 
+- **V1.16 B1 delivered/pruned:** source/main `c89ef1c3b922b0a68c729f5065e8ba4c74e5afd0`, PR #37. Full source CI 38189559976, CodeQL 38189559964; actual main CodeQL 38190590509 and Workers Build 114622514327 passed. Existing Home operational hints use current sources, fresh private snapshots and screen-lifetime guards.
+
 ## Active work
 
-- **Branch/base:** `slice/v1.16-grounded-home` from verified A2 main above; root Codex holds the sole writer lock. Read live HEAD for checkpoints; preserve unknown local `work`.
-- **B1:** keep existing Home operational hints grounded in current non-inactive item sources; record snapshot revision, serve fresh private reads and ignore obsolete screen replies. Frozen contracts and exact delivery evidence are in `docs/road-to-v2/v1.16-execution-card.md`. Source qualification is pending.
+- **Branch/base:** `slice/v1.16-reviewed-learning` from verified B1 main `c89ef1c3b922b0a68c729f5065e8ba4c74e5afd0`; root Codex holds the sole writer lock. Read live HEAD for checkpoints; preserve unknown local `work`.
+- **C1:** bounded role/model/policy outcome metrics in existing Admin > Catalog, private provider stamps and catalogue-revision guards on knowledge decisions. Frozen contracts and exact delivery evidence are in `docs/road-to-v2/v1.16-execution-card.md`. Source qualification is pending.
 - **Identity:** parent V1.15; candidate V1.16 remains unreleased. Independently useful future-version slices may deploy, with no invented V1.15.N/V1.16.N and no final V1.16 label.
 - **QA:** owner retains live/manual product/photo/model QA. Local build/typecheck/diff/privacy and normal automatic CI qualify source; no local product/provider probes, model switch, paid infrastructure, schema or dependency change.
 
@@ -19,7 +21,7 @@
 
 The accepted authority is `docs/specs/accepted/v1.16-ambient-intelligent-core.md`; permanent version policy is `docs/PRODUCT_VERSION_GOVERNANCE.md`. Full V1.16 and final V2 readiness are **OPEN**: contextual-hint qualification, bounded verified-learning/model evaluation, private artifact-bound version/changelog and final acceptance remain. Text roles remain REVIEW_ONLY.
 
-Finish B1 on the one active branch, push coherent checkpoints, integrate only when independently green, confirm actual main deployment and prune. Then continue the accepted learning/evaluation and version slices. Do not start V2.1/RTV3-01 until V1.16 final readiness qualifies.
+Finish C1 on the one active branch, push coherent checkpoints, integrate only when independently green, confirm actual main deployment and prune. Then continue provider/model evaluation and the private artifact-bound version slice. Do not start V2.1/RTV3-01 until V1.16 final readiness qualifies.
 
 ## Historical continuity
 

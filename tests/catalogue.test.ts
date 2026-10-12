@@ -562,6 +562,16 @@ describe("review-only AI offers and correction evidence", () => {
     expect((await as(otherCookie, offerPath(session), "POST", { draftId, revision: 1, name: "Staplr" })).status).toBe(403);
     const first = await ask(session);
     expect(first.proposal).toMatchObject({ kind: "REVIEW_ONLY", field: "term", value: "Stapler" });
+    expect(first).not.toHaveProperty("modelVersion");
+    expect(first).not.toHaveProperty("knowledgeVersion");
+    const raw = sqlite.prepare("SELECT value FROM system_settings WHERE key = 'ai_review_offer:ACC-1'").get()!.value as string;
+    const privateOffer = JSON.parse(raw);
+    expect(privateOffer.modelVersion).toBe("@cf/ibm-granite/granite-4.0-h-micro");
+    expect(privateOffer.knowledgeVersion).toBe(2);
+    sqlite.prepare("UPDATE system_settings SET value = ? WHERE key = 'ai_review_offer:ACC-1'").run(JSON.stringify({ ...privateOffer, knowledgeVersion: 1 }));
+    expect(await ask(session)).toMatchObject({ proposal: null, reason: "STALE_POLICY" });
+    expect(calls).toHaveLength(1);
+    sqlite.prepare("UPDATE system_settings SET value = ? WHERE key = 'ai_review_offer:ACC-1'").run(raw);
     expect((await ask(session)).id).toBe(first.id);
     expect(calls).toHaveLength(1);
     await Promise.all([ask(session, 2), ask(session, 2)]);
@@ -579,7 +589,10 @@ describe("review-only AI offers and correction evidence", () => {
     expect(feedbackCount()).toBe(1);
     expect((await save(session, body)).status).toBe(200); expect(feedbackCount()).toBe(1);
     const { reviewProposals } = await import("../src/ai-review");
-    expect((await reviewProposals(env.DB)).proposals).toEqual([]);
+    const evidence = await reviewProposals(env.DB);
+    expect(evidence.proposals).toEqual([]);
+    expect(evidence.metrics.find((entry) => entry.role === "TEXT_NORMALIZE")).toMatchObject({ answered: 1, corrected: 1, timed: 1, neurons: 2 });
+    for (const privateValue of ["ACC-1", "Staplr", offer.id, draftId]) expect(JSON.stringify(evidence.metrics)).not.toContain(privateValue);
     sqlite.prepare("UPDATE items SET needs_review = 0 WHERE id = ?").run(saved.id);
     expect((await reviewProposals(env.DB)).proposals[0]).toMatchObject({ observed: "staplr", support: 1, actors: 1, target: { name: "Staple Remover" } });
   });
@@ -635,6 +648,16 @@ describe("review-only AI offers and correction evidence", () => {
     sqlite.prepare("UPDATE system_settings SET value = ? WHERE key = 'ai_review_offer:ACC-1'").run(JSON.stringify({ ...JSON.parse(current.value), expiresAt: 0 }));
     expect((await save(session, shot(shelf, { aiFeedback: decision(fresh) }))).status).toBe(201);
     expect(feedbackCount()).toBe(0);
+    for (const [index, stamp] of [{ knowledgeVersion: 1 }, { modelVersion: "unknown-model" }].entries()) {
+      const issued = await ask(session, 5 + index);
+      const stored = JSON.parse(sqlite.prepare("SELECT value FROM system_settings WHERE key = 'ai_review_offer:ACC-1'").get()!.value as string);
+      sqlite.prepare("UPDATE system_settings SET value = ? WHERE key = 'ai_review_offer:ACC-1'").run(JSON.stringify({ ...stored, ...stamp }));
+      const manual = await save(session, shot(shelf, { aiFeedback: decision(issued) }));
+      expect(manual.status).toBe(201);
+      const saved = await manual.json() as { id: string };
+      expect(onHand(saved.id)).toBe(3);
+      expect(feedbackCount()).toBe(0);
+    }
   });
   it("kept guesses, mismatched corrections and poisoned unreviewed items never vote", async () => {
     seed(); const shelf = await place("AI test shelf"); const session = await begin(shelf);
@@ -645,6 +668,7 @@ describe("review-only AI offers and correction evidence", () => {
     sqlite.prepare("UPDATE items SET needs_review = 0").run();
     const { reviewProposals } = await import("../src/ai-review");
     expect((await reviewProposals(env.DB)).proposals).toEqual([]);
+    expect((await reviewProposals(env.DB)).metrics.find((entry) => entry.role === "TEXT_NORMALIZE")).toMatchObject({ kept: 1, corrected: 1 });
   });
   it("admin decisions need independent reviewed outcomes and preserve the first decision", async () => {
     seed(); const shelf = await place("AI test shelf"); const session = await begin(shelf); const other = await begin(shelf, otherCookie);
@@ -656,12 +680,40 @@ describe("review-only AI offers and correction evidence", () => {
     }
     expect((await staff("/api/staff/admin/catalog/proposals")).status).toBe(403);
     sqlite.prepare("UPDATE staff_accounts SET role = 'ADMIN' WHERE id = 'ACC-1'").run();
-    const data = await (await staff("/api/staff/admin/catalog/proposals")).json() as { proposals: import("../src/ai-review-types").KnowledgeProposal[] };
+    const data = await (await staff("/api/staff/admin/catalog/proposals")).json() as { proposals: import("../src/ai-review-types").KnowledgeProposal[]; metrics: import("../src/ai-review-types").ReviewStats[] };
     expect(data.proposals[0]).toMatchObject({ support: 3, actors: 2, conflicts: 0 });
+    expect(data.metrics.find((entry) => entry.role === "TEXT_NORMALIZE")).toMatchObject({ answered: 3, corrected: 3, neurons: 6 });
     const id = data.proposals[0]!.id;
+    const prepare = env.DB.prepare.bind(env.DB);
+    let raced = false;
+    const write = vi.spyOn(env.DB, "prepare").mockImplementation((sql) => {
+      if (!raced && sql.startsWith("INSERT INTO audit_log") && sql.includes("AI_KNOWLEDGE_DECIDED")) {
+        raced = true;
+        sqlite.exec("UPDATE catalog_revision SET value = value + 1 WHERE id = 1");
+      }
+      return prepare(sql);
+    });
+    try {
+      expect((await staff("/api/staff/admin/catalog/proposals", "POST", { id, decision: "APPROVE" })).status).toBe(409);
+      expect(raced).toBe(true);
+      expect(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'AI_KNOWLEDGE_DECIDED'").get()).toEqual({ n: 0 });
+    } finally { write.mockRestore(); }
     const [first, second] = await Promise.all([staff("/api/staff/admin/catalog/proposals", "POST", { id, decision: "APPROVE" }), staff("/api/staff/admin/catalog/proposals", "POST", { id, decision: "REJECT" })]);
     expect(first.status).toBe(200); expect(await first.json()).toEqual(await second.json());
     expect((sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'AI_KNOWLEDGE_DECIDED'").get() as { n: number }).n).toBe(1);
+    // Older/unknown policy or model records cannot inflate the current-role rollup.
+    const insert = sqlite.prepare("INSERT INTO audit_log(id, action, entity_type, entity_id, details_json, created_at) VALUES(?, 'AI_REVIEW_RESOLVED', 'CATALOGUE', 'legacy', ?, ?)");
+    for (const patch of [{ version: "unknown-model" }, { knowledgeVersion: 1 }, { outcome: "NOT_AN_OUTCOME" }]) {
+      insert.run(crypto.randomUUID(), JSON.stringify({ role: "TEXT_NORMALIZE", version: "@cf/ibm-granite/granite-4.0-h-micro", knowledgeVersion: 2, outcome: "ANSWER", ms: 1, neurons: 999, ...patch }), new Date().toISOString());
+    }
+    const { reviewProposals } = await import("../src/ai-review");
+    expect((await reviewProposals(env.DB)).metrics.find((entry) => entry.role === "TEXT_NORMALIZE")).toMatchObject({ answered: 3, corrected: 3, neurons: 6 });
+    const later = new Date(Date.now() + 1000).toISOString();
+    for (let index = 0; index < 205; index += 1) sqlite.prepare("INSERT INTO audit_log(id, action, entity_type, entity_id, details_json, created_at) VALUES(?, 'AI_REVIEW_OFFERED', 'CATALOGUE', 'later', '{}', ?)").run(crypto.randomUUID(), later);
+    const bounded = await reviewProposals(env.DB);
+    expect(bounded.window).toBe(200);
+    expect(bounded.proposals).toEqual([]);
+    expect(bounded.metrics.every((entry) => entry.answered === 0 && entry.corrected === 0 && entry.neurons === 0)).toBe(true);
   });
 });
 
@@ -683,6 +735,8 @@ describe("review routing at the Worker boundary", () => {
     const shelf = await place("AI stale shelf"); const session = await begin(shelf);
     const response = await staff(`/api/staff/catalogue/sessions/${session}/ai-offer`, "POST", { draftId: crypto.randomUUID(), revision: 1, name: "Staplr" });
     expect(await response.json()).toMatchObject({ proposal: null, label: null, reason: "STALE_CATALOGUE" });
+    const { reviewProposals } = await import("../src/ai-review");
+    expect((await reviewProposals(env.DB)).metrics.find((entry) => entry.role === "TEXT_NORMALIZE")).toMatchObject({ dropped: 1, answered: 0 });
     expect((await save(session, shot(shelf))).status).toBe(201);
   });
   it("uses one reviewed-candidate role, strict replies and minimal facts", async () => {
@@ -695,6 +749,13 @@ describe("review routing at the Worker boundary", () => {
     expect(await response.json()).toMatchObject({ proposal: { role: "CANDIDATE_ARBITRATE", field: "id", value: "ITM-AI-C" }, label: "Whiteboard Marker Blue" });
     expect(calls).toHaveLength(1);
     expect(JSON.parse(calls[0]!.input.messages[1]!.content)).toEqual({ name: "Whiteboard marker", candidates: [{ id: "ITM-AI-B", name: "Whiteboard Marker Black" }, { id: "ITM-AI-C", name: "Whiteboard Marker Blue" }] });
+    env.AI = { run: async () => { throw Object.assign(new Error("private provider failure"), { status: 429 }); } } as unknown as Ai;
+    const failed = await staff(`/api/staff/catalogue/sessions/${session}/ai-offer`, "POST", { draftId: crypto.randomUUID(), revision: 1, name: "Whiteboard marker" });
+    expect(await failed.json()).toMatchObject({ proposal: null, reason: "RATE_LIMITED" });
+    const { reviewProposals } = await import("../src/ai-review");
+    const evidence = await reviewProposals(env.DB);
+    expect(evidence.metrics.find((entry) => entry.role === "CANDIDATE_ARBITRATE")).toMatchObject({ answered: 1, unavailable: 1, neurons: 6 });
+    for (const privateValue of ["private notes", "private serial", "private provider failure", "Whiteboard"]) expect(JSON.stringify(evidence.metrics)).not.toContain(privateValue);
   });
   it("asks GLM only a fixed conflict below 6500, and owner-off never calls a provider", async () => {
     sqlite.prepare("UPDATE items SET status = 'ARCHIVED'").run();

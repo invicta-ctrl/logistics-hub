@@ -184,6 +184,7 @@ test.describe("Administration", () => {
     await page.route("**/api/staff/admin/activity", (route) => route.fulfill(json({ events: [] })));
     await page.route("**/api/staff/admin/retention", (route) => route.fulfill(json({ loans: 0, phoneRecords: 0, photos: 0 })));
     await page.route("**/api/staff/admin/catalog", (route) => route.fulfill(json({ active: 10, unclassified: 4, captured: 0, capturedClassified: 0 })));
+    await page.route("**/api/staff/admin/catalog/proposals", (route) => route.fulfill(json({ proposals: [], window: 200, metrics: [{ role: "TEXT_NORMALIZE", answered: 3, abstained: 1, unavailable: 1, dropped: 1, kept: 1, rejected: 1, corrected: 1, timed: 6, totalMs: 120, neurons: 6 }] })));
     await page.route("**/api/staff/admin/catalog/aliases**", (route) => route.fulfill(json({ items: [{ id: "ITM-0001", name: "Sample Item", category: "SCHOOL SUPPLIES", aliases: "sample, test item", updatedAt: "2026-10-01T02:00:00.000Z" }], more: false })));
   });
 
@@ -194,6 +195,14 @@ test.describe("Administration", () => {
         await page.goto(address);
         await expect(page.locator("main h1")).toHaveCount(1);
         await page.waitForLoadState("networkidle");
+        if (address === "/staff/admin/catalog") {
+          const outcomes = page.locator("#ai-review-outcomes details");
+          await expect(outcomes).not.toHaveAttribute("open");
+          await outcomes.locator("summary").click();
+          await expect(outcomes).toContainText("3 answered");
+          await expect(outcomes).toContainText("1 correction choice");
+          await expect(outcomes).toContainText("6.00 accounted Neurons");
+        }
         const problems = await page.evaluate(() => {
           const unlabelled = [...document.querySelectorAll("main input:not([type=hidden]), main select, main textarea")].filter((field) =>
             !field.getAttribute("aria-label") && !field.getAttribute("aria-labelledby") && !field.closest("label") && !(field.id && document.querySelector(`label[for="${CSS.escape(field.id)}"]`)));
@@ -208,6 +217,20 @@ test.describe("Administration", () => {
       expect(await sidewaysScroll(page), `${address} at 200%`).toBe(0);
     });
   }
+
+  test("a changed knowledge proposal refreshes the existing list after a refused decision", async ({ page }) => {
+    let reads = 0;
+    const proposal = { id: `KP-${"a".repeat(64)}`, observed: "staplr", target: { name: "Stapler", category: "TOOLS", unit: "piece", behaviour: "BORROW" }, support: 3, actors: 2, conflicts: 0, decision: null, knowledgeVersion: 2 };
+    await page.route("**/api/staff/admin/catalog/proposals", (route) => {
+      if (route.request().method() === "POST") return route.fulfill({ status: 409, ...json({ error: "The catalogue changed. Refresh the proposals before deciding." }) });
+      reads += 1;
+      return route.fulfill(json({ proposals: reads === 1 ? [proposal] : [], metrics: [], window: 200 }));
+    });
+    await page.goto("/staff/admin/catalog");
+    await page.getByRole("button", { name: "Approve for code review" }).click();
+    await expect(page.locator("#ai-proposals")).toContainText("No reviewed correction proposals yet.");
+    expect(reads).toBe(2);
+  });
 
   test("the sections are one navigation with the current one marked, and a confirmation sheet names its title and focuses the safe choice", async ({ page }) => {
     await page.goto("/staff/admin/self-service");

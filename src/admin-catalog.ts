@@ -1,9 +1,9 @@
-import type { KnowledgeProposal } from "./ai-review-types";
+import type { KnowledgeProposal, ReviewStats } from "./ai-review-types";
 import "./admin.css";
 import { adminPage } from "./admin-frame";
 import { BEHAVIOUR_LABELS } from "./catalog-policy";
 import { KNOWLEDGE, KNOWLEDGE_VERSION } from "./item-knowledge";
-import { type Html, api, categoryName, emptyState, failure, html, mount, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
+import { ApiError, type Html, api, categoryName, emptyState, failure, html, mount, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
 
 type Coverage = { active: number; unclassified: number; captured: number; capturedClassified: number };
 type AliasItem = { id: string; name: string; category: string; aliases: string | null; updatedAt: string | null };
@@ -42,6 +42,7 @@ export async function catalogSettings(): Promise<void> {
       <h2 id="ai-title" class="section-title">AI review and reviewed corrections</h2>
       <p>Staff can Keep, Reject or Correct a review-only suggestion in Add items. Kept guesses never become training evidence. AI availability and today's allowance are shown in <a href="/staff/admin" data-route>System</a>.</p>
       <p>Proposals use the last 200 catalogue audit events. Approval records a request for code review; built-in hints change only after a knowledge version update and fixture tests.</p>
+      <div id="ai-review-outcomes"></div>
       <div id="ai-proposals" aria-live="polite"></div>
     </section>
     <section class="admin-block" aria-labelledby="elsewhere-title">
@@ -51,19 +52,35 @@ export async function catalogSettings(): Promise<void> {
     <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>`
   });
   if (!session) return;
+  let active = true;
+  onLeave(() => { active = false; });
   const loadProposals = async () => {
     const host = document.querySelector<HTMLElement>("#ai-proposals")!;
     try {
-      const { proposals } = await api<{ proposals: KnowledgeProposal[] }>("/api/staff/admin/catalog/proposals");
+      const { proposals, metrics = [] } = await api<{ proposals: KnowledgeProposal[]; metrics?: ReviewStats[] }>("/api/staff/admin/catalog/proposals");
+      if (!active) return;
+      const outcomes = metrics.filter((entry) => entry.answered + entry.abstained + entry.unavailable + entry.dropped + entry.kept + entry.rejected + entry.corrected > 0);
+      const roles: Record<ReviewStats["role"], string> = { TEXT_NORMALIZE: "Name matching", CANDIDATE_ARBITRATE: "Item matches", RARE_SECOND_OPINION: "Checks to clarify" };
+      mount(document.querySelector("#ai-review-outcomes")!, outcomes.length ? html`<details class="hint-details"><summary>Review outcomes</summary>
+        <p class="muted">Current model and knowledge-policy records in the last 200 catalogue events.</p>
+        <ul class="hint-list">${outcomes.map((entry) => html`<li class="hint-row"><p><strong>${roles[entry.role]}</strong></p>
+          <p>${entry.answered} answered · ${entry.abstained} no answer · ${entry.unavailable} unavailable · ${entry.dropped} dropped</p>
+          <p>${entry.kept} kept · ${entry.rejected} rejected · ${plural(entry.corrected, "correction choice")}</p>
+          ${entry.timed ? html`<p class="muted">${Math.round(entry.totalMs / entry.timed)} ms average request · ${entry.neurons.toFixed(2)} accounted Neurons</p>` : ""}</li>`)}</ul></details>` : html``);
       mount(host, proposals.length ? html`<ul class="hint-list">${proposals.map((proposal) => html`<li class="hint-row"><p><strong>${proposal.observed}</strong> → ${proposal.target.name} · ${categoryName(proposal.target.category)} · ${proposal.target.unit} · ${BEHAVIOUR_LABELS[proposal.target.behaviour as keyof typeof BEHAVIOUR_LABELS]}</p><p>${proposal.support} reviewed corrections from ${proposal.actors} staff; ${proposal.conflicts} conflicts.</p>${proposal.decision ? html`<p>${proposal.decision === "APPROVE" ? "Approved — awaiting code review" : "Rejected"}</p>` : proposal.support >= 3 && proposal.actors >= 2 && !proposal.conflicts ? html`<div class="photo-actions"><button class="button button--secondary" data-proposal="${proposal.id}" data-decision="APPROVE">Approve for code review</button><button class="button button--ghost" data-proposal="${proposal.id}" data-decision="REJECT">Reject</button></div>` : html`<p class="muted">More independent evidence is needed.</p>`}</li>`)}</ul>` : html`<p>No reviewed correction proposals yet.</p>`);
-    } catch (error) { mount(host, html`<p role="alert">${failure(error)}</p>`); }
+    } catch (error) { if (active) mount(host, html`<p role="alert">${failure(error)}</p>`); }
   };
   document.querySelector("#ai-proposals")!.addEventListener("click", async (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-proposal]");
     if (!button) return;
     button.disabled = true;
     try { await api("/api/staff/admin/catalog/proposals", { method: "POST", body: JSON.stringify({ id: button.dataset.proposal, decision: button.dataset.decision }) }); await loadProposals(); }
-    catch (error) { toast(failure(error), "error"); button.disabled = false; }
+    catch (error) {
+      if (!active) return;
+      toast(failure(error), "error");
+      if (error instanceof ApiError && error.status === 409) await loadProposals();
+      else button.disabled = false;
+    }
   });
   void loadProposals();
 
