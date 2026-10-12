@@ -119,9 +119,16 @@ export function supportedChoice(task: Task, choice: string): boolean {
   if (!task.evidence) return true; // Fixed-code follow-ups are a separate, review-only role.
   const typed = words(task.evidence.observed);
   if (!typed.length) return false;
+  // A single adjacent-key reversal is one typo, not two unrelated spelling edits.
+  const near = (a: string, b: string) => {
+    if (closeWord(a, b)) return true;
+    if (a.length !== b.length) return false;
+    const at = [...a].findIndex((part, index) => part !== b[index]);
+    return at >= 0 && at + 1 < a.length && a[at] === b[at + 1] && a[at + 1] === b[at] && a.slice(at + 2) === b.slice(at + 2);
+  };
   const supportsWord = (word: string, from: readonly string[]) =>
-    from.some((part) => closeWord(word, part)) ||
-    from.some((part, index) => index + 1 < from.length && closeWord(word, part + from[index + 1]));
+    from.some((part) => near(word, part)) ||
+    from.some((part, index) => index + 1 < from.length && near(word, part + from[index + 1]));
   const supports = (name: string) => {
     const offered = words(name);
     return offered.length > 0 &&
