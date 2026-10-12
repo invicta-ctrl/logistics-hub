@@ -508,8 +508,8 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   if (keeping && method === "POST") return json(await keepBoth(env.DB, account, keeping[1]!));
   if (path === "/api/staff/attention/summary" && method === "GET") return revisioned(request, env.DB, () => attentionSummary(env.DB), hourSalt());
   if (path === "/api/staff/home" && method === "GET") return json(await resumable(env.DB, account));
-  // Insights are practical but never urgent: a person's browser may keep them for two minutes, and nothing else waits on them.
-  if (path === "/api/staff/home/insights" && method === "GET") return json(await insights(env.DB), 200, { "cache-control": "private, max-age=120" });
+  // Optional insights follow current records after each visit; nothing else waits on this read.
+  if (path === "/api/staff/home/insights" && method === "GET") return json(await insights(env.DB), 200, { "cache-control": "private, no-store" });
   const reorder = REORDER_PATH.exec(path);
   if (reorder && method === "PATCH") return json(await updateReorder(env.DB, account, reorder[1]!, await body()));
   if (path === "/api/staff/items" && method === "POST") {

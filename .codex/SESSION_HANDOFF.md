@@ -1,41 +1,27 @@
 # Session Handoff — Logistics Hub
 
-**State: V1.15 closed; V1.16 A1 delivered; A2 provider fallback/core independence slice IN PROGRESS, 2026-10-12. Full V1.16 remains OPEN.**
+**State: V1.15 closed; V1.16 A1/A2 delivered and pruned; B1 grounded Home slice IN PROGRESS, 2026-10-12. Full V1.16 remains OPEN.**
 
-## Exact source and ownership
+## Exact source, ownership and active contract
 
-- **Repository:** `invicta-ctrl/logistics-hub`.
-- **A1 base / rollback source:** `179435fdd7f2a9b0aa21a5c956f0c0bc12a41fa7` (accepted planning PR #33 merged/pruned; V1.15 runtime retained).
-- **A1 source / merged main:** `4511614c7b7fe18acfe7e0806399582c02b40516`; PR [#34](https://github.com/invicta-ctrl/logistics-hub/pull/34) merged at that commit. Source slice `slice/v1.16-enrichment-isolation` deleted locally/remotely and pruned.
-- **Records checkpoint:** documentation-only follow-up from that verified main. Read live refs for its HEAD; application/test/config content remains identical to the proven A1 source. No further product-version increment.
-- **Writer:** root Codex was the sole tracked writer; supporting agents stayed read-only. Root yields after the final records checkpoint. Verify actual lock before takeover; preserve unknown local `work`.
+- Repository `invicta-ctrl/logistics-hub`; branch `slice/v1.16-grounded-home`; base/rollback `65397388b5c88c713a3fa0ae567317ef4d1d4ed0`. Read live HEAD and checks for the current checkpoint.
+- Codex is the sole tracked writer and holds the lock. Supporting work was read-only; no additional worktree/branch. Unknown local `work` is preserved.
+- B1 reuses bounded Home insight queries and source links. Current non-inactive item facts, snapshot catalogue revision, private fresh reads and screen-lifetime rejection keep optional hints independent of core navigation. Existing caption carries freshness; no new panel or queue.
+- Parent V1.15; candidate V1.16 unreleased; independently useful slice of the accepted future version. No patch number or final V1.16 label.
 
-## Delivered independent behavior
+## Delivered evidence
 
-- `src/catalogue-sync.ts` / `src/item-photo.ts`: durably saved captures leave the queue before optional cleanup. Separate available cross-tab lock, local single-flight and 60-second abort deadline keep cleanup off the core capture/check sender. Original-photo fallback and explicit later action remain when busy or unavailable. Intent is consumed once; accept only the saved photo, unchanged item revision and current fully signed-in owner.
-- `src/ai-review.ts`: unavailable stored-offer/catalogue-revision reads omit optional feedback evidence. Valid feedback retains the atomic manual capture/audit transaction and idempotent replay; core transaction failures are not swallowed.
-- Existing catalogue/browser fixtures verify capture completion and a second save while cleanup is held, offline saving before a late AI reply followed by one replay, and one opening movement during optional feedback lookup failures. Existing valid-feedback atomicity/rollback assertions remain. The observed unrelated card-tab wait now uses its existing visible-profile assertion, retaining URL/card checks.
+- V1.15 closure: `docs/road-to-v2/releases/v1.15-final-pass.md`; final source `962c66e718bad84d29b8b470400753701d7f5cd2`, CI 38133613254; closure/main `84f798fd0703dce4b0befa69c183ed04717ef4a8`, CI 38134402564 and configured deployment passed. Planning PR #33 main `179435fdd7f2a9b0aa21a5c956f0c0bc12a41fa7`, CI 38135957807, CodeQL/deployment passed.
+- A1 source/main `4511614c7b7fe18acfe7e0806399582c02b40516`, PR #34; full source CI 38136947614 and CodeQL 38136947607 passed; actual main CodeQL 38137698654 and Workers Build 114464986328 passed. Optional cleanup/feedback reads no longer hold manual captures; original-photo/owner/revision guards and atomic valid feedback remain.
+- A2 source/main `65397388b5c88c713a3fa0ae567317ef4d1d4ed0`, PR #36; full source CI 38187507116 and CodeQL 38187507098 passed. Actual main CodeQL 38188178668 and Workers Build 114615134853 passed. Ten-second model deadline and fixed error diagnostics retain one reservation, ignore late answers and open existing breakers. Existing stock/count/lending/replay/return/audit cases complete against a never-settling binding with no calls.
+- A2 preceding checkpoint `b2be5512c4dcd506e53c7e3604270e228b4ebb51` failed only the old two-call-site safety expectation; corrected checkpoint requires one bounded call site and retains route/review restrictions. Duplicate same-head push CI was cancelled; full PR CI above succeeded. Completed source branches are deleted locally/remotely and pruned.
 
-## Verification and deployment evidence
+## Validation and boundaries
 
-- Local `npm run build` (Wrangler types, three TypeScript targets, Vite), diff check and staged privacy scan passed; zero secret/private-roster matches in 1024 tracked files.
-- Exact source full CI [38136947614](https://github.com/invicta-ctrl/logistics-hub/actions/runs/38136947614) SUCCESS: build/unit, performance smoke, privacy, browser and Worker integration. CodeQL 38136947607 SUCCESS.
-- Actual merged main CodeQL 38137698654 SUCCESS and Workers Build 114464986328 SUCCESS. Main source is the same exact SHA validated by the full source CI; automatic push CI is a repeat of that source, not separate model-quality evidence.
-- V1.15 closure is recorded in `docs/road-to-v2/releases/v1.15-final-pass.md`; final source/main checks and configured deployment passed. PR #33 documentation main CI 38135957807 also passed.
-- Owner retains live/manual QA. No new production data/provider operation, paid model, migration or real-photo accuracy claim. No Cloudflare credentials or environment change needed for the existing automatic main deployment.
+B1 local build/typecheck and diff checks passed. Staged privacy and exact-source automatic CI/CodeQL/Workers Build are pending. No local product/provider tests: owner retains live/manual QA. Fixture CI does not establish real-photo accuracy, provider availability or production latency. Existing model mappings, REVIEW_ONLY text roles and free Neuron/Images caps remain; no dependency, migration, production data operation or new infrastructure. Existing main auto-deployment needs no Cloudflare credentials/environment change.
 
-## Version and remaining scope
+## Next action and open release gates
 
-- **PARENT VERSION:** V1.15. **CANDIDATE VERSION:** V1.16, unreleased. **RELEASE TYPE:** independently complete slice of the accepted future main version; this follow-up is documentation-only. Neither mints a historical patch number or prematurely releases V1.16.
-- Accepted scope: `docs/specs/accepted/v1.16-ambient-intelligent-core.md`; canonical execution/evidence card: `docs/road-to-v2/v1.16-execution-card.md`. Permanent release numbering: `docs/PRODUCT_VERSION_GOVERNANCE.md`.
-- **NOT completed:** all of A's degraded-mode/router qualification, contextual hints, verified learning/model evaluation, artifact-bound Administration version/changelog, full V1.16 acceptance and final V2 readiness. No V3 implementation authorized by this slice.
+Finish B1 and its meaningful existing source/privacy/late-reply cases, push checkpoints, merge when independently green, confirm main deployment and prune. Continue accepted verified learning/model evaluation and private Administration > System product-version/changelog slices. Full V1.16 and final V2 readiness stay OPEN until all accepted gates and owner QA qualify; no V3 work in this slice.
 
-## First next action
-
-Checkpoint `b2be5512c4dcd506e53c7e3604270e228b4ebb51`, PR #36: CI 38139248148 found only the existing source-boundary expectation still listing two direct AI call sites. That case now requires the single shared bounded call site, retaining every route/review restriction. Worker integration, CodeQL 38139248131 and Workers Build 114469680858 passed that checkpoint. Full CI on the corrected checkpoint is required before merging.
-
-Active branch `slice/v1.16-assist-fallbacks` from verified main `a869be4c27b51cb29dc50b167a6ee0e4d6c13b5d` (full CI 38138146737 passed). Codex holds the writer lock; one read-only specialist supplied a `/tmp` patch for existing core cases. A2 implementation is in `ambient-assist.ts`/`ai-roles.ts`: shared 10-second deadline, bounded failure codes, unchanged API fallback/reservations. Existing adapter cases qualify HTTP failures and ignored late answers; existing Worker cases hold an AI binding and assert zero calls through stock/count/replay and loans/returns/audit. Local build/typecheck/diff passed; automatic exact-source CI, CodeQL and configured deployment remain pending. No local product/provider tests. Read live HEAD/checks before integration. Preserve deterministic manual work and REVIEW_ONLY text roles. Continue B–E/S2–S5 only as independent complete outcomes. Push checkpoints, integrate each green slice, confirm deployment, prune; never label the full version COMPLETE while any accepted gate remains open.
-
-## Historical handoffs
-
-The former cumulative history is retrievable at [the pre-cleanup revision](https://github.com/invicta-ctrl/logistics-hub/blob/aa09900827a94e0931a33416f70c3ae4c7e6bcf9/.codex/SESSION_HANDOFF.md). Older “WAITING” and “IN PROGRESS” statements do not apply to current work; use release evidence and accepted specs.
+Authority/evidence: `docs/specs/accepted/v1.16-ambient-intelligent-core.md`, `docs/road-to-v2/v1.16-execution-card.md`, `docs/PRODUCT_VERSION_GOVERNANCE.md`. Former cumulative handoffs remain in [Git history](https://github.com/invicta-ctrl/logistics-hub/blob/aa09900827a94e0931a33416f70c3ae4c7e6bcf9/.codex/SESSION_HANDOFF.md).

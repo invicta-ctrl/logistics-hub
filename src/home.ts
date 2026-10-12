@@ -2,7 +2,7 @@ import { GAP_NO_PLACE, GAP_UNCLASSIFIED, dayOf, times } from "./attention";
 import { behaviourOf, BEHAVIOUR_LABELS } from "./catalog-policy";
 import { openSession } from "./catalogue";
 import { openChecks } from "./audits";
-import type { Actor } from "./inventory";
+import { type Actor, currentItemSQL } from "./inventory";
 
 /*
  * Operations home (V1.12). Two reads, neither stored: what this person can pick up where they left off, and a handful of practical
@@ -48,15 +48,15 @@ export async function insights(db: D1Database, now = Date.now()) {
   const day = (days: number) => since(days, now);
   const [borrowed, used, short, reports, kits, corrections, catalog] = await db.batch([
     db.prepare(`SELECT i.id AS id, i.name AS name, COUNT(*) AS n, MAX(l.created_at) AS last FROM loans l INDEXED BY idx_loans_created JOIN items i ON i.id = l.item_id
-      WHERE l.created_at >= ?1 GROUP BY l.item_id HAVING COUNT(*) >= ?2 ORDER BY n DESC, last DESC, i.name COLLATE NOCASE LIMIT ${ROWS}`).bind(day(WINDOWS.borrowed), AT_LEAST),
+      WHERE l.created_at >= ?1 AND i.status <> 'INACTIVE' AND ${currentItemSQL()} GROUP BY l.item_id HAVING COUNT(*) >= ?2 ORDER BY n DESC, last DESC, i.name COLLATE NOCASE LIMIT ${ROWS}`).bind(day(WINDOWS.borrowed), AT_LEAST),
     // The window's own index: left to itself the planner walks the item index and so the whole ledger. On hand is read for the few rows kept.
     db.prepare(`SELECT t.*, (SELECT b.on_hand FROM inventory_balances b WHERE b.id = t.id) AS onHand FROM (
         SELECT i.id AS id, i.name AS name, i.unit AS unit, i.reorder_threshold AS level, -SUM(m.signed_quantity) AS taken, COUNT(*) AS n
         FROM inventory_movements m INDEXED BY idx_inventory_movements_created JOIN items i ON i.id = m.item_id
-        WHERE m.created_at >= ?1 AND m.movement_type = 'STOCK_OUT' AND m.status = 'POSTED' AND m.imported_from IS NULL AND i.item_type = 'Consumable' AND i.status <> 'INACTIVE'
+        WHERE m.created_at >= ?1 AND m.movement_type = 'STOCK_OUT' AND m.status = 'POSTED' AND m.imported_from IS NULL AND i.item_type = 'Consumable' AND i.status <> 'INACTIVE' AND ${currentItemSQL()}
         GROUP BY m.item_id HAVING COUNT(*) >= ?2 ORDER BY taken DESC, i.name COLLATE NOCASE LIMIT ${ROWS}) t ORDER BY t.taken DESC, t.name COLLATE NOCASE`).bind(day(WINDOWS.used), AT_LEAST),
     db.prepare(`SELECT i.id AS id, i.name AS name, i.reorder_threshold AS level, g.n AS n, g.last AS last FROM (
-        SELECT r.item_id AS itemId, COUNT(*) AS n, MAX(r.created_at) AS last FROM reorders r WHERE r.created_at >= ?1 AND r.status <> 'DISMISSED'
+        SELECT r.item_id AS itemId, COUNT(*) AS n, MAX(r.created_at) AS last FROM reorders r JOIN items i ON i.id = r.item_id WHERE r.created_at >= ?1 AND r.status <> 'DISMISSED' AND i.status <> 'INACTIVE' AND ${currentItemSQL()}
         GROUP BY r.item_id HAVING COUNT(*) >= ?2 ORDER BY n DESC, last DESC LIMIT ${ROWS}) g JOIN items i ON i.id = g.itemId ORDER BY g.n DESC, g.last DESC, i.name COLLATE NOCASE`).bind(day(WINDOWS.short), AT_LEAST),
     db.prepare(`SELECT g.id AS id, lp.path AS place, g.n AS n, g.cant AS cant, g.items AS items FROM (
         SELECT r.location_id AS id, COUNT(*) AS n, SUM(r.kind = 'CANT_FIND') AS cant, COUNT(DISTINCT r.item_id) AS items, MAX(r.created_at) AS last FROM location_reports r
@@ -69,10 +69,10 @@ export async function insights(db: D1Database, now = Date.now()) {
       JOIN kits k ON k.id = g.kitId WHERE k.active = 1 ORDER BY g.short DESC, g.last DESC, k.name COLLATE NOCASE`).bind(day(WINDOWS.kits), AT_LEAST),
     // How an item is used (Borrow, Take, Use gradually) changed again after it had been sorted: the first sort out of "not sure" is not a correction.
     db.prepare(`SELECT i.id AS id, i.name AS name, i.item_type AS itemType, i.consumption_mode AS consumptionMode, g.n AS n, g.last AS last FROM (
-        SELECT a.entity_id AS itemId, COUNT(*) AS n, MAX(a.created_at) AS last FROM audit_log a WHERE a.entity_type = 'ITEM' AND a.action = 'ITEM_UPDATED' AND a.created_at >= ?1
+        SELECT a.entity_id AS itemId, COUNT(*) AS n, MAX(a.created_at) AS last FROM audit_log a JOIN items i ON i.id = a.entity_id WHERE a.entity_type = 'ITEM' AND a.action = 'ITEM_UPDATED' AND a.created_at >= ?1 AND i.status <> 'INACTIVE' AND ${currentItemSQL()}
           AND (json_extract(a.details_json, '$.consumptionMode') IS NOT NULL OR COALESCE(json_extract(a.details_json, '$.itemType.from'), 'NEEDS_REVIEW') <> 'NEEDS_REVIEW')
         GROUP BY a.entity_id HAVING COUNT(*) >= ?2 ORDER BY n DESC, last DESC LIMIT ${ROWS}) g JOIN items i ON i.id = g.itemId ORDER BY g.n DESC, g.last DESC, i.name COLLATE NOCASE`).bind(day(WINDOWS.corrections), AT_LEAST),
-    db.prepare(`SELECT (SELECT COUNT(*) FROM items i WHERE i.status = 'ACTIVE') AS total, (SELECT COUNT(*) FROM items i WHERE ${GAP_UNCLASSIFIED}) AS unclassified, (SELECT COUNT(*) FROM items i WHERE ${GAP_NO_PLACE}) AS noPlace`)
+    db.prepare(`SELECT (SELECT COUNT(*) FROM items i WHERE i.status = 'ACTIVE') AS total, (SELECT COUNT(*) FROM items i WHERE ${GAP_UNCLASSIFIED}) AS unclassified, (SELECT COUNT(*) FROM items i WHERE ${GAP_NO_PLACE}) AS noPlace, (SELECT value FROM catalog_revision WHERE id = 1) AS revision`)
   ]);
   const rows = (result: D1Result | undefined) => (result?.results ?? []) as Row[];
   const cards: InsightCard[] = [];
@@ -103,7 +103,7 @@ export async function insights(db: D1Database, now = Date.now()) {
       return { name: String(row.name), href: `/staff/items?item=${row.id}&tab=history`, evidence: `Its use was changed ${times(Number(row.n))}; the latest on ${dayOf(String(row.last))}. Now: ${behaviour ? BEHAVIOUR_LABELS[behaviour] : "not set"}.` };
     }));
 
-  const counts = rows(catalog)[0] as { total: number; unclassified: number; noPlace: number };
+  const counts = rows(catalog)[0] as { total: number; unclassified: number; noPlace: number; revision: number };
   const sorted = counts.total - counts.unclassified;
   const completeness: Completeness = {
     id: "completeness", title: "How complete is the catalog?", window: "Today", rule: "Active items only.",
@@ -112,5 +112,5 @@ export async function insights(db: D1Database, now = Date.now()) {
       { name: "Sorted items with a place", have: sorted - counts.noPlace, of: sorted, gap: counts.noPlace, href: "/staff/attention?reason=NO_PLACE", gapText: "without a place" }
     ]
   };
-  return { asOf: new Date(now).toISOString(), cards, completeness };
+  return { revision: counts.revision, asOf: new Date(now).toISOString(), cards, completeness };
 }

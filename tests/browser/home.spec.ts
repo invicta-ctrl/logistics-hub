@@ -118,6 +118,7 @@ test.describe("Home", () => {
     await expect(borrowed).toContainText("Last 90 days · Items lent at least twice.");
     await expect(borrowed.getByRole("link", { name: "Projector - portable" })).toHaveAttribute("href", "/staff/items?item=ITM-0001");
     await expect(borrowed).toContainText("Lent 9 times; the latest on 3 Oct.");
+    await expect(page.locator("#home-insights-asof")).toHaveText(/^Updated /);
     await expect(borrowed).not.toContainText("Advice only");
     await expect(page.getByRole("article", { name: "What keeps running short?" })).toContainText("Advice only. Nothing is ordered or changed from here.");
     const complete = page.getByRole("article", { name: "How complete is the catalog?" });
@@ -145,6 +146,33 @@ test.describe("Home", () => {
     expect(asked.insights).toBe(2);
     await page.getByRole("link", { name: /^Lend or return/ }).click();
     await expect(page).toHaveURL(/\/staff\/loans$/);
+  });
+
+  test("a held optional insight does not block navigation or expire a newer screen", async ({ page }) => {
+    await setup(page);
+    let release!: () => void;
+    let started!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const asked = new Promise<void>((resolve) => { started = resolve; });
+    await page.route("**/api/staff/home/insights", async (route) => {
+      started(); await held;
+      await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "Old session expired." }) });
+    });
+    try {
+      await page.goto("/staff/home");
+      await asked;
+      await expect(page.locator("#home-attention .home-row")).toHaveCount(5);
+      await page.getByRole("link", { name: /^Lend or return/ }).click();
+      await expect(page).toHaveURL(/\/staff\/loans$/);
+      const reply = page.waitForResponse((response) => response.url().endsWith("/api/staff/home/insights") && response.status() === 401);
+      release();
+      await (await reply).finished();
+      await page.waitForLoadState("networkidle");
+      await expect(page).toHaveURL(/\/staff\/loans$/);
+      await page.route("**/api/staff/home/insights", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(INSIGHTS) }));
+      await page.getByRole("link", { name: /Logistics Hub/ }).first().click();
+      await expect(page.getByRole("article", { name: "What equipment is borrowed most?" })).toBeVisible();
+    } finally { release(); }
   });
 
   test("the search box opens the same search as the bar", async ({ page }) => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
@@ -17,7 +17,7 @@ const as = (cookie: string, path: string, method = "GET", body?: unknown) =>
 const json = async <T = Record<string, any>>(response: Response | Promise<Response>) => (await (await response).json()) as T;
 
 type Card = { id: string; title: string; window: string; rule: string; rows: Array<{ name: string; href: string; evidence: string }>; advisory?: true };
-type Insights = { asOf: string; cards: Card[]; completeness: { rows: Array<{ name: string; have: number; of: number; gap: number; href: string }> } };
+type Insights = { revision: number; asOf: string; cards: Card[]; completeness: { rows: Array<{ name: string; have: number; of: number; gap: number; href: string }> } };
 type Resumable = { catalogue: { id: string; place: string | null; saved: number } | null; checks: Array<{ id: string; place: string | null; status: string; expected: number }> };
 const insights = () => json<Insights>(as(one, "/api/staff/home/insights"));
 const card = async (id: string) => (await insights()).cards.find((entry) => entry.id === id);
@@ -72,9 +72,9 @@ describe("who may read it", () => {
     for (const path of ["/api/staff/home", "/api/staff/home/insights"]) expect((await as(one, path, "POST", {})).status, path).toBe(405);
   });
 
-  it("keeps insights out of shared caches and for a short while in the browser", async () => {
+  it("keeps current insights private and out of browser caches", async () => {
     const response = await as(one, "/api/staff/home/insights");
-    expect(response.headers.get("cache-control")).toBe("private, max-age=120");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect((await as(one, "/api/staff/home")).headers.get("cache-control")).toBe("no-store");
   });
 });
@@ -144,6 +144,17 @@ describe("insights", () => {
     sqlite.prepare("INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, photo_key, status, movement_id, created_at, created_by) VALUES(?, ?, 1, 'INDIVIDUAL', 'Pat', 'TEST-0001', 'k', 'OUT', ?, ?, 'ACC-1')").run(`LN-${uuid()}`, old, insertMovement(old), daysAgo(120));
     sqlite.prepare("INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, photo_key, status, movement_id, created_at, created_by) VALUES(?, ?, 1, 'INDIVIDUAL', 'Pat', 'TEST-0001', 'k', 'OUT', ?, ?, 'ACC-1')").run(`LN-${uuid()}`, old, insertMovement(old), daysAgo(100));
     expect((await card("borrowed"))!.rows.map((row) => row.name)).toEqual(["Lent Projector"]);
+    const snapshot = await insights();
+    sqlite.prepare("UPDATE items SET status = 'INACTIVE' WHERE id = ?").run(lent);
+    sqlite.exec("UPDATE catalog_revision SET value = value + 1 WHERE id = 1");
+    const inactive = await insights();
+    expect(inactive.revision).toBe(snapshot.revision + 1);
+    expect(inactive.cards.find((entry) => entry.id === "borrowed")).toBeUndefined();
+    // The archive marker remains authoritative even if an old source's status label is wrong.
+    sqlite.prepare("UPDATE items SET status = 'ACTIVE' WHERE id = ?").run(lent);
+    sqlite.prepare("INSERT INTO audit_log(id, action, entity_type, entity_id, details_json, created_at) VALUES(?, 'ITEM_MERGED', 'ITEM', ?, ?, ?)")
+      .run(`IM-${lent}`, lent, JSON.stringify({ targetId: old }), new Date().toISOString());
+    expect(await card("borrowed")).toBeUndefined();
   });
 
   /** A movement row for a loan's NOT NULL link; its stock effect does not matter to these counts. */
@@ -183,6 +194,8 @@ describe("insights", () => {
     expect(shown).toMatchObject({ advisory: true, window: "Last 90 days" });
     expect(shown.rows).toEqual([expect.objectContaining({ name: "Short Tape", evidence: expect.stringContaining("A restock was requested 2 times") })]);
     expect(shown.rows[0]!.evidence).toContain("The reorder level is 3.");
+    sqlite.prepare("UPDATE items SET status = 'INACTIVE' WHERE id = ?").run(tape);
+    expect(await card("short")).toBeUndefined();
   });
 
   it("names the places people keep reporting, with the split of what they said", async () => {
@@ -224,6 +237,8 @@ describe("insights", () => {
     const shown = (await card("corrections"))!;
     expect(shown.rows).toEqual([expect.objectContaining({ name: "Wavering Marker", href: `/staff/items?item=${id}&tab=history`, evidence: expect.stringContaining("Its use was changed 2 times") })]);
     expect(shown.rows[0]!.evidence).toContain("Now: Take.");
+    await edit({ status: "INACTIVE", itemType: "Consumable" });
+    expect(await card("corrections")).toBeUndefined();
   });
 
   it("counts the catalog's gaps with the same definitions as Attention", async () => {
@@ -242,6 +257,8 @@ describe("insights", () => {
   });
 
   it("reads and never writes, and carries no borrower, account or reporter name", async () => {
+    const run = vi.fn(() => new Promise<never>(() => {}));
+    env.AI = { run };
     const lent = await item("Private lens", 5, { itemType: "Loanable", lendingAudience: "STUDENTS_AND_USC_STAFF" });
     for (const days of [2, 3]) sqlite.prepare("INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, photo_key, status, movement_id, created_at, created_by) VALUES(?, ?, 1, 'INDIVIDUAL', 'Secret Borrower', 'TEST-0001', 'k', 'OUT', ?, ?, 'ACC-1')").run(`LN-${uuid()}`, lent, insertMovement(lent), daysAgo(days));
     const before = tableSizes();
@@ -249,6 +266,7 @@ describe("insights", () => {
     expect(text).toContain("Private Lens");
     for (const secret of ["Secret Borrower", "Staff One", "staff.one", "ACC-1"]) expect(text).not.toContain(secret);
     expect(tableSizes()).toEqual(before);
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("is bounded: at most five rows a card, however many items repeat", async () => {

@@ -1,6 +1,6 @@
 import "./home.css";
 import { ATTENTION_PAINTED, type AttentionGroup, SEARCH_KEYS, ageOf, attentionNow, loadSession, refreshAttention, shell } from "./staff";
-import { ApiError, type Html, type IconName, api, emptyState, expired, failure, html, icon, live, mount, onLeave, plural } from "./ui";
+import { ApiError, type Html, type IconName, api, emptyState, expired, failure, formatDateTime, html, icon, live, mount, onLeave, plural } from "./ui";
 
 /*
  * Home (/staff/home): where staff start. It answers "what should I do next?" from three things that already exist: what needs a person
@@ -15,7 +15,7 @@ type Resumable = {
 };
 type InsightCard = { id: string; title: string; window: string; rule: string; rows: Array<{ name: string; href: string; evidence: string }>; advisory?: true };
 type Completeness = { id: string; title: string; window: string; rule: string; rows: Array<{ name: string; have: number; of: number; gap: number; href: string; gapText: string }> };
-type Insights = { asOf: string; cards: InsightCard[]; completeness: Completeness };
+type Insights = { revision: number; asOf: string; cards: InsightCard[]; completeness: Completeness };
 
 /** The work staff start most, in working order. Everyone sees these; administrators also see the two Administration pages. */
 const ACTIONS: ReadonlyArray<{ href: string; icon: IconName; title: string; detail: string; admin?: true }> = [
@@ -157,12 +157,17 @@ export async function homeWorkspace(): Promise<void> {
 
   // Insights come last and alone: slow or failing, they leave everything above as it is.
   const box = document.querySelector<HTMLElement>("#home-insights")!;
+  let active = true;
+  onLeave(() => { active = false; });
   const loadInsights = () => {
     box.setAttribute("aria-busy", "true");
     api<Insights>("/api/staff/home/insights", { priority: "low" } as RequestInit).then((data) => {
+      if (!active) return;
+      document.querySelector("#home-insights-asof")!.textContent = `Updated ${formatDateTime(data.asOf)}`;
       box.removeAttribute("aria-busy");
       mount(box, insightsMarkup(data));
     }).catch((error) => {
+      if (!active) return;
       box.removeAttribute("aria-busy");
       if (error instanceof ApiError && error.status === 401) return expired();
       mount(box, html`<div class="home-failed" role="status">${icon("alert")}<p>Insights could not be loaded. ${failure(error)}</p><button class="button button--secondary button--sm" type="button" id="home-insights-retry">Try again</button></div>`);
