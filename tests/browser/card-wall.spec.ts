@@ -38,6 +38,17 @@ async function mock(page: Page | BrowserContext) {
   return scans;
 }
 
+test("unknown directory filter URLs fall back to Everyone without breaking cards or search", async ({ page }) => {
+  await mock(page);
+  for (const query of ["", "?show=invalid", "?show=__proto__", "?show=constructor"]) {
+    await page.goto(`/staff/admin/directory${query}`);
+    await expect(page.getByRole("button", { name: /^Everyone/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("link", { name: /Ana Marie Santos/ })).toBeVisible();
+    await page.getByRole("searchbox", { name: "Search the Staff Directory" }).fill("Bea");
+    await expect(page.getByRole("link", { name: /Bea Cruz Reyes/ })).toBeVisible();
+  }
+});
+
 test("the wall shows each uploaded ID front; a card opens on the ID, turns over at a tap, and switches to the details", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   const scans = await mock(page);
