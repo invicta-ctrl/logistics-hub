@@ -1,0 +1,702 @@
+{
+  "fixtureVersion": "v116-photo-heldout-1",
+  "status": "DRAFT_FOR_COORDINATOR_REVIEW_BEFORE_INFERENCE",
+  "domain": "29 fresh produce types, coffee cup, and three original-author branded juice/milk/oat-milk cartons; six ambiguous/non-inventory probes. Pantry-heavy, not representative USC/office qualification. One current public scientific-calculator diagnostic is scored separately; historical pixel overlap is unknown and it is excluded from held-out name accuracy.",
+  "freezePolicy": "No provider output has been seen; no examples, file names or expected labels reach the model. Entire object families are held-out from prompt tuning. Historical temporary photo bytes were not retained, so historical pixel overlap cannot be proved absent.",
+  "sources": {
+    "grocery": {
+      "commit": "fc80ba90f803d79d0383df52c5a4ac5de99ff6fc",
+      "credit": "Marcus Klasson, Cheng Zhang, Hedvig Kjellstrom",
+      "license": "MIT repository; original-author natural photos; README expressly permits applying dataset to models",
+      "licenseSource": "https://github.com/marcusklasson/GroceryStoreDataset/blob/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/LICENSE",
+      "permissionSource": "https://github.com/marcusklasson/GroceryStoreDataset/blob/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/README.md"
+    },
+    "scikit": {
+      "commit": "e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae",
+      "licenseEvidence": "https://github.com/scikit-image/scikit-image/blob/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/_fetchers.py",
+      "credits": {
+        "coffee.png": "CC0; Rachel Michetti",
+        "clock_motion.png": "Public domain; Stefan van der Walt",
+        "grass.png": "CC0; DeviantArt source texture",
+        "brick.png": "CC0; CC0Textures",
+        "gravel.png": "CC0; CC0Textures",
+        "chelsea.png": "CC0; Stefan van der Walt",
+        "hubble_deep_field.jpg": "Public domain; NASA/Hubble"
+      }
+    },
+    "logisticsOwner": {
+      "authorization": "Owner explicitly authorized Internet photos for item validation; current public item photo only, no staff evidence, identity or private original.",
+      "lookup": "Exact public catalogue item name; no media/provider identifiers stored in this manifest.",
+      "classification": "OFFICE_DIAGNOSTIC; historical pixel overlap unknown; excluded from fresh held-out name precision."
+    }
+  },
+  "photos": [
+    {
+      "id": "p01",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Apple/Golden-Delicious/Golden-Delicious_001.jpg",
+      "sha256": "df7f8560332f0751f9c008c266e68cec6e331dfd42800136f0cdb882f74e39a8",
+      "acceptableNames": [
+        "Apple",
+        "Apples",
+        "Green Apple",
+        "Green Apples",
+        "Golden Delicious Apple",
+        "Golden Delicious Apples"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p02",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Avocado/Avocado_001.jpg",
+      "sha256": "03901190f6b2975927a27e881f0b63fda7ebcd93273a6920909bd10126911f81",
+      "acceptableNames": [
+        "Avocado",
+        "Avocados",
+        "Avocado Fruit"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p03",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Banana/Banana_001.jpg",
+      "sha256": "cb0797fc663e7515c081690f5a6fe92af62dabc8eb4ca4e1c64ddf66b31f1f98",
+      "acceptableNames": [
+        "Banana",
+        "Bananas",
+        "Banana Bunch",
+        "Bunch of Bananas"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p04",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Kiwi/Kiwi_001.jpg",
+      "sha256": "43435cad0e66719b493c2447d8595b067cb90135dee7e7ac1bd806f96f215717",
+      "acceptableNames": [
+        "Kiwi",
+        "Kiwis",
+        "Kiwifruit",
+        "Kiwi Fruit",
+        "Kiwi Fruits"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p05",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Lemon/Lemon_001.jpg",
+      "sha256": "e64bf233ac900b7061484824c19bd4983af729c83d9fca56a52fe9a129b603ad",
+      "acceptableNames": [
+        "Lemon",
+        "Lemons"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p06",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Lime/Lime_001.jpg",
+      "sha256": "0cc034befe07592751806c5440b55f0ac38a4f468c85d522c37e18cae50bd3ae",
+      "acceptableNames": [
+        "Lime",
+        "Limes"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p07",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Melon/Cantaloupe/Cantaloupe_001.jpg",
+      "sha256": "9db3f91ee5544bde4b3cb733b8d8174a176e139258960828946de42bda334188",
+      "acceptableNames": [
+        "Cantaloupe",
+        "Cantaloupes",
+        "Cantaloupe Melon",
+        "Melon",
+        "Melons"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p08",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Orange/Orange_001.jpg",
+      "sha256": "c6848d155f2d56954da24442417326689b1d405fd291784244ac5521edb6ad85",
+      "acceptableNames": [
+        "Orange",
+        "Oranges"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p09",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Papaya/Papaya_001.jpg",
+      "sha256": "6901d607d2b5aced7fb247fbdb1bdf52226b91a71928bafebe1bb9241dc74e34",
+      "acceptableNames": [
+        "Papaya",
+        "Papayas",
+        "Green Papaya"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p10",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Passion-Fruit/Passion-Fruit_001.jpg",
+      "sha256": "838a54fcae4be3e1c5ab3231486f75dc830e2e20c39f79c2fd0b3566addd2605",
+      "acceptableNames": [
+        "Passion Fruit",
+        "Passionfruit",
+        "Passion Fruits",
+        "Purple Passion Fruit"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p11",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Peach/Peach_001.jpg",
+      "sha256": "08aee8254b8c7e3d2bcabd64039dd95642c0ec45b656e0e3d14f59d64cf8343c",
+      "acceptableNames": [
+        "Peach",
+        "Peaches"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p12",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Pear/Anjou/Anjou_001.jpg",
+      "sha256": "de261cde5fe72d2c8ccaad6e91c6c043871a3c149da00c84ac73ddac2ddf17fd",
+      "acceptableNames": [
+        "Pear",
+        "Pears",
+        "Green Pear",
+        "Green Pears"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p13",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Pineapple/Pineapple_001.jpg",
+      "sha256": "9f9087f432690accd1a938fd495bbc119751b96f0a45b9c0c4d5b94539ab42e7",
+      "acceptableNames": [
+        "Pineapple",
+        "Pineapples"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p14",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Plum/Plum_001.jpg",
+      "sha256": "8fdc312430313260b7bc708dd476592928fb5541b43b403a7af201d4be3a1f83",
+      "acceptableNames": [
+        "Plum",
+        "Plums"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p15",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Fruit/Pomegranate/Pomegranate_001.jpg",
+      "sha256": "48f97a12449c24f258253dea811cf5acf5171c5350ae6cd620b9b24dfd557e37",
+      "acceptableNames": [
+        "Pomegranate",
+        "Pomegranates"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p16",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Asparagus/Asparagus_001.jpg",
+      "sha256": "f4b67fbeeb077b475e23645b69429422ff47ec52d1cfb212d8f312d5c141247d",
+      "acceptableNames": [
+        "Asparagus",
+        "Green Asparagus",
+        "Asparagus Spears",
+        "Bunch of Asparagus"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p17",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Aubergine/Aubergine_001.jpg",
+      "sha256": "073ae82e3ae1a58ffaf1372df021a162fa99a68145683bef1b5c5d87d318a644",
+      "acceptableNames": [
+        "Aubergine",
+        "Aubergines",
+        "Eggplant",
+        "Eggplants"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p18",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Cabbage/Cabbage_001.jpg",
+      "sha256": "a2be847316440ed8c4431a256201635f800f154d475908f40d444ea292c32896",
+      "acceptableNames": [
+        "Cabbage",
+        "Cabbages",
+        "Green Cabbage",
+        "Head of Cabbage"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p19",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Carrots/Carrots_001.jpg",
+      "sha256": "df01a557721fc0a3ec6fff201d99863a650d57f68258c67e9afabecd23297d0c",
+      "acceptableNames": [
+        "Carrot",
+        "Carrots"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p20",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Garlic/Garlic_001.jpg",
+      "sha256": "e668f06b4cf623cbb4de870a8de715ad15b766459613dd8a6a80385925949aef",
+      "acceptableNames": [
+        "Garlic",
+        "Garlic Bulb",
+        "Garlic Bulbs",
+        "Bulb of Garlic"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p21",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Ginger/Ginger_001.jpg",
+      "sha256": "97106f627ea5a547c55a04690d4afe7b54cbeb103550794818d83f64f5629148",
+      "acceptableNames": [
+        "Ginger",
+        "Ginger Root",
+        "Ginger Roots"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p22",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Leek/Leek_001.jpg",
+      "sha256": "645ebef54584f61f01acde7837b2531f9648720f944fa8c88c35737d3bea2b5d",
+      "acceptableNames": [
+        "Leek",
+        "Leeks"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p23",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Mushroom/Brown-Cap-Mushroom/Brown-Cap-Mushroom_001.jpg",
+      "sha256": "e21c353b2d778c2683bcb8c03beae77e67fc38517b8615f3186ea4b59f7e2a83",
+      "acceptableNames": [
+        "Mushroom",
+        "Mushrooms",
+        "Brown Mushroom",
+        "Brown Mushrooms",
+        "Button Mushroom",
+        "Button Mushrooms"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p24",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Onion/Yellow-Onion/Yellow-Onion_001.jpg",
+      "sha256": "1173ddcd0659ffcb447853048ae91ea8eeb52d574aa1be594ec6ab42c95cccf1",
+      "acceptableNames": [
+        "Onion",
+        "Onions",
+        "Brown Onion",
+        "Brown Onions",
+        "Yellow Onion",
+        "Yellow Onions"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p25",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Pepper/Green-Bell-Pepper/Green-Bell-Pepper_001.jpg",
+      "sha256": "4702f6968e059c7d2d921f2d565032a0bf64f8073f6f6f06ee92b2fcb2e58e3f",
+      "acceptableNames": [
+        "Pepper",
+        "Peppers",
+        "Bell Pepper",
+        "Bell Peppers",
+        "Green Pepper",
+        "Green Peppers",
+        "Green Bell Pepper",
+        "Green Bell Peppers"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p26",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Potato/Floury-Potato/Floury-Potato_001.jpg",
+      "sha256": "d3929d10d5612c4e8b7b5f087dd2775537be611b25cd0159514772006acc81bc",
+      "acceptableNames": [
+        "Potato",
+        "Potatoes"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p27",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Red-Beet/Red-Beet_001.jpg",
+      "sha256": "01adfc434160f611e6e50b0373c787a3cb21c8927849594dd35cf5e1da6fa845",
+      "acceptableNames": [
+        "Beet",
+        "Beets",
+        "Beetroot",
+        "Beetroots",
+        "Red Beet",
+        "Red Beets"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p28",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Tomato/Beef-Tomato/Beef-Tomato_001.jpg",
+      "sha256": "68f60443c1429e7b3f40fd594f81774b4c55cade32416f2aa13ed524dc8a2a81",
+      "acceptableNames": [
+        "Tomato",
+        "Tomatoes",
+        "Red Tomato",
+        "Red Tomatoes"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p29",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Vegetables/Zucchini/Zucchini_001.jpg",
+      "sha256": "584a31ec2977b301d83b65748d9e816904992106274404292bd4bcd439540581",
+      "acceptableNames": [
+        "Zucchini",
+        "Zucchinis",
+        "Courgette",
+        "Courgettes"
+      ],
+      "packagingScored": false,
+      "review": "No people/hands seen; source coarse class independently labels visible foreground product. Name only, no varietal/policy/count/location inference; packaging is not a qualified target.",
+      "sourceGroup": "grocery",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p30",
+      "kind": "POSITIVE",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/coffee.png",
+      "sha256": "cc02f8ca188b167c775a7101b5d767d1e71792cf762c33d6fa15a4599b5a8de7",
+      "acceptableNames": [
+        "Coffee Cup",
+        "Cup",
+        "Coffee Mug",
+        "Mug",
+        "Cup of Coffee",
+        "Espresso Cup",
+        "Coffee"
+      ],
+      "packagingScored": false,
+      "review": "Clearly shows coffee cup/saucer/spoon; multiple finite natural names are acceptable; no legible brand/model.",
+      "sourceGroup": "scikit",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p31",
+      "kind": "AMBIGUOUS",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/clock_motion.png",
+      "sha256": "f029226b28b642e80113d86622e9b215ee067a0966feaf5e60604a1e05733955",
+      "acceptableNames": null,
+      "packagingScored": false,
+      "review": "Strong motion blur: name excluded from precision denominator; emitted coarse label recorded as unscored, printed identifiers still must be absent.",
+      "sourceGroup": "scikit",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p32",
+      "kind": "NON_ITEM",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/grass.png",
+      "sha256": "b6b6022426b38936c43a4ac09635cd78af074e90f42ffa8227ac8b7452d39f89",
+      "acceptableNames": [],
+      "packagingScored": false,
+      "review": "Outdoor texture, no distinct catalogue product.",
+      "sourceGroup": "scikit",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p33",
+      "kind": "NON_ITEM",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/brick.png",
+      "sha256": "7966caf324f6ba843118d98f7a07746d22f6a343430add0233eca5f6eaaa8fcf",
+      "acceptableNames": [],
+      "packagingScored": false,
+      "review": "Wall texture, no distinct catalogue product.",
+      "sourceGroup": "scikit",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p34",
+      "kind": "NON_ITEM",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/gravel.png",
+      "sha256": "c48615b451bf1e606fbd72c0aa9f8cc0f068ab7111ef7d93bb9b0f2586440c12",
+      "acceptableNames": [],
+      "packagingScored": false,
+      "review": "Ground texture, no distinct catalogue product.",
+      "sourceGroup": "scikit",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p35",
+      "kind": "NON_ITEM",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/chelsea.png",
+      "sha256": "596aa1e7cb875eb79f437e310381d26b338a81c2da23439704a73c4651e8c4bb",
+      "acceptableNames": [],
+      "packagingScored": false,
+      "review": "Animal, no catalogue product or person.",
+      "sourceGroup": "scikit",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p36",
+      "kind": "NON_ITEM",
+      "source": "https://raw.githubusercontent.com/scikit-image/scikit-image/e8a42ba85aaf5fd9322ef9ca51bc21063b22fcae/skimage/data/hubble_deep_field.jpg",
+      "sha256": "3a19c5dd8a927a9334bb1229a6d63711b1c0c767fb27e2286e7c84a3e2c2f5f4",
+      "acceptableNames": [],
+      "packagingScored": false,
+      "review": "Astronomical scene, no catalogue product or person.",
+      "sourceGroup": "scikit",
+      "acceptableBrands": [],
+      "acceptableModels": []
+    },
+    {
+      "id": "p37",
+      "kind": "POSITIVE",
+      "sourceGroup": "grocery",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Packages/Juice/Bravo-Apple-Juice/Bravo-Apple-Juice_001.jpg",
+      "sha256": "744c3058a52037cb5b0a81c015aa43a1ccf2870695579a51f471376498dac9ed",
+      "acceptableNames": [
+        "Apple Juice",
+        "Apple Juice Carton",
+        "Carton of Apple Juice",
+        "Apple Juice Box",
+        "Juice Carton",
+        "Juice Box",
+        "Juice",
+        "Bravo Apple Juice"
+      ],
+      "acceptableBrands": [
+        "Bravo"
+      ],
+      "acceptableModels": [],
+      "packagingScored": false,
+      "review": "Original-author publicly licensed product photo; carton and printed brand independently reviewed before inference. Non-identifying hand is visible; no face, staff/borrower identity, proof or document. No distinct model identifier is established; model should abstain."
+    },
+    {
+      "id": "p38",
+      "kind": "POSITIVE",
+      "sourceGroup": "grocery",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Packages/Milk/Arla-Ecological-Medium-Fat-Milk/Arla-Ecological-Medium-Fat-Milk_001.jpg",
+      "sha256": "84ff61de8d1588e70bf51021d4d3d1a05cb3b2a0bbf97fbc04e18c37ecdc0186",
+      "acceptableNames": [
+        "Milk",
+        "Milk Carton",
+        "Carton of Milk",
+        "Organic Milk",
+        "Cow Milk",
+        "Semi Skimmed Milk",
+        "Arla Milk"
+      ],
+      "acceptableBrands": [
+        "Arla"
+      ],
+      "acceptableModels": [],
+      "packagingScored": false,
+      "review": "Original-author publicly licensed product photo; carton and printed brand independently reviewed before inference. Non-identifying hand is visible; no face, staff/borrower identity, proof or document. No distinct model identifier is established; model should abstain."
+    },
+    {
+      "id": "p39",
+      "kind": "POSITIVE",
+      "sourceGroup": "grocery",
+      "source": "https://raw.githubusercontent.com/marcusklasson/GroceryStoreDataset/fc80ba90f803d79d0383df52c5a4ac5de99ff6fc/dataset/test/Packages/Oat-Milk/Oatly-Oat-Milk/Oatly-Oat-Milk_001.jpg",
+      "sha256": "9242f2f63ef6a4f7310a8d79671bc0139a698782a7304c1729080d404ffbe84f",
+      "acceptableNames": [
+        "Oat Milk",
+        "Oat Milk Carton",
+        "Carton of Oat Milk",
+        "Oat Drink",
+        "Oat Drink Carton",
+        "Oat Beverage",
+        "Oat Beverage Carton"
+      ],
+      "acceptableBrands": [
+        "Oatly",
+        "Oat-Ly",
+        "Oat Ly"
+      ],
+      "acceptableModels": [],
+      "packagingScored": false,
+      "review": "Original-author publicly licensed product photo; carton and printed brand independently reviewed before inference. Non-identifying hand is visible; no face, staff/borrower identity, proof or document. No distinct model identifier is established; model should abstain."
+    },
+    {
+      "id": "p40",
+      "kind": "OFFICE_DIAGNOSTIC",
+      "source": "LOGISTICS_PUBLIC_CALCULATOR",
+      "itemName": "2-Liner Scientific Calculator",
+      "sha256": "8de4b89a423225d31372591d51599fa0fceee86caec33784e8a217d0123711b1",
+      "acceptableNames": [
+        "Calculator",
+        "Scientific calculator",
+        "Casio calculator",
+        "Casio scientific calculator",
+        "2-liner scientific calculator"
+      ],
+      "acceptableBrands": [
+        "Casio"
+      ],
+      "acceptableModels": [
+        "fx-115MS",
+        "fx115MS"
+      ],
+      "printedEvidence": "Coordinator directly inspected the approved public photo before inference: Casio and fx-115MS visibly printed. The same current preparePhoto thumbnail pipeline will be measured."
+    }
+  ]
+}

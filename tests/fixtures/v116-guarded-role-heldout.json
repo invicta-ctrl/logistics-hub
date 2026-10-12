@@ -1,0 +1,575 @@
+{
+  "fixtureVersion": "v116-guarded-synthetic-1",
+  "status": "FROZEN_BEFORE_PROVIDER_CALLS",
+  "source": "Independently authored public synthetic storeroom labels and scorer-only truth. No production or person data.",
+  "sourceCommit": "fb7e72ca29d1c2e1937dbbca1a989e111ea79834",
+  "notes": [
+    "40 cases: 32 clear typo/reordered positives, four missing-qualifier ambiguities and four absent products. Every family is held out.",
+    "Current prompts, parsers and guards are frozen before inference. Public fixture design includes independently authored multi-typo inputs to test incremental utility; only deterministic baseline/support checks preceded freeze. No model responses or spent-fixture accuracy informed these cases; no general office/photo representativeness is claimed.",
+    "The current runRole paths are measured. Raw provider precision is conditional on the actually invoked subset; all-case guarded precision is separate. Suppressed calls are not provider abstention.",
+    "Production mappings and REVIEW_ONLY remain unchanged. This is finite diagnostic evidence, not a promotion claim."
+  ],
+  "nameCases": [
+    {
+      "id": "g-01-t",
+      "family": "g-family-01",
+      "kind": "typo",
+      "name": "Bamobo dumplnig staemer",
+      "terms": [
+        "Bamboo dumpling steamer",
+        "Steel dumpling steamer",
+        "Cork coaster rack",
+        "Ceramic watering spike",
+        "Marble rolling pin"
+      ],
+      "truth": "Bamboo dumpling steamer"
+    },
+    {
+      "id": "g-01-r",
+      "family": "g-family-01",
+      "kind": "reorder",
+      "name": "dumpling steamer Steel",
+      "terms": [
+        "Bamboo dumpling steamer",
+        "Steel dumpling steamer",
+        "Cork coaster rack",
+        "Ceramic watering spike",
+        "Marble rolling pin"
+      ],
+      "truth": "Steel dumpling steamer"
+    },
+    {
+      "id": "g-02-t",
+      "family": "g-family-02",
+      "kind": "typo",
+      "name": "Coppre tea infsuer",
+      "terms": [
+        "Copper tea infuser",
+        "Brass tea infuser",
+        "Silicone pastry scraper",
+        "Copper plant label",
+        "Silicone garlic peeler"
+      ],
+      "truth": "Copper tea infuser"
+    },
+    {
+      "id": "g-02-r",
+      "family": "g-family-02",
+      "kind": "reorder",
+      "name": "tea infuser Brass",
+      "terms": [
+        "Copper tea infuser",
+        "Brass tea infuser",
+        "Silicone pastry scraper",
+        "Copper plant label",
+        "Silicone garlic peeler"
+      ],
+      "truth": "Brass tea infuser"
+    },
+    {
+      "id": "g-03-t",
+      "family": "g-family-03",
+      "kind": "typo",
+      "name": "Woodne chess clcok",
+      "terms": [
+        "Wooden chess clock",
+        "Metal chess clock",
+        "Linen gardening apron",
+        "Stone incense holder",
+        "Rattan serving basket"
+      ],
+      "truth": "Wooden chess clock"
+    },
+    {
+      "id": "g-03-r",
+      "family": "g-family-03",
+      "kind": "reorder",
+      "name": "chess clock Metal",
+      "terms": [
+        "Wooden chess clock",
+        "Metal chess clock",
+        "Linen gardening apron",
+        "Stone incense holder",
+        "Rattan serving basket"
+      ],
+      "truth": "Metal chess clock"
+    },
+    {
+      "id": "g-04-t",
+      "family": "g-family-04",
+      "kind": "typo",
+      "name": "Beceh embroidrey hopo",
+      "terms": [
+        "Beech embroidery hoop",
+        "Birch embroidery hoop",
+        "Rubber seedling dibber",
+        "Brass candle snuffer",
+        "Bamboo dumpling steamer"
+      ],
+      "truth": "Beech embroidery hoop"
+    },
+    {
+      "id": "g-04-r",
+      "family": "g-family-04",
+      "kind": "reorder",
+      "name": "embroidery hoop Birch",
+      "terms": [
+        "Beech embroidery hoop",
+        "Birch embroidery hoop",
+        "Rubber seedling dibber",
+        "Brass candle snuffer",
+        "Bamboo dumpling steamer"
+      ],
+      "truth": "Birch embroidery hoop"
+    },
+    {
+      "id": "g-05-t",
+      "family": "g-family-05",
+      "kind": "typo",
+      "name": "Cermaic mortra peslte",
+      "terms": [
+        "Ceramic mortar pestle",
+        "Granite mortar pestle",
+        "Terracotta watering spike",
+        "Beech rolling pin",
+        "Copper tea infuser"
+      ],
+      "truth": "Ceramic mortar pestle"
+    },
+    {
+      "id": "g-05-r",
+      "family": "g-family-05",
+      "kind": "reorder",
+      "name": "mortar pestle Granite",
+      "terms": [
+        "Ceramic mortar pestle",
+        "Granite mortar pestle",
+        "Terracotta watering spike",
+        "Beech rolling pin",
+        "Copper tea infuser"
+      ],
+      "truth": "Granite mortar pestle"
+    },
+    {
+      "id": "g-06-t",
+      "family": "g-family-06",
+      "kind": "typo",
+      "name": "Cokr coaser rcak",
+      "terms": [
+        "Cork coaster rack",
+        "Rattan coaster rack",
+        "Slate plant label",
+        "Rubber garlic peeler",
+        "Wooden chess clock"
+      ],
+      "truth": "Cork coaster rack"
+    },
+    {
+      "id": "g-06-r",
+      "family": "g-family-06",
+      "kind": "reorder",
+      "name": "coaster rack Rattan",
+      "terms": [
+        "Cork coaster rack",
+        "Rattan coaster rack",
+        "Slate plant label",
+        "Rubber garlic peeler",
+        "Wooden chess clock"
+      ],
+      "truth": "Rattan coaster rack"
+    },
+    {
+      "id": "g-07-t",
+      "family": "g-family-07",
+      "kind": "typo",
+      "name": "Slicone pastyr scrpaer",
+      "terms": [
+        "Silicone pastry scraper",
+        "Steel pastry scraper",
+        "Porcelain incense holder",
+        "Bamboo serving basket",
+        "Beech embroidery hoop"
+      ],
+      "truth": "Silicone pastry scraper"
+    },
+    {
+      "id": "g-07-r",
+      "family": "g-family-07",
+      "kind": "reorder",
+      "name": "pastry scraper Steel",
+      "terms": [
+        "Silicone pastry scraper",
+        "Steel pastry scraper",
+        "Porcelain incense holder",
+        "Bamboo serving basket",
+        "Beech embroidery hoop"
+      ],
+      "truth": "Steel pastry scraper"
+    },
+    {
+      "id": "g-08-t",
+      "family": "g-family-08",
+      "kind": "typo",
+      "name": "Lnien gardneing arpon",
+      "terms": [
+        "Linen gardening apron",
+        "Leather gardening apron",
+        "Tin candle snuffer",
+        "Steel dumpling steamer",
+        "Ceramic mortar pestle"
+      ],
+      "truth": "Linen gardening apron"
+    },
+    {
+      "id": "g-08-r",
+      "family": "g-family-08",
+      "kind": "reorder",
+      "name": "gardening apron Leather",
+      "terms": [
+        "Linen gardening apron",
+        "Leather gardening apron",
+        "Tin candle snuffer",
+        "Steel dumpling steamer",
+        "Ceramic mortar pestle"
+      ],
+      "truth": "Leather gardening apron"
+    },
+    {
+      "id": "g-09-t",
+      "family": "g-family-09",
+      "kind": "typo",
+      "name": "Rubber seedlnig dibber",
+      "terms": [
+        "Rubber seedling dibber",
+        "Wooden seedling dibber",
+        "Marble rolling pin",
+        "Brass tea infuser",
+        "Cork coaster rack"
+      ],
+      "truth": "Rubber seedling dibber"
+    },
+    {
+      "id": "g-09-r",
+      "family": "g-family-09",
+      "kind": "reorder",
+      "name": "seedling dibber Wooden",
+      "terms": [
+        "Rubber seedling dibber",
+        "Wooden seedling dibber",
+        "Marble rolling pin",
+        "Brass tea infuser",
+        "Cork coaster rack"
+      ],
+      "truth": "Wooden seedling dibber"
+    },
+    {
+      "id": "g-10-t",
+      "family": "g-family-10",
+      "kind": "typo",
+      "name": "Terracotta wateirng spike",
+      "terms": [
+        "Terracotta watering spike",
+        "Ceramic watering spike",
+        "Silicone garlic peeler",
+        "Metal chess clock",
+        "Silicone pastry scraper"
+      ],
+      "truth": "Terracotta watering spike"
+    },
+    {
+      "id": "g-10-r",
+      "family": "g-family-10",
+      "kind": "reorder",
+      "name": "watering spike Ceramic",
+      "terms": [
+        "Terracotta watering spike",
+        "Ceramic watering spike",
+        "Silicone garlic peeler",
+        "Metal chess clock",
+        "Silicone pastry scraper"
+      ],
+      "truth": "Ceramic watering spike"
+    },
+    {
+      "id": "g-11-t",
+      "family": "g-family-11",
+      "kind": "typo",
+      "name": "Slate palnt label",
+      "terms": [
+        "Slate plant label",
+        "Copper plant label",
+        "Rattan serving basket",
+        "Birch embroidery hoop",
+        "Linen gardening apron"
+      ],
+      "truth": "Slate plant label"
+    },
+    {
+      "id": "g-11-r",
+      "family": "g-family-11",
+      "kind": "reorder",
+      "name": "plant label Copper",
+      "terms": [
+        "Slate plant label",
+        "Copper plant label",
+        "Rattan serving basket",
+        "Birch embroidery hoop",
+        "Linen gardening apron"
+      ],
+      "truth": "Copper plant label"
+    },
+    {
+      "id": "g-12-t",
+      "family": "g-family-12",
+      "kind": "typo",
+      "name": "Porcelain incesne holder",
+      "terms": [
+        "Porcelain incense holder",
+        "Stone incense holder",
+        "Bamboo dumpling steamer",
+        "Granite mortar pestle",
+        "Rubber seedling dibber"
+      ],
+      "truth": "Porcelain incense holder"
+    },
+    {
+      "id": "g-12-r",
+      "family": "g-family-12",
+      "kind": "reorder",
+      "name": "incense holder Stone",
+      "terms": [
+        "Porcelain incense holder",
+        "Stone incense holder",
+        "Bamboo dumpling steamer",
+        "Granite mortar pestle",
+        "Rubber seedling dibber"
+      ],
+      "truth": "Stone incense holder"
+    },
+    {
+      "id": "g-13-t",
+      "family": "g-family-13",
+      "kind": "typo",
+      "name": "Tin candle snufefr",
+      "terms": [
+        "Tin candle snuffer",
+        "Brass candle snuffer",
+        "Copper tea infuser",
+        "Rattan coaster rack",
+        "Terracotta watering spike"
+      ],
+      "truth": "Tin candle snuffer"
+    },
+    {
+      "id": "g-13-r",
+      "family": "g-family-13",
+      "kind": "reorder",
+      "name": "candle snuffer Brass",
+      "terms": [
+        "Tin candle snuffer",
+        "Brass candle snuffer",
+        "Copper tea infuser",
+        "Rattan coaster rack",
+        "Terracotta watering spike"
+      ],
+      "truth": "Brass candle snuffer"
+    },
+    {
+      "id": "g-14-t",
+      "family": "g-family-14",
+      "kind": "typo",
+      "name": "Marble rollnig pin",
+      "terms": [
+        "Marble rolling pin",
+        "Beech rolling pin",
+        "Wooden chess clock",
+        "Steel pastry scraper",
+        "Slate plant label"
+      ],
+      "truth": "Marble rolling pin"
+    },
+    {
+      "id": "g-14-r",
+      "family": "g-family-14",
+      "kind": "reorder",
+      "name": "rolling pin Beech",
+      "terms": [
+        "Marble rolling pin",
+        "Beech rolling pin",
+        "Wooden chess clock",
+        "Steel pastry scraper",
+        "Slate plant label"
+      ],
+      "truth": "Beech rolling pin"
+    },
+    {
+      "id": "g-15-t",
+      "family": "g-family-15",
+      "kind": "typo",
+      "name": "Silicone galric peeler",
+      "terms": [
+        "Silicone garlic peeler",
+        "Rubber garlic peeler",
+        "Beech embroidery hoop",
+        "Leather gardening apron",
+        "Porcelain incense holder"
+      ],
+      "truth": "Silicone garlic peeler"
+    },
+    {
+      "id": "g-15-r",
+      "family": "g-family-15",
+      "kind": "reorder",
+      "name": "garlic peeler Rubber",
+      "terms": [
+        "Silicone garlic peeler",
+        "Rubber garlic peeler",
+        "Beech embroidery hoop",
+        "Leather gardening apron",
+        "Porcelain incense holder"
+      ],
+      "truth": "Rubber garlic peeler"
+    },
+    {
+      "id": "g-16-t",
+      "family": "g-family-16",
+      "kind": "typo",
+      "name": "Rattan servnig basket",
+      "terms": [
+        "Rattan serving basket",
+        "Bamboo serving basket",
+        "Ceramic mortar pestle",
+        "Wooden seedling dibber",
+        "Tin candle snuffer"
+      ],
+      "truth": "Rattan serving basket"
+    },
+    {
+      "id": "g-16-r",
+      "family": "g-family-16",
+      "kind": "reorder",
+      "name": "serving basket Bamboo",
+      "terms": [
+        "Rattan serving basket",
+        "Bamboo serving basket",
+        "Ceramic mortar pestle",
+        "Wooden seedling dibber",
+        "Tin candle snuffer"
+      ],
+      "truth": "Bamboo serving basket"
+    },
+    {
+      "id": "g-amb-1",
+      "family": "g-family-01",
+      "kind": "ambiguous",
+      "name": "dumpling steamer",
+      "terms": [
+        "Bamboo dumpling steamer",
+        "Steel dumpling steamer",
+        "Cork coaster rack",
+        "Ceramic watering spike",
+        "Marble rolling pin"
+      ],
+      "truth": null
+    },
+    {
+      "id": "g-amb-2",
+      "family": "g-family-02",
+      "kind": "ambiguous",
+      "name": "tea infuser",
+      "terms": [
+        "Copper tea infuser",
+        "Brass tea infuser",
+        "Silicone pastry scraper",
+        "Copper plant label",
+        "Silicone garlic peeler"
+      ],
+      "truth": null
+    },
+    {
+      "id": "g-amb-3",
+      "family": "g-family-03",
+      "kind": "ambiguous",
+      "name": "chess clock",
+      "terms": [
+        "Wooden chess clock",
+        "Metal chess clock",
+        "Linen gardening apron",
+        "Stone incense holder",
+        "Rattan serving basket"
+      ],
+      "truth": null
+    },
+    {
+      "id": "g-amb-4",
+      "family": "g-family-04",
+      "kind": "ambiguous",
+      "name": "embroidery hoop",
+      "terms": [
+        "Beech embroidery hoop",
+        "Birch embroidery hoop",
+        "Rubber seedling dibber",
+        "Brass candle snuffer",
+        "Bamboo dumpling steamer"
+      ],
+      "truth": null
+    },
+    {
+      "id": "g-abs-1",
+      "family": "g-family-01",
+      "kind": "absent",
+      "name": "Plastic dumpling steamer",
+      "terms": [
+        "Bamboo dumpling steamer",
+        "Steel dumpling steamer",
+        "Cork coaster rack",
+        "Ceramic watering spike",
+        "Marble rolling pin"
+      ],
+      "truth": null
+    },
+    {
+      "id": "g-abs-2",
+      "family": "g-family-02",
+      "kind": "absent",
+      "name": "Titanium tea infuser",
+      "terms": [
+        "Copper tea infuser",
+        "Brass tea infuser",
+        "Silicone pastry scraper",
+        "Copper plant label",
+        "Silicone garlic peeler"
+      ],
+      "truth": null
+    },
+    {
+      "id": "g-abs-3",
+      "family": "g-family-03",
+      "kind": "absent",
+      "name": "Stone chess clock",
+      "terms": [
+        "Wooden chess clock",
+        "Metal chess clock",
+        "Linen gardening apron",
+        "Stone incense holder",
+        "Rattan serving basket"
+      ],
+      "truth": null
+    },
+    {
+      "id": "g-abs-4",
+      "family": "g-family-04",
+      "kind": "absent",
+      "name": "Steel embroidery hoop",
+      "terms": [
+        "Beech embroidery hoop",
+        "Birch embroidery hoop",
+        "Rubber seedling dibber",
+        "Brass candle snuffer",
+        "Bamboo dumpling steamer"
+      ],
+      "truth": null
+    }
+  ],
+  "followUpCases": []
+}

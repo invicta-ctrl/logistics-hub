@@ -27,7 +27,7 @@
 
 V1.16 **owns first implementation** of a genuine product-version label and concise deployed changelog in the existing Administration → System > This version, preserving Build, Commit, Built and Migrations. **V2.1 / RTV3-01 F4 inherits and verifies** that functionality (including honest unknown/rollback behavior), adding its own operability work without a duplicate panel. Subsequent releases update verified deployed product identity. V3.1–V3.7 historical labels do not schedule releases beyond V3.0.
 
-**Final V2 readiness gate:** V2 is genuinely complete and ready to proceed to the V3 roadmap only after V1.16's complete accepted scope is verified, merged and deployed, the V1.16 Administration version/changelog is inspected, and remaining owner QA is resolved or explicitly accepted. Historical V2.0 evidence remains unchanged.
+**Final V2 readiness gate:** V2 is genuinely complete and ready to proceed to the V3 roadmap only after V1.16's complete accepted scope and production behavior are verified by the agents, final owner acceptance is obtained, and the promoted deployed artifact's Administration version/changelog and release record are verified. Missing production test access or provider-administration proof leaves V1.16 OPEN. Historical V2.0 evidence remains unchanged.
 
 **No incomplete release doctrine:** all working checkpoints are committed/pushed to the sole active slice branch; merge each independently complete, fully verified slice to updated main promptly, then prune and start the next slice from main. Do not label incomplete or future work as released.
 

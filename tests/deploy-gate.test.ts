@@ -141,7 +141,7 @@ require("fs").writeFileSync("build-source", process.env.GITHUB_SHA);
     expect(fs.readFileSync(path.join(dir, "build-source"), "utf8")).toBe(sha);
     const exercise = (result, readError = "") => spawnSync("bash", ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", `${command}\nnode provider.cjs`], {
       cwd: dir, encoding: "utf8", timeout: 10_000,
-      env: { ...process.env, PATH: `${dir}${path.delimiter}${process.env.PATH}`, SHA: sha, REPO: repo, GH_TOKEN: "fixture-not-a-token",
+      env: { ...process.env, PATH: `${dir}${path.delimiter}${process.env.PATH}`, SHA: sha, REPO: repo, GH_TOKEN: "test-only",
         FAKE_RUNS: JSON.stringify({ total_count: 1, workflow_runs: [run()] }), FAKE_CHECKS: JSON.stringify({ total_count: 1, check_runs: [result] }), FAKE_READ_ERROR: readError },
     });
     const refused = exercise(check({ conclusion: "failure" }));

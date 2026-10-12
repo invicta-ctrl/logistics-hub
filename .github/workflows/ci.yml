@@ -18,6 +18,14 @@ on:
         required: false
         default: ""
         type: string
+      qualification_task:
+        description: Recover the spent text receipt, or measure fresh guarded roles and photos without promotion
+        required: true
+        default: receipt
+        type: choice
+        options:
+          - receipt
+          - fresh
 
 permissions:
   contents: read
@@ -106,12 +114,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-        if: inputs.receipt_run == ''
+        if: inputs.receipt_run == '' && inputs.qualification_task == 'fresh'
+      - run: npx playwright install --with-deps chromium
+        if: inputs.receipt_run == '' && inputs.qualification_task == 'fresh'
       - name: Recover the completed public qualification receipt without inference
-        if: inputs.receipt_run != ''
+        if: inputs.receipt_run != '' || inputs.qualification_task != 'fresh'
         env:
           GH_TOKEN: ${{ github.token }}
-          RECEIPT_RUN: ${{ inputs.receipt_run }}
+          RECEIPT_RUN: ${{ inputs.receipt_run || '38215952629' }}
         run: |
           node --input-type=module -e '
             import { execFileSync } from "node:child_process";
@@ -125,22 +135,31 @@ jobs:
             if (receipt.byteLength > 128000 || !receipt.toString("utf8").includes("72d23615672d32fddca71650bd02ea48952df1e8f88556cb4748de97ef404297")) throw new Error("Unrecognized qualification receipt.");
             writeFileSync("role-qualification.txt", receipt);
           '
-      - name: Measure existing roles and permitted same-task challenger
-        if: inputs.receipt_run == ''
+      - name: Measure fresh guarded roles and licensed photos
+        if: inputs.receipt_run == '' && inputs.qualification_task == 'fresh'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          qualification_status=0
-          node scripts/evaluate-roles.mjs --fixtures tests/fixtures/v116-role-heldout.json --challenger qwen --granite 60 --qwen 60 --glm 5 --stop-neurons 400 > role-qualification.txt 2>&1 || qualification_status=$?
-          exit "$qualification_status"
+          # Validate every public source/preparer before any additional inference. The prior185-call receipt is spent.
+          node scripts/evaluate-roles.mjs --photos tests/fixtures/v116-photo-heldout.json --dry --prior-neurons 128.288 --stop-neurons 240 > role-qualification.txt 2>&1
+          node scripts/evaluate-roles.mjs --guarded tests/fixtures/v116-guarded-role-heldout.json --granite 40 --qwen 40 --glm 0 --prior-neurons 128.288 --stop-neurons 400 >> role-qualification.txt 2>&1
+          photo_prior=$(node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const line = readFileSync("role-qualification.txt", "utf8").split("\n").find(line => line.startsWith("guarded receipt "));
+            const receipt = line ? JSON.parse(line.slice("guarded receipt ".length)) : null;
+            const used = receipt?.combinedAccountedNeurons;
+            if (!receipt?.complete || !receipt.coreUnchanged || !receipt.rolesRemainReviewOnly || !Number.isFinite(used) || used < 128.288 || used >= 400) throw new Error("No complete verified guard receipt; photo inference refused.");
+            console.log(Math.ceil(used * 1000) / 1000);
+          ')
+          node scripts/evaluate-roles.mjs --photos tests/fixtures/v116-photo-heldout.json --prior-neurons "$photo_prior" --stop-neurons 240 >> role-qualification.txt 2>&1
       - name: Publish the bounded count-only receipt
         if: always()
         run: |
           node --input-type=module -e '
             import { existsSync, readFileSync } from "node:fs";
             if (!existsSync("role-qualification.txt")) process.exit(0);
-            const safe = /^(catalog preflight|Catalog preflight|Catalog availability|Needs CLOUDFLARE|Account identity|Model is outside|fresh fixture|Deterministic baseline|Granite|Qwen|GLM|paired normalization|measurement receipt|provider metrics|accounted Neurons)/;
+            const safe = /^(catalog preflight|Catalog preflight|Catalog availability|Needs CLOUDFLARE|Account identity|Model is outside|fresh fixture|guarded |photo |Raw provider scores|TEXT_NORMALIZE,|CANDIDATE_ARBITRATE,|Deterministic baseline|Granite|Qwen|GLM|paired normalization|measurement receipt|provider metrics|accounted Neurons)/;
             const report = readFileSync("role-qualification.txt", "utf8").split("\n").filter(line => safe.test(line)).join("\n");
             if (report) console.log(`::notice title=V1.16 qualification::${report.replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A")}`);
           '

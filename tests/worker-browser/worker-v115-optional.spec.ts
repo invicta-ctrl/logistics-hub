@@ -92,11 +92,11 @@ test("with every photo and optional panel failing, staff and students still do t
   await student.goto("/lending");
   await student.getByRole("searchbox").first().fill(name).catch(() => undefined);
   await expect(student.getByText(name).first()).toBeVisible();
-  expect(await brokenPictures(student), "the Lending Hub shows no broken picture").toEqual([]);
+  await expect.poll(() => brokenPictures(student), { message: "the Lending Hub shows no broken picture" }).toEqual([]);
   await student.goto(`/self-service?do=borrow&item=${id}`);
   const borrow = student.getByRole("dialog", { name });
   await expect(borrow).toBeVisible();
-  expect(await brokenPictures(student), "Self-Service shows no broken picture").toEqual([]);
+  await expect.poll(() => brokenPictures(student), { message: "Self-Service shows no broken picture" }).toEqual([]);
   await identify(borrow, "Optional Student");
   await borrow.getByLabel("Tomorrow").check();
   await borrow.getByRole("button", { name: "Review and borrow" }).click();

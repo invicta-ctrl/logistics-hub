@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { absentNames, baselineAnswer, closest, isAmbiguous, passes, score, similarity, splitOf, variantsOf } from "../src/role-evaluation";
@@ -88,6 +88,61 @@ describe("bounded fresh provider evaluation", () => {
       env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: preload ? "a".repeat(32) : "", CLOUDFLARE_API_TOKEN: preload ? "test-only" : "", QUALIFICATION_SCENARIO: scenario } });
   const metrics = (output: string) => output.split("\n").filter((line) => line.startsWith("provider metrics ")).map((line) => JSON.parse(line.slice(17)));
 
+  it("measures current guarded adapters without treating pre-call suppression as provider abstention or trusted values", () => {
+    const guardFlags = ["--guarded", "tests/fixtures/v116-guarded-role-heldout.json", "--granite", "40", "--qwen", "40", "--glm", "0", "--prior-neurons", "128.288"];
+    const dir = mkdtempSync(join(tmpdir(), "guarded-role-evaluation-")), preload = join(dir, "transport.mjs");
+    writeFileSync(preload, `
+      import fs from 'node:fs';
+      const fixture = JSON.parse(fs.readFileSync('tests/fixtures/v116-guarded-role-heldout.json'));
+      const truth = new Map(fixture.nameCases.map(each => [each.name, each.truth])); let calls = 0;
+      globalThis.fetch = async (url, options) => {
+        if (!String(url).startsWith('https://api.cloudflare.com/client/v4/accounts/')) throw new Error('unexpected egress');
+        if (String(url).includes('/ai/models/search')) return {ok:true,status:200,json:async()=>({success:true,result:[{name:new URL(url).searchParams.get('search')}]})};
+        calls++; const payload = JSON.parse(options.body), input = JSON.parse(payload.messages[1].content);
+        if ('truth' in input || 'family' in input || 'kind' in input || !options.signal || truth.get(input.name) === null) throw new Error('unsafe or pre-suppressed task reached provider');
+        const field = String(url).includes('granite') ? 'term' : 'id';
+        if (payload.max_tokens !== (field === 'term' ? 40 : 60)) throw new Error('adapter changed');
+        const answer = field === 'term' ? truth.get(input.name) : input.candidates.find(each => each.name === truth.get(input.name))?.id;
+        if (process.env.QUALIFICATION_SCENARIO === 'denied') return {ok:false,status:403,json:async()=>({success:false})};
+        let result = {[field]:answer};
+        if (process.env.QUALIFICATION_SCENARIO === 'mixed') {
+          if (calls === 1) result = {[field]:payload.response_format.json_schema.properties[field].enum.find(value => value !== null && value !== answer)};
+          if (calls === 2) result = {[field]:null}; if (calls === 3) result = {bad:42};
+        }
+        return {ok:true,status:200,json:async()=>({success:true,result:{choices:[{message:field === 'term'?{content:JSON.stringify(result)}:{content:null,reasoning_content:JSON.stringify(result)}}],usage:{neurons:.5}}})};
+      };
+    `);
+    const records = (output: string, prefix: string) => output.split("\n").filter(line => line.startsWith(prefix)).map(line => JSON.parse(line.slice(prefix.length)));
+    try {
+      const dry = run(["--dry", ...guardFlags]);
+      expect(dry.status).toBe(0);
+      expect(dry.stdout).toContain("baseline answered 24 (precision 100%)");
+      const ideal = run(guardFlags, preload);
+      expect(ideal.status).toBe(0);
+      for (const result of records(ideal.stdout, "guarded measurement ")) expect(result).toMatchObject({completed:40,providerInvoked:32,preSuppressed:8,postVetoed:0,
+        rawPopulation:"INVOKED_SUBSET_ONLY",rawScore:{cases:32,absentCases:0,modelAnswered:32,fixes:8},guardedScore:{cases:40,absentCases:8,modelAnswered:32,fixes:8},promotion:"NOT_AUTHORIZED_REVIEW_ONLY"});
+      expect(metrics(ideal.stdout).map(each => each.abstentions)).toEqual([0,0]);
+      expect(records(ideal.stdout,"guarded receipt ")[0]).toMatchObject({complete:true,coreUnchanged:true,rolesRemainReviewOnly:true,guardedAccountedNeurons:32});
+      const mixed = run(guardFlags, preload, "mixed");
+      expect(mixed.status).toBe(0);
+      expect(records(mixed.stdout,"guarded measurement ")[0]).toMatchObject({preSuppressed:8,postVetoed:1,rawScore:{modelWrong:1},guardedScore:{modelWrong:0,modelAnswered:29}});
+      expect(metrics(mixed.stdout)[0]).toMatchObject({abstentions:1,invalid:1});
+      const denied = run(guardFlags, preload, "denied");
+      expect(denied.status).toBe(2);
+      expect(records(denied.stdout,"guarded receipt ")[0]).toMatchObject({complete:false,stopped:"ACCESS_DENIED"});
+      expect(metrics(denied.stdout).reduce((sum, each) => sum + each.calls, 0)).toBe(1);
+      const capped = run([...guardFlags.slice(0,-1),"399.5"], preload);
+      expect(capped.status).toBe(2);
+      expect(records(capped.stdout,"guarded receipt ")[0]).toMatchObject({complete:false,guardedAccountedNeurons:0});
+      expect(metrics(capped.stdout)).toHaveLength(0);
+      const changed = JSON.parse(readFileSync("tests/fixtures/v116-guarded-role-heldout.json", "utf8")); changed.nameCases[0].name = "DO_NOT_SEND_PRIVATE_TEST_DATA";
+      const changedPath = join(dir,"changed.json"); writeFileSync(changedPath,JSON.stringify(changed));
+      const refused = run(["--guarded",changedPath,...guardFlags.slice(2)],preload);
+      expect(refused.status).toBe(2); expect(refused.stderr).toContain("Unreviewed fixture bytes");
+      expect(refused.stdout).not.toContain("catalog preflight"); expect(refused.stdout).not.toContain("DO_NOT_SEND_PRIVATE_TEST_DATA");
+    } finally { rmSync(dir,{recursive:true,force:true}); }
+  });
+
   it("validates fresh fixtures without credentials or inference, and refuses malformed limits and unpermitted challengers", () => {
     const dry = run(["--dry", ...flags]);
     expect(dry.status).toBe(0);
@@ -99,6 +154,24 @@ describe("bounded fresh provider evaluation", () => {
     for (const args of [["--dry", "--granite", "NaN"], ["--dry", "--stop-neurons", "-1"], ["--dry", "--fixtures"], ["--dry", "--challenger", "paid-model"]]) {
       expect(run(args).status).toBe(1);
     }
+  });
+
+  it("refuses altered or symlinked photo manifests before downloads, browser preparation or inference", () => {
+    const dir = mkdtempSync(join(tmpdir(), "photo-fixture-"));
+    const changedPath = join(dir, "changed.json"), linkPath = join(dir, "linked.json"), preload = join(dir, "egress.mjs");
+    const changed = JSON.parse(readFileSync("tests/fixtures/v116-photo-heldout.json", "utf8"));
+    changed.photos[0].id = "DO_NOT_SEND_PRIVATE_TEST_DATA";
+    writeFileSync(changedPath, JSON.stringify(changed));
+    symlinkSync(join(process.cwd(), "tests/fixtures/v116-photo-heldout.json"), linkPath);
+    writeFileSync(preload, `globalThis.fetch = async () => { console.log('UNAUTHORIZED_EGRESS'); throw new Error(); };`);
+    try {
+      for (const path of [changedPath, linkPath]) {
+        const refused = run(["--photos", path, "--dry"], preload);
+        expect(refused.status).not.toBe(0);
+        expect(refused.stderr).toMatch(/Unreviewed photo manifest|Invalid bounded photo manifest/);
+        expect(refused.stdout).not.toMatch(/UNAUTHORIZED_EGRESS|DO_NOT_SEND_PRIVATE_TEST_DATA|photo preparation/);
+      }
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
   it("refuses unreviewed file egress and reads one bounded descriptor snapshot despite a replaced pathname", () => {
