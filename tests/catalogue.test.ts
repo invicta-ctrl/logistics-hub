@@ -739,23 +739,18 @@ describe("review routing at the Worker boundary", () => {
     expect((await reviewProposals(env.DB)).metrics.find((entry) => entry.role === "TEXT_NORMALIZE")).toMatchObject({ dropped: 1, answered: 0 });
     expect((await save(session, shot(shelf))).status).toBe(201);
   });
-  it("uses one reviewed-candidate role, strict replies and minimal facts", async () => {
+  it("refuses ambiguous catalogue colour choices without calling a model or leaking private facts", async () => {
     sqlite.prepare("UPDATE items SET status = 'ARCHIVED'").run();
     sqlite.prepare("INSERT INTO items(id, name, category, item_type, consumption_mode, unit, needs_review) VALUES('ITM-AI-B', 'Whiteboard Marker Black', 'TOOLS', 'Loanable', 'WHOLE_UNIT', 'piece', 0), ('ITM-AI-C', 'Whiteboard Marker Blue', 'TOOLS', 'Loanable', 'WHOLE_UNIT', 'piece', 0), ('ITM-AI-D', 'Whiteboard Marker Private', 'TOOLS', 'Loanable', 'WHOLE_UNIT', 'piece', 1)").run();
-    const calls: { model: string; input: { messages: { content: string }[] } }[] = [];
-    env.AI = { run: async (model: string, input: { messages: { content: string }[] }) => { calls.push({ model, input }); return { response: { id: "ITM-AI-C" } }; } } as unknown as Ai;
+    const calls: unknown[] = [];
+    env.AI = { run: async () => { calls.push(true); return { response: { id: "ITM-AI-C" } }; } } as unknown as Ai;
     const session = await begin(await place("AI boundary shelf"));
     const response = await staff(`/api/staff/catalogue/sessions/${session}/ai-offer`, "POST", { draftId: crypto.randomUUID(), revision: 1, name: "Whiteboard marker", notes: "private notes", serialNumber: "private serial" });
-    expect(await response.json()).toMatchObject({ proposal: { role: "CANDIDATE_ARBITRATE", field: "id", value: "ITM-AI-C" }, label: "Whiteboard Marker Blue" });
-    expect(calls).toHaveLength(1);
-    expect(JSON.parse(calls[0]!.input.messages[1]!.content)).toEqual({ name: "Whiteboard marker", candidates: [{ id: "ITM-AI-B", name: "Whiteboard Marker Black" }, { id: "ITM-AI-C", name: "Whiteboard Marker Blue" }] });
-    env.AI = { run: async () => { throw Object.assign(new Error("private provider failure"), { status: 429 }); } } as unknown as Ai;
-    const failed = await staff(`/api/staff/catalogue/sessions/${session}/ai-offer`, "POST", { draftId: crypto.randomUUID(), revision: 1, name: "Whiteboard marker" });
-    expect(await failed.json()).toMatchObject({ proposal: null, reason: "RATE_LIMITED" });
+    expect(await response.json()).toMatchObject({ proposal: null, label: null });
+    expect(calls).toHaveLength(0);
     const { reviewProposals } = await import("../src/ai-review");
     const evidence = await reviewProposals(env.DB);
-    expect(evidence.metrics.find((entry) => entry.role === "CANDIDATE_ARBITRATE")).toMatchObject({ answered: 1, unavailable: 1, neurons: 6 });
-    for (const privateValue of ["private notes", "private serial", "private provider failure", "Whiteboard"]) expect(JSON.stringify(evidence.metrics)).not.toContain(privateValue);
+    for (const privateValue of ["private notes", "private serial", "Whiteboard"]) expect(JSON.stringify(evidence.metrics)).not.toContain(privateValue);
   });
   it("asks GLM only a fixed conflict below 6500, and owner-off never calls a provider", async () => {
     sqlite.prepare("UPDATE items SET status = 'ARCHIVED'").run();
