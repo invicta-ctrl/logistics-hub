@@ -68,7 +68,7 @@ const clean = (text: string, limit: number) => text.replace(/\s+/g, " ").trim().
 
 /* ---------- The three adapters: what is sent, the schema asked for, and how a reply is read ---------- */
 
-type Task = { system: string; user: string; allowed: readonly string[]; field: ProposalField };
+type Task = { system: string; user: string; allowed: readonly string[]; field: ProposalField; evidence?: { observed: string; options: ReadonlyArray<{ value: string; name: string }> } };
 
 /** TEXT_NORMALIZE (Granite): the observed or typed name, and the canonical terms it may be normalized to. Returns one of them or null. */
 export const MAX_TERMS = 40;
@@ -79,7 +79,7 @@ export function normalizeTask(observed: string, terms: readonly string[], prefer
   const allowed = [...new Set(terms.map((term) => term.replace(/\s+/g, " ").trim()).filter((term) => term && term.length <= 60))]
     .sort((a, b) => overlap(b) - overlap(a) || Number(preferred.includes(b)) - Number(preferred.includes(a)) || a.localeCompare(b)).slice(0, MAX_TERMS);
   return {
-    field: "term", allowed,
+    field: "term", allowed, evidence: { observed: clean(observed, 80), options: allowed.map((name) => ({ value: name, name })) },
     system: "You match a storeroom item name to the catalogue's own wording. Reply with JSON only: {\"term\": ...}. term must be copied exactly from the list in the request. Answer only when the name is clearly the same item as one term (a misspelling, a plural, reordered words, or one missing word) and no other term fits equally well; otherwise null.",
     user: JSON.stringify({ name: clean(observed, 80), terms: allowed })
   };
@@ -89,7 +89,7 @@ export function normalizeTask(observed: string, terms: readonly string[], prefer
 export function arbitrateTask(observed: string, candidates: ReadonlyArray<{ id: string; name: string }>): Task {
   const list = candidates.slice(0, 5).map((candidate) => ({ id: candidate.id, name: clean(candidate.name, 80) }));
   return {
-    field: "id", allowed: list.map((candidate) => candidate.id),
+    field: "id", allowed: list.map((candidate) => candidate.id), evidence: { observed: clean(observed, 80), options: list.map((candidate) => ({ value: candidate.id, name: candidate.name })) },
     system: "You decide which existing storeroom item a new name refers to. Reply with JSON only: {\"id\": ...}. id must be copied exactly from the candidates in the request, or null when it is unclear or none fits.",
     user: JSON.stringify({ name: clean(observed, 80), candidates: list })
   };
@@ -107,6 +107,30 @@ export function secondOpinionTask(facts: readonly FactCode[]): Task {
     system: "Staff are cataloguing a storeroom item and the evidence conflicts. Reply with JSON only: {\"follow_up\": ...}. follow_up is the one question a person should check first, copied exactly from the allowed list, or null.",
     user: JSON.stringify({ conflicts: [...new Set(facts)].filter((fact) => FACT_CODES.includes(fact)), allowed: FOLLOW_UPS })
   };
+}
+
+/**
+ * A model may only suggest a uniquely supported candidate. An exact/shared noun is not enough:
+ * the typed words must identify one source item without silently supplying missing qualifiers.
+ * This is conservative by design; a skipped suggestion leaves normal manual selection available.
+ */
+export function supportedChoice(task: Task, choice: string): boolean {
+  if (!task.allowed.includes(choice)) return false;
+  if (!task.evidence) return true; // Fixed-code follow-ups are a separate, review-only role.
+  const typed = words(task.evidence.observed);
+  if (!typed.length) return false;
+  const supportsWord = (word: string, from: readonly string[]) =>
+    from.some((part) => closeWord(word, part)) ||
+    from.some((part, index) => index + 1 < from.length && closeWord(word, part + from[index + 1]));
+  const supports = (name: string) => {
+    const offered = words(name);
+    return offered.length > 0 &&
+      typed.every((word) => supportsWord(word, offered)) &&
+      offered.filter((word) => !supportsWord(word, typed)).length <= Math.floor(offered.length / 4);
+  };
+  const chosen = task.evidence.options.find((option) => option.value === choice);
+  return Boolean(chosen && supports(chosen.name) &&
+    !task.evidence.options.some((option) => option.value !== choice && supports(option.name)));
 }
 
 /** A reply reduced to one allowed value, or null. A value that is not exactly in the allowed list is dropped. */
@@ -155,6 +179,7 @@ export async function runRole(db: D1Database, ai: AiRunner | undefined, role: Te
     if (!await assistOn(db)) return done("ABSTAIN", "SWITCHED_OFF");
     if (task.field !== ROLE_FIELDS[role]) return done("ABSTAIN", "TASK_MISMATCH");
     if (task.allowed.length === 0) return done("ABSTAIN", "NOTHING_TO_CHOOSE");
+    if (task.evidence && !task.allowed.some((choice) => supportedChoice(task, choice))) return done("ABSTAIN", "INSUFFICIENT_EVIDENCE");
     const breaker = breakers[role];
     if (breaker.openUntil > now) return done("UNAVAILABLE", "BREAKER_OPEN");
     const limits = ROLE_LIMITS[role];
@@ -175,6 +200,7 @@ export async function runRole(db: D1Database, ai: AiRunner | undefined, role: Te
     const neurons = neuronsOf(reply, limits.reserve);
     if (neurons !== limits.reserve) await spend(db, neurons - limits.reserve, now);
     const value = readChoice(reply, task);
+    if (value !== null && !supportedChoice(task, value)) return done("ABSTAIN", "INSUFFICIENT_EVIDENCE", null, neurons);
     return value === null ? done("ABSTAIN", "NO_VALID_ANSWER", null, neurons) : done("ANSWER", "OK", value, neurons);
   } catch {
     return done("UNAVAILABLE", "ERROR");
