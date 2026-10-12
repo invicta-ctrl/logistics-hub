@@ -20,7 +20,7 @@ Read the current documents in the following priority order, then verify Git/head
 | V3 product naming / roadmap | `docs/road-to-v3/06_ROAD_TO_V3_RELEASE_MAP.md` and `docs/road-to-v3/README.md` |
 | V3 owner decisions / unresolved findings | `docs/road-to-v3/decisions/OWNER_DECISIONS.md`, `docs/road-to-v3/08_RECONCILIATION_REGISTER.md` |
 
-`CLAUDE.md` now simply points agents to the above authority without resurrecting the historical forward-propagation workflow. **The owner-approved V1.16 is not yet implemented or fully released** on this documentation checkpoint; Road to V3 remains downstream.
+`CLAUDE.md` now simply points agents to the above authority without resurrecting the historical forward-propagation workflow. At the historical 2026-10-11 audit, V1.16 implementation/release was pending. **Current clarification, 2026-10-12:** A1/A2/B1/C1/D1 are delivered; full V1.16 remains OPEN in VERSION_VERIFYING. Agents execute feasible live QA and fresh model qualification before final owner acceptance; Road to V3 remains downstream.
 
 ## Cleanup decisions
 

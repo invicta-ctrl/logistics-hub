@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { absentNames, baselineAnswer, closest, isAmbiguous, passes, score, similarity, splitOf, variantsOf } from "../src/role-evaluation";
 
 describe("role evaluation helpers", () => {
@@ -74,5 +78,72 @@ describe("role evaluation helpers", () => {
     const silent = score(cases.map((each) => ({ ...each, model: "A" })));
     expect(passes({ ...silent, fixes: 0 }, { netBenefit: false })).toMatchObject({ pass: true, why: expect.stringContaining("not measurable") });
     expect(passes({ ...silent, fixes: 0 }).pass).toBe(false);
+  });
+});
+
+describe("bounded fresh provider evaluation", () => {
+  const flags = ["--fixtures", "tests/fixtures/v116-role-heldout.json", "--challenger", "qwen", "--granite", "10", "--qwen", "0", "--glm", "0"];
+  const run = (args: string[], preload?: string, scenario = "") => spawnSync(process.execPath,
+    [...(preload ? ["--import", preload] : []), "scripts/evaluate-roles.mjs", ...args], { encoding: "utf8", timeout: 15_000,
+      env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: preload ? "a".repeat(32) : "", CLOUDFLARE_API_TOKEN: preload ? "test-only" : "", QUALIFICATION_SCENARIO: scenario } });
+  const metrics = (output: string) => output.split("\n").filter((line) => line.startsWith("provider metrics ")).map((line) => JSON.parse(line.slice(17)));
+
+  it("validates fresh fixtures without credentials or inference, and refuses malformed limits and unpermitted challengers", () => {
+    const dry = run(["--dry", ...flags]);
+    expect(dry.status).toBe(0);
+    expect(dry.stdout).toContain("zero inference calls");
+    expect(dry.stdout).toContain("baseline answered 36 (precision 100%)");
+    const noAuth = run(flags);
+    expect(noAuth.status).toBe(1);
+    expect(noAuth.stderr).toContain("Nothing was sent");
+    for (const args of [["--dry", "--granite", "NaN"], ["--dry", "--stop-neurons", "-1"], ["--dry", "--fixtures"], ["--dry", "--challenger", "paid-model"]]) {
+      expect(run(args).status).toBe(1);
+    }
+  });
+
+  it("keeps valid abstention, invalid output and failures distinct; caps paired calls and refuses partial measurements", () => {
+    const dir = mkdtempSync(join(tmpdir(), "role-evaluation-"));
+    const preload = join(dir, "transport.mjs");
+    writeFileSync(preload, `
+      let calls = 0;
+      globalThis.fetch = async (url, options) => {
+        if (!String(url).startsWith('https://api.cloudflare.com/client/v4/accounts/')) throw new Error('unexpected destination');
+        if (String(url).includes('/ai/models/search')) return { ok: true, status: 200, json: async () => ({ success: true, result: [{ name: new URL(url).searchParams.get('search'), properties: [{property_id:'deprecated',value:'false'}] }] }) };
+        calls++;
+        const payload = JSON.parse(options.body), input = JSON.parse(payload.messages[1].content);
+        if ('truth' in input || 'acceptable' in input || 'family' in input || payload.max_tokens !== 40 || !options.signal) throw new Error('unsafe task');
+        const field = Object.keys(payload.response_format.json_schema.properties)[0];
+        const ok = (content, neurons) => ({ ok: true, status: 200, json: async () => ({ success: true, result: { choices: [{message:{content:JSON.stringify(content)}}], ...(neurons === undefined ? {} : {usage:{neurons}}) } }) });
+        const error = status => ({ ok: false, status, json: async () => ({ success: false }) });
+        if (process.env.QUALIFICATION_SCENARIO === 'mixed') return calls === 1 ? ok({[field]:payload.response_format.json_schema.properties[field].enum[0]}, .2) : calls === 2 ? ok({[field]:null}, .3) : calls === 3 ? ok({bad:42}, .4) : error(429);
+        if (process.env.QUALIFICATION_SCENARIO === 'denied') return error(403);
+        if (process.env.QUALIFICATION_SCENARIO === 'invalid') return ok({bad:42}, .1);
+        if (process.env.QUALIFICATION_SCENARIO === 'calibration') return ok({[field]:null}, 3);
+        return ok({[field]:null});
+      };
+    `);
+    try {
+      const mixed = run(flags, preload, "mixed");
+      expect(mixed.status).toBe(2);
+      const [incumbent, challenger] = metrics(mixed.stdout);
+      expect(incumbent).toMatchObject({ calls: 2, answers: 1, invalid: 1, abstentions: 0 });
+      expect(challenger).toMatchObject({ calls: 2, abstentions: 1, failures: { RATE_LIMITED: 1 }, fallbackReservedNeurons: 3 });
+      expect(mixed.stdout).toContain("accounted Neurons 3.9");
+      expect(mixed.stdout).toContain('"complete":false');
+      expect(mixed.stdout).toContain("unpaired calls excluded from quality comparison 0");
+      for (const scenario of ["denied", "calibration"]) {
+        const stopped = run(flags, preload, scenario);
+        expect(stopped.status).toBe(2);
+        expect(metrics(stopped.stdout).reduce((n, bucket) => n + bucket.calls, 0)).toBe(1);
+      }
+      const invalid = run(flags, preload, "invalid");
+      expect(invalid.status).toBe(2);
+      expect(metrics(invalid.stdout).reduce((n, bucket) => n + bucket.invalid, 0)).toBe(5);
+      expect(metrics(invalid.stdout).reduce((n, bucket) => n + bucket.abstentions, 0)).toBe(0);
+      const capped = run([...flags, "--stop-neurons", "5"], preload);
+      expect(capped.status).toBe(2);
+      expect(metrics(capped.stdout).reduce((n, bucket) => n + bucket.calls, 0)).toBe(2);
+      expect(capped.stdout).toContain("accounted Neurons 5");
+    } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 });

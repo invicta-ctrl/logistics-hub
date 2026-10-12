@@ -12,7 +12,7 @@ function page(content: Html, current: "" | "home" | "lending"): void {
   mount(app, html`
     <header class="site-header">
       <div class="container site-header__inner">
-        <a class="site-header__brand" href="/" data-route aria-label="Department of Logistics home">${LOCKUP}</a>
+        <a class="site-header__brand" href="/" data-route aria-label="Department of Logistics HAU University Student Council home">${LOCKUP}</a>
         <nav class="site-nav" aria-label="Main">
           <a class="site-nav__link" href="/lending" data-route ${current === "lending" ? html`aria-current="page"` : ""}>Lending Hub</a>
           <a class="site-nav__link" href="/staff" data-route>Staff sign in</a>

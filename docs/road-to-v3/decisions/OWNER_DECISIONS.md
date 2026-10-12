@@ -52,3 +52,12 @@ Owner acceptance is required before RTV3-02 implementation.
 - **Count by integrated release, not by commit:** separate completed/merged fixes mean separate third-component versions. Multiple commits/checkpoints for one fix or intentionally bundled release still count as one revision. Documentation-only or unfinished work does not increment a product version.
 - **Evidence and display:** verify parent version, current main, existing release history and deployed identity before final allocation. One truthful release record/changelog per revision; the approved V1.16 Administration version system must support the revision number. Unknown history must not be fabricated.
 - **Binding policy:** `docs/PRODUCT_VERSION_GOVERNANCE.md`, invoked normatively by AGENTS.md, CLAUDE.md, .agents/PROJECT_POLICY.md and docs/SHARED_AGENT_WORKFLOW.md. Never present an incomplete revision as shipped or weaken existing single-writer/security/release gates.
+
+
+## V1.16 final qualification and acceptance — owner-directed 2026-10-12
+
+- Use live GitHub authority; verify completed A1/A2/B1/C1/D1 evidence without rebuilding their capabilities. Agents perform technically feasible production/mobile/desktop/photo/fallback/integrity/permission/System/accessibility QA themselves.
+- Freeze fresh held-out fixtures, benchmark an existing failing task against a permitted challenger, and record real precision, abstention, latency, availability and free usage. Preserve REVIEW_ONLY for unqualified roles; no paid API, automatic model promotion or quota-exhaustion completion claim.
+- Finish independently verified accepted-scope repairs on one writable slice with exact-source CI/CodeQL, configured deployment, postflight and rollback controls. Preserve unknown work and historical release evidence.
+- Final approval is a distinct owner acceptance gate, requested only after all agent-executable gates pass. Only that explicit approval permits governed V1.16 product identity promotion; verify actual running artifact and Administration version/changelog before RELEASED_VERIFIED and closure.
+- Explicit states: VERSION_VERIFYING, BLOCKED_EXTERNAL, PAUSED_USAGE_LIMIT, AWAITING_OWNER_ACCEPTANCE, RELEASED_VERIFIED. An interruption preserves exact executable continuation with V1.16 OPEN. No V2.1 or final V2 readiness before accepted, verified release.

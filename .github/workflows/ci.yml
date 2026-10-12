@@ -7,16 +7,23 @@ on:
   push:
     branches: [main, "road-to-v2/**", "slice/**", "ops/**"]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact frozen main SHA for bounded V1.16 model qualification (no deployment or data changes)
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && 'role-qualification' || 'regression' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
   checks:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -37,6 +44,7 @@ jobs:
       - run: npm run test:browser -- --reporter=line,github
 
   worker-e2e:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -54,3 +62,53 @@ jobs:
           name: worker-e2e-traces
           path: test-results/
           retention-days: 7
+
+  role-qualification:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require the frozen current main
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          node --input-type=module -e '
+            import { execFileSync } from "node:child_process";
+            const expected = process.env.EXPECTED_SHA;
+            const checked = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+            const current = execFileSync("git", ["ls-remote", "origin", "refs/heads/main"], { encoding: "utf8" }).split(/\s/)[0];
+            if (!/^[a-f0-9]{40}$/.test(expected ?? "") || expected !== process.env.GITHUB_SHA || checked !== expected || current !== expected) {
+              console.error("Frozen main source mismatch. No provider request was sent."); process.exit(1);
+            }
+          '
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Measure existing roles and permitted same-task challenger
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          qualification_status=0
+          node scripts/evaluate-roles.mjs --fixtures tests/fixtures/v116-role-heldout.json --challenger qwen --granite 60 --qwen 60 --glm 5 --stop-neurons 400 > role-qualification.txt 2>&1 || qualification_status=$?
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const safe = /^(catalog preflight|Catalog preflight|Catalog availability|Needs CLOUDFLARE|Account identity|Model is outside|fresh fixture|Deterministic baseline|Granite|Qwen|GLM|paired normalization|measurement receipt|provider metrics|accounted Neurons)/;
+            for (const line of readFileSync("role-qualification.txt", "utf8").split("\n").filter(line => safe.test(line))) {
+              console.log(`::notice title=V1.16 qualification::${line.replace(/%/g, "%25").replace(/\r/g, "%0D")}`);
+            }
+          '
+          exit "$qualification_status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v116-role-qualification
+          path: role-qualification.txt
+          if-no-files-found: warn
+          retention-days: 90

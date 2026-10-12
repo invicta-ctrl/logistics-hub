@@ -44,7 +44,7 @@ test("leaving the page stops its polling: an answer that arrives afterwards chan
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
   await expect.poll(() => requests).toBe(2);
   // Leave for the landing page while the second request is out, then let it answer.
-  await page.getByRole("link", { name: "Department of Logistics home" }).first().click();
+  await page.getByRole("link", { name: "Department of Logistics HAU University Student Council home" }).first().click();
   await expect(page.locator(".catalogue__row")).toHaveCount(0);
   release();
   await page.waitForTimeout(500);

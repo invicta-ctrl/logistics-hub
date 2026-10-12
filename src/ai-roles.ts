@@ -36,8 +36,8 @@ export const ROLE_LIMITS: Record<Exclude<ModelRole, "VISION_EXTRACT">, { reserve
   RARE_SECOND_OPINION: { reserve: 3, maxTokens: 80, thinkingOption: true }
 };
 /**
- * All three start review-only: Granite failed its first classification test (13% and 24%), and Qwen and GLM have no held-out result at
- * all. A proposed answer needs a person's Keep, Reject or Correct decision before it can affect a draft. ACTIVE_ELIGIBLE remains a
+ * All three stay review-only: the historical sealed normalization/arbitration tests failed Granite (56%) and Qwen (42%); GLM only
+ * has synthetic conformance evidence. A proposed answer needs Keep, Reject or Correct before it can affect a draft. ACTIVE_ELIGIBLE remains a
  * future reviewed-gate state; production code passes no override, and only tests assign to it.
  */
 export const ROUTE_STATE: Record<Exclude<ModelRole, "VISION_EXTRACT">, RouteState> = {

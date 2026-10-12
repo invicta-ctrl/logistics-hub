@@ -149,7 +149,7 @@ function frame(): Html {
   return html`<div class="ss-photo" aria-hidden="true"></div>
     <header class="ss-bar">
       <div class="ss-bar__inner">
-        <a class="ss-bar__brand" href="/self-service" data-route aria-label="Self-Service home"><span class="ss-bar__marks" aria-hidden="true">${CREST}${MARK}</span><span class="ss-bar__title"><span>Self-Service</span><small>HAU USC Logistics</small></span></a>
+        <a class="ss-bar__brand" href="/self-service" data-route aria-label="Self-Service HAU USC Logistics home"><span class="ss-bar__marks" aria-hidden="true">${CREST}${MARK}</span><span class="ss-bar__title"><span>Self-Service</span><small>HAU USC Logistics</small></span></a>
         <div class="ss-bar__end">
           <button class="ss-theme" type="button" data-theme-toggle aria-label="Dark theme" aria-pressed="${String(document.body.dataset.theme === "dark")}">${icon("sun")}${icon("moon")}</button>
           <div data-region="pill"></div>

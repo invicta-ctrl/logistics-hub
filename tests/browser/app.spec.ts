@@ -22,7 +22,7 @@ test("landing shows the institutional identity and current Logistics services", 
   await expect(page.getByRole("complementary", { name: "Logistics services" })).toBeVisible();
   await expect(page.locator(".hero__services").getByRole("link", { name: /Self-Service/ })).toHaveAttribute("href", "/self-service");
   await expect(page.locator(".hero__services").getByRole("link", { name: /Staff sign-in/ })).toHaveAttribute("href", "/staff");
-  await expect(page.getByRole("link", { name: "Department of Logistics home" })).toHaveAttribute("href", "/");
+  await expect(page.getByRole("link", { name: "Department of Logistics HAU University Student Council home" })).toHaveAttribute("href", "/");
   const facebook = page.getByRole("contentinfo").getByRole("link", { name: "Student Council on Facebook (opens in a new tab)" });
   await expect(facebook).toHaveAttribute("href", "https://www.facebook.com/holyangeluniversitysc");
   await expect(facebook).toHaveAttribute("target", "_blank");
@@ -37,7 +37,7 @@ test("Lending Hub groups by category, filters, and keeps filters in the URL", as
   await page.setViewportSize({ width: 375, height: 700 });
   await page.goto("/lending");
   await expect(page.getByRole("heading", { name: "Lending Hub", level: 1 })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Department of Logistics home" })).toHaveAttribute("href", "/");
+  await expect(page.getByRole("link", { name: "Department of Logistics HAU University Student Council home" })).toHaveAttribute("href", "/");
   await expect(page.getByRole("heading", { name: /Furniture/, level: 2 })).toBeVisible();
   await expect(page.getByText("3 pieces available")).toBeVisible();
   // Rows name only the exception: who may not borrow, never loan periods or the usual audience.
@@ -163,6 +163,7 @@ test("self-service: the item decides Borrow, Take or Use, and a use asks no amou
 });
 
 test("self-service fits phones, tablets and desktops, with every screen and sheet inside the viewport", async ({ page }) => {
+  test.setTimeout(90_000); // 48 complete screens across six device sizes.
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
   for (const viewport of [{ width: 320, height: 640 }, { width: 375, height: 667 }, { width: 412, height: 915 }, { width: 390, height: 844 }, { width: 820, height: 1180 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(viewport);
@@ -398,11 +399,12 @@ test("activity: the page keeps one viewport and only the feed scrolls, loading o
   const entry = (n: number) => ({ id: `phone:E${n}`, correlationId: `E${n}`, at: new Date(Date.UTC(2026, 9, 1, 2, 0) - n * 60_000).toISOString(), source: "PHONE", type: "PHONE_RETURN",
     summary: `A phone return of 1 piece of Item ${n} was held for staff.`, actor: "Self-Service", actorId: "SELF_SERVICE", itemId: `ITM-${n}`, itemName: `Item ${n}`, unit: "piece",
     change: 0, stockChanged: false, before: null, after: null, reason: null, note: null, attention: false });
-  const cursors: string[] = [];
+  const cursorReads: string[][] = [];
   await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", mustChangePassword: false, recovery: null, selfServiceReviews: 0 }) }));
   await page.route("**/api/staff/activity*", (route) => {
     const cursor = new URL(route.request().url()).searchParams.get("cursor");
-    if (cursor) cursors.push(cursor);
+    if (cursor) cursorReads.at(-1)!.push(cursor);
+    else cursorReads.push([]);
     const start = cursor ? Number(cursor) : 0;
     // 1,000 entries exist; the page must stop asking at 300.
     return route.fulfill({ contentType: "application/json", body: JSON.stringify({ events: Array.from({ length: PAGE }, (_, index) => entry(start + index)), nextCursor: String(start + PAGE) }) });
@@ -423,7 +425,7 @@ test("activity: the page keeps one viewport and only the feed scrolls, loading o
     };
   });
   for (const viewport of [{ width: 320, height: 640 }, { width: 390, height: 844 }, { width: 820, height: 1100 }, { width: 1440, height: 900 }]) {
-    cursors.length = 0;
+    cursorReads.length = 0;
     await page.setViewportSize(viewport);
     await page.goto("/staff/activity");
     await expect(page.locator(".activity-row")).toHaveCount(PAGE);
@@ -446,7 +448,9 @@ test("activity: the page keeps one viewport and only the feed scrolls, loading o
     await expect(page.locator("#activity-older")).toBeHidden();
     await page.locator("#activity-feed").evaluate((feed) => { feed.scrollTop = feed.scrollHeight; });
     await page.waitForTimeout(150);
-    expect(cursors.length, "no request past the cap").toBe(5);
+    // Live refresh rereads the displayed pages; every read must stop at the same cap.
+    await expect.poll(() => cursorReads.at(-1)).toEqual(["50", "100", "150", "200", "250"]);
+    for (const read of cursorReads) expect(read, "no request past the cap").toEqual(["50", "100", "150", "200", "250"]);
     const last = await measure();
     expect(last.pageGrows).toBeLessThanOrEqual(1);
     expect(last.rows).toBe(300);

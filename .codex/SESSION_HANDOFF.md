@@ -11,8 +11,8 @@
 ## Current bounded change and verification
 
 - `tests/browser/card-wall.spec.ts`: native modifier navigation disables decorative card motion and foregrounds its source page before clicking. Native ControlOrMeta click/new-tab/profile/ID assertions remain. Baseline modifier repeated five times passed; updated seven card cases repeated three times on three workers passed 21/21. The fix still requires final exact-source CI.
-- Public actual production QA is underway at `https://logistics.hausc.org`; anonymous pages and permission denials are accessible. Isolated authenticated Worker QA uses a disposable D1/R2 state, not production or the existing preview state. Its photo/crop/replacement/fallback/catalogue/offline/manual/replay/System/mobile cases are running; do not describe an in-progress run as passed.
-- Fresh non-sensitive role fixtures and a bounded same-fixture permitted challenger extension are being prepared using the existing evaluator. No inference has run, model mapping has not changed, and text roles remain REVIEW_ONLY. The historical sealed synthetic split cannot be reused for a new qualification claim.
+- Public actual production QA completed at `https://logistics.hausc.org`; anonymous pages and permission denials are accessible. Isolated authenticated Worker QA uses a disposable D1/R2 state, not production or the existing preview state. Its20 photo/crop/replacement/fallback/catalogue/offline/manual/replay/System/mobile cases passed in3.5m. This is not authenticated production/provider evidence.
+- Fresh60-case fixtures and a bounded same-fixture permitted challenger extension are frozen in the existing evaluator;11 role-evaluation tests and build/typecheck pass. The manual exact-main CI job uses existing production environment credentials if usable; no protection/token scope is altered. No inference has run, model mapping has not changed, and text roles remain REVIEW_ONLY. The historical sealed synthetic split cannot be reused for a new qualification claim.
 
 ## Access gates and ownership
 
@@ -23,7 +23,7 @@
 
 ## Next action and final release gate
 
-Collect remaining QA evidence, finish the fresh-fixture/evaluator preparation, review the live acceptance matrix, and correct genuine in-scope defects. Build/typecheck/privacy/diff and final exact-source CI/CodeQL must pass before this slice integrates. Verify actualmain Workers/CodeQL, preserve rollback and prune only integrated branches. Keep each coherent verified checkpoint pushed.
+Read the directly verified matrix in `docs/road-to-v2/evidence/v1.16-release-qualification-2026-10-12.md`. Two actual public brand-label accessibility defects are corrected; focused name/reflow/pagination checks6/6 passed. Pagination trace distinguishes a normal refresh reread from requests past the300-row cap. Finish final full exact-source qualification, then integrate independently green source/tooling and test the protected GitHub model credentials. Build/typecheck/privacy/diff and final exact-source CI/CodeQL must pass before this slice integrates. Verify actualmain Workers/CodeQL, preserve rollback and prune only integrated branches. Keep each coherent verified checkpoint pushed.
 
 Only after all agent-executable gates pass may status become AWAITING_OWNER_ACCEPTANCE and the owner be asked for final V1.16 acceptance. Only explicit final approval permits product-release.json promotion. Then qualify exact release source, integrate, verify the actual production artifact and Administration version/changelog, record RELEASED_VERIFIED and close. Until then V1.16/final V2 readiness stay OPEN; no V2.1. If interrupted, finish a safe verified checkpoint, record exact HEAD/results/first command and yield the lock.
 

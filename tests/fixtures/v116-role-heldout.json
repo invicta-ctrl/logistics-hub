@@ -1,0 +1,901 @@
+{
+  "fixtureVersion": "v116-fresh-synthetic-1",
+  "status": "DRAFT_FROZEN_BEFORE_PROVIDER_CALLS",
+  "source": "Independently authored public synthetic storeroom labels; zero model responses used. No policy or production record is asserted.",
+  "sourceCommit": "31c64a608fe38dce204b8943a6cdee9b5b36cd8b",
+  "notes": [
+    "60 held-out name cases: 40 typos/reordered positives, 10 missing-distinction ambiguities, 10 absent products. Ground-truth is visible only to scorer.",
+    "Every family stays in this held-out set. Existing prompts are frozen; no examples or prompt tuning use these cases. No claim of real USC/photo representativeness.",
+    "Run Granite plus one permitted challenger on each exact normalization task; reuse 40 scored cases for Qwen arbitration only if remaining budget fits. Fixed-code GLM cases assess synthetic priority consistency, not real staff utility."
+  ],
+  "nameCases": [
+    {
+      "id": "n-01-0-t",
+      "family": "f-01",
+      "kind": "typo",
+      "name": "Magentic whiteboard eraser",
+      "terms": [
+        "Magnetic whiteboard eraser",
+        "Felt whiteboard eraser",
+        "Flat-head precision screwdriver",
+        "Transparent zipper document pouch",
+        "Rechargeable inspection flashlight"
+      ],
+      "truth": "Magnetic whiteboard eraser"
+    },
+    {
+      "id": "n-01-0-r",
+      "family": "f-01",
+      "kind": "reorder",
+      "name": "whiteboard eraser Magnetic",
+      "terms": [
+        "Magnetic whiteboard eraser",
+        "Felt whiteboard eraser",
+        "Flat-head precision screwdriver",
+        "Transparent zipper document pouch",
+        "Rechargeable inspection flashlight"
+      ],
+      "truth": "Magnetic whiteboard eraser"
+    },
+    {
+      "id": "n-01-1-t",
+      "family": "f-01",
+      "kind": "typo",
+      "name": "Flet whiteboard eraser",
+      "terms": [
+        "Magnetic whiteboard eraser",
+        "Felt whiteboard eraser",
+        "Flat-head precision screwdriver",
+        "Transparent zipper document pouch",
+        "Rechargeable inspection flashlight"
+      ],
+      "truth": "Felt whiteboard eraser"
+    },
+    {
+      "id": "n-01-1-r",
+      "family": "f-01",
+      "kind": "reorder",
+      "name": "whiteboard eraser Felt",
+      "terms": [
+        "Magnetic whiteboard eraser",
+        "Felt whiteboard eraser",
+        "Flat-head precision screwdriver",
+        "Transparent zipper document pouch",
+        "Rechargeable inspection flashlight"
+      ],
+      "truth": "Felt whiteboard eraser"
+    },
+    {
+      "id": "n-01-amb",
+      "family": "f-01",
+      "kind": "ambiguous",
+      "name": "whiteboard eraser",
+      "terms": [
+        "Magnetic whiteboard eraser",
+        "Felt whiteboard eraser",
+        "Flat-head precision screwdriver",
+        "Transparent zipper document pouch",
+        "Rechargeable inspection flashlight"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-01-abs",
+      "family": "f-01",
+      "kind": "absent",
+      "name": "Balloon inflator",
+      "terms": [
+        "Magnetic whiteboard eraser",
+        "Felt whiteboard eraser",
+        "Flat-head precision screwdriver",
+        "Transparent zipper document pouch",
+        "Rechargeable inspection flashlight"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-02-0-t",
+      "family": "f-02",
+      "kind": "typo",
+      "name": "Micrfoiber screen cleaning cloth",
+      "terms": [
+        "Microfiber screen cleaning cloth",
+        "Cotton screen cleaning cloth",
+        "Folding metal document stand",
+        "Silicone cable organizer clip",
+        "Insulated steel water flask"
+      ],
+      "truth": "Microfiber screen cleaning cloth"
+    },
+    {
+      "id": "n-02-0-r",
+      "family": "f-02",
+      "kind": "reorder",
+      "name": "screen cleaning cloth Microfiber",
+      "terms": [
+        "Microfiber screen cleaning cloth",
+        "Cotton screen cleaning cloth",
+        "Folding metal document stand",
+        "Silicone cable organizer clip",
+        "Insulated steel water flask"
+      ],
+      "truth": "Microfiber screen cleaning cloth"
+    },
+    {
+      "id": "n-02-1-t",
+      "family": "f-02",
+      "kind": "typo",
+      "name": "Cotton screen cleaning cloth",
+      "terms": [
+        "Microfiber screen cleaning cloth",
+        "Cotton screen cleaning cloth",
+        "Folding metal document stand",
+        "Silicone cable organizer clip",
+        "Insulated steel water flask"
+      ],
+      "truth": "Cotton screen cleaning cloth"
+    },
+    {
+      "id": "n-02-1-r",
+      "family": "f-02",
+      "kind": "reorder",
+      "name": "screen cleaning cloth Cotton",
+      "terms": [
+        "Microfiber screen cleaning cloth",
+        "Cotton screen cleaning cloth",
+        "Folding metal document stand",
+        "Silicone cable organizer clip",
+        "Insulated steel water flask"
+      ],
+      "truth": "Cotton screen cleaning cloth"
+    },
+    {
+      "id": "n-02-amb",
+      "family": "f-02",
+      "kind": "ambiguous",
+      "name": "screen cleaning cloth",
+      "terms": [
+        "Microfiber screen cleaning cloth",
+        "Cotton screen cleaning cloth",
+        "Folding metal document stand",
+        "Silicone cable organizer clip",
+        "Insulated steel water flask"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-02-abs",
+      "family": "f-02",
+      "kind": "absent",
+      "name": "Ceramic paint palette",
+      "terms": [
+        "Microfiber screen cleaning cloth",
+        "Cotton screen cleaning cloth",
+        "Folding metal document stand",
+        "Silicone cable organizer clip",
+        "Insulated steel water flask"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-03-0-t",
+      "family": "f-03",
+      "kind": "typo",
+      "name": "Fla-thead precision screwdriver",
+      "terms": [
+        "Flat-head precision screwdriver",
+        "Phillips precision screwdriver",
+        "Transparent zipper document pouch",
+        "Rechargeable inspection flashlight",
+        "Amber glass spray bottle"
+      ],
+      "truth": "Flat-head precision screwdriver"
+    },
+    {
+      "id": "n-03-0-r",
+      "family": "f-03",
+      "kind": "reorder",
+      "name": "precision screwdriver Flat-head",
+      "terms": [
+        "Flat-head precision screwdriver",
+        "Phillips precision screwdriver",
+        "Transparent zipper document pouch",
+        "Rechargeable inspection flashlight",
+        "Amber glass spray bottle"
+      ],
+      "truth": "Flat-head precision screwdriver"
+    },
+    {
+      "id": "n-03-1-t",
+      "family": "f-03",
+      "kind": "typo",
+      "name": "Phillips precision screwdriver",
+      "terms": [
+        "Flat-head precision screwdriver",
+        "Phillips precision screwdriver",
+        "Transparent zipper document pouch",
+        "Rechargeable inspection flashlight",
+        "Amber glass spray bottle"
+      ],
+      "truth": "Phillips precision screwdriver"
+    },
+    {
+      "id": "n-03-1-r",
+      "family": "f-03",
+      "kind": "reorder",
+      "name": "precision screwdriver Phillips",
+      "terms": [
+        "Flat-head precision screwdriver",
+        "Phillips precision screwdriver",
+        "Transparent zipper document pouch",
+        "Rechargeable inspection flashlight",
+        "Amber glass spray bottle"
+      ],
+      "truth": "Phillips precision screwdriver"
+    },
+    {
+      "id": "n-03-amb",
+      "family": "f-03",
+      "kind": "ambiguous",
+      "name": "precision screwdriver",
+      "terms": [
+        "Flat-head precision screwdriver",
+        "Phillips precision screwdriver",
+        "Transparent zipper document pouch",
+        "Rechargeable inspection flashlight",
+        "Amber glass spray bottle"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-03-abs",
+      "family": "f-03",
+      "kind": "absent",
+      "name": "Wooden violin bow",
+      "terms": [
+        "Flat-head precision screwdriver",
+        "Phillips precision screwdriver",
+        "Transparent zipper document pouch",
+        "Rechargeable inspection flashlight",
+        "Amber glass spray bottle"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-04-0-t",
+      "family": "f-04",
+      "kind": "typo",
+      "name": "Fodling metal document stand",
+      "terms": [
+        "Folding metal document stand",
+        "Folding plastic document stand",
+        "Silicone cable organizer clip",
+        "Insulated steel water flask",
+        "Digital kitchen timer"
+      ],
+      "truth": "Folding metal document stand"
+    },
+    {
+      "id": "n-04-0-r",
+      "family": "f-04",
+      "kind": "reorder",
+      "name": "metal document stand Folding",
+      "terms": [
+        "Folding metal document stand",
+        "Folding plastic document stand",
+        "Silicone cable organizer clip",
+        "Insulated steel water flask",
+        "Digital kitchen timer"
+      ],
+      "truth": "Folding metal document stand"
+    },
+    {
+      "id": "n-04-1-t",
+      "family": "f-04",
+      "kind": "typo",
+      "name": "Fodling plastic document stand",
+      "terms": [
+        "Folding metal document stand",
+        "Folding plastic document stand",
+        "Silicone cable organizer clip",
+        "Insulated steel water flask",
+        "Digital kitchen timer"
+      ],
+      "truth": "Folding plastic document stand"
+    },
+    {
+      "id": "n-04-1-r",
+      "family": "f-04",
+      "kind": "reorder",
+      "name": "plastic document stand Folding",
+      "terms": [
+        "Folding metal document stand",
+        "Folding plastic document stand",
+        "Silicone cable organizer clip",
+        "Insulated steel water flask",
+        "Digital kitchen timer"
+      ],
+      "truth": "Folding plastic document stand"
+    },
+    {
+      "id": "n-04-amb",
+      "family": "f-04",
+      "kind": "ambiguous",
+      "name": "folding document stand",
+      "terms": [
+        "Folding metal document stand",
+        "Folding plastic document stand",
+        "Silicone cable organizer clip",
+        "Insulated steel water flask",
+        "Digital kitchen timer"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-04-abs",
+      "family": "f-04",
+      "kind": "absent",
+      "name": "Rubber swim goggles",
+      "terms": [
+        "Folding metal document stand",
+        "Folding plastic document stand",
+        "Silicone cable organizer clip",
+        "Insulated steel water flask",
+        "Digital kitchen timer"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-05-0-t",
+      "family": "f-05",
+      "kind": "typo",
+      "name": "Tranpsarent zipper document pouch",
+      "terms": [
+        "Transparent zipper document pouch",
+        "Mesh zipper document pouch",
+        "Rechargeable inspection flashlight",
+        "Amber glass spray bottle",
+        "Magnetic whiteboard eraser"
+      ],
+      "truth": "Transparent zipper document pouch"
+    },
+    {
+      "id": "n-05-0-r",
+      "family": "f-05",
+      "kind": "reorder",
+      "name": "zipper document pouch Transparent",
+      "terms": [
+        "Transparent zipper document pouch",
+        "Mesh zipper document pouch",
+        "Rechargeable inspection flashlight",
+        "Amber glass spray bottle",
+        "Magnetic whiteboard eraser"
+      ],
+      "truth": "Transparent zipper document pouch"
+    },
+    {
+      "id": "n-05-1-t",
+      "family": "f-05",
+      "kind": "typo",
+      "name": "Mseh zipper document pouch",
+      "terms": [
+        "Transparent zipper document pouch",
+        "Mesh zipper document pouch",
+        "Rechargeable inspection flashlight",
+        "Amber glass spray bottle",
+        "Magnetic whiteboard eraser"
+      ],
+      "truth": "Mesh zipper document pouch"
+    },
+    {
+      "id": "n-05-1-r",
+      "family": "f-05",
+      "kind": "reorder",
+      "name": "zipper document pouch Mesh",
+      "terms": [
+        "Transparent zipper document pouch",
+        "Mesh zipper document pouch",
+        "Rechargeable inspection flashlight",
+        "Amber glass spray bottle",
+        "Magnetic whiteboard eraser"
+      ],
+      "truth": "Mesh zipper document pouch"
+    },
+    {
+      "id": "n-05-amb",
+      "family": "f-05",
+      "kind": "ambiguous",
+      "name": "zipper document pouch",
+      "terms": [
+        "Transparent zipper document pouch",
+        "Mesh zipper document pouch",
+        "Rechargeable inspection flashlight",
+        "Amber glass spray bottle",
+        "Magnetic whiteboard eraser"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-05-abs",
+      "family": "f-05",
+      "kind": "absent",
+      "name": "Metal luggage padlock",
+      "terms": [
+        "Transparent zipper document pouch",
+        "Mesh zipper document pouch",
+        "Rechargeable inspection flashlight",
+        "Amber glass spray bottle",
+        "Magnetic whiteboard eraser"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-06-0-t",
+      "family": "f-06",
+      "kind": "typo",
+      "name": "Silcione cable organizer clip",
+      "terms": [
+        "Silicone cable organizer clip",
+        "Adhesive cable organizer clip",
+        "Insulated steel water flask",
+        "Digital kitchen timer",
+        "Microfiber screen cleaning cloth"
+      ],
+      "truth": "Silicone cable organizer clip"
+    },
+    {
+      "id": "n-06-0-r",
+      "family": "f-06",
+      "kind": "reorder",
+      "name": "cable organizer clip Silicone",
+      "terms": [
+        "Silicone cable organizer clip",
+        "Adhesive cable organizer clip",
+        "Insulated steel water flask",
+        "Digital kitchen timer",
+        "Microfiber screen cleaning cloth"
+      ],
+      "truth": "Silicone cable organizer clip"
+    },
+    {
+      "id": "n-06-1-t",
+      "family": "f-06",
+      "kind": "typo",
+      "name": "Adhseive cable organizer clip",
+      "terms": [
+        "Silicone cable organizer clip",
+        "Adhesive cable organizer clip",
+        "Insulated steel water flask",
+        "Digital kitchen timer",
+        "Microfiber screen cleaning cloth"
+      ],
+      "truth": "Adhesive cable organizer clip"
+    },
+    {
+      "id": "n-06-1-r",
+      "family": "f-06",
+      "kind": "reorder",
+      "name": "cable organizer clip Adhesive",
+      "terms": [
+        "Silicone cable organizer clip",
+        "Adhesive cable organizer clip",
+        "Insulated steel water flask",
+        "Digital kitchen timer",
+        "Microfiber screen cleaning cloth"
+      ],
+      "truth": "Adhesive cable organizer clip"
+    },
+    {
+      "id": "n-06-amb",
+      "family": "f-06",
+      "kind": "ambiguous",
+      "name": "cable organizer clip",
+      "terms": [
+        "Silicone cable organizer clip",
+        "Adhesive cable organizer clip",
+        "Insulated steel water flask",
+        "Digital kitchen timer",
+        "Microfiber screen cleaning cloth"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-06-abs",
+      "family": "f-06",
+      "kind": "absent",
+      "name": "Bicycle spoke wrench",
+      "terms": [
+        "Silicone cable organizer clip",
+        "Adhesive cable organizer clip",
+        "Insulated steel water flask",
+        "Digital kitchen timer",
+        "Microfiber screen cleaning cloth"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-07-0-t",
+      "family": "f-07",
+      "kind": "typo",
+      "name": "Rechagreable inspection flashlight",
+      "terms": [
+        "Rechargeable inspection flashlight",
+        "Battery-powered inspection flashlight",
+        "Amber glass spray bottle",
+        "Magnetic whiteboard eraser",
+        "Flat-head precision screwdriver"
+      ],
+      "truth": "Rechargeable inspection flashlight"
+    },
+    {
+      "id": "n-07-0-r",
+      "family": "f-07",
+      "kind": "reorder",
+      "name": "inspection flashlight Rechargeable",
+      "terms": [
+        "Rechargeable inspection flashlight",
+        "Battery-powered inspection flashlight",
+        "Amber glass spray bottle",
+        "Magnetic whiteboard eraser",
+        "Flat-head precision screwdriver"
+      ],
+      "truth": "Rechargeable inspection flashlight"
+    },
+    {
+      "id": "n-07-1-t",
+      "family": "f-07",
+      "kind": "typo",
+      "name": "Batter-ypowered inspection flashlight",
+      "terms": [
+        "Rechargeable inspection flashlight",
+        "Battery-powered inspection flashlight",
+        "Amber glass spray bottle",
+        "Magnetic whiteboard eraser",
+        "Flat-head precision screwdriver"
+      ],
+      "truth": "Battery-powered inspection flashlight"
+    },
+    {
+      "id": "n-07-1-r",
+      "family": "f-07",
+      "kind": "reorder",
+      "name": "inspection flashlight Battery-powered",
+      "terms": [
+        "Rechargeable inspection flashlight",
+        "Battery-powered inspection flashlight",
+        "Amber glass spray bottle",
+        "Magnetic whiteboard eraser",
+        "Flat-head precision screwdriver"
+      ],
+      "truth": "Battery-powered inspection flashlight"
+    },
+    {
+      "id": "n-07-amb",
+      "family": "f-07",
+      "kind": "ambiguous",
+      "name": "inspection flashlight",
+      "terms": [
+        "Rechargeable inspection flashlight",
+        "Battery-powered inspection flashlight",
+        "Amber glass spray bottle",
+        "Magnetic whiteboard eraser",
+        "Flat-head precision screwdriver"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-07-abs",
+      "family": "f-07",
+      "kind": "absent",
+      "name": "Garden seed spreader",
+      "terms": [
+        "Rechargeable inspection flashlight",
+        "Battery-powered inspection flashlight",
+        "Amber glass spray bottle",
+        "Magnetic whiteboard eraser",
+        "Flat-head precision screwdriver"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-08-0-t",
+      "family": "f-08",
+      "kind": "typo",
+      "name": "Insluated steel water flask",
+      "terms": [
+        "Insulated steel water flask",
+        "Insulated plastic water flask",
+        "Digital kitchen timer",
+        "Microfiber screen cleaning cloth",
+        "Folding metal document stand"
+      ],
+      "truth": "Insulated steel water flask"
+    },
+    {
+      "id": "n-08-0-r",
+      "family": "f-08",
+      "kind": "reorder",
+      "name": "steel water flask Insulated",
+      "terms": [
+        "Insulated steel water flask",
+        "Insulated plastic water flask",
+        "Digital kitchen timer",
+        "Microfiber screen cleaning cloth",
+        "Folding metal document stand"
+      ],
+      "truth": "Insulated steel water flask"
+    },
+    {
+      "id": "n-08-1-t",
+      "family": "f-08",
+      "kind": "typo",
+      "name": "Insluated plastic water flask",
+      "terms": [
+        "Insulated steel water flask",
+        "Insulated plastic water flask",
+        "Digital kitchen timer",
+        "Microfiber screen cleaning cloth",
+        "Folding metal document stand"
+      ],
+      "truth": "Insulated plastic water flask"
+    },
+    {
+      "id": "n-08-1-r",
+      "family": "f-08",
+      "kind": "reorder",
+      "name": "plastic water flask Insulated",
+      "terms": [
+        "Insulated steel water flask",
+        "Insulated plastic water flask",
+        "Digital kitchen timer",
+        "Microfiber screen cleaning cloth",
+        "Folding metal document stand"
+      ],
+      "truth": "Insulated plastic water flask"
+    },
+    {
+      "id": "n-08-amb",
+      "family": "f-08",
+      "kind": "ambiguous",
+      "name": "insulated water flask",
+      "terms": [
+        "Insulated steel water flask",
+        "Insulated plastic water flask",
+        "Digital kitchen timer",
+        "Microfiber screen cleaning cloth",
+        "Folding metal document stand"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-08-abs",
+      "family": "f-08",
+      "kind": "absent",
+      "name": "Silicone oven mitt",
+      "terms": [
+        "Insulated steel water flask",
+        "Insulated plastic water flask",
+        "Digital kitchen timer",
+        "Microfiber screen cleaning cloth",
+        "Folding metal document stand"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-09-0-t",
+      "family": "f-09",
+      "kind": "typo",
+      "name": "Abmer glass spray bottle",
+      "terms": [
+        "Amber glass spray bottle",
+        "Cobalt glass spray bottle",
+        "Magnetic whiteboard eraser",
+        "Flat-head precision screwdriver",
+        "Transparent zipper document pouch"
+      ],
+      "truth": "Amber glass spray bottle"
+    },
+    {
+      "id": "n-09-0-r",
+      "family": "f-09",
+      "kind": "reorder",
+      "name": "glass spray bottle Amber",
+      "terms": [
+        "Amber glass spray bottle",
+        "Cobalt glass spray bottle",
+        "Magnetic whiteboard eraser",
+        "Flat-head precision screwdriver",
+        "Transparent zipper document pouch"
+      ],
+      "truth": "Amber glass spray bottle"
+    },
+    {
+      "id": "n-09-1-t",
+      "family": "f-09",
+      "kind": "typo",
+      "name": "Coablt glass spray bottle",
+      "terms": [
+        "Amber glass spray bottle",
+        "Cobalt glass spray bottle",
+        "Magnetic whiteboard eraser",
+        "Flat-head precision screwdriver",
+        "Transparent zipper document pouch"
+      ],
+      "truth": "Cobalt glass spray bottle"
+    },
+    {
+      "id": "n-09-1-r",
+      "family": "f-09",
+      "kind": "reorder",
+      "name": "glass spray bottle Cobalt",
+      "terms": [
+        "Amber glass spray bottle",
+        "Cobalt glass spray bottle",
+        "Magnetic whiteboard eraser",
+        "Flat-head precision screwdriver",
+        "Transparent zipper document pouch"
+      ],
+      "truth": "Cobalt glass spray bottle"
+    },
+    {
+      "id": "n-09-amb",
+      "family": "f-09",
+      "kind": "ambiguous",
+      "name": "glass spray bottle",
+      "terms": [
+        "Amber glass spray bottle",
+        "Cobalt glass spray bottle",
+        "Magnetic whiteboard eraser",
+        "Flat-head precision screwdriver",
+        "Transparent zipper document pouch"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-09-abs",
+      "family": "f-09",
+      "kind": "absent",
+      "name": "Crochet yarn hook",
+      "terms": [
+        "Amber glass spray bottle",
+        "Cobalt glass spray bottle",
+        "Magnetic whiteboard eraser",
+        "Flat-head precision screwdriver",
+        "Transparent zipper document pouch"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-10-0-t",
+      "family": "f-10",
+      "kind": "typo",
+      "name": "Diigtal kitchen timer",
+      "terms": [
+        "Digital kitchen timer",
+        "Mechanical kitchen timer",
+        "Microfiber screen cleaning cloth",
+        "Folding metal document stand",
+        "Silicone cable organizer clip"
+      ],
+      "truth": "Digital kitchen timer"
+    },
+    {
+      "id": "n-10-0-r",
+      "family": "f-10",
+      "kind": "reorder",
+      "name": "kitchen timer Digital",
+      "terms": [
+        "Digital kitchen timer",
+        "Mechanical kitchen timer",
+        "Microfiber screen cleaning cloth",
+        "Folding metal document stand",
+        "Silicone cable organizer clip"
+      ],
+      "truth": "Digital kitchen timer"
+    },
+    {
+      "id": "n-10-1-t",
+      "family": "f-10",
+      "kind": "typo",
+      "name": "Mechnaical kitchen timer",
+      "terms": [
+        "Digital kitchen timer",
+        "Mechanical kitchen timer",
+        "Microfiber screen cleaning cloth",
+        "Folding metal document stand",
+        "Silicone cable organizer clip"
+      ],
+      "truth": "Mechanical kitchen timer"
+    },
+    {
+      "id": "n-10-1-r",
+      "family": "f-10",
+      "kind": "reorder",
+      "name": "kitchen timer Mechanical",
+      "terms": [
+        "Digital kitchen timer",
+        "Mechanical kitchen timer",
+        "Microfiber screen cleaning cloth",
+        "Folding metal document stand",
+        "Silicone cable organizer clip"
+      ],
+      "truth": "Mechanical kitchen timer"
+    },
+    {
+      "id": "n-10-amb",
+      "family": "f-10",
+      "kind": "ambiguous",
+      "name": "kitchen timer",
+      "terms": [
+        "Digital kitchen timer",
+        "Mechanical kitchen timer",
+        "Microfiber screen cleaning cloth",
+        "Folding metal document stand",
+        "Silicone cable organizer clip"
+      ],
+      "truth": null
+    },
+    {
+      "id": "n-10-abs",
+      "family": "f-10",
+      "kind": "absent",
+      "name": "Foam camping pillow",
+      "terms": [
+        "Digital kitchen timer",
+        "Mechanical kitchen timer",
+        "Microfiber screen cleaning cloth",
+        "Folding metal document stand",
+        "Silicone cable organizer clip"
+      ],
+      "truth": null
+    }
+  ],
+  "followUpCases": [
+    {
+      "id": "g-01",
+      "facts": [
+        "CATEGORY_SPLIT"
+      ],
+      "acceptable": [
+        "CHECK_CATEGORY"
+      ]
+    },
+    {
+      "id": "g-02",
+      "facts": [
+        "UNIT_SPLIT"
+      ],
+      "acceptable": [
+        "CHECK_COUNTING_UNIT"
+      ]
+    },
+    {
+      "id": "g-03",
+      "facts": [
+        "BEHAVIOUR_SPLIT"
+      ],
+      "acceptable": [
+        "CHECK_BORROW_OR_TAKE"
+      ]
+    },
+    {
+      "id": "g-04",
+      "facts": [
+        "POSSIBLE_DUPLICATE"
+      ],
+      "acceptable": [
+        "LOOKS_LIKE_EXISTING_ITEM"
+      ]
+    },
+    {
+      "id": "g-05",
+      "facts": [
+        "NAME_AND_PHOTO_DISAGREE"
+      ],
+      "acceptable": [
+        "CHECK_NAME"
+      ]
+    }
+  ],
+  "vision": "Requires fresh licensed non-person public item photos with independently checked truth and hashes. Not substituted with this text set."
+}

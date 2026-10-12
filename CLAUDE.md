@@ -12,7 +12,7 @@
 ## Active release boundary — 2026-10-11
 
 - **V1.15 is historically closed.** Do not restart the old Road-to-V2 branch runner. Completed releases V1.1–V1.15, previous migrations and production operations remain auditable under `docs/road-to-v2/releases/` and `docs/specs/accepted/`.
-- **V1.16 Ambient Assist + Intelligent Core is owner-accepted but not yet an implemented release.** The sole active source of detailed scope is `docs/specs/accepted/v1.16-ambient-intelligent-core.md` and its execution card `docs/road-to-v2/v1.16-execution-card.md`. Its completion and deployed confirmation are required before declaring final V2 readiness for the V3 roadmap.
+- **V1.16 Ambient Assist + Intelligent Core has five independently delivered capabilities, but the full release is OPEN.** The sole active source of detailed scope is `docs/specs/accepted/v1.16-ambient-intelligent-core.md` and its execution card `docs/road-to-v2/v1.16-execution-card.md`. Its completion and deployed confirmation are required before declaring final V2 readiness for the V3 roadmap.
 - **V3 roadmap:** V2.1–V2.9 (stable internal aliases RTV3-01–RTV3-09), then V3.0. For `start/continue RTV` and `start/continue V2.x`, use only `docs/road-to-v3/00_COORDINATOR_CARD.md` and its gates. V2.1/F4 reuses the product-version/changelog implementation from completed V1.16, never duplicates it.
 - **Automatic version revisions:** `docs/PRODUCT_VERSION_GOVERNANCE.md` is mandatory. A completed main release `Vx.xx` followed by a separately merged verified product change becomes `Vx.xx.1`, `Vx.xx.2`, etc. Count independently released changes, not checkpoints. Do not invent historical patch versions or mark an unreleased version complete.
 

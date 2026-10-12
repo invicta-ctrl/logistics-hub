@@ -29,6 +29,10 @@ for (const route of ROUTES) {
         return { unlabelled: unlabelled.length, unnamed: unnamed.length };
       });
       expect(problems, `${route} at ${width}px`).toEqual({ unlabelled: 0, unnamed: 0 });
+      for (const brand of await page.locator(".site-header__brand, .ss-bar__brand").all()) {
+        const visible = (await brand.innerText()).trim().replace(/\s+/g, " ");
+        await expect(brand).toHaveAccessibleName(new RegExp(visible.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+      }
       expect(await sidewaysScroll(page), `${route} at ${width}px`).toBe(0);
     }
   });
