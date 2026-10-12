@@ -105,7 +105,8 @@ export async function staffDirectory(): Promise<void> {
   async function list(): Promise<void> {
     document.title = "Staff Directory · Administration";
     const params = new URLSearchParams(window.location.search);
-    const show = (params.get("show") ?? "all") as Show;
+    const requestedShow = params.get("show");
+    const show: Show = requestedShow !== null && Object.prototype.hasOwnProperty.call(SHOWS, requestedShow) ? requestedShow as Show : "all";
     const department = DEPARTMENT_CODES.find((code) => code === params.get("dept")) ?? null;
     mount(root, html`
       <header class="page-header">
