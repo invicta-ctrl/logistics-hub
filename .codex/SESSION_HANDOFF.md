@@ -1,6 +1,10 @@
 # Session Handoff — Logistics Hub
 
-## Latest owner-transfer checkpoint — 2026-10-12
+## Active Codex continuation — 2026-10-12
+
+Root preserved and fast-forwarded existing slice to remote `f8261d16a732c575ef37fa5002db62155fafc797` and claimed the physical Codex lock. Exact-source fullpushCI38220826525/PRCI38220831528, CodeQL38220831519 and combinedgate114716921541 SUCCESS. Current focused repair prevents6m→5m,20ml→30ml andAA→AAA qualifier guesses; it preserves normal typo/transposition support and REVIEW_ONLY. Verify76 AI/catalogue cases, build/privacy/diff, push the coherent checkpoint and wait for its own exact-source fullCI/combinedCodeQL before integrating. Main remains3615. QH03 external facts: main protected:false, rulesets empty, details/variables403; no provider settings changed. Fresh licensed photo evaluation preparation and read-only receipt recovery continue. No final release/owner acceptance request until all executable gates pass.
+
+## Previous owner-transfer checkpoint — historical
 
 The owner lifted Codex's writer lock after usage exhaustion. Cloud-only GitHub work on existing PR #41 / `slice/v1.16-final-qualification` added the accepted code-quality/AI precision amendment, evidence veto (`src/ai-roles.ts`), and directory filter fallback (`src/directory-workspace.ts`), with `tests/ai-roles.test.ts`, `tests/catalogue.test.ts` and `tests/browser/card-wall.spec.ts` coverage. **No new branch, model calls, production-data write, or main merge.** Local worktree and ignored lock could not be inspected due bridge errors: the next local writer MUST inspect and claim via `npm run agent:status` / `npm run agent:claim` before editing.
 

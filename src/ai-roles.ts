@@ -121,6 +121,9 @@ export function supportedChoice(task: Task, choice: string): boolean {
   if (!typed.length) return false;
   // A single adjacent-key reversal is one typo, not two unrelated spelling edits.
   const near = (a: string, b: string) => {
+    if (a === b) return true;
+    // Lengths, sizes and short identifiers are source facts, not spelling corrections.
+    if (/\d/.test(a + b) || Math.min(a.length, b.length) <= 2 || Math.max(a.length, b.length) <= 3) return false;
     if (closeWord(a, b)) return true;
     if (a.length !== b.length) return false;
     const at = [...a].findIndex((part, index) => part !== b[index]);

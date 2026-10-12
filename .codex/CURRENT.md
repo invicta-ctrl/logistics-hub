@@ -2,7 +2,11 @@
 
 **2026-10-12 | VERSION_VERIFYING | V1.16 OPEN.** Live GitHub refs and the writer lock take precedence.
 
-## Current handoff — owner-transferred quality and Ambient Assist work (2026-10-12)
+## Active continuation — Codex resumed after verified owner-transfer checkpoint
+
+Root fetched and preserved the live GitHub takeover through `f8261d16a732c575ef37fa5002db62155fafc797`, fast-forwarded the clean existing slice and explicitly claimed the physical Codex writer lock. Exact-source pushCI38220826525/PRCI38220831528 (247browser/90Worker), CodeQL38220831519 and combinedCodeQL114716921541 SUCCESS. Review then reproduced unsupported6m→5m/20ml→30ml/AA→AAA choices in the new evidence veto; current correction requires exact numeric/very-short token matches while retaining accepted typo/transposition cases. Verify focused AI/Worker tests and final exact-sourceCI before integrating. Main3615, V1.16 OPEN, original scope and owner's amended QH03 external release gate remain in force.
+
+## Previous owner-transferred quality checkpoint (historical)
 
 - The owner explicitly reported that Codex exhausted its usage and **released the writer lock**. This takeover used GitHub only on existing `slice/v1.16-final-qualification` and PR #41, preserving all earlier Codex commits and unknown local work. The local Astral Bridge workspace could not be opened; the ignored `.agent-state/lock.json` could not be inspected or claimed locally. **Before the next local editor writes, run `npm run agent:status` and claim the prescribed lock.** Do not infer the physical lock state from this record.
 - Main remains `3615f97eec335216b7ef5fb3d0ff198bdd44797c`. Product metadata remains V1.15 and full V1.16 is OPEN.
