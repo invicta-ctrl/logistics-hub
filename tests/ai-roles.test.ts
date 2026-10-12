@@ -72,6 +72,7 @@ describe("evidence-gated item suggestions", () => {
     const heads = ["Flat-head precision screwdriver", "Phillips precision screwdriver"];
     expect(supportedChoice(normalizeTask("precision screwdriver", heads), heads[0]!)).toBe(false);
     expect(supportedChoice(normalizeTask("Fla-thead precision screwdriver", heads), heads[0]!)).toBe(true);
+    expect(supportedChoice(normalizeTask("Fodling plastic document stand", ["Folding plastic document stand", "Folding metal document stand"]), "Folding plastic document stand")).toBe(true);
     const materials = arbitrateTask("metal stand", [
       { id: "metal", name: "Folding metal document stand" },
       { id: "plastic", name: "Folding plastic document stand" }
