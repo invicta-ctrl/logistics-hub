@@ -1,5 +1,11 @@
 # Session Handoff — Logistics Hub
 
+## Latest owner-transfer checkpoint — 2026-10-12
+
+The owner lifted Codex's writer lock after usage exhaustion. Cloud-only GitHub work on existing PR #41 / `slice/v1.16-final-qualification` added the accepted code-quality/AI precision amendment, evidence veto (`src/ai-roles.ts`), and directory filter fallback (`src/directory-workspace.ts`), with `tests/ai-roles.test.ts`, `tests/catalogue.test.ts` and `tests/browser/card-wall.spec.ts` coverage. **No new branch, model calls, production-data write, or main merge.** Local worktree and ignored lock could not be inspected due bridge errors: the next local writer MUST inspect and claim via `npm run agent:status` / `npm run agent:claim` before editing.
+
+Main `3615f97`; source checkpoint `a03a66a8`; CodeQL `38219611814` SUCCESS, full source checks job `114712658197` SUCCESS. Worker E2E `114712658442` was IN PROGRESS on the checkpoint; final full CI and current-head checks must be verified. An earlier red Worker unit assertion explicitly expected an unsupported Blue-marker guess; it was corrected to require zero AI calls and manual clarification, and the new source checks passed. Separate QH03 GitHub/main protection and Cloudflare CI-gated deployment work remains BLOCKED_EXTERNAL without provider preflight; full V1.16, real-photo model qualification, authenticated production QA and owner acceptance remain OPEN. No version promotion or deployed-quality claim. Review existing earlier handoff details below, then current HEAD/branch/lock.
+
 **2026-10-12 | VERSION_VERIFYING | V1.16 OPEN.**
 
 ## Current executable continuation
