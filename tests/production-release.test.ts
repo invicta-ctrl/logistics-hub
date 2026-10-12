@@ -635,6 +635,20 @@ describe("the manifest and the workflow", () => {
         expect(qualification).not.toMatch(/production-release|migrations apply|wrangler|d1 (execute|export)|r2 bucket|continue-on-error/);
         expect(qualification).toContain('exit "$qualification_status"');
         expect(qualification).toContain("path: role-qualification.txt");
+        const recovery = qualification.slice(qualification.indexOf("- name: Recover"), qualification.indexOf("- name: Measure"));
+        expect(recovery).toContain("if: inputs.receipt_run != ''");
+        expect(recovery).toContain('run !== "38215952629"');
+        expect(recovery).toContain('source.head_sha !== "3615f97eec335216b7ef5fb3d0ff198bdd44797c"');
+        expect(recovery).toContain('source.event !== "workflow_dispatch"');
+        expect(recovery).toContain('source.conclusion !== "success"');
+        expect(recovery).toContain('source.path !== ".github/workflows/ci.yml"');
+        expect(recovery).not.toContain("secrets.");
+        expect(recovery).not.toMatch(/evaluate-roles|fetch\(|ai\/run/);
+        expect(qualification.slice(qualification.indexOf("- name: Measure"), qualification.indexOf("- name: Publish"))).toContain("if: inputs.receipt_run == ''");
+        const publish = qualification.slice(qualification.indexOf("- name: Publish"), qualification.indexOf("- uses: actions/upload-artifact"));
+        expect(publish).toContain('.join("\\n")');
+        expect(publish).toContain('.replace(/\\n/g, "%0A")');
+        expect(publish.match(/::notice/g)).toHaveLength(1);
         continue;
       }
       expect(text, file).not.toMatch(/production-release|migrations apply|CLOUDFLARE_API_TOKEN|environment:\s*production/);

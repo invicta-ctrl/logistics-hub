@@ -1,24 +1,22 @@
 # Current Work Pointer — Logistics Hub
 
-**As of 2026-10-12 | Status: VERSION_VERIFYING | V1.16 OPEN.**
-Live Git refs and writer lock take precedence. The owner's current release-qualification instruction supersedes the former owner-only manual QA preference.
+**2026-10-12 | VERSION_VERIFYING | V1.16 OPEN.** Live GitHub refs and the writer lock take precedence.
 
-## Verified baseline and current ownership
+## Verified baseline and ownership
 
-- Live GitHub main/base: `31c64a608fe38dce204b8943a6cdee9b5b36cd8b`, clean and fetched. Its seven documentation changes preserve application/test/config/product metadata from qualified source `9fea0ebf5d7163ccf7325a8c9aad26cab6e62230`.
-- One active writable slice: `slice/v1.16-release-qualification`; root Codex owns the shared writer lock. Unknown local `work` is preserved; no extra worktree.
-- A1/A2/B1/C1/D1 are integrated. Verify their live exact-source evidence in `docs/road-to-v2/v1.16-execution-card.md`; do not rebuild completed capabilities.
-- Product identity remains verified V1.15. V1.16 promotion requires the final owner approval requested only after agent-executable qualification gates pass. No V2.1 work or final V2 readiness declaration.
+- Live main/base: `3615f97eec335216b7ef5fb3d0ff198bdd44797c`, PR40 merged and its source branch deleted/pruned. Exact-source full push/PR CI38214841162/38214845690, combined CodeQL114697250063 and actual main CI38215893071/CodeQL38215893094/Workers114700637756 SUCCESS.
+- One writable slice: `slice/v1.16-final-qualification` from that main; root Codex owns the writer lock. Unknown local `work` is preserved. No additional worktree.
+- A1/A2/B1/C1/D1 are complete independent slices; preserve evidence in the execution card. Do not rebuild them. Product identity remains verified V1.15; no V1.16 promotion or V2.1 work.
 
-## Remaining qualification
+## Remaining acceptance gates
 
-- Fresh held-out provider/challenger comparison is prepared: `tests/fixtures/v116-role-heldout.json` (60 cases), strict existing evaluator and a manual frozen-main CI job under the existing production environment. Shell authentication is unavailable; test the protected GitHub credentials after independently green integration before concluding BLOCKED_EXTERNAL. Provider metrics remain UNMEASURED; all text models REVIEW_ONLY.
-- Actual production authenticated Catalogue/photo/Admin QA: **BLOCKED_EXTERNAL** pending an authorized test session. No real staff credentials are read, created or stored. Agent runs public production QA and isolated authenticated Worker QA itself.
-- Records main's CI was cancelled after a browser job failure, not a passing full run: the native modifier-popup case timed out. Source slice CI at 9fea passed. This slice stabilizes only decorative motion/focus in that test, retaining native click/profile assertions; focused card cases passed 21/21 (three repetitions, three workers). Final exact-source CI remains pending.
-- Directly verified matrix: `docs/road-to-v2/evidence/v1.16-release-qualification-2026-10-12.md`. Public live QA and20 disposable authenticated Worker checks passed except two brand-label accessibility defects, now corrected in source and awaiting deployed postflight. Focused regressions,11 role-evaluation tests, build/typecheck pass. Final full CI/CodeQL is next. A checkpoint/deployment is not a completed version.
+- Fresh provider run38215952629 completed on exact main3615 using existing protected credentials. Granite normalization78% precision, same-task Qwen challenger71%; both fail95% and remain REVIEW_ONLY. Full latency/availability/Neuron receipt exists as artifact11731528198, but local signed-storage access is denied and per-line notices were truncated by GitHub. This slice adds narrowly scoped read-only recovery of that exact receipt and one multiline notice, without repeating inference.
+- Actual deployed source3615 frontend bytes match the build. Twelve focused phone/desktop/200% cases have zero overflow/runtime exceptions. Axe still found two concatenated header-title text nodes; literal markup spaces clear them in controlled diagnosis. This slice applies those spaces and strengthens the existing name regression. Deployed postflight is still required.
+- Fresh Gemma real-photo measurement is being prepared with licensed, reviewed non-sensitive fixtures and the existing preparation/prompt/parser; no new inference or promotion claim yet.
+- Actual production authenticated Catalogue/photos/learning/System QA is **BLOCKED_EXTERNAL** pending an authorized dedicated test session. Agents run all feasible public production and disposable authenticated Worker checks themselves. Never read real staff credentials or bypass authentication.
 
-## Next executable action
+## Exact next action
 
-Read live branch/HEAD/lock and the execution card. Complete final exact-source CI/CodeQL; verify independent source integration, main Workers and affected public brand/asset postflight. Then dispatch the reviewed frozen-main qualification job and capture actual provider receipts. Keep failed/unrun checks distinct. Review, qualify and push coherent checkpoints on this one slice; integrate only independently green work, verify actual main checks/deployment and prune proven-integrated branches. Obtain final owner acceptance before governed V1.16 identity promotion and verify the actual running artifact afterward.
+Read actual HEAD/status/lock and `docs/road-to-v2/evidence/v1.16-release-qualification-2026-10-12.md`. Finish focused checks, review/privacy and push each coherent checkpoint on the one slice. Complete fresh bounded photo qualification preparation, then final exact-source full CI/combined CodeQL, integrate only independently green work, verify main deployment and corrected public postflight, and prune only integrated branches. Dispatch frozen-main receipt recovery before any additional inference; capture complete text metrics and spend evidence. Preserve failed/unrun results distinctly.
 
-Authority: `docs/specs/accepted/v1.16-ambient-intelligent-core.md`, `docs/PRODUCT_VERSION_GOVERNANCE.md`, current owner release instruction. Historic closure/source proof remains in the execution card and Git history.
+Final owner acceptance is requested only after every agent-executable gate passes. Following explicit approval, promote governed V1.16 metadata, qualify exact release source, verify the actual running Administration version/changelog and close with RELEASED_VERIFIED. Until then V1.16/final V2 readiness remain OPEN.

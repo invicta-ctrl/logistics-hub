@@ -4,7 +4,7 @@ type LendingItem = { id: string; name: string; category: string; unit: string; i
 type Catalog = { revision: number; items: LendingItem[]; categories: string[] };
 type Sort = "name" | "available";
 
-const LOCKUP = html`<span class="lockup">${CREST}<span class="lockup__rule" aria-hidden="true"></span>${MARK}<span class="lockup__text"><strong>Department of Logistics</strong><span>HAU University Student Council</span></span></span>`;
+const LOCKUP = html`<span class="lockup">${CREST}<span class="lockup__rule" aria-hidden="true"></span>${MARK}<span class="lockup__text"><strong>Department of Logistics</strong> <span>HAU University Student Council</span></span></span>`;
 
 const USC_FACEBOOK = "https://www.facebook.com/holyangeluniversitysc";
 

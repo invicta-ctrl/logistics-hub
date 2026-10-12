@@ -2,6 +2,34 @@
 
 **2026-10-12 | VERSION_VERIFYING | V1.16 OPEN.**
 
+## Current executable continuation
+
+- Live repository/main/base `3615f97eec335216b7ef5fb3d0ff198bdd44797c`; PR40 integrated, source branch removed/pruned. Root Codex owns the shared writer lock on the sole `slice/v1.16-final-qualification`. Run `git status --short --branch`, `git ls-remote origin refs/heads/main`, `npm run agent:status` before editing. Preserve unknown local `work`.
+- Source3615 full pushCI38214841162 and PRCI38214845690 SUCCESS, CodeQL38214845647 plus combined gate114697250063 SUCCESS. Actual main CI38215893071, CodeQL38215893094, Workers114700637756 SUCCESS. Source and main are the same SHA. Completed A1/A2/B1/C1/D1 proof and rollback sources remain in the execution card; no reconstruction.
+- Actual provider text run38215952629/job114700615550 SUCCESS on exact main3615:60 fresh cases, Granite78% precision, Qwen same-normalization challenger71%; neither meets95%, no mapping or REVIEW_ONLY change. Artifact11731528198 (`v116-role-qualification`) contains full metrics. Local download/log storage redirect is Forbidden; never publish its signed URL. Per-line GitHub notices capped at10 and omitted later metrics. Recover that exact report through the hosted existing CI job, no repeated inference.
+- Actual production postflight3615 JS/CSS match local built bytes. Twelve affected phone/desktop/light/dark/actual320px200% cases pass reflow and zero uncaught exceptions. Accessibility still FAIL: `.lockup__text` and `.ss-bar__title` concatenate adjacent text nodes. Controlled literal spacing clears WCAG2.5.3; current source adds those spaces and a normalized textContent name assertion. Re-run only affected public postflight after corrected deployment.
+- Current slice also adds fixed-source read-only receipt recovery (old run38215952629 only, immutable source/event/branch/workflow/success/hash checks), no provider credentials on recovery, and a single escaped multiline aggregate notice. Ordinary full CI remains intact; manual receipt/inference success cannot authorize deploy.
+- Photo qualification draft/fixtures are read-only agent work under `/tmp`, not released code or accuracy proof. Reuse current320px preparePhoto and actual photoName prompt/parser on disposable migratedD1; freeze reviewed public licensed bytes before inference. No paid APIs, production database/media writes, or model promotion.
+
+## External and release gates
+
+- Managed shell has no Cloudflare credential; protected GitHub provider credentials **are usable**. Do not treat secret-inventory403 or local unauthenticated Wrangler as a provider block. Existing cloud setup draft saved variable/start instructions only; draft publication never implied runtime activation.
+- Actual authenticated production Catalogue/upload/crop/cleanup/ledger/learning/System verification remains **BLOCKED_EXTERNAL**: no authorized dedicated QA session. Never read/store real staff credentials, use production SQL to fabricate sessions or bypass access controls. Agent performs tests once a proper session is supplied; routine QA is not assigned to owner.
+- Free caps remain10,000Neurons/day,9,500app stop,500Images/month; REST evaluation is outside app counter. Distinguish provider usage receipts from retained reservations. Recover text metrics before deciding the remaining safe photo spend.
+- Product-release.json still verified V1.15. No final owner approval, V1.16 promotion, released claim or V2.1 work. Source3615 is rollback for this next independent qualification slice; no migrations/provider-data/billing changes.
+
+## First next action
+
+Read current Git refs/lock and qualification matrix. Finish this checkpoint's focused workflow/accessibility checks, build/privacy/diff, commit and push. Integrate the fresh-photo evaluation only when its finite public fixture/payload/timeout/accounting contracts are verified. Final exact-source full CI and combined CodeQL must pass before integration; then verify actual main CI/Workers, recover the existing text receipt, run authorized bounded photo measurement, and repeat corrected deployed accessibility/asset postflight. Keep version OPEN through all remaining QA.
+
+Only a directly evidenced GO matrix with every agent-executable gate satisfied permits AWAITING_OWNER_ACCEPTANCE and a final approval request. Explicit approval then authorizes governed identity promotion, exact-source checks, production artifact/System version/changelog verification, canonical release record and RELEASED_VERIFIED. External blockers or interruption require a precise pushed continuation and yielded lock, never a finished-product claim.
+
+## Historical qualification continuation (superseded by live refs above)
+
+# Session Handoff — Logistics Hub
+
+**2026-10-12 | VERSION_VERIFYING | V1.16 OPEN.**
+
 ## Exact executable continuation
 
 - Repository `invicta-ctrl/logistics-hub`; live GitHub main/base `31c64a608fe38dce204b8943a6cdee9b5b36cd8b`. Root Codex is the sole tracked writer on `slice/v1.16-release-qualification`. Read actual HEAD/lock/status before continuing. Unknown local `work` remains untouched; one worktree.
