@@ -146,9 +146,10 @@ test("a modifier press follows the card's link to the profile, and the profile's
   // A modifier click opens a background tab. Activate it before waiting for its document to start.
   await tab.bringToFront();
   await tab.waitForURL(new RegExp(`person=${id(1)}`), { waitUntil: "commit", timeout: 15_000 });
-  await tab.waitForLoadState("domcontentloaded");
-  await tab.bringToFront();
   try {
+    // Poll the committed document: popup lifecycle events can precede Playwright's new-tab listener.
+    await tab.waitForFunction(() => document.readyState !== "loading", undefined, { timeout: 10_000 });
+    await tab.bringToFront();
     await expect(tab.getByRole("heading", { level: 1, name: "Ana Marie Santos" })).toBeVisible({ timeout: 15_000 });
   } catch (error) {
     const state = await tab.evaluate(() => ({ ready: document.readyState, title: document.title, headings: [...document.querySelectorAll("h1")].map((node) => node.textContent) }));
