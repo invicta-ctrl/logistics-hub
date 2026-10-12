@@ -124,10 +124,13 @@ test("a card's section link closes it and opens that section; Back returns to th
 });
 
 test("a modifier press follows the card's link to the profile, and the profile's own card opens on the ID", async ({ page, context }) => {
+  // Native link navigation is independent of the card's decorative pointer motion.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   // The new tab is mocked too. Unmocked, its API calls reached the preview server, which has no API, so it showed "The staff
   // workspace is unavailable" and the test proved only the address; now it proves the profile opens there.
   await mock(context);
   await page.goto("/staff/admin/directory");
+  await page.bringToFront();
   const [tab] = await Promise.all([context.waitForEvent("page"), page.getByRole("link", { name: /Ana Marie Santos/ }).click({ modifiers: ["ControlOrMeta"] })]);
   // A modifier click opens a background tab. Activate it before waiting for its document to start.
   await tab.bringToFront();
