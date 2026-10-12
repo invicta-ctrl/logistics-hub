@@ -373,8 +373,12 @@ if (guarded) {
       if (typeof decoded === "string") { try { decoded = JSON.parse(decoded); } catch { decoded = null; } }
       const valid = Boolean(decoded && typeof decoded === "object" && !Array.isArray(decoded) && Object.keys(decoded).length === 4
         && ["name", "brand", "model", "packaging"].every((field) => decoded[field] === null || typeof decoded[field] === "string"));
-      if (valid) { bucket.valid += 1; stats.streak = 0; } else { bucket.invalid += 1; stats.streak += 1; }
-      if (answer.name) { if (valid) bucket.answers += 1; scored.emittedNames += 1; } else { if (valid) { bucket.abstentions += 1; scored.abstentions += 1; } else scored.invalidFallbacks += 1; }
+      if (valid) {
+        bucket.valid += 1; stats.streak = 0;
+        if (decoded.name === null) { bucket.abstentions += 1; scored.abstentions += 1; } else bucket.answers += 1;
+      } else { bucket.invalid += 1; stats.streak += 1; }
+      if (answer.name) scored.emittedNames += 1;
+      else if (!valid) scored.invalidFallbacks += 1;
       if (each.kind === "OFFICE_DIAGNOSTIC") {
         officeDiagnostics.push({ fixture: each.id, nameAnswered: Boolean(answer.name), correctName: Boolean(answer.name && each.acceptableNames.some((expected) => flat(expected) === flat(answer.name))),
           brandAnswered: Boolean(answer.reading?.brand), supportedBrand: Boolean(answer.reading?.brand && each.acceptableBrands.some((expected) => flat(expected) === flat(answer.reading.brand))),
@@ -402,7 +406,7 @@ if (guarded) {
     const coreUnchanged = before === JSON.stringify(core());
     const complete = scored.completed === prepared.length && coreUnchanged && !stats.halt && !stats.calibrationErrors;
     say(`photo cases ${JSON.stringify(caseResults)}`);
-    say(`photo measurement ${JSON.stringify({ ...scored, officeDiagnostics, namePrecision: scored.scoredAnswers ? scored.correctNames / scored.scoredAnswers : null,
+    say(`photo measurement ${JSON.stringify({ ...scored, officeDiagnostics, namePopulation: "PARSED_RUNTIME_NAMES_ON_SCORED_HELDOUT_CASES", namePrecision: scored.scoredAnswers ? scored.correctNames / scored.scoredAnswers : null,
       positiveCoverage: scored.positiveCases ? scored.positiveAnswers / scored.positiveCases : null, brandPrecision: scored.brandAnswers ? scored.supportedBrands / scored.brandAnswers : null,
       brandCoverage: scored.expectedBrandCases ? scored.positiveBrandAnswers / scored.expectedBrandCases : null, modelPrecision: scored.modelAnswers ? scored.supportedModels / scored.modelAnswers : null, modelPositiveCoverage: scored.expectedModelCases ? "FINITE_FIXTURE_ONLY" : "UNMEASURED_NO_POSITIVE_MODEL_IDS", coreUnchanged, packagingQuality: "NOT_SCORED", generalOfficeAccuracy: "UNMEASURED", promotion: "NOT_AUTHORIZED" })}`);
     say(`photo receipt ${JSON.stringify({ expected: prepared.length, completed: scored.completed, complete, stopped: stats.halt ?? (stats.calibrationErrors ? "RESERVATION_CALIBRATION" : !complete ? "BUDGET_OR_FAILURE_STREAK" : null),
