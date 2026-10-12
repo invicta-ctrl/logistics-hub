@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type RouteState, FACT_CODES, MAX_TERMS, ROLE_LIMITS, ROLE_MODELS, ROUTE_STATE, type TextRole, arbitrateTask, normalizeTask, readChoice, resetRoleBreakers, route, runRole, secondOpinionTask } from "../src/ai-roles";
+import { type RouteState, FACT_CODES, MAX_TERMS, ROLE_LIMITS, ROLE_MODELS, ROUTE_STATE, type TextRole, arbitrateTask, normalizeTask, readChoice, resetRoleBreakers, route, runRole, secondOpinionTask, supportedChoice } from "../src/ai-roles";
 import { BANDS, CALL_TIMEOUT_MS, type AiRunner, neuronsToday, resetBreaker } from "../src/ambient-assist";
 import { migratedD1 } from "./d1-sqlite";
 
@@ -61,6 +61,44 @@ describe("reading a reply", () => {
   });
 });
 
+describe("evidence-gated item suggestions", () => {
+  it("permits supported typos and reorders, but not unsupported or ambiguous item names", () => {
+    const lengths = ["5m extension cord", "10m extension cord"];
+    expect(supportedChoice(normalizeTask("5m extnsion cord", lengths), lengths[0]!)).toBe(true);
+    expect(supportedChoice(normalizeTask("cord extension 10m", lengths), lengths[1]!)).toBe(true);
+    expect(supportedChoice(normalizeTask("extension cord", lengths), lengths[0]!)).toBe(false);
+    expect(supportedChoice(normalizeTask("extension cord", lengths), lengths[1]!)).toBe(false);
+    expect(supportedChoice(normalizeTask("Ceramic paint palette", lengths), lengths[0]!)).toBe(false);
+    const heads = ["Flat-head precision screwdriver", "Phillips precision screwdriver"];
+    expect(supportedChoice(normalizeTask("precision screwdriver", heads), heads[0]!)).toBe(false);
+    expect(supportedChoice(normalizeTask("Fla-thead precision screwdriver", heads), heads[0]!)).toBe(true);
+    const materials = arbitrateTask("metal document stand", [
+      { id: "metal", name: "Folding metal document stand" },
+      { id: "plastic", name: "Folding plastic document stand" }
+    ]);
+    expect(supportedChoice(materials, "metal")).toBe(false); // Missing form factor: ask for clarification.
+    expect(supportedChoice(arbitrateTask("Folding metal document stand", [
+      { id: "metal", name: "Folding metal document stand" },
+      { id: "plastic", name: "Folding plastic document stand" }
+    ]), "metal")).toBe(true);
+  });
+
+  it("refuses unsupported tasks without spending Neurons, and vetoes an unsupported valid-schema reply", async () => {
+    const ambiguous = normalizeTask("extension cord", ["5m extension cord", "10m extension cord"]);
+    expect(await runRole(db, ai, "TEXT_NORMALIZE", ambiguous, "USER")).toMatchObject({
+      outcome: "ABSTAIN", reason: "INSUFFICIENT_EVIDENCE", proposal: null, value: null
+    });
+    expect(sent).toHaveLength(0);
+    const unique = normalizeTask("5m extnsion cord", ["5m extension cord", "10m extension cord"]);
+    answer = () => chat('{"term":"10m extension cord"}', 0.4);
+    expect(await runRole(db, ai, "TEXT_NORMALIZE", unique, "USER")).toMatchObject({
+      outcome: "ABSTAIN", reason: "INSUFFICIENT_EVIDENCE", proposal: null, value: null
+    });
+    expect(sent).toHaveLength(1);
+    expect(await neuronsToday(db)).toBeCloseTo(0.4, 5);
+  });
+});
+
 describe("running a role", () => {
   const task = () => normalizeTask("staplr", ["Stapler", "Hole puncher"]);
 
@@ -71,11 +109,11 @@ describe("running a role", () => {
 
   it("keeps Qwen and GLM answers as typed review-only proposals", async () => {
     answer = () => chat('{"id":"a"}');
-    expect(await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("x", [{ id: "a", name: "A" }, { id: "b", name: "B" }]), "USER")).toMatchObject({ value: null, observed: null, proposal: { kind: "REVIEW_ONLY", role: "CANDIDATE_ARBITRATE", field: "id", value: "a" } });
+    expect(await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("Office stapler", [{ id: "a", name: "Office stapler" }, { id: "b", name: "Hole puncher" }]), "USER")).toMatchObject({ value: null, observed: null, proposal: { kind: "REVIEW_ONLY", role: "CANDIDATE_ARBITRATE", field: "id", value: "a" } });
     answer = () => chat('{"follow_up":"CHECK_CATEGORY"}');
     expect(await runRole(db, ai, "RARE_SECOND_OPINION", secondOpinionTask(["CATEGORY_SPLIT"]), "USER")).toMatchObject({ value: null, observed: null, proposal: { kind: "REVIEW_ONLY", role: "RARE_SECOND_OPINION", field: "follow_up", value: "CHECK_CATEGORY" } });
     answer = () => chat('{"id":"a","extra":true}');
-    expect(await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("x", [{ id: "a", name: "A" }, { id: "b", name: "B" }]), "USER")).toMatchObject({ outcome: "ABSTAIN", reason: "NO_VALID_ANSWER", value: null, proposal: null, observed: null });
+    expect(await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("Office stapler", [{ id: "a", name: "Office stapler" }, { id: "b", name: "Hole puncher" }]), "USER")).toMatchObject({ outcome: "ABSTAIN", reason: "NO_VALID_ANSWER", value: null, proposal: null, observed: null });
   });
 
   it("rejects a task whose proposal field does not belong to its role", async () => {
@@ -116,7 +154,7 @@ describe("running a role", () => {
     expect(await runRole(db, undefined, "TEXT_NORMALIZE", task(), "USER", {})).toMatchObject({ outcome: "UNAVAILABLE", reason: "NO_BINDING" });
     expect(await runRole(db, ai, "TEXT_NORMALIZE", normalizeTask("x", []), "USER", {})).toMatchObject({ reason: "NOTHING_TO_CHOOSE" });
     await db.prepare("INSERT INTO system_settings(key, value, updated_at) VALUES(?, ?, ?)").bind(`ai_neurons:${new Date().toISOString().slice(0, 10)}`, String(BANDS.stop - 1), new Date().toISOString()).run();
-    expect(await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("x", [{ id: "a", name: "A" }, { id: "b", name: "B" }]), "USER", {})).toMatchObject({ outcome: "ABSTAIN", reason: "BUDGET" });
+    expect(await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("Office stapler", [{ id: "a", name: "Office stapler" }, { id: "b", name: "Hole puncher" }]), "USER", {})).toMatchObject({ outcome: "ABSTAIN", reason: "BUDGET" });
     expect(sent).toHaveLength(0);
     await db.prepare("INSERT INTO system_settings(key, value, updated_at) VALUES('ambient_assist', 'off', ?)").bind(new Date().toISOString()).run();
     expect(await runRole(db, ai, "TEXT_NORMALIZE", task(), "USER", {})).toMatchObject({ reason: "SWITCHED_OFF" });
@@ -130,7 +168,7 @@ describe("running a role", () => {
     expect(sent).toHaveLength(3);
     expect(await neuronsToday(db)).toBe(3 * ROLE_LIMITS.TEXT_NORMALIZE.reserve);
     answer = () => chat('{"id":"a"}', 2);
-    const other = await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("x", [{ id: "a", name: "A" }, { id: "b", name: "B" }]), "USER", {});
+    const other = await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("Office stapler", [{ id: "a", name: "Office stapler" }, { id: "b", name: "Hole puncher" }]), "USER", {});
     expect(other).toMatchObject({ outcome: "ANSWER", value: "a" });
   });
 
@@ -156,14 +194,14 @@ describe("running a role", () => {
   it("turns thinking off for the reasoning models", async () => {
     active();
     answer = () => chat('{"id":"a"}', 2);
-    await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("x", [{ id: "a", name: "A" }, { id: "b", name: "B" }]), "USER");
+    await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("Office stapler", [{ id: "a", name: "Office stapler" }, { id: "b", name: "Hole puncher" }]), "USER");
     expect(sent[0]!.input).toHaveProperty("chat_template_kwargs", { enable_thinking: false });
   });
 
   it("lets Qwen choose only a supplied id and GLM only a fixed follow-up", async () => {
     active();
     answer = () => chat('{"id":"zzz"}');
-    expect((await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("x", [{ id: "a", name: "A" }, { id: "b", name: "B" }]), "USER", {})).value).toBeNull();
+    expect((await runRole(db, ai, "CANDIDATE_ARBITRATE", arbitrateTask("Office stapler", [{ id: "a", name: "Office stapler" }, { id: "b", name: "Hole puncher" }]), "USER", {})).value).toBeNull();
     answer = () => chat('{"follow_up":"CHECK_CATEGORY"}', 3);
     expect((await runRole(db, ai, "RARE_SECOND_OPINION", secondOpinionTask(["NAME_AND_PHOTO_DISAGREE"]), "USER", {})).value).toBe("CHECK_CATEGORY");
     answer = () => chat('{"follow_up":"DELETE_THE_ITEM"}');
