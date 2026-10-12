@@ -173,7 +173,9 @@ test.describe("Administration", () => {
     build: { version: "0123456789ab", commit: "a".repeat(40), builtAt: "2026-10-07T01:00:00.000Z", migrations: ["0001_init.sql"], product: { version: "V1.15", sourceCommit: "b".repeat(40), changes: ["Items open directly for entry.", "Selected photos fit item screens."] } },
     database: { ok: true, ms: 4, migrations: { applied: 1, latest: "0001_init.sql", latestAppliedAt: "2026-10-07T01:30:00.000Z", pending: [] } },
     storage: [{ id: "EVIDENCE", label: "Loan photos", holds: "Photos taken when something is lent.", ok: true, ms: 3 }, { id: "CATALOG_MEDIA", label: "Catalog pictures", holds: "Item and place pictures.", ok: false, ms: 2000 }],
-    selfService: "open"
+    selfService: "open",
+    assist: { on: true, available: true, neuronsToday: 0, band: "NORMAL", stopAt: 9500 },
+    cleanup: { on: false, available: false, sentThisMonth: 0, monthlyCap: 500 }
   };
   const SECTIONS = ["/staff/admin", "/staff/admin/self-service", "/staff/admin/catalog", "/staff/admin/staff", "/staff/admin/accountability"];
 
