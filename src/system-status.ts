@@ -3,7 +3,8 @@
 import { selfServiceState } from "./settings";
 
 export type Probe = { ok: boolean; ms: number };
-export type Build = { version: string; commit: string | null; builtAt: string; migrations: string[] };
+export type ProductRelease = { version: string; sourceCommit: string; changes: string[] };
+export type Build = { version: string; commit: string | null; builtAt: string; migrations: string[]; product: ProductRelease | null };
 export type MigrationLevel = {
   applied: number;
   latest: string | null;
@@ -40,6 +41,15 @@ async function probe<T>(name: string, check: () => Promise<T>): Promise<{ ok: tr
   }
 }
 
+/** Release identity is governed build data. Plain bounded notes, no markup or guessed version. */
+function readProduct(value: unknown): ProductRelease | null {
+  const record = value as Partial<Record<keyof ProductRelease, unknown>> | null;
+  if (!record || typeof record.version !== "string" || record.version.length > 30 || !/^V(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:\.[1-9]\d*)?$/.test(record.version)) return null;
+  if (typeof record.sourceCommit !== "string" || !/^[0-9a-f]{40}$/.test(record.sourceCommit)) return null;
+  if (!Array.isArray(record.changes) || record.changes.length < 2 || record.changes.length > 5 || !record.changes.every((note) => typeof note === "string" && note === note.trim() && note.length >= 2 && note.length <= 180 && !/[<>\x00-\x1f]/.test(note))) return null;
+  return { version: record.version, sourceCommit: record.sourceCommit, changes: record.changes as string[] };
+}
+
 /** The build's own record (vite.config.ts). A missing or unreadable one means "unknown", which is what the page then says. */
 function readBuild(value: unknown): Build | null {
   const record = value as Partial<Record<keyof Build, unknown>> | null;
@@ -47,7 +57,7 @@ function readBuild(value: unknown): Build | null {
   if (typeof record.builtAt !== "string" || Number.isNaN(Date.parse(record.builtAt))) return null;
   if (!Array.isArray(record.migrations) || !record.migrations.every((name) => typeof name === "string" && /^\d{4}_[a-z0-9_]+\.sql$/.test(name))) return null;
   const commit = typeof record.commit === "string" && /^[0-9a-f]{40}$/.test(record.commit) ? record.commit : null;
-  return { version: record.version, commit, builtAt: record.builtAt, migrations: record.migrations as string[] };
+  return { version: record.version, commit, builtAt: record.builtAt, migrations: record.migrations as string[], product: commit ? readProduct(record.product) : null };
 }
 
 async function readMigrations(db: D1Database, expected: string[] | null): Promise<MigrationLevel> {

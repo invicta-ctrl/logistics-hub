@@ -9,6 +9,7 @@ const origin = "https://hub.example.test";
 const PASSWORD = "correct horse battery";
 const VERSION = "0123456789ab";
 const COMMIT = "a".repeat(40);
+const PRODUCT = { version: "V1.15", sourceCommit: "b".repeat(40), changes: ["Items open directly for entry.", "Selected photos fit item screens."] };
 let env: Env;
 let sqlite: ReturnType<typeof migratedD1>["sqlite"];
 let buildRecord: unknown;
@@ -30,7 +31,7 @@ function recordMigrations(names: string[]) {
 beforeEach(async () => {
   const database = migratedD1();
   sqlite = database.sqlite;
-  buildRecord = { version: VERSION, commit: COMMIT, builtAt: "2026-10-07T08:00:00.000Z", migrations: migrationFiles() };
+  buildRecord = { version: VERSION, commit: COMMIT, builtAt: "2026-10-07T08:00:00.000Z", migrations: migrationFiles(), product: PRODUCT };
   env = {
     DB: database.d1, EVIDENCE: memoryR2().bucket, CATALOG_MEDIA: memoryR2().bucket, STAFF_IDS: memoryR2().bucket,
     ASSETS: { fetch: async (request: Request) => new URL(request.url).pathname === "/build.json" && buildRecord !== undefined ? Response.json(buildRecord) : new Response("<html></html>") } as unknown as Fetcher,
@@ -59,7 +60,7 @@ async function cookieOf(username: string) {
 const as = (cookie: string, path: string, method = "GET", body?: unknown) => call(path, { method, cookie, body: body === undefined ? undefined : JSON.stringify(body) });
 
 type Status = {
-  build: { version: string; commit: string | null; builtAt: string; migrations: string[] } | null;
+  build: { version: string; commit: string | null; builtAt: string; migrations: string[]; product: { version: string; sourceCommit: string; changes: string[] } | null } | null;
   database: { ok: boolean; migrations: { applied: number; latest: string | null; latestAppliedAt: string | null; pending: string[] | null } | null };
   storage: Array<{ id: string; ok: boolean }>;
   selfService: string | null;
@@ -81,7 +82,7 @@ describe("Administration > System", () => {
     const response = await as(await cookieOf("admin"), "/api/staff/admin/system");
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     const status = await response.json() as Status;
-    expect(status.build).toEqual({ version: VERSION, commit: COMMIT, builtAt: "2026-10-07T08:00:00.000Z", migrations: files });
+    expect(status.build).toEqual({ version: VERSION, commit: COMMIT, builtAt: "2026-10-07T08:00:00.000Z", migrations: files, product: PRODUCT });
     expect(status.database.ok).toBe(true);
     expect(status.database.migrations).toMatchObject({ applied: files.length, latest: files.at(-1), pending: [] });
     expect(status.database.migrations!.latestAppliedAt).toMatch(/^2026-10-0\dT09:30:00Z$/);
@@ -106,8 +107,41 @@ describe("Administration > System", () => {
     expect(unknown.database.migrations!.pending).toBeNull();
     buildRecord = { version: "not-a-version", commit: COMMIT, builtAt: "2026-10-07T08:00:00.000Z", migrations: [] };
     expect((await (await as(admin, "/api/staff/admin/system")).json() as Status).build).toBeNull();
-    buildRecord = { version: VERSION, commit: "HEAD", builtAt: "2026-10-07T08:00:00.000Z", migrations: [] };
-    expect((await (await as(admin, "/api/staff/admin/system")).json() as Status).build).toMatchObject({ version: VERSION, commit: null });
+    buildRecord = { version: VERSION, commit: "HEAD", builtAt: "2026-10-07T08:00:00.000Z", migrations: [], product: PRODUCT };
+    expect((await (await as(admin, "/api/staff/admin/system")).json() as Status).build).toMatchObject({ version: VERSION, commit: null, product: null });
+  });
+
+  it("keeps known build facts when release metadata is missing or malformed", async () => {
+    recordMigrations(migrationFiles());
+    const admin = await cookieOf("admin");
+    const known = { version: VERSION, commit: COMMIT, builtAt: "2026-10-07T08:00:00.000Z", migrations: migrationFiles() };
+    for (const product of [undefined, null, { ...PRODUCT, version: "V1.016" }, { ...PRODUCT, version: "V1.16.0" }, { ...PRODUCT, version: "V1.16.1.2" }, { ...PRODUCT, sourceCommit: "HEAD" }, { ...PRODUCT, changes: ["<script>not plain notes</script>", "Other note"] }, { ...PRODUCT, changes: ["Only one note"] }, { ...PRODUCT, changes: Array(6).fill("Too many notes") }]) {
+      buildRecord = { ...known, product };
+      const status = await (await as(admin, "/api/staff/admin/system")).json() as Status;
+      expect(status.build).toMatchObject({ version: VERSION, commit: COMMIT, product: null });
+      expect(status.database.migrations!.pending).toEqual([]);
+    }
+  });
+
+  it("reports the current artifact on refresh and restores the original identity on rollback", async () => {
+    recordMigrations(migrationFiles());
+    const admin = await cookieOf("admin");
+    const original = structuredClone(buildRecord);
+    const read = async () => ((await (await as(admin, "/api/staff/admin/system")).json()) as Status).build;
+    expect((await read())!.product).toEqual(PRODUCT);
+    buildRecord = { ...(original as object), commit: "c".repeat(40), product: { ...PRODUCT, version: "V1.15.1", sourceCommit: "d".repeat(40), changes: ["A separately verified correction.", "Its accompanying verified improvement."] } };
+    expect(await read()).toMatchObject({ commit: "c".repeat(40), product: { version: "V1.15.1" } });
+    buildRecord = original;
+    expect(await read()).toMatchObject({ commit: COMMIT, product: PRODUCT });
+  });
+
+  it.runIf(fs.existsSync("dist/build.json"))("the normal build carries the governed release source without exposing a second metadata asset", () => {
+    const release = JSON.parse(fs.readFileSync("product-release.json", "utf8")) as { version: string; sourceCommit: string; record: string; changes: string[] };
+    const artifact = JSON.parse(fs.readFileSync("dist/build.json", "utf8")) as { product: unknown };
+    expect(artifact.product).toEqual(release);
+    expect(release.version).toBe("V1.15");
+    expect(fs.readFileSync(release.record, "utf8")).toContain(release.sourceCommit);
+    expect(fs.existsSync("dist/product-release.json")).toBe(false);
   });
 
   it("reports an unreadable migration table as unknown, not as a failed database", async () => {

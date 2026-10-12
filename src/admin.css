@@ -22,6 +22,11 @@
 .version-facts > div { display: grid; grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr); gap: var(--space-1) var(--space-4); }
 .version-facts dt { color: var(--text-2); font-weight: 600; }
 .version-facts dd { margin: 0; overflow-wrap: anywhere; }
+.product-version { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); margin: 0 0 var(--space-4); }
+.product-version span { color: var(--text-2); }
+.product-version strong { font-size: 1.6rem; overflow-wrap: anywhere; }
+.release-notes { margin: 0 0 var(--space-5); padding-inline-start: 1.25rem; overflow-wrap: anywhere; }
+.release-notes li + li { margin-top: var(--space-1); }
 
 .banner { display: flex; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .banner p { margin: 0; }

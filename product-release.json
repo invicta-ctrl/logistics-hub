@@ -1,0 +1,11 @@
+{
+  "version": "V1.15",
+  "sourceCommit": "962c66e718bad84d29b8b470400753701d7f5cd2",
+  "record": "docs/road-to-v2/releases/v1.15-final-pass.md",
+  "changes": [
+    "Add items opens directly, with an optional location.",
+    "Crops and background edits appear across item views.",
+    "Sharper item photos fit inventory and Self-Service screens.",
+    "Inactive duplicates can be merged while preserving stock and history."
+  ]
+}

@@ -1,12 +1,12 @@
 import "./admin.css";
 import { adminPage } from "./admin-frame";
-import { type Html, api, emptyState, failure, formatDateTime, html, mount } from "./ui";
+import { type Html, api, emptyState, failure, formatDateTime, html, mount, onLeave } from "./ui";
 
 /** The answer of GET /api/staff/admin/system (src/system-status.ts). */
 type Probe = { ok: boolean; ms: number };
 type Status = {
   checkedAt: string;
-  build: { version: string; commit: string | null; builtAt: string; migrations: string[] } | null;
+  build: { version: string; commit: string | null; builtAt: string; migrations: string[]; product?: { version: string; sourceCommit: string; changes: string[] } | null } | null;
   database: Probe & { migrations: { applied: number; latest: string | null; latestAppliedAt: string | null; pending: string[] | null } | null };
   storage: Array<Probe & { id: string; label: string; holds: string }>;
   selfService: "open" | "paused" | null;
@@ -68,7 +68,7 @@ function render(status: Status, owner: boolean): Html {
     <section class="admin-block" aria-labelledby="health-title">
       <div class="admin-block__head"><h2 id="health-title" class="section-title">Right now</h2><p class="admin-source">Checked ${formatDateTime(status.checkedAt)}. Each check waits at most two seconds.</p></div>
       <ul class="status-list">
-        ${row("Application", tag("ok", "Running"), build ? html`Version <code>${build.version}</code>` : "This page was served by the application.")}
+        ${row("Application", tag("ok", "Running"), build ? html`Build <code>${build.version}</code>` : "This page was served by the application.")}
         ${row("Database", status.database.ok ? tag("ok", "Answering") : tag("bad", "Not answering"), status.database.ok ? quick(status.database) : "It did not answer within two seconds.")}
         ${status.storage.map((bucket) => row(bucket.label, bucket.ok ? tag("ok", "Answering") : tag("bad", "Not answering"), bucket.ok ? html`${bucket.holds} <span class="muted">${quick(bucket)}</span>` : "It did not answer within two seconds."))}
         ${row("Self-Service", status.selfService === "open" ? tag("ok", "Open") : status.selfService === "paused" ? tag("warn", "Closed for maintenance") : tag("warn", "Unknown"), html`<a class="text-link" href="/staff/admin/self-service" data-route>${status.selfService === null ? "Open the Self-Service settings" : "Change it in Self-Service"}</a>`)}
@@ -79,12 +79,15 @@ function render(status: Status, owner: boolean): Html {
     </section>
     <section class="admin-block" aria-labelledby="version-title">
       <h2 id="version-title" class="section-title">This version</h2>
+      <p class="product-version"><span>Product version</span><strong>${build?.product?.version ?? "Unknown"}</strong></p>
+      <h3 class="section-title">What's new</h3>
+      ${build?.product ? html`<ul class="release-notes">${build.product.changes.map((note) => html`<li>${note}</li>`)}</ul>` : html`<p class="muted">Not recorded.</p>`}
       ${build ? html`<dl class="version-facts">
         <div><dt>Build</dt><dd><code>${build.version}</code></dd></div>
         <div><dt>Commit</dt><dd>${build.commit ? html`<code>${build.commit.slice(0, 7)}</code><span class="visually-hidden"> (full commit ${build.commit})</span>` : html`<span class="muted">Not recorded.</span> This build was made without a commit.`}</dd></div>
         <div><dt>Built</dt><dd>${formatDateTime(build.builtAt)}</dd></div>
         <div><dt>Migrations</dt><dd>${level ? html`<code>${level.latest ?? "none"}</code> is the latest applied${level.latestAppliedAt ? html`, on ${formatDateTime(level.latestAppliedAt)}` : ""}. ${level.pending === null ? "" : level.pending.length ? html`<strong>${level.pending.length} of this version's migrations ${level.pending.length === 1 ? "is" : "are"} not applied yet.</strong>` : "Every migration in this version is applied."}` : html`<span class="muted">Could not be read from the database.</span>`}</dd></div>
-      </dl>` : html`<p>This build did not leave a record of what it is, so no version is shown. A normal production build always does.</p>
+      </dl>` : html`<p class="muted">Build details not recorded.</p>
       ${level ? html`<p>Migrations: <code>${level.latest ?? "none"}</code> is the latest applied.</p>` : ""}`}
     </section>
     <section class="admin-block" aria-labelledby="backup-title">
@@ -105,29 +108,37 @@ export async function systemStatus(): Promise<void> {
   });
   if (!session) return;
   const target = document.querySelector<HTMLElement>("#system")!;
+  let active = true;
+  let request = 0;
+  onLeave(() => { active = false; });
   async function check(): Promise<void> {
+    if (!active) return;
+    const current = ++request;
     target.setAttribute("aria-busy", "true");
     try {
-      mount(target, render(await api<Status>("/api/staff/admin/system"), session!.role === "OWNER"));
+      const status = await api<Status>("/api/staff/admin/system");
+      if (!active || current !== request) return;
+      mount(target, render(status, session!.role === "OWNER"));
       document.querySelector("#check-again")!.addEventListener("click", () => { void check(); });
       document.querySelector<HTMLButtonElement>("#assist-toggle")?.addEventListener("click", (event) => {
         const button = event.currentTarget as HTMLButtonElement;
         button.disabled = true;
         api("/api/staff/admin/assist", { method: "PATCH", body: JSON.stringify({ on: button.dataset.on === "true" }) })
-          .then(() => check(), (error) => { button.disabled = false; mount(target.querySelector("#system-summary")!, html`<p>${failure(error)}</p>`); });
+          .then(() => check(), (error) => { if (!active) return; button.disabled = false; mount(target.querySelector("#system-summary")!, html`<p>${failure(error)}</p>`); });
       });
       document.querySelector<HTMLButtonElement>("#cleanup-toggle")?.addEventListener("click", (event) => {
         const button = event.currentTarget as HTMLButtonElement;
         button.disabled = true;
         api("/api/staff/admin/cleanup", { method: "PATCH", body: JSON.stringify({ on: button.dataset.on === "true" }) })
-          .then(() => check(), (error) => { button.disabled = false; mount(target.querySelector("#system-summary")!, html`<p>${failure(error)}</p>`); });
+          .then(() => check(), (error) => { if (!active) return; button.disabled = false; mount(target.querySelector("#system-summary")!, html`<p>${failure(error)}</p>`); });
       });
     } catch (error) {
+      if (!active || current !== request) return;
       // Navigation and every other page stay available; only this report is missing.
       mount(target, emptyState("System status could not be loaded", failure(error), html`<button type="button" class="button button--secondary" id="check-again">Try again</button>`, "error", 3));
       document.querySelector("#check-again")!.addEventListener("click", () => { void check(); });
     }
-    target.setAttribute("aria-busy", "false");
+    if (active && current === request) target.setAttribute("aria-busy", "false");
   }
   await check();
 }

@@ -170,7 +170,7 @@ test.describe("Administration", () => {
   ];
   const status = {
     checkedAt: "2026-10-07T02:00:00.000Z",
-    build: { version: "0123456789ab", commit: null, builtAt: "2026-10-07T01:00:00.000Z", migrations: ["0001_init.sql"] },
+    build: { version: "0123456789ab", commit: "a".repeat(40), builtAt: "2026-10-07T01:00:00.000Z", migrations: ["0001_init.sql"], product: { version: "V1.15", sourceCommit: "b".repeat(40), changes: ["Items open directly for entry.", "Selected photos fit item screens."] } },
     database: { ok: true, ms: 4, migrations: { applied: 1, latest: "0001_init.sql", latestAppliedAt: "2026-10-07T01:30:00.000Z", pending: [] } },
     storage: [{ id: "EVIDENCE", label: "Loan photos", holds: "Photos taken when something is lent.", ok: true, ms: 3 }, { id: "CATALOG_MEDIA", label: "Catalog pictures", holds: "Item and place pictures.", ok: false, ms: 2000 }],
     selfService: "open"
@@ -203,6 +203,11 @@ test.describe("Administration", () => {
           await expect(outcomes).toContainText("1 correction choice");
           await expect(outcomes).toContainText("6.00 accounted Neurons");
         }
+        if (address === "/staff/admin") {
+          await expect(page.locator(".product-version strong")).toHaveText("V1.15");
+          await expect(page.locator(".release-notes li")).toHaveCount(2);
+          await expect(page.locator(".version-facts")).toContainText("0123456789ab");
+        }
         const problems = await page.evaluate(() => {
           const unlabelled = [...document.querySelectorAll("main input:not([type=hidden]), main select, main textarea")].filter((field) =>
             !field.getAttribute("aria-label") && !field.getAttribute("aria-labelledby") && !field.closest("label") && !(field.id && document.querySelector(`label[for="${CSS.escape(field.id)}"]`)));
@@ -217,6 +222,46 @@ test.describe("Administration", () => {
       expect(await sidewaysScroll(page), `${address} at 200%`).toBe(0);
     });
   }
+
+  test("System refresh uses the running artifact and preserves unknown and rollback identities", async ({ page }) => {
+    let current: unknown = status;
+    await page.route("**/api/staff/admin/system", (route) => route.fulfill(json(current)));
+    await page.goto("/staff/admin");
+    await expect(page.locator(".product-version strong")).toHaveText("V1.15");
+    const notes = ["Photo edits & thumbnails stay together.", "A second verified change."];
+    current = { ...status, build: { ...status.build, commit: "c".repeat(40), product: { ...status.build.product, version: "V1.15.1", changes: notes } } };
+    let release!: () => void;
+    let started!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const began = new Promise<void>((resolve) => { started = resolve; });
+    let checks = 0;
+    await page.route("**/api/staff/admin/system", async (route) => {
+      if (++checks === 1) { started(); await held; await route.fulfill(json(status)); }
+      else await route.fulfill(json(current));
+    });
+    try {
+      await page.getByRole("button", { name: "Check again" }).click();
+      await began;
+      await page.getByRole("button", { name: "Check again" }).click();
+      await expect(page.locator(".product-version strong")).toHaveText("V1.15.1");
+      release();
+      await page.waitForLoadState("networkidle");
+      await expect(page.locator(".product-version strong")).toHaveText("V1.15.1");
+    } finally { release(); }
+    await expect(page.locator(".release-notes li")).toHaveText(notes);
+    const { product: _product, ...older } = status.build;
+    current = { ...status, build: older };
+    await page.getByRole("button", { name: "Check again" }).click();
+    await expect(page.locator(".product-version strong")).toHaveText("Unknown");
+    await expect(page.locator(".version-facts")).toContainText("0123456789ab");
+    current = { ...status, build: null };
+    await page.getByRole("button", { name: "Check again" }).click();
+    await expect(page.locator(".product-version strong")).toHaveText("Unknown");
+    await expect(page.locator(".release-notes li")).toHaveCount(0);
+    current = status;
+    await page.getByRole("button", { name: "Check again" }).click();
+    await expect(page.locator(".product-version strong")).toHaveText("V1.15");
+  });
 
   test("a changed knowledge proposal refreshes the existing list after a refused decision", async ({ page }) => {
     let reads = 0;

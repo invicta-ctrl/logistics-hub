@@ -54,6 +54,7 @@ Before starting a post-release change:
 
 ## 5. Website version & change summary
 
+- **Governed source:** the accepted D1 slice implements `product-release.json` → the deploy's private `build.json.product` → the existing authorized System endpoint/panel. The source records the verified release version, source commit, canonical release record and 2–5 plain shipped notes. Update it only for a qualified release under this policy; a future-version slice retains the last verified release. Missing/malformed product metadata or an unrecorded artifact commit displays Unknown/Not recorded. This implementation is pending its exact-source/deployment qualification in `docs/road-to-v2/v1.16-execution-card.md`.
 - **After V1.16 ships its accepted version-display capability**, Administration > System > This version must display the actual **Product version** and a brief **What's new** summary for the immutable running build, separately from build fingerprint, commit, built date and migration status.
 - For a revision deployment, show `V1.15.1`, `V1.15.2`, etc., and summarize only that revision's verified changes, ideally 2–5 concise items. Main releases show `V1.16`, `V2.1`, etc.
 - A release candidate may be labeled as pending in private release records, but the public/staff product must not display it as shipped. Absent/malformed version metadata is `Unknown` rather than a guessed value.

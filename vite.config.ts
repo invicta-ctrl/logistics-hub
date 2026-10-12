@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { build, defineConfig, type Plugin, type Rollup } from "vite";
 
 /** The two apps' pages: Self-Service and the staff workspace share index.html; the Catalog has its own, so it installs as itself. */
@@ -72,7 +72,10 @@ function serviceWorker(): Plugin {
       // Builds and GitHub Actions both set one; a local build states none and the page says so.
       const commit = [process.env.WORKERS_CI_COMMIT_SHA, process.env.GITHUB_SHA].find((value) => /^[0-9a-f]{40}$/.test(value ?? "")) ?? null;
       const migrations = readdirSync("migrations").filter((name) => name.endsWith(".sql")).sort();
-      this.emitFile({ type: "asset", fileName: "build.json", source: JSON.stringify({ version, commit, builtAt: new Date().toISOString(), migrations }) });
+      // Governed release identity travels only in this deploy's private build record.
+      let product: unknown = null;
+      try { product = JSON.parse(readFileSync("product-release.json", "utf8")); } catch { /* Unknown rather than a fabricated release. */ }
+      this.emitFile({ type: "asset", fileName: "build.json", source: JSON.stringify({ version, commit, builtAt: new Date().toISOString(), migrations, product }) });
     }
   };
 }
