@@ -129,9 +129,9 @@ test("a modifier press follows the card's link to the profile, and the profile's
   await mock(context);
   await page.goto("/staff/admin/directory");
   const [tab] = await Promise.all([context.waitForEvent("page"), page.getByRole("link", { name: /Ana Marie Santos/ }).click({ modifiers: ["ControlOrMeta"] })]);
-  await tab.waitForURL(new RegExp(`person=${id(1)}`), { waitUntil: "commit", timeout: 15_000 });
-  // Foreground the committed document and wait for the actual profile to be ready.
+  // A modifier click opens a background tab. Activate it before waiting for its document to start.
   await tab.bringToFront();
+  await tab.waitForURL(new RegExp(`person=${id(1)}`), { waitUntil: "commit", timeout: 15_000 });
   await expect(tab.getByRole("heading", { level: 1, name: "Ana Marie Santos" })).toBeVisible({ timeout: 15_000 });
   await expect(tab).toHaveURL(new RegExp(`person=${id(1)}`));
   await expect(page.getByRole("dialog")).toHaveCount(0);

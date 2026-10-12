@@ -18,7 +18,7 @@
 
 ## Validation and boundaries
 
-B1 local build/typecheck and diff checks passed. Staged privacy and exact-source automatic CI/CodeQL/Workers Build are pending. No local product/provider tests: owner retains live/manual QA. Fixture CI does not establish real-photo accuracy, provider availability or production latency. Existing model mappings, REVIEW_ONLY text roles and free Neuron/Images caps remain; no dependency, migration, production data operation or new infrastructure. Existing main auto-deployment needs no Cloudflare credentials/environment change.
+B1 local build/typecheck and diff checks passed. Staged privacy passed. Checkpoint 4434ec94e97dc0af54fda4a780365ea1f95d0316, PR #37: unit/build/performance/privacy and Home browser cases passed; full CI 38188737713 failed the existing card-wall modifier-tab heading wait. That case now foregrounds the native popup before waiting for its document, retaining URL/profile/card assertions. Corrected full source CI is required before merge. CodeQL 38188737711 and source Workers Build 114616750621 passed the preceding checkpoint. Duplicate push CI and redundant A2-main repeat were cancelled; exact A2 source/full CI and actual deployment already passed. No local product/provider tests: owner retains live/manual QA. Fixture CI does not establish real-photo accuracy, provider availability or production latency. Existing model mappings, REVIEW_ONLY text roles and free Neuron/Images caps remain; no dependency, migration, production data operation or new infrastructure. Existing main auto-deployment needs no Cloudflare credentials/environment change.
 
 ## Next action and open release gates
 
