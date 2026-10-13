@@ -1,13 +1,13 @@
 # Session Handoff — Logistics Hub
 
-**2026-10-12 | VERSION_VERIFYING | V1.16 OPEN / NO-GO.**
+**2026-10-13 | VERSION_VERIFYING | V1.16 OPEN / NO-GO.**
 
 ## Current state and qualification
 
 - Main/base eb512c9bcde7cbedbc8da844a27d99ffeab1e09e; PR42 exactsource pushCI38253121299/PRCI38253126765/CodeQL38253126758/combined114824457704 SUCCESS, fast-forward integrated/pruned. MainCI38254602887/CodeQL38254602889 SUCCESS; mainWorkers114830277803 FAILED without reason/annotations. Deployment UNVERIFIED. Priorfb7 verified mainWorkers/public12-case accessibility/200%/assets is separate; private Worker/System identity unverified.
 - Sole writer Codex, sole slice `slice/v1.16-qualification-receipts`. Before editing: `git status --short --branch`, `git ls-remote origin refs/heads/main refs/heads/slice/v1.16-qualification-receipts`, `npm run agent:status`; claim if yielded. Preserve unknown local `work`, private files and preview state. No new writable worktree, force/reset or parallel branch.
 - CompletedA1/A2/B1/C1/D1 and rollback receipts remain in executioncard/canonical evidence. Do not rebuild. Product-release.json remains verifiedV1.15; noV1.16 promotion orV2.1.
-- Receipt-source573de3112a9a8e933c9dcc985340b1526f9136e9 combinedCodeQL115057482938 SUCCESS. Pushchecks115057293737 FAILED modifier-tab `waitForLoadState("domcontentloaded")`(246browser passed); PRchecks115057308065 SUCCESS. Full source is not green. Bounded actual-document readiness correction retains native click/new-tab/profile/own-ID assertions,15s heading deadline and traces/diagnostics.12 repetitions PASS(34.8s); next source needs typecheck/stagedprivacy/full exactCI/security.
+- Latest pushed source2199f76041231ae23118cc60da2e49a867342fd8: pushCI38324859198 FAILED native15s profile heading while PRCI38324864003 SUCCESS; both90-caseWorker jobs and combinedCodeQL115061179726 SUCCESS. Snapshot ready=interactive/defaultindex title/headings=[] does not locate startup stage. Original readiness correction alone is insufficient. Current comparison selects full Chromium for the card suite; CI installs full153 and defaultheadlessshell153, while local availablefull151 cannot install exact153(CDN Domain forbidden). No network bypass. Retainedtrace11780970737 downloadForbidden, contents uninspected. Bounded diagnostics capture pending localhost resource paths, errors without URL query/hash and actual app state; no bodies/tokens. Native/new-tab/profile/own-ID and15s heading assertions are unchanged.16 local card cases PASS/typecheckPASS; next source fullCI/security required. A local broad reproduction was intentionally interrupted after131passed/2interrupted/114notrun: not a passing fullsuite. Root stopped only its own known process.
 - Receipt workflow permits only immutable recorded original38215952629(success/source3615) and fresh38320413046(failure/sourceeb512), validates source/event/path/status/digests, preserves original failure/reportSHA256/zero-inference provenance, and publishes atmost8 complete3000-character chunks. Ten actual shell/workflow contracts PASS(oversized/wrongsource/result/unapprovedID refusal). No runtime/model/budget/provider setting change.
 
 ## AI evidence and no-replay boundary
@@ -26,7 +26,7 @@
 
 ## Executable continuation
 
-1. Finish typecheck/stagedprivacy/diff, commit/push bounded readiness correction on this same slice; obtain its full exact-source push/PRCI+combinedCodeQL. Do not merge573 on failed push evidence or fish for green reruns.
+1. Finish stagedprivacy/diff, commit/push full-Chromium comparison/bounded diagnostics on this same slice; obtain its full exact-source push/PRCI+combinedCodeQL. Do not merge2199 on its failed push proof or fish for green reruns. If comparison fails, use its bounded startup diagnostics/retained trace to identify the cause before another repair; no runtime change is justified by current evidence.
 2. Refresh clean refs/lock, exact fast-forward only independently green source; verify actual mainCI/security/Workers, prune proven ancestors, keep main frozen for receipt recovery.
 3. `gh workflow run ci.yml --ref main -f expected_sha=<full main> -f qualification_task=receipt -f receipt_run=38320413046`. No provider secrets/inference. Read all check annotations, validate numbered1/N completeness/no duplicates, join exact messages, verify provenance/digests and retain original failure.
 4. Read complete core/latency/actualusage/photoattemptedIDs/stop. Fix only proven defects on sole slice. No guarded/attemptedphoto replay, spent-label tuning, silent caps/reset or promotion. Resume verified unattempted IDs with all costs carried/frozen contracts; larger plan needs distinct reviewed amendment.

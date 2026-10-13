@@ -1,4 +1,7 @@
-import { type BrowserContext, expect, test, type Page } from "@playwright/test";
+import { type BrowserContext, expect, test, type Page, type Request } from "@playwright/test";
+
+// Native tabs use full Chromium; the default CI browser is the headless shell at the same version.
+test.use({ channel: "chromium" });
 
 /*
  * The Staff Directory as a wall of cards (Earl, 2026-10-03: the card is what you press). A card opens on the person's details
@@ -135,6 +138,23 @@ test("a card's section link closes it and opens that section; Back returns to th
 });
 
 test("a modifier press follows the card's link to the profile, and the profile's own card opens on the ID", async ({ page, context }) => {
+  const pending = new Map<Request, string>(), failed: string[] = [], errors: string[] = [];
+  context.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.origin === "http://127.0.0.1:4173") pending.set(request, `${request.resourceType()} ${url.pathname}`.slice(0, 120));
+  });
+  context.on("requestfinished", (request) => pending.delete(request));
+  context.on("requestfailed", (request) => {
+    failed.push(`${pending.get(request)} ${request.failure()?.errorText}`.slice(0, 160));
+    if (failed.length > 3) failed.shift();
+    pending.delete(request);
+  });
+  const recordError = (message: string) => {
+    const safe = message.replace(/((?:https?|wss?):\/\/[^\s"'<>?#]+)[?#][^\s"'<>]*/g, "$1");
+    errors.push(safe.slice(0, 160)); if (errors.length > 3) errors.shift();
+  };
+  context.on("weberror", (error) => recordError(error.error().message));
+  context.on("console", (message) => { if (message.type() === "error") recordError(message.text()); });
   // Native link navigation is independent of the card's decorative pointer motion.
   await page.emulateMedia({ reducedMotion: "reduce" });
   // The new tab is mocked too. Unmocked, its API calls reached the preview server, which has no API, so it showed "The staff
@@ -152,8 +172,10 @@ test("a modifier press follows the card's link to the profile, and the profile's
     await tab.bringToFront();
     await expect(tab.getByRole("heading", { level: 1, name: "Ana Marie Santos" })).toBeVisible({ timeout: 15_000 });
   } catch (error) {
-    const state = await tab.evaluate(() => ({ ready: document.readyState, title: document.title, headings: [...document.querySelectorAll("h1")].map((node) => node.textContent) }));
-    throw new Error(`Native profile rendering failed: ${JSON.stringify(state)}`, { cause: error });
+    const state = await tab.evaluate(() => ({ ready: document.readyState, title: document.title, visibility: document.visibilityState,
+      appChildren: document.querySelector("#app")?.childElementCount, appText: document.querySelector("#app")?.textContent?.slice(0, 150),
+      headings: [...document.querySelectorAll("h1")].map((node) => node.textContent) }));
+    throw new Error(`Native profile rendering failed: ${JSON.stringify({ ...state, pending: [...pending.values()].slice(0, 6), failed, errors })}`, { cause: error });
   }
   await expect(tab).toHaveURL(new RegExp(`person=${id(1)}`));
   await expect(page.getByRole("dialog")).toHaveCount(0);
