@@ -9,21 +9,13 @@ Follow-up to the V1.15 Final Pass, requested by Earl. No version number is minte
 - A person's entry always wins. A keystroke or a tap on a chip or "Use these" makes the field theirs (even if they empty it); a field that already holds anything we did not write is never changed; a saved draft reopened for editing is theirs. When the name changes and the match goes, only what the catalogue wrote is taken back.
 - The same ownership rule as the Model field (`modelEdited` / `modelFromPhoto`). A field the catalogue wrote is not offered again in the "Suggested: … Use these" line.
 
-## Why this gate
+## Why this gate, and what is not yet measured
 
-Leave-one-out on the repository's public seed catalog, 253 reviewed items, built-in suggestions only (`npm run evaluate:suggestions`; the seed loader now marks a typed row as reviewed because every imported row is still flagged `needs_review`, which the stricter `verified` rule of V1.16 otherwise excludes, leaving zero items):
+The gate is deliberately narrow: only reviewed items vote (`verified`: active, not flagged for review, valid category, unit and type), and it needs an exact name or all five look-alikes in agreement. Four of five agreeing, the knowledge base and the last-item hint stay buttons.
 
-| Evidence | Category | Counted in |
-|---|---|---|
-| All five look-alikes agree (5 of 5) | 75 items, right 97% | 48 items, right 100% |
-| Exact reviewed name or other name | 2 items, right 100% (too few to quote) | 2 items, right 100% |
-| Four of five agree | 14 items, right 71% | 20 items, right 85% |
-| Four of four (fewer than five exist) | 15 items, right 93% | 8 items, right 88% |
-| Knowledge base only | 7 items, right 57% | 6 items, right 50% |
+**Its accuracy on reviewed data has not been measured, and this note makes no accuracy claim.** The repository's migrated seed catalog carries `needs_review = 1` on every row, so `npm run evaluate:suggestions` correctly reports zero reviewed items there (`docs/road-to-v2/releases/v1.15-final-pass.md`). An earlier draft of this change treated the seed's classified rows as reviewed and quoted 97% (category) and 100% (unit) for the gate; that was a measurement of unreviewed legacy labels, it was wrong to present it as evidence, and it has been withdrawn along with the script change that produced it.
 
-Written into an empty field with the gate above: category 77 of 253 items (30%), right 97%; unit 50 of 253 (20%), right 100%. With the knowledge base on: category 74 (29%), right 97%; unit 46 (18%), right 100%.
-
-These are leave-one-out figures on the seed catalogue, where an item's real siblings are present. They say how often the gate is right when it speaks, not how often it will speak on a new shelf. On production, until more items are reviewed, it will speak less often, and the "Review later" and button paths are unchanged.
+What would settle it: after real cataloguing has produced reviewed records, run `npm run evaluate:suggestions -- --from <private local export>` (never committed). The report now prints, per field, how often the gate would write into an empty field and how often it would be right. Until then the safeguards are structural: it speaks only from human-confirmed items, it says where the value came from, a person's own entry always wins, and one tap or keystroke changes it.
 
 ## Verification
 

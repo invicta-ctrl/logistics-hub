@@ -1,5 +1,5 @@
 // Leave-one-out measurement of the catalog suggestions (amendment §9). Prints aggregates only: tier counts and hit rates, never item names.
-//   npm run evaluate:suggestions                 the repository's own public seed catalog (migrations applied to a throwaway database); every imported row is still flagged for review, so a typed row stands in for a staff-reviewed one here
+//   npm run evaluate:suggestions                 the repository's own public seed catalog (migrations applied to a throwaway database)
 //   npm run evaluate:suggestions -- --from f.json a private local export (an array of items with name, aliases, category, itemType, consumptionMode, unit, stockArea, status);
 //                                                 run it privately and never commit the file or its per-item output.
 //   npm run evaluate:suggestions -- --ai [--ai-limit 300]
@@ -25,7 +25,7 @@ const { outputFiles } = await build({
       import { AI_MODEL, aiMessages, aiReplyText, aiSchema, readAiAnswer } from "./src/catalog-ai";
       import { KNOWLEDGE, KNOWLEDGE_VERSION } from "./src/item-knowledge";
       import { migratedD1 } from "./tests/d1-sqlite";
-      const catalogOf = (external) => external ?? migratedD1().sqlite.prepare("SELECT name, aliases, category, item_type AS itemType, consumption_mode AS consumptionMode, unit, stock_area AS stockArea, status, needs_review AS needsReview FROM items").all().map((item) => ({ ...item, needsReview: item.itemType === "NEEDS_REVIEW" }));
+      const catalogOf = (external) => external ?? migratedD1().sqlite.prepare("SELECT name, aliases, category, item_type AS itemType, consumption_mode AS consumptionMode, unit, stock_area AS stockArea, status, needs_review AS needsReview FROM items").all().map((item) => ({ ...item, needsReview: item.needsReview === 0 ? false : true }));
       export function run(external) {
         const catalog = catalogOf(external);
         const before = evaluate(catalog, { knowledge: false });

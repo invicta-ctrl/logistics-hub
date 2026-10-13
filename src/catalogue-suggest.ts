@@ -31,9 +31,9 @@ const VOTERS = 5;
 export const STRONG_VOTES = 4;
 /**
  * True when a suggestion is sure enough to be written into an empty field instead of offered as a button: the typed name is exactly a
- * verified item's name or other name, or all five look-alikes agree. Four of five and the knowledge base stay buttons. Leave-one-out on
- * the public seed catalog (`npm run evaluate:suggestions`) found five of five right for 97% of categories and 100% of units, against
- * 71–85% at four of five.
+ * verified item's name or other name, or all five look-alikes agree. Four of five and the knowledge base stay buttons. Only reviewed
+ * items vote (`verified`), so this speaks only from human-confirmed evidence. Its accuracy on reviewed data is not yet measured: run
+ * `npm run evaluate:suggestions -- --from <private export>` on reviewed records and read the "written into an empty field" lines.
  */
 export const confidentMatch = <T>(suggestion: Suggestion<T> | undefined): suggestion is Suggestion<T> =>
   suggestion?.tier === "STRONG" && suggestion.basis === "CATALOG" && suggestion.votes !== undefined && (suggestion.votes.exact || (suggestion.votes.of === VOTERS && suggestion.votes.agree === VOTERS));
