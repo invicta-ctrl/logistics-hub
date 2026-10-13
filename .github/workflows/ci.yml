@@ -10,22 +10,14 @@ on:
   workflow_dispatch:
     inputs:
       expected_sha:
-        description: Exact frozen main SHA for bounded V1.16 model qualification (no deployment or data changes)
+        description: Exact frozen main SHA for recorded V1.16 receipt recovery (no inference or deployment)
         required: true
         type: string
       receipt_run:
         description: Optional read-only recovery of a recorded V1.16 qualification receipt (no inference)
         required: false
-        default: ""
+        default: "38215952629"
         type: string
-      qualification_task:
-        description: Recover the spent text receipt, or measure fresh guarded roles and photos without promotion
-        required: true
-        default: receipt
-        type: choice
-        options:
-          - receipt
-          - fresh
 
 permissions:
   contents: read
@@ -87,7 +79,7 @@ jobs:
   role-qualification:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 10
     environment: production
     permissions:
       contents: read
@@ -113,12 +105,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-        if: inputs.receipt_run == '' && inputs.qualification_task == 'fresh'
-      - run: npx playwright install --with-deps chromium
-        if: inputs.receipt_run == '' && inputs.qualification_task == 'fresh'
       - name: Recover a recorded public qualification receipt without inference
-        if: inputs.receipt_run != '' || inputs.qualification_task != 'fresh'
         env:
           GH_TOKEN: ${{ github.token }}
           RECEIPT_RUN: ${{ inputs.receipt_run || '38215952629' }}
@@ -142,24 +129,6 @@ jobs:
             const provenance = { run, source: source.head_sha, result: source.conclusion, bytes: receipt.byteLength, sha256: createHash("sha256").update(receipt).digest("hex"), additionalInferenceCalls: 0 };
             writeFileSync("role-qualification.txt", Buffer.concat([Buffer.from(`measurement receipt source ${JSON.stringify(provenance)}\n`), receipt]));
           '
-      - name: Measure fresh guarded roles and licensed photos
-        if: inputs.receipt_run == '' && inputs.qualification_task == 'fresh'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          # Validate every public source/preparer before any additional inference. The prior185-call receipt is spent.
-          node scripts/evaluate-roles.mjs --photos tests/fixtures/v116-photo-heldout.json --dry --prior-neurons 128.288 --stop-neurons 240 > role-qualification.txt 2>&1
-          node scripts/evaluate-roles.mjs --guarded tests/fixtures/v116-guarded-role-heldout.json --granite 40 --qwen 40 --glm 0 --prior-neurons 128.288 --stop-neurons 400 >> role-qualification.txt 2>&1
-          photo_prior=$(node --input-type=module -e '
-            import { readFileSync } from "node:fs";
-            const line = readFileSync("role-qualification.txt", "utf8").split("\n").find(line => line.startsWith("guarded receipt "));
-            const receipt = line ? JSON.parse(line.slice("guarded receipt ".length)) : null;
-            const used = receipt?.combinedAccountedNeurons;
-            if (!receipt?.complete || !receipt.coreUnchanged || !receipt.rolesRemainReviewOnly || !Number.isFinite(used) || used < 128.288 || used >= 400) throw new Error("No complete verified guard receipt; photo inference refused.");
-            console.log(Math.ceil(used * 1000) / 1000);
-          ')
-          node scripts/evaluate-roles.mjs --photos tests/fixtures/v116-photo-heldout.json --prior-neurons "$photo_prior" --stop-neurons 240 >> role-qualification.txt 2>&1
       - name: Publish the bounded count-only receipt
         if: always()
         run: |

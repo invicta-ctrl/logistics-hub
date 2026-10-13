@@ -293,7 +293,7 @@ if (guarded) {
     }
     const coreUnchanged = !refusedCoreWrite && before === JSON.stringify(core());
     const complete = ["TEXT_NORMALIZE", "CANDIDATE_ARBITRATE"].every((role) => expected[role] !== undefined && completed[role] === expected[role]) && coreUnchanged && !stats.halt && !stats.calibrationErrors;
-    say(`guarded receipt ${JSON.stringify({ expected, completed, complete, coreUnchanged, stopped: stats.halt ?? (stats.calibrationErrors ? "RESERVATION_CALIBRATION" : !complete ? "BUDGET_OR_FAILURE_STREAK" : null),
+    say(`guarded receipt ${JSON.stringify({ expected, completed, complete, coreUnchanged, stopped: complete ? null : stats.halt ?? (stats.calibrationErrors ? "RESERVATION_CALIBRATION" : !coreUnchanged ? "CORE_CHANGED" : stats.streak >= HARD.consecutiveFailures ? "FAILURE_STREAK" : "BUDGET_STOP"),
       priorVerifiedAccountedNeurons: priorNeurons, guardedAccountedNeurons: stats.neurons, combinedAccountedNeurons: priorNeurons + stats.neurons, combinedCap: 400, rolesRemainReviewOnly: true })}`);
     local.sqlite.close(); if (!complete) process.exitCode = 2;
   }
@@ -347,9 +347,10 @@ if (guarded) {
     const core = () => local.sqlite.prepare("SELECT (SELECT COUNT(*) FROM items) AS items, (SELECT COUNT(*) FROM inventory_movements) AS movements, (SELECT COALESCE(SUM(on_hand),0) FROM inventory_balances) AS onHand, (SELECT COUNT(*) FROM loans) AS loans").get();
     const before = JSON.stringify(core());
     const caseResults = [], officeDiagnostics = [];
+    const heldout = photoFixture.photos.filter((each) => each.kind === "POSITIVE" || each.kind === "NON_ITEM");
     const scored = { completed: 0, emittedNames: 0, scoredAnswers: 0, correctNames: 0, wrongNames: 0, positiveCases: photoFixture.photos.filter((each) => each.kind === "POSITIVE").length, positiveAnswers: 0,
-      negativeCases: photoFixture.photos.filter((each) => each.kind === "NON_ITEM").length, negativeAnswers: 0, abstentions: 0, invalidFallbacks: 0, unscoredAmbiguousNames: 0, unsupportedPrintedIdentifiers: 0, brandAnswers: 0, supportedBrands: 0, unsupportedBrands: 0, expectedBrandCases: photoFixture.photos.filter((each) => each.acceptableBrands.length).length,
-      positiveBrandAnswers: 0, modelAnswers: 0, supportedModels: 0, unsupportedModels: 0, expectedModelCases: photoFixture.photos.filter((each) => each.acceptableModels.length).length, outcomes: {} };
+      completedPositiveCases: 0, negativeCases: photoFixture.photos.filter((each) => each.kind === "NON_ITEM").length, completedNegativeCases: 0, negativeAnswers: 0, abstentions: 0, invalidFallbacks: 0, unscoredAmbiguousNames: 0, unsupportedPrintedIdentifiers: 0, brandAnswers: 0, supportedBrands: 0, unsupportedBrands: 0, expectedBrandCases: heldout.filter((each) => each.acceptableBrands.length).length, completedBrandCases: 0,
+      positiveBrandAnswers: 0, modelAnswers: 0, supportedModels: 0, unsupportedModels: 0, expectedModelCases: heldout.filter((each) => each.acceptableModels.length).length, completedModelCases: 0, outcomes: {} };
     const flat = (name) => name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
     for (const { each, jpeg } of prepared) {
       if (stats.halt || stats.calibrationErrors || stats.streak >= HARD.consecutiveFailures || stats.neurons + m.PHOTO_RESERVE > Math.min(stopAt, 240) || priorNeurons + stats.neurons + m.PHOTO_RESERVE > 400) break;
@@ -367,6 +368,12 @@ if (guarded) {
       scored.outcomes[answer.outcome] = (scored.outcomes[answer.outcome] ?? 0) + 1;
       if (!pending) { stats.halt = answer.outcome; break; }
       scored.completed += 1;
+      if (each.kind === "POSITIVE") scored.completedPositiveCases += 1;
+      if (each.kind === "NON_ITEM") scored.completedNegativeCases += 1;
+      if (heldout.includes(each)) {
+        if (each.acceptableBrands.length) scored.completedBrandCases += 1;
+        if (each.acceptableModels.length) scored.completedModelCases += 1;
+      }
       if (!transport?.available) { caseResults.push({ fixture: each.id, result: "PROVIDER_UNAVAILABLE" }); continue; }
       const bucket = bucketFor("VISION_EXTRACT", m.PHOTO_MODEL);
       let decoded = m.aiReplyText(transport.reply);
@@ -391,6 +398,7 @@ if (guarded) {
         if (answer.name) { scored.scoredAnswers += 1; if (each.acceptableNames.some((expected) => flat(expected) === flat(answer.name))) scored.correctNames += 1; else scored.wrongNames += 1; }
       }
       caseResults.push({ fixture: each.id, result: each.kind === "AMBIGUOUS" ? "UNSCORED_AMBIGUOUS" : !answer.name ? "NO_NAME" : each.acceptableNames.some((expected) => flat(expected) === flat(answer.name)) ? "RIGHT_NAME" : "WRONG_NAME", schemaValid: valid });
+      if (!heldout.includes(each)) continue;
       if (answer.reading?.brand) {
         scored.brandAnswers += 1;
         if (each.acceptableBrands.length) scored.positiveBrandAnswers += 1;
@@ -407,9 +415,9 @@ if (guarded) {
     const complete = scored.completed === prepared.length && coreUnchanged && !stats.halt && !stats.calibrationErrors;
     say(`photo cases ${JSON.stringify(caseResults)}`);
     say(`photo measurement ${JSON.stringify({ ...scored, officeDiagnostics, namePopulation: "PARSED_RUNTIME_NAMES_ON_SCORED_HELDOUT_CASES", namePrecision: scored.scoredAnswers ? scored.correctNames / scored.scoredAnswers : null,
-      positiveCoverage: scored.positiveCases ? scored.positiveAnswers / scored.positiveCases : null, brandPrecision: scored.brandAnswers ? scored.supportedBrands / scored.brandAnswers : null,
-      brandCoverage: scored.expectedBrandCases ? scored.positiveBrandAnswers / scored.expectedBrandCases : null, modelPrecision: scored.modelAnswers ? scored.supportedModels / scored.modelAnswers : null, modelPositiveCoverage: scored.expectedModelCases ? "FINITE_FIXTURE_ONLY" : "UNMEASURED_NO_POSITIVE_MODEL_IDS", coreUnchanged, packagingQuality: "NOT_SCORED", generalOfficeAccuracy: "UNMEASURED", promotion: "NOT_AUTHORIZED" })}`);
-    say(`photo receipt ${JSON.stringify({ expected: prepared.length, completed: scored.completed, complete, stopped: stats.halt ?? (stats.calibrationErrors ? "RESERVATION_CALIBRATION" : !complete ? "BUDGET_OR_FAILURE_STREAK" : null),
+      positiveCoverage: scored.completedPositiveCases ? scored.positiveAnswers / scored.completedPositiveCases : null, positiveCoveragePopulation: "COMPLETED_POSITIVE_HELDOUT_CASES", printedPopulation: "SCORED_HELDOUT_CASES_EXCLUDING_DIAGNOSTIC_AND_AMBIGUOUS", brandPrecision: scored.brandAnswers ? scored.supportedBrands / scored.brandAnswers : null,
+      brandCoverage: scored.completedBrandCases ? scored.positiveBrandAnswers / scored.completedBrandCases : null, modelPrecision: scored.modelAnswers ? scored.supportedModels / scored.modelAnswers : null, modelPositiveCoverage: scored.expectedModelCases ? "FINITE_FIXTURE_ONLY" : "UNMEASURED_NO_POSITIVE_MODEL_IDS", coreUnchanged, packagingQuality: "NOT_SCORED", generalOfficeAccuracy: "UNMEASURED", promotion: "NOT_AUTHORIZED" })}`);
+    say(`photo receipt ${JSON.stringify({ expected: prepared.length, completed: scored.completed, complete, stopped: complete ? null : stats.halt ?? (stats.calibrationErrors ? "RESERVATION_CALIBRATION" : !coreUnchanged ? "CORE_CHANGED" : stats.streak >= HARD.consecutiveFailures ? "FAILURE_STREAK" : "BUDGET_STOP"),
       priorVerifiedAccountedNeurons: priorNeurons, photoAccountedNeurons: stats.neurons, combinedAccountedNeurons: priorNeurons + stats.neurons, photoCap: Math.min(stopAt, 240), combinedCap: 400 })}`);
     local.sqlite.close(); if (!complete) process.exitCode = 2;
   }

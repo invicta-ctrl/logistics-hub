@@ -617,7 +617,7 @@ describe("the manifest and the workflow", () => {
         continue;
       }
       if (file === "ci.yml" && text.includes("\n  role-qualification:")) {
-        // Accepted V1.16 permits a manual provider benchmark; ordinary regression jobs still never receive production credentials.
+        // Spent qualification fixtures can only be recovered; no CI job receives provider credentials or sends inference.
         const start = text.indexOf("\n  role-qualification:");
         const ordinary = text.slice(0, start), qualification = text.slice(start);
         expect(ordinary).not.toMatch(/production-release|migrations apply|CLOUDFLARE_API_TOKEN|environment:\s*production/);
@@ -628,22 +628,13 @@ describe("the manifest and the workflow", () => {
         expect(qualification).toContain("persist-credentials: false");
         expect(qualification).toContain('expected !== process.env.GITHUB_SHA || checked !== expected || current !== expected');
         expect(qualification).toContain('"ls-remote", "origin", "refs/heads/main"');
-        expect([...qualification.matchAll(/\$\{\{\s*secrets\.([A-Z_]+)\s*\}\}/g)].map((match) => match[1]).sort()).toEqual(["CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"]);
-        expect(qualification.slice(0, qualification.indexOf("- name: Measure fresh guarded"))).not.toContain("secrets.");
-        expect(qualification.slice(qualification.indexOf("- uses: actions/upload-artifact"))).not.toContain("secrets.");
-        expect(qualification).toContain("node scripts/evaluate-roles.mjs --guarded tests/fixtures/v116-guarded-role-heldout.json --granite 40 --qwen 40 --glm 0 --prior-neurons 128.288 --stop-neurons 400");
-        expect(qualification).toContain('node scripts/evaluate-roles.mjs --photos tests/fixtures/v116-photo-heldout.json --prior-neurons "$photo_prior" --stop-neurons 240');
-        expect(qualification).toContain('Math.ceil(used * 1000) / 1000');
-        expect(qualification).toContain('!receipt?.complete || !receipt.coreUnchanged || !receipt.rolesRemainReviewOnly');
-        expect(qualification).not.toContain('--fixtures tests/fixtures/v116-role-heldout.json');
+        expect(qualification).not.toMatch(/secrets\.|evaluate-roles|qualification_task|Measure fresh/);
         expect(qualification).not.toMatch(/production-release|migrations apply|wrangler|d1 (execute|export)|r2 bucket|continue-on-error/);
-        expect(qualification).toContain("inputs.qualification_task == 'fresh'");
-        expect(ordinary).toContain("default: receipt");
+        expect(ordinary).toContain('default: "38215952629"');
         expect(ordinary).toContain("'qualification-no-checks'");
         expect(ordinary).toContain("'qualification-no-worker-e2e'");
         expect(qualification).toContain("path: role-qualification.txt");
-        const recovery = qualification.slice(qualification.indexOf("- name: Recover"), qualification.indexOf("- name: Measure"));
-        expect(recovery).toContain("if: inputs.receipt_run != ''");
+        const recovery = qualification.slice(qualification.indexOf("- name: Recover"), qualification.indexOf("- name: Publish"));
         expect(recovery).toContain('!Object.hasOwn(receipts, run)');
         expect(recovery).toContain('"38215952629": { sha: "3615f97eec335216b7ef5fb3d0ff198bdd44797c", result: "success"');
         expect(recovery).toContain('"38320413046": { sha: "eb512c9bcde7cbedbc8da844a27d99ffeab1e09e", result: "failure"');
@@ -653,7 +644,6 @@ describe("the manifest and the workflow", () => {
         expect(recovery).toContain('source.path !== ".github/workflows/ci.yml"');
         expect(recovery).not.toContain("secrets.");
         expect(recovery).not.toMatch(/evaluate-roles|fetch\(|ai\/run/);
-        expect(qualification.slice(qualification.indexOf("- name: Measure"), qualification.indexOf("- name: Publish"))).toContain("if: inputs.receipt_run == ''");
         const publish = qualification.slice(qualification.indexOf("- name: Publish"), qualification.indexOf("- uses: actions/upload-artifact"));
         expect(publish).toContain('.join("\\n")');
         expect(publish).toContain('.replace(/\\n/g, "%0A")');

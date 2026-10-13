@@ -3,6 +3,11 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runInNewContext } from "node:vm";
+import { migratedD1 } from "./d1-sqlite";
+import { PHOTO_MODEL, PHOTO_RESERVE, photoName, resetBreaker } from "../src/ambient-assist";
+import { aiReplyText } from "../src/catalog-ai";
+import { ROLE_MODELS } from "../src/ai-roles";
 import { absentNames, baselineAnswer, closest, isAmbiguous, passes, score, similarity, splitOf, variantsOf } from "../src/role-evaluation";
 
 describe("role evaluation helpers", () => {
@@ -87,6 +92,54 @@ describe("bounded fresh provider evaluation", () => {
     [...(preload ? ["--import", preload] : []), "scripts/evaluate-roles.mjs", ...args], { encoding: "utf8", timeout: 15_000,
       env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: preload ? "a".repeat(32) : "", CLOUDFLARE_API_TOKEN: preload ? "test-only" : "", QUALIFICATION_SCENARIO: scenario } });
   const metrics = (output: string) => output.split("\n").filter((line) => line.startsWith("provider metrics ")).map((line) => JSON.parse(line.slice(17)));
+
+  it("keeps the public photo diagnostic out of held-out support and distinguishes invalid-streak, budget and complete receipts", async () => {
+    // Execute the actual measurement block with the real parser/D1 and an in-memory provider; no downloads or inference.
+    const source = readFileSync("scripts/evaluate-roles.mjs", "utf8");
+    const start = source.lastIndexOf("    const local =", source.indexOf("    const caseResults = [], officeDiagnostics = [];"));
+    const end = source.indexOf("\n  }\n} else if (fixture)", start);
+    expect(start).toBeGreaterThan(0); expect(end).toBeGreaterThan(start);
+    const photoFixture = JSON.parse(readFileSync("tests/fixtures/v116-photo-heldout.json", "utf8"));
+    const evaluate = async (scenario: string, stopAt = 240) => {
+      resetBreaker();
+      const lines: string[] = [], bucket = { valid: 0, answers: 0, abstentions: 0, invalid: 0 };
+      const stats = { halt: null, calibrationErrors: 0, streak: 0, neurons: 0, calls: 0 };
+      const process = { exitCode: 0 };
+      await runInNewContext(`(async () => {${source.slice(start, end)}\n})()`, {
+        photoFixture, prepared: photoFixture.photos.map((each: object) => ({ each, jpeg: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]) })),
+        stats, process, stopAt, priorNeurons: 165.557, HARD: { consecutiveFailures: 5 },
+        m: { migratedD1, resetBreaker, photoName, aiReplyText, PHOTO_MODEL, PHOTO_RESERVE, ROLE_MODELS },
+        bucketFor: () => bucket, say: (line: string) => lines.push(line),
+        invoke: async () => {
+          stats.calls += 1; stats.neurons += .5;
+          const content = scenario === "invalid" ? '{"name":"Wrong thing","brand":"'
+            : JSON.stringify(stats.calls === 40 ? { name: "Calculator", brand: "Casio", model: "fx-115MS", packaging: null }
+              : { name: stats.calls === 1 ? "People" : null, brand: null, model: null, packaging: null });
+          return { available: true, reply: { choices: [{ message: { content } }], usage: { neurons: .5 } } };
+        },
+      });
+      const record = (prefix: string) => JSON.parse(lines.find(line => line.startsWith(prefix))!.slice(prefix.length));
+      return { measurement: record("photo measurement "), receipt: record("photo receipt "), bucket, status: process.exitCode };
+    };
+    const complete = await evaluate("valid");
+    expect(complete.status).toBe(0);
+    expect(complete.receipt).toMatchObject({ expected: 40, completed: 40, complete: true, stopped: null });
+    expect(complete.bucket).toEqual({ valid: 40, answers: 2, abstentions: 38, invalid: 0 });
+    expect(complete.measurement).toMatchObject({ scoredAnswers: 0, emittedNames: 1, namePrecision: null,
+      completedPositiveCases: 33, completedNegativeCases: 5, expectedBrandCases: 3, completedBrandCases: 3,
+      brandAnswers: 0, modelAnswers: 0, expectedModelCases: 0, modelPositiveCoverage: "UNMEASURED_NO_POSITIVE_MODEL_IDS", coreUnchanged: true,
+      officeDiagnostics: [{ nameAnswered: true, correctName: true, brandAnswered: true, supportedBrand: true, modelAnswered: true, supportedModel: true, population: "CURRENT_PUBLIC_DIAGNOSTIC_NOT_HELDOUT" }] });
+    const invalid = await evaluate("invalid");
+    expect(invalid.status).toBe(2);
+    expect(invalid.receipt).toMatchObject({ completed: 5, complete: false, stopped: "FAILURE_STREAK" });
+    expect(invalid.bucket).toEqual({ valid: 0, answers: 0, abstentions: 0, invalid: 5 });
+    expect(invalid.measurement).toMatchObject({ scoredAnswers: 5, wrongNames: 5, namePrecision: 0,
+      completedPositiveCases: 5, completedNegativeCases: 0, completedBrandCases: 0, brandCoverage: null, officeDiagnostics: [] });
+    const capped = await evaluate("valid", 6);
+    expect(capped.status).toBe(2);
+    expect(capped.receipt).toMatchObject({ completed: 1, complete: false, stopped: "BUDGET_STOP" });
+    expect(capped.bucket.invalid).toBe(0);
+  });
 
   it("measures current guarded adapters without treating pre-call suppression as provider abstention or trusted values", () => {
     const guardFlags = ["--guarded", "tests/fixtures/v116-guarded-role-heldout.json", "--granite", "40", "--qwen", "40", "--glm", "0", "--prior-neurons", "128.288"];
