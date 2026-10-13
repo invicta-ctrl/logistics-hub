@@ -133,7 +133,7 @@ describe("bounded fresh provider evaluation", () => {
     expect(invalid.status).toBe(2);
     expect(invalid.receipt).toMatchObject({ completed: 5, complete: false, stopped: "FAILURE_STREAK" });
     expect(invalid.bucket).toEqual({ valid: 0, answers: 0, abstentions: 0, invalid: 5 });
-    expect(invalid.measurement).toMatchObject({ scoredAnswers: 5, wrongNames: 5, namePrecision: 0,
+    expect(invalid.measurement).toMatchObject({ scoredAnswers: 0, wrongNames: 0, namePrecision: null, invalidFallbacks: 5,
       completedPositiveCases: 5, completedNegativeCases: 0, completedBrandCases: 0, brandCoverage: null, officeDiagnostics: [] });
     const capped = await evaluate("valid", 6);
     expect(capped.status).toBe(2);

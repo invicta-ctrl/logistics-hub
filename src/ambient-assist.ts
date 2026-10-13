@@ -164,12 +164,7 @@ function replyObject(reply: unknown): Record<string, unknown> | null {
     value = Array.isArray(choices) ? (choices[0] as { message?: { content?: unknown } } | undefined)?.message?.content : (reply as { response?: unknown }).response;
   }
   if (typeof value === "string") {
-    const text = value;
-    try { value = JSON.parse(text); } catch {
-      // A reply cut off by the token limit still carries its name when the name came first: keep that, drop the rest.
-      const cut = /"name"\s*:\s*"([^"\\]{1,60})"/.exec(text);
-      return cut ? { name: cut[1] } : null;
-    }
+    try { value = JSON.parse(value); } catch { return null; }
   }
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
@@ -196,7 +191,11 @@ function readPrinted(raw: unknown, limit: number, wordLimit: number): string | n
 
 export function readPhotoReading(reply: unknown): PhotoReading {
   const answer = replyObject(reply);
-  return { name: readPhotoName(reply), brand: readPrinted(answer?.brand, 40, 4), model: readPrinted(answer?.model, 40, 3), packaging: readPrinted(answer?.packaging, 24, 2) };
+  if (!answer || Object.keys(answer).length !== NAME_SCHEMA.required.length
+    || !NAME_SCHEMA.required.every((field) => Object.hasOwn(answer, field) && (answer[field] === null || typeof answer[field] === "string"))) {
+    return { name: null, brand: null, model: null, packaging: null };
+  }
+  return { name: readPhotoName({ response: answer }), brand: readPrinted(answer.brand, 40, 4), model: readPrinted(answer.model, 40, 3), packaging: readPrinted(answer.packaging, 24, 2) };
 }
 
 /** The Neurons a reply reports, or the reserve when it reports none (counted high rather than low). */
