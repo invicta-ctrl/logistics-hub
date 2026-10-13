@@ -295,6 +295,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
       choose(target.itemType === "Loanable" ? "BORROW" : target.consumptionMode === "OPEN_UNIT" ? "GRADUAL" : "CONSUME");
       reviewDecision = { decision: "CORRECT", correction: target.name };
       nameEdited = true; nameFromPhoto = false;
+      touched.category = touched.unit = true; written.category = written.unit = null;
     } else {
       const decision = button.dataset.aiDecision;
       if (decision !== "KEEP" && decision !== "REJECT") return;
