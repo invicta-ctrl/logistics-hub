@@ -451,6 +451,63 @@ test.describe("photo suggestions (ambient assist)", () => {
     await expect(page.locator("#cat-name-hint")).toBeEmpty();
   });
 
+  test("a confident catalogue match fills Category and Counted in and says so; the person's own entry always wins", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await begin(page, server);
+    // An exact name of a reviewed item: both fields are written and each says where it came from.
+    await name(page).fill("Bond Paper A4");
+    await expect(page.getByLabel("Category")).toHaveValue("PAPER");
+    await expect(page.getByLabel("Counted in")).toHaveValue("ream");
+    await expect(page.locator("#cat-category-hint")).toContainText("From the catalogue: Like “Bond Paper A4”");
+    await expect(page.locator("#cat-unit-hint")).toContainText("From the catalogue: Like “Bond Paper A4”");
+    // They are not offered a second time as "Use these"; only how it is handed out is still open.
+    await expect(page.locator("#cat-why")).not.toContainText("ream");
+    await expect(page.locator("#cat-why")).toContainText("Suggested: Use gradually.");
+    // A new name that matches nothing takes back only what was written.
+    await name(page).fill("zebra");
+    await expect(page.getByLabel("Category")).toHaveValue("");
+    await expect(page.getByLabel("Counted in")).toHaveValue("");
+    await expect(page.locator("#cat-category-hint")).toBeEmpty();
+    await expect(page.locator("#cat-unit-hint")).toBeEmpty();
+    // Typing in a field makes it the person's: it survives a name that would have filled it, and loses its source line.
+    await name(page).fill("Bond Paper A4");
+    await expect(page.getByLabel("Category")).toHaveValue("PAPER");
+    await page.getByLabel("Category").fill("STATIONERY");
+    await expect(page.locator("#cat-category-hint")).toBeEmpty();
+    await expect(page.getByLabel("Counted in")).toHaveValue("ream");
+    await name(page).fill("zebra");
+    await expect(page.getByLabel("Category")).toHaveValue("STATIONERY");
+    await expect(page.getByLabel("Counted in")).toHaveValue("");
+    // Clearing a field is also a choice: it stays empty.
+    await name(page).fill("Bond Paper A4");
+    await expect(page.getByLabel("Counted in")).toHaveValue("ream");
+    await page.getByLabel("Counted in").fill("");
+    await name(page).fill("Bond Paper A4 ");
+    await expect(page.getByLabel("Counted in")).toHaveValue("");
+    // A field filled before the name was typed is never overwritten.
+    await name(page).fill("");
+    await page.getByLabel("Category").fill("TOOLS");
+    await name(page).fill("Bond Paper A4");
+    await expect(page.getByLabel("Category")).toHaveValue("TOOLS");
+  });
+
+  test("what the catalogue filled is saved, and the next item starts empty", async ({ page }) => {
+    const server = serve(page, { active: true });
+    await begin(page, server);
+    await name(page).fill("Bond Paper A4");
+    await expect(page.getByLabel("Category")).toHaveValue("PAPER");
+    await pick(page, "Take").click();
+    // The exact name is also a possible duplicate, so the first press asks and the second saves it as a separate item.
+    await page.getByRole("button", { name: "Save & next" }).click();
+    await page.getByRole("button", { name: "Save as a separate item" }).click();
+    await expect(rows(page).first().getByText("Saved", { exact: true })).toBeVisible();
+    expect(server.state.captures[0]).toMatchObject({ category: "PAPER", unit: "ream" });
+    await expect(name(page)).toHaveValue("");
+    await expect(page.getByLabel("Category")).toHaveValue("");
+    await expect(page.locator("#cat-category-hint")).toBeEmpty();
+    await expect(page.locator("#cat-unit-hint")).toBeEmpty();
+  });
+
   test("the model read from the photo fills an empty Model field, and typing there keeps it the person's", async ({ page }) => {
     const server = serve(page, { active: true });
     await server.ready;

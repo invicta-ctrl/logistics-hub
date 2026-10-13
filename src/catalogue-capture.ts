@@ -1,7 +1,7 @@
 import type { Who } from "./catalogue-offline";
 import { type DraftFieldName, type PhotoOutcome, composeDraft, needsAttention } from "./catalog-draft";
 import type { ReviewOffer } from "./ai-review-types";
-import { suggest, verified } from "./catalogue-suggest";
+import { confidentMatch, suggest, verified } from "./catalogue-suggest";
 import { type Detail, type Entry, type SessionRecord, type Snapshot, type SnapshotItem, drop, dropSession, durable, entries, keep, keepSession, sessions, setAccess, setSnapshot, snapshot } from "./catalogue-store";
 import { type PlaceList, bindNewPlace, newPlaceForm, placeList, placeOptions, refreshParents } from "./catalogue-places";
 import { onSyncChange, savedItem, signedOut, syncNow } from "./catalogue-sync";
@@ -126,6 +126,10 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
   /** The count is the person's once they change it; the starting 1 is only a default (amendment §4). */
   let quantityEdited = false;
   let modelFromPhoto = false;
+  /** The same rule for Category and Counted in: a confident catalogue match is written into an empty field and said once; a keystroke or a tap makes the field the person's for good. */
+  const written: Record<"category" | "unit", string | null> = { category: null, unit: null };
+  const matchSaid: Record<"category" | "unit", string | null> = { category: null, unit: null };
+  const touched: Record<"category" | "unit", boolean> = { category: false, unit: false };
   onLeave(() => { photoRevision += 1; });
   const thumbs = new Map<string, string>();
   const canAddPlace = who.mode === "signed-in";
@@ -167,8 +171,8 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
           <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One fewer">${icon("minus")}</button><input id="cat-qty" type="number" inputmode="numeric" min="0" max="100000" step="1" value="1" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div></div>
         <p class="cat-suggest" id="cat-draft" role="status"></p>
         <div class="field-grid">
-          <div class="field"><label for="cat-category">Category <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-category" list="cat-categories" maxlength="100" autocomplete="off" /><datalist id="cat-categories"></datalist><div class="cat-chips" id="cat-category-chips"></div></div>
-          <div class="field"><label for="cat-unit">Counted in <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-unit" list="cat-units" maxlength="30" autocomplete="off" placeholder="piece, box, ream" /><datalist id="cat-units"></datalist><div class="cat-chips" id="cat-unit-chips"></div></div>
+          <div class="field"><label for="cat-category">Category <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-category" list="cat-categories" maxlength="100" autocomplete="off" aria-describedby="cat-category-hint" /><datalist id="cat-categories"></datalist><p class="cat-name-hint cat-name-hint--photo" id="cat-category-hint" aria-live="polite"></p><div class="cat-chips" id="cat-category-chips"></div></div>
+          <div class="field"><label for="cat-unit">Counted in <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-unit" list="cat-units" maxlength="30" autocomplete="off" placeholder="piece, box, ream" aria-describedby="cat-unit-hint" /><datalist id="cat-units"></datalist><p class="cat-name-hint cat-name-hint--photo" id="cat-unit-hint" aria-live="polite"></p><div class="cat-chips" id="cat-unit-chips"></div></div>
         </div>
         <details class="cat-more" id="cat-more"><summary>Advanced details</summary>
           <div class="field-grid">
@@ -373,6 +377,14 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
     const name = value("cat-name");
     const items = everything();
     const raw = suggest(name, items, recent());
+    // A confident catalogue match fills an empty Category or Counted in; a field the person has touched, or holds anything we did not write, is never changed. When the name changes and the match goes, only what we wrote is taken back.
+    for (const kind of ["category", "unit"] as const) {
+      const current = value(`cat-${kind}`);
+      if (touched[kind] || (current !== "" && current !== written[kind])) { written[kind] = null; continue; }
+      const hint = raw[kind];
+      if (confidentMatch(hint)) { field(`cat-${kind}`).value = hint.value; written[kind] = hint.value; matchSaid[kind] = hint.why; }
+      else if (written[kind] !== null) { field(`cat-${kind}`).value = ""; written[kind] = null; }
+    }
     const conflicting = (["behaviour", "category", "unit"] as const).filter((field) => raw[field]?.tier === "CONFLICTING");
     suggestions = { ...raw, behaviour: settled(raw.behaviour), category: settled(raw.category), unit: settled(raw.unit) };
     // Possible matches, judged as the person types, against what is already known (and what was just added).
@@ -389,6 +401,12 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
     hint.classList.toggle("visually-hidden", !nameFromPhoto);
     hint.classList.toggle("cat-name-hint--photo", nameFromPhoto);
     mount($("#cat-model-hint"), modelFromPhoto ? html`${icon("camera")}From photo` : html``);
+    for (const kind of ["category", "unit"] as const) {
+      // A polite status region: only replaced when its words change, so typing on does not read it out again.
+      const said = written[kind] === null ? "" : `From the catalogue: ${matchSaid[kind]}. Change it if that is wrong.`;
+      const element = $(`#cat-${kind}-hint`);
+      if (element.textContent !== said) mount(element, said ? html`${icon("info")}${said}` : html``);
+    }
     if (!matches.length) armed = false;
     drawMatches();
     for (const button of root.querySelectorAll<HTMLButtonElement>("[data-behaviour]")) {
@@ -399,11 +417,14 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
       button.querySelector<HTMLElement>(".cat-choice__suggest")!.hidden = !suggested;
     }
     const stock = suggestions.stockArea && suggestions.stockArea.value !== $<HTMLSelectElement>("#cat-stock").value ? suggestions.stockArea : undefined;
-    const lines = [suggestions.behaviour, suggestions.category, suggestions.unit, stock].filter(Boolean);
-    const pending = [suggestions.behaviour && behaviour === null, suggestions.category && !value("cat-category"), suggestions.unit && !value("cat-unit"), stock].filter(Boolean).length;
+    // A field already written from the catalogue says so under itself, so it is not offered again here.
+    const offeredCategory = written.category === null ? suggestions.category : undefined;
+    const offeredUnit = written.unit === null ? suggestions.unit : undefined;
+    const lines = [suggestions.behaviour, offeredCategory, offeredUnit, stock].filter(Boolean);
+    const pending = [suggestions.behaviour && behaviour === null, offeredCategory && !value("cat-category"), offeredUnit && !value("cat-unit"), stock].filter(Boolean).length;
     // Everything "Use these" would fill is named here first: nothing changes silently, including the stock area behind "More details".
     const sure = lines.every((line) => line!.tier === "STRONG");
-    const named = [suggestions.behaviour && BEHAVIOUR_LABELS[suggestions.behaviour.value], suggestions.category && categoryName(suggestions.category.value), suggestions.unit?.value, stock && (stock.value === "Pantry" ? "Pantry" : "General stock")].filter(Boolean).join(" · ");
+    const named = [suggestions.behaviour && BEHAVIOUR_LABELS[suggestions.behaviour.value], offeredCategory && categoryName(offeredCategory.value), offeredUnit?.value, stock && (stock.value === "Pantry" ? "Pantry" : "General stock")].filter(Boolean).join(" · ");
     const notSure = conflicting.map((field) => {
       const hint = raw[field]!;
       const show = (value: string) => field === "behaviour" ? BEHAVIOUR_LABELS[value as Behaviour] : field === "category" ? categoryName(value) : value;
@@ -441,8 +462,8 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
     if (nameEdited) { edited.add("name"); typed.name = value("cat-name"); }
     if (modelEdited) own("model", value("cat-model"));
     if (quantityEdited) own("quantity", field("cat-qty").value);
-    own("category", value("cat-category"));
-    own("unit", value("cat-unit"));
+    if (written.category === null) own("category", value("cat-category"));
+    if (written.unit === null) own("unit", value("cat-unit"));
     own("expiry", value("cat-expiry"));
     own("reorder", value("cat-reorder"));
     if (behaviour) own("behaviour", behaviour);
@@ -475,7 +496,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
     direct?.onDirty(true);
     invalidateReview();
     if (button.dataset.behaviour) choose(button.dataset.behaviour as Behaviour);
-    else if (button.dataset.fill) { field(`cat-${button.dataset.fill}`).value = button.dataset.value ?? ""; armed = false; draw(); }
+    else if (button.dataset.fill) { const kind = button.dataset.fill as "category" | "unit"; touched[kind] = true; written[kind] = null; field(`cat-${kind}`).value = button.dataset.value ?? ""; armed = false; draw(); }
     else if (button.dataset.step) {
       const quantity = field("cat-qty");
       quantity.value = String(Math.min(100_000, Math.max(0, (Number(quantity.value) || 0) + Number(button.dataset.step))));
@@ -483,8 +504,8 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
       later();
     } else if (button.id === "cat-use-all") {
       if (suggestions.behaviour) behaviour = suggestions.behaviour.value;
-      if (suggestions.category && !value("cat-category")) field("cat-category").value = suggestions.category.value;
-      if (suggestions.unit && !value("cat-unit")) field("cat-unit").value = suggestions.unit.value;
+      if (suggestions.category && !value("cat-category")) { field("cat-category").value = suggestions.category.value; touched.category = true; }
+      if (suggestions.unit && !value("cat-unit")) { field("cat-unit").value = suggestions.unit.value; touched.unit = true; }
       if (suggestions.stockArea && suggestions.stockArea.value !== $<HTMLSelectElement>("#cat-stock").value) $<HTMLSelectElement>("#cat-stock").value = suggestions.stockArea.value;
       armed = false;
       draw();
@@ -614,6 +635,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
       scheduleReview(0);
     } catch { if (revision === photoRevision && photo?.display === taken.display && root.isConnected) { photoOutcome = "FAILED"; drawPhoto(); } /* checked after sync instead */ }
   };
+  for (const kind of ["category", "unit"] as const) field(`cat-${kind}`).addEventListener("input", () => { touched[kind] = true; written[kind] = null; draw(); });
   field("cat-model").addEventListener("input", () => { modelEdited = true; modelFromPhoto = false; draw(); });
   field("cat-name").addEventListener("input", () => { nameEdited = true; if (nameFromPhoto) { nameFromPhoto = false; draw(); } });
   field("cat-name").addEventListener("blur", () => {
@@ -648,6 +670,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
     modelEdited = false;
     quantityEdited = false;
     modelFromPhoto = false;
+    for (const kind of ["category", "unit"] as const) { touched[kind] = false; written[kind] = null; matchSaid[kind] = null; }
     preparing = false;
     photo = null;
     photoName = null;
@@ -865,6 +888,9 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
       preparing = false;
       nameEdited = modelEdited = quantityEdited = true;
       modelFromPhoto = false;
+      // A saved entry's category and unit, blank or not, are what the person left.
+      touched.category = touched.unit = true;
+      written.category = written.unit = null;
       $("#cat-crop").hidden = true;
       const body = entry.body;
       if (direct) { placeId = typeof body.locationId === "string" ? body.locationId : null; field("cat-reviewed").checked = body.reviewed === true; showPlace(); direct.onDirty(true); }

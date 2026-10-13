@@ -16,13 +16,27 @@ export type Known = { name: string; aliases?: string | null; category: string; i
 export type Tier = "STRONG" | "WEAK" | "CONFLICTING";
 /** Where a suggestion's evidence came from: confirmed items, the built-in knowledge base, or what this session just added. */
 export type Basis = "CATALOG" | "KNOWLEDGE" | "SESSION";
-export type Suggestion<T> = { value: T; why: string; tier: Tier; basis: Basis; /** The other side of a Conflicting suggestion. */ other?: { value: T; why: string } };
+export type Suggestion<T> = {
+  value: T; why: string; tier: Tier; basis: Basis;
+  /** The other side of a Conflicting suggestion. */
+  other?: { value: T; why: string };
+  /** For a look-alike vote: how many of the `of` voters gave this value, and whether the typed name is exactly a verified item's name or other name. Absent for knowledge-base and session hints. */
+  votes?: { agree: number; of: number; exact: boolean };
+};
 export type Suggestions = { behaviour?: Suggestion<Behaviour>; category?: Suggestion<string>; unit?: Suggestion<string>; stockArea?: Suggestion<string> };
 
 /** How many look-alike items vote. */
 const VOTERS = 5;
 /** Look-alikes (of at most five) that must agree, with nothing contradicting them, for a Strong suggestion: 4, from 3, because the leave-one-out run separated Strong from Weak cleanly there (tuned by `npm run evaluate:suggestions`). */
 export const STRONG_VOTES = 4;
+/**
+ * True when a suggestion is sure enough to be written into an empty field instead of offered as a button: the typed name is exactly a
+ * verified item's name or other name, or all five look-alikes agree. Four of five and the knowledge base stay buttons. Leave-one-out on
+ * the public seed catalog (`npm run evaluate:suggestions`) found five of five right for 97% of categories and 100% of units, against
+ * 71–85% at four of five.
+ */
+export const confidentMatch = <T>(suggestion: Suggestion<T> | undefined): suggestion is Suggestion<T> =>
+  suggestion?.tier === "STRONG" && suggestion.basis === "CATALOG" && suggestion.votes !== undefined && (suggestion.votes.exact || (suggestion.votes.of === VOTERS && suggestion.votes.agree === VOTERS));
 const knownNames = (item: Known) => [item.name, ...(item.aliases ?? "").split(/[;,\n]/).map((alias) => alias.trim()).filter(Boolean)];
 const isExact = (typed: string, item: Known) => {
   const wanted = words(typed).join(" ");
@@ -66,7 +80,7 @@ function decide<T>(votes: T[], exact: boolean, conflictingExact: boolean, why: s
   const tied = ranked[1] !== undefined && ranked[1][1] === top[1];
   if (tied) return { value: top[0], why, tier: "CONFLICTING", basis: "CATALOG", other: { value: ranked[1]![0], why } };
   if (hint && hint.value !== top[0]) return { value: top[0], why, tier: "CONFLICTING", basis: "CATALOG", other: hint };
-  return { value: top[0], why, tier: exact || top[1] >= STRONG_VOTES ? "STRONG" : "WEAK", basis: "CATALOG" };
+  return { value: top[0], why, tier: exact || top[1] >= STRONG_VOTES ? "STRONG" : "WEAK", basis: "CATALOG", votes: { agree: top[1], of: votes.length, exact } };
 }
 
 /**
