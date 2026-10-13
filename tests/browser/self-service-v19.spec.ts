@@ -355,28 +355,35 @@ test.describe("contextual help", () => {
     await expect(page.getByRole("dialog", { name: "Folding Table" })).toHaveCount(0);
   });
 
-  test("opens and closes on tap, closes on a tap elsewhere, and its target is at least 24 by 24 CSS pixels with 44 around it", async ({ page }) => {
-    await page.setViewportSize({ width: 320, height: 640 });
-    const sheet = await open(page);
-    const trigger = sheet.getByRole("button", { name: "About the student ID" });
-    const box = (await trigger.boundingBox())!;
-    expect(box.width).toBeGreaterThanOrEqual(24);
-    expect(box.height).toBeGreaterThanOrEqual(24);
-    const hit = await trigger.evaluate((node) => { const ring = getComputedStyle(node, "::before"); return [parseFloat(ring.width), parseFloat(ring.height)]; });
-    expect(hit[0]).toBeGreaterThanOrEqual(44);
-    expect(hit[1]).toBeGreaterThanOrEqual(44);
-    await trigger.click();
-    const note = sheet.locator(".help__note");
-    await expect(note).toContainText("Logistics keeps a record of who has each item");
-    // The note stays inside the screen, even from a field near the edge.
-    const place = (await note.boundingBox())!;
-    expect(place.x).toBeGreaterThanOrEqual(0);
-    expect(place.x + place.width).toBeLessThanOrEqual(320);
-    await trigger.click();
-    await expect(note).toHaveCount(0);
-    await trigger.click();
-    await sheet.getByRole("heading", { name: "Folding Table" }).click();
-    await expect(note).toHaveCount(0);
+  test.describe("touch", () => {
+    test.use({ hasTouch: true });
+
+    test("opens and closes on tap, closes on a tap elsewhere, and its target is at least 24 by 24 CSS pixels with 44 around it", async ({ page }) => {
+      await page.setViewportSize({ width: 320, height: 640 });
+      const sheet = await open(page);
+      const trigger = sheet.getByRole("button", { name: "About the student ID" });
+      const box = (await trigger.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(24);
+      expect(box.height).toBeGreaterThanOrEqual(24);
+      const hit = await trigger.evaluate((node) => { const ring = getComputedStyle(node, "::before"); return [parseFloat(ring.width), parseFloat(ring.height)]; });
+      expect(hit[0]).toBeGreaterThanOrEqual(44);
+      expect(hit[1]).toBeGreaterThanOrEqual(44);
+      // Finish layout before opening: scrolling and resizing intentionally close a note.
+      await trigger.scrollIntoViewIfNeeded();
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+      await trigger.tap();
+      const note = sheet.locator(".help__note");
+      await expect(note).toContainText("Logistics keeps a record of who has each item");
+      // The note stays inside the screen, even from a field near the edge.
+      const place = (await note.boundingBox())!;
+      expect(place.x).toBeGreaterThanOrEqual(0);
+      expect(place.x + place.width).toBeLessThanOrEqual(320);
+      await trigger.tap();
+      await expect(note).toHaveCount(0);
+      await trigger.tap();
+      await sheet.getByRole("heading", { name: "Folding Table" }).tap();
+      await expect(note).toHaveCount(0);
+    });
   });
 
   test("only one note is open at a time", async ({ page }) => {

@@ -10,7 +10,11 @@ Accepted D explicitly requires parser/schema validation. Source salvaged malform
 
 Current existing-file regressions: five malformed cases exercise authenticated photo-name HTTP200/manual-null/one call/accounting/unchanged stock; valid/legacyresponse/privacy bounds; inherited-key refusal; malformed matching name cannot create a duplicate hint while photo saves/manual name and ledger remain unchanged. Existing evaluator expects invalid fallback instead of salvaged names. Five-file128 targeted tests, build/typecheck, stagedprivacy zero matches/1029 files and diff PASS. Commit/push coherent source, full exact-head CI/combinedCodeQL, green merge/main security/Build/prune; no provider calls.
 
-Then reconcile current matrix/pointers/execution card and continue the two external gates below. Do not restart PR45 or rebuild A1/A2/B1/C1/D1.
+First source577e41b9d31e66f966a1b81ea9ec4c6eae5589ef/PR46 did not integrate: pushCI38369381015 FAILED one contextual-help mouse-click case (246 passed), Worker115202268744 PASS; PRCI38369648202 PASS (247 browser/90 Worker), combinedCodeQL115203389139 PASS. Help intentionally closes on resize/scroll; adjacent cases settle layout, while this tap case did not and used mouse input. Bound the verifier to real touch for this case and settle two animation frames before opening, retaining size/text/placement/toggle/outside assertions plus all desktop hover/keyboard cases. No help runtime defect established; keep the failed source receipt and require fresh full gates for the correction.
+
+Local `PLAYWRIGHT_CHROMIUM_PATH=/usr/bin/chromium npm run test:browser -- tests/browser/self-service-v19.spec.ts --grep 'contextual help' --repeat-each=5 --workers=2 --reporter=line`:20/20 PASS (all four cases repeated five times); `npm run typecheck` and diff PASS. Logs `/tmp/v116-help-touch-regression.log` and `/tmp/v116-help-typecheck.log`. No production/provider mutation. Managed environment recheck still shows no capabilities/secrets/runtime variables/outbound identities; dedicated QA and administrator gates remain absent.
+
+Then reconcile current matrix/pointers/execution card and continue the two external gates below. Query live PR46/ref state first; if the corrected source is already integrated/pruned, do not restart it. Do not restart PR45 or rebuild A1/A2/B1/C1/D1.
 
 ## Qualified implementation and publication state (retained provenance)
 
