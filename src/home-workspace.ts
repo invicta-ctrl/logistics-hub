@@ -34,8 +34,39 @@ const greeting = (name: string) => {
   const hour = new Date().getHours();
   return `${hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"}, ${name.split(/\s+/)[0] ?? name}`;
 };
+/** Today as staff read it, in the Hub's own time zone: "Tuesday, 14 October". */
+const today = new Intl.DateTimeFormat("en-PH", { weekday: "long", month: "long", day: "numeric", timeZone: "Asia/Manila" });
+const isoDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" });
 const toAct = (group: AttentionGroup) => group.byUrgency.NOW + group.byUrgency.SOON;
 const attentionHref = (group: AttentionGroup) => `/staff/attention?reason=${group.reason}`;
+
+/** The stage's two lines: who is here, then the one answer that matters ("17 things to act on…", or that nothing needs a person). */
+function ledeMarkup(name: string, act: number | null): Html {
+  const summary = act === null ? "" : act ? html`<strong>${plural(act, "thing")}</strong> to act on today or this week.` : "Nothing needs a person right now.";
+  return html`<span class="home-stage__hello">${greeting(name)}.</span> <span class="home-stage__summary">${summary}</span>`;
+}
+
+/*
+ * The stage's drawing: a storeroom shelf in elevation, drawn like a drafting sheet, with one tagged crate. It stands for the
+ * Hub's physical work and nothing else: it shows no count, place or status, never changes with the data, and is hidden from
+ * assistive technology.
+ */
+const STAGE_SCENE = html`<svg class="home-stage__scene" viewBox="0 0 360 200" aria-hidden="true" focusable="false">
+  <g class="home-scene__measure"><path d="M40 20v10M220 20v10M40 25h180"/><path d="M46 22l-6 3 6 3M214 22l6 3-6 3"/></g>
+  <g class="home-scene__ground"><path d="M0 184h360"/><path d="M8 184l-6 8M28 184l-6 8M48 184l-6 8M68 184l-6 8M88 184l-6 8M108 184l-6 8M128 184l-6 8M148 184l-6 8M168 184l-6 8M188 184l-6 8M208 184l-6 8M228 184l-6 8M248 184l-6 8M268 184l-6 8M288 184l-6 8M308 184l-6 8M328 184l-6 8M348 184l-6 8"/></g>
+  <g class="home-scene__shelf"><path d="M40 40v144M220 40v144M44 40v144M216 40v144"/><path class="home-scene__board" d="M36 40h188v5H36zM36 80h188v5H36zM36 128h188v5H36z"/></g>
+  <g class="home-scene__things">
+    <path class="home-scene__solid" d="M54 52h46v28H54z"/><path d="M54 60h46M77 52v8"/>
+    <path class="home-scene__solid" d="M106 62h32v18h-32z"/>
+    <path class="home-scene__solid" d="M148 56h60v24h-60z"/><path class="home-scene__slot" d="M166 63h24v8h-24z"/>
+    <path class="home-scene__solid" d="M54 96h7v32h-7zM63 92h7v36h-7zM72 98h7v30h-7zM81 94h7v34h-7z"/>
+    <path class="home-scene__solid" d="M104 100h104v28H104z"/><path d="M146 107h20a3 3 0 0 1 0 6h-20a3 3 0 0 1 0-6z"/>
+    <path class="home-scene__solid" d="M54 140h88v44H54z"/><path d="M54 140l88 44M54 184l88-44"/>
+    <circle class="home-scene__solid" cx="180" cy="166" r="18"/><circle cx="180" cy="166" r="10"/><circle cx="180" cy="166" r="3"/>
+  </g>
+  <g class="home-scene__truck"><path d="M262 92v84h40"/><path d="M256 92h12"/><path class="home-scene__solid" d="M268 128h36v44h-36z"/><path d="M268 140h36"/><circle class="home-scene__solid" cx="270" cy="178" r="6"/></g>
+  <g class="home-scene__tag"><path d="M142 150l14 5"/><path class="home-scene__label" d="M156 149l20 7-4 12-20-7z"/><circle cx="159" cy="155" r="1.6"/></g>
+</svg>`;
 
 function attentionMarkup(groups: AttentionGroup[]): Html {
   // Today before This week; each keeps the order the Worker gave it.
@@ -96,10 +127,14 @@ export async function homeWorkspace(): Promise<void> {
   const admin = session.role !== "STAFF";
   const actions = ACTIONS.filter((action) => !action.admin || admin);
   shell(session, "home", html`
-    <header class="page-header">
-      <div class="page-header__title"><h1>Home</h1><p id="home-lede" aria-live="polite">${greeting(session.displayName)}.</p></div>
+    <header class="home-stage drafting">
+      <div class="home-stage__title">
+        <div class="home-stage__kicker"><h1>Home</h1><time datetime="${isoDay.format(new Date())}">${today.format(new Date())}</time></div>
+        <p id="home-lede" class="home-stage__lede" aria-live="polite">${ledeMarkup(session.displayName, null)}</p>
+      </div>
+      <button class="home-search" type="button" id="home-search" aria-haspopup="dialog">${icon("search")}<span class="home-search__text">Search items, places and kits</span><kbd aria-hidden="true">${SEARCH_KEYS}</kbd></button>
+      ${STAGE_SCENE}
     </header>
-    <button class="home-search" type="button" id="home-search" aria-haspopup="dialog">${icon("search")}<span class="home-search__text">Search items, places and kits</span><kbd aria-hidden="true">${SEARCH_KEYS}</kbd></button>
     <div class="home-grid">
       <div class="home-main">
         <section class="home-section" aria-labelledby="home-attention-title">
@@ -122,6 +157,7 @@ export async function homeWorkspace(): Promise<void> {
     </section>`);
 
   const lede = document.querySelector<HTMLElement>("#home-lede")!;
+  const dateline = document.querySelector<HTMLTimeElement>(".home-stage__kicker time")!;
   const attentionBox = document.querySelector<HTMLElement>("#home-attention")!;
   const continueBox = document.querySelector<HTMLElement>("#home-continue")!;
   document.querySelector("#home-search")!.addEventListener("click", () => document.querySelector<HTMLElement>("[data-palette]")?.click());
@@ -134,7 +170,10 @@ export async function homeWorkspace(): Promise<void> {
     attentionBox.removeAttribute("aria-busy");
     mount(attentionBox, attentionMarkup(groups));
     const act = groups.reduce((sum, group) => sum + toAct(group), 0);
-    lede.textContent = `${greeting(session.displayName)}. ${act ? `${plural(act, "thing")} to act on today or this week.` : "Nothing needs a person right now."}`;
+    mount(lede, ledeMarkup(session.displayName, act));
+    // The date moves on with the greeting, so a Home left open overnight does not keep yesterday.
+    const day = new Date();
+    if (dateline.dateTime !== isoDay.format(day)) { dateline.dateTime = isoDay.format(day); dateline.textContent = today.format(day); }
   };
   document.addEventListener(ATTENTION_PAINTED, paintAttention);
   onLeave(() => document.removeEventListener(ATTENTION_PAINTED, paintAttention));

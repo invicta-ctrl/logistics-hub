@@ -787,15 +787,16 @@ export async function workspace(): Promise<void> {
     stopAdding();
     dirty = false;
     document.querySelectorAll("tr.is-open").forEach((element) => element.classList.remove("is-open"));
-    document.querySelector(`tr[data-key="${CSS.escape(id)}"]`)?.classList.add("is-open");
+    const origin = document.querySelector(`tr[data-key="${CSS.escape(id)}"]`);
+    origin?.classList.add("is-open");
     openId = id;
     detail = null;
     // A link or the search can open an item the table has not drawn yet; render() draws it.
     if (shownIds.indexOf(id) >= rowLimit) render();
     writeParams({ item: id, add: null });
     const item = inventory?.items.find((entry) => entry.id === id);
-    sheetShell(id, item?.name ?? "Loading…", html`<div class="skeleton skeleton--block"></div>`);
-    panel.open();
+    sheetShell(html`<span class="mono">${id}</span>`, item?.name ?? "Loading…", html`<div class="skeleton skeleton--block"></div>`);
+    panel.open(origin);
     void loadDetail(id, tab);
   }
 
@@ -927,14 +928,18 @@ export async function workspace(): Promise<void> {
     }
   }
 
-  /** Who and what the item is at a glance, beside its photo: availability, status, type, category, place, and how fresh that is. */
+  /**
+   * Who and what the item is at a glance, beside its photo: the ledger's count (and what is out on loan, kept apart from it), status,
+   * type, category, the recorded place, and how fresh that is. The place is what the record says, never a live position: the line
+   * under it says when the item was last seen there.
+   */
   function profileInfo({ item, loans, freshness, kits }: Detail): Html {
     const out = loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
-    return html`<p class="profile__stock"><strong>${item.onHand}</strong> ${units(item.onHand, item.unit)} on hand${out ? html` <span class="muted">· ${out} on loan</span>` : ""}</p>
+    return html`<div class="profile__stock"><p class="readout"><strong>${item.onHand}</strong> <span>${units(item.onHand, item.unit)} on hand</span></p>${out ? html`<p class="readout readout--loan"><strong>${out}</strong> <span>on loan</span></p>` : ""}</div>
       ${tags(item)}
       <p class="profile__meta">${label(item.itemType)} · ${categoryName(item.category)}</p>
       ${item.model || item.serialNumber ? html`<p class="profile__meta">${[item.model && `Model ${item.model}`, item.serialNumber && `Serial ${item.serialNumber}`].filter(Boolean).join(" · ")}</p>` : ""}
-      <p class="profile__meta profile__meta--place">${icon("pin")}<span>${item.location ?? html`<span class="muted">No place set</span>`}${!item.location && item.legacyLocation ? html`<span class="muted"> · typed earlier: ${item.legacyLocation}</span>` : ""}</span></p>
+      <p class="profile__meta profile__meta--place"><span class="profile__label">Recorded place</span>${icon("pin")}<span>${item.location ?? html`<span class="muted">No place set</span>`}${!item.location && item.legacyLocation ? html`<span class="muted"> · typed earlier: ${item.legacyLocation}</span>` : ""}</span></p>
       ${freshnessLine(item, freshness)}
       ${kits?.length ? html`<p class="profile__meta profile__meta--kits">${icon("stack")}<span>In ${kits.length === 1 ? "the kit" : "kits"}: ${kits.map((kit, index) => html`${index ? ", " : ""}<a class="text-link" href="/staff/kits?kit=${kit.id}" data-route>${kit.name}</a>${kit.active ? "" : " (inactive)"}`)}</span></p>` : ""}
       <p class="profile__where"><button type="button" class="button button--secondary button--sm" data-where>${icon("pin")}Where is it?</button></p>`;
@@ -1081,7 +1086,7 @@ export async function workspace(): Promise<void> {
     const tabs: Array<[Tab, string]> = [["overview", "Overview"], ...(lendable ? [["loan", out ? `Loan · ${out} out` : "Loan"] as [Tab, string]] : []), ["details", item.needsReview ? "Review & edit" : "Edit details"], ["history", "History"]];
     if (tab === "loan" && !lendable) tab = "overview";
     sheetShell(html`<span class="mono">${item.id}</span>`, item.name, html`
-      <section class="profile" id="photo-panel" aria-label="Item profile"><div class="profile__photo" data-tile></div><div class="profile__info"><div id="profile-info">${profileInfo(loaded)}</div></div><div class="profile__actions" data-actions></div></section>
+      <section class="profile theater drafting" id="photo-panel" aria-label="Item profile"><div class="profile__photo" data-tile></div><div class="profile__info"><div id="profile-info">${profileInfo(loaded)}</div></div><div class="profile__actions" data-actions></div></section>
       <div class="tabs" role="tablist" aria-label="Item sections">
         ${tabs.map(([key, text]) => html`<button type="button" role="tab" id="tab-${key}" aria-controls="panel-${key}" aria-selected="${key === tab}" tabindex="${key === tab ? 0 : -1}">${text}</button>`)}
       </div>

@@ -26,6 +26,23 @@ export const outcomeTag = (status: string) => html`<span class="tag ${OUTCOME_TO
 
 const daysOut = (loan: Loan) => Math.max(0, Math.round((Date.parse(`${officeDay()}T00:00:00Z`) - Date.parse(`${officeDay(loan.createdAt)}T00:00:00Z`)) / 86_400_000));
 
+/**
+ * Where an open loan stands in its own time, drawn from the three dates the Hub holds: lent, due and today (Manila days).
+ * The rail runs from the day it was lent to today or the due day, whichever is later; the tick is the due day, and the stretch
+ * past it is drawn as late. It repeats what the row already says in words, so it is hidden from assistive technology. SVG
+ * geometry, not inline styles, so the Content-Security-Policy (style-src 'self') leaves it alone.
+ */
+function loanTrack(loan: Pick<Loan, "status" | "returnBy" | "createdAt">, today = officeDay()): Html {
+  if (loan.status !== "OUT" || !loan.returnBy) return html``;
+  const day = (value: string) => Date.parse(`${value}T00:00:00Z`) / 86_400_000;
+  const lent = day(officeDay(loan.createdAt)), due = day(loan.returnBy), now = day(today);
+  const span = Math.max(due, now) - lent;
+  if (!(span > 0)) return html``;
+  const at = (value: number) => Math.min(100, Math.max(0, Math.round(((value - lent) / span) * 1000) / 10));
+  const late = now > due;
+  return html`<svg class="loan-track${late ? " loan-track--late" : ""}" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true" focusable="false"><line class="loan-track__rail" x1="0" y1="4" x2="100" y2="4"/><line class="loan-track__used" x1="0" y1="4" x2="${at(Math.min(now, due))}" y2="4"/>${late ? html`<line class="loan-track__late" x1="${at(due)}" y1="4" x2="100" y2="4"/>` : ""}<line class="loan-track__due" x1="${at(due)}" y1="0" x2="${at(due)}" y2="8"/></svg>`;
+}
+
 /** One loan as a row: who, what, since when, and the Return action while it is out. */
 export function loanRow(loan: Loan, withItem = false): Html {
   const out = loan.status === "OUT";
@@ -34,7 +51,7 @@ export function loanRow(loan: Loan, withItem = false): Html {
     <div class="loan-row__main">
       <p class="loan-row__who"><strong>${loan.borrowerName}</strong>${loan.studentId ? html` <span class="mono muted">${loan.studentId}</span>` : ""} ${purposeTag(loan.purpose)}</p>
       <p class="loan-row__what">${withItem ? html`<a class="row-link" href="/staff/items?item=${loan.itemId}" data-route>${loan.itemName}</a> · ` : ""}${loan.quantity} ${units(loan.quantity, loan.unit)}
-        · ${out ? html`out ${days === 0 ? "since today" : days === 1 ? "since yesterday" : `for ${days} days`}` : html`${formatDate(officeDay(loan.createdAt))} → ${formatDate(officeDay(loan.closedAt!))}`} ${out ? dueTag(loan) : outcomeTag(loan.status)}</p>
+        · ${out ? html`out ${days === 0 ? "since today" : days === 1 ? "since yesterday" : `for ${days} days`}` : html`${formatDate(officeDay(loan.createdAt))} → ${formatDate(officeDay(loan.closedAt!))}`} ${out ? html`${dueTag(loan)}${loanTrack(loan)}` : outcomeTag(loan.status)}</p>
       ${loan.reason ? html`<p class="loan-row__note">${loan.reason}</p>` : ""}
       ${loan.returnNote ? html`<p class="loan-row__note">${loan.returnNote}</p>` : ""}
       <p class="loan-row__meta">Lent by ${loan.createdBy ?? "staff"} · ${formatDateTime(loan.createdAt)}${loan.closedBy ? ` · closed by ${loan.closedBy}` : ""}</p>
