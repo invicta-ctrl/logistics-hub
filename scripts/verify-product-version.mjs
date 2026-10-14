@@ -65,9 +65,13 @@ export function checkVersionChange({ paths, before, after, recordExists = () => 
       changes.some((text) => typeof text !== "string" || !text.trim() || text.length > 240)) {
     failures.push("Release must include 2–5 plain, non-empty changelog lines.");
   }
+  if (JSON.stringify(changes) === JSON.stringify(before.changes)) {
+    failures.push("The What's new summary must describe this revision, not repeat the parent release.");
+  }
   const record = after?.record;
-  if (typeof record !== "string" || (!/^docs\/[A-Za-z0-9/._-]+\.md$/.test(record) || record.includes("..")) || !recordExists(record)) {
-    failures.push("Release must point to an existing canonical docs/**.md release record.");
+  if (typeof record !== "string" || (!/^docs\/[A-Za-z0-9/._-]+\.md$/.test(record) || record.includes("..")) || !recordExists(record) ||
+      record === before.record || !paths.includes(record)) {
+    failures.push("Release must add or update its own canonical docs/**.md record in the same change, not reuse the parent record.");
   }
   return { impacting, failures };
 }
