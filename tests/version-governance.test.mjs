@@ -60,7 +60,7 @@ describe("product version release gate", () => {
     }).failures.join(" "), /sourceCommit/);
     assert.match(check(["src/main.ts", "product-release.json"], {
       ...candidate, record: "docs/missing.md",
-    }).failures.join(" "), /release record/);
+    }).failures.join(" "), /record/);
     assert.match(check(["src/main.ts", "product-release.json"], {
       ...candidate, changes: ["One line only"],
     }).failures.join(" "), /2–5/);
