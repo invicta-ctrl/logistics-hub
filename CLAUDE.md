@@ -18,7 +18,7 @@
 
 ## Permanent engineering and release rules
 
-- One active writer and one `slice/*` branch. Checkpoint each coherent working increment to the active branch; on passing independent acceptance and exact-head CI, merge the complete slice promptly to updated `main`, verify configured deployment and prune only confirmed-integrated refs. Incomplete functionality stays off main and is reported truthfully.
+- Default is one implementation writer and one slice. The owner-approved two-lane exception allows Codex on V1.16 and Claude on an independently accepted UI slice, in separate writable worktrees with disjoint files and per-worktree locks (maximum two writers account-wide). Checkpoint to each assigned branch; never edit the other lane's paths or the shared `.codex` pointers. Only the steward merges complete qualified PRs, one at a time, after current-base checks and production preflight. Incomplete work stays off main.
 - Never deliver or describe an incomplete version as a finished product. Required correctness/security/denial/performance/browser checks, production preflight, backups, rollback and owner gates are not waived by the words `start`, `finish` or `continue`.
 - D1 structured business truth, R2 governed media, movement-derived stock, server-enforced permissions, append-only audit, safe offline recovery and deterministic-first intelligent features are invariant. Ambient AI is optional and must not block core work or receive forbidden private data.
 - Avoid new speculative dependencies, duplicate caches/registries, obsolete execution paths or a second source of truth. Design for one-person operations, usable phones, accessible interaction and concise staff-facing copy.
