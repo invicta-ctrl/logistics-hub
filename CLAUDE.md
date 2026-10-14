@@ -22,7 +22,7 @@
 - Never deliver or describe an incomplete version as a finished product. Required correctness/security/denial/performance/browser checks, production preflight, backups, rollback and owner gates are not waived by the words `start`, `finish` or `continue`.
 - D1 structured business truth, R2 governed media, movement-derived stock, server-enforced permissions, append-only audit, safe offline recovery and deterministic-first intelligent features are invariant. Ambient AI is optional and must not block core work or receive forbidden private data.
 - Avoid new speculative dependencies, duplicate caches/registries, obsolete execution paths or a second source of truth. Design for one-person operations, usable phones, accessible interaction and concise staff-facing copy.
-- Record exact branch/HEAD, completed versus incomplete work, meaningful test evidence, next action and named writer in `.codex/SESSION_HANDOFF.md` before yielding.
+- For Codex's V1.16 lane, preserve the existing `.codex/SESSION_HANDOFF.md` and `.codex/CURRENT.md`. Claude must **not edit those shared pointers** during parallel development; write exact UI branch/HEAD, test evidence, owner, progress, blockers and next action in the accepted UI-lane handoff or PR body before yielding. The steward reconciles shared pointers serially.
 - Production and migration work follows `docs/DEPLOYMENT.md`, `docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`, `ops/releases/` and the protected operations lane. No bypass by older Road-to-V2 instructions.
 
 ## Historical material
