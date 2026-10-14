@@ -4,6 +4,8 @@
 
 **One writable worktree + optional detached read-only specialist worktrees + one active slice branch + one writer + small verified commits + immediate merge to main when green + prune the finished branch.**
 
+**Cross-project concurrency:** Codex and Claude may implement different authoritative projects simultaneously under individually approved scopes and distinct locks (maximum two agent writers account-wide), provided no files, database/provider resources, release controls or dependencies are shared. Logistics Hub is one project across frontend/backend, branches and worktrees: V1.16 implementation and Logistics UI implementation must serialize under its single writer lock. Read-only UX review may continue during V1.16 work. This does not launch an agent, relax a release gate, or permit a second Logistics Hub writable worktree.
+
 **Owner release doctrine (2026-10-11):** Never present an incomplete product/version as complete. Coherent working checkpoints are committed and pushed to the single active slice branch. After its own accepted scope, verification and exact-head CI pass, an independently usable slice merges immediately to updated main, its deployment is verified, and the branch is pruned. Resume version-level work using a new slice branched from the latest main. Never publish a partially functional capability to main or falsely advertise its version in Administration. A blocked slice remains transparently recorded in handoff; do not silently truncate scope to claim completion.
 
 ## Workspace
