@@ -311,9 +311,10 @@ export type Sheet = { open: (origin?: Element | null) => void; close: (force?: b
  * Escape and backdrop close, an optional unsaved-changes guard, an exit animation, and
  * focus returned to whatever opened it.
  *
- * A side panel is attached to what opened it: the row or control (`origin`, else the focused opener) sets where it grows from
- * and where its notch points, as viewport coordinates in --origin-x/--origin-y, when it is still in view beside the panel.
- * Scrolling the page behind detaches it, so the notch never points at a row that has moved.
+ * A caller that passes `origin` (the item profile passes its row) gets a side panel attached to it: the origin sets where the
+ * panel grows from and where its notch points, as viewport coordinates in --origin-x/--origin-y, when it is still in view beside
+ * the panel. Scrolling the page behind detaches it, so the notch never points at a row that has moved. Without an origin a
+ * sheet opens as it always has, whatever control had focus.
  */
 export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolean; onClose?: () => void } = {}): Sheet {
   let opener: HTMLElement | null = null;
@@ -365,7 +366,7 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
       if (dialog.open) { if (origin) anchor(origin); return; }
       opener = document.activeElement as HTMLElement | null;
       dialog.showModal();
-      anchor(origin ?? opener);
+      anchor(origin);
     },
     close,
     discardOk

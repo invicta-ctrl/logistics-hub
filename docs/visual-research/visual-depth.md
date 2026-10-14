@@ -34,7 +34,8 @@ Timings (the script's own probe, median of 7 loads per run, two runs): Items col
 
 - Depth is used for meaning only: ambient (page), raised (lists, tables, tiles), floating (menus), modal (the attached panel). Edge light marks a lit top edge; the drafting grid and crop marks appear only on editorial surfaces (the item profile, Home's stage, empty lists).
 - Motion runs only under `prefers-reduced-motion: no-preference`: the panel grows from its row (260 ms, settle easing) and leaves toward it; the item settles on its plate after the record arrives; Home's drawing settles once. The existing reduce rule stops all of it, and every screenshot above was taken with reduced motion.
-- `sheet().open(origin)` records the origin's visible centre as viewport coordinates through the CSSOM (the `style-src 'self'` policy forbids inline style attributes). It attaches only when at least 3rem of the origin is in view beside the open panel; scrolling the page behind detaches it. Phone sheets never attach.
+- `sheet().open(origin)` records the origin's visible centre as viewport coordinates through the CSSOM (the `style-src 'self'` policy forbids inline style attributes). It attaches only when at least 3rem of the origin is in view beside the open panel; scrolling the page behind detaches it. Phone sheets never attach. Only the item profile passes an origin (its row); every other sheet (Loans, Stock, Add items and the rest) opens exactly as before, whatever control had focus.
+- Home's date refreshes with the greeting whenever Attention repaints, so a Home left open overnight moves on to the new day.
 
 ### Accessibility checks
 
@@ -42,6 +43,7 @@ Timings (the script's own probe, median of 7 loads per run, two runs): Items col
 - The h1 is still "Home"; the date separator is silent (`content: "/" / ""`); the drawing and the loan tracks are `aria-hidden` and repeat nothing that is not already in words.
 - Keyboard order on Home is unchanged: search, Open Attention, the first reason. Focus rings show on tiles (offset outline) and rows.
 - 320 px and 200% text: the Home, Items, Locations, Attention and Search browser tests check for no sideways scroll at 320, 390, 768 and 1366 px and at 200% text; all pass.
+- Forced colours (Chromium's emulation of `forced-colors: active`, not Windows itself): shadows and tinted backgrounds drop out, so the edge rules that carry meaning become drawn borders: the overdue loan rule, the first reason on Home, and the attached panel's edge and notch. [Home 1440](visual-depth/forced-colours/depth-home-1440.jpg) and [the attached panel 1440](visual-depth/forced-colours/depth-item-attached-1440.jpg) are from the seeded Worker; [Loans 1024](visual-depth/forced-colours/depth-loans-1024.jpg) uses the mocked loans of the browser test below, because the seeded Worker has no open loans before the evidence run lends some. Every state is also in words ("Overdue · due …", the count and title of the first reason).
 
 ### Test evidence
 
@@ -50,8 +52,9 @@ All on the final code of this slice, in a cloud container (Chromium at `/opt/pw-
 - `npm run typecheck`: passed.
 - `npx vitest run`: 815 passed, 2 skipped.
 - `npm run verify:privacy`: passed.
-- `npx playwright test` (mocked browser suite): 247 passed in 4.7 min. In an earlier run under extra load, `home.spec.ts` "a held optional insight does not block navigation or expire a newer screen" failed twice, then passed 10 times out of 10 on this branch and 10 out of 10 on `main`. It races a held 401 against the next page's code loading, in code this slice does not change.
+- `npx playwright test` (mocked browser suite): 247 passed in 4.7 min before the review follow-ups; after them, 250 of 251 passed in 4.9 min, and the one failure, `id-card.spec.ts` (the 3D ID card's flight timing, unchanged here), passed alone straight after. In an earlier run under extra load, `home.spec.ts` "a held optional insight does not block navigation or expire a newer screen" failed twice, then passed 10 times out of 10 on this branch and 10 out of 10 on `main`. It races a held 401 against the next page's code loading, in code this slice does not change.
+- `tests/browser/visual-depth.spec.ts` (new, 4 tests): an item opened from its row is attached on a computer (the notch's height matches the row's centre) and lets go when the page scrolls and when the panel closes; a phone's sheet never attaches; a sheet opened without an origin does not attach even with a focused control beside the panel, and a named origin under the panel does not attach either; and the loan track's geometry for a loan lent 10 days ago and due 5 days ago (half used, half late), one halfway to its due day, one due today, and none for a loan with no due date or lent and due today. With the old fallback to the focused control put back, the third test fails.
 - `npm run test:browser:worker` (real local Worker and D1): 90 passed in 11.3 min.
-- PR 51 CI on the first checkpoint: `checks`, `worker-e2e` and CodeQL green.
+- PR 51 CI: `checks`, `worker-e2e` and CodeQL green on the first checkpoint and on `29b7b67`.
 
-Unrun: real phones, a screen reader, and forced-colours mode.
+Unrun: real phones, a screen reader, and Windows' own contrast themes (forced colours was checked in Chromium's emulation only).

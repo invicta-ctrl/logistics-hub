@@ -157,6 +157,7 @@ export async function homeWorkspace(): Promise<void> {
     </section>`);
 
   const lede = document.querySelector<HTMLElement>("#home-lede")!;
+  const dateline = document.querySelector<HTMLTimeElement>(".home-stage__kicker time")!;
   const attentionBox = document.querySelector<HTMLElement>("#home-attention")!;
   const continueBox = document.querySelector<HTMLElement>("#home-continue")!;
   document.querySelector("#home-search")!.addEventListener("click", () => document.querySelector<HTMLElement>("[data-palette]")?.click());
@@ -170,6 +171,9 @@ export async function homeWorkspace(): Promise<void> {
     mount(attentionBox, attentionMarkup(groups));
     const act = groups.reduce((sum, group) => sum + toAct(group), 0);
     mount(lede, ledeMarkup(session.displayName, act));
+    // The date moves on with the greeting, so a Home left open overnight does not keep yesterday.
+    const day = new Date();
+    if (dateline.dateTime !== isoDay.format(day)) { dateline.dateTime = isoDay.format(day); dateline.textContent = today.format(day); }
   };
   document.addEventListener(ATTENTION_PAINTED, paintAttention);
   onLeave(() => document.removeEventListener(ATTENTION_PAINTED, paintAttention));

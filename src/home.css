@@ -57,6 +57,7 @@
 #home-attention .home-list > li:first-child > .home-row { position: relative; padding-block: var(--space-5); background: linear-gradient(90deg, var(--subtle), var(--surface) 70%); }
 #home-attention .home-list > li:first-child > .home-row::before { position: absolute; top: var(--space-3); bottom: var(--space-3); left: 0; width: 3px; border-radius: 0 3px 3px 0; background: var(--warn); content: ""; }
 #home-attention .home-list > li:first-child > .home-row:has(.tag--bad)::before { background: var(--bad); }
+@media (forced-colors: active) { #home-attention .home-list > li:first-child > .home-row::before { width: 0; border-inline-start: 3px solid CanvasText; } }
 #home-attention .home-list > li:first-child .home-row__count { font-size: 2.5rem; }
 #home-attention .home-list > li:first-child .home-row__title { font-size: var(--text-md); }
 .home-row__icon { display: inline-grid; width: 2.25rem; height: 2.25rem; flex: none; place-items: center; border-radius: var(--radius-pill); background: var(--subtle); color: var(--brand); }

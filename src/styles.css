@@ -712,6 +712,11 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .sheet[data-origin]::before { position: absolute; top: clamp(2rem, var(--origin-y), calc(100% - 2rem)); left: -.4375rem; width: .875rem; height: .875rem; transform: translateY(-50%) rotate(45deg); border-radius: 2px; background: var(--surface); box-shadow: -1px 1px 0 rgb(43 10 12 / 8%); content: ""; }
   .sheet[data-origin]::backdrop { background: rgb(28 25 23 / 24%); }
 }
+/* Forced colours drop shadows and backgrounds, so the panel keeps a drawn edge and the notch keeps its outline. */
+@media (min-width: 761px) and (forced-colors: active) {
+  .sheet { border-inline-start: 1px solid CanvasText; }
+  .sheet[data-origin]::before { border: solid CanvasText; border-width: 0 0 1px 1px; }
+}
 .sheet__body { display: grid; flex: 1; min-height: 0; align-content: start; gap: var(--space-4); overflow-y: auto; padding: var(--space-6) max(var(--space-6), env(safe-area-inset-right, 0px)) calc(var(--space-6) + var(--safe-bottom)) max(var(--space-6), env(safe-area-inset-left, 0px)); scroll-padding-top: 3.5rem; scroll-padding-bottom: calc(var(--space-6) + var(--safe-bottom)); overscroll-behavior: contain; }
 .sheet .tabs { position: sticky; top: calc(-1 * var(--space-6)); z-index: 2; background: var(--surface); }
 .quantity__context:empty { display: none; }
@@ -930,6 +935,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .loan-row:first-child.is-overdue { border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
 .loan-row:last-child.is-overdue { border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
 .loan-row:only-child.is-overdue { border-radius: var(--radius-lg); }
+@media (forced-colors: active) { .loan-row.is-overdue { border-inline-start: 3px solid CanvasText; } }
 .loan-track { width: 4.5rem; height: .5rem; flex: none; overflow: visible; }
 .loan-track line { vector-effect: non-scaling-stroke; stroke-linecap: butt; }
 .loan-track__rail { stroke: var(--line-strong); stroke-width: 2; }
