@@ -25,15 +25,15 @@ Every qualifying main merge must have a verified version identity, concise chang
 
 ## Non-negotiables
 
-- Writable/local-preview worktree: `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`.
+- Codex's existing writable/local-preview worktree remains `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`. A second isolated writable Claude UI worktree is permitted **only** under `docs/specs/accepted/2026-10-14-isolated-agent-worktrees.md` and an accepted bounded UI slice.
 - Approved MausBot Scout, Oracle, Sentinel, and Harbor worktrees are detached/read-only specialist worktrees under the accepted MausBot amendment.
-- One active writer **for the whole Logistics Hub project** (frontend, backend, branches, worktrees and related repos), not just one per file/worktree. Codex, Claude, or Forge must claim the writer lock before edits; yield before handoff. Independent projects may each have their own authorized writer concurrently (maximum two account-wide) only with no shared mutable resources; read-only Logistics UI review may overlap V1.16 implementation.
-- The writable worktree uses the one active slice branch. No Codex/Claude/MausBot-specific long-lived branches.
-- Claude Cloud must commit and push each coherent working checkpoint to the one active `slice/*` branch so the local preview can auto-sync it. Unpushed cloud edits cannot appear locally.
+- Default: one project writer. **Accepted two-lane exception:** Codex and Claude may write concurrently on distinct Git worktrees/short-lived branches **only** with disjoint file-level ownership, accepted separate tasks, per-worktree locks and one serial integration steward; at most two writers account-wide. Unproven isolation falls back to one writer. Read-only review can always run. See the isolated-agent-worktrees amendment.
+- By default one writable slice; the accepted two-lane exception permits the existing Codex V1.16 slice plus **one** additional Claude UI slice, each in its own worktree. No long-lived agent/model branches.
+- Claude Cloud must checkpoint only to its **own authorized UI slice branch**. The original local-preview sync watcher is **not** a two-branch synchronizer and must not switch Codex's active V1.16 branch. Separate the UI preview and local state.
 - `main` is always the latest verified working product.
-- At most one active short-lived `slice/<part>-<scope>` branch.
-- A finished green slice is merged to `main` immediately and its branch is deleted/pruned.
-- **Never present an incomplete version or product as completed or deployed.** Preserve incomplete work only on the active slice, label it accurately in handoffs, and never ship broken dependencies, fake working buttons or missing primary workflows. Every coherent working checkpoint must be tested, committed and pushed to the single current slice branch; do not hold progress only in a cloud session. As soon as a slice is independently usable and all its accepted gates are green, merge that slice to updated `main`, verify CI/deployment, prune the integrated branch, then continue remaining version work on a new slice from updated `main`. The product release/version label changes only after the full version actually qualifies and is deployed. Incomplete checkpoints never go to `main`.
+- At most one active `slice/*` branch **per writer lane**; two total only while the accepted isolated two-lane exception is active. Unaccepted/unknown branch work is preserved.
+- Complete green slices integrate to `main` **serially through the designated steward**, after exact-base CI and deployment preflight; the other writer pauses before any rebase or cross-lane integration. Prune only confirmed-integrated branches.
+- **Never present an incomplete version or product as completed or deployed.** Preserve incomplete work only on the active slice, label it accurately in handoffs, and never ship broken dependencies, fake working buttons or missing primary workflows. Every coherent working checkpoint must be tested, committed and pushed to **that writer's assigned slice branch**; do not hold progress only in a cloud session. As soon as a slice is independently usable and all its accepted gates are green, merge that slice to updated `main`, verify CI/deployment, prune the integrated branch, then continue remaining version work on a new slice from updated `main`. The product release/version label changes only after the full version actually qualifies and is deployed. Incomplete checkpoints never go to `main`.
 - Never put a knowingly broken/incomplete slice on `main`.
 - Preserve unknown work; no destructive reset/clean/history rewrite.
 - Public repo: no staff/borrower PII, credentials, provider IDs, private exports, or private evidence.
@@ -63,7 +63,7 @@ Keep modules cohesive and readable. Optimize for a future agent understanding th
 - Verify it.
 - Commit when it is working.
 - Continue.
-- When the whole slice is green, integrate it into `main`, prune the slice branch, then start the next slice from fresh `main`.
+- When a whole slice is green, pause the other lane at a checkpoint, integrate **one verified PR at a time** into `main`, verify CI/deployment and only then prune confirmed-integrated work; the remaining writer refreshes and retests against the new base.
 
 Keep `npm run dev:live` available at `http://127.0.0.1:8791` when practical.
 
