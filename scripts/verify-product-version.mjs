@@ -66,7 +66,7 @@ export function checkVersionChange({ paths, before, after, recordExists = () => 
     failures.push("Release must include 2–5 plain, non-empty changelog lines.");
   }
   const record = after?.record;
-  if (typeof record !== "string" || !/^docs\/[A-Za-z0-9/_-]+\.md$/.test(record) || !recordExists(record)) {
+  if (typeof record !== "string" || (!/^docs\/[A-Za-z0-9/._-]+\.md$/.test(record) || record.includes("..")) || !recordExists(record)) {
     failures.push("Release must point to an existing canonical docs/**.md release record.");
   }
   return { impacting, failures };
