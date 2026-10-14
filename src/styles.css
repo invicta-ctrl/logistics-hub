@@ -285,12 +285,13 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .checklist li.is-done .icon { color: var(--ok-dot); }
 
 /* ---------- Empty, loading, toast ---------- */
-.empty { display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-16) var(--space-6); border: 1px dashed var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); text-align: center; }
-.empty > .icon { --icon-size: var(--icon-lg); margin-bottom: var(--space-1); color: var(--text-3); }
+/* An empty list is a composed, quiet plate (the drafting motif, below), its icon set down on it like an object, not a dashed hole. */
+.empty { --drafting-focus: 50% 30%; position: relative; isolation: isolate; display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-16) var(--space-6); border-radius: var(--radius-lg); background: linear-gradient(180deg, var(--subtle), var(--surface) 78%); box-shadow: inset 0 0 0 1px var(--line); text-align: center; }
+.empty > .icon { --icon-size: var(--icon-lg); box-sizing: content-box; margin-bottom: var(--space-2); padding: var(--space-3); border-radius: var(--radius-pill); background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line), 0 10px 16px -10px rgb(43 10 12 / 35%); color: var(--text-3); }
 .empty :is(h1, h2, h3) { font-size: var(--text-lg); }
 .empty p { max-width: 30rem; color: var(--text-2); font-size: var(--text-base); }
 .empty .button { margin-top: var(--space-3); }
-.empty--error { border-style: solid; border-color: var(--line-bad); }
+.empty--error { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-bad); }
 .empty--error > .icon { color: var(--bad); }
 .skeleton { display: block; border-radius: var(--radius); background: linear-gradient(90deg, var(--subtle) 30%, var(--hover) 50%, var(--subtle) 70%) 0 0 / 300% 100%; }
 .skeleton--text { width: min(60%, 18rem); height: .875rem; }
@@ -555,7 +556,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .filters-toggle { display: none; }
 .table-toolbar__count { margin-left: auto; color: var(--text-3); font-size: var(--text-sm); white-space: nowrap; }
 
-.data-table-wrap { overflow: clip; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.data-table-wrap { overflow: clip; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--edge-light), var(--shadow-sm); }
 .data-table-wrap--responsive { container-type: inline-size; }
 .table-more { display: flex; justify-content: center; margin: var(--space-3) 0 0; }
 .table-more .button { height: auto; min-height: 2.75rem; max-width: 100%; white-space: normal; text-align: center; }
@@ -630,8 +631,8 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
    Home's stage), never lists or forms. A lit plate with a faint drafting grid that fades out from its focus (--drafting-focus)
    and four crop marks. Decoration only: it carries no information. */
 .drafting { position: relative; isolation: isolate; border-radius: var(--radius-xl); background: linear-gradient(180deg, var(--subtle), var(--surface) 78%); box-shadow: inset 0 0 0 1px var(--line); }
-.drafting::before { position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: linear-gradient(var(--grid-line) 1px, transparent 1px) -1px -1px / 1.25rem 1.25rem, linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) -1px -1px / 1.25rem 1.25rem; content: ""; mask-image: radial-gradient(110% 95% at var(--drafting-focus, 18% 32%), #000 25%, transparent 72%); pointer-events: none; }
-.drafting::after { position: absolute; inset: .625rem; z-index: -1; background:
+:is(.drafting, .empty:not(.empty--error))::before { position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: linear-gradient(var(--grid-line) 1px, transparent 1px) -1px -1px / 1.25rem 1.25rem, linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) -1px -1px / 1.25rem 1.25rem; content: ""; mask-image: radial-gradient(110% 95% at var(--drafting-focus, 18% 32%), #000 25%, transparent 72%); pointer-events: none; }
+:is(.drafting, .empty:not(.empty--error))::after { position: absolute; inset: .625rem; z-index: -1; background:
     linear-gradient(var(--tick), var(--tick)) 0 0 / .625rem 1px no-repeat, linear-gradient(var(--tick), var(--tick)) 0 0 / 1px .625rem no-repeat,
     linear-gradient(var(--tick), var(--tick)) 100% 0 / .625rem 1px no-repeat, linear-gradient(var(--tick), var(--tick)) 100% 0 / 1px .625rem no-repeat,
     linear-gradient(var(--tick), var(--tick)) 0 100% / .625rem 1px no-repeat, linear-gradient(var(--tick), var(--tick)) 0 100% / 1px .625rem no-repeat,
@@ -920,12 +921,21 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 /* ==========================================================================
    Loans — rows, photo, return dialog, dashboard
    ========================================================================== */
-.loan-list { display: grid; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.loan-list { display: grid; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--edge-light), var(--shadow-sm); }
 .loan-list__empty { font-size: var(--text-sm); }
 .loan-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
 .loan-row:last-child { border-bottom: 0; }
-.loan-row.is-overdue { box-shadow: inset 0 0 0 1px var(--bad-dot); background: var(--bad-tint); }
+/* Overdue is said once, quietly: a rule at the row's edge and the red due tag, not a pink box around every late loan. */
+.loan-row.is-overdue { box-shadow: inset 3px 0 0 var(--bad); background: linear-gradient(90deg, var(--bad-tint), var(--surface) 45%); }
 .loan-row:first-child.is-overdue { border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.loan-row:last-child.is-overdue { border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.loan-row:only-child.is-overdue { border-radius: var(--radius-lg); }
+.loan-track { width: 4.5rem; height: .5rem; flex: none; overflow: visible; }
+.loan-track line { vector-effect: non-scaling-stroke; stroke-linecap: butt; }
+.loan-track__rail { stroke: var(--line-strong); stroke-width: 2; }
+.loan-track__used { stroke: var(--text-3); stroke-width: 2; }
+.loan-track__late { stroke: var(--bad); stroke-width: 2; }
+.loan-track__due { stroke: var(--text-2); stroke-width: 1.5; }
 .loan-row__main { display: grid; min-width: 0; gap: .1875rem; }
 .loan-row__who { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--text-base); }
 .loan-row__who strong { font-weight: 600; overflow-wrap: anywhere; }

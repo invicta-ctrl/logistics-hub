@@ -312,16 +312,18 @@ export type Sheet = { open: (origin?: Element | null) => void; close: (force?: b
  * focus returned to whatever opened it.
  *
  * A side panel is attached to what opened it: the row or control (`origin`, else the focused opener) sets where it grows from
- * and where its notch points, as viewport coordinates in --origin-x/--origin-y. Scrolling the page behind detaches it, so the
- * notch never points at a row that has moved.
+ * and where its notch points, as viewport coordinates in --origin-x/--origin-y, when it is still in view beside the panel.
+ * Scrolling the page behind detaches it, so the notch never points at a row that has moved.
  */
 export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolean; onClose?: () => void } = {}): Sheet {
   let opener: HTMLElement | null = null;
   const detach = () => { delete dialog.dataset.origin; };
+  // Only an origin still in view beside the open panel (at least 3rem of it) gets the attachment; a phone's bottom sheet never does.
   const anchor = (origin: Element | null | undefined) => {
     const box = origin && origin !== document.body && !origin.closest("dialog") ? origin.getBoundingClientRect() : null;
-    if (!box?.height) return detach();
-    dialog.style.setProperty("--origin-x", `${Math.round(box.left + box.width / 2)}px`);
+    const visible = box ? Math.min(box.right, dialog.getBoundingClientRect().left) : 0;
+    if (!box?.height || visible - box.left < 48) return detach();
+    dialog.style.setProperty("--origin-x", `${Math.round((box.left + visible) / 2)}px`);
     dialog.style.setProperty("--origin-y", `${Math.round(box.top + box.height / 2)}px`);
     dialog.dataset.origin = "";
     document.addEventListener("scroll", detach, { once: true, passive: true });
@@ -362,8 +364,8 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
       // Opening another record while the panel is up moves the notch to it; the panel itself stays.
       if (dialog.open) { if (origin) anchor(origin); return; }
       opener = document.activeElement as HTMLElement | null;
-      anchor(origin ?? opener);
       dialog.showModal();
+      anchor(origin ?? opener);
     },
     close,
     discardOk

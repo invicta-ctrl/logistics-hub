@@ -2052,6 +2052,12 @@ async function visualDepthScenes(browser, url, dir) {
       await page.goto(`${url}/staff/${name}`);
       await settle(page);
       await shot(page, `depth-${name}-${size}`);
+      // An empty list: the seeded Worker records no stock movement today, so Stock's Activity view is empty.
+      if (name === "stock") {
+        await page.locator("[data-view=activity]").click();
+        await settle(page);
+        await shot(page, `depth-empty-${size}`);
+      }
     }
     await context.close();
   }
