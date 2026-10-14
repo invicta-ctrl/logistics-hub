@@ -141,7 +141,7 @@ Before yielding:
 2. Run relevant tests/typecheck.
 3. Check `git status`.
 4. Commit the safe atomic work when practical.
-5. Update `.codex/SESSION_HANDOFF.md` with:
+5. In default one-lane mode or Codex's V1.16 lane, update `.codex/SESSION_HANDOFF.md`. In Claude's parallel UI lane update **only its approved lane handoff or PR body**, never shared `.codex` pointers. Include:
    - current branch + HEAD;
    - completed work;
    - incomplete work;
