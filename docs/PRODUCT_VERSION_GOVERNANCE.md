@@ -62,7 +62,14 @@ Before starting a post-release change:
 - Any change to how version metadata is encoded must reuse the single governed build/Administration route and have denial, rollback, stale-cache and cross-device tests. Never expose private build.json or add a duplicate Administration panel.
 - Before the V1.16 version UI is actually deployed, maintain truthful release records; do not claim the planned UI is already live.
 
-## 6. Mandatory agent release checklist
+## 6. CI enforcement and historic debt
+
+- CI's `checks` job executes `node --test tests/version-governance.test.mjs` and `node scripts/verify-product-version.mjs` for PRs and pushes to protected `main`. The script compares exact base-to-candidate paths, fails closed for app/runtime/build/dependency changes without a modified `product-release.json`, rejects skipped/reused revision identifiers, and demands fresh source provenance, an existing release record and 2–5 changelog notes. It excludes documentation, tests and agent-governance changes from product numbering. Operational/CI-only workflow edits remain subject to deployment-control review; excluding them from product numbering does **not** approve a provider change or bypass production authorization.
+- Historical V1.15 version debt is recorded at `docs/road-to-v2/evidence/v1.15-revision-reconciliation-2026-10-14.md`. Its candidate list is **not** an accepted numbered ledger. Resolve actual independently merged/released scope, evidence and next legitimate revision **before** a corrective `product-release.json` change; do not invent prior live labels. Preserve final V1.16 acceptance as a separate gate.
+- This gate enforces change classification and metadata shape **before integration**, not truth of screenshots, CI success, final version allocation, rollback, release authorization or live provider deployment. The integrator must still verify protected-main check configuration, current production-main Cloudflare build trigger, exact artifact, rollback and postflight. An automatic Workers Builds deployment can otherwise occur independently of main CI; never represent a green CI check as proof that trigger is safe.
+- Every main-target PR must carry an explicit `RELEASE TYPE: product revision / new main release / documentation-only / operations-only` and recorded reason. Pure records-only/main documentation updates do not consume a revision. A product release record must be reviewed **before** merge, then enriched with actual main SHA/deployment evidence afterward without minting another number for the records update.
+
+## 7. Mandatory agent release checklist
 
 Before each independent merge/release, Codex, Claude and Forge MUST check and state in the release record:
 - `PARENT VERSION`, `CANDIDATE VERSION`, `RELEASE TYPE` (new main / post-release revision / documentation-only);
