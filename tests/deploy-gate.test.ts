@@ -62,6 +62,37 @@ describe("R9: the deploy gate", () => {
     expect(gate(dir, fakeWrangler(dir, answer(["0001_a.sql"]), 1)).status).toBe(1);
     expect(gate(dir, fakeWrangler(dir, "Authentication error")).status).toBe(1);
   });
+
+  it("uses the workflow's release-relative wrangler path from the release child directory", () => {
+    const workflow = fs.readFileSync(".github/workflows/deploy.yml", "utf8");
+    const workflowWrangler = workflow.match(/deploy-gate\.mjs --release-dir release --wrangler (\S+)/)?.[1];
+    expect(workflowWrangler).toBe("node_modules/wrangler/bin/wrangler.js");
+
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "lh-gate-ci-layout-"));
+    dirs.push(workspace);
+    const gateDir = path.join(workspace, "ops", "scripts", "ops");
+    fs.mkdirSync(gateDir, { recursive: true });
+    for (const name of ["deploy-gate.mjs", "production-release.mjs"]) {
+      fs.copyFileSync(path.join("scripts", "ops", name), path.join(gateDir, name));
+    }
+    const releaseDir = path.join(workspace, "release");
+    const wranglerDir = path.join(releaseDir, "node_modules", "wrangler", "bin");
+    fs.mkdirSync(path.join(releaseDir, "migrations"), { recursive: true });
+    fs.mkdirSync(wranglerDir, { recursive: true });
+    fs.writeFileSync(path.join(releaseDir, "migrations", "0001_a.sql"), "SELECT 1;");
+    const argsFile = path.join(releaseDir, "args.json");
+    fs.writeFileSync(path.join(wranglerDir, "wrangler.js"), `require("fs").writeFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)));
+process.stdout.write(${JSON.stringify(answer(["0001_a.sql"]))});`);
+    const run = (wrangler: string) => spawnSync(process.execPath, [path.join(gateDir, "deploy-gate.mjs"), "--release-dir", "release", "--wrangler", wrangler], {
+      cwd: workspace, encoding: "utf8",
+    });
+
+    // This is the pre-fix workflow argument. It becomes release/release/... after the gate enters release.
+    expect(run("release/node_modules/wrangler/bin/wrangler.js").status).toBe(1);
+    const corrected = run(workflowWrangler!);
+    expect(corrected.status, corrected.stderr).toBe(0);
+    expect(JSON.parse(fs.readFileSync(argsFile, "utf8"))).toEqual(["d1", "execute", "DB", "--remote", "--json", "--command", QUERIES.migrations]);
+  });
 });
 
 describe("V116-QH03: exact-source security qualification before provider access", () => {
