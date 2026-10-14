@@ -27,7 +27,7 @@ Every qualifying main merge must have a verified version identity, concise chang
 
 - Writable/local-preview worktree: `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`.
 - Approved MausBot Scout, Oracle, Sentinel, and Harbor worktrees are detached/read-only specialist worktrees under the accepted MausBot amendment.
-- One active writer. Codex, Claude, or Forge must claim the writer lock before edits; yield before handoff.
+- One active writer **for the whole Logistics Hub project** (frontend, backend, branches, worktrees and related repos), not just one per file/worktree. Codex, Claude, or Forge must claim the writer lock before edits; yield before handoff. Independent projects may each have their own authorized writer concurrently (maximum two account-wide) only with no shared mutable resources; read-only Logistics UI review may overlap V1.16 implementation.
 - The writable worktree uses the one active slice branch. No Codex/Claude/MausBot-specific long-lived branches.
 - Claude Cloud must commit and push each coherent working checkpoint to the one active `slice/*` branch so the local preview can auto-sync it. Unpushed cloud edits cannot appear locally.
 - `main` is always the latest verified working product.
