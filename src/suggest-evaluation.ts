@@ -1,6 +1,6 @@
 import { type AiPayload, aiPayload, readAiAnswer } from "./catalog-ai";
 import { behaviourOf } from "./catalog-policy";
-import { type Known, type Tier, suggest, verified } from "./catalogue-suggest";
+import { type Known, type Tier, confidentMatch, suggest, verified } from "./catalogue-suggest";
 
 /*
  * Leave-one-out measurement of the suggestion pipeline (catalog intelligence amendment §9). Each confirmed item is hidden in turn, its
@@ -11,12 +11,14 @@ import { type Known, type Tier, suggest, verified } from "./catalogue-suggest";
 export const FIELDS = ["behaviour", "unit", "category"] as const;
 export type Field = typeof FIELDS[number];
 export type Cell = { n: number; right: number; either: number };
-export type Evaluation = { items: number; fields: Record<Field, Record<Tier | "NONE", Cell>> };
+/** Fields that are written into an empty form field when the match is confident (`confidentMatch`). */
+export const PREFILL_FIELDS = ["category", "unit"] as const;
+export type Evaluation = { items: number; fields: Record<Field, Record<Tier | "NONE", Cell>>; prefill: Record<typeof PREFILL_FIELDS[number], { n: number; right: number }> };
 
 export function evaluate(catalog: readonly Known[], options: { knowledge: boolean }): Evaluation {
   const items = catalog.filter(verified);
   const empty = (): Record<Tier | "NONE", Cell> => ({ STRONG: { n: 0, right: 0, either: 0 }, WEAK: { n: 0, right: 0, either: 0 }, CONFLICTING: { n: 0, right: 0, either: 0 }, NONE: { n: 0, right: 0, either: 0 } });
-  const result: Evaluation = { items: items.length, fields: { behaviour: empty(), unit: empty(), category: empty() } };
+  const result: Evaluation = { items: items.length, fields: { behaviour: empty(), unit: empty(), category: empty() }, prefill: { category: { n: 0, right: 0 }, unit: { n: 0, right: 0 } } };
   for (const [index, item] of items.entries()) {
     const others = items.filter((_, other) => other !== index);
     const found = suggest(item.name, others, [], options);
@@ -27,6 +29,11 @@ export function evaluate(catalog: readonly Known[], options: { knowledge: boolea
       cell.n += 1;
       if (suggestion?.value === truth[field]) cell.right += 1;
       if (suggestion && (suggestion.value === truth[field] || suggestion.other?.value === truth[field])) cell.either += 1;
+    }
+    for (const field of PREFILL_FIELDS) {
+      if (!confidentMatch(found[field])) continue;
+      result.prefill[field].n += 1;
+      if (found[field]!.value === truth[field]) result.prefill[field].right += 1;
     }
   }
   return result;
@@ -48,6 +55,7 @@ export function report(label: string, evaluation: Evaluation): string {
     }
     lines.push(`    ${"NONE".padEnd(11)} ${String(cells.NONE.n).padStart(4)} items`);
   }
+  for (const field of PREFILL_FIELDS) lines.push(`  ${field} written into an empty field (exact match, or all five look-alikes agree): ${evaluation.prefill[field].n} items (${pct(evaluation.prefill[field].n, evaluation.items)}); right ${pct(evaluation.prefill[field].right, evaluation.prefill[field].n)}`);
   return lines.join("\n");
 }
 

@@ -1,6 +1,7 @@
 // Leave-one-out measurement of the catalog suggestions (amendment §9). Prints aggregates only: tier counts and hit rates, never item names.
 //   npm run evaluate:suggestions                 the repository's own public seed catalog (migrations applied to a throwaway database)
-//   npm run evaluate:suggestions -- --from f.json a private local export (an array of items with name, aliases, category, itemType, consumptionMode, unit, stockArea, status);
+//   npm run evaluate:suggestions -- --from f.json a private local export (an array of items with name, aliases, category, itemType, consumptionMode, unit, stockArea, status, and needsReview: false);
+//                                                 a row without needsReview: false is not a reviewed item and is left out, so an export that lacks it reports 0 confirmed items;
 //                                                 run it privately and never commit the file or its per-item output.
 //   npm run evaluate:suggestions -- --ai [--ai-limit 300]
 //                                                 also measures the Workers AI second opinion (amendment §13.6) on the same catalog:

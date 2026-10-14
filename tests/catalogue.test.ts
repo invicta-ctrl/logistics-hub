@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
-import { suggest } from "../src/catalogue-suggest";
+import { confidentMatch, suggest } from "../src/catalogue-suggest";
 import { type Known, hamming, possibleDuplicates, words } from "../src/duplicates";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
 import { jpeg } from "./jpeg";
@@ -84,9 +84,22 @@ describe("suggestions", () => {
   ];
   it("explains a suggestion by the items it is like", () => {
     const result = suggest("whiteboard mar", catalog, []);
-    expect(result.category).toEqual({ value: "OFFICE SUPPLIES", why: "Like “Whiteboard Marker Black” and 1 more", tier: "WEAK", basis: "CATALOG" });
+    expect(result.category).toEqual({ value: "OFFICE SUPPLIES", why: "Like “Whiteboard Marker Black” and 1 more", tier: "WEAK", basis: "CATALOG", votes: { agree: 2, of: 2, exact: false } });
     expect(result.behaviour?.value).toBe("CONSUME");
     expect(result.unit?.value).toBe("piece");
+  });
+  it("is confident enough to fill a field only for an exact name, or when all five look-alikes agree", () => {
+    expect(confidentMatch(suggest("Bond Paper A4", catalog, []).category)).toBe(true);
+    expect(confidentMatch(suggest("whiteboard mar", catalog, []).category)).toBe(false);
+    const markers = Array.from({ length: 5 }, (_, index) => item({ name: `Desk Lamp ${index}`, category: "ELECTRICAL", unit: "piece" }));
+    expect(confidentMatch(suggest("desk lamp", markers, []).category)).toBe(true);
+    expect(confidentMatch(suggest("desk lamp", [...markers.slice(0, 4), item({ name: "Desk Lamp 4", category: "FURNITURE", unit: "piece" })], []).category)).toBe(false);
+    expect(confidentMatch(suggest("desk lamp", markers.slice(0, 4), []).category)).toBe(false);
+    expect(confidentMatch(undefined)).toBe(false);
+  });
+  it("never counts a knowledge-base or session hint as confident", () => {
+    expect(confidentMatch(suggest("batteries", [], []).behaviour)).toBe(false);
+    expect(confidentMatch(suggest("zebra", [], [item({ name: "A", category: "TOOLS" }), item({ name: "B", category: "TOOLS" })]).category)).toBe(false);
   });
   it("knows a loanable and a gradually used consumable", () => {
     expect(suggest("extension cord 5m", catalog, []).behaviour?.value).toBe("BORROW");
