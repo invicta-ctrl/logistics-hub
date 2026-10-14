@@ -61,14 +61,23 @@
   --text-2xl: 1.75rem;
   --text-display: clamp(2rem, 5vw, 2.75rem);
 
-  /* Shape and elevation: sm for resting controls, md for raised panels and sheets, lg for menus over content. */
+  /* Shape and elevation. Depth says what a surface is: sm for resting controls, md for raised panels you act on, lg for menus
+     over content, modal for sheets lifted furthest. Shadows are warm ink rather than grey, and never animated. A raised surface
+     also catches light on its top edge (--edge-light); ambient content sits flush on the paper with a hairline only. */
   --radius: 6px;
   --radius-lg: 10px;
   --radius-xl: 16px;
   --radius-pill: 999px;
-  --shadow-sm: 0 1px 2px rgb(28 25 23 / 6%);
-  --shadow-md: 0 4px 14px rgb(28 25 23 / 8%), 0 1px 3px rgb(28 25 23 / 6%);
-  --shadow-lg: 0 12px 32px rgb(28 25 23 / 16%), 0 2px 6px rgb(28 25 23 / 8%);
+  --shadow-sm: 0 1px 2px rgb(43 10 12 / 7%);
+  --shadow-md: 0 1px 2px rgb(43 10 12 / 5%), 0 8px 20px -10px rgb(43 10 12 / 16%);
+  --shadow-lg: 0 18px 40px -14px rgb(43 10 12 / 30%), 0 2px 6px rgb(28 25 23 / 8%);
+  --shadow-modal: 0 0 0 1px rgb(43 10 12 / 6%), -28px 0 60px -30px rgb(43 10 12 / 40%);
+  --edge-light: inset 0 1px 0 rgb(255 255 255 / 75%);
+  --edge-light-brand: inset 0 1px 0 rgb(255 255 255 / 16%);
+  /* The drafting motif (a fine grid, crop marks, a ruler's ticks) belongs to editorial surfaces only: the shell, Home's stage
+     and an object's study. It never sits behind text that has to be read. */
+  --grid-line: rgb(122 20 25 / 7.5%);
+  --tick: rgb(122 20 25 / 28%);
   --container: 72rem;
   --gutter: clamp(1rem, 4vw, 2rem);
   --space-1: .25rem;
@@ -101,8 +110,11 @@
      --ease enters and settles, --ease-in leaves; dur-1 feedback, dur-2 menus and indicators, dur-3 sheets. */
   --ease: cubic-bezier(.2, .8, .2, 1);
   --ease-in: cubic-bezier(.4, 0, 1, 1);
+  /* --ease-settle: an object coming to rest (a panel growing from its row, an item settling on its stage). */
+  --ease-settle: cubic-bezier(.16, 1, .3, 1);
   --dur-1: 120ms;
   --dur-2: 200ms;
+  --dur-inspect: 260ms;
   --dur-3: 320ms;
 
   color-scheme: light;
@@ -150,20 +162,24 @@ kbd { display: inline-grid; min-width: 1.35rem; height: 1.35rem; place-items: ce
 .page-message { padding-block: var(--space-16); }
 
 /* ---------- Buttons and links ---------- */
-.button { display: inline-flex; min-height: 2.5rem; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2) var(--space-4); border: 1px solid transparent; border-radius: var(--radius); background: transparent; font-size: var(--text-base); font-weight: 500; line-height: 1.2; text-decoration: none; white-space: nowrap; transition: background-color var(--dur-1), border-color var(--dur-1), color var(--dur-1), box-shadow var(--dur-2); }
+.button { display: inline-flex; min-height: 2.5rem; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2) var(--space-4); border: 1px solid transparent; border-radius: var(--radius); background: transparent; font-size: var(--text-base); font-weight: 500; line-height: 1.2; text-decoration: none; white-space: nowrap; transition: background-color var(--dur-1), border-color var(--dur-1), color var(--dur-1), box-shadow var(--dur-2), transform var(--dur-1) var(--ease); }
+/* A press is felt, not celebrated: the control sinks a pixel and loses its lift. It says "received", never "done". */
+.button:active:not(:disabled) { transform: translateY(1px); }
 .button .icon { --icon-size: var(--icon-sm); }
 .button:focus-visible { outline: none; box-shadow: var(--focus); }
 .button:disabled { cursor: progress; opacity: .6; }
 .button--sm { min-height: 2.25rem; padding: var(--space-2) var(--space-3); font-size: var(--text-sm); }
 .button--lg { min-height: 3rem; padding: var(--space-3) var(--space-6); font-size: var(--text-md); }
 .button--block { width: 100%; }
-.button--primary { background: var(--brand); color: var(--on-brand); box-shadow: var(--shadow-sm); }
-.button--primary:hover:not(:disabled) { background: var(--brand-hover); }
-.button--secondary { border-color: var(--line-strong); background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+.button--primary { background: var(--brand) linear-gradient(180deg, rgb(255 255 255 / 7%), transparent); color: var(--on-brand); box-shadow: var(--edge-light-brand), 0 1px 2px rgb(43 10 12 / 22%), 0 4px 10px -6px rgb(122 20 25 / 55%); }
+.button--primary:hover:not(:disabled) { background-color: var(--brand-hover); }
+.button--primary:active:not(:disabled) { box-shadow: inset 0 1px 2px rgb(28 25 23 / 30%); }
+.button--secondary { border-color: var(--line-strong); background: var(--surface); color: var(--text); box-shadow: var(--edge-light), var(--shadow-sm); }
 .button--secondary:hover { border-color: var(--text-3); background: var(--hover); }
+.button--secondary:active:not(:disabled) { background: var(--subtle); box-shadow: inset 0 1px 2px rgb(28 25 23 / 10%); }
 .button--ghost { color: var(--text-2); }
 .button--ghost:hover { background: var(--subtle); color: var(--text); }
-.button--danger { background: var(--bad); color: var(--on-brand); box-shadow: var(--shadow-sm); }
+.button--danger { background: var(--bad); color: var(--on-brand); box-shadow: var(--edge-light-brand), var(--shadow-sm); }
 .button--danger:hover:not(:disabled) { background: var(--bad-hover); }
 .button--on-dark { background: var(--gold-action); color: var(--brand-deep); font-weight: 600; }
 .button--on-dark:hover:not(:disabled) { background: var(--gold-action-hover); }
@@ -269,12 +285,13 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .checklist li.is-done .icon { color: var(--ok-dot); }
 
 /* ---------- Empty, loading, toast ---------- */
-.empty { display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-16) var(--space-6); border: 1px dashed var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); text-align: center; }
-.empty > .icon { --icon-size: var(--icon-lg); margin-bottom: var(--space-1); color: var(--text-3); }
+/* An empty list is a composed, quiet plate (the drafting motif, below), its icon set down on it like an object, not a dashed hole. */
+.empty { --drafting-focus: 50% 30%; position: relative; isolation: isolate; display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-16) var(--space-6); border-radius: var(--radius-lg); background: linear-gradient(180deg, var(--subtle), var(--surface) 78%); box-shadow: inset 0 0 0 1px var(--line); text-align: center; }
+.empty > .icon { --icon-size: var(--icon-lg); box-sizing: content-box; margin-bottom: var(--space-2); padding: var(--space-3); border-radius: var(--radius-pill); background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line), 0 10px 16px -10px rgb(43 10 12 / 35%); color: var(--text-3); }
 .empty :is(h1, h2, h3) { font-size: var(--text-lg); }
 .empty p { max-width: 30rem; color: var(--text-2); font-size: var(--text-base); }
 .empty .button { margin-top: var(--space-3); }
-.empty--error { border-style: solid; border-color: var(--line-bad); }
+.empty--error { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-bad); }
 .empty--error > .icon { color: var(--bad); }
 .skeleton { display: block; border-radius: var(--radius); background: linear-gradient(90deg, var(--subtle) 30%, var(--hover) 50%, var(--subtle) 70%) 0 0 / 300% 100%; }
 .skeleton--text { width: min(60%, 18rem); height: .875rem; }
@@ -420,7 +437,10 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 /* ==========================================================================
    Staff workspace
    ========================================================================== */
-.app-bar { position: sticky; top: 0; z-index: 30; container-type: inline-size; border-bottom: 1px solid var(--on-dark-line); background: var(--brand-dark); color: var(--on-dark); }
+.app-bar { position: sticky; top: 0; z-index: 30; container-type: inline-size; border-bottom: 1px solid var(--on-dark-line); background: radial-gradient(90rem 12rem at 12% -6rem, rgb(122 20 25 / 55%), transparent 70%), var(--brand-dark); color: var(--on-dark); box-shadow: 0 1px 0 rgb(43 10 12 / 10%), 0 6px 16px -12px rgb(43 10 12 / 45%); }
+/* The shell's provenance mark: a ruler's ticks along the bar's lower edge, strongest under the name and fading out, like the
+   scale printed on a logistics label. Decoration only; nothing reads from it. */
+.app-bar::after { position: absolute; right: 0; bottom: 0; left: 0; height: .3125rem; background: repeating-linear-gradient(90deg, rgb(242 209 92 / 42%) 0 1px, transparent 1px .75rem) 0 100% / 100% .1875rem no-repeat, repeating-linear-gradient(90deg, rgb(242 209 92 / 55%) 0 1px, transparent 1px 6rem) 0 100% / 100% .3125rem no-repeat; content: ""; mask-image: linear-gradient(90deg, transparent, #000 4%, #000 26%, transparent 58%); pointer-events: none; }
 .app-bar__inner { display: flex; min-height: var(--app-bar); align-items: center; gap: var(--space-6); max-width: 90rem; margin-inline: auto; padding-inline: max(var(--gutter), env(safe-area-inset-left, 0px)) max(var(--gutter), env(safe-area-inset-right, 0px)); }
 .app-bar :focus-visible { outline-color: var(--gold-action); }
 .app-bar__brand { display: flex; min-width: 0; flex: 0 1 auto; align-items: center; gap: var(--space-3); border-radius: var(--radius); text-decoration: none; }
@@ -536,7 +556,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .filters-toggle { display: none; }
 .table-toolbar__count { margin-left: auto; color: var(--text-3); font-size: var(--text-sm); white-space: nowrap; }
 
-.data-table-wrap { overflow: clip; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.data-table-wrap { overflow: clip; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--edge-light), var(--shadow-sm); }
 .data-table-wrap--responsive { container-type: inline-size; }
 .table-more { display: flex; justify-content: center; margin: var(--space-3) 0 0; }
 .table-more .button { height: auto; min-height: 2.75rem; max-width: 100%; white-space: normal; text-align: center; }
@@ -589,16 +609,75 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .photo-tile--busy { padding: var(--space-3); color: var(--text-2); font-size: var(--text-sm); text-align: center; }
 .photo-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .profile__info { display: grid; gap: var(--space-2); align-content: start; min-width: 0; }
-.profile__stock { font-size: var(--text-md); }
-.profile__stock strong { font-family: var(--serif); font-size: var(--text-2xl); font-variant-numeric: tabular-nums; line-height: 1.1; }
 .profile__meta { color: var(--text-2); font-size: var(--text-sm); }
 .profile__meta--place, .profile__meta--kits { display: flex; align-items: flex-start; gap: var(--space-2); }
+.profile__meta--place { flex-wrap: wrap; row-gap: 0; }
+.profile__meta--place > .profile__label { flex-basis: 100%; }
+.profile__meta--place > span:last-child { flex: 1; min-width: 0; }
 .profile__meta--place .icon, .profile__meta--kits .icon { --icon-size: var(--icon-sm); color: var(--text-3); }
 /* V1.7: how fresh the record is (seen in a check, counted), and a check's finding still to settle. */
 .profile__meta--fresh, .profile__meta--finding { display: flex; align-items: flex-start; gap: var(--space-2); }
 .profile__meta--fresh .icon { --icon-size: var(--icon-sm); color: var(--text-3); }
 .profile__meta--finding { color: var(--warn-ink); }
 .profile__meta--finding .icon { --icon-size: var(--icon-sm); color: var(--warn); }
+.profile__stock { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-5); }
+.readout { display: flex; align-items: baseline; gap: var(--space-2); }
+.readout strong { font-family: var(--serif); font-size: var(--text-2xl); font-variant-numeric: tabular-nums; font-weight: 500; line-height: 1.1; }
+.readout--loan { color: var(--text-2); }
+.readout--loan strong { color: var(--text-2); }
+.profile__label { display: block; color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+
+/* Drafting plate (2026-10-14): the one authored motif of the visual-depth pass, kept to editorial surfaces (an item's profile,
+   Home's stage), never lists or forms. A lit plate with a faint drafting grid that fades out from its focus (--drafting-focus)
+   and four crop marks. Decoration only: it carries no information. */
+.drafting { position: relative; isolation: isolate; border-radius: var(--radius-xl); background: linear-gradient(180deg, var(--subtle), var(--surface) 78%); box-shadow: inset 0 0 0 1px var(--line); }
+:is(.drafting, .empty:not(.empty--error))::before { position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: linear-gradient(var(--grid-line) 1px, transparent 1px) -1px -1px / 1.25rem 1.25rem, linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) -1px -1px / 1.25rem 1.25rem; content: ""; mask-image: radial-gradient(110% 95% at var(--drafting-focus, 18% 32%), #000 25%, transparent 72%); pointer-events: none; }
+:is(.drafting, .empty:not(.empty--error))::after { position: absolute; inset: .625rem; z-index: -1; background:
+    linear-gradient(var(--tick), var(--tick)) 0 0 / .625rem 1px no-repeat, linear-gradient(var(--tick), var(--tick)) 0 0 / 1px .625rem no-repeat,
+    linear-gradient(var(--tick), var(--tick)) 100% 0 / .625rem 1px no-repeat, linear-gradient(var(--tick), var(--tick)) 100% 0 / 1px .625rem no-repeat,
+    linear-gradient(var(--tick), var(--tick)) 0 100% / .625rem 1px no-repeat, linear-gradient(var(--tick), var(--tick)) 0 100% / 1px .625rem no-repeat,
+    linear-gradient(var(--tick), var(--tick)) 100% 100% / .625rem 1px no-repeat, linear-gradient(var(--tick), var(--tick)) 100% 100% / 1px .625rem no-repeat;
+  content: ""; pointer-events: none; }
+
+/* Resource Theater (2026-10-14): an item's profile is an object study, not a record. The item (its photo, or its icon when it
+   has none) stands on a drafting plate with a floor shadow; beside it, the readings the Hub actually holds. Everything here is
+   the same profile and controls as before; only its staging changed. */
+.theater { gap: var(--space-4) var(--space-6); grid-template-columns: 11rem minmax(0, 1fr); padding: var(--space-6) var(--space-6) var(--space-5); }
+.theater .profile__photo { position: relative; }
+/* The object stands on the stage itself: its icon floats over a soft contact shadow. A photo is a specimen card instead, lifted
+   off the stage with its own shadow. */
+.theater .photo-tile { border-radius: var(--radius-xl); background: transparent; box-shadow: none; }
+.theater .photo-tile::after { position: absolute; right: 22%; bottom: 17%; left: 22%; z-index: -1; height: .875rem; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 10 12 / 26%), transparent); content: ""; }
+.theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview) { background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line), 0 1px 2px rgb(43 10 12 / 6%), 0 18px 28px -18px rgb(43 10 12 / 45%); }
+.theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview)::after { display: none; }
+.theater .profile__photo:has(.item-visual--loaded, .photo-tile--preview)::after { position: absolute; right: 12%; bottom: -.625rem; left: 12%; z-index: -1; height: .875rem; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 10 12 / 24%), transparent); content: ""; }
+.theater .photo-tile[data-view]:hover { background: rgb(255 255 255 / 55%); }
+.theater .photo-tile .item-visual { position: relative; background: transparent; }
+.theater .photo-tile .item-visual > .item-icon { width: 56%; height: 56%; max-width: none; max-height: none; stroke-width: 1.25; filter: drop-shadow(0 1px 0 rgb(255 255 255 / 90%)); }
+/* No photo yet: adding one is a quiet label on the plinth, not a dashed hole. */
+.theater .photo-tile--add { gap: 0; border: 0; color: var(--text-2); }
+.theater .photo-tile--add .profile-visual { width: 100%; height: 100%; }
+.theater .photo-tile--add > span:last-child { position: absolute; bottom: .25rem; left: 50%; display: inline-flex; max-width: calc(100% - 1rem); align-items: center; padding: .125rem .5rem; transform: translateX(-50%); border-radius: var(--radius-pill); background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line), var(--shadow-sm); font-size: .75rem; white-space: nowrap; }
+.theater .photo-tile--add:hover { background: rgb(248 238 238 / 60%); }
+.theater .photo-tile--add:hover > span:last-child { color: var(--brand); box-shadow: inset 0 0 0 1px var(--line-brand); }
+/* A single action (Take photo) sits under the object; editing a photo's several actions takes the stage's full width. */
+.theater { grid-template-areas: "photo info" "actions info"; grid-template-rows: auto 1fr; }
+.theater > .profile__photo { grid-area: photo; }
+.theater > .profile__info { grid-area: info; }
+.theater > .profile__actions { grid-area: actions; align-self: start; justify-items: center; }
+/* Several photo controls, a confirmation or a message need the plate's full width under the object and its readings. */
+.theater:has(> .profile__actions :is(.photo-actions > :nth-child(2), .inline-confirm, [role=alert], [role=status])) { grid-template-areas: "photo info" "actions actions"; grid-template-rows: auto auto; }
+.theater:has(> .profile__actions :is(.photo-actions > :nth-child(2), .inline-confirm, [role=alert], [role=status])) > .profile__actions { justify-items: start; }
+.theater .profile__info { gap: var(--space-3); padding-top: var(--space-1); }
+.theater .readout strong { font-size: 2.5rem; letter-spacing: -.02em; }
+.theater .profile__stock { padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); }
+.theater .profile__meta--place { margin-top: var(--space-1); }
+.theater .profile__meta--fresh { margin-top: calc(-1 * var(--space-2)); padding-left: calc(var(--icon-sm) + var(--space-2)); }
+.theater .profile__meta--fresh .icon { display: none; }
+@media (max-width: 760px) {
+  .theater { grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--space-3) var(--space-4); padding: var(--space-4); }
+  .theater .readout strong { font-size: 2rem; }
+}
 
 /* The photo viewer: a full-screen modal dialog; the thumbnail grows into it where view transitions exist. */
 .viewer { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: #fff; }
@@ -617,12 +696,27 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 ::view-transition-old(item-photo), ::view-transition-new(item-photo) { height: 100%; object-fit: contain; overflow: clip; }
 
 /* Item sheet (side panel) */
-.sheet { width: min(100%, 42rem); height: 100%; max-width: none; max-height: none; margin: 0 0 0 auto; padding: 0; border: 0; background: var(--surface); box-shadow: var(--shadow-md); color: var(--text); }
+.sheet { width: min(100%, 42rem); height: 100%; max-width: none; max-height: none; margin: 0 0 0 auto; padding: 0; border: 0; background: var(--surface); box-shadow: var(--shadow-modal); color: var(--text); }
 .sheet::backdrop { background: var(--scrim); }
 .sheet[open] { display: flex; flex-direction: column; }
 .sheet__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: var(--space-5) var(--space-6); border-top: 0; border-bottom: 1px solid var(--line); }
 .sheet__kicker { color: var(--text-3); font-size: var(--text-sm); overflow-wrap: anywhere; }
-.sheet__header h2 { margin-top: var(--space-1); font-size: var(--text-lg); overflow-wrap: anywhere; }
+.sheet__header h2 { margin-top: var(--space-1); font-family: var(--serif); font-size: 1.5rem; font-weight: 500; letter-spacing: -.01em; line-height: 1.15; overflow-wrap: anywhere; }
+/* A record's ID as the tag tied to the thing itself: a punched hole, a hairline edge, the code in mono. */
+.sheet__kicker > .mono:only-child { display: inline-flex; align-items: center; gap: .4375rem; padding: .0625rem .5rem .0625rem .375rem; border: 1px solid var(--line-strong); border-radius: var(--radius-pill) 3px 3px var(--radius-pill); background: var(--surface); box-shadow: var(--edge-light), var(--shadow-sm); color: var(--text-2); font-size: .8125rem; letter-spacing: .02em; }
+.sheet__kicker > .mono:only-child::before { width: .375rem; height: .375rem; flex: none; border-radius: 50%; background: var(--subtle); box-shadow: inset 0 0 0 1.5px var(--line-strong); content: ""; }
+/* On a wide screen the side panel is attached to the row that opened it: a notch on its edge points back at the row, and it
+   grows from there (see the motion rules). Opened from a link or after the page scrolled, it simply has no notch. */
+@media (min-width: 761px) {
+  .sheet[data-origin] { overflow: visible; transform-origin: calc(var(--origin-x) - 100vw + 100%) var(--origin-y); }
+  .sheet[data-origin]::before { position: absolute; top: clamp(2rem, var(--origin-y), calc(100% - 2rem)); left: -.4375rem; width: .875rem; height: .875rem; transform: translateY(-50%) rotate(45deg); border-radius: 2px; background: var(--surface); box-shadow: -1px 1px 0 rgb(43 10 12 / 8%); content: ""; }
+  .sheet[data-origin]::backdrop { background: rgb(28 25 23 / 24%); }
+}
+/* Forced colours drop shadows and backgrounds, so the panel keeps a drawn edge and the notch keeps its outline. */
+@media (min-width: 761px) and (forced-colors: active) {
+  .sheet { border-inline-start: 1px solid CanvasText; }
+  .sheet[data-origin]::before { border: solid CanvasText; border-width: 0 0 1px 1px; }
+}
 .sheet__body { display: grid; flex: 1; min-height: 0; align-content: start; gap: var(--space-4); overflow-y: auto; padding: var(--space-6) max(var(--space-6), env(safe-area-inset-right, 0px)) calc(var(--space-6) + var(--safe-bottom)) max(var(--space-6), env(safe-area-inset-left, 0px)); scroll-padding-top: 3.5rem; scroll-padding-bottom: calc(var(--space-6) + var(--safe-bottom)); overscroll-behavior: contain; }
 .sheet .tabs { position: sticky; top: calc(-1 * var(--space-6)); z-index: 2; background: var(--surface); }
 .quantity__context:empty { display: none; }
@@ -832,12 +926,22 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 /* ==========================================================================
    Loans — rows, photo, return dialog, dashboard
    ========================================================================== */
-.loan-list { display: grid; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.loan-list { display: grid; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--edge-light), var(--shadow-sm); }
 .loan-list__empty { font-size: var(--text-sm); }
 .loan-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
 .loan-row:last-child { border-bottom: 0; }
-.loan-row.is-overdue { box-shadow: inset 0 0 0 1px var(--bad-dot); background: var(--bad-tint); }
+/* Overdue is said once, quietly: a rule at the row's edge and the red due tag, not a pink box around every late loan. */
+.loan-row.is-overdue { box-shadow: inset 3px 0 0 var(--bad); background: linear-gradient(90deg, var(--bad-tint), var(--surface) 45%); }
 .loan-row:first-child.is-overdue { border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+.loan-row:last-child.is-overdue { border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.loan-row:only-child.is-overdue { border-radius: var(--radius-lg); }
+@media (forced-colors: active) { .loan-row.is-overdue { border-inline-start: 3px solid CanvasText; } }
+.loan-track { width: 4.5rem; height: .5rem; flex: none; overflow: visible; }
+.loan-track line { vector-effect: non-scaling-stroke; stroke-linecap: butt; }
+.loan-track__rail { stroke: var(--line-strong); stroke-width: 2; }
+.loan-track__used { stroke: var(--text-3); stroke-width: 2; }
+.loan-track__late { stroke: var(--bad); stroke-width: 2; }
+.loan-track__due { stroke: var(--text-2); stroke-width: 1.5; }
 .loan-row__main { display: grid; min-width: 0; gap: .1875rem; }
 .loan-row__who { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); font-size: var(--text-base); }
 .loan-row__who strong { font-weight: 600; overflow-wrap: anywhere; }
@@ -1085,6 +1189,16 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .viewer--fade[open], .viewer--fade[open]::backdrop { animation: fade-in var(--dur-2) ease-out; }
   .sheet.is-closing { animation: sheet-out var(--dur-2) var(--ease-in) both; }
   .sheet.is-closing::backdrop { animation: fade-out var(--dur-2) var(--ease-in) both; }
+  /* Attached to a row: the panel grows out of it and folds back into it on close (its transform-origin is the row). */
+  @media (min-width: 761px) {
+    .sheet[open][data-origin] { animation: inspector-in var(--dur-inspect) var(--ease-settle); }
+    .sheet.is-closing[data-origin] { animation: inspector-out var(--dur-2) var(--ease-in) both; }
+  }
+  /* The object settles onto its stage once the record has loaded: the motion follows the server's answer, never precedes it. */
+  .theater .profile__photo { animation: object-settle var(--dur-3) var(--ease-settle) 40ms backwards; }
+  @keyframes inspector-in { from { opacity: 0; transform: translateX(1rem) scale(.965); } }
+  @keyframes inspector-out { to { opacity: 0; transform: translateX(.75rem) scale(.97); } }
+  @keyframes object-settle { from { opacity: 0; transform: translateY(.375rem) scale(.96); } }
   .sheet .skeleton--block { animation: fade-in var(--dur-2) 150ms both, shimmer 1.6s linear infinite; }
   .delta { animation: delta-in .5s var(--ease) both; }
   /* A section change: the page settles in and the current-section marker grows from its centre. */
@@ -1633,6 +1747,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .cat-more { padding-block: var(--space-3); border-block: 1px solid var(--line); }
 .cat-actions .button--secondary { min-height: var(--target); border: 0; background: transparent; color: var(--brand); box-shadow: none; }
 .profile:has(.photo-crop), .profile:has([data-save]) { grid-template-columns: minmax(0, 1fr); }
+.profile.theater:has(.photo-crop, [data-save]) { grid-template-areas: "photo" "info" "actions"; grid-template-rows: auto; }
 .profile:has(.photo-crop) > [data-tile] { display: none; }
 .profile:has(.photo-crop) .profile__actions { justify-items: stretch; }
 /* Location and kit panels keep their photo actions inside the info column. */
@@ -1696,6 +1811,7 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
   .photo-actions > .button { white-space: normal; }
   .profile__actions > .photo-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .profile__actions [data-save-clean], .profile__actions [data-enable-cleanup] { grid-column: 1 / -1; }
+  .profile__actions > .photo-actions:not(:has(> :nth-child(2))) { grid-template-columns: minmax(0, 1fr); }
 }
 
 .hero__eyebrow { font: 500 .75rem/1.5 var(--sans); letter-spacing: .13em; text-transform: uppercase; }

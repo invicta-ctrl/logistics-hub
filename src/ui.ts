@@ -304,15 +304,31 @@ export function sheetContent(kicker: Html | string, title: string, body: Html): 
     <div class="sheet__body">${body}</div>`;
 }
 
-export type Sheet = { open: () => void; close: (force?: boolean) => void; discardOk: () => boolean };
+export type Sheet = { open: (origin?: Element | null) => void; close: (force?: boolean) => void; discardOk: () => boolean };
 
 /**
  * The one sheet behaviour (side panel on desktop, bottom sheet on phones): modal open,
  * Escape and backdrop close, an optional unsaved-changes guard, an exit animation, and
  * focus returned to whatever opened it.
+ *
+ * A caller that passes `origin` (the item profile passes its row) gets a side panel attached to it: the origin sets where the
+ * panel grows from and where its notch points, as viewport coordinates in --origin-x/--origin-y, when it is still in view beside
+ * the panel. Scrolling the page behind detaches it, so the notch never points at a row that has moved. Without an origin a
+ * sheet opens as it always has, whatever control had focus.
  */
 export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolean; onClose?: () => void } = {}): Sheet {
   let opener: HTMLElement | null = null;
+  const detach = () => { delete dialog.dataset.origin; };
+  // Only an origin still in view beside the open panel (at least 3rem of it) gets the attachment; a phone's bottom sheet never does.
+  const anchor = (origin: Element | null | undefined) => {
+    const box = origin && origin !== document.body && !origin.closest("dialog") ? origin.getBoundingClientRect() : null;
+    const visible = box ? Math.min(box.right, dialog.getBoundingClientRect().left) : 0;
+    if (!box?.height || visible - box.left < 48) return detach();
+    dialog.style.setProperty("--origin-x", `${Math.round((box.left + visible) / 2)}px`);
+    dialog.style.setProperty("--origin-y", `${Math.round(box.top + box.height / 2)}px`);
+    dialog.dataset.origin = "";
+    document.addEventListener("scroll", detach, { once: true, passive: true });
+  };
   const discardOk = () => !options.dirty?.() || window.confirm("Discard your unsaved changes?");
   const close = (force = false) => {
     if (!dialog.open || dialog.classList.contains("is-closing") || (!force && !discardOk())) return;
@@ -338,12 +354,20 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
     // onClose runs first so a caller can take back content it lent to the sheet.
     options.onClose?.();
     dialog.innerHTML = "";
+    detach();
+    document.removeEventListener("scroll", detach);
     if (opener?.isConnected) opener.focus({ preventScroll: true });
     opener = null;
   });
   onLeave(() => { if (dialog.open) dialog.close(); });
   return {
-    open: () => { if (!dialog.open) { opener = document.activeElement as HTMLElement | null; dialog.showModal(); } },
+    open: (origin) => {
+      // Opening another record while the panel is up moves the notch to it; the panel itself stays.
+      if (dialog.open) { if (origin) anchor(origin); return; }
+      opener = document.activeElement as HTMLElement | null;
+      dialog.showModal();
+      anchor(origin);
+    },
     close,
     discardOk
   };
