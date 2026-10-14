@@ -41,7 +41,7 @@ describe("product version release gate", () => {
   });
 
   it("accepts one correctly recorded revision and a separate documented release identity", () => {
-    assert.deepEqual(check(["src/catalogue-capture.ts", "product-release.json"]).failures, []);
+    assert.deepEqual(check(["src/catalogue-capture.ts", "product-release.json", candidate.record]).failures, []);
     assert.equal(nextVersionAllowed("V1.15.1", "V1.15.2"), true);
     assert.equal(nextVersionAllowed("V1.15.4", "V1.16"), true);
     assert.equal(nextVersionAllowed("V1.16", "V2.1"), true);
@@ -54,7 +54,7 @@ describe("product version release gate", () => {
     assert.equal(parseProductVersion("V1.15.01"), null);
   });
 
-  it("requires new provenance and an existing canonical release record", () => {
+  it("requires new provenance, fresh notes and a revision-specific release record", () => {
     assert.match(check(["src/main.ts", "product-release.json"], {
       ...candidate, sourceCommit: previous.sourceCommit,
     }).failures.join(" "), /sourceCommit/);
@@ -64,6 +64,13 @@ describe("product version release gate", () => {
     assert.match(check(["src/main.ts", "product-release.json"], {
       ...candidate, changes: ["One line only"],
     }).failures.join(" "), /2–5/);
+    assert.match(check(["src/main.ts", "product-release.json", candidate.record], {
+      ...candidate, changes: previous.changes,
+    }).failures.join(" "), /What.s new/);
+    assert.match(check(["src/main.ts", "product-release.json", candidate.record], {
+      ...candidate, record: previous.record,
+    }).failures.join(" "), /parent record/);
+    assert.match(check(["src/main.ts", "product-release.json"], candidate).failures.join(" "), /same change/);
   });
 
   it("lets pure documentation and isolated policy corrections pass without minting a version", () => {
