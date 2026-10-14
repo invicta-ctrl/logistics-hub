@@ -52,11 +52,11 @@ Keep Git boring.
 
 Allowed normal branches:
 1. `main` — latest verified working product.
-2. Exactly one active short-lived slice branch, named `slice/<part>-<scope>`.
+2. Normally one active short-lived slice branch, named `slice/<part>-<scope>`. A specific accepted two-lane exception permits the existing V1.16 slice plus one UI slice in distinct writable Git worktrees.
 
 No permanent `dev`, `staging`, `backup`, model-specific, agent-specific, or duplicate feature branches.
 
-Both Codex and Claude work on the SAME active slice branch and SAME shared worktree, one writer at a time.
+**Owner-approved parallel development (2026-10-14):** Codex may continue backend/V1.16 while Claude implements a **separately accepted** frontend/UI slice simultaneously, on a second dedicated writable worktree and branch with explicit disjoint path ownership. One writer per worktree, at most two account-wide, and one serial integration steward. Shared code, contracts, release controls, data/providers and global files remain steward-exclusive unless an explicit temporary transfer is approved. This supersedes the previous one-writer-per-entire-project prohibition but not its default or safety gates. Normative local amendment: `docs/specs/accepted/2026-10-14-isolated-agent-worktrees.md`; global amendment: Context Vault `governance/agents/specs/PARALLEL-PROJECT-LANES-002.md`. The UI reference review is research, not a code spec.
 
 ### Slice lifecycle
 
@@ -71,7 +71,7 @@ Both Codex and Claude work on the SAME active slice branch and SAME shared workt
    - push `main`;
    - delete the merged slice branch locally and remotely;
    - run `git fetch --prune`.
-6. Only then create the next slice branch from fresh `main`.
+6. In normal one-lane mode only then create the next slice. In the accepted two-lane exception the independent Claude UI branch may already exist; it must pause, refresh its main-base and retest before integration.
 
 Prefer linear history. Avoid merge bubbles when a safe fast-forward or rebase is possible.
 
@@ -91,11 +91,11 @@ Authoritative local worktree:
 
 `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`
 
-Exactly one active writer at a time. The active agent must claim the local writer lock before editing and yield it before the next agent writes.
+Normal mode permits one active writer. Under the accepted isolated two-lane exception, Codex and Claude may write concurrently **only in separate worktrees on disjoint accepted file scopes**; each claims and yields its own worktree-local writer lock. The current lock script is local to each checkout and is **not a project-wide scheduler**: the steward must verify the other lane, account-wide writer count, shared-resource isolation and exact ownership separately.
 
-The accepted MausBot multi-worktree amendment permits detached, read-only specialist worktrees for Scout, Oracle, Sentinel, and Harbor while keeping the existing Logistics Hub shared worktree as the sole writable/local-preview worktree. These detached worktrees do not create branches and do not change the branch budget. Forge is the normal MausBot writer and must use the writable worktree and writer lock.
+The accepted MausBot multi-worktree amendment permits detached, read-only specialist worktrees for Scout, Oracle, Sentinel, and Harbor. The existing Logistics Hub shared worktree remains the canonical V1.16/local-preview checkout; only the new approved Claude UI lane may add a second isolated writable worktree. These detached worktrees do not create branches and do not change the branch budget. Forge is the normal MausBot writer and must use the writable worktree and writer lock.
 
-The handoff file `.codex/SESSION_HANDOFF.md` is mandatory.
+Codex retains exclusive write ownership of `.codex/SESSION_HANDOFF.md` and `.codex/CURRENT.md` during V1.16. Claude records progress in its own UI PR/approved lane handoff, not in shared live pointers. The integration steward updates shared pointers only during serial integration.
 
 When usage is near its limit:
 - at ~25% or any imminent-limit warning: stop starting large work and enter handoff mode;
@@ -121,8 +121,8 @@ A green slice is merged to `main` immediately. A partially working slice stays o
 ### Owner's explicit completion and checkpoint contract (2026-10-11)
 
 - Under **no circumstance** claim or present an unfinished version, broken workflow, or incomplete product as finished. State unresolved work accurately in the active-branch handoff, not in a false release claim.
-- Push each coherent, reviewed, working checkpoint to the one active slice branch, after focused verification; preserve exact commits and next action. Do not leave useful safe progress invisible to the shared worktree.
-- Merge **every independently complete and verified slice** into updated `main` as soon as it meets its own accepted acceptance criteria and exact-head checks, verify production/build and prune only confirmed-integrated slice branches. Subsequent slices branch from the new `main`; there is still only one active writable slice branch.
+- Push each coherent, reviewed, working checkpoint to **the assigned lane's own slice branch**, after focused verification; preserve exact commits and next action. During parallel mode, do not switch the primary V1.16 worktree or cloud-preview watcher to Claude's UI branch.
+- Merge **every independently complete and verified slice** into updated `main` as soon as it meets its own accepted acceptance criteria and exact-head checks, verify production/build and prune only confirmed-integrated slice branches. Subsequent slices branch from verified new `main`; the accepted parallel exception allows the other active UI slice to remain isolated until a steward-led pause/rebase/retest and serialized merge.
 - Never merge a partial feature, future-required button or incomplete release into `main`. The release version/changelog must describe the **verified running artifact**, not the intended future work.
 - Owner-accepted V1.16 Ambient Assist + Intelligent Core work is pre-Road-to-V3; its implementation follows the accepted V1.16 specification and all remaining writer/security/production gates. Its release identity will be implemented in the existing Administration > System view and carried into V2.1 rather than duplicated.
 
