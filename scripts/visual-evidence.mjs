@@ -72,8 +72,8 @@ async function serve(dir, port) {
   if (pages.includes("staff-directory")) runD1(directoryRecordsSql(), { persistTo: state });
   // locations: items the phone is offered, two look-alike places the migration would have kept apart, and typed locations with no place yet.
   if (pages.includes("locations") && fs.existsSync(path.join(dir, "migrations", "0024_locations.sql"))) runD1(locationRecordsSql(), { persistTo: state });
-  if ((pages.includes("attention") || pages.includes("home")) && fs.existsSync(path.join(dir, "src", "attention.ts"))) runD1(attentionRecordsSql(), { persistTo: state });
-  if (pages.includes("home") && fs.existsSync(path.join(dir, "src", "home.ts"))) runD1(homeRecordsSql(), { persistTo: state });
+  if ((pages.includes("attention") || pages.includes("home") || pages.includes("visual-depth")) && fs.existsSync(path.join(dir, "src", "attention.ts"))) runD1(attentionRecordsSql(), { persistTo: state });
+  if ((pages.includes("home") || pages.includes("visual-depth")) && fs.existsSync(path.join(dir, "src", "home.ts"))) runD1(homeRecordsSql(), { persistTo: state });
   if (pages.includes("search") && fs.existsSync(path.join(dir, "src", "search-palette.ts"))) runD1(searchRecordsSql(), { persistTo: state });
   const child = spawn(process.execPath, [wrangler, "dev", "--local", "--port", String(port), "--inspector-port", String(port + 1), "--persist-to", state, "--env-file", path.join(state, ".env")], { cwd: dir, stdio: "ignore", detached: process.platform !== "win32" });
   const url = `http://127.0.0.1:${port}`;
@@ -2001,6 +2001,63 @@ async function homeScenes(browser, url, dir) {
   return timings;
 }
 
+/**
+ * Visual depth (2026-10-14): the staff surfaces the visual-depth slice reshapes, at the four review widths (1440, 1024, 390, 320),
+ * for staff and an owner: Home busy and calm, an item's profile (a loanable item that is out on loan, and one with a photo), the
+ * Items list, Stock, Loans, Attention and Activity. Every number comes from the seeded Worker; the calm Home only empties two answers.
+ */
+async function visualDepthScenes(browser, url, dir) {
+  const shot = (page, name, options = {}) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80, ...options });
+  const widths = { "1440": [1440, 900, 1], "1024": [1024, 768, 1], "390": [390, 844, 2], "320": [320, 720, 2] };
+  const first = await signIn(browser, url, "owner.demo", SIZES.desktop);
+  const state = await first.context.storageState();
+  const loans = await (await first.page.request.get(`${url}/api/staff/loans`)).json();
+  const lent = (loans.open ?? []).find((loan) => loan.itemId)?.itemId ?? "ITM-0262";
+  // A second item with a photo (a drawn, obviously fictional product shot), so the profile is seen with a picture and without.
+  const pictured = lent === "ITM-0262" ? "ITM-0263" : "ITM-0262";
+  await seedPhotos(first.page, url, [pictured], await first.page.evaluate(drawPhotos));
+  await first.context.close();
+  const settle = async (page) => { await page.waitForLoadState("networkidle"); await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(250); };
+  for (const [size, viewport] of Object.entries(widths)) {
+    const { context, page } = await resume(browser, state, viewport);
+    await page.goto(`${url}/staff/home`);
+    await page.waitForSelector("#home-attention:not([aria-busy])");
+    await settle(page);
+    await shot(page, `depth-home-${size}`);
+    await shot(page, `depth-home-full-${size}`, { fullPage: true });
+    const calm = await context.newPage();
+    await calm.route("**/api/staff/attention/summary", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ needsAction: 0, bySource: {}, groups: [] }) }));
+    await calm.route("**/api/staff/home", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ catalogue: null, checks: [] }) }));
+    await calm.goto(`${url}/staff/home`);
+    await calm.waitForSelector("#home-attention:not([aria-busy])");
+    await settle(calm);
+    await shot(calm, `depth-home-calm-${size}`);
+    await calm.close();
+    await page.goto(`${url}/staff/items`);
+    await page.waitForSelector("[data-key]");
+    await settle(page);
+    await shot(page, `depth-items-${size}`);
+    await page.goto(`${url}/staff/items?item=${lent}`);
+    await page.waitForSelector("dialog[open] .tabs");
+    await settle(page);
+    await shot(page, `depth-item-${size}`);
+    await page.locator("dialog[open] .sheet__body").evaluate((body) => body.scrollTo(0, body.scrollHeight));
+    await page.waitForTimeout(150);
+    await shot(page, `depth-item-scrolled-${size}`);
+    await page.goto(`${url}/staff/items?item=${pictured}`);
+    await page.waitForSelector("dialog[open] .tabs");
+    await settle(page);
+    await shot(page, `depth-item-photo-${size}`);
+    for (const name of ["stock", "loans", "attention", "activity"]) {
+      await page.goto(`${url}/staff/${name}`);
+      await settle(page);
+      await shot(page, `depth-${name}-${size}`);
+    }
+    await context.close();
+  }
+  return { item: lent, pictured };
+}
+
 async function capture(url, dir) {
   fs.mkdirSync(dir, { recursive: true });
   const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
@@ -2012,7 +2069,7 @@ async function capture(url, dir) {
         const { context, page } = await signIn(browser, url, username, viewport);
         for (const name of pages) {
           if (role === "STAFF" && name === "admin") continue;
-          if (name === "item-photos" || name === "attention" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits" || name === "search" || name === "admin-control" || name === "home") continue;
+          if (name === "item-photos" || name === "attention" || name === "public-photos" || name === "self-service-v19" || name === "shell" || name === "staff-directory" || name === "locations" || name === "catalogue" || name === "catalog-visuals" || name === "catalog-pwa" || name === "location-audit" || name === "kits" || name === "search" || name === "admin-control" || name === "home" || name === "visual-depth") continue;
           await page.goto(name === "item-profile" ? `${url}/staff/items?item=ITM-0262` : `${url}/staff/${name}`);
           if (name === "item-profile") await page.waitForSelector("dialog[open] .tabs");
           await page.waitForLoadState("networkidle");
@@ -2055,6 +2112,7 @@ async function capture(url, dir) {
     if (pages.includes("kits")) Object.assign(timings, { kits: await kitScenes(browser, url, dir) });
     if (pages.includes("attention")) Object.assign(timings, { attention: await attentionScenes(browser, url, dir) });
     if (pages.includes("home")) Object.assign(timings, { home: await homeScenes(browser, url, dir) });
+    if (pages.includes("visual-depth")) Object.assign(timings, { visualDepth: await visualDepthScenes(browser, url, dir) });
     if (pages.includes("search")) Object.assign(timings, { search: await searchScenes(browser, url, dir) });
     if (pages.includes("admin-control")) Object.assign(timings, { adminControl: await adminScenes(browser, url, dir, { SIZES, signIn, resume, median }) });
     if (pages.includes("shell")) Object.assign(timings, { shell: await shellScenes(browser, url, dir) });
