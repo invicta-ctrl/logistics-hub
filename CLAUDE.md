@@ -7,7 +7,7 @@
 1. Read `AGENTS.md` and follow its authority order.
 2. Read `.agents/PROJECT_POLICY.md`, `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md` and `docs/SHARED_AGENT_WORKFLOW.md`.
 3. Read the **active accepted** specification/amendment, verified repository state, release record, and task-specific policies. If any source conflicts, resolve by the repository authority chain; don't use an older chat, stale plan or superseded proposal as permission.
-4. Before modifying source, verify current worktree, remote refs, uncommitted changes and exact writer lock; claim the sole writer lock according to the shared workflow. Never use a second writable branch or infer that a disconnected writer has yielded.
+4. Before implementation, verify the accepted UI slice, approved file allowlist, separate Claude worktree and branch, both lane states, and per-worktree lock. The owner-approved two-lane exception permits a separate Claude UI slice from main; without its accepted file ownership and integration plan, stay read-only. See `docs/specs/accepted/2026-10-14-isolated-agent-worktrees.md`.
 
 ## Active release boundary — 2026-10-11
 
