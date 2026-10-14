@@ -58,6 +58,8 @@ No permanent `dev`, `staging`, `backup`, model-specific, agent-specific, or dupl
 
 Both Codex and Claude work on the SAME active slice branch and SAME shared worktree, one writer at a time.
 
+**Cross-project concurrency (owner-approved 2026-10-14):** Codex and Claude may run separately authorized implementation sessions at the same time on different authoritative projects, up to two writers account-wide, only if project ownership and mutable resources are isolated. The whole Logistics Hub (including UI, API, submodules, alternate repos, branches and worktrees) counts as **one project**: its frontend and V1.16 release work cannot have simultaneous code/configuration writers. Read-only UI audits, research and specifications may proceed in parallel. Shared databases, provider settings, files, release controls or dependencies across different projects require serialized writes. Do not change this project's one-writable-worktree, one-slice, writer-lock, CI, release or production gates. Account-wide source: Context Vault `governance/agents/specs/CROSS-PROJECT-CONCURRENCY-001.md`.
+
 ### Slice lifecycle
 
 1. Start the slice from current `main`.
