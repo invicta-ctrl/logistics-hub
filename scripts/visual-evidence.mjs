@@ -2003,8 +2003,8 @@ async function homeScenes(browser, url, dir) {
 
 /**
  * Visual depth (2026-10-14): the staff surfaces the visual-depth slice reshapes, at the four review widths (1440, 1024, 390, 320),
- * for staff and an owner: Home busy and calm, an item's profile (a loanable item that is out on loan, and one with a photo), the
- * Items list, Stock, Loans, Attention and Activity. Every number comes from the seeded Worker; the calm Home only empties two answers.
+ * for staff and an owner: Home busy and calm, an item's profile (a loanable item that is out on loan, opened from its row and by
+ * address, and one with a photo), the Items list, Stock, Loans, Attention and Activity. Every number comes from the seeded Worker; the calm Home only empties two answers.
  */
 async function visualDepthScenes(browser, url, dir) {
   const shot = (page, name, options = {}) => page.screenshot({ path: path.join(dir, `${name}.jpg`), type: "jpeg", quality: 80, ...options });
@@ -2037,6 +2037,14 @@ async function visualDepthScenes(browser, url, dir) {
     await page.waitForSelector("[data-key]");
     await settle(page);
     await shot(page, `depth-items-${size}`);
+    // Opened from its row, as staff do: on a computer the panel stays attached to the row it came from.
+    if (viewport[0] >= 1024) {
+      await page.getByRole("searchbox", { name: "Search items" }).fill(lent);
+      await page.locator(`[data-key="${lent}"] .row-link`).click();
+      await page.waitForSelector("dialog[open] .tabs");
+      await settle(page);
+      await shot(page, `depth-item-attached-${size}`);
+    }
     await page.goto(`${url}/staff/items?item=${lent}`);
     await page.waitForSelector("dialog[open] .tabs");
     await settle(page);
