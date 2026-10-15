@@ -1,7 +1,7 @@
 import { reducedMotion } from "./ui";
 
 /*
- * The Staff theme (HAU-UI-MEDIA-THEME-001). Light is the default; a person may choose Dark or System, and the choice stays on this device only
+ * The Staff theme (HAU-UI-MEDIA-THEME-001). Light is the default; a person flips it to Dark with the sun/moon button (a "system" choice saved by an earlier build still works), and the choice stays on this device only
  * (no request, no audit, no account setting). It applies to Staff routes alone: `data-theme="dark"` on <html> is set on /staff and removed on every
  * other route, so the public pages and Self-Service (which has its own theme, src/self-service-app.ts) never see it. public/theme-boot.js applies
  * the saved choice before first paint; keep the two in step.
@@ -27,7 +27,10 @@ export function preference(): Preference {
 const systemDark = (): boolean => window.matchMedia("(prefers-color-scheme: dark)").matches;
 const resolved = (choice: Preference): "light" | "dark" => choice === "dark" || (choice === "system" && systemDark()) ? "dark" : "light";
 
-/** Puts the right theme on the page for this path and marks the chosen button. Touches no data and reloads nothing. */
+/** Whether Staff is showing Dark right now (the button's pressed state), whatever the saved choice. */
+export const staffDark = (): boolean => resolved(preference()) === "dark";
+
+/** Puts the right theme on the page for this path and marks the toggle. Touches no data and reloads nothing. */
 export function syncTheme(path: string = window.location.pathname): void {
   const choice = preference();
   const theme = inStaff(path) ? resolved(choice) : "light";
@@ -35,7 +38,7 @@ export function syncTheme(path: string = window.location.pathname): void {
   if (theme === "dark") root.setAttribute("data-theme", "dark"); else root.removeAttribute("data-theme");
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOR[theme]);
   document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", theme);
-  document.querySelectorAll<HTMLElement>("[data-theme-choice]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.themeChoice === choice)));
+  document.querySelectorAll<HTMLElement>("[data-theme-toggle]").forEach((button) => button.setAttribute("aria-pressed", String(theme === "dark")));
 }
 
 /** The new theme spreads out from the control as a circle where the browser can and motion is welcome; otherwise it swaps at once. */
@@ -63,8 +66,8 @@ export function startTheme(): void {
   if (started) return;
   started = true;
   document.addEventListener("click", (event) => {
-    const button = (event.target as Element).closest<HTMLButtonElement>("[data-theme-choice]");
-    if (button) choose(button.dataset.themeChoice as Preference, button);
+    const button = (event.target as Element).closest<HTMLButtonElement>("[data-theme-toggle]");
+    if (button) choose(staffDark() ? "light" : "dark", button);
   });
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (preference() === "system") syncTheme(); });
   window.addEventListener("storage", (event) => { if (event.key === KEY) syncTheme(); });

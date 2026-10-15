@@ -5,7 +5,7 @@
  */
 import type { DepartmentCode } from "./directory-policy";
 import { setAccess } from "./catalogue-store";
-import { preference } from "./theme";
+import { staffDark } from "./theme";
 import { ApiError, MARK, type Html, type IconName, api, app, emptyState, failure, formatDate, html, icon, mount, navigate, onLeave, setMessage, toast } from "./ui";
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
@@ -79,12 +79,8 @@ export function shell(session: Session, section: Section, main: Html): void {
       </div>
     </header>
     <div class="menu" id="staff-menu" popover>
-      <div class="menu__identity">${avatar}<p><strong>${session.displayName}</strong><span>${accessLabel(sessionAccess(session))} · <span class="mono">${session.username}</span></span></p></div>
+      <div class="menu__identity">${avatar}<p><strong>${session.displayName}</strong><span>${accessLabel(sessionAccess(session))} · <span class="mono">${session.username}</span></span></p><button class="menu__theme" type="button" data-theme-toggle aria-label="Dark theme" aria-pressed="${String(staffDark())}">${icon("sun")}${icon("moon")}</button></div>
       ${overflow.length ? html`<ul class="menu__list menu__list--more" aria-label="More sections">${overflow.map((entry) => html`<li><a class="menu__item" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}${entry.text}</a></li>`)}</ul>` : ""}
-      <div class="menu__theme" role="group" aria-label="Appearance">
-        <span class="menu__theme-label" aria-hidden="true">Appearance</span>
-        ${(["light", "dark", "system"] as const).map((choice) => html`<button type="button" class="menu__theme-choice" data-theme-choice="${choice}" aria-pressed="${String(preference() === choice)}">${choice === "light" ? "Light" : choice === "dark" ? "Dark" : "System"}</button>`)}
-      </div>
       <ul class="menu__list">
         ${sections.length ? html`<li><a class="menu__item" href="/staff/home" data-route ${current("home")}>${icon("home")}Home</a></li>` : ""}
         <li><a class="menu__item" href="/staff/account" data-route ${current("account")}>${icon("user")}My account</a></li>

@@ -19,17 +19,24 @@ const theme = (page: Page) => page.evaluate(() => document.documentElement.getAt
 const stored = (page: Page) => page.evaluate(() => localStorage.getItem("hub-theme"));
 async function choose(page: Page, choice: "light" | "dark" | "system") {
   if (!(await page.locator("#staff-menu").evaluate((menu) => menu.matches(":popover-open")))) await page.locator("button.account").click();
-  await page.locator(`[data-theme-choice="${choice}"]`).click();
+  const toggle = page.locator("[data-theme-toggle]");
+  if (choice === "system") throw new Error("the toggle has no System choice; save it in storage instead");
+  if ((await toggle.getAttribute("aria-pressed")) !== String(choice === "dark")) await toggle.click();
 }
 
 test.describe("Staff theme", () => {
-  test("is Light until a person chooses, and the choice shows as pressed", async ({ page }) => {
+  test("is Light until a person chooses, and the sun/moon button shows the state", async ({ page }) => {
     await openStaff(page);
     expect(await theme(page)).toBeNull();
     await page.locator("button.account").click();
-    await expect(page.locator('[data-theme-choice="light"]')).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator('[data-theme-choice="dark"]')).toHaveAttribute("aria-pressed", "false");
-    await expect(page.locator('[data-theme-choice="dark"]')).toHaveText("Dark");
+    const toggle = page.locator("[data-theme-toggle]");
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(toggle).toHaveAttribute("aria-label", "Dark theme");
+    expect(await toggle.locator("svg").count()).toBe(2);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
   });
 
   test("Dark is chosen by hand, kept on this device, applied before the app draws, and read back after a reload", async ({ page }) => {
@@ -57,10 +64,10 @@ test.describe("Staff theme", () => {
     expect(await stored(page)).toBe("light");
   });
 
-  test("System follows the device and changes with it", async ({ page }) => {
+  test("a System choice saved by an earlier build still follows the device", async ({ page }) => {
     await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript(() => localStorage.setItem("hub-theme", "system"));
     await openStaff(page);
-    await choose(page, "system");
     await expect.poll(() => theme(page)).toBe("dark");
     await page.emulateMedia({ colorScheme: "light" });
     await expect.poll(() => theme(page)).toBeNull();
