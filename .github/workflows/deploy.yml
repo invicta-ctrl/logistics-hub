@@ -10,6 +10,9 @@
 # Migrations never ride a deploy: the gate refuses while production lacks one, and only production-ops.yml applies them.
 # Secrets live in the `production` environment, never in the repository: CLOUDFLARE_API_TOKEN (Workers Scripts: Edit and
 # D1: Read on the account) and CLOUDFLARE_ACCOUNT_ID.
+# This repository's run logs and summaries are public (V116-QH03). Wrangler prints Worker version ids, the account's
+# workers.dev address and deployment authors, so its output stays on the runner and each step shows a curated status. A
+# rollback target is masked before any step can show it; a deploy target that is not a commit is refused before then.
 name: Deploy
 
 on:
@@ -65,6 +68,12 @@ jobs:
     timeout-minutes: 20
     environment: production
     steps:
+      # `deploy` is the default action, so a rollback's version id can land here by mistake. Read from the event file, it
+      # is refused before the next step would show it as part of its environment.
+      - name: Refuse a target that is not a commit before any step shows it
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          [[ "$(jq -r '.inputs.target // ""' "$GITHUB_EVENT_PATH")" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::target must be a full 40-character commit."; exit 1; }
       - name: Decide which commit
         id: pick
         env:
@@ -167,13 +176,23 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$DRY" = true ]; then
-            npx wrangler deploy --dry-run
-            echo "Dry run for $SHA: every check passed; nothing was uploaded." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            args=(deploy --dry-run)
+          else
+            message="$HOW ${SHA:0:12}${REASON:+: $REASON}"
+            args=(deploy --message "${message:0:100}")
           fi
-          message="$HOW ${SHA:0:12}${REASON:+: $REASON}"
-          npx wrangler deploy --message "${message:0:100}"
-          echo "Deployed $SHA ($HOW) at $(date -u +%FT%TZ). ${REASON:+Reason: $REASON}" >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          output=$(npx wrangler "${args[@]}" 2>&1) || status=$?
+          if [ "$status" -ne 0 ]; then
+            codes=$(grep -oE '\[code: [0-9]+\]' <<< "$output" | sort -u | paste -sd ' ' -) || true
+            echo "::error::wrangler deploy failed with exit $status${codes:+ and Cloudflare $codes}. Its own output stays off this public log; see docs/DEPLOYMENT.md, CI deploy-gate."
+            exit "$status"
+          fi
+          if [ "$DRY" = true ]; then
+            echo "Dry run for $SHA: every check passed; nothing was uploaded." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Deployed $SHA ($HOW) at $(date -u +%FT%TZ). ${REASON:+Reason: $REASON}" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
   rollback:
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'rollback'
@@ -181,6 +200,13 @@ jobs:
     timeout-minutes: 10
     environment: production
     steps:
+      # The target is a private Worker version id. This step reads it from the event file, so it never shows it either, and
+      # masks it before any later step renders it in its environment, its commands or the summary.
+      - name: Mask the rollback target
+        run: |
+          target=$(jq -r '.inputs.target // ""' "$GITHUB_EVENT_PATH")
+          [[ "$target" =~ ^[0-9a-f-]{36}$ ]] || { echo "::error::target must be a Worker version id."; exit 1; }
+          echo "::add-mask::$target"
       - name: Check the request
         env:
           REF: ${{ github.ref }}
@@ -190,8 +216,7 @@ jobs:
         run: |
           set -euo pipefail
           [ "$REF" = refs/heads/main ] || { echo "::error::Run this workflow from main."; exit 1; }
-          [[ "$TARGET" =~ ^[0-9a-f-]{36}$ ]] || { echo "::error::target must be a Worker version id."; exit 1; }
-          [ "$CONFIRM" = "ROLLBACK $TARGET" ] || { echo "::error::confirm must be exactly: ROLLBACK $TARGET"; exit 1; }
+          [ "$CONFIRM" = "ROLLBACK $TARGET" ] || { echo "::error::confirm must be exactly ROLLBACK, a space, then the target."; exit 1; }
           [ -n "${REASON// /}" ] || { echo "::error::Give a reason."; exit 1; }
       - uses: actions/checkout@v4
         with:
@@ -209,5 +234,11 @@ jobs:
           REASON: ${{ inputs.reason }}
         run: |
           set -euo pipefail
-          npx wrangler rollback "$TARGET" --message "${REASON:0:100}" --yes
-          echo "Rolled back to $TARGET at $(date -u +%FT%TZ). Reason: $REASON" >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          output=$(npx wrangler rollback "$TARGET" --message "${REASON:0:100}" --yes 2>&1) || status=$?
+          if [ "$status" -ne 0 ]; then
+            codes=$(grep -oE '\[code: [0-9]+\]' <<< "$output" | sort -u | paste -sd ' ' -) || true
+            echo "::error::wrangler rollback failed with exit $status${codes:+ and Cloudflare $codes}. Its own output stays off this public log; see docs/DEPLOYMENT.md, CI deploy-gate."
+            exit "$status"
+          fi
+          echo "Rolled back to the requested Worker version at $(date -u +%FT%TZ). Reason: $REASON" | tee -a "$GITHUB_STEP_SUMMARY"

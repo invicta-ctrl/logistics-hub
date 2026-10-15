@@ -192,3 +192,139 @@ require("fs").writeFileSync("build-source", process.env.GITHUB_SHA);
     }
   });
 });
+
+describe.skipIf(process.platform === "win32")("V116-QH03: the public run log never carries Wrangler's private output", () => {
+  const workflow = () => fs.readFileSync(".github/workflows/deploy.yml", "utf8");
+  const sha = "3".repeat(40);
+  const version = "0f1e2d3c-4b5a-4978-8a9b-0c1d2e3f4a5b";
+  const current = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+  // What wrangler prints that a public log must not show: version ids, the account's workers.dev address, who deployed.
+  const wranglerSays = ["Uploaded logistics-hub (2.1 sec)", "https://logistics-hub.private-subdomain.workers.dev",
+    `Current Version ID: ${current}`, "Author: deployer@example.com"].join("\n");
+  const leaks = [current, version, "private-subdomain", "deployer@example.com"];
+
+  /** The named step's `run: |` script, as bash receives it. */
+  function script(name: string) {
+    const lines = workflow().split("\n");
+    const at = lines.indexOf(`      - name: ${name}`);
+    expect(at, name).toBeGreaterThan(-1);
+    const run = lines.findIndex((line, index) => index > at && line === "        run: |");
+    const next = lines.findIndex((line, index) => index > at && line.startsWith("      - "));
+    expect(run > at && (next === -1 || run < next), `${name} has a run block`).toBe(true);
+    const body = [];
+    for (const line of lines.slice(run + 1)) {
+      if (line !== "" && !line.startsWith("          ")) break;
+      body.push(line.slice(10));
+    }
+    return body.join("\n");
+  }
+
+  /** Runs a step as the Ubuntu runner does, with a stand-in npx that records its arguments and answers like wrangler. */
+  function step(name: string, env: Record<string, string>, wrangler = { stdout: wranglerSays, stderr: "", status: 0 }) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lh-public-log-"));
+    dirs.push(dir);
+    const argsFile = path.join(dir, "args.jsonl");
+    fs.writeFileSync(path.join(dir, "npx"), `#!/usr/bin/env node
+require("fs").appendFileSync(${JSON.stringify(argsFile)}, JSON.stringify(process.argv.slice(2)) + "\\n");
+process.stdout.write(${JSON.stringify(wrangler.stdout)}); process.stderr.write(${JSON.stringify(wrangler.stderr)}); process.exit(${wrangler.status});
+`, { mode: 0o700 });
+    const summary = path.join(dir, "summary.md");
+    const result = spawnSync("bash", ["-e", "-c", script(name)], {
+      cwd: dir, encoding: "utf8", timeout: 10_000,
+      env: { ...process.env, PATH: `${dir}${path.delimiter}${process.env.PATH}`, GITHUB_STEP_SUMMARY: summary, ...env },
+    });
+    const read = (file: string) => fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+    return { status: result.status, log: result.stdout + result.stderr, summary: read(summary),
+      args: read(argsFile).split("\n").filter(Boolean).map((line) => JSON.parse(line)) };
+  }
+
+  /** A workflow_dispatch event file with this target, as the runner provides it. */
+  function event(target: string) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lh-dispatch-"));
+    dirs.push(dir);
+    const file = path.join(dir, "event.json");
+    fs.writeFileSync(file, JSON.stringify({ inputs: { action: "rollback", target, reason: "test", confirm: `ROLLBACK ${target}` } }));
+    return file;
+  }
+  const stepsOf = (job: string) => {
+    const text = workflow();
+    const start = text.indexOf(`\n  ${job}:\n`);
+    const end = text.indexOf("\n  rollback:\n", start + 1);
+    return text.slice(start, job === "deploy" ? end : undefined).split("\n      - ").slice(1);
+  };
+
+  it("deploys and dry-runs after both gates, showing only a curated status", () => {
+    const text = workflow();
+    expect(text.indexOf("      - name: Deploy\n")).toBeGreaterThan(text.indexOf("      - name: Refuse while production lacks a migration"));
+    const deploy = step("Deploy", { SHA: sha, HOW: "manual", DRY: "false", REASON: "restore the photo fix" });
+    expect(deploy.status, deploy.log).toBe(0);
+    expect(deploy.args).toEqual([["wrangler", "deploy", "--message", `manual ${sha.slice(0, 12)}: restore the photo fix`]]);
+    expect(deploy.summary).toMatch(new RegExp(`^Deployed ${sha} \\(manual\\) at \\S+\\. Reason: restore the photo fix\\n$`));
+    expect(deploy.log).toBe(deploy.summary);
+    const dry = step("Deploy", { SHA: sha, HOW: "ci", DRY: "true", REASON: "" });
+    expect(dry.status, dry.log).toBe(0);
+    expect(dry.args).toEqual([["wrangler", "deploy", "--dry-run"]]);
+    expect(dry.summary).toBe(`Dry run for ${sha}: every check passed; nothing was uploaded.\n`);
+    expect(dry.log).toBe(dry.summary);
+    // The Worker version message is still cut to 100 characters.
+    expect(step("Deploy", { SHA: sha, HOW: "override", DRY: "false", REASON: "x".repeat(200) }).args[0][3]).toHaveLength(100);
+  });
+
+  it("fails with Wrangler's own exit code, showing only Cloudflare's error codes", () => {
+    const stderr = `✘ [ERROR] A request to the Cloudflare API (/accounts/abc123/workers/scripts/logistics-hub) failed.\n  Authentication error [code: 10000]\n`
+      + "You are logged in with an API Token, associated with the email deployer@example.com.\n";
+    const failed = step("Deploy", { SHA: sha, HOW: "ci", DRY: "false", REASON: "" }, { stdout: wranglerSays, stderr, status: 7 });
+    expect(failed.status).toBe(7);
+    expect(failed.log).toBe("::error::wrangler deploy failed with exit 7 and Cloudflare [code: 10000]. Its own output stays off this public log; see docs/DEPLOYMENT.md, CI deploy-gate.\n");
+    expect(failed.summary).toBe("");
+    const rollback = step("Roll back", { TARGET: version, REASON: "test" }, { stdout: wranglerSays, stderr: "", status: 3 });
+    expect(rollback.status).toBe(3);
+    expect(rollback.log).toBe("::error::wrangler rollback failed with exit 3. Its own output stays off this public log; see docs/DEPLOYMENT.md, CI deploy-gate.\n");
+    expect(rollback.summary).toBe("");
+  });
+
+  it("masks the rollback target before any step can show it, and refuses a malformed one unseen", () => {
+    expect(workflow()).not.toMatch(/^run-name:/m);
+    const steps = stepsOf("rollback");
+    expect(steps[0]).toMatch(/^name: Mask the rollback target\n/);
+    // No environment (the runner prints it before the script runs) and no expression the runner would expand into the script.
+    expect(steps[0]).not.toContain("env:");
+    expect(steps[0]).not.toContain("${{");
+    for (const shown of steps.join("\n").matchAll(/echo "([^"]*)"/g)) expect(shown[1]).not.toMatch(/\$\{?(TARGET|CONFIRM)/);
+    const masked = step("Mask the rollback target", { GITHUB_EVENT_PATH: event(version) });
+    expect(masked.status, masked.log).toBe(0);
+    expect(masked.log).toBe(`::add-mask::${version}\n`);
+    for (const target of ["not-a-version", `${version}\nsecond-line`, sha]) {
+      const refused = step("Mask the rollback target", { GITHUB_EVENT_PATH: event(target) });
+      expect(refused.status).not.toBe(0);
+      expect(refused.log).toBe("::error::target must be a Worker version id.\n");
+    }
+  });
+
+  it("rolls back with --yes and the reason, keeping every version off the log and summary", () => {
+    const rolled = step("Roll back", { TARGET: version, REASON: "photo fix regressed" },
+      { stdout: `${wranglerSays}\nWorker Version ${version} has been deployed to 100% of traffic.\n`, stderr: "", status: 0 });
+    expect(rolled.status, rolled.log).toBe(0);
+    expect(rolled.args).toEqual([["wrangler", "rollback", version, "--message", "photo fix regressed", "--yes"]]);
+    expect(rolled.summary).toMatch(/^Rolled back to the requested Worker version at \S+\. Reason: photo fix regressed\n$/);
+    expect(rolled.log).toBe(rolled.summary);
+    for (const leak of leaks) expect(rolled.summary).not.toContain(leak);
+  });
+
+  it("refuses a deploy target that is not a commit before the step that would show it", () => {
+    const steps = stepsOf("deploy");
+    expect(steps[0]).toMatch(/^name: Refuse a target that is not a commit before any step shows it\n/);
+    expect(steps[0]).not.toContain("env:");
+    expect(steps[0]).not.toContain("${{ inputs");
+    expect(steps[1]).toMatch(/^name: Decide which commit\n/);
+    const guard = "Refuse a target that is not a commit before any step shows it";
+    for (const target of [version, "main", `${sha}\n${version}`]) {
+      const refused = step(guard, { GITHUB_EVENT_PATH: event(target) });
+      expect(refused.status).not.toBe(0);
+      expect(refused.log).toBe("::error::target must be a full 40-character commit.\n");
+    }
+    const allowed = step(guard, { GITHUB_EVENT_PATH: event(sha) });
+    expect(allowed.status, allowed.log).toBe(0);
+    expect(allowed.log).toBe("");
+  });
+});

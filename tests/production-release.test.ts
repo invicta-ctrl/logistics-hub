@@ -613,7 +613,10 @@ describe("the manifest and the workflow", () => {
         // H8 (R9): deploys and rolls back the Worker from the production environment, and only that. It never runs on a
         // push, never migrates, and asks D1 only through the read-only deploy gate.
         expect(text).not.toMatch(/production-release|migrations apply|d1 (execute|export)|r2 bucket|^\s+push:/m);
-        expect(text.match(/^\s*npx wrangler .*$/gm)?.map((line) => line.trim())).toEqual(["npx wrangler deploy --dry-run", "npx wrangler deploy --message \"${message:0:100}\"", "npx wrangler rollback \"$TARGET\" --message \"${REASON:0:100}\" --yes"]);
+        // Its only wrangler calls, each with the output kept off the public log (V116-QH03): a deploy, dry or with its
+        // message, and a rollback.
+        expect(text.match(/npx wrangler .*$/gm)?.map((line) => line.trim())).toEqual(["npx wrangler \"${args[@]}\" 2>&1) || status=$?", "npx wrangler rollback \"$TARGET\" --message \"${REASON:0:100}\" --yes 2>&1) || status=$?"]);
+        expect(text.match(/^\s*args=.*$/gm)?.map((line) => line.trim())).toEqual(["args=(deploy --dry-run)", "args=(deploy --message \"${message:0:100}\")"]);
         continue;
       }
       if (file === "ci.yml" && text.includes("\n  role-qualification:")) {
