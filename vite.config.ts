@@ -6,7 +6,7 @@ import { build, defineConfig, type Plugin, type Rollup } from "vite";
 const PAGES = ["index.html", "staff/catalogue.html"];
 
 /** Files the app needs offline that come from public/ rather than the bundle. */
-const PUBLIC_SHELL = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-512.png", "/touch-icon.png", "/brand/dol-mark.png", "/brand/hau-usc-crest.webp", "/brand/hau-campus-dusk.webp"];
+const PUBLIC_SHELL = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-512.png", "/touch-icon.png", "/brand/dol-mark.png", "/brand/hau-usc-crest.webp", "/brand/hau-campus-dusk.webp", "/theme-boot.js"];
 /** The Catalog app's own page (staff/catalogue.html, served at /staff/catalogue), manifest and icons, saved with the Catalogue's screens. */
 const CATALOGUE_SHELL = ["/staff/catalogue", "/catalogue.webmanifest", "/icons/catalog-192.png", "/icons/catalog-512.png", "/icons/catalog-maskable-512.png", "/icons/catalog-touch-icon.png"];
 

@@ -6,6 +6,7 @@ import "@fontsource/newsreader/latin-500.css";
 import "./styles.css";
 import { landing, lending, notFound, offlinePage } from "./public";
 import { startPwa } from "./pwa";
+import { startTheme, syncTheme } from "./theme";
 import { MARK, app, handOverQuery, html, leave, mount, navigate, shown, toast } from "./ui";
 
 type View = () => void | Promise<void>;
@@ -62,6 +63,7 @@ async function render(): Promise<void> {
   loaded = true;
   shown.address = window.location.pathname + window.location.search;
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  syncTheme(path);
   if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/home", true);
   // Offline the server cannot hand over the other page; the router renders what it can (the offline page) instead.
   if (catalogRoute(path) !== CATALOG_PAGE && navigator.onLine && sessionStorage.getItem("reloaded-for-page") !== path) {
@@ -158,5 +160,6 @@ window.addEventListener("popstate", () => {
   }
   render();
 });
+startTheme();
 startPwa();
 void render();
