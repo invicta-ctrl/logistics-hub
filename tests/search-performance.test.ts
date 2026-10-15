@@ -110,7 +110,7 @@ describe("search performance", () => {
   });
 
   it("keeps search out of the first load: the palette is fetched on first use", () => {
-    const shell = readFileSync("src/staff.ts", "utf8");
+    const shell = readFileSync("src/staff-shell.ts", "utf8");
     expect(shell).not.toMatch(/^import[^;]*from "\.\/search-palette"/m);
     expect(shell).toMatch(/import\("\.\/search-palette"\)/);
     expect(shell).not.toMatch(/^import[^;]*from "\.\/search"/m);

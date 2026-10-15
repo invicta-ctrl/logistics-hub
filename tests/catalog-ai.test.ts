@@ -1,8 +1,9 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { AI_REASON, AI_TIER, type AiPayload, aiMessages, aiPayload, aiSchema, readAiAnswer } from "../src/catalog-ai";
 import { evaluateWithAi } from "../src/suggest-evaluation";
 import { migratedD1 } from "./d1-sqlite";
+import { sourceFiles } from "./source-files";
 
 /* The Workers AI second opinion's boundary (amendment §13.2–13.3): what may be sent, what may come back, and that nothing calls it yet. */
 
@@ -103,18 +104,18 @@ describe("what may come back", () => {
 
 describe("the V1.11 second opinion stays a measurement", () => {
   it("is reached by no route or page: measured on 2026-10-07 and left off (V1.15 plan, Ambient AI Assist amendment)", () => {
-    const users = readdirSync("src").filter((file) => /\.ts$/.test(file) && readFileSync(`src/${file}`, "utf8").includes("./catalog-ai"));
+    const users = sourceFiles().filter((file) => readFileSync(file, "utf8").includes("./catalog-ai"));
     // ai-roles.ts takes only the reply-text helper, not the second opinion itself.
-    expect(users).toEqual(["ai-roles.ts", "suggest-evaluation.ts"]);
+    expect(users).toEqual(["src/ai-roles.ts", "src/suggest-evaluation.ts"]);
   });
 
   it("the Workers AI binding stays inside bounded adapters and the audited review boundary", () => {
     expect(readFileSync("wrangler.jsonc", "utf8")).toMatch(/"ai"\s*:\s*\{\s*"binding"\s*:\s*"AI"\s*\}/);
-    const sources = readdirSync("src").filter((file) => /\.ts$/.test(file));
+    const sources = sourceFiles();
     // Photo and text adapters now share one bounded call site; no other module may invoke the binding directly.
-    expect(sources.filter((file) => /\bai\.run\(|\.AI\.run\(/.test(readFileSync(`src/${file}`, "utf8")))).toEqual(["ambient-assist.ts"]);
+    expect(sources.filter((file) => /\bai\.run\(|\.AI\.run\(/.test(readFileSync(file, "utf8")))).toEqual(["src/ambient-assist.ts"]);
     // Staff text requests enter only through the server-issued review boundary. Trusted activation still needs its benchmark gate.
-    expect(sources.filter((file) => readFileSync(`src/${file}`, "utf8").includes("./ai-roles"))).toEqual(["ai-review.ts"]);
-    expect(sources.filter((file) => /env\.AI\b/.test(readFileSync(`src/${file}`, "utf8")))).toEqual(["worker.ts"]);
+    expect(sources.filter((file) => readFileSync(file, "utf8").includes("./ai-roles"))).toEqual(["src/ai-review.ts"]);
+    expect(sources.filter((file) => /env\.AI\b/.test(readFileSync(file, "utf8")))).toEqual(["src/worker.ts"]);
   });
 });

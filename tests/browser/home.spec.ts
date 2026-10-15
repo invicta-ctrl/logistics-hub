@@ -148,6 +148,17 @@ test.describe("Home", () => {
     await expect(page).toHaveURL(/\/staff\/loans$/);
   });
 
+  test("opened as /staff/home/ it still says when insights fail, and shows them when tried again", async ({ page }) => {
+    const asked = await setup(page, { insightsStatus: 500 });
+    await page.goto("/staff/home/");
+    await expect(page.locator("#home-insights")).toContainText("Insights could not be loaded.");
+    await page.route("**/api/staff/home/insights", (route) => { asked.insights += 1; return route.fulfill({ contentType: "application/json", body: JSON.stringify(INSIGHTS) }); });
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByRole("article", { name: "What equipment is borrowed most?" })).toBeVisible();
+    await expect(page.locator("#home-insights")).not.toHaveAttribute("aria-busy");
+    expect(asked.insights).toBe(2);
+  });
+
   test("a held optional insight does not block navigation or expire a newer screen", async ({ page }) => {
     await setup(page);
     let release!: () => void;

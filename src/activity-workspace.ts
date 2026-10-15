@@ -2,7 +2,7 @@ import "./activity.css";
 import { ACTIVITY_SOURCES, ACTIVITY_TITLES, ACTIVITY_TYPES, STOCK_AREAS, type ActivitySource } from "./catalog-policy";
 import { type Place, inOrder, pathOf, placesOf } from "./location-tree";
 import { signed } from "./movement-form";
-import { type Session, loadSession, shell } from "./staff";
+import { type Session, loadSession, shell } from "./staff-shell";
 import { type Html, ApiError, api, emptyState, expired, failure, formatDate, formatDateTime, html, icon, label, live, mount, officeDay, onLeave, preservingFocus, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 /*

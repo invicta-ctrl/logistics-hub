@@ -18,7 +18,7 @@ Read `AGENTS.md` and its required policy/handoff chain before changing anything.
 
 - Phones never write quantities: each self-service action is an immutable event with its own id, applied once through the same ledger and lending statements staff use. The service worker precaches each build's app shell and never caches `/api/*`.
 
-Source: `src/worker.ts` (routing and auth), `src/inventory.ts` (data), `src/catalog-policy.ts` (listing and self-service rules), `src/self-service.ts` (self-service sync), `src/public.ts`, `src/staff.ts`, `src/self-service-app.ts`, `src/offline-*.ts`, `src/sw.ts` and `src/ui.ts` (browser).
+Source: `src/worker.ts` (routing and auth), `src/inventory.ts` (data), `src/catalog-policy.ts` (listing and self-service rules), `src/self-service.ts` (self-service sync), `src/public.ts`, `src/staff-shell.ts` (staff sign-in and shell), `src/staff.ts` (Items), `src/self-service-app.ts`, `src/offline-*.ts`, `src/sw.ts` and `src/ui.ts` (browser).
 
 ## Local development
 

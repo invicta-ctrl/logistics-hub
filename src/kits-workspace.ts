@@ -3,7 +3,8 @@ import { behaviourOf, BEHAVIOUR_LABELS, units } from "./catalog-policy";
 import { CHECK_LABELS, CHECK_OUTCOMES, COMPONENT_STATE_LABELS, KIT_STATE_LABELS, type CheckOutcome, type ComponentState, type KitState } from "./kit-policy";
 import { openViewer, photoPanel, rowThumb } from "./item-photo";
 import { inOrder, pathOf, placesOf } from "./location-tree";
-import { type PlaceRow, ageOf, loadSession, shell } from "./staff";
+import type { PlaceRow } from "./staff";
+import { ageOf, loadSession, shell } from "./staff-shell";
 import { ApiError, type Html, api, emptyState, expired, failure, html, icon, live, mount, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, working, writeParams } from "./ui";
 
 /*

@@ -1,5 +1,5 @@
 import { ApiError, type Html, failure, html, icon, mount, sheet, sheetContent } from "./ui";
-import { openViewer } from "./item-photo";
+import { openViewer } from "./item-viewer";
 import { REPORT_KINDS, REPORT_LABELS, type ReportKind } from "./location-tree";
 
 /*

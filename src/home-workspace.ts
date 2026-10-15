@@ -1,5 +1,5 @@
 import "./home.css";
-import { ATTENTION_PAINTED, type AttentionGroup, SEARCH_KEYS, ageOf, attentionNow, loadSession, refreshAttention, shell } from "./staff";
+import { ATTENTION_PAINTED, type AttentionGroup, SEARCH_KEYS, ageOf, attentionNow, loadSession, refreshAttention, shell } from "./staff-shell";
 import { ApiError, type Html, type IconName, api, emptyState, expired, failure, formatDateTime, html, icon, live, mount, onLeave, plural } from "./ui";
 
 /*
@@ -198,15 +198,19 @@ export async function homeWorkspace(): Promise<void> {
   const box = document.querySelector<HTMLElement>("#home-insights")!;
   let active = true;
   onLeave(() => { active = false; });
+  // Home is left the moment the address changes, while the next page's code may still be loading: an answer that arrives
+  // then, an ended session included, belongs to the page the person left and never sends them anywhere. Like the router,
+  // this ignores trailing slashes, so Home opened as /staff/home/ is still here.
+  const here = () => active && window.location.pathname.replace(/\/+$/, "") === "/staff/home";
   const loadInsights = () => {
     box.setAttribute("aria-busy", "true");
     api<Insights>("/api/staff/home/insights", { priority: "low" } as RequestInit).then((data) => {
-      if (!active) return;
+      if (!here()) return;
       document.querySelector("#home-insights-asof")!.textContent = `Updated ${formatDateTime(data.asOf)}`;
       box.removeAttribute("aria-busy");
       mount(box, insightsMarkup(data));
     }).catch((error) => {
-      if (!active) return;
+      if (!here()) return;
       box.removeAttribute("aria-busy");
       if (error instanceof ApiError && error.status === 401) return expired();
       mount(box, html`<div class="home-failed" role="status">${icon("alert")}<p>Insights could not be loaded. ${failure(error)}</p><button class="button button--secondary button--sm" type="button" id="home-insights-retry">Try again</button></div>`);

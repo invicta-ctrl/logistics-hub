@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
+import { MAX_SCAN_BODY } from "../src/staff-directory";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
 // @ts-expect-error: a plain .mjs tool without types.
 import * as ops from "../scripts/ops/production-release.mjs";
@@ -45,8 +46,8 @@ beforeEach(async () => {
 });
 
 /** As a browser sends it: a form upload is encoded first so it carries its Content-Length, which the Worker requires. */
-async function call(role: keyof typeof cookies | null, path: string, method = "GET", body?: unknown) {
-  const headers: Record<string, string> = { origin };
+async function call(role: keyof typeof cookies | null, path: string, method = "GET", body?: unknown, extra: Record<string, string> = {}) {
+  const headers: Record<string, string> = { origin, ...extra };
   if (role) headers.cookie = cookies[role]!;
   let payload: BodyInit | undefined;
   if (body instanceof FormData) {
@@ -508,6 +509,142 @@ describe("usage, loans and activity come from the existing records", () => {
     expect(JSON.stringify(await json(await call("STAFF", "/api/staff/activity")))).not.toContain("Ana Santos");
   });
 });
+
+describe("the Worker boundary around the Staff Directory (V1.16 MA1)", () => {
+  const evil = { origin: "https://evil.example" };
+  /** Every table and bucket a directory write could touch, so a refusal can be shown to change nothing. */
+  const footprint = () => ({
+    rows: ["staff_directory", "staff_id_cards", "staff_accounts", "audit_log"].map((table) => (sqlite.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n),
+    scans: ids.objects.size
+  });
+  const writes = (person: string): Array<[string, string, unknown]> => [
+    ["/api/staff/admin/directory", "POST", { name: "Cara Lim", department: "DoL" }],
+    ["/api/staff/admin/directory/import", "POST", pairForm("Lim", "DHR")],
+    [`/api/staff/admin/directory/${person}`, "PATCH", { name: "Ana S." }],
+    [`/api/staff/admin/directory/${person}/account`, "PUT", { accountId: "ACC-staff" }],
+    [`/api/staff/admin/directory/${person}/account`, "DELETE", undefined],
+    [`/api/staff/admin/directory/${person}/account/new`, "POST", { username: "ana.santos" }],
+    [`/api/staff/admin/directory/${person}/id`, "PUT", pairForm("Santos", "DoL")],
+    [`/api/staff/admin/directory/${person}/id`, "DELETE", undefined],
+    [`/api/staff/admin/directory/${person}/id/derived`, "PUT", pairForm("Santos", "DoL")]
+  ];
+
+  it("refuses every cross-site write before it reaches the directory, and changes nothing", async () => {
+    const person = await addPerson({ name: "Ana Santos", department: "DoL" });
+    const before = footprint();
+    for (const [path, method, body] of writes(person)) {
+      const response = await call("OWNER", path, method, body, evil);
+      expect(response.status, `${method} ${path}`).toBe(403);
+      expect(await json(response), `${method} ${path}`).toEqual({ error: "Invalid request origin." });
+    }
+    expect(footprint()).toEqual(before);
+  });
+
+  it("is not reachable with an offline cataloguing lease, which still works for the Catalogue", async () => {
+    const person = await addPerson({ name: "Ana Santos", department: "DoL" });
+    const on = await call("OWNER", "/api/staff/catalogue/offline", "POST");
+    expect(on.status).toBe(200);
+    const lease = on.headers.get("set-cookie")!.split(";")[0]!;
+    const asLease = (path: string, method = "GET", body?: unknown) => worker.fetch(new Request(`${origin}${path}`, { method, headers: { origin, cookie: lease, "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) }), env);
+    expect((await asLease("/api/staff/catalogue/offline")).status).toBe(200);
+    const before = footprint();
+    for (const [path, method] of [["/api/staff/admin/directory", "GET"], ["/api/staff/admin/directory/search?q=Ana", "GET"], [`/api/staff/admin/directory/${person}`, "GET"], [`/api/staff/admin/directory/${person}/id/front`, "GET"],
+      ["/api/staff/admin/directory", "POST"], [`/api/staff/admin/directory/${person}`, "PATCH"], [`/api/staff/admin/directory/${person}/id`, "DELETE"]] as const) {
+      const response = await asLease(path, method, method === "GET" || method === "DELETE" ? undefined : { name: "Lease" });
+      expect(response.status, `${method} ${path}`).toBe(401);
+    }
+    expect(footprint()).toEqual(before);
+  });
+
+  it("asks an administrator who must replace their password to do that first, on reads and writes alike", async () => {
+    const person = await addPerson({ name: "Ana Santos", department: "DoL" });
+    sqlite.prepare("UPDATE staff_accounts SET must_change_password = 1 WHERE id = 'ACC-admin'").run();
+    const before = footprint();
+    for (const [path, method, body] of [["/api/staff/admin/directory", "GET", undefined], [`/api/staff/admin/directory/${person}`, "GET", undefined], ["/api/staff/admin/directory", "POST", { name: "Cara Lim", department: "DoL" }]] as const) {
+      const response = await call("ADMIN", path, method, body);
+      expect(response.status, `${method} ${path}`).toBe(403);
+      expect((await json(response)).code, `${method} ${path}`).toBe("PASSWORD_CHANGE_REQUIRED");
+    }
+    expect(footprint()).toEqual(before);
+  });
+
+  it("answers 405 for a directory path with the wrong method and 404 for a path it does not have", async () => {
+    const person = await addPerson({ name: "Ana Santos", department: "DoL" });
+    for (const [path, method] of [["/api/staff/admin/directory", "PUT"], ["/api/staff/admin/directory/search", "DELETE"], ["/api/staff/admin/directory/accounts", "POST"], ["/api/staff/admin/directory/import", "GET"],
+      [`/api/staff/admin/directory/${person}/usage`, "POST"], [`/api/staff/admin/directory/${person}/id/front`, "PATCH"]]) {
+      const response = await call("ADMIN", path, method, method === "GET" || method === "DELETE" ? undefined : {});
+      expect(response.status, `${method} ${path}`).toBe(405);
+      expect(await json(response), `${method} ${path}`).toEqual({ error: "Method not allowed." });
+    }
+    for (const path of ["/api/staff/admin/directory/nope", "/api/staff/admin/directoryX", "/api/staff/admin/directory/PER-123", `/api/staff/admin/directory/${person}/nope`]) {
+      const response = await call("ADMIN", path);
+      expect(response.status, path).toBe(404);
+      expect(await json(response), path).toEqual({ error: "Not found." });
+    }
+  });
+
+  it("refuses a scan upload without a length, one too large and one that is not a form, before reading it", async () => {
+    const person = await addPerson({ name: "Ana Santos", department: "DoL" });
+    const before = footprint();
+    for (const [path, method] of [["/api/staff/admin/directory/import", "POST"], [`/api/staff/admin/directory/${person}/id`, "PUT"], [`/api/staff/admin/directory/${person}/id/derived`, "PUT"]]) {
+      const send = (headers: Record<string, string>, body: BodyInit) => worker.fetch(new Request(`${origin}${path}`, { method, headers: { origin, cookie: cookies.OWNER!, ...headers }, body }), env);
+      const unsized = await send({}, pairForm("Lim", "DHR"));
+      expect([unsized.status, await json(unsized)], `${method} ${path} without a length`).toEqual([411, { error: "Missing content length." }]);
+      const large = await send({ "content-type": "multipart/form-data; boundary=x", "content-length": String(MAX_SCAN_BODY + 1) }, "--x--");
+      expect([large.status, await json(large)], `${method} ${path} too large`).toEqual([413, { error: "Those scans are too large." }]);
+      const garbled = await send({ "content-type": "multipart/form-data; boundary=x", "content-length": "9" }, "not a form");
+      expect([garbled.status, await json(garbled)], `${method} ${path} not a form`).toEqual([400, { error: "Invalid upload." }]);
+    }
+    expect(footprint()).toEqual(before);
+  });
+
+  it("answers every directory route the same way for each kind of caller", async () => {
+    const person = await addPerson({ name: "Ana Santos", department: "DoL" });
+    const answers = new Map(EXPECTED_ANSWERS.map(([route]) => [route, [] as number[]]));
+    // Each kind of caller in turn, with the same empty bodies, so the answers depend only on the gate and the handlers.
+    for (const role of [null, "STAFF", "ADMIN", "OWNER"] as const) {
+      for (const route of answers.keys()) {
+        const [method, where] = route.split(" ") as [string, string];
+        const path = where.startsWith("/P") ? `/api/staff/admin/directory/${person}${where.slice(2)}` : where;
+        answers.get(route)!.push((await call(role, path, method, method === "GET" || method === "DELETE" ? undefined : {})).status);
+      }
+    }
+    expect([...answers]).toEqual(EXPECTED_ANSWERS.map(([route, ...statuses]) => [route, statuses]));
+    const search = await call("ADMIN", "/api/staff/admin/directory/search?q=Ana");
+    expect(search.headers.get("cache-control")).toBe("private, no-store");
+    expect((await call("ADMIN", "/api/staff/admin/directory")).headers.get("cache-control")).toBe("no-store");
+  });
+});
+
+/**
+ * Recorded from the Worker before the Staff Directory routes moved out of worker.ts (V1.16 MA1), and unchanged by the move:
+ * route, then the status for someone signed out, STAFF, ADMIN and OWNER. `/P` is one person without an ID card or sign-in;
+ * bodies are empty, so writes stop at validation (400), at a missing upload length (411) or at an owner-only step (403).
+ */
+const EXPECTED_ANSWERS: Array<[string, number, number, number, number]> = [
+  ["GET /api/staff/admin/directory", 401, 403, 200, 200],
+  ["GET /api/staff/admin/directory/search?q=Ana", 401, 403, 200, 200],
+  ["POST /api/staff/admin/directory", 401, 403, 400, 400],
+  ["GET /api/staff/admin/directory/accounts", 401, 403, 200, 200],
+  ["GET /api/staff/admin/directory/derived", 401, 403, 403, 200],
+  ["POST /api/staff/admin/directory/import", 401, 403, 411, 411],
+  ["GET /P", 401, 403, 200, 200],
+  ["PATCH /P", 401, 403, 200, 200],
+  ["PUT /P/account", 401, 403, 400, 400],
+  ["DELETE /P/account", 401, 403, 200, 200],
+  ["POST /P/account/new", 401, 403, 400, 400],
+  ["GET /P/access", 401, 403, 200, 200],
+  ["GET /P/usage", 401, 403, 200, 200],
+  ["GET /P/loans", 401, 403, 200, 200],
+  ["GET /P/activity", 401, 403, 200, 200],
+  ["PUT /P/id", 401, 403, 411, 411],
+  ["DELETE /P/id", 401, 403, 403, 400],
+  ["GET /P/id/front", 401, 403, 404, 404],
+  ["GET /P/id/back", 401, 403, 404, 404],
+  ["GET /P/id/thumb", 401, 403, 404, 404],
+  ["GET /P/id/face", 401, 403, 404, 404],
+  ["PUT /P/id/derived", 401, 403, 411, 411]
+];
 
 describe("V1.3 release manifest (Cloud Operations lane)", () => {
   const manifest = JSON.parse(fs.readFileSync("ops/releases/v1.3.json", "utf8"));

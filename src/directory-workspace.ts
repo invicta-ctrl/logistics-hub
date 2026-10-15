@@ -3,7 +3,7 @@ import { DEPARTMENTS, DEPARTMENT_CODES, type DepartmentCode } from "./directory-
 import { type Loan, loanRow, openReturn } from "./loan-form";
 import { tiltTile } from "./card-motion";
 import { type Card, type View, cardForm, cardSource, fillTiles, forgetScans, importArchive, makeMissingImages, openCard } from "./staff-ids";
-import { type Access, type Role, type Session, accessLabel, initials, loadSession, shell } from "./staff";
+import { type Access, type Role, type Session, accessLabel, initials, loadSession, shell } from "./staff-shell";
 import { adminTabs } from "./admin-frame";
 import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatQuantity, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
 

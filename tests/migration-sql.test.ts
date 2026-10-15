@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { migratedD1 } from "./d1-sqlite";
+import { sourceFiles } from "./source-files";
 
 describe("D1 migration arithmetic", () => {
   it("preserves every seed row and derives balances from posted movements only", () => {
@@ -107,7 +108,8 @@ describe("0022 append-only audit log", () => {
 describe("append-only tables", () => {
   it("are never written with OR REPLACE, which SQLite lets past their delete triggers", async () => {
     const fs = await import("node:fs");
-    const writers = [...fs.readdirSync("src").map((file) => `src/${file}`), ...fs.readdirSync("scripts").filter((file) => file.endsWith(".mjs")).map((file) => `scripts/${file}`)];
+    // Every code file, in subfolders too, so a later move into folders cannot slip past this.
+    const writers = [...sourceFiles("src", [".ts", ".js", ".mjs"]), ...sourceFiles("scripts", [".mjs", ".js"])];
     const offenders = writers.filter((file) => /OR\s+REPLACE\s+INTO\s+(audit_log|inventory_movements)\b/i.test(fs.readFileSync(file, "utf8")));
     expect(offenders).toEqual([]);
   });

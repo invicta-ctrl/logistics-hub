@@ -1,5 +1,5 @@
 import { DEPARTMENT_CODES } from "./directory-policy";
-import { type Access, type Role, type Session, accessLabel } from "./staff";
+import { type Access, type Role, type Session, accessLabel } from "./staff-shell";
 import { type Html, html, plural } from "./ui";
 
 /*

@@ -2,7 +2,7 @@ import { stockState } from "./catalog-policy";
 import { type Place, pathOf, placesOf } from "./location-tree";
 import { type Preset, bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
-import { loadSession, shell } from "./staff";
+import { loadSession, shell } from "./staff-shell";
 import {
   type Html, api, categoryName, emptyState, expired, failure, formatDate, formatDateTime, formatTime, html, icon, label, live, mount,
   bindRowActionMenus, formatQuantity, officeDay, onLeave, plural, preservingFocus, rowActionMenu, sheet as createSheet, sheetContent, toast, units, working, writeParams
