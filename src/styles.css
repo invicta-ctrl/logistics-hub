@@ -72,12 +72,12 @@
   --shadow-md: 0 1px 2px rgb(43 10 12 / 5%), 0 8px 20px -10px rgb(43 10 12 / 16%);
   --shadow-lg: 0 18px 40px -14px rgb(43 10 12 / 30%), 0 2px 6px rgb(28 25 23 / 8%);
   --shadow-modal: 0 0 0 1px rgb(43 10 12 / 6%), -28px 0 60px -30px rgb(43 10 12 / 40%);
+  /* The stone matte every item photo stands on (also what cutout thumbnails are flattened onto, src/item-photo.ts STAGE). A light print in
+     Light and Dark alike, so a picture's own colours read the same on both. */
+  --stage: #e8e3dd;
+  --stage-edge: rgb(43 10 12 / 14%);
   --edge-light: inset 0 1px 0 rgb(255 255 255 / 75%);
   --edge-light-brand: inset 0 1px 0 rgb(255 255 255 / 16%);
-  /* The drafting motif (a fine grid, crop marks, a ruler's ticks) belongs to editorial surfaces only: the shell, Home's stage
-     and an object's study. It never sits behind text that has to be read. */
-  --grid-line: rgb(122 20 25 / 7.5%);
-  --tick: rgb(122 20 25 / 28%);
   --container: 72rem;
   --gutter: clamp(1rem, 4vw, 2rem);
   --space-1: .25rem;
@@ -127,6 +127,54 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
+}
+
+/* Dark (Staff only; HAU-UI-MEDIA-THEME-001): set by src/theme.ts and public/theme-boot.js on /staff routes, never on public pages or Self-Service
+   (which has its own dark theme in self-service.css). Plum-black canvas, warm text, a lifted oxblood that still passes as text and as a button
+   fill. Item photos keep their light stone print (--stage) in both themes. */
+:root[data-theme="dark"] {
+  --bg: #140609;
+  --surface: #1d0f13;
+  --subtle: rgb(255 236 214 / 6%);
+  --hover: rgb(255 236 214 / 8%);
+  --line: rgb(255 226 196 / 13%);
+  --line-strong: rgb(255 226 196 / 24%);
+  --line-field: rgb(255 226 196 / 52%);
+  --text: #f7ece1;
+  --text-2: rgb(247 236 225 / 78%);
+  --text-3: rgb(247 236 225 / 64%);
+  --brand: #e0646f;
+  --brand-hover: #ec7d87;
+  --brand-tint: rgb(224 100 111 / 15%);
+  --on-brand: #1f0a0d;
+  --gold: #e7bd62;
+  --line-brand: rgb(224 100 111 / 38%);
+  --line-ok: rgb(62 207 142 / 32%);
+  --line-warn: rgb(240 180 60 / 34%);
+  --line-bad: rgb(255 93 110 / 36%);
+  --warn-ink: #f2d58f;
+  --bad-hover: #ff8591;
+  --scrim: rgb(8 2 4 / 62%);
+  --selection: rgb(224 100 111 / 32%);
+  --highlight: rgb(239 199 106 / 18%);
+  --ok: #6fdca5;
+  --ok-dot: #3ecf8e;
+  --ok-tint: rgb(62 207 142 / 13%);
+  --warn: #f2c565;
+  --warn-dot: #f0b43c;
+  --warn-tint: rgb(240 180 60 / 13%);
+  --bad: #ff9aa4;
+  --bad-dot: #ff5d6e;
+  --bad-tint: rgb(255 93 110 / 13%);
+  --focus: 0 0 0 3px rgb(240 200 110 / 60%);
+  --focus-field: 0 0 0 3px rgb(224 100 111 / 30%);
+  --focus-bad: 0 0 0 3px rgb(255 93 110 / 30%);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow-md: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 20px -10px rgb(0 0 0 / 55%);
+  --shadow-lg: 0 18px 40px -14px rgb(0 0 0 / 65%), 0 2px 6px rgb(0 0 0 / 35%);
+  --shadow-modal: 0 0 0 1px rgb(255 226 196 / 10%), -28px 0 60px -30px rgb(0 0 0 / 70%);
+  --edge-light: inset 0 1px 0 rgb(255 255 255 / 6%);
+  color-scheme: dark;
 }
 
 /* ---------- Base ---------- */
@@ -285,8 +333,8 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .checklist li.is-done .icon { color: var(--ok-dot); }
 
 /* ---------- Empty, loading, toast ---------- */
-/* An empty list is a composed, quiet plate (the drafting motif, below), its icon set down on it like an object, not a dashed hole. */
-.empty { --drafting-focus: 50% 30%; position: relative; isolation: isolate; display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-16) var(--space-6); border-radius: var(--radius-lg); background: linear-gradient(180deg, var(--subtle), var(--surface) 78%); box-shadow: inset 0 0 0 1px var(--line); text-align: center; }
+/* An empty list is a composed, quiet plate, its icon set down on it like an object, not a dashed hole. */
+.empty { position: relative; isolation: isolate; display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-16) var(--space-6); border-radius: var(--radius-lg); background: linear-gradient(180deg, var(--subtle), var(--surface) 78%); box-shadow: inset 0 0 0 1px var(--line); text-align: center; }
 .empty > .icon { --icon-size: var(--icon-lg); box-sizing: content-box; margin-bottom: var(--space-2); padding: var(--space-3); border-radius: var(--radius-pill); background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line), 0 10px 16px -10px rgb(43 10 12 / 35%); color: var(--text-3); }
 .empty :is(h1, h2, h3) { font-size: var(--text-lg); }
 .empty p { max-width: 30rem; color: var(--text-2); font-size: var(--text-base); }
@@ -495,6 +543,13 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .menu__item { display: flex; width: 100%; min-height: var(--target-min); align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius); background: none; color: var(--text); font-size: var(--text-base); font-weight: 500; text-align: left; text-decoration: none; transition: background-color var(--dur-1); }
 .menu__item .icon { color: var(--text-3); }
 /* A trailing mark (opens in a new tab) sits at the row's end, smaller than the item's own icon. */
+.menu__theme { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin: var(--space-1) 0 var(--space-2); padding: 2px; border-radius: var(--radius); background: var(--subtle); box-shadow: inset 0 0 0 1px var(--line); }
+.menu__theme-label { grid-column: 1 / -1; padding: var(--space-1) var(--space-2) 0; color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.menu__theme-choice { min-height: var(--target-min); border: 0; border-radius: calc(var(--radius) - 2px); background: none; color: var(--text-2); font: inherit; font-size: var(--text-sm); font-weight: 500; cursor: pointer; }
+.menu__theme-choice[aria-pressed="true"] { background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line-strong), var(--shadow-sm); color: var(--text); font-weight: 600; }
+.menu__theme-choice[aria-pressed="true"]::before { content: "\2713\00a0"; }
+@media (hover: hover) { .menu__theme-choice:hover { color: var(--text); } }
+.menu__theme-choice:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 .menu__aside { display: inline-flex; margin-left: auto; }
 .menu__aside .icon { --icon-size: var(--icon-xs); }
 @media (hover: hover) { .menu__item:hover { background: var(--subtle); } }
@@ -599,7 +654,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .profile > input[type=file] { top: 0; left: 0; }
 .profile__actions { display: grid; grid-column: 1 / -1; min-width: 0; gap: var(--space-2); justify-items: start; }
 .profile__actions:empty { display: none; }
-.photo-tile { position: relative; display: grid; width: 100%; aspect-ratio: 1; place-items: center; overflow: hidden; padding: 0; border: 0; border-radius: var(--radius-lg); background: var(--subtle); box-shadow: inset 0 0 0 1px var(--line); }
+.photo-tile { position: relative; display: grid; width: 100%; aspect-ratio: 1; place-items: center; overflow: hidden; padding: 0; border: 0; border-radius: var(--radius-lg); background: var(--stage); box-shadow: inset 0 0 0 1px var(--stage-edge); }
 .photo-tile img { width: 100%; height: 100%; object-fit: contain; }
 .photo-tile[data-view] { cursor: zoom-in; }
 .photo-tile--preview img { object-fit: contain; }
@@ -627,17 +682,13 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .readout--loan strong { color: var(--text-2); }
 .profile__label { display: block; color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 
-/* Drafting plate (2026-10-14): the one authored motif of the visual-depth pass, kept to editorial surfaces (an item's profile,
-   Home's stage), never lists or forms. A lit plate with a faint drafting grid that fades out from its focus (--drafting-focus)
-   and four crop marks. Decoration only: it carries no information. */
+/* Plate (2026-10-14): a lit surface for editorial areas (an item's profile, Home's stage). Its drafting grid and crop marks were
+   removed 2026-10-14 (HAU-UI-MEDIA-THEME-001): they carried no information. */
 .drafting { position: relative; isolation: isolate; border-radius: var(--radius-xl); background: linear-gradient(180deg, var(--subtle), var(--surface) 78%); box-shadow: inset 0 0 0 1px var(--line); }
-:is(.drafting, .empty:not(.empty--error))::before { position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: linear-gradient(var(--grid-line) 1px, transparent 1px) -1px -1px / 1.25rem 1.25rem, linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) -1px -1px / 1.25rem 1.25rem; content: ""; mask-image: radial-gradient(110% 95% at var(--drafting-focus, 18% 32%), #000 25%, transparent 72%); pointer-events: none; }
-:is(.drafting, .empty:not(.empty--error))::after { position: absolute; inset: .625rem; z-index: -1; background:
-    linear-gradient(var(--tick), var(--tick)) 0 0 / .625rem 1px no-repeat, linear-gradient(var(--tick), var(--tick)) 0 0 / 1px .625rem no-repeat,
-    linear-gradient(var(--tick), var(--tick)) 100% 0 / .625rem 1px no-repeat, linear-gradient(var(--tick), var(--tick)) 100% 0 / 1px .625rem no-repeat,
-    linear-gradient(var(--tick), var(--tick)) 0 100% / .625rem 1px no-repeat, linear-gradient(var(--tick), var(--tick)) 0 100% / 1px .625rem no-repeat,
-    linear-gradient(var(--tick), var(--tick)) 100% 100% / .625rem 1px no-repeat, linear-gradient(var(--tick), var(--tick)) 100% 100% / 1px .625rem no-repeat;
-  content: ""; pointer-events: none; }
+
+/* Dark: the icon needs no white highlight on a dark plate, and the add-photo hover lifts with the theme's own hover tone. */
+:root[data-theme="dark"] .theater .photo-tile .item-visual > .item-icon { filter: none; }
+:root[data-theme="dark"] .theater .photo-tile--add:hover { background: var(--hover); }
 
 /* Resource Theater (2026-10-14): an item's profile is an object study, not a record. The item (its photo, or its icon when it
    has none) stands on a drafting plate with a floor shadow; beside it, the readings the Hub actually holds. Everything here is
@@ -648,10 +699,10 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
    off the stage with its own shadow. */
 .theater .photo-tile { border-radius: var(--radius-xl); background: transparent; box-shadow: none; }
 .theater .photo-tile::after { position: absolute; right: 22%; bottom: 17%; left: 22%; z-index: -1; height: .875rem; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 10 12 / 26%), transparent); content: ""; }
-.theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview) { background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line), 0 1px 2px rgb(43 10 12 / 6%), 0 18px 28px -18px rgb(43 10 12 / 45%); }
+.theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview) { background: var(--stage); box-shadow: var(--edge-light), inset 0 0 0 1px var(--stage-edge), 0 1px 2px rgb(43 10 12 / 6%), 0 18px 28px -18px rgb(43 10 12 / 45%); }
 .theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview)::after { display: none; }
 .theater .profile__photo:has(.item-visual--loaded, .photo-tile--preview)::after { position: absolute; right: 12%; bottom: -.625rem; left: 12%; z-index: -1; height: .875rem; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 10 12 / 24%), transparent); content: ""; }
-.theater .photo-tile[data-view]:hover { background: rgb(255 255 255 / 55%); }
+.theater .photo-tile[data-view]:hover:has(.item-visual--loaded) { background: color-mix(in srgb, var(--stage) 88%, #fff); }
 .theater .photo-tile .item-visual { position: relative; background: transparent; }
 .theater .photo-tile .item-visual > .item-icon { width: 56%; height: 56%; max-width: none; max-height: none; stroke-width: 1.25; filter: drop-shadow(0 1px 0 rgb(255 255 255 / 90%)); }
 /* No photo yet: adding one is a quiet label on the plinth, not a dashed hole. */

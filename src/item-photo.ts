@@ -1,4 +1,4 @@
-import { cutoutProblem, cutoutShares } from "./cutout-share";
+import { cutoutProblem, cutoutShares, subjectCrop } from "./cutout-share";
 import type { PhotoCleanup, PhotoCrop } from "./catalog-draft";
 export type { PhotoCleanup } from "./catalog-draft";
 import { type VisualItem, itemIconSvg } from "./item-icons";
@@ -65,7 +65,21 @@ export async function preparePhoto(file: File): Promise<Prepared> {
 
 const FULL_CROP: PhotoCrop = { x: 0, y: 0, width: 100, height: 100 };
 
-/** A small JPEG keeps the Worker's existing metadata stripping; transparency is composited over white here. */
+/** The stone the thumbnails are flattened onto where a picture is transparent; the same colour as the tile they sit on (--stage in styles.css). */
+const STAGE = "#e8e3dd";
+
+/** A cutout's thumbnail frames its subject, not the whole photo: the crop tightened to where the item is (display only; see subjectCrop). */
+function framed(bitmap: ImageBitmap, rect: PhotoCrop): PhotoCrop {
+  try {
+    const scale = Math.min(1, 160 / Math.max(bitmap.width, bitmap.height));
+    const canvas = Object.assign(document.createElement("canvas"), { width: Math.max(1, Math.round(bitmap.width * scale)), height: Math.max(1, Math.round(bitmap.height * scale)) });
+    const context = canvas.getContext("2d", { willReadFrequently: true })!;
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return subjectCrop(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, rect) ?? rect;
+  } catch { return rect; }
+}
+
+/** A small JPEG keeps the Worker's existing metadata stripping; transparency is composited over the stage stone here. */
 async function thumbnailOf(bitmap: ImageBitmap, rect: PhotoCrop = FULL_CROP, edge: number = EDGES.thumb): Promise<Blob> {
   const width = Math.max(1, Math.round(bitmap.width * Math.min(100, Math.max(1, rect.width)) / 100));
   const height = Math.max(1, Math.round(bitmap.height * Math.min(100, Math.max(1, rect.height)) / 100));
@@ -74,7 +88,7 @@ async function thumbnailOf(bitmap: ImageBitmap, rect: PhotoCrop = FULL_CROP, edg
   const scale = Math.min(1, edge / Math.max(width, height));
   const canvas = Object.assign(document.createElement("canvas"), { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) });
   const context = canvas.getContext("2d")!;
-  context.fillStyle = "#fff"; context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = STAGE; context.fillRect(0, 0, canvas.width, canvas.height);
   context.drawImage(bitmap, x, y, width, height, 0, 0, canvas.width, canvas.height);
   const encode = (quality: number) => new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("The thumbnail could not be prepared.")), "image/jpeg", quality));
   let image = await encode(edge > EDGES.thumb ? .88 : .8);
@@ -90,8 +104,9 @@ export async function cropPhoto(source: Prepared, rect: PhotoCrop): Promise<Prep
     const thumb = await thumbnailOf(bitmap, rect);
     const detail = await thumbnailOf(bitmap, rect, EDGES.detail);
     if (source.cleanDisplay) clean = await createImageBitmap(source.cleanDisplay);
-    const cutoutThumb = clean ? await thumbnailOf(clean, rect) : undefined;
-    const cutoutDetail = clean ? await thumbnailOf(clean, rect, EDGES.detail) : undefined;
+    const subject = clean ? framed(clean, rect) : rect;
+    const cutoutThumb = clean ? await thumbnailOf(clean, subject) : undefined;
+    const cutoutDetail = clean ? await thumbnailOf(clean, subject, EDGES.detail) : undefined;
     return { ...source, thumb, detail, crop: { ...rect }, cutoutThumb, cutoutDetail, preview: await dataUrl(cutoutThumb ?? thumb) };
   } finally { bitmap.close(); clean?.close(); }
 }
@@ -204,7 +219,8 @@ async function cutoutFault(id: string, pending = true, signal?: AbortSignal): Pr
       const crop = response.headers.get("x-photo-crop");
       const rect = crop ? JSON.parse(crop) as PhotoCrop : FULL_CROP;
       // Unknown legacy crop bounds cannot authorize a larger public derivative.
-      return { fault: null, thumb: await thumbnailOf(bitmap, rect), ...(crop ? { detail: await thumbnailOf(bitmap, rect, EDGES.detail) } : {}), source };
+      const subject = subjectCrop(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, rect) ?? rect;
+      return { fault: null, thumb: await thumbnailOf(bitmap, subject), ...(crop ? { detail: await thumbnailOf(bitmap, subject, EDGES.detail) } : {}), source };
     } finally { bitmap.close(); }
   } catch { return { fault: "The cleaned picture could not be checked.", source }; }
 }

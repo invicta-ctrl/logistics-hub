@@ -2,7 +2,7 @@ import { deflateSync } from "node:zlib";
 import { beforeEach, describe, expect, it } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { CUTOUT_MONTHLY_CAP, type ImagesRunner, checkCutoutShape, cleanupOn, cleanupStatus, cutoutsThisMonth, resetCutoutBreaker, setCleanup } from "../src/item-cutout";
-import { cutoutProblem, cutoutShares } from "../src/cutout-share";
+import { cutoutProblem, cutoutShares, subjectCrop } from "../src/cutout-share";
 import { hashPassword } from "../src/session";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
 import { jpeg } from "./jpeg";
@@ -365,5 +365,38 @@ describe("picture cleanup", () => {
     expect(await cutoutsThisMonth(env.DB)).toBe(spent);
     expect(answers).toHaveLength(1);
     expect(actions()).toEqual([]);
+  });
+});
+
+describe("subjectCrop (display-only trim of a new cutout)", () => {
+  const picture = (w: number, h: number, boxes: Array<[number, number, number, number, number]>) => {
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (const [x0, y0, x1, y1, alpha] of boxes) for (let y = y0; y < y1; y += 1) for (let x = x0; x < x1; x += 1) data[(y * w + x) * 4 + 3] = alpha;
+    return data;
+  };
+  const full = { x: 0, y: 0, width: 100, height: 100 };
+
+  it("frames a small subject with a margin inside its crop", () => {
+    const crop = subjectCrop(picture(100, 100, [[40, 40, 60, 60, 255]]), 100, 100, full)!;
+    expect(crop.x).toBeGreaterThan(30); expect(crop.x).toBeLessThan(40);
+    expect(crop.width).toBeGreaterThan(20); expect(crop.width).toBeLessThan(40);
+    expect(crop.x + crop.width).toBeLessThanOrEqual(100);
+  });
+
+  it("keeps thin faint parts (a cable) inside the box", () => {
+    const crop = subjectCrop(picture(100, 100, [[40, 40, 60, 60, 255], [60, 50, 90, 51, 20]]), 100, 100, full)!;
+    expect(crop.x + crop.width).toBeGreaterThanOrEqual(90);
+  });
+
+  it("never reaches outside the crop it was given", () => {
+    const rect = { x: 20, y: 20, width: 60, height: 60 };
+    const crop = subjectCrop(picture(100, 100, [[10, 10, 90, 90, 255], [45, 45, 55, 55, 255]]), 100, 100, rect);
+    expect(crop === null || (crop.x >= 20 && crop.y >= 20 && crop.x + crop.width <= 80 && crop.y + crop.height <= 80)).toBe(true);
+  });
+
+  it("keeps the whole crop when nothing is kept, when the subject is a speck, or when it already fills the frame", () => {
+    expect(subjectCrop(picture(100, 100, []), 100, 100, full)).toBeNull();
+    expect(subjectCrop(picture(100, 100, [[50, 50, 52, 52, 255]]), 100, 100, full)).toBeNull();
+    expect(subjectCrop(picture(100, 100, [[2, 2, 98, 98, 255]]), 100, 100, full)).toBeNull();
   });
 });
