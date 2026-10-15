@@ -48,7 +48,11 @@ function choose(choice: Preference, origin: HTMLElement): void {
   const x = box.left + box.width / 2;
   const y = box.top + box.height / 2;
   const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
-  document.startViewTransition(change).ready.then(() => {
+  const root = document.documentElement;
+  root.classList.add("theme-switching");
+  const transition = document.startViewTransition(change);
+  void transition.finished.catch(() => undefined).then(() => root.classList.remove("theme-switching"));
+  transition.ready.then(() => {
     document.documentElement.animate({ clipPath: [`circle(0 at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
       { duration: 450, easing: "cubic-bezier(.2, .8, .2, 1)", pseudoElement: "::view-transition-new(root)" });
   }).catch(() => undefined);

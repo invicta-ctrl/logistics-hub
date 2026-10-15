@@ -115,3 +115,35 @@ test.describe("Ornaments", () => {
     expect(tokens).toEqual(["", "", ""]);
   });
 });
+
+test.describe("Dark in the places that stay light", () => {
+  test("a photo tile outside the item profile keeps readable ink on its stone, in Dark", async ({ page }) => {
+    await openStaff(page);
+    await choose(page, "dark");
+    await expect.poll(() => theme(page)).toBe("dark");
+    const ratios = await page.evaluate(() => {
+      const parse = (value: string) => value.match(/[\d.]+/g)!.map(Number);
+      const lum = ([r, g, b]: number[]) => [r, g, b].map((v) => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }).reduce((sum, v, at) => sum + v * [.2126, .7152, .0722][at]!, 0);
+      const ratio = (a: number[], b: number[]) => (Math.max(lum(a), lum(b)) + .05) / (Math.min(lum(a), lum(b)) + .05);
+      const host = document.createElement("div");
+      host.innerHTML = '<div class="photo-tile photo-tile--busy" role="status">Preparing the photo…</div><div class="photo-tile"><span class="item-visual"><svg class="item-icon" width="24" height="24"></svg></span></div>';
+      document.body.append(host);
+      const busy = host.children[0] as HTMLElement;
+      const icon = host.querySelector(".item-visual") as HTMLElement;
+      const stone = parse(getComputedStyle(busy).backgroundColor);
+      return { text: ratio(parse(getComputedStyle(busy).color), stone), icon: ratio(parse(getComputedStyle(icon).color), stone) };
+    });
+    expect(ratios.text).toBeGreaterThanOrEqual(4.5);
+    expect(ratios.icon).toBeGreaterThanOrEqual(3);
+  });
+
+  test("printing in Dark uses dark ink on white paper", async ({ page }) => {
+    await openStaff(page);
+    await choose(page, "dark");
+    await expect.poll(() => theme(page)).toBe("dark");
+    await page.emulateMedia({ media: "print" });
+    const printed = await page.evaluate(() => ({ text: getComputedStyle(document.body).color, paper: getComputedStyle(document.documentElement).colorScheme }));
+    expect(printed.text).toBe("rgb(28, 25, 23)");
+    expect(printed.paper).toBe("light");
+  });
+});

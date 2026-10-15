@@ -76,6 +76,9 @@
      Light and Dark alike, so a picture's own colours read the same on both. */
   --stage: #e8e3dd;
   --stage-edge: rgb(43 10 12 / 14%);
+  /* Ink for what sits on the stone (a busy note, a fallback icon): fixed, because the stone is light in both themes. */
+  --stage-ink: #44403c;
+  --stage-brand: #7a1419;
   --edge-light: inset 0 1px 0 rgb(255 255 255 / 75%);
   --edge-light-brand: inset 0 1px 0 rgb(255 255 255 / 16%);
   --container: 72rem;
@@ -547,7 +550,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .menu__theme-label { grid-column: 1 / -1; padding: var(--space-1) var(--space-2) 0; color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .menu__theme-choice { min-height: var(--target-min); border: 0; border-radius: calc(var(--radius) - 2px); background: none; color: var(--text-2); font: inherit; font-size: var(--text-sm); font-weight: 500; cursor: pointer; }
 .menu__theme-choice[aria-pressed="true"] { background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line-strong), var(--shadow-sm); color: var(--text); font-weight: 600; }
-.menu__theme-choice[aria-pressed="true"]::before { content: "\2713\00a0"; }
+.menu__theme-choice[aria-pressed="true"]::before { content: "\2713\00a0" / ""; }
 @media (hover: hover) { .menu__theme-choice:hover { color: var(--text); } }
 .menu__theme-choice:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 .menu__aside { display: inline-flex; margin-left: auto; }
@@ -658,10 +661,12 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .photo-tile img { width: 100%; height: 100%; object-fit: contain; }
 .photo-tile[data-view] { cursor: zoom-in; }
 .photo-tile--preview img { object-fit: contain; }
+.photo-tile .item-visual { color: var(--stage-brand); }
+.theater .photo-tile .item-visual { color: var(--brand); }
 .photo-tile--add { align-content: center; justify-items: center; gap: var(--space-2); border: 1.5px dashed var(--line-strong); background: var(--surface); box-shadow: none; color: var(--text-2); font-size: var(--text-sm); font-weight: 500; transition: border-color var(--dur-2), background-color var(--dur-2), color var(--dur-2); }
 .photo-tile--add:hover { border-color: var(--brand); background: var(--brand-tint); color: var(--brand); }
 .photo-tile--add .icon { --icon-size: var(--icon-xl); }
-.photo-tile--busy { padding: var(--space-3); color: var(--text-2); font-size: var(--text-sm); text-align: center; }
+.photo-tile--busy { padding: var(--space-3); color: var(--stage-ink); font-size: var(--text-sm); text-align: center; }
 .photo-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .profile__info { display: grid; gap: var(--space-2); align-content: start; min-width: 0; }
 .profile__meta { color: var(--text-2); font-size: var(--text-sm); }
@@ -709,7 +714,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .theater .photo-tile--add { gap: 0; border: 0; color: var(--text-2); }
 .theater .photo-tile--add .profile-visual { width: 100%; height: 100%; }
 .theater .photo-tile--add > span:last-child { position: absolute; bottom: .25rem; left: 50%; display: inline-flex; max-width: calc(100% - 1rem); align-items: center; padding: .125rem .5rem; transform: translateX(-50%); border-radius: var(--radius-pill); background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line), var(--shadow-sm); font-size: .75rem; white-space: nowrap; }
-.theater .photo-tile--add:hover { background: rgb(248 238 238 / 60%); }
+.theater .photo-tile--add:hover { background: color-mix(in srgb, var(--brand-tint) 60%, transparent); }
 .theater .photo-tile--add:hover > span:last-child { color: var(--brand); box-shadow: inset 0 0 0 1px var(--line-brand); }
 /* A single action (Take photo) sits under the object; editing a photo's several actions takes the stage's full width. */
 .theater { grid-template-areas: "photo info" "actions info"; grid-template-rows: auto 1fr; }
@@ -1379,6 +1384,8 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 
 /* ---------- Print: the Lending Hub list prints as a clean sheet ---------- */
 @media print {
+  /* Paper is white: a Dark Staff theme prints with the Light palette. */
+  :root[data-theme="dark"] { --bg: #fff; --surface: #fff; --subtle: #f4f2ee; --hover: #f7f5f1; --line: #e7e3dc; --line-strong: #d4cdc2; --line-field: #958d82; --text: #1c1917; --text-2: #57514a; --text-3: #6f675e; --brand: #7a1419; --brand-hover: #621015; --brand-tint: #f8eeee; --on-brand: #fff; --line-brand: #e7c0c4; --line-ok: #b9dcc8; --line-warn: #efdcb1; --line-bad: #efc4ca; --warn-ink: #5c4210; --ok: #17663f; --ok-tint: #e8f4ed; --warn: #8a5300; --warn-tint: #fdf7e8; --bad: #a3202f; --bad-tint: #fcebed; color-scheme: light; }
   .site-header, .filterbar, .site-footer, .hero__actions, .skip-link, .toasts { display: none !important; }
   body, .page-intro { background: var(--surface); color: var(--text); }
   .lending-layout { display: block; padding: 0; }
@@ -1876,3 +1883,6 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
 .cat-ai p { margin-block: .5rem; }
 .cat-ai input { width: 100%; margin-block: .5rem; }
 @media (max-width: 520px) { .cat-actions { flex-wrap: wrap; } .cat-actions > button { flex: 1 1 100%; white-space: normal; } }
+
+/* A theme change supplies its own circular reveal (src/theme.ts), so the default cross-fade is off while it runs (as in self-service.css). */
+:root.theme-switching::view-transition-old(root), :root.theme-switching::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
