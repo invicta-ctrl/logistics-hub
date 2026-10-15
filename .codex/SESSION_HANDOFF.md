@@ -1,8 +1,15 @@
 # Session Handoff — Logistics Hub
 
-**2026-10-15 | V1.16 OPEN / NO-GO / BLOCKED_EXTERNAL.** `main` is `de58444637e478d95fa3f74ffdd072093ccce998`; its production artifact and release identity are not yet qualified. No final acceptance or identity promotion occurred.
+**2026-10-15 | V1.16 OPEN / NO-GO / BLOCKED_EXTERNAL.** `main` is `8f5dc1e57b559374bbb54e1755bcf32095c98536` (PR55, the accepted media/theme UI slice, fast-forwarded on Earl's approval at 00:38 UTC after PR52 `de584446`); its production artifact and release identity are not yet qualified. No final acceptance or identity promotion occurred.
 
-## Current handoff — Codex production-qualification lane
+## Current handoff — Claude production-qualification lane (single-lane takeover)
+
+- **Worktree/branch/lock:** Claude cloud checkout, `slice/v1.16-production-qualification` (PR53). Earl confirmed the Codex-to-Claude custody transfer at 2026-10-15 00:38 UTC; Codex yielded at `99892da331b678ec3fed3fdd1941f1503eee5518`. Claude claimed its lock at 2026-10-15 00:39:54 UTC with `headAtClaim` `99892da` and merged `main` `8f5dc1e` (PR55) into the branch, cleanly. The media/theme lane is finished; one writer. Earl's Windows worktree keeps its untracked `NUL`.
+- **Inherited evidence:** PR53 head `99892da` push CI `38660095515`, PR CI `38660099909` and CodeQL `38660099841` SUCCESS. Everything below in the Codex handoff remains true unless a later bullet here supersedes it.
+- **Owner priority order:** QH03 log-privacy repair; dedicated Staff/Admin QA; the unfinished photo verification; a read-only Cloudflare production preflight; reconciliation of PR53 and PR54. Earl's instruction ended mid-sentence ("Preserve the V…"); until he completes it, keep V1.15 as the live label and V1.16 OPEN.
+- **Next exact action:** repair the QH03 deploy and rollback output handling (below) with CI-shaped regressions, push, and drive exact-head CI green.
+
+## Previous handoff — Codex production-qualification lane (yielded)
 
 - **Worktree/branch/lock:** `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`, `slice/v1.16-production-qualification`, implementation/main baseline `de58444637e478d95fa3f74ffdd072093ccce998`; the published handoff checkpoint is `6dc13deabd1c8fc410f9668d4b7c525c84f158f5`; obtain latest HEAD/upstream/PR53 head from live Git, separate from runtime identity. The owner transfer threshold is met (35% five-hour remaining, 1% weekly remaining). Codex completes this checkpoint then yields its lock; Claude is the designated next writer, AUTHORIZED/AWAITING_CLAIM, and must verify unlocked state then claim the lane before edits. No Claude session has started automatically. Only `NUL` is untracked; preserve it.
 - **Integration:** Codex performed the protected, non-forced leased ref update `ce601a5 -> edcf174` (`expected_sha=ce601a5`, `force=false`). PR48 is MERGED at 11:17:51 UTC. Docs-only PR52 merged at 14:58:12 UTC as `de584446`; its handback records are preserved as attributed historical context. PR47/PR50/PR51 and PR48 task refs were ancestry-checked and pruned. PR52's remote branch tip was rechecked equal to `origin/main` at `de584446`, with no local branch or attached worktree, then deleted; `origin/main` remained `de584446`.

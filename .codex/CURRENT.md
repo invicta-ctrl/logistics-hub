@@ -1,8 +1,13 @@
 # Current Work Pointer — Logistics Hub
 
-**2026-10-15 | V1.16 OPEN / NO-GO / BLOCKED_EXTERNAL.** `main` is `de58444637e478d95fa3f74ffdd072093ccce998`: PR52's docs-only Claude handback merged after PR48. Product identity remains V1.15; no final owner acceptance has been requested.
+**2026-10-15 | V1.16 OPEN / NO-GO / BLOCKED_EXTERNAL.** `main` is `8f5dc1e57b559374bbb54e1755bcf32095c98536`: after docs-only PR52 (`de584446`), Earl fast-forwarded PR55, the separately accepted Claude media/theme UI slice (`c005045`, `8f5dc1e`), at 2026-10-15 00:38 UTC. PR55 changed no version files; product identity remains V1.15 (`docs/PRODUCT_VERSION_GOVERNANCE.md`: V1.16 is underway). No final owner acceptance has been requested.
 
-## Current Codex production-qualification lane — 2026-10-15
+## Current Claude production-qualification lane — 2026-10-15 (single-lane takeover)
+
+- **Custody:** Earl handed this lane to Claude at 2026-10-15 00:38 UTC after Codex yielded at `99892da331b678ec3fed3fdd1941f1503eee5518` with no unpublished tracked changes. Claude claimed the lock in its own cloud checkout at 2026-10-15 00:39:54 UTC (`headAtClaim` `99892da`). Branch `slice/v1.16-production-qualification` (PR53), with `main` `8f5dc1e` merged in. The media/theme lane is finished, so Claude is the only implementation writer. Earl's Windows worktree keeps its untracked `NUL`; preserve it.
+- **Owner priority order:** QH03 deploy/rollback log-privacy repair; dedicated Staff/Admin QA; the unfinished photo verification; a read-only Cloudflare production preflight; reconciliation of PR53 and PR54. Exact-head verification and Earl's approval in the thread precede any merge. Production, provider and Cloudflare writes stay paused.
+
+## Codex production-qualification lane — yielded 2026-10-15 at `99892da`
 
 - Codex is completing the handoff checkpoint on `slice/v1.16-production-qualification`; the owner transfer threshold is met (35% five-hour remaining, 1% weekly remaining). Claude is the designated next writer, AUTHORIZED/AWAITING_CLAIM after this push and Codex lock yield; no Claude session has started automatically. Prepared from published records checkpoint `6dc13deabd1c8fc410f9668d4b7c525c84f158f5`; obtain the latest PR53 head/HEAD/upstream from live Git before edits. Runtime/main remains separate. Codex local lock was claimed at 2026-10-14 11:25:09 UTC. Preserve the known untracked `NUL` and all unclassified historical work.
 - Completed integration/cleanup: PR51 (`5a589c7`), PR47 (`ce601a5`, carrying PR50 `7eb3875`), PR48 (`edcf174`), and docs-only PR52 (`de584446`, merged 2026-10-14 14:58:12 UTC) are on `main`. PR52's handback history is preserved as attributed historical context; its remote branch was rechecked equal to `main` then pruned on 2026-10-15.
@@ -12,7 +17,7 @@
 
 ## Next exact action
 
-1. Claude must verify the latest published PR53 head and checks from live Git, then verify the lock is yielded and claim the lane before any edit or integration. `6dc13de` CodeQL and Workers Build PASS while its CI checks/Worker E2E are pending; `f80367c` remains the fully qualified CI baseline. Keep main merges paused while release gates remain open.
+1. Done: Claude verified PR53 head `99892da` (push CI `38660095515`, PR CI `38660099909`, CodeQL `38660099841` all SUCCESS), claimed the lane and merged `main` `8f5dc1e`. Next: repair QH03 log privacy in `.github/workflows/deploy.yml` with CI-shaped regressions, then exact-head CI. Keep main merges paused while release gates remain open.
 2. Keep the completed manual Owner QA evidence; attempt the photo subflow only through documented upload recovery or manual UI under root direction.
 3. Preserve the owner-provided screenshot visually confirmed by root as Ready/100% traffic; main automatic-build Enabled and private current rollback capture are OWNER_REPORTED. The full Cloudflare source SHA and current Production deploy command remain UNKNOWN. Keep cutover paused pending concrete preflight and root's evidence decision.
 4. Complete dedicated Staff/Admin QA, accepted Issue #49 authority, and final owner GO before release promotion.
