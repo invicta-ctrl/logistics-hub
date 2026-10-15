@@ -1,6 +1,7 @@
 import { offerReview, reviewProposals, decideKnowledge } from "./ai-review";
 import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
 import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
+import { json } from "./http";
 import { type AiRunner, MAX_PHOTO_BYTES, assistStatus, keepBoth, photoName, recheckCapturedPhoto, recheckWaiting, setAssist } from "./ambient-assist";
 import { attention, attentionSummary, reviewIdentity, reviewReturn, selfServiceToCheck } from "./attention";
 import { auditDetail, auditReview, auditState, finishAudit, itemFreshness, observe, resolveObservation, startAudit, updateAudit } from "./audits";
@@ -25,7 +26,8 @@ import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { eraseOldDetails, retentionPreview } from "./retention";
 import { selfServiceState, setSelfService } from "./settings";
 import { systemStatus } from "./system-status";
-import { MAX_SCAN_BODY, createLinkedAccount, idDerived, missingDerived, putDerived, createPerson, directory, findPeople, idScan, importPair, linkAccount, linkableAccounts, linkedPerson, personAccess, personActivity, personDetail, personLoans, personUsage, putIdCard, removeIdCard, unlinkAccount, updatePerson } from "./staff-directory";
+import { linkedPerson } from "./staff-directory";
+import { staffDirectory } from "./staff-directory-routes";
 import { openReorder, stockOverview, updateReorder } from "./stock";
 import { heldPhoto, networkOf, readBatch, resolveReview, reviewDecisions, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
 
@@ -106,7 +108,6 @@ const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|phot
 const MAX_SYNC_BYTES = 12 * 1024 * 1024;
 /** One display, two small and two detail JPEGs, plus bounded form framing. */
 const MAX_PHOTO_BODY = 2_300_000;
-const PERSON_PATH = /^\/api\/staff\/admin\/directory\/(PER-[0-9a-f-]{36})(\/account|\/account\/new|\/access|\/usage|\/loans|\/activity|\/id|\/id\/front|\/id\/back|\/id\/thumb|\/id\/face|\/id\/derived)?$/;
 const ALIAS_PATH = /^\/api\/staff\/admin\/catalog\/aliases\/(ITM-[A-Za-z0-9-]{1,24})$/;
 const ACCOUNT_PATH = /^\/api\/staff\/admin\/accounts\/(ACC-[A-Za-z0-9-]{1,60})(\/password|\/sessions\/revoke)?$/;
 // Paths still usable while an account must replace a password someone else set.
@@ -114,10 +115,6 @@ const PASSWORD_CHANGE_ALLOWED = new Set(["/api/staff/session", "/api/staff/me/pa
 /** What a sign-in without Logistics Hub access may still do: see and look after its own account. */
 const OWN_ACCOUNT_PATHS = new Set(["/api/staff/session", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke"]);
 let dummyHash: Promise<string> | undefined;
-
-function json(body: unknown, status = 200, headers: HeadersInit = {}): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...headers } });
-}
 
 function secureHeaders(response: Response, url: URL): Response {
   const headers = new Headers(response.headers);
@@ -580,46 +577,6 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   if (relation && !relation[2] && method === "POST") return json(await linkItems(env.DB, account, relation[1]!, await body()), 201);
   if (relation?.[2] && method === "DELETE") return json(await unlinkItems(env.DB, account, relation[1]!, relation[2]));
   const known = match || keeping || relation || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/attention", "/api/staff/attention/summary", "/api/staff/home", "/api/staff/home/insights", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/catalogue/photo-name", "/api/staff/locations", "/api/staff/search", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
-  return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
-}
-
-/** Administration → Staff Directory. The caller is already an ADMIN or OWNER; the owner-only steps check again inside. */
-async function staffDirectory(request: Request, env: Env, account: Account, url: URL): Promise<Response> {
-  const { pathname: path } = url;
-  const method = request.method;
-  const body = () => request.json().catch(() => null);
-  const scans = async () => {
-    // Two card scans: refuse a larger body before reading it into memory.
-    const size = Number(request.headers.get("content-length"));
-    if (!size) throw new InputError(411, "Missing content length.");
-    if (size > MAX_SCAN_BODY) throw new InputError(413, "Those scans are too large.");
-    const form = await request.formData().catch(() => null);
-    if (!form) throw new InputError(400, "Invalid upload.");
-    return form;
-  };
-  if (path === "/api/staff/admin/directory" && method === "GET") return json(await directory(env.DB));
-  if (path === "/api/staff/admin/directory/search" && method === "GET") return json(await findPeople(env.DB, url.searchParams.get("q") ?? ""), 200, { "cache-control": "private, no-store" });
-  if (path === "/api/staff/admin/directory" && method === "POST") return json(await createPerson(env.DB, account, await body()), 201);
-  if (path === "/api/staff/admin/directory/accounts" && method === "GET") return json(await linkableAccounts(env.DB, account));
-  if (path === "/api/staff/admin/directory/derived" && method === "GET") return json(await missingDerived(env.DB, env.STAFF_IDS, account));
-  if (path === "/api/staff/admin/directory/import" && method === "POST") return json(await importPair(env.DB, env.STAFF_IDS, account, await scans()));
-  const match = PERSON_PATH.exec(path);
-  const [, id, part] = match ?? [];
-  if (match && !part && method === "GET") return json(await personDetail(env.DB, id!));
-  if (match && !part && method === "PATCH") return json(await updatePerson(env.DB, account, id!, await body()));
-  if (part === "/account" && method === "PUT") return json(await linkAccount(env.DB, account, id!, await body()));
-  if (part === "/account" && method === "DELETE") return json(await unlinkAccount(env.DB, account, id!));
-  if (part === "/account/new" && method === "POST") return json(await createLinkedAccount(env.DB, account, id!, await body()), 201);
-  if (part === "/access" && method === "GET") return json(await personAccess(env.DB, account, id!));
-  if (part === "/usage" && method === "GET") return json(await personUsage(env.DB, id!, url.searchParams));
-  if (part === "/loans" && method === "GET") return json(await personLoans(env.DB, id!));
-  if (part === "/activity" && method === "GET") return json(await personActivity(env.DB, id!, url.searchParams.get("cursor")));
-  if (part === "/id" && method === "PUT") return json(await putIdCard(env.DB, env.STAFF_IDS, account, id!, await scans()));
-  if (part === "/id" && method === "DELETE") return json(await removeIdCard(env.DB, env.STAFF_IDS, account, id!, url.searchParams.get("expected")));
-  if ((part === "/id/front" || part === "/id/back") && method === "GET") return idScan(env.DB, env.STAFF_IDS, account, id!, part.slice(4), url.searchParams.get("derive") === "1");
-  if ((part === "/id/thumb" || part === "/id/face") && method === "GET") return idDerived(env.DB, env.STAFF_IDS, account, id!, part.slice(4));
-  if (part === "/id/derived" && method === "PUT") return json(await putDerived(env.DB, env.STAFF_IDS, account, id!, await scans()));
-  const known = match || ["/api/staff/admin/directory", "/api/staff/admin/directory/search", "/api/staff/admin/directory/accounts", "/api/staff/admin/directory/derived", "/api/staff/admin/directory/import"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 
