@@ -52,8 +52,10 @@ describe("the staff shell (V1.16 MA2)", () => {
 
   it("the shell keeps one copy of its state: the search shortcut and the attention numbers", () => {
     const owners = (pattern: RegExp) => sourceFiles().filter((file) => pattern.test(readFileSync(file, "utf8")));
-    expect(owners(/^let searchKey\b/m)).toEqual(["src/staff-shell.ts"]);
-    expect(owners(/^let summary\b/m)).toEqual(["src/staff-shell.ts"]);
+    // Every variable the shell keeps between pages, and only the shell.
+    const state = [...readFileSync("src/staff-shell.ts", "utf8").matchAll(/^let (\w+)/gm)].map(([, name]) => name!);
+    expect(state).toEqual(expect.arrayContaining(["searchKey", "summary", "summaryRequest", "summaryTag"]));
+    for (const name of state) expect(owners(new RegExp(`^let ${name}\\b`, "m")), name).toEqual(["src/staff-shell.ts"]);
     expect(owners(/^export const ATTENTION_PAINTED\b/m)).toEqual(["src/staff-shell.ts"]);
   });
 });
