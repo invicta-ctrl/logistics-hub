@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import { closureOf, importGraph, sourceFiles } from "./source-files";
 
@@ -54,5 +55,44 @@ describe("the staff shell (V1.16 MA2)", () => {
     expect(owners(/^let searchKey\b/m)).toEqual(["src/staff-shell.ts"]);
     expect(owners(/^let summary\b/m)).toEqual(["src/staff-shell.ts"]);
     expect(owners(/^export const ATTENTION_PAINTED\b/m)).toEqual(["src/staff-shell.ts"]);
+  });
+});
+
+/** The modules every environment may load: rules and data with no DOM, D1, R2, bindings or secrets (spec, M0 baseline). */
+const SHARED = ["ai-review-types", "catalog-draft", "catalog-policy", "catalogue-suggest", "directory-policy", "duplicates", "item-icons", "item-knowledge", "kit-policy", "location-tree", "relation-policy", "search"].map((name) => `src/${name}.ts`);
+/** Everything `entry` can load, at once or on demand. */
+const everything = (entry: string) => {
+  const seen = new Set<string>();
+  const visit = (file: string) => { if (seen.has(file)) return; seen.add(file); graph.get(file)!.runtime.forEach(visit); graph.get(file)!.lazy.forEach(visit); };
+  visit(entry);
+  return seen;
+};
+
+describe("environments (V1.16 MA3)", () => {
+  it("shared modules import only each other and compile without the browser's, the Worker's or Node's types", () => {
+    for (const file of SHARED) {
+      const imports = graph.get(file)!;
+      expect([...imports.runtime, ...imports.types, ...imports.lazy].filter((target) => !SHARED.includes(target)), file).toEqual([]);
+    }
+    // Plain ES2022 and nothing else: a shared module that touched the page, D1, R2, a binding or a secret would not compile.
+    const program = ts.createProgram(SHARED, { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, lib: ["lib.es2022.d.ts"], types: [], strict: true, noEmit: true, skipLibCheck: true });
+    expect(ts.getPreEmitDiagnostics(program).map((problem) => `${problem.file?.fileName ?? ""}: ${ts.flattenDiagnosticMessageText(problem.messageText, " ")}`)).toEqual([]);
+  });
+
+  it("the browser and the Worker load nothing of each other's: what both load is shared", () => {
+    const browser = everything("src/main.ts");
+    const worker = everything("src/worker.ts");
+    expect([...browser].filter((file) => worker.has(file) && !SHARED.includes(file))).toEqual([]);
+    expect(worker.has("src/ui.ts") || browser.has("src/inventory.ts")).toBe(false);
+  });
+
+  it("the service worker loads exactly its six files", () => {
+    expect([...closureOf(graph, "src/sw.ts")].sort()).toEqual(["src/catalog-policy.ts", "src/catalogue-store.ts", "src/offline-queue.ts", "src/offline-store.ts", "src/offline-sync.ts", "src/sw.ts"]);
+  });
+
+  it("only worker.ts imports the Staff Directory routes, so its central gate always stands in front of them", () => {
+    const importers = [...graph].filter(([, imports]) => [imports.runtime, imports.types, imports.lazy].some((set) => set.has("src/staff-directory-routes.ts"))).map(([file]) => file);
+    // Nothing else may import them; that worker.ts serves them is what the Staff Directory API tests show.
+    expect(importers.filter((file) => file !== "src/worker.ts")).toEqual([]);
   });
 });
