@@ -1,5 +1,5 @@
 import "./attention.css";
-import { ageOf, loadSession, refreshAttention, shell } from "./staff";
+import { ageOf, loadSession, refreshAttention, shell } from "./staff-shell";
 import { ApiError, type Html, api, emptyState, expired, failure, html, icon, live, mount, preservingFocus, toast, writeParams } from "./ui";
 
 /*

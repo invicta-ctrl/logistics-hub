@@ -378,6 +378,56 @@ test.describe("Where is it? in Self-Service", () => {
     await expect(offline).toContainText("Reports need a connection");
     await expect(offline.getByRole("button", { name: /find it|looks wrong/ })).toHaveCount(0);
   });
+
+  test("the picture opens large over the route; Escape, Back and Close each close only it and give focus back (V1.16 MA2)", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/self-service?do=item&item=ITM-0043");
+    await page.locator(".ss-item").getByRole("button", { name: "Where is it?" }).click();
+    const where = page.getByRole("dialog", { name: "Bottled Water" }).last();
+    const enlarge = where.getByRole("button", { name: "Enlarge the picture of Cabinet 1" });
+    const viewer = page.getByRole("dialog", { name: "Picture of Cabinet 1" });
+    // Closing hands the viewer's history entry back a moment later; a person never acts inside that moment, a test must wait for it.
+    const settled = () => expect.poll(() => page.evaluate(() => !window.history.state?.viewer)).toBe(true);
+    const entries = await page.evaluate(() => window.history.length);
+    await enlarge.click();
+    await expect(viewer).toBeVisible();
+    await expect(viewer.getByRole("img", { name: "Picture of Cabinet 1" })).toHaveAttribute("src", "/api/public/location-media/00000000-0000-4000-8000-00000000c001/display");
+    await expect(viewer.locator("figcaption")).toHaveText("Cabinet 1 · where to find Bottled Water");
+    expect(await page.evaluate(() => window.history.length)).toBe(entries + 1);
+    await page.keyboard.press("Escape");
+    await expect(viewer).toHaveCount(0);
+    await expect(where).toBeVisible();
+    await expect(enlarge).toBeFocused();
+    await settled();
+    await enlarge.click();
+    await expect(viewer).toBeVisible();
+    await page.goBack();
+    await expect(viewer).toHaveCount(0);
+    // Back closed only the viewer: the same page, with the route still open.
+    await expect(page).toHaveURL(/\/self-service\?do=item&item=ITM-0043$/);
+    await expect(where).toBeVisible();
+    await expect(enlarge).toBeFocused();
+    await enlarge.click();
+    await viewer.getByRole("button", { name: "Close photo" }).click();
+    await expect(viewer).toHaveCount(0);
+    await expect(enlarge).toBeFocused();
+    await settled();
+  });
+
+  test("with no transition to play the viewer fades in, and under reduced motion it simply appears (V1.16 MA2)", async ({ page }) => {
+    await page.addInitScript(() => { delete (Document.prototype as { startViewTransition?: unknown }).startViewTransition; });
+    const open = async () => {
+      await page.goto("/self-service?do=item&item=ITM-0043");
+      await page.locator(".ss-item").getByRole("button", { name: "Where is it?" }).click();
+      await page.getByRole("dialog", { name: "Bottled Water" }).last().getByRole("button", { name: "Enlarge the picture of Cabinet 1" }).click();
+      const viewer = page.locator("dialog.viewer");
+      await expect(viewer).toBeVisible();
+      return viewer;
+    };
+    await expect(await open()).toHaveClass(/\bviewer--fade\b/);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect(await open()).not.toHaveClass(/\bviewer--fade\b/);
+  });
 });
 
 test.describe("Self-Service review: reports from phones", () => {

@@ -1,6 +1,7 @@
 import { openViewer, photoPanel } from "./item-photo";
 import { MAX_DEPTH, VISIBILITIES, VISIBILITY_LABELS, ancestry, inOrder, levelsBelow, lookAlikes, pathOf, placesOf, withinPlace } from "./location-tree";
-import { type PlaceRow, ageOf, loadSession, shell } from "./staff";
+import type { PlaceRow } from "./staff";
+import { ageOf, loadSession, shell } from "./staff-shell";
 import { ApiError, type Html, api, emptyState, expired, failure, html, icon, live, mount, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, writeParams } from "./ui";
 
 /*

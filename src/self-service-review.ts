@@ -1,7 +1,7 @@
 import "./self-service.css";
 import { REVIEW_REASONS, type ReviewReason, foldReference, selfServiceReference } from "./catalog-policy";
 import { REPORT_LABELS, type ReportKind } from "./location-tree";
-import { loadSession, shell } from "./staff";
+import { loadSession, shell } from "./staff-shell";
 import { type Html, CREST, MARK, api, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, onLeave, plural, preservingFocus, toast, units, writeParams } from "./ui";
 
 /*

@@ -1,5 +1,5 @@
 import "./home.css";
-import { ATTENTION_PAINTED, type AttentionGroup, SEARCH_KEYS, ageOf, attentionNow, loadSession, refreshAttention, shell } from "./staff";
+import { ATTENTION_PAINTED, type AttentionGroup, SEARCH_KEYS, ageOf, attentionNow, loadSession, refreshAttention, shell } from "./staff-shell";
 import { ApiError, type Html, type IconName, api, emptyState, expired, failure, formatDateTime, html, icon, live, mount, onLeave, plural } from "./ui";
 
 /*

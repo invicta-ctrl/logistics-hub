@@ -1,4 +1,4 @@
-import { type Session, loadSession, shell } from "./staff";
+import { type Session, loadSession, shell } from "./staff-shell";
 import { type Html, html, mount, navigate, sheet as createSheet, sheetContent } from "./ui";
 
 /*

@@ -19,7 +19,7 @@ const ROUTES: Record<string, () => View | Promise<View>> = {
   "/": () => landing,
   "/lending": () => lending,
   "/self-service": () => import("./self-service-app").then((module) => module.selfService),
-  "/staff": () => import("./staff").then((module) => module.staffLogin),
+  "/staff": () => import("./staff-shell").then((module) => module.staffLogin),
   "/staff/home": () => import("./home-workspace").then((module) => module.homeWorkspace),
   "/staff/items": () => import("./staff").then((module) => module.workspace),
   "/staff/catalogue": () => import("./catalogue-workspace").then((module) => module.catalogueWorkspace),

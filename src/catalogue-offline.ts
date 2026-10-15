@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { type Access, type Snapshot, access, durable, setAccess, setSnapshot, snapshot } from "./catalogue-store";
 import { isStandalone, platform, requestPersistence } from "./pwa";
-import type { Session } from "./staff";
+import type { Session } from "./staff-shell";
 import { ApiError, api } from "./ui";
 
 /*

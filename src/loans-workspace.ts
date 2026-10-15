@@ -1,6 +1,6 @@
 import { PUBLIC_LENDING_ITEM_TYPE } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, isOverdue, loanFields, loanRow, openReturn } from "./loan-form";
-import { loadSession, shell } from "./staff";
+import { loadSession, shell } from "./staff-shell";
 import { type Html, api, emptyState, expired, html, icon, label, live, mount, onLeave, plural, preservingFocus, reducedMotion, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Period = "30d" | "12m" | "all";

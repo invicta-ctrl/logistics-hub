@@ -1,6 +1,6 @@
 import "./catalogue.css";
 import type { Who } from "./catalogue-offline";
-import { accessLabel, initials, sessionAccess, signOut } from "./staff";
+import { accessLabel, initials, sessionAccess, signOut } from "./staff-shell";
 import { type Html, MARK, app, html, icon, mount, onLeave } from "./ui";
 
 /*

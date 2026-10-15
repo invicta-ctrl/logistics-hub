@@ -2,7 +2,7 @@ import "./admin.css";
 import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
 import { ACCESS_HINT, accessChoices, accessTag, bindCopy, canManage, oneTime } from "./account-ui";
 import { adminPage, confirmImpact } from "./admin-frame";
-import { type Access, type Role, accessLabel, loadSession, sessionAccess, shell } from "./staff";
+import { type Access, type Role, accessLabel, loadSession, sessionAccess, shell } from "./staff-shell";
 import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
 
 type Row = { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number };
