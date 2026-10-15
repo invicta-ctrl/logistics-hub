@@ -238,12 +238,12 @@ process.stdout.write(${JSON.stringify(wrangler.stdout)}); process.stderr.write($
       args: read(argsFile).split("\n").filter(Boolean).map((line) => JSON.parse(line)) };
   }
 
-  /** A workflow_dispatch event file with this target, as the runner provides it. */
-  function event(target: string) {
+  /** A workflow_dispatch event file with this target and confirmation, as the runner provides it. */
+  function event(target: string, confirm = `ROLLBACK ${target}`) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lh-dispatch-"));
     dirs.push(dir);
     const file = path.join(dir, "event.json");
-    fs.writeFileSync(file, JSON.stringify({ inputs: { action: "rollback", target, reason: "test", confirm: `ROLLBACK ${target}` } }));
+    fs.writeFileSync(file, JSON.stringify({ inputs: { target, reason: "test", confirm } }));
     return file;
   }
   const stepsOf = (job: string) => {
@@ -268,6 +268,10 @@ process.stdout.write(${JSON.stringify(wrangler.stdout)}); process.stderr.write($
     expect(dry.log).toBe(dry.summary);
     // The Worker version message is still cut to 100 characters.
     expect(step("Deploy", { SHA: sha, HOW: "override", DRY: "false", REASON: "x".repeat(200) }).args[0][3]).toHaveLength(100);
+    // The reason is printed on one line, so it cannot start a line the runner would read as a command.
+    const injected = step("Deploy", { SHA: sha, HOW: "manual", DRY: "false", REASON: "fix\n::warning::injected\r" });
+    expect(injected.status, injected.log).toBe(0);
+    expect(injected.log).toMatch(new RegExp(`^Deployed ${sha} \\(manual\\) at \\S+\\. Reason: fix ::warning::injected \\n$`));
   });
 
   it("fails with Wrangler's own exit code, showing only Cloudflare's error codes", () => {
@@ -277,6 +281,10 @@ process.stdout.write(${JSON.stringify(wrangler.stdout)}); process.stderr.write($
     expect(failed.status).toBe(7);
     expect(failed.log).toBe("::error::wrangler deploy failed with exit 7 and Cloudflare [code: 10000]. Its own output stays off this public log; see docs/DEPLOYMENT.md, CI deploy-gate.\n");
     expect(failed.summary).toBe("");
+    // A failure Cloudflare gave no code for (a missing build, a bad config) still keeps Wrangler's exit code.
+    const bare = step("Deploy", { SHA: sha, HOW: "ci", DRY: "true", REASON: "" }, { stdout: "", stderr: "✘ [ERROR] The assets directory does not exist.\n", status: 9 });
+    expect(bare.status).toBe(9);
+    expect(bare.log).toBe("::error::wrangler deploy failed with exit 9. Its own output stays off this public log; see docs/DEPLOYMENT.md, CI deploy-gate.\n");
     const rollback = step("Roll back", { TARGET: version, REASON: "test" }, { stdout: wranglerSays, stderr: "", status: 3 });
     expect(rollback.status).toBe(3);
     expect(rollback.log).toBe("::error::wrangler rollback failed with exit 3. Its own output stays off this public log; see docs/DEPLOYMENT.md, CI deploy-gate.\n");
@@ -299,6 +307,25 @@ process.stdout.write(${JSON.stringify(wrangler.stdout)}); process.stderr.write($
       expect(refused.status).not.toBe(0);
       expect(refused.log).toBe("::error::target must be a Worker version id.\n");
     }
+    // A confirmation that does not match is refused in the same step, unseen: the mask covers only the exact id, not a
+    // mistyped copy of it, so no later step reads the confirmation at all.
+    expect(workflow()).not.toMatch(/\$\{\{[^}]*inputs\.confirm/);
+    for (const confirm of [`ROLLBACK ${version.slice(0, 35)}`, `rollback ${version}`, `ROLLBACK ${version.toUpperCase()}`, ""]) {
+      const refused = step("Mask the rollback target", { GITHUB_EVENT_PATH: event(version, confirm) });
+      expect(refused.status).not.toBe(0);
+      expect(refused.log).toBe(`::add-mask::${version}\n::error::confirm must be exactly ROLLBACK, a space, then the target.\n`);
+    }
+  });
+
+  it("keeps the dispatch inputs out of workflow- and job-level settings, which every step would show before the mask", () => {
+    const text = workflow();
+    const headers = [text.slice(0, text.indexOf("\njobs:\n"))];
+    for (const job of ["deploy", "rollback"]) {
+      const start = text.indexOf(`\n  ${job}:\n`);
+      expect(start, job).toBeGreaterThan(-1);
+      headers.push(text.slice(start, text.indexOf("\n    steps:\n", start)));
+    }
+    for (const header of headers) expect(header).not.toMatch(/inputs\.(target|confirm|reason)/);
   });
 
   it("rolls back with --yes and the reason, keeping every version off the log and summary", () => {
@@ -309,21 +336,32 @@ process.stdout.write(${JSON.stringify(wrangler.stdout)}); process.stderr.write($
     expect(rolled.summary).toMatch(/^Rolled back to the requested Worker version at \S+\. Reason: photo fix regressed\n$/);
     expect(rolled.log).toBe(rolled.summary);
     for (const leak of leaks) expect(rolled.summary).not.toContain(leak);
+    const injected = step("Roll back", { TARGET: version, REASON: "regressed\n::warning::injected" });
+    expect(injected.status, injected.log).toBe(0);
+    expect(injected.log).toMatch(/^Rolled back to the requested Worker version at \S+\. Reason: regressed ::warning::injected\n$/);
   });
 
   it("refuses a deploy target that is not a commit before the step that would show it", () => {
     const steps = stepsOf("deploy");
     expect(steps[0]).toMatch(/^name: Refuse a target that is not a commit before any step shows it\n/);
+    // Only a dispatch has inputs: a deploy after CI has none, and must not be refused here.
+    expect(steps[0]).toContain("if: github.event_name == 'workflow_dispatch'\n");
     expect(steps[0]).not.toContain("env:");
     expect(steps[0]).not.toContain("${{ inputs");
     expect(steps[1]).toMatch(/^name: Decide which commit\n/);
     const guard = "Refuse a target that is not a commit before any step shows it";
     for (const target of [version, "main", `${sha}\n${version}`]) {
-      const refused = step(guard, { GITHUB_EVENT_PATH: event(target) });
+      const refused = step(guard, { GITHUB_EVENT_PATH: event(target, `DEPLOY ${target}`) });
       expect(refused.status).not.toBe(0);
       expect(refused.log).toBe("::error::target must be a full 40-character commit.\n");
     }
-    const allowed = step(guard, { GITHUB_EVENT_PATH: event(sha) });
+    // So is a confirmation that does not match, which could hold a rollback's version id.
+    for (const confirm of [`ROLLBACK ${version}`, `DEPLOY ${sha.slice(0, 39)}`, `deploy ${sha}`, ""]) {
+      const refused = step(guard, { GITHUB_EVENT_PATH: event(sha, confirm) });
+      expect(refused.status).not.toBe(0);
+      expect(refused.log).toBe("::error::confirm must be exactly DEPLOY, a space, then the target.\n");
+    }
+    const allowed = step(guard, { GITHUB_EVENT_PATH: event(sha, `DEPLOY ${sha}`) });
     expect(allowed.status, allowed.log).toBe(0);
     expect(allowed.log).toBe("");
   });

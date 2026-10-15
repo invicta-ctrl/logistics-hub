@@ -68,12 +68,14 @@ jobs:
     timeout-minutes: 20
     environment: production
     steps:
-      # `deploy` is the default action, so a rollback's version id can land here by mistake. Read from the event file, it
-      # is refused before the next step would show it as part of its environment.
+      # `deploy` is the default action, so a rollback's version id can land here by mistake, as the target or in its
+      # confirmation. Read from the event file, both are refused before the next step would show them in its environment.
       - name: Refuse a target that is not a commit before any step shows it
         if: github.event_name == 'workflow_dispatch'
         run: |
-          [[ "$(jq -r '.inputs.target // ""' "$GITHUB_EVENT_PATH")" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::target must be a full 40-character commit."; exit 1; }
+          target=$(jq -r '.inputs.target // ""' "$GITHUB_EVENT_PATH")
+          [[ "$target" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::target must be a full 40-character commit."; exit 1; }
+          [ "$(jq -r '.inputs.confirm // ""' "$GITHUB_EVENT_PATH")" = "DEPLOY $target" ] || { echo "::error::confirm must be exactly DEPLOY, a space, then the target."; exit 1; }
       - name: Decide which commit
         id: pick
         env:
@@ -82,13 +84,11 @@ jobs:
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
           TARGET: ${{ inputs.target }}
           REASON: ${{ inputs.reason }}
-          CONFIRM: ${{ inputs.confirm }}
         run: |
           set -euo pipefail
           if [ "$EVENT" = workflow_dispatch ]; then
             [ "$REF" = refs/heads/main ] || { echo "::error::Run this workflow from main."; exit 1; }
             [[ "$TARGET" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::target must be a full 40-character commit."; exit 1; }
-            [ "$CONFIRM" = "DEPLOY $TARGET" ] || { echo "::error::confirm must be exactly: DEPLOY $TARGET"; exit 1; }
             [ -n "${REASON// /}" ] || { echo "::error::Give a reason."; exit 1; }
             echo "sha=$TARGET" >> "$GITHUB_OUTPUT"
           else
@@ -191,7 +191,9 @@ jobs:
           if [ "$DRY" = true ]; then
             echo "Dry run for $SHA: every check passed; nothing was uploaded." | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            echo "Deployed $SHA ($HOW) at $(date -u +%FT%TZ). ${REASON:+Reason: $REASON}" | tee -a "$GITHUB_STEP_SUMMARY"
+            # One line: a reason cannot start a line of its own that the runner would read as a command.
+            reason=${REASON//[$'\r\n']/ }
+            echo "Deployed $SHA ($HOW) at $(date -u +%FT%TZ). ${reason:+Reason: $reason}" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
   rollback:
@@ -200,23 +202,22 @@ jobs:
     timeout-minutes: 10
     environment: production
     steps:
-      # The target is a private Worker version id. This step reads it from the event file, so it never shows it either, and
-      # masks it before any later step renders it in its environment, its commands or the summary.
+      # The target is a private Worker version id. This step reads it and its confirmation from the event file, so it never
+      # shows them either; it masks the target before any later step renders it in its environment, its commands or the
+      # summary, and refuses a confirmation that does not match, whose mistyped copy of the id a mask would not cover.
       - name: Mask the rollback target
         run: |
           target=$(jq -r '.inputs.target // ""' "$GITHUB_EVENT_PATH")
           [[ "$target" =~ ^[0-9a-f-]{36}$ ]] || { echo "::error::target must be a Worker version id."; exit 1; }
           echo "::add-mask::$target"
+          [ "$(jq -r '.inputs.confirm // ""' "$GITHUB_EVENT_PATH")" = "ROLLBACK $target" ] || { echo "::error::confirm must be exactly ROLLBACK, a space, then the target."; exit 1; }
       - name: Check the request
         env:
           REF: ${{ github.ref }}
-          TARGET: ${{ inputs.target }}
           REASON: ${{ inputs.reason }}
-          CONFIRM: ${{ inputs.confirm }}
         run: |
           set -euo pipefail
           [ "$REF" = refs/heads/main ] || { echo "::error::Run this workflow from main."; exit 1; }
-          [ "$CONFIRM" = "ROLLBACK $TARGET" ] || { echo "::error::confirm must be exactly ROLLBACK, a space, then the target."; exit 1; }
           [ -n "${REASON// /}" ] || { echo "::error::Give a reason."; exit 1; }
       - uses: actions/checkout@v4
         with:
@@ -241,4 +242,5 @@ jobs:
             echo "::error::wrangler rollback failed with exit $status${codes:+ and Cloudflare $codes}. Its own output stays off this public log; see docs/DEPLOYMENT.md, CI deploy-gate."
             exit "$status"
           fi
-          echo "Rolled back to the requested Worker version at $(date -u +%FT%TZ). Reason: $REASON" | tee -a "$GITHUB_STEP_SUMMARY"
+          reason=${REASON//[$'\r\n']/ }
+          echo "Rolled back to the requested Worker version at $(date -u +%FT%TZ). Reason: $reason" | tee -a "$GITHUB_STEP_SUMMARY"
