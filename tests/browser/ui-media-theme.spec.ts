@@ -17,10 +17,9 @@ async function openStaff(page: Page, options: { items?: unknown[]; path?: string
 
 const theme = (page: Page) => page.evaluate(() => document.documentElement.getAttribute("data-theme"));
 const stored = (page: Page) => page.evaluate(() => localStorage.getItem("hub-theme"));
-async function choose(page: Page, choice: "light" | "dark" | "system") {
+async function choose(page: Page, choice: "light" | "dark") {
   if (!(await page.locator("#staff-menu").evaluate((menu) => menu.matches(":popover-open")))) await page.locator("button.account").click();
-  const toggle = page.locator("[data-theme-toggle]");
-  if (choice === "system") throw new Error("the toggle has no System choice; save it in storage instead");
+  const toggle = page.locator("[data-staff-theme]");
   if ((await toggle.getAttribute("aria-pressed")) !== String(choice === "dark")) await toggle.click();
 }
 
@@ -29,12 +28,15 @@ test.describe("Staff theme", () => {
     await openStaff(page);
     expect(await theme(page)).toBeNull();
     await page.locator("button.account").click();
-    const toggle = page.locator("[data-theme-toggle]");
+    const toggle = page.locator("[data-staff-theme]");
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await expect(toggle).toHaveAttribute("aria-label", "Dark theme");
     expect(await toggle.locator("svg").count()).toBe(2);
+    const shown = () => toggle.locator("svg").evaluateAll((icons) => icons.map((icon) => getComputedStyle(icon).opacity));
+    await expect.poll(shown).toEqual(["1", "0"]);
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(shown).toEqual(["0", "1"]);
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
   });
@@ -83,6 +85,20 @@ test.describe("Staff theme", () => {
     await page.goto("/");
     expect(await theme(page)).toBeNull();
     await page.goto("/self-service");
+    expect(await theme(page)).toBeNull();
+    expect(await page.evaluate(() => document.querySelector('meta[name="color-scheme"]')!.getAttribute("content"))).toBe("light");
+  });
+
+  test("the Self-Service switch and the Staff switch do not touch each other", async ({ page }) => {
+    await page.route("**/api/self-service/catalog", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ maintenance: true }) }));
+    await page.goto("/self-service");
+    const toggle = page.locator("[data-theme-toggle]");
+    const before = await toggle.getAttribute("aria-pressed");
+    const flipped = before === "true" ? "false" : "true";
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", flipped);
+    await expect.poll(() => page.evaluate(() => document.body.dataset.theme)).toBe(flipped === "true" ? "dark" : "light");
+    expect(await stored(page)).toBeNull();
     expect(await theme(page)).toBeNull();
     expect(await page.evaluate(() => document.querySelector('meta[name="color-scheme"]')!.getAttribute("content"))).toBe("light");
   });

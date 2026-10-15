@@ -79,7 +79,7 @@ export function shell(session: Session, section: Section, main: Html): void {
       </div>
     </header>
     <div class="menu" id="staff-menu" popover>
-      <div class="menu__identity">${avatar}<p><strong>${session.displayName}</strong><span>${accessLabel(sessionAccess(session))} · <span class="mono">${session.username}</span></span></p><button class="menu__theme" type="button" data-theme-toggle aria-label="Dark theme" aria-pressed="${String(staffDark())}">${icon("sun")}${icon("moon")}</button></div>
+      <div class="menu__identity">${avatar}<p><strong>${session.displayName}</strong><span>${accessLabel(sessionAccess(session))} · <span class="mono">${session.username}</span></span></p><button class="menu__theme" type="button" data-staff-theme aria-label="Dark theme" aria-pressed="${String(staffDark())}">${icon("sun")}${icon("moon")}</button></div>
       ${overflow.length ? html`<ul class="menu__list menu__list--more" aria-label="More sections">${overflow.map((entry) => html`<li><a class="menu__item" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}${entry.text}</a></li>`)}</ul>` : ""}
       <ul class="menu__list">
         ${sections.length ? html`<li><a class="menu__item" href="/staff/home" data-route ${current("home")}>${icon("home")}Home</a></li>` : ""}

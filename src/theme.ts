@@ -38,7 +38,7 @@ export function syncTheme(path: string = window.location.pathname): void {
   if (theme === "dark") root.setAttribute("data-theme", "dark"); else root.removeAttribute("data-theme");
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", THEME_COLOR[theme]);
   document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", theme);
-  document.querySelectorAll<HTMLElement>("[data-theme-toggle]").forEach((button) => button.setAttribute("aria-pressed", String(theme === "dark")));
+  document.querySelectorAll<HTMLElement>("[data-staff-theme]").forEach((button) => button.setAttribute("aria-pressed", String(theme === "dark")));
 }
 
 /** The new theme spreads out from the control as a circle where the browser can and motion is welcome; otherwise it swaps at once. */
@@ -66,7 +66,7 @@ export function startTheme(): void {
   if (started) return;
   started = true;
   document.addEventListener("click", (event) => {
-    const button = (event.target as Element).closest<HTMLButtonElement>("[data-theme-toggle]");
+    const button = (event.target as Element).closest<HTMLButtonElement>("[data-staff-theme]");
     if (button) choose(staffDark() ? "light" : "dark", button);
   });
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (preference() === "system") syncTheme(); });
