@@ -199,8 +199,9 @@ export async function homeWorkspace(): Promise<void> {
   let active = true;
   onLeave(() => { active = false; });
   // Home is left the moment the address changes, while the next page's code may still be loading: an answer that arrives
-  // then, an ended session included, belongs to the page the person left and never sends them anywhere.
-  const here = () => active && window.location.pathname === "/staff/home";
+  // then, an ended session included, belongs to the page the person left and never sends them anywhere. Like the router,
+  // this ignores trailing slashes, so Home opened as /staff/home/ is still here.
+  const here = () => active && window.location.pathname.replace(/\/+$/, "") === "/staff/home";
   const loadInsights = () => {
     box.setAttribute("aria-busy", "true");
     api<Insights>("/api/staff/home/insights", { priority: "low" } as RequestInit).then((data) => {
