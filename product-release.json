@@ -4,9 +4,9 @@
   "record": "docs/road-to-v2/releases/v1.16.md",
   "changes": [
     "Photo and name suggestions stay optional: they never change stock or hold up saving, and your typing always wins.",
-    "Add items fills Category and Counted in when a name matches reviewed items, and says so underneath.",
+    "Add items fills in Category and Counted in when a name clearly matches reviewed catalogue items, and says so underneath.",
     "Administration's System page shows the running version and what's new in it.",
-    "Calmer screens: photos on a stone stage, quieter empty states, and a Dark theme from the account menu's sun and moon button.",
-    "Sign-in and most staff pages load about half as much code, so they open sooner on phones."
+    "Calmer screens: a new Home, item details that open beside their row, quieter overdue loans, photos on a plain backdrop, and a Dark theme from the account menu.",
+    "Sign-in and most staff pages now download about half as much code, so they should open sooner on slow connections."
   ]
 }
