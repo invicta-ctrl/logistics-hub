@@ -280,6 +280,8 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   let stagedVersion: string | null | undefined;
   let cropping = false;
   let state: "" | "preparing" | "saving" | "removing" | "cleaning" = "";
+  let cleanupTask: AbortController | null = null;
+  let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
   let confirming = false;
   let editing = noun !== "photo";
   let error = "";
@@ -308,8 +310,8 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   /** Item photos only: remove the background, or go back to the original. The original photo is never changed by either. */
   const cleanButton = (): Html => {
     if (!options.cleanup || !photo) return html``;
-    if (photo.cutout) return html`<button type="button" class="button button--ghost button--sm" data-original ${busy() ? "disabled" : ""}>Use original</button>`;
-    return html`<button type="button" class="button button--ghost button--sm" data-clean ${busy() || !photo.cleanable ? "disabled" : ""}>Remove background</button>${enableButton()}`;
+    if (photo.cutout) return html`<button type="button" class="button button--ghost button--sm" data-original ${busy() || cleanupTask ? "disabled" : ""}>Use original</button>`;
+    return html`<button type="button" class="button button--ghost button--sm" data-clean ${busy() || cleanupTask || !photo.cleanable ? "disabled" : ""}>Remove background</button>${enableButton()}`;
   };
 
   const draw = () => {
@@ -342,14 +344,65 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       html`${!editing ? alert : html`${confirming
         ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>
             <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : `Remove ${noun}`}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>`
-        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button>${options.noun === "photo" ? html`<button type="button" class="button button--secondary button--sm" data-crop-existing>Crop thumbnail</button>` : ""}<button type="button" class="button button--ghost button--sm" data-remove>Remove</button>${cleanButton()}${noun === "photo" ? html`<button type="button" class="button button--ghost button--sm" data-close-photo-editor>Done</button>` : ""}</div>${state === "cleaning" ? html`<p class="field__hint" role="status">Working…</p>` : ""}`}${cleanupHint()}${alert}`}`);
+        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button>${options.noun === "photo" ? html`<button type="button" class="button button--secondary button--sm" data-crop-existing>Crop thumbnail</button>` : ""}<button type="button" class="button button--ghost button--sm" data-remove>Remove</button>${cleanButton()}${noun === "photo" ? html`<button type="button" class="button button--ghost button--sm" data-close-photo-editor>Done</button>` : ""}</div>${state === "cleaning" ? html`<p class="field__hint" role="status">Working…</p>` : ""}`}${cleanupTask ? html`<p class="field__hint" role="status">Removing background…</p>` : ""}${cleanupHint()}${alert}`}`);
   };
   const focus = (selector: string) => host.querySelector<HTMLElement>(selector)?.focus();
+  const panelActions = ["data-pick", "data-camera", "data-view", "data-remove", "data-keep", "data-remove-confirmed", "data-clean", "data-original", "data-crop-existing", "data-close-photo-editor"];
+  const heldAction = () => panelActions.find((name) => host.querySelector(`[${name}]:focus`));
+  const stopCleanup = () => {
+    if (cleanupTimer) clearTimeout(cleanupTimer);
+    cleanupTimer = null;
+    cleanupTask?.abort();
+    cleanupTask = null;
+  };
+  const cleanupCurrent = (savedId: string, controller: AbortController) => !controller.signal.aborted && cleanupTask === controller && host.isConnected && !busy() && !staged && photo?.id === savedId;
+  const redrawCleanup = () => {
+    const held = heldAction();
+    draw();
+    if (held && host.isConnected) focus(`[${held}]`);
+  };
+  const cleanSavedPhoto = (savedId: string, updatedAt?: string) => {
+    if (!options.cleanup || !host.isConnected || busy() || staged || photo?.id !== savedId) return;
+    stopCleanup();
+    const controller = new AbortController();
+    cleanupTask = controller;
+    cleanupTimer = setTimeout(() => controller.abort(), 60_000);
+    redrawCleanup();
+    void (async () => {
+      try {
+        if (!cleanupCurrent(savedId, controller)) return;
+        const fault = await removePhotoBackground(options.cleanup!, savedId, { signal: controller.signal, canContinue: () => cleanupCurrent(savedId, controller), updatedAt });
+        if (!cleanupCurrent(savedId, controller)) return;
+        if (fault) {
+          error = `${fault} The original photo is still in use.`;
+          redrawCleanup();
+          return;
+        }
+        photo = { ...photo, cutout: true, cutoutThumb: true };
+        redrawCleanup();
+        toast("Background removed.");
+        if (!cleanupCurrent(savedId, controller)) return;
+        await Promise.resolve(options.changed(photo));
+        if (!cleanupCurrent(savedId, controller)) return;
+      } catch (problem) {
+        if (!cleanupCurrent(savedId, controller) || controller.signal.aborted) return;
+        error = `${failure(problem)} The original photo is still in use.`;
+        redrawCleanup();
+      } finally {
+        if (cleanupTask !== controller) return;
+        if (cleanupTimer) clearTimeout(cleanupTimer);
+        cleanupTimer = null;
+        cleanupTask = null;
+        if (host.isConnected && !busy() && !staged && photo?.id === savedId) redrawCleanup();
+      }
+    })();
+  };
 
   const select = async (chooser: HTMLInputElement) => {
     const file = chooser.files?.[0];
     chooser.value = "";
     if (!file) return;
+    stopCleanup();
     const version = options.updatedAt?.();
     const revision = ++selection;
     state = "preparing";
@@ -423,6 +476,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     else if (target.closest("[data-crop-photo]") && staged) { cropping = true; draw(); }
     else if (target.closest("[data-reset-photo]") && originalStaged) { staged = originalStaged; draw(); focus("[data-save]"); }
     else if (target.closest("[data-crop-existing]") && photo) {
+      stopCleanup();
       const version = options.updatedAt?.(); const revision = ++selection; state = "preparing"; draw();
       try {
         const response = await fetch(photoUrl(photo.id, "display"), { credentials: "same-origin" });
@@ -458,28 +512,28 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       if (cropExisting) form.set("crop", "1");
       if (options.updatedAt) form.set("updatedAt", stagedVersion ?? "");
       try {
-        const saved = await api<{ photo: Photo }>(endpoint, { method: "PUT", body: form });
+        const saved = await api<{ photo: Photo; updatedAt?: string }>(endpoint, { method: "PUT", body: form });
+        const savedUpdatedAt = typeof saved.updatedAt === "string" ? saved.updatedAt : undefined;
         photo = saved.photo;
         staged = originalStaged = null;
         cropExisting = false;
-        if (cleanAfterSave && options.cleanup && photo.cleanable) {
-          await changeBackground(true);
-          if (photo?.cutout) { editing = noun !== "photo"; draw(); focus("[data-view]"); }
-          return;
-        }
         state = "";
-        if (cleanAfterSave) error = photo.cleanupReason || "Background removal is unavailable. The saved original photo is kept.";
-        editing = noun !== "photo";
+        if (cleanAfterSave && (!options.cleanup || !photo.cleanable)) error = photo.cleanupReason || "Background removal is unavailable. The saved original photo is kept.";
+        editing = cleanAfterSave || noun !== "photo";
         draw();
         toast(`${noun === "photo" ? "Photo" : "Picture"} saved.`);
-        void Promise.resolve(options.changed(photo)).catch(() => undefined);
-        focus("[data-view]");
+        focus(cleanAfterSave && noun === "photo" ? "[data-close-photo-editor]" : "[data-view]");
+        const savedId = photo.id;
+        void Promise.resolve(options.changed(photo)).catch(() => undefined).then(() => {
+          if (cleanAfterSave && options.cleanup && host.isConnected && !busy() && !staged && photo?.id === savedId && photo.cleanable) cleanSavedPhoto(savedId, savedUpdatedAt);
+        });
       } catch (problem) {
         await failed(problem);
       }
     } else if ((target.closest("[data-clean]") || target.closest("[data-original]")) && photo && options.cleanup) {
       await changeBackground(Boolean(target.closest("[data-clean]")));
     } else if (target.closest("[data-remove-confirmed]") && photo) {
+      stopCleanup();
       state = "removing";
       draw();
       try {
@@ -551,9 +605,9 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     if (busy() || staged) return;
     selection += 1;
     // A redraw replaces the buttons, so whichever one has focus is given it again.
-    const held = ["data-pick", "data-view", "data-remove", "data-clean", "data-original"].find((name) => host.querySelector(`[${name}]:focus`));
+    const held = heldAction();
     // A refresh of the same original must not erase a failed cleanup's explanation.
-    if (photo?.id !== next?.id) error = "";
+    if (photo?.id !== next?.id) { error = ""; stopCleanup(); }
     photo = next; confirming = false; draw();
     void repairThumbnail().then(repairDetail);
     if (held) focus(`[${held}]`);

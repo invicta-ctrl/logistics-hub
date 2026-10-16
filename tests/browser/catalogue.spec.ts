@@ -1514,6 +1514,135 @@ test("enabling background removal keeps a staged first photo and makes no cleanu
   expect(cleanupCalls).toBe(0);
 });
 
+test("Save & remove background publishes the photo before its optional cleanup settles", async ({ page }) => {
+  await page.goto("/");
+  const photoId = "00000000-0000-4000-8000-0000000000cd";
+  let releaseCleanup: () => void = () => {};
+  const cleanupHeld = new Promise<void>((resolve) => { releaseCleanup = resolve; });
+  const cutout = Buffer.from(await page.evaluate(() => {
+    const canvas = Object.assign(document.createElement("canvas"), { width: 16, height: 16 });
+    const context = canvas.getContext("2d")!;
+    context.fillStyle = "#9a2537"; context.fillRect(0, 0, 8, 16);
+    return canvas.toDataURL("image/png").split(",")[1]!;
+  }), "base64");
+  await page.route("**/api/staff/items/ITM-test/photo", (route) => route.fulfill({ json: { photo: { id: photoId, width: 1, height: 1, cleanable: true }, updatedAt: "new-version" } }));
+  await page.route("**/api/staff/items/ITM-test/cutout", async (route) => {
+    const contentType = route.request().headers()["content-type"] ?? "";
+    if (contentType.startsWith("multipart/form-data")) {
+      const form = await new Response(new Uint8Array(route.request().postDataBuffer()!), { headers: { "content-type": contentType } }).formData();
+      expect(form.get("updatedAt")).toBe("new-version");
+      await route.fulfill({ json: {} }); return;
+    }
+    await cleanupHeld;
+    await route.fulfill({ json: { cutout: true } });
+  });
+  await page.route(`**/api/staff/media/${photoId}/cutout`, (route) => route.fulfill({ contentType: "image/png", headers: { etag: CUTOUT_ETAG }, body: cutout }));
+  await page.evaluate(async () => {
+    const modulePath = "/src/item-photo.ts";
+    const { photoPanel } = await import(modulePath) as typeof import("../../src/item-photo");
+    const host = document.createElement("section"); host.id = "async-cleanup-photo"; host.innerHTML = '<div data-tile></div><div data-actions></div>'; host.dataset.changes = "0"; document.querySelector("main")!.append(host);
+    (window as unknown as { cleanupPanel: { render: (photo: { id: string; width: number; height: number; cleanable: boolean }) => void } }).cleanupPanel = photoPanel(host, { id: "ITM-test", name: "Synthetic item", photo: null, noun: "photo", endpoint: "/api/staff/items/ITM-test/photo", cleanup: "/api/staff/items/ITM-test/cutout", cleanupState: () => ({ cleanable: true }), thumbUrl: () => "", hintAdd: "Choose photo", hintHas: "Original kept", removeNote: "", updatedAt: () => "old-version", changed: () => { host.dataset.changes = String(Number(host.dataset.changes) + 1); }, refresh: async () => {}, view: () => {} });
+  });
+  const panel = page.locator("#async-cleanup-photo");
+  await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "item.png", mimeType: "image/png", buffer: PNG });
+  await panel.getByRole("button", { name: "Save & remove background", exact: true }).click();
+  await expect(page.getByText("Photo saved.", { exact: true })).toBeVisible();
+  await expect(panel.locator("[data-close-photo-editor]")).toBeFocused();
+  await expect(panel).toHaveAttribute("data-changes", "1");
+  await expect(panel.locator("[data-pick]")).toBeEnabled();
+  await expect(panel.locator("[data-clean]")).toBeDisabled();
+  await page.evaluate((id) => (window as unknown as { cleanupPanel: { render: (photo: { id: string; width: number; height: number; cleanable: boolean }) => void } }).cleanupPanel.render({ id, width: 1, height: 1, cleanable: true }), photoId);
+  await panel.locator("[data-camera]").focus();
+  releaseCleanup();
+  await expect(page.getByText("Background removed.", { exact: true })).toBeVisible();
+  await expect(panel.locator("[data-camera]")).toBeFocused();
+  await expect(panel).toHaveAttribute("data-changes", "2");
+  await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "ordinary-save.png", mimeType: "image/png", buffer: PNG });
+  await panel.locator("[data-save]").click();
+  await expect(panel.locator("[data-view]")).toBeFocused();
+});
+
+test("background cleanup ignores stale acceptance after a new photo or detached panel", async ({ page }) => {
+  await page.goto("/");
+  const staleId = "00000000-0000-4000-8000-0000000000ce";
+  const detachedId = "00000000-0000-4000-8000-0000000000cf";
+  const accepting: string[] = [];
+  const accepted: string[] = [];
+  const release = new Map<string, () => void>();
+  const held = new Map<string, Promise<void>>();
+  for (const id of ["ITM-stale", "ITM-detached"]) held.set(id, new Promise<void>((resolve) => release.set(id, resolve)));
+  const cutout = Buffer.from(await page.evaluate(() => {
+    const canvas = Object.assign(document.createElement("canvas"), { width: 16, height: 16 });
+    const context = canvas.getContext("2d")!; context.fillStyle = "#9a2537"; context.fillRect(0, 0, 8, 16);
+    return canvas.toDataURL("image/png").split(",")[1]!;
+  }), "base64");
+  await page.route("**/api/staff/items/ITM-*/photo", (route) => {
+    const item = /items\/(ITM-[^/]+)\/photo/.exec(route.request().url())![1]!;
+    return route.fulfill({ json: { photo: { id: item === "ITM-stale" ? staleId : detachedId, width: 1, height: 1, cleanable: true } } });
+  });
+  await page.route("**/api/staff/items/ITM-*/cutout", async (route) => {
+    const item = /items\/(ITM-[^/]+)\/cutout/.exec(route.request().url())![1]!;
+    if (!(route.request().headers()["content-type"] ?? "").startsWith("multipart/form-data")) { await route.fulfill({ json: { cutout: true } }); return; }
+    accepting.push(item); await held.get(item)!;
+    await route.fulfill({ json: {} }).catch(() => undefined);
+    accepted.push(item);
+  });
+  await page.route("**/api/staff/media/*/cutout", (route) => route.fulfill({ contentType: "image/png", headers: { etag: CUTOUT_ETAG }, body: cutout }));
+  await page.evaluate(async () => {
+    const modulePath = "/src/item-photo.ts";
+    const { photoPanel } = await import(modulePath) as typeof import("../../src/item-photo");
+    const make = (hostId: string, item: string) => {
+      const host = document.createElement("section"); host.id = hostId; host.innerHTML = '<div data-tile></div><div data-actions></div>'; host.dataset.changes = "0"; document.querySelector("main")!.append(host);
+      photoPanel(host, { id: item, name: "Synthetic item", photo: null, noun: "photo", endpoint: `/api/staff/items/${item}/photo`, cleanup: `/api/staff/items/${item}/cutout`, cleanupState: () => ({ cleanable: true }), thumbUrl: () => "", hintAdd: "Choose photo", hintHas: "Original kept", removeNote: "", changed: () => { host.dataset.changes = String(Number(host.dataset.changes) + 1); if (item === "ITM-detached") (window as unknown as { detachedChanges: number }).detachedChanges = Number(host.dataset.changes); }, refresh: async () => {}, view: () => {} });
+    };
+    (window as unknown as { detachedChanges: number }).detachedChanges = 0;
+    make("stale-cleanup-photo", "ITM-stale"); make("detached-cleanup-photo", "ITM-detached");
+  });
+  const stale = page.locator("#stale-cleanup-photo");
+  await stale.locator("input[type=file]:not([capture])").setInputFiles({ name: "first.png", mimeType: "image/png", buffer: PNG });
+  await stale.getByRole("button", { name: "Save & remove background", exact: true }).click();
+  await expect.poll(() => accepting.includes("ITM-stale")).toBe(true);
+  await stale.locator("input[type=file]:not([capture])").setInputFiles({ name: "replacement.png", mimeType: "image/png", buffer: PNG });
+  await expect(stale.locator("[data-save]")).toBeVisible();
+  release.get("ITM-stale")!();
+  await expect.poll(() => accepted.includes("ITM-stale")).toBe(true);
+  await expect(stale).toHaveAttribute("data-changes", "1");
+  const detached = page.locator("#detached-cleanup-photo");
+  await detached.locator("input[type=file]:not([capture])").setInputFiles({ name: "detached.png", mimeType: "image/png", buffer: PNG });
+  await detached.getByRole("button", { name: "Save & remove background", exact: true }).click();
+  await expect.poll(() => accepting.includes("ITM-detached")).toBe(true);
+  await detached.evaluate((node) => node.remove());
+  release.get("ITM-detached")!();
+  await expect.poll(() => accepted.includes("ITM-detached")).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { detachedChanges: number }).detachedChanges)).toBe(1);
+});
+
+test("delayed saved callback cannot start cleanup over a newer staged photo", async ({ page }) => {
+  await page.goto("/");
+  const photoId = "00000000-0000-4000-8000-0000000000d0";
+  let cleanupCalls = 0;
+  await page.route("**/api/staff/items/ITM-delayed/photo", (route) => route.fulfill({ json: { photo: { id: photoId, width: 1, height: 1, cleanable: true } } }));
+  await page.route("**/api/staff/items/ITM-delayed/cutout", (route) => { cleanupCalls += 1; return route.abort(); });
+  await page.evaluate(async () => {
+    const modulePath = "/src/item-photo.ts";
+    const { photoPanel } = await import(modulePath) as typeof import("../../src/item-photo");
+    const host = document.createElement("section"); host.id = "delayed-changed-photo"; host.innerHTML = '<div data-tile></div><div data-actions></div>'; document.querySelector("main")!.append(host);
+    photoPanel(host, { id: "ITM-delayed", name: "Synthetic item", photo: null, noun: "photo", endpoint: "/api/staff/items/ITM-delayed/photo", cleanup: "/api/staff/items/ITM-delayed/cutout", cleanupState: () => ({ cleanable: true }), thumbUrl: () => "", hintAdd: "Choose photo", hintHas: "Original kept", removeNote: "", changed: async () => { host.dataset.changed = "waiting"; await (window as unknown as { changedHeld: Promise<void> }).changedHeld; host.dataset.changed = "settled"; }, refresh: async () => {}, view: () => {} });
+    (window as unknown as { changedHeld: Promise<void> }).changedHeld = new Promise<void>((resolve) => (window as unknown as { releaseChanged: () => void }).releaseChanged = resolve);
+  });
+  const panel = page.locator("#delayed-changed-photo");
+  await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "first.png", mimeType: "image/png", buffer: PNG });
+  await panel.getByRole("button", { name: "Save & remove background", exact: true }).click();
+  await expect(panel).toHaveAttribute("data-changed", "waiting");
+  await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "newer.png", mimeType: "image/png", buffer: PNG });
+  await expect(panel.locator("[data-save]")).toBeFocused();
+  await page.evaluate(() => (window as unknown as { releaseChanged: () => void }).releaseChanged());
+  await expect(panel).toHaveAttribute("data-changed", "settled");
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  expect(cleanupCalls).toBe(0);
+  await expect(panel.locator("[data-save]")).toBeVisible();
+});
+
 test("phone crop handles resize and move with real touch while keeping the original", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 650 }); await page.goto("/");
   await page.evaluate(async () => {
