@@ -34,11 +34,21 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Compare the exact PR base (or previous main SHA) before any product is built.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Verify version-governance regressions
+        run: node --test tests/version-governance.test.mjs
+      - name: Refuse product changes without a successive release identity
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        env:
+          VERSION_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/verify-product-version.mjs
       - run: npm run build
       - run: npm test
       # The performance harnesses are skipped in ordinary runs; these smoke runs keep them working on the current schema
