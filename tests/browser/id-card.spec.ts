@@ -28,6 +28,15 @@ const pose = (page: Page) => page.locator("[data-card]").evaluate((element) => {
 });
 const flat = (side: "front" | "back") => (value: { m11: number; m13: number; m23: number }) =>
   Math.abs(value.m11 - (side === "front" ? 1 : -1)) < 0.002 && Math.abs(value.m13) < 0.01 && Math.abs(value.m23) < 0.01;
+/**
+ * Flat on that side throughout 400 ms. A turn swings through flat and back a few times before it rests, for longer on a busy runner,
+ * so one flat sample can be a swing passing by.
+ */
+async function atRest(page: Page, side: "front" | "back") {
+  const until = Date.now() + 400;
+  do { if (!flat(side)(await pose(page))) return false; } while (Date.now() < until);
+  return true;
+}
 
 async function openFront(page: Page) {
   await page.goto(`/staff/admin/directory?person=${ID}&tab=id`);
@@ -65,7 +74,8 @@ test("the card flies out of its tile, leans toward the mouse, settles flat, turn
   await expect(viewer.getByRole("button", { name: "Details" })).toHaveAttribute("aria-pressed", "true");
   await expect.poll(async () => flat("back")(await pose(page)), { timeout: 4000 }).toBe(true);
   await page.keyboard.press("p");
-  await expect.poll(async () => flat("front")(await pose(page)), { timeout: 4000 }).toBe(true);
+  // At rest before zooming: zooming stops the lean, and the check below must not catch the turn still swinging.
+  await expect.poll(() => atRest(page, "front"), { timeout: 8000 }).toBe(true);
 
   // Zoomed in, the card is for reading: it does not lean.
   await page.keyboard.press("+");
