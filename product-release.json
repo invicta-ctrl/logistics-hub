@@ -1,11 +1,12 @@
 {
-  "version": "V1.15",
-  "sourceCommit": "962c66e718bad84d29b8b470400753701d7f5cd2",
-  "record": "docs/road-to-v2/releases/v1.15-final-pass.md",
+  "version": "V1.16",
+  "sourceCommit": "6ceefb5b5d0d98feab80359984bd736743b74989",
+  "record": "docs/road-to-v2/releases/v1.16.md",
   "changes": [
-    "Add items opens directly, with an optional location.",
-    "Crops and background edits appear across item views.",
-    "Sharper item photos fit inventory and Self-Service screens.",
-    "Inactive duplicates can be merged while preserving stock and history."
+    "Photo and name suggestions stay optional: they never change stock or hold up saving, and your typing always wins.",
+    "Add items fills Category and Counted in when a name matches reviewed items, and says so underneath.",
+    "Administration's System page shows the running version and what's new in it.",
+    "Calmer screens: photos on a stone stage, quieter empty states, and a Dark theme from the account menu's sun and moon button.",
+    "Sign-in and most staff pages load about half as much code, so they open sooner on phones."
   ]
 }
