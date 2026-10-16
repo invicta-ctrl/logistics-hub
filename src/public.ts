@@ -54,7 +54,7 @@ function terms(item: LendingItem): string {
   return [item.audience === "USC_STAFF_ONLY" ? label(item.audience) : "", item.itemType === "Consumable" ? "Consumable, taken and not returned" : ""].filter(Boolean).join(" · ");
 }
 
-const skeletonRows = (count: number) => html`<ul class="catalogue" aria-hidden="true">${Array.from({ length: count }, () => html`<li class="catalogue__row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></li>`)}</ul>`;
+const skeletonRows = (count: number) => html`<section class="catalogue-group" aria-hidden="true"><h2 class="catalogue-group__title"><span class="skeleton skeleton--text"></span></h2><ul class="catalogue catalogue--photos">${Array.from({ length: count }, () => html`<li class="catalogue__row"><span class="item-thumb skeleton"></span><div class="catalogue__main"><span class="skeleton skeleton--text"></span></div><span class="skeleton skeleton--num"></span></li>`)}</ul></section>`;
 
 /** Rolls each changed count from its previous value to the new one. */
 function rollCounts(container: Element, before: Map<string, number>, changed: Set<string>): void {
@@ -121,12 +121,12 @@ export function lending(): void {
             <button type="button" data-sort="name" aria-pressed="true">A–Z</button><button type="button" data-sort="available" aria-pressed="false">Availability</button>
           </div>
         </div>
-        <div class="chips" id="lending-categories" role="group" aria-label="Category"></div>
+        <div class="chips" id="lending-categories" role="group" aria-label="Category" aria-busy="true"><span class="chip chip--skeleton" aria-hidden="true"><span class="skeleton"></span></span><span class="chip chip--skeleton" aria-hidden="true"><span class="skeleton"></span></span><span class="chip chip--skeleton" aria-hidden="true"><span class="skeleton"></span></span></div>
       </div>
     </search>
     <div class="container lending-layout">
       <p class="result-count" id="lending-count" aria-live="polite"></p>
-      <div id="lending-results" aria-busy="true">${skeletonRows(6)}</div>
+      <div id="lending-results" aria-busy="true">${skeletonRows(8)}</div>
       <p class="lending-note">Borrow in person at the Logistics office. Staff record the loan and return date.</p>
     </div>
   </main>`, "lending");
@@ -156,9 +156,11 @@ export function lending(): void {
     clear.hidden = !search.value;
     writeParams({ q: search.value.trim(), category, available: availableOnly.checked ? "1" : null, sort: sort === "name" ? null : sort });
     sortGroup.querySelectorAll("button").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.sort === sort)));
+    chips.removeAttribute("aria-busy");
     if (!catalog.items.length) {
       count.textContent = "";
       chips.hidden = true;
+      mount(chips, html``);
       mount(results, emptyState("No items are open for borrowing yet", "Staff are reviewing the inventory. Approved items appear here automatically; there is no need to refresh."));
       return;
     }
@@ -233,6 +235,9 @@ export function lending(): void {
     onError: () => {
       if (catalog) return;
       results.removeAttribute("aria-busy");
+      chips.removeAttribute("aria-busy");
+      chips.hidden = true;
+      mount(chips, html``);
       mount(results, emptyState("We couldn't load the Lending Hub", "Check your connection. We'll keep retrying automatically.", html`<button class="button button--secondary" type="button" id="retry">Try again now</button>`, "error"));
       document.querySelector("#retry")?.addEventListener("click", () => void poll.refresh());
     }

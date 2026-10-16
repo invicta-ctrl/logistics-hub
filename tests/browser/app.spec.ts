@@ -54,6 +54,36 @@ test("Lending Hub groups by category, filters, and keeps filters in the URL", as
   await expect(page.getByText("Cork Board")).toBeVisible();
 });
 
+test("Lending Hub reserves its loading geometry until the catalog arrives", async ({ page }) => {
+  let releaseCatalog: () => void = () => {};
+  const delayedCatalog = new Promise<void>((resolve) => { releaseCatalog = resolve; });
+  await page.route("**/api/public/catalog", async (route) => {
+    await delayedCatalog;
+    await route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify(catalog) });
+  });
+  await page.addInitScript(() => {
+    let value = 0;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries() as Array<PerformanceEntry & { hadRecentInput?: boolean; value?: number }>) if (!entry.hadRecentInput) value += entry.value ?? 0;
+    }).observe({ type: "layout-shift", buffered: true });
+    Object.defineProperty(window, "__lendingCls", { get: () => value });
+  });
+  await page.setViewportSize({ width: 1365, height: 900 });
+  await page.goto("/lending", { waitUntil: "domcontentloaded" });
+  const results = page.locator("#lending-results");
+  await expect(results).toHaveAttribute("aria-busy", "true");
+  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  const before = (await page.locator(".lending-layout").boundingBox())!;
+  releaseCatalog();
+  await expect(page.getByRole("heading", { name: /Furniture/, level: 2 })).toBeVisible();
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  const after = (await page.locator(".lending-layout").boundingBox())!;
+  expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(1);
+  const cls = await page.evaluate(() => (window as unknown as { __lendingCls: number }).__lendingCls);
+  expect(cls).toBeLessThanOrEqual(0.1);
+});
+
 test("a shared Lending Hub link restores its filters, and / focuses search", async ({ page }) => {
   await page.goto("/lending?q=sciss");
   await expect(page.getByRole("searchbox", { name: "Search the Lending Hub" })).toHaveValue("sciss");
@@ -68,6 +98,9 @@ test("Lending Hub explains an empty, fail-closed catalog", async ({ page }) => {
   await page.route("**/api/public/catalog", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ revision: 1, items: [], categories: [] }) }));
   await page.goto("/lending");
   await expect(page.getByRole("heading", { name: "No items are open for borrowing yet" })).toBeVisible();
+  await expect(page.locator("#lending-categories")).toBeHidden();
+  await expect(page.locator("#lending-categories")).not.toHaveAttribute("aria-busy");
+  await expect(page.locator("#lending-categories .chip--skeleton")).toHaveCount(0);
 });
 
 test("Lending Hub reports a recoverable loading failure", async ({ page }) => {
@@ -75,6 +108,9 @@ test("Lending Hub reports a recoverable loading failure", async ({ page }) => {
   await page.goto("/lending");
   await expect(page.getByRole("heading", { name: "We couldn't load the Lending Hub" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Try again now" })).toBeVisible();
+  await expect(page.locator("#lending-categories")).toBeHidden();
+  await expect(page.locator("#lending-categories")).not.toHaveAttribute("aria-busy");
+  await expect(page.locator("#lending-categories .chip--skeleton")).toHaveCount(0);
 });
 
 test("staff sign-in validates fields and can reveal the password", async ({ page }) => {
