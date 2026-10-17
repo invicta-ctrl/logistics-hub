@@ -493,9 +493,6 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
    Staff workspace
    ========================================================================== */
 .app-bar { position: sticky; top: 0; z-index: 30; container-type: inline-size; border-bottom: 1px solid var(--on-dark-line); background: radial-gradient(90rem 12rem at 12% -6rem, rgb(122 20 25 / 55%), transparent 70%), var(--brand-dark); color: var(--on-dark); box-shadow: 0 1px 0 rgb(43 10 12 / 10%), 0 6px 16px -12px rgb(43 10 12 / 45%); }
-/* The shell's provenance mark: a ruler's ticks along the bar's lower edge, strongest under the name and fading out, like the
-   scale printed on a logistics label. Decoration only; nothing reads from it. */
-.app-bar::after { position: absolute; right: 0; bottom: 0; left: 0; height: .3125rem; background: repeating-linear-gradient(90deg, rgb(242 209 92 / 42%) 0 1px, transparent 1px .75rem) 0 100% / 100% .1875rem no-repeat, repeating-linear-gradient(90deg, rgb(242 209 92 / 55%) 0 1px, transparent 1px 6rem) 0 100% / 100% .3125rem no-repeat; content: ""; mask-image: linear-gradient(90deg, transparent, #000 4%, #000 26%, transparent 58%); pointer-events: none; }
 .app-bar__inner { display: flex; min-height: var(--app-bar); align-items: center; gap: var(--space-6); max-width: 90rem; margin-inline: auto; padding-inline: max(var(--gutter), env(safe-area-inset-left, 0px)) max(var(--gutter), env(safe-area-inset-right, 0px)); }
 .app-bar :focus-visible { outline-color: var(--gold-action); }
 .app-bar__brand { display: flex; min-width: 0; flex: 0 1 auto; align-items: center; gap: var(--space-3); border-radius: var(--radius); text-decoration: none; }
