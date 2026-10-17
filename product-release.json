@@ -1,12 +1,12 @@
 {
   "version": "V1.16",
-  "sourceCommit": "6ceefb5b5d0d98feab80359984bd736743b74989",
+  "sourceCommit": "56b9788de904c5d61be5e5b1c9ae1090b565e3d4",
   "record": "docs/road-to-v2/releases/v1.16.md",
   "changes": [
     "Photo and name suggestions stay optional: they never change stock or hold up saving, and your typing always wins.",
     "Add items fills in Category and Counted in when a name clearly matches reviewed catalogue items, and says so underneath.",
     "Administration's System page shows the running version and what's new in it.",
-    "Calmer screens: a new Home, item details that open beside their row, quieter overdue loans, photos on a plain backdrop, and a Dark theme from the account menu.",
-    "Sign-in and most staff pages now download about half as much code, so they should open sooner on slow connections."
+    "Calmer screens: a new Home, side-by-side item details, quieter overdue loans, plain photo backdrops, a Dark theme, and steady Lending loading.",
+    "Faster staff pages and responsive photo saves: optional background cleanup continues quietly after the new photo appears."
   ]
 }
