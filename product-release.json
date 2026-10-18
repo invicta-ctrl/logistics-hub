@@ -1,6 +1,6 @@
 {
   "version": "V1.16",
-  "sourceCommit": "56b9788de904c5d61be5e5b1c9ae1090b565e3d4",
+  "sourceCommit": "0636485f7dcde71c03810f1dc0e44d469c7906a5",
   "record": "docs/road-to-v2/releases/v1.16.md",
   "changes": [
     "Photo and name suggestions stay optional: they never change stock or hold up saving, and your typing always wins.",
