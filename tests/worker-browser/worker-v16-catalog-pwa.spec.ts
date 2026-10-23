@@ -23,10 +23,23 @@ let page: Page;
 let shelf = "";
 
 let profile = "";
+
+/**
+ * Cataloguing and checks run in the installed Catalog (LH-IP02-S03): a plain browser tab shows only how to install it. These tests open
+ * the Catalog as the installed app, by answering the standalone display-mode query as an installed window does.
+ */
+const asInstalledApp = () => {
+  const native = window.matchMedia.bind(window);
+  window.matchMedia = (query: string) => query.includes("display-mode: standalone")
+    ? ({ matches: true, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false } as unknown as MediaQueryList)
+    : native(query);
+};
+
 async function tablet() {
   // Installation needs a normal profile; Chromium rejects installability in incognito contexts.
   profile = mkdtempSync(join(tmpdir(), "logistics-pwa-"));
   const made = await chromium.launchPersistentContext(profile, { ...devices["Galaxy Tab S4"], baseURL: BASE, headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH });
+  await made.addInitScript(asInstalledApp);
   return { context: made, page: await made.newPage() };
 }
 

@@ -1,6 +1,19 @@
 import { expect, test } from "@playwright/test";
 
 /* Real local Worker and D1, owner switch off: no provider traffic is required for this release proof. */
+
+/**
+ * Cataloguing and checks run in the installed Catalog (LH-IP02-S03): a plain browser tab shows only how to install it. These tests open
+ * the Catalog as the installed app, by answering the standalone display-mode query as an installed window does.
+ */
+const asInstalledApp = () => {
+  const native = window.matchMedia.bind(window);
+  window.matchMedia = (query: string) => query.includes("display-mode: standalone")
+    ? ({ matches: true, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false } as unknown as MediaQueryList)
+    : native(query);
+};
+
+test.beforeEach(async ({ page }) => { await page.addInitScript(asInstalledApp); });
 test("review offers respect the owner switch and manual captures still save once", async ({ page, baseURL, browser }) => {
   await page.goto("/staff");
   const headers = { origin: baseURL! };

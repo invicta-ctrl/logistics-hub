@@ -42,7 +42,7 @@ export function catalogueShell(who: Signed | null, main: Html, hero?: Html): voi
     <div class="menu cg-menu" id="cg-menu" popover>
       <div class="menu__identity">${avatar}<p><strong>${person.displayName}</strong><span>${accessLabel(sessionAccess(person))} · <span class="mono">${person.username}</span></span></p></div>
       <ul class="menu__list">
-        ${who.mode === "signed-in" ? html`<li><a class="menu__item" href="/staff/items" data-route>${icon("box")}Staff workspace</a></li>
+        ${who.mode === "signed-in" ? html`<li><a class="menu__item" href="/staff/home" data-route>${icon("home")}Open the staff workspace</a></li>
           <li><button class="menu__item" type="button" data-cg-signout>${icon("signOut")}Sign out</button></li>`
         : online ? html`<li><a class="menu__item" href="/staff?next=%2Fstaff%2Fcatalogue" data-route>${icon("user")}Sign in</a></li>`
         : html`<li class="cg-menu__note">${icon("cloudOff")}<span>The staff workspace and signing in need a connection.</span></li>`}

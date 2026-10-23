@@ -15,6 +15,10 @@ import { ApiError, type Html, api, emptyState, failure, formatDateTime, html, ic
  * Catalog. A session is one person walking a shelf; it lives on the server, so it resumes on any device that person signs in on.
  * With offline cataloguing on (V1.6, catalogue-offline.ts) the same page and the capture screen (catalogue-capture.ts) also work
  * without a connection, from what this device saved, and whatever is saved here waits on the device until the server has it.
+ *
+ * Cataloguing runs only in the installed Catalog (LH-IP02-S03). Opened in a browser tab, this page stays the Catalog's own, so its manifest
+ * is here to install from, but it shows only how to install it and the ways back: no session, capture or check starts in a tab.
+ * Administrators also catalogue from Administration › Catalog in the staff workspace.
  */
 
 type Waiting = { id: string; name: string; place: string | null; capturedAt: string; photoId: string | null; onHand: number; unit: string };
@@ -41,6 +45,7 @@ export async function catalogueWorkspace(): Promise<void> {
   if (who.mode === "signed-in" && (who.session.mustChangePassword || who.session.hub === false)) return navigate("/staff/account", true);
   // From here this member's work is sent whenever it can be, on this page and the capture screen alike.
   startSending({ owner: who.session.id, legacy: who.mode === "signed-in" });
+  if (!isStandalone()) return appOnly(who);
   const query = new URLSearchParams(window.location.search);
   // Ids from the address become API paths: anything but the shape this app issues is ignored.
   const open = query.get("session");
@@ -66,6 +71,32 @@ export async function catalogueWorkspace(): Promise<void> {
     root.removeAttribute("aria-busy");
     mount(root, emptyState("Add items could not be opened", failure(error), html`<a class="button button--secondary" href="/staff/catalogue" data-route>Try again</a>`, "error"));
   }
+}
+
+/** A browser tab: the Catalog is an app. How to install it, and the way back to the staff workspace (and, for administrators, their Catalog). */
+function appOnly(who: Signed): void {
+  document.title = "Install the Catalog · HAU USC Logistics";
+  const admin = who.mode === "signed-in" && who.session.role !== "STAFF";
+  catalogueShell(who, html`<div id="cat-app"></div>`, html`<h1>The Catalog is an app</h1>`);
+  const host = document.querySelector<HTMLElement>("#cat-app")!;
+  const render = () => mount(host, html`<section class="card cat-card cat-app" aria-labelledby="app-title">
+      <div class="card__head"><h2 id="app-title">Install the Catalog</h2></div>
+      <p class="card__text">Cataloguing runs in the installed Catalog. It opens straight to Add items, keeps working where there's no signal, and sends what you save once you're back online.</p>
+      ${canPromptInstall() ? html`<div class="where__buttons"><button type="button" class="button button--primary button--lg" data-install>${icon("install")}Install the Catalog</button></div>` : ""}
+      <ol class="cat-steps">${installSteps().map((step) => html`<li>${step}</li>`)}</ol>
+    </section>
+    <nav class="where__buttons cat-app__ways" aria-label="Elsewhere">
+      <a class="button button--secondary" href="/staff/home" data-route>${icon("home")}Open the staff workspace</a>
+      ${admin ? html`<a class="button button--secondary" href="/staff/admin/catalog" data-route>Catalog in Administration ${icon("next")}</a>` : ""}
+    </nav>`);
+  host.addEventListener("click", async (event) => {
+    if (!(event.target as HTMLElement).closest("[data-install]")) return;
+    await promptInstall();
+    render();
+  });
+  // The browser offers installing a moment after the page loads; the button appears then.
+  onLeave(onPwaChange(render));
+  render();
 }
 
 /** Offline, with no offline access on this device: nothing can be catalogued until there is a connection. */
@@ -337,10 +368,12 @@ export function finishedView(root: HTMLElement, detail: Detail, onDevice = 0, ca
   const { session, counts } = detail;
   const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
   const done = session.status === "FINISHED";
+  // In Administration's Catalog sheet the sheet closes itself, and another session starts in the same sheet (LH-IP02-S03).
+  const sheeted = root.classList.contains("cat--sheet");
   mount(root, html`
     <header class="page-header">
       <div class="page-header__title"><h1>${done ? "Cataloguing finished" : `${session.owner} is cataloguing`}</h1><p>${session.place ?? "No place"} · started ${formatDateTime(session.startedAt)}</p></div>
-      <div class="page-header__actions"><a class="button button--secondary" href="/staff/catalogue" data-route>Back to Add items</a></div>
+      ${sheeted ? "" : html`<div class="page-header__actions"><a class="button button--secondary" href="/staff/catalogue" data-route>Back to Add items</a></div>`}
     </header>
     <section class="card cat-card" aria-labelledby="sum-title"><div class="card__head"><h2 id="sum-title">${plural(total, "item")} ${onDevice ? "catalogued" : "saved"}</h2></div>
       ${total ? html`<ul class="plain-list">${(Object.keys(BEHAVIOUR_LABELS) as Behaviour[]).filter((key) => counts[key]).map((key) => html`<li><span class="cat-count">${counts[key]}</span> ${BEHAVIOUR_LABELS[key]}</li>`)}</ul>` : html`<p class="muted">Nothing was saved in this session.</p>`}
@@ -351,7 +384,7 @@ export function finishedView(root: HTMLElement, detail: Detail, onDevice = 0, ca
       <p class="card__text" id="rev-text">Checking what is waiting…</p>
       <div class="form-alert" id="rev-alert" role="alert" hidden></div>
       <div class="where__buttons"><button type="button" class="button button--primary" id="rev-go" hidden></button></div></section>` : ""}
-    <div class="where__buttons">${done ? html`<a class="button button--primary" href="/staff/catalogue" data-route>Start another session</a>` : ""}${canSignOff ? html`<a class="button button--secondary" href="/staff/items" data-route>See them under Items</a>` : ""}</div>`);
+    <div class="where__buttons">${done ? sheeted ? html`<button type="button" class="button button--primary" data-catalog-again>Start another session</button>` : html`<a class="button button--primary" href="/staff/catalogue" data-route>Start another session</a>` : ""}${canSignOff ? html`<a class="button button--secondary" href="/staff/items" data-route>See them under Items</a>` : ""}</div>`);
   if (done && session.mine && canSignOff && !onDevice) void offerReview(root, session.id);
 }
 

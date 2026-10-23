@@ -643,3 +643,36 @@ test("service homepage fits a short phone and a desktop without clipping links",
     await page.screenshot({ path: `test-results/browser/home-${viewport.width}.png`, fullPage: true });
   }
 });
+
+test("staff pictures take their own background, and a cleaned picture stands on a pedestal (LH-IP02-S03)", async ({ page }) => {
+  const photo = (n: number) => `00000000-0000-4000-8000-00000000000${n}`;
+  const item = (id: string, name: string, photoId: string) => ({ id, name, aliases: null, category: "OFFICE SUPPLIES", itemType: "Consumable", unit: "piece", status: "ACTIVE", needsReview: false,
+    lendingAudience: "NOT_AVAILABLE_FOR_LENDING", onHand: 4, reorderThreshold: 0, locationId: null, legacyLocation: null, openReports: 0, listed: false, stockArea: "Inventory", expiresOn: null,
+    lastCountedAt: null, reorderStatus: null, onLoan: 0, consumptionMode: "WHOLE_UNIT", openUnits: 0, openCondition: null, photoId, visualType: null, iconKey: null, updatedAt: "2026-10-03T00:00:00.000Z", model: null, serialNumber: null });
+  // Drawn pictures: a projector shot against a pale-blue wall, a cleaned picture flattened onto the stone, and a busy shelf.
+  const svg = (inner: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">${inner}</svg>`;
+  const pictures: Record<string, string> = {
+    [photo(1)]: svg('<rect width="160" height="160" fill="#dfe8f1"/><rect x="40" y="60" width="80" height="44" rx="8" fill="#2d2f33"/>'),
+    [photo(2)]: svg('<rect width="160" height="160" fill="#e8e3dd"/><rect x="50" y="50" width="60" height="50" rx="10" fill="#c8302b"/>'),
+    [photo(3)]: svg('<rect width="160" height="160" fill="#20623b"/><rect width="80" height="160" fill="#f2c94c"/><rect y="80" width="160" height="80" fill="#5b2a86"/>')
+  };
+  await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", access: "DoL", hub: true, mustChangePassword: false, recovery: null, selfServiceReviews: 0, selfServiceClosed: false, directory: null }) }));
+  await page.route("**/api/staff/inventory", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify({ revision: 1,
+    items: [item("ITM-0001", "Projector", photo(1)), item("ITM-0002", "First aid kit", photo(2)), item("ITM-0003", "Shelf of supplies", photo(3))], categories: ["OFFICE SUPPLIES"], locations: [], units: ["piece"] }) }));
+  await page.route("**/api/staff/media/*/thumb*", (route) => {
+    const id = new URL(route.request().url()).pathname.split("/").at(-2)!;
+    return route.fulfill({ contentType: "image/svg+xml", body: pictures[id] ?? svg("") });
+  });
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await page.goto("/staff/items");
+  const frame = (n: number) => page.locator(`img[data-photo="${photo(n)}"]`).first().locator("..");
+  // A plain wall: the frame takes its colour.
+  await expect(frame(1)).toHaveClass(/photo-matched/);
+  expect(await frame(1).evaluate((element) => element.style.getPropertyValue("--photo-bg"))).toBe("rgb(223 232 241)");
+  await expect(frame(1)).not.toHaveClass(/photo-pedestal/);
+  // A cleaned picture (flattened onto the stone) stands on its plinth.
+  await expect(frame(2)).toHaveClass(/photo-pedestal/);
+  // A busy edge keeps the neutral frame.
+  await expect(frame(3)).toHaveClass(/item-visual--loaded/);
+  await expect(frame(3)).not.toHaveClass(/photo-matched/);
+});

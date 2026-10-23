@@ -71,3 +71,8 @@
 /* The coverage figures are four cards and a note: two rows of two on a phone, one row wider up. Its placeholder is about that tall. */
 .skeleton--coverage { height: 25rem; }
 @media (min-width: 48rem) { .skeleton--coverage { height: 13rem; } }
+/* Administration › Catalog: cataloguing leads the page (LH-IP02-S03). The sheet is Add items' capture screen running a session. */
+.admin-cataloguing__go { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); margin-top: var(--space-4); }
+.admin-cataloguing__go p { margin: 0; }
+.admin-cataloguing__app { display: flex; align-items: flex-start; gap: var(--space-2); max-width: 40rem; margin-top: var(--space-4); color: var(--text-2); font-size: var(--text-sm); }
+.admin-cataloguing__app > .icon { flex: none; margin-top: .125rem; color: var(--text-3); }

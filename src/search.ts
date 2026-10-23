@@ -324,6 +324,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "self-service", title: "Self-Service review", detail: "Page", href: "/staff/self-service", terms: ["self service", "phone records", "phones", "qr"] },
   { id: "activity", title: "Activity", detail: "Page, who did what", href: "/staff/activity", terms: ["activity", "history", "audit", "log", "export"] },
   { id: "admin", title: "Administration", detail: "Accounts and settings", href: "/staff/admin", terms: ["administration", "admin", "accounts", "settings", "users"], admin: true },
+  { id: "catalog", title: "Catalog", detail: "Administration, start cataloguing", href: "/staff/admin/catalog", terms: ["catalog", "catalogue", "cataloguing", "catalog session"], admin: true },
   { id: "directory", title: "Staff Directory", detail: "Administration, USC people", href: "/staff/admin/directory", terms: ["staff directory", "directory", "people", "members"], admin: true },
   { id: "account", title: "My account", detail: "Password and profile", href: "/staff/account", terms: ["my account", "account", "password", "profile"] }
 ];

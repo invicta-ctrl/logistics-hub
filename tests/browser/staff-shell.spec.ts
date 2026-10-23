@@ -96,7 +96,7 @@ test.describe("the account menu", () => {
     await expect(menu).toBeVisible();
     await expect(more).toHaveAttribute("aria-expanded", "true");
     const sections = menu.getByRole("list", { name: "More sections" });
-    await expect(sections.getByRole("link")).toHaveText(["Items", "Stock", "Locations", "Kits", "Catalogue", "Loans", "Self-Service", "Activity", "Administration"]);
+    await expect(sections.getByRole("link")).toHaveText(["Items", "Stock", "Locations", "Kits", "Loans", "Self-Service", "Activity", "Administration"]);
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
     await expect(more).toHaveAttribute("aria-expanded", "false");

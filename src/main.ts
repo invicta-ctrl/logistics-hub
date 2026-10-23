@@ -5,7 +5,7 @@ import "@fontsource/newsreader/latin-400.css";
 import "@fontsource/newsreader/latin-500.css";
 import "./styles.css";
 import { landing, lending, notFound, offlinePage } from "./public";
-import { startPwa } from "./pwa";
+import { isStandalone, startPwa } from "./pwa";
 import { startTheme, syncTheme } from "./theme";
 import { MARK, app, handOverQuery, html, leave, mount, navigate, shown, toast } from "./ui";
 
@@ -65,6 +65,10 @@ async function render(): Promise<void> {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   syncTheme(path);
   if (path.startsWith("/staff/") && !ROUTES[path]) return navigate("/staff/home", true);
+  // In a browser tab the Catalog only offers its app (LH-IP02-S03), so a place check from an older link (Home's Continue, a bookmark)
+  // opens in Locations instead. The installed Catalog keeps running checks itself.
+  const check = catalogRoute(path) && !isStandalone() ? new URLSearchParams(window.location.search).get("audit") : null;
+  if (check && /^LA-[A-Za-z0-9-]+$/.test(check)) return navigate(`/staff/locations?check=${check}`, true);
   // Offline the server cannot hand over the other page; the router renders what it can (the offline page) instead.
   if (catalogRoute(path) !== CATALOG_PAGE && navigator.onLine && sessionStorage.getItem("reloaded-for-page") !== path) {
     sessionStorage.setItem("reloaded-for-page", path);

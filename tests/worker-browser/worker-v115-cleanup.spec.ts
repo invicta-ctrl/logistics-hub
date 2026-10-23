@@ -6,7 +6,7 @@ import { type Page, type Request, expect, test } from "@playwright/test";
 test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: "wait" }); });
 
 /*
- * FP-E, the screen: "Remove background" appears only when the Worker can clean pictures, shows the cleaned picture, and "Use original" goes
+ * FP-E, the screen: "Remove background" appears only when the Worker can clean pictures, shows the cleaned picture, and "Use the original photo" goes
  * back. The local Worker has no Images binding, so the three provider-facing answers are stubbed here; the cut itself is covered in
  * tests/item-cutout.test.ts and the real provider run in the evidence file.
  */
@@ -96,7 +96,7 @@ async function itemWithPhoto(page: Page, baseURL: string, cutoutBody: Buffer): P
       await route.fulfill({ json: { cutout: state.cleaned } });
     }
   });
-  await page.route(/\/api\/staff\/media\/[^/]+\/(cutout|pending)$/, (route) => route.fulfill({ body: cutoutBody, contentType: "image/png", headers: { etag: CUTOUT_ETAG } }));
+  await page.route(/\/api\/staff\/media\/[^/]+\/(cutout|pending)(\?r=\d+)?$/, (route) => route.fulfill({ body: cutoutBody, contentType: "image/png", headers: { etag: CUTOUT_ETAG } }));
   await page.route(/\/api\/staff\/media\/[^/]+\/thumb\?v=2(?:&r=\d+)?$/, (route) => state.cleaned && state.thumb
     ? route.fulfill({ body: state.thumb, contentType: "image/jpeg" }) : route.fallback());
   await page.goto(`/staff/items?item=${id}`);
@@ -124,14 +124,17 @@ test("picture cleanup: remove the background, see the cleaned picture, go back t
   const original = await (await page.request.get(`/api/staff/media/${photoId}/display`)).body();
   const panel = page.locator("#photo-panel");
   await panel.getByRole("button", { name: "Remove background" }).click();
-  await expect(panel.getByRole("button", { name: "Use original" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Use the original photo" })).toBeVisible();
   expect(state.posted).toEqual([{ expected: photoId }, { expected: photoId, accept: true }]);
-  await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", thumbnailSrc(photoId, 1));
+  // The cleaned picture stands on the pedestal: the cut-out itself, fetched fresh after the change (LH-IP02-S03).
+  await expect(panel.locator("[data-tile] .pedestal img")).toHaveAttribute("src", `/api/staff/media/${photoId}/cutout?r=1`);
+  await expect(panel.locator("[data-tile] .pedestal__item")).toHaveClass(/is-seated/);
+  await expect(panel.getByText("The original photo is kept.")).toBeVisible();
   expect(await (await page.request.get(`/api/staff/media/${photoId}/display`)).body()).toEqual(original);
   // Focus lands on the button that now undoes it.
-  await expect(panel.getByRole("button", { name: "Use original" })).toBeFocused();
+  await expect(panel.getByRole("button", { name: "Use the original photo" })).toBeFocused();
 
-  await panel.getByRole("button", { name: "Use original" }).click();
+  await panel.getByRole("button", { name: "Use the original photo" }).click();
   await expect(panel.getByRole("button", { name: "Remove background" })).toBeVisible();
   expect(state.deletes).toBe(1);
   await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", thumbnailSrc(photoId, 2));
@@ -193,12 +196,12 @@ test("a replacement saves before cleanup, cleans its new media id and preserves 
   await page.locator("dialog.viewer").getByRole("button", { name: "Edit photo", exact: true }).click();
   await expect(page.locator("dialog.viewer")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => !history.state?.viewer)).toBe(true);
-  await expect(page.getByRole("button", { name: "Use original", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Use the original photo", exact: true })).toBeVisible();
   const next = (await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id;
   expect(next).not.toBe(photoId);
   expect(state.posted).toEqual([{ expected: next }, { expected: next, accept: true }]);
   expect(await (await page.request.get(`/api/staff/media/${next}/display`)).body()).toEqual(original);
-  await expect(page.locator("#photo-panel [data-tile] img").first()).toHaveAttribute("src", thumbnailSrc(next, 1));
+  await expect(page.locator("#photo-panel [data-tile] .pedestal img")).toHaveAttribute("src", `/api/staff/media/${next}/cutout?r=1`);
 });
 
 for (const failure of ["save conflict", "cleanup unavailable"] as const) test(`replacement ${failure} keeps an original and never cleans a conflicting save`, async ({ page, baseURL }) => {
@@ -218,7 +221,7 @@ test("the cleaned picture opens large over the dark overlay with its edges intac
   const { photoId } = await itemWithPhoto(page, baseURL!, providerCutout);
   const panel = page.locator("#photo-panel");
   await panel.getByRole("button", { name: "Remove background" }).click();
-  await expect(panel.getByRole("button", { name: "Use original" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Use the original photo" })).toBeVisible();
   await panel.getByRole("button", { name: /View photo of/ }).click();
   const viewer = page.locator("dialog.viewer");
   await expect(viewer.locator("img")).toHaveAttribute("src", `/api/staff/media/${photoId}/cutout`);

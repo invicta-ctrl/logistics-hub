@@ -1,5 +1,6 @@
 import { type VisualItem, itemIconSvg, resolveItemVisual } from "./item-icons";
 import { LABELS } from "./catalog-policy";
+import { frameByPhoto, seatOnPedestal, unframe } from "./photo-frame";
 
 export const app = document.querySelector<HTMLDivElement>("#app")!;
 
@@ -98,6 +99,9 @@ const thumbnailVersions = new Map<string, number>();
 export const itemThumbnailUrl = (id: string, scope: "staff" | "public" = "public", size: "thumb" | "detail" = "thumb") =>
   `/api/${scope}/media/${id}/${size}?v=2${thumbnailVersions.has(id) ? `&r=${thumbnailVersions.get(id)}` : ""}`;
 
+/** How many times a photo's cleaned picture changed under the same id, so a picture drawn from it again is fetched fresh. */
+export const thumbnailVersion = (id: string): number => thumbnailVersions.get(id) ?? 0;
+
 /** Refresh already-visible photos after changing a cutout without replacing its media id. */
 export function refreshItemThumbnail(id: string): void {
   thumbnailVersions.set(id, (thumbnailVersions.get(id) ?? 0) + 1);
@@ -113,12 +117,19 @@ export function refreshItemThumbnail(id: string): void {
 export const thumbImg = (item: VisualItem & { photo?: string | null }): Html =>
   itemVisual({ ...item, photoId: item.photo }, itemThumbnailUrl, "item-thumb");
 
+/** Pictures in the staff workspace only (its main area and the sheets in it): public pages and Self-Service keep theirs (LH-IP02-S03). */
+const staffPicture = (image: HTMLImageElement) => Boolean(image.closest(".app-main"));
 // Resource events do not bubble. Capture lets redraws share one fallback handler without per-row listeners.
 document.addEventListener("load", (event) => {
   const image = event.target;
-  if (image instanceof HTMLImageElement && image.hasAttribute("data-item-photo")) {
+  if (!(image instanceof HTMLImageElement)) return;
+  // A cut-out on the item sheet's pedestal, and the photo just chosen while adding an item, are framed by the picture itself (photo-frame.ts).
+  if (image.hasAttribute("data-pedestal")) return seatOnPedestal(image);
+  if (image.parentElement?.classList.contains("cat-photo")) return frameByPhoto(image, image.parentElement);
+  if (image.hasAttribute("data-item-photo")) {
     const frame = image.parentElement;
     frame?.classList.add("item-visual--loaded");
+    if (frame && staffPicture(image)) frameByPhoto(image, frame);
     if (frame?.classList.contains("ss-item__visual")) {
       frame.style.setProperty("--item-photo-edge", `${Math.max(image.naturalWidth, image.naturalHeight) / (window.devicePixelRatio || 1)}px`);
     }
@@ -126,8 +137,16 @@ document.addEventListener("load", (event) => {
 }, true);
 document.addEventListener("error", (event) => {
   const image = event.target;
+  // A cut-out that cannot be fetched stands on the pedestal as its thumbnail instead, so the tile is never empty.
+  if (image instanceof HTMLImageElement && image.hasAttribute("data-pedestal")) {
+    image.removeAttribute("data-pedestal");
+    if (image.dataset.fallback) image.src = image.dataset.fallback;
+    image.parentElement?.classList.add("is-seated");
+    return;
+  }
   if (image instanceof HTMLImageElement && image.hasAttribute("data-item-photo")) {
     image.parentElement?.classList.remove("item-visual--loaded");
+    if (image.parentElement) unframe(image.parentElement);
     if (image.parentElement?.classList.contains("ss-item__visual")) image.parentElement.style.removeProperty("--item-photo-edge");
     image.remove();
   }

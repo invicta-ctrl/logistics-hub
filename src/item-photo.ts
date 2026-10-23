@@ -2,7 +2,7 @@ import { cutoutProblem, cutoutShares, subjectCrop } from "./cutout-share";
 import type { PhotoCleanup, PhotoCrop } from "./catalog-draft";
 export type { PhotoCleanup } from "./catalog-draft";
 import type { VisualItem } from "./item-icons";
-import { ApiError, type Html, api, dataUrl, failure, html, icon, jpegOf, itemVisual, itemThumbnailUrl, refreshItemThumbnail, mount, toast } from "./ui";
+import { ApiError, type Html, api, dataUrl, failure, html, icon, jpegOf, itemVisual, itemThumbnailUrl, refreshItemThumbnail, mount, thumbnailVersion, toast } from "./ui";
 export { openViewer } from "./item-viewer";
 
 /** `cutout`: a cleaned picture (background removed) is kept beside the original. `cleanable`: the Worker can make one (src/item-cutout.ts). */
@@ -310,7 +310,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   /** Item photos only: remove the background, or go back to the original. The original photo is never changed by either. */
   const cleanButton = (): Html => {
     if (!options.cleanup || !photo) return html``;
-    if (photo.cutout) return html`<button type="button" class="button button--ghost button--sm" data-original ${busy() || cleanupTask ? "disabled" : ""}>Use original</button>`;
+    if (photo.cutout) return html`<button type="button" class="button button--ghost button--sm" data-original ${busy() || cleanupTask ? "disabled" : ""}>Use the original photo</button><span class="photo-actions__note">The original photo is kept.</span>`;
     return html`<button type="button" class="button button--ghost button--sm" data-clean ${busy() || cleanupTask || !photo.cleanable ? "disabled" : ""}>Remove background</button>${enableButton()}`;
   };
 
@@ -340,6 +340,9 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     }
     show(options.visual && options.visual().visualType === "SYSTEM_ICON"
       ? html`<button type="button" class="photo-tile" data-view aria-label="View saved ${noun} of ${name}">${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}</button>`
+      : photo.cutout && options.cleanup
+      // A cleaned picture stands on a pedestal (LH-IP02-S03): the transparent cut-out, cropped to the item, on a plinth (photo-frame.ts).
+      ? html`<button type="button" class="photo-tile photo-tile--pedestal" data-view aria-label="View ${noun} of ${name}, background removed"><span class="pedestal" aria-hidden="true"><i class="pedestal__plinth"></i><span class="pedestal__item"><img src="${shownUrl(photo, "display")}${thumbnailVersion(photo.id) ? `?r=${thumbnailVersion(photo.id)}` : ""}" alt="" data-pedestal data-fallback="${tileUrl(photo.id)}" decoding="async" /></span></span><span class="photo-tile__note">${icon("check")}Background removed</span></button>`
       : html`<button type="button" class="photo-tile" data-view aria-label="View ${noun} of ${name}">${options.visual ? itemVisual({ ...options.visual(), photoId: photo.id }, tileUrl, "profile-visual", true) : html`<img src="${tileUrl(photo.id)}" alt="" width="160" height="160" />`}</button>`,
       html`${!editing ? alert : html`${confirming
         ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>

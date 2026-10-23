@@ -41,17 +41,27 @@ function known(entry: Entry): Item {
 /** How many of each kind a list of captures holds, as the server counts a session. */
 const countsOf = (list: Entry[]) => list.reduce<Record<string, number>>((out, entry) => ({ ...out, [String(entry.body.behaviour)]: (out[String(entry.body.behaviour)] ?? 0) + 1 }), {});
 
-export async function captureScreen(who: Signed, sessionId: string, direct?: { host: HTMLElement; onCleanup: (fn: () => void) => void; onDirty: (dirty: boolean) => void }): Promise<void> {
-  const onLeave = direct?.onCleanup ?? onPageLeave;
+/**
+ * Where the screen is drawn when it is not the Catalog's own page: inside a sheet of the staff workspace. Without `session` it is Add items
+ * (one item, no session place, "direct"); with it, a cataloguing session in a sheet (Administration › Catalog, LH-IP02-S03), which keeps
+ * its place, Save & next and Finish exactly as the Catalog does, and asks the sheet to draw it again where the Catalog would navigate.
+ */
+export type Hosted = { host: HTMLElement; onCleanup: (fn: () => void) => void; onDirty: (dirty: boolean) => void; session?: { reopen: (id: string) => void } };
+
+export async function captureScreen(who: Signed, sessionId: string, hosted?: Hosted): Promise<void> {
+  /** Add items: one item in a sheet, with no session place. Everything else (the Catalog, a session in a sheet) is a cataloguing session. */
+  const direct = hosted && !hosted.session ? hosted : undefined;
+  const onLeave = hosted?.onCleanup ?? onPageLeave;
   const session = who.session;
   /** Whether the server can be reached: opened offline, it follows the connection from then on. */
   let online = who.mode !== "offline";
-  if (!direct) {
+  if (!hosted) {
     document.title = "Cataloguing · Catalog";
     catalogueShell(who, html`<div class="cat" id="cat"><div class="skeleton skeleton--block"></div></div>`);
   }
-  const root = direct?.host ?? document.querySelector<HTMLElement>("#cat")!;
-  if (direct) root.classList.add("cat", "cat--direct");
+  const root = hosted?.host ?? document.querySelector<HTMLElement>("#cat")!;
+  if (hosted) root.classList.add("cat", "cat--sheet");
+  if (direct) root.classList.add("cat--direct");
   const { finishedView, signInHere } = await import("./catalogue-workspace");
 
   // What the server says about the session where it can be asked; otherwise what this device knows of it.
@@ -61,7 +71,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
     if (record && (!online || !record.serverId)) detail = record.detail;
     else detail = await api<Detail>(`/api/staff/catalogue/sessions/${encodeURIComponent(record?.serverId ?? sessionId)}`);
   } catch (error) {
-    if (direct) throw error;
+    if (hosted) throw error;
     if (!(record && error instanceof ApiError && error.status === 0)) {
       mount(root, emptyState("This cataloguing session could not be opened", record || online ? failure(error) : "It isn't saved on this device, so it opens only with a connection.", html`<a class="button button--secondary" href="/staff/catalogue" data-route>Back to Add items</a>`, "error", 1));
       return;
@@ -140,7 +150,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
     <input class="visually-hidden" type="file" id="cat-file" accept="image/jpeg,image/png,image/webp" capture="environment" tabindex="-1" aria-label="Take a photo" />
     <input class="visually-hidden" type="file" id="cat-library" accept="image/jpeg,image/png,image/webp" tabindex="-1" aria-label="Choose a photo or image file" />
     <header class="cat-bar" ${direct ? html`hidden` : ""}>
-      <a class="button button--ghost button--sm" href="/staff/catalogue" data-route>${icon("back")}Add items</a>
+      ${hosted ? "" : html`<a class="button button--ghost button--sm" href="/staff/catalogue" data-route>${icon("back")}Add items</a>`}
       <div class="cat-bar__place"><span class="cat-bar__label">Cataloguing in</span>
         <button type="button" class="cat-place" id="cat-place" aria-expanded="false" aria-controls="cat-place-panel">${icon("pin")}<span id="cat-place-name"></span><span class="cat-place__change">Change</span></button></div>
       <p class="cat-bar__count"><strong id="cat-count"></strong> <span id="cat-sync" class="live-status" data-state="live"></span> <button type="button" class="text-link cat-see" id="cat-see" hidden>See</button></p>
@@ -213,7 +223,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
   }
   // A new version of the app waits until nothing is being typed here (pwa.ts).
   whenIdle(() => root.isConnected && !value("cat-name") && !photo && !preparing);
-  onLeave(() => whenIdle(() => Boolean(direct)));
+  onLeave(() => whenIdle(() => Boolean(hosted)));
 
   const invalidateReview = () => {
     clearTimeout(reviewTimer);
@@ -229,7 +239,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
   // Native fields emit input as they change; their later blur/change must not invalidate a displayed decision.
   form.addEventListener("input", (event) => {
     if ((event.target as HTMLElement).closest(".cat-ai, #cat-crop")) return;
-    direct?.onDirty(true);
+    hosted?.onDirty(true);
     if ((event.target as HTMLElement).id === "cat-reviewed") return;
     invalidateReview();
     scheduleReview();
@@ -494,7 +504,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
     if (existing) { const name = existing.dataset.useExisting; clear(false); toast(name ? `Not added. ${name} is open in a new tab to update.` : "Not added."); return; }
     const button = target.closest<HTMLElement>("[data-behaviour], [data-fill], [data-step], #cat-use-all");
     if (!button) return;
-    direct?.onDirty(true);
+    hosted?.onDirty(true);
     invalidateReview();
     if (button.dataset.behaviour) choose(button.dataset.behaviour as Behaviour);
     else if (button.dataset.fill) { const kind = button.dataset.fill as "category" | "unit"; touched[kind] = true; written[kind] = null; field(`cat-${kind}`).value = button.dataset.value ?? ""; armed = false; draw(); }
@@ -578,7 +588,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
     const chosen = chooser.files?.[0];
     chooser.value = "";
     if (!chosen) return;
-    direct?.onDirty(true);
+    hosted?.onDirty(true);
     const revision = ++photoRevision;
     invalidateReview();
     $("#cat-crop").hidden = true;
@@ -691,7 +701,8 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
     setMessage($("#cat-alert"), "");
     drawPhoto();
     draw();
-    if (direct) { showPlace(); direct.onDirty(false); }
+    if (direct) showPlace();
+    hosted?.onDirty(false);
     field("cat-name").focus();
     if (keepShared) field("cat-name").select();
     if (keepShared) scheduleReview();
@@ -781,7 +792,7 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
   /** Neither a sign-in nor this device's offline access is valid any more: what is here waits on the device for the next sign-in. */
   const ended = async () => {
     await setAccess(null);
-    if (direct) return expired();
+    if (hosted) return expired();
     navigate(signInHere(true), true);
   };
   const connected = (now: boolean) => {
@@ -894,7 +905,8 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
       written.category = written.unit = null;
       $("#cat-crop").hidden = true;
       const body = entry.body;
-      if (direct) { placeId = typeof body.locationId === "string" ? body.locationId : null; field("cat-reviewed").checked = body.reviewed === true; showPlace(); direct.onDirty(true); }
+      if (direct) { placeId = typeof body.locationId === "string" ? body.locationId : null; field("cat-reviewed").checked = body.reviewed === true; showPlace(); }
+      hosted?.onDirty(true);
       field("cat-name").value = String(body.name);
       behaviour = body.behaviour as Behaviour;
       field("cat-qty").value = String(body.quantity);
@@ -978,13 +990,18 @@ export async function captureScreen(who: Signed, sessionId: string, direct?: { h
         // Finished on the server: the page drawn next is the server's summary, with signing items off, under the server's id (a
         // session started here offline may have joined the one this person had open elsewhere).
         await dropSession(latest.id);
-        if (latest.serverId !== sessionId) { navigate(`/staff/catalogue?session=${latest.serverId}`, true); return; }
+        if (latest.serverId !== sessionId) {
+          if (hosted?.session) hosted.session.reopen(latest.serverId);
+          else navigate(`/staff/catalogue?session=${latest.serverId}`, true);
+          return;
+        }
       } else {
         // Finished here: the server is told once everything in it has been sent (catalogue-sync.ts).
         await keepSession({ ...latest, finishing: true });
       }
       void syncNow();
-      // The address does not change, so the page is drawn again rather than navigated to.
+      // The address does not change, so the page is drawn again rather than navigated to; in a sheet, only the sheet is.
+      if (hosted?.session) { hosted.session.reopen(sessionId); return; }
       leave();
       await captureScreen(who, sessionId);
     } catch (error) {

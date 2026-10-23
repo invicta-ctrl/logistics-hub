@@ -24,7 +24,8 @@ type Section = "home" | "items" | "stock" | "locations" | "kits" | "catalogue" |
 
 /**
  * The staff destinations, grouped as the rail shows them (LH-IP02-S01). Home leads without a label; on phones Home, Find and More sit in
- * the bottom bar and every other destination is listed under More.
+ * the bottom bar and every other destination is listed under More. Cataloguing is not one of them (LH-IP02-S03): administrators start it
+ * from Administration › Catalog, and everyone else catalogues in the installed Catalog app.
  */
 const SECTIONS: ReadonlyArray<{ id: Section; href: string; text: string; icon: IconName; group: string }> = [
   { id: "home", href: "/staff/home", text: "Home", icon: "home", group: "" },
@@ -32,7 +33,6 @@ const SECTIONS: ReadonlyArray<{ id: Section; href: string; text: string; icon: I
   { id: "stock", href: "/staff/stock", text: "Stock", icon: "stack", group: "Resources" },
   { id: "locations", href: "/staff/locations", text: "Locations", icon: "pin", group: "Resources" },
   { id: "kits", href: "/staff/kits", text: "Kits", icon: "basket", group: "Resources" },
-  { id: "catalogue", href: "/staff/catalogue", text: "Catalogue", icon: "camera", group: "Resources" },
   { id: "loans", href: "/staff/loans", text: "Loans", icon: "swap", group: "Circulation" },
   { id: "self-service", href: "/staff/self-service", text: "Self-Service", icon: "phone", group: "Circulation" },
   { id: "activity", href: "/staff/activity", text: "Activity", icon: "history", group: "Records" },

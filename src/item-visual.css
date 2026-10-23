@@ -15,3 +15,26 @@
 .icon-choice .item-icon { width: 1.75rem; height: 1.75rem; color: var(--brand); }
 .viewer__fallback { display: grid; place-items: center; width: min(24rem, 80vw); height: min(24rem, 60vh); border-radius: var(--radius); background: var(--subtle); color: var(--brand); }
 .viewer__fallback .item-icon { width: 6rem; height: 6rem; }
+/* LH-IP02-S03 · A picture takes its own background (photo-frame.ts): the frame turns the colour along the photo's edge, so they read as one. */
+.item-visual.photo-matched, .cat-photo.photo-matched { background: var(--photo-bg); }
+/* A cut-out's thumbnail (flattened onto the stone) stands just above a small plinth; the full pedestal is the item sheet's, below. */
+.item-visual.photo-pedestal { position: relative; background: var(--stage); }
+.item-visual.photo-pedestal > .item-visual__photo { align-self: start; height: 74%; margin-top: 5%; }
+.item-visual.photo-pedestal::before, .item-visual.photo-pedestal::after { position: absolute; left: 18%; right: 18%; pointer-events: none; content: ""; }
+.item-visual.photo-pedestal::before { bottom: 6%; height: 10%; border-radius: 0 0 50% 50% / 0 0 40% 40%; background: linear-gradient(90deg, #cdc5bb, #f3efe9 45%, #f3efe9 55%, #cdc5bb); box-shadow: 0 5px 8px -5px rgb(28 18 20 / 35%); }
+.item-visual.photo-pedestal::after { bottom: 12.5%; height: 7%; border-radius: 50%; background: radial-gradient(farthest-side at 50% 40%, #fbf9f6, #ece6df 70%, #dcd4ca); }
+/* The item sheet's pedestal: the transparent cut-out, cropped to the item, on a short plinth with a lit top and a contact shadow. */
+.photo-tile--pedestal { background: radial-gradient(120% 80% at 50% 0%, #f4f1ec, var(--stage) 70%); }
+.pedestal { position: absolute; inset: 0; }
+.pedestal__plinth { position: absolute; left: 20%; right: 20%; bottom: 8%; height: 12%; }
+.pedestal__plinth::before { position: absolute; inset: 0; border-radius: 0 0 50% 50% / 0 0 40% 40%; background: linear-gradient(90deg, #cdc5bb, #f3efe9 45%, #f3efe9 55%, #cdc5bb); box-shadow: 0 18px 26px -16px rgb(28 18 20 / 40%); content: ""; }
+.pedestal__plinth::after { position: absolute; left: 0; right: 0; top: -25%; height: 50%; border-radius: 50%; background: radial-gradient(farthest-side at 50% 40%, #fdfbf8, #ece6df 70%, #dbd3c9); box-shadow: inset 0 -1px 0 rgb(28 18 20 / 10%); content: ""; }
+.pedestal::after { position: absolute; left: 33%; right: 33%; bottom: 18.5%; height: 3%; border-radius: 50%; background: radial-gradient(closest-side, rgb(28 18 20 / 38%), transparent); content: ""; }
+.pedestal__item { position: absolute; z-index: 1; left: 50%; bottom: 20%; width: var(--item-w, 58%); height: var(--item-h, 58%); overflow: hidden; transform: translateX(-50%); opacity: 0; }
+.pedestal__item.is-seated { opacity: 1; }
+.photo-tile .pedestal__item img { position: absolute; max-width: none; width: calc(100% * 100 / var(--crop-w, 100)); height: calc(100% * 100 / var(--crop-h, 100)); left: calc(-100% * var(--crop-x, 0) / var(--crop-w, 100)); top: calc(-100% * var(--crop-y, 0) / var(--crop-h, 100)); object-fit: fill; }
+.photo-tile__note { position: absolute; top: var(--space-2); left: var(--space-2); z-index: 2; display: inline-flex; align-items: center; gap: .25rem; padding: .125rem .5rem; border-radius: var(--radius-pill); background: rgb(255 255 255 / 78%); color: var(--stage-ink); font-size: .75rem; font-weight: 500; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.photo-tile__note .icon { --icon-size: .875rem; }
+.photo-actions__note { align-self: center; color: var(--text-3); font-size: var(--text-sm); }
+@media (prefers-reduced-motion: no-preference) { .pedestal__item { transition: opacity var(--dur-2) var(--ease-settle); } }
+@media (forced-colors: active) { .pedestal__plinth::before, .pedestal__plinth::after, .item-visual.photo-pedestal::before, .item-visual.photo-pedestal::after { border: 1px solid CanvasText; } }

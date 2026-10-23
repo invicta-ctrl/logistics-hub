@@ -2,6 +2,20 @@ import { devices, expect, test, type Page, type Request, type Route } from "@pla
 
 /* V1.5 Rapid Catalogue on fictional data with a small stateful server behind the API: sessions, captures, photos and bulk edits. */
 
+/**
+ * Cataloguing and checks run in the installed Catalog (LH-IP02-S03): a plain browser tab shows only how to install it. These tests open
+ * the Catalog as the installed app, by answering the standalone display-mode query as an installed window does.
+ */
+const asInstalledApp = () => {
+  const native = window.matchMedia.bind(window);
+  window.matchMedia = (query: string) => query.includes("display-mode: standalone")
+    ? ({ matches: true, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false } as unknown as MediaQueryList)
+    : native(query);
+};
+
+// Every test here is the installed app, except those about what a browser tab shows instead.
+test.beforeEach(async ({ page }, testInfo) => { if (!testInfo.titlePath.some((title) => title.includes("in a browser tab"))) await page.addInitScript(asInstalledApp); });
+
 const session = { authenticated: true, id: "ACC-staff", username: "staff.sample", displayName: "Staff Sample", role: "STAFF", access: "DoL", hub: true, mustChangePassword: false, recovery: null, selfServiceReviews: 0, selfServiceClosed: false, directory: null };
 const SESSION_ID = "CS-00000000-0000-4000-8000-000000000001";
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
@@ -149,6 +163,66 @@ test("a library photo is kept whole and mobile save actions leave focused fields
   });
   expect(clearOfSaveActions).toBe(true);
   await expect(page.locator(".cat-actions")).toHaveCSS("position", "static");
+});
+
+test.describe("in a browser tab (LH-IP02-S03)", () => {
+  test("the Catalog shows only how to install it and the way back, and starts nothing", async ({ page }) => {
+    const server = serve(page);
+    await server.ready;
+    await page.goto("/staff/catalogue");
+    await expect(page.getByRole("heading", { level: 1, name: "The Catalog is an app" })).toBeVisible();
+    await expect(page.locator(".cat-app .cat-steps li").first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open the staff workspace" })).toHaveAttribute("href", "/staff/home");
+    await expect(page.getByRole("link", { name: /Catalog in Administration/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Start cataloguing/ })).toHaveCount(0);
+    expect(server.state.starts).toHaveLength(0);
+    // It is still the Catalog's own page, with its manifest, so the app installs from here.
+    expect(await page.evaluate(() => document.querySelector('link[rel="manifest"]')?.getAttribute("href"))).toBe("/catalogue.webmanifest");
+  });
+
+  test("administrators are also offered the Catalog in Administration", async ({ page }) => {
+    const server = serve(page);
+    await server.ready;
+    const owner = { ...session, role: "OWNER", access: "OWNER" };
+    await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(owner) }));
+    await page.route("**/api/staff/catalogue/offline", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ signedIn: true, lease: null, account: { id: owner.id, displayName: owner.displayName, username: owner.username, role: owner.role, access: owner.access } }) }));
+    await page.goto("/staff/catalogue");
+    await expect(page.getByRole("link", { name: /Catalog in Administration/ })).toHaveAttribute("href", "/staff/admin/catalog");
+  });
+});
+
+test.describe("Administration › Catalog (LH-IP02-S03)", () => {
+  test("runs a session in a sheet: the place is part of it, it stays open after each save, and Finish ends it there", async ({ page }) => {
+    const server = serve(page);
+    await server.ready;
+    const owner = { ...session, role: "OWNER", access: "OWNER" };
+    const answer = (body: unknown) => (route: Route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+    await page.route("**/api/staff/session", answer(owner));
+    await page.route("**/api/staff/admin/catalog", answer({ active: 3, unclassified: 0, captured: 0, capturedClassified: 0 }));
+    await page.route("**/api/staff/admin/catalog/aliases*", answer({ items: [], more: false }));
+    await page.route("**/api/staff/admin/catalog/proposals", answer({ proposals: [], metrics: [] }));
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.goto("/staff/admin/catalog");
+    await page.getByRole("button", { name: "Start cataloguing" }).click();
+    const sheet = page.getByRole("dialog", { name: "Catalog" });
+    await expect(sheet.getByText("Cataloguing in")).toBeVisible();
+    // The address stays Administration's: the session lives in the sheet, not on the Catalog's page.
+    await expect(page).toHaveURL(/\/staff\/admin\/catalog$/);
+    expect(server.state.starts).toHaveLength(1);
+    await name(page).fill("whiteboard marker blue");
+    await page.getByRole("button", { name: "Use these" }).click();
+    await sheet.getByRole("button", { name: "Save & next" }).click();
+    await expect(name(page)).toHaveValue("");
+    await expect(name(page)).toBeFocused();
+    await expect.poll(() => server.state.captures.length).toBe(1);
+    expect(server.state.captures[0]).toMatchObject({ locationId: "LOC-0003", name: "Whiteboard Marker Blue" });
+    page.once("dialog", (dialog) => void dialog.accept());
+    await sheet.getByRole("button", { name: "Finish" }).click();
+    await expect(sheet.getByRole("heading", { name: "Cataloguing finished" })).toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Start another session" })).toBeVisible();
+    await expect(sheet.getByRole("link", { name: "Back to Add items" })).toHaveCount(0);
+    expect(server.state.finished).toBe(true);
+  });
 });
 
 test.describe("starting and resuming", () => {
@@ -933,8 +1007,8 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     await expect(page.locator(".cg-pill")).toHaveText("Online");
     await expect(page.getByRole("navigation", { name: "Sections" })).toHaveCount(0);
     await page.getByRole("button", { name: /^Account:/ }).click();
-    await page.getByRole("link", { name: "Staff workspace" }).click();
-    await expect(page).toHaveURL(/\/staff\/items$/);
+    await page.getByRole("link", { name: "Open the staff workspace" }).click();
+    await expect(page).toHaveURL(/\/staff\/home$/);
     await expect.poll(shown).toEqual({ app: null, manifest: "/manifest.webmanifest" });
     await page.goBack();
     await expect(page).toHaveURL(/\/staff\/catalogue$/);
@@ -991,12 +1065,12 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
     expect(server.state.lease).toBeNull();
   });
 
-  test("the Catalogue page fits a 320 px phone with the device card open", async ({ page }) => {
+  test("in a browser tab, the install view fits a 320 px phone", async ({ page }) => {
     const server = serve(page);
     await server.ready;
     await page.setViewportSize({ width: 320, height: 700 });
     await page.goto("/staff/catalogue");
-    await page.getByText("Install the Catalog on this", { exact: false }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "The Catalog is an app" })).toBeVisible();
     await expect(page.locator(".cat-steps li").first()).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(await page.locator("h1").count()).toBe(1);
@@ -1059,18 +1133,14 @@ test.describe("offline cataloguing on this device (V1.6)", () => {
       // Only what the page can see of the device: its user agent, screen and touch. The tests still run in Chromium.
       const { defaultBrowserType: _, ...seen } = device;
       test.use(seen);
-      test("install steps are this device's own, in its own words", async ({ page }) => {
+      test("in a browser tab, install steps are this device's own, in its own words", async ({ page }) => {
         const server = serve(page);
         await server.ready;
         await page.goto("/staff/catalogue");
-        const install = page.locator(".cat-install");
-        if (!(await install.getAttribute("open") !== null)) await install.locator("summary").click();
+        const install = page.locator(".cat-app");
         for (const word of steps) await expect(install.locator(".cat-steps")).toContainText(word);
-        if (label === "an iPhone") {
-          // A Safari tab keeps its data apart from the Home Screen app, so offline cataloguing is turned on in the app.
-          await expect(page.getByText(/works from the Home Screen app, not from a Safari tab/)).toBeVisible();
-          await expect(page.getByRole("button", { name: "Turn on offline cataloguing" })).toHaveCount(0);
-        } else await expect(page.getByRole("button", { name: "Turn on offline cataloguing" })).toBeVisible();
+        // Offline cataloguing is turned on in the installed app, never in a tab.
+        await expect(page.getByRole("button", { name: "Turn on offline cataloguing" })).toHaveCount(0);
       });
     });
   }

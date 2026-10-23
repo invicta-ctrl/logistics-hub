@@ -2,13 +2,15 @@ import { openViewer, photoPanel } from "./item-photo";
 import { MAX_DEPTH, VISIBILITIES, VISIBILITY_LABELS, ancestry, inOrder, levelsBelow, lookAlikes, pathOf, placesOf, withinPlace } from "./location-tree";
 import type { PlaceRow } from "./staff";
 import { ageOf, loadSession, shell } from "./staff-shell";
-import { ApiError, type Html, api, emptyState, expired, failure, html, icon, live, mount, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, writeParams } from "./ui";
+import type { Session } from "./staff-shell";
+import { ApiError, type Html, api, emptyState, expired, failure, html, icon, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, writeParams } from "./ui";
 
 /*
  * Locations (/staff/locations): the places items are kept, as the tree staff think in (Office → Storage Area → Cabinet 1 →
  * Shelf 2). A place carries plain-language directions, one reference picture shared by every item kept there, and whether
  * Self-Service may show them. Items choose a place in their own edit form; this page is where places are made, described,
- * moved, retired, and where look-alike spellings left by the migration are combined on purpose.
+ * moved, retired, and where look-alike spellings left by the migration are combined on purpose. On the website a place is also checked
+ * from here (LH-IP02-S03): Check this place starts, or resumes, the person's check, which runs in this page at ?check=LA-….
  */
 
 type Answer = { revision: number; locations: PlaceRow[] };
@@ -17,6 +19,9 @@ const SNIPPET = 90;
 export async function locationsWorkspace(): Promise<void> {
   const session = await loadSession("items");
   if (!session) return;
+  // A check runs in this page; its id becomes an API path, so only the shape the server issues is taken.
+  const checking = new URLSearchParams(window.location.search).get("check");
+  if (checking && /^LA-[A-Za-z0-9-]+$/.test(checking)) return placeCheck(session, checking);
   document.title = "Locations · Staff workspace";
   shell(session, "items", html`
     <header class="page-header">
@@ -169,7 +174,9 @@ export async function locationsWorkspace(): Promise<void> {
       ${row ? html`<section class="profile" id="place-photo" aria-label="Picture"><div class="profile__photo" data-tile></div>
         <div class="profile__info"><p class="profile__meta profile__meta--place">${icon("pin")}<span>${paths.get(row.id)}</span></p>
           <p class="profile__meta">${row.itemCount ? html`<a class="text-link" href="/staff/items?location=${row.id}" data-route>${countLabel(row)} kept here</a>` : "No items kept here"}${row.openReports ? ` · ${plural(row.openReports, "open report")}` : ""}</p>
-          <p class="profile__meta profile__meta--fresh">${icon("clock")}<span>${row.lastCheckedAt ? `Last checked ${ageOf(row.lastCheckedAt)}` : "Not checked yet"} · <a class="text-link" href="/staff/catalogue">Check it in the Catalog</a></span></p>
+          <p class="profile__meta profile__meta--fresh">${icon("clock")}<span>${row.lastCheckedAt ? `Last checked ${ageOf(row.lastCheckedAt)}` : "Not checked yet"}</span></p>
+          ${row.active ? html`<div class="where__buttons"><button type="button" class="button button--secondary button--sm" data-check-place>${icon("check")}Check this place</button></div>
+            <div class="form-alert" id="check-alert" role="alert" hidden></div>` : ""}
           <div class="profile__actions" data-actions></div></div></section>` : ""}
       <form id="place-form" class="form" novalidate>
         <div class="field"><label for="p-name">Name</label><input id="p-name" name="name" value="${row?.name ?? ""}" required maxlength="120" autocomplete="off" placeholder="Cabinet 1" aria-describedby="p-name-hint" />${hint("name", "What staff call it. Cabinet 1 inside Storage Area reads as Storage Area › Cabinet 1.")}</div>
@@ -269,6 +276,19 @@ export async function locationsWorkspace(): Promise<void> {
   }
 
   function bind(row: PlaceRow | undefined): void {
+    const checkPlace = sheetElement.querySelector<HTMLButtonElement>("[data-check-place]");
+    checkPlace?.addEventListener("click", async () => {
+      checkPlace.disabled = true;
+      try {
+        const { checkLink, startCheck } = await import("./audit-screen");
+        const id = await startCheck({ mode: "signed-in", session: session!, access: null }, row!.id, paths.get(row!.id) ?? row!.name);
+        panel.close(true);
+        navigate(checkLink(id));
+      } catch (error) {
+        setMessage(sheetElement.querySelector("#check-alert")!, failure(error));
+        checkPlace.disabled = false;
+      }
+    });
     const place = sheetElement.querySelector<HTMLFormElement>("#place-form")!;
     const alert = place.querySelector<HTMLElement>("#place-alert")!;
     place.addEventListener("input", () => { dirty = true; });
@@ -350,4 +370,21 @@ export async function locationsWorkspace(): Promise<void> {
     });
   }
 
+}
+
+/** A place check in the staff workspace: the same check screen the Catalog runs, framed by the shell, sending what it records as it goes. */
+async function placeCheck(session: Session, id: string): Promise<void> {
+  document.title = "Checking a place · Locations";
+  shell(session, "items", html`<div id="check-host"><div class="skeleton skeleton--block"></div></div>`);
+  const host = document.querySelector<HTMLElement>("#check-host")!;
+  try {
+    const [{ checkScreen }, { startSending }] = await Promise.all([import("./audit-screen"), import("./catalogue-sync")]);
+    if (!host.isConnected) return;
+    startSending({ owner: session.id, legacy: true });
+    await checkScreen({ mode: "signed-in", session, access: null }, id, host);
+  } catch (error) {
+    if (!host.isConnected) return;
+    if (error instanceof ApiError && error.status === 401) return expired();
+    mount(host, emptyState("This check could not be opened", failure(error), html`<a class="button button--secondary" href="/staff/locations" data-route>Back to Locations</a>`, "error", 1));
+  }
 }

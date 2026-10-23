@@ -3,7 +3,8 @@ import "./admin.css";
 import { adminPage } from "./admin-frame";
 import { BEHAVIOUR_LABELS } from "./catalog-policy";
 import { KNOWLEDGE, KNOWLEDGE_VERSION } from "./item-knowledge";
-import { ApiError, type Html, api, categoryName, emptyState, failure, html, mount, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
+import type { SessionInfo } from "./catalogue-store";
+import { ApiError, type Html, api, categoryName, emptyState, expired, failure, html, icon, mount, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
 
 type Coverage = { active: number; unclassified: number; captured: number; capturedClassified: number };
 type AliasItem = { id: string; name: string; category: string; aliases: string | null; updatedAt: string | null };
@@ -14,13 +15,26 @@ function stat(label: string, value: number, note: Html | string, warn = false): 
   return html`<div class="stat ${warn ? "stat--warn" : ""}"><dt>${label}</dt><dd><span class="stat__value">${value.toLocaleString()}</span><span class="stat__note">${note}</span></dd></div>`;
 }
 
-/** Administration > Catalog: how far classification has got, other names per item, the built-in hints, and the AI setting's honest state. */
+/** Where the Catalog app remembers the place last catalogued (catalogue-workspace.ts); the sheet starts there too. */
+const LAST_PLACE = "catalogue-last-place";
+const lastPlace = (): string | null => { try { return window.localStorage.getItem(LAST_PLACE); } catch { return null; } };
+
+/**
+ * Administration > Catalog: cataloguing (LH-IP02-S03), how far classification has got, other names per item, the built-in hints, and the
+ * AI setting's honest state. On the website administrators catalogue here, in a sheet; everyone else catalogues in the installed Catalog.
+ */
 export async function catalogSettings(): Promise<void> {
   const session = await adminPage("catalog", {
     title: "Catalog",
-    lede: "How complete the catalog is, the other names people search by, and the hints that come with the app.",
+    lede: "Cataloguing, how complete the catalog is, the other names people search by, and the hints that come with the app.",
     body: () => html`
-    <section class="admin-block admin-block--first" aria-labelledby="coverage-title">
+    <section class="admin-block admin-block--first admin-cataloguing" aria-labelledby="cataloguing-title">
+      <h2 id="cataloguing-title" class="section-title">Cataloguing</h2>
+      <p>Walk a shelf and add what is on it, one item after another. The place is part of the sheet, so you can start straight away and change it as you move along.</p>
+      <div class="admin-cataloguing__go"><button type="button" class="button button--primary button--lg" id="catalog-start">${icon("camera")}<span>Start cataloguing</span></button><p class="muted" id="catalog-open" aria-live="polite"></p></div>
+      <p class="admin-cataloguing__app">${icon("install")}<span>Staff catalogue in the installed Catalog app, which also works where there's no signal. <a href="/staff/catalogue" data-route>Install the Catalog app</a></span></p>
+    </section>
+    <section class="admin-block" aria-labelledby="coverage-title">
       <h2 id="coverage-title" class="section-title">Classification</h2>
       <div id="coverage" aria-busy="true"><div class="skeleton skeleton--block skeleton--coverage" aria-hidden="true"></div></div>
     </section>
@@ -47,13 +61,77 @@ export async function catalogSettings(): Promise<void> {
     </section>
     <section class="admin-block" aria-labelledby="elsewhere-title">
       <h2 id="elsewhere-title" class="section-title">Looked after elsewhere</h2>
-      <p>Places, kits and cataloguing sessions are looked after on their own pages: <a href="/staff/locations" data-route>Places</a>, <a href="/staff/kits" data-route>Kits</a> and <a href="/staff/catalogue" data-route>Cataloguing</a>.</p>
+      <p>Places and kits are looked after on their own pages: <a href="/staff/locations" data-route>Places</a> (where checking a place starts) and <a href="/staff/kits" data-route>Kits</a>.</p>
     </section>
-    <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>`
+    <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>
+    <dialog class="sheet sheet--add" id="catalog-sheet" aria-labelledby="sheet-title"></dialog>`
   });
   if (!session) return;
   let active = true;
   onLeave(() => { active = false; });
+
+  /* ---------- Cataloguing ---------- */
+  // The Catalog sheet is Add items' capture screen running a cataloguing session: the place is chosen in it, it stays open after each save,
+  // and Finish ends the session exactly as the Catalog does. Closing the sheet leaves the session open, to resume here or in the app.
+  const catalogSheet = document.querySelector<HTMLDialogElement>("#catalog-sheet")!;
+  const start = document.querySelector<HTMLButtonElement>("#catalog-start")!;
+  let cleanups: Array<() => void> = [];
+  let generation = 0;
+  let dirty = false;
+  const runCleanups = () => { const done = cleanups; cleanups = []; generation += 1; done.forEach((cleanup) => cleanup()); };
+  const catalogPanel = createSheet(catalogSheet, { dirty: () => dirty, onClose: () => { runCleanups(); dirty = false; void loadOpenSession(); } });
+  onLeave(runCleanups);
+
+  /** Says whether this person has a session open (here or on any device), so the button resumes it rather than seeming to start afresh. */
+  async function loadOpenSession(): Promise<void> {
+    try {
+      const state = await api<{ session: SessionInfo | null }>("/api/staff/catalogue");
+      if (!active) return;
+      const open = state.session;
+      start.querySelector("span")!.textContent = open ? "Resume cataloguing" : "Start cataloguing";
+      document.querySelector("#catalog-open")!.textContent = open ? `${open.place ? `Your session in ${open.place}` : "Your session"} is open · ${plural(open.saved, "item")} saved` : "";
+    } catch { /* the button still works; the server answers when it is pressed */ }
+  }
+
+  /** Starts (or resumes: the server keeps one open session a person) and draws the capture screen in the sheet. `reopen` draws it again. */
+  async function runSession(id: string | null): Promise<void> {
+    runCleanups();
+    const mine = generation;
+    dirty = false;
+    const host = catalogSheet.querySelector<HTMLElement>("#catalog-host");
+    if (!host) return;
+    host.className = "";
+    mount(host, html`<div class="skeleton skeleton--block"></div>`);
+    const current = () => mine === generation && host.isConnected && catalogSheet.open;
+    try {
+      const [{ captureScreen }, { startSending }] = await Promise.all([import("./catalogue-capture"), import("./catalogue-sync")]);
+      if (!current()) return;
+      const begin = (locationId: string | null) => api<{ id: string }>("/api/staff/catalogue/sessions", { method: "POST", body: JSON.stringify({ locationId }) });
+      // A remembered place that has since been retired starts the session with no place rather than not at all.
+      const sessionId = id ?? (await begin(lastPlace()).catch((error) => { if (error instanceof ApiError && error.status === 400 && lastPlace()) return begin(null); throw error; })).id;
+      if (!current()) return;
+      startSending({ owner: session!.id, legacy: true });
+      await captureScreen({ mode: "signed-in", session: session!, access: null }, sessionId, {
+        host,
+        onCleanup: (cleanup) => { if (current()) cleanups.push(cleanup); else cleanup(); },
+        onDirty: (next) => { if (current()) dirty = next; },
+        session: { reopen: (next) => void runSession(next) }
+      });
+    } catch (error) {
+      if (!current()) return;
+      if (error instanceof ApiError && error.status === 401) return expired();
+      mount(host, emptyState("Cataloguing could not be opened", failure(error), html`<button type="button" class="button button--secondary" data-catalog-again>Try again</button>`, "error", 3));
+    }
+  }
+
+  start.addEventListener("click", () => {
+    mount(catalogSheet, sheetContent("Cataloguing session", "Catalog", html`<div id="catalog-host"></div>`));
+    catalogPanel.open();
+    void runSession(null);
+  });
+  // "Try again", and the summary's "Start another session", start afresh in the same sheet.
+  catalogSheet.addEventListener("click", (event) => { if ((event.target as HTMLElement).closest("[data-catalog-again]")) void runSession(null); });
+  void loadOpenSession();
   const loadProposals = async () => {
     const host = document.querySelector<HTMLElement>("#ai-proposals")!;
     try {

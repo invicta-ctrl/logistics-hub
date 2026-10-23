@@ -1,5 +1,18 @@
 import { expect, test, type Page } from "@playwright/test";
 
+/**
+ * Cataloguing and checks run in the installed Catalog (LH-IP02-S03): a plain browser tab shows only how to install it. These tests open
+ * the Catalog as the installed app, by answering the standalone display-mode query as an installed window does.
+ */
+const asInstalledApp = () => {
+  const native = window.matchMedia.bind(window);
+  window.matchMedia = (query: string) => query.includes("display-mode: standalone")
+    ? ({ matches: true, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false } as unknown as MediaQueryList)
+    : native(query);
+};
+
+test.beforeEach(async ({ page }) => { await page.addInitScript(asInstalledApp); });
+
 /*
  * V1.5 against a real Worker and D1: a cataloguing session on a shelf (a loanable with a photo, a consumable, an item saved
  * while the connection is down, a possible duplicate saved as a separate item, and one that waits for review), then finishing

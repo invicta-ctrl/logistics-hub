@@ -2,6 +2,20 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 
 /* V1.7 checking a place, on fictional data with a small stateful server behind the API: what is sent, offline, the review, and access. */
 
+/**
+ * Cataloguing and checks run in the installed Catalog (LH-IP02-S03): a plain browser tab shows only how to install it. These tests open
+ * the Catalog as the installed app, by answering the standalone display-mode query as an installed window does.
+ */
+const asInstalledApp = () => {
+  const native = window.matchMedia.bind(window);
+  window.matchMedia = (query: string) => query.includes("display-mode: standalone")
+    ? ({ matches: true, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false } as unknown as MediaQueryList)
+    : native(query);
+};
+
+// Every test here is the installed app, except those about the staff workspace in a browser tab.
+test.beforeEach(async ({ page }, testInfo) => { if (!testInfo.titlePath.some((title) => title.includes("in a browser tab"))) await page.addInitScript(asInstalledApp); });
+
 const session = { authenticated: true, id: "ACC-staff", username: "staff.sample", displayName: "Staff Sample", role: "STAFF", access: "DoL", hub: true, mustChangePassword: false, recovery: null, selfServiceReviews: 0, selfServiceClosed: false, directory: null };
 const AUDIT = "LA-00000000-0000-4000-8000-000000000001";
 const place = (id: string, name: string, parentId: string | null, directions: string | null = null) => ({ id, name, parentId, directions, visibility: "STAFF_ONLY", active: true, updatedAt: "2026-10-04T00:00:00.000Z", photo: null, itemCount: 0, openReports: 0 });
@@ -209,6 +223,38 @@ test("an acknowledgement committing as storage fills cannot overwrite the next l
     return { durable: store.durable(), record: (await store.audits())[0] };
   }, { id: AUDIT, owner: session.id });
   expect(saved).toMatchObject({ durable: false, record: { pending: { status: "OPEN", placeNote: "New note" }, finishing: true } });
+});
+
+test.describe("in a browser tab, checks run in Locations (LH-IP02-S03)", () => {
+  const places = (page: Page) => page.route("**/api/staff/locations", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ revision: 1,
+    locations: PLACES.map((entry) => ({ ...entry, updatedAt: "2026-10-03T00:00:00.000Z", photo: null, itemCount: entry.id === "LOC-0002" ? 4 : 0, openReports: 0, lastCheckedAt: null })) }) }));
+
+  test("Check this place starts the check inside the staff workspace, and the way back is Locations", async ({ page }) => {
+    const server = serve(page);
+    await server.ready;
+    await places(page);
+    await page.goto("/staff/locations");
+    await page.getByRole("button", { name: /^Shelf B/ }).click();
+    await page.getByRole("button", { name: "Check this place" }).click();
+    await expect(page).toHaveURL(new RegExp(`/staff/locations\\?check=${AUDIT}$`));
+    await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Store room › Shelf B" })).toBeVisible();
+    await row(page, "Masking tape").getByRole("button", { name: /^Here/ }).click();
+    await expect.poll(() => server.state.received).toBe(1);
+    await page.locator(".cat-back a").click();
+    await expect(page).toHaveURL(/\/staff\/locations$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Locations" })).toBeVisible();
+  });
+
+  test("an older check link to the Catalog opens the check in Locations", async ({ page }) => {
+    const server = serve(page);
+    await server.ready;
+    await places(page);
+    await page.goto(`/staff/catalogue?audit=${AUDIT}`);
+    await expect(page).toHaveURL(new RegExp(`/staff/locations\\?check=${AUDIT}$`));
+    await expect(page.getByRole("heading", { level: 1, name: "Store room › Shelf B" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Sections" })).toBeVisible();
+  });
 });
 
 async function startCheck(page: Page) {

@@ -8,7 +8,7 @@ import { whenIdle } from "./pwa";
 import { ApiError, type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, onLeave, plural, reducedMotion, sheet, sheetContent, toast, units } from "./ui";
 
 /*
- * Checking a place (V1.7), in the Catalog app. A check is one person verifying what should be at one place and the places inside it:
+ * Checking a place (V1.7), in the Catalog app and, on the website, in Locations (LH-IP02-S03). A check is one person verifying what should be at one place and the places inside it:
  * each expected item is marked Here (the count matches), Count differs, I can't find it or Record looks wrong; anything else on the
  * shelf is Found here (recorded elsewhere) or Not in the catalog. Everything seen is written on this device first and sent in order
  * (catalogue-sync.ts), so a check runs the same with or without a connection. Nothing seen changes stock: the review, after the check is
@@ -30,7 +30,10 @@ const FINDINGS = new Set(["MISMATCH", "CANT_FIND", "FOUND_HERE", "UNLISTED", "NE
 const RESOLVED_LABELS: Record<string, string> = { POSTED_COUNT: "Count posted", MOVED_HERE: "Moved here", REPORTED: "Reported", NO_CHANGE: "No change" };
 
 const now = () => new Date().toISOString();
-const checkLink = (id: string) => `/staff/catalogue?audit=${id}`;
+/** Where checks live in this window: the Catalog's own page (the installed app), or Locations in the staff workspace. Links stay there. */
+const inCatalog = () => document.documentElement.dataset.app === "catalog";
+const home = () => inCatalog() ? { href: "/staff/catalogue", label: "Catalog" } : { href: "/staff/locations", label: "Locations" };
+export const checkLink = (id: string) => inCatalog() ? `/staff/catalogue?audit=${id}` : `/staff/locations?check=${id}`;
 const amount = (count: number, unit: string) => `${count} ${units(count, unit)}`;
 
 /** The items expected at a place (and the places inside it), from the catalog this device saved: what a check started offline expects. */
@@ -93,7 +96,7 @@ export async function checksCard(host: HTMLElement, who: Signed, places: Paramet
  * Starts a check. With a connection the server makes it (or answers with this person's open check of the place, or refuses when someone
  * else is checking it); without one, this device starts it under an id it proposes and expects what its saved catalog says is there.
  */
-async function startCheck(who: Signed, locationId: string, place: string | null): Promise<string> {
+export async function startCheck(who: Signed, locationId: string, place: string | null): Promise<string> {
   if (navigator.onLine) {
     try {
       const started = await api<{ id: string }>("/api/staff/audits", { method: "POST", body: JSON.stringify({ locationId }) });
@@ -125,9 +128,11 @@ function checkedOf(detail: AuditDetail, held: ObservationEntry[]): number {
 
 /* ---------- The check ---------- */
 
-export async function checkScreen(who: Signed, id: string): Promise<void> {
-  document.title = "Checking a place · Catalog";
-  catalogueShell(who, html`<div class="ck" id="ck" aria-busy="true"><div class="skeleton skeleton--block"></div></div>`);
+/** Draws a check in the Catalog's frame, or in `host` when the staff workspace already framed the page (Locations). */
+export async function checkScreen(who: Signed, id: string, host?: HTMLElement): Promise<void> {
+  document.title = `Checking a place · ${home().label}`;
+  if (host) mount(host, html`<div class="ck" id="ck" aria-busy="true"><div class="skeleton skeleton--block"></div></div>`);
+  else catalogueShell(who, html`<div class="ck" id="ck" aria-busy="true"><div class="skeleton skeleton--block"></div></div>`);
   const root = document.querySelector<HTMLElement>("#ck")!;
   let record = (await audits()).find((each) => each.id === id || each.serverId === id) ?? null;
   let detail: AuditDetail | null = null;
@@ -136,14 +141,14 @@ export async function checkScreen(who: Signed, id: string): Promise<void> {
     detail = navigator.onLine ? await refreshCheck(id, who.session.id) : null;
   } catch (error) {
     root.removeAttribute("aria-busy");
-    mount(root, emptyState("This check could not be opened", failure(error), html`<a class="button button--secondary" href="/staff/catalogue" data-route>Back to the Catalog</a>`, "error", 1));
+    mount(root, emptyState("This check could not be opened", failure(error), html`<a class="button button--secondary" href="${home().href}" data-route>Back to ${home().label}</a>`, "error", 1));
     return;
   }
   record = (await audits()).find((each) => each.id === id || each.serverId === id) ?? record;
   detail ??= record?.detail ?? null;
   root.removeAttribute("aria-busy");
   if (!detail) {
-    mount(root, emptyState("This check isn’t saved on this device", "It opens only with a connection.", html`<a class="button button--secondary" href="/staff/catalogue" data-route>Back to the Catalog</a>`, "error", 1));
+    mount(root, emptyState("This check isn’t saved on this device", "It opens only with a connection.", html`<a class="button button--secondary" href="${home().href}" data-route>Back to ${home().label}</a>`, "error", 1));
     return;
   }
   if (detail.audit.status === "FINISHED" || record?.finishing) return summary(root, who, detail, record);
@@ -202,7 +207,7 @@ async function checking(root: HTMLElement, who: Signed, start: AuditRecord): Pro
     if (filter === "todo" && !todo.length) filter = "done";
     const shown = filter === "todo" ? todo : filter === "done" ? done : findings.filter((entry): entry is AuditItem => "onHand" in entry);
     mount(root, html`
-      <p class="cat-back"><a class="text-link" href="/staff/catalogue" data-route>${icon("back")}Catalog</a></p>
+      <p class="cat-back"><a class="text-link" href="${home().href}" data-route>${icon("back")}${home().label}</a></p>
       <header class="ck-head">
         <p class="ck-head__kicker">Checking</p>
         <h1>${detail.audit.place ?? "A place"}</h1>
@@ -331,8 +336,8 @@ async function checking(root: HTMLElement, who: Signed, start: AuditRecord): Pro
       record.detail.audit.status = "PAUSED";
       await keepAudit(record);
       void syncNow();
-      toast("Check paused. Resume it from the Catalog on any device.");
-      return navigate("/staff/catalogue");
+      toast(`Check paused. Resume it from ${inCatalog() ? "the Catalog" : "the place in Locations"} on any device.`);
+      return navigate(home().href);
     }
     if (target.hasAttribute("data-discard-stopped")) {
       if (!window.confirm("Discard what could not be saved? It was never on the server.")) return;
@@ -469,9 +474,9 @@ async function summary(root: HTMLElement, who: Signed, detail: AuditDetail, reco
   const notChecked = items.filter((item) => !item.observation);
   const minutes = detail.audit.finishedAt ? Math.max(1, Math.round((Date.parse(detail.audit.finishedAt) - Date.parse(detail.audit.startedAt)) / 60_000)) : null;
   const open = review?.discrepancies.filter((entry) => !entry.resolution).length ?? findings.length;
-  document.title = `Check of ${detail.audit.place ?? "a place"} · Catalog`;
+  document.title = `Check of ${detail.audit.place ?? "a place"} · ${home().label}`;
   mount(root, html`
-    <p class="cat-back"><a class="text-link" href="/staff/catalogue" data-route>${icon("back")}Catalog</a></p>
+    <p class="cat-back"><a class="text-link" href="${home().href}" data-route>${icon("back")}${home().label}</a></p>
     <header class="ck-head">
       <p class="ck-head__kicker">${detail.audit.status === "FINISHED" ? "Check finished" : "Check finished on this device"}</p>
       <h1>${detail.audit.place ?? "A place"}</h1>
@@ -494,7 +499,7 @@ async function summary(root: HTMLElement, who: Signed, detail: AuditDetail, reco
           <p class="card__text">${signIn ? "Sign in again to settle these." : navigator.onLine && !local ? "The findings could not be loaded. Reload to settle them." : "Settle these once you’re online and signed in."}</p>`}
     </section>
     ${notChecked.length ? html`<details class="ck-notchecked"><summary>Not checked (${notChecked.length})</summary><ul>${notChecked.map((item) => html`<li>${item.name} <span class="muted">· ${item.place ?? ""}</span></li>`)}</ul></details>` : ""}
-    <div class="where__buttons ck-summary-actions"><button type="button" class="button button--secondary" data-print>Print summary</button><a class="button button--primary" href="/staff/catalogue" data-route>Back to the Catalog</a></div>`);
+    <div class="where__buttons ck-summary-actions"><button type="button" class="button button--secondary" data-print>Print summary</button><a class="button button--primary" href="${home().href}" data-route>Back to ${inCatalog() ? "the Catalog" : "Locations"}</a></div>`);
 
   // One listener per screen: redrawing after a finding is settled reuses it.
   if (root.dataset.summary) return;
