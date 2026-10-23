@@ -61,7 +61,8 @@ async function addPlace(page: Page, name: string, inside: string | null, options
 test.describe.serial("smart locations", () => {
   test("places: build a tree, describe and photograph it, and combine nothing by accident", async ({ page }) => {
     await signIn(page);
-    await page.getByRole("link", { name: "Locations" }).click();
+    // Locations is a destination in the rail (LH-IP02-S01); the Items page also links to it, so the rail's link is the one meant.
+    await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Locations" }).click();
     await expect(page.getByRole("heading", { name: "Locations", level: 1 })).toBeVisible();
 
     await addPlace(page, "Storage Area", null, { directions: "Through the door behind the front desk.", shared: true });

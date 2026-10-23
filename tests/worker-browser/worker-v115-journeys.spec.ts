@@ -87,7 +87,8 @@ test.describe.serial("V2 journeys", () => {
     // Staff: Home says something needs attention; Attention names the phone return and leads to where it is settled.
     await staff.goto("/staff/home");
     await expect(staff.getByRole("heading", { name: "Needs attention" })).toBeVisible();
-    await staff.getByRole("link", { name: "Open Attention" }).click();
+    // Home and Attention are one workspace (LH-IP02-S01): the bell opens it on everything, routine work included.
+    await staff.locator(".app-bell").click();
     await expect(staff).toHaveURL(/\/staff\/attention/);
     const entry = staff.locator("li, article").filter({ hasText: `Phone return of ${PROJECTOR}` }).first();
     await expect(entry).toBeVisible();

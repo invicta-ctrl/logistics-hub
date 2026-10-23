@@ -8,7 +8,8 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 const PAGES: [name: string, route: string, api: RegExp][] = [
-  ["Home", "/staff/home", /\/api\/staff\/home$/],
+  // Home's freshness line is its queue's (LH-IP02-S01): Home and Attention are one workspace on the same poll.
+  ["Home", "/staff/home", /\/api\/staff\/attention$/],
   ["Items", "/staff/items", /\/api\/staff\/inventory$/],
   ["Stock", "/staff/stock", /\/api\/staff\/stock$/],
   ["Loans", "/staff/loans", /\/api\/staff\/loans$/],
