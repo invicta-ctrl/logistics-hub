@@ -1,10 +1,8 @@
-import { CREST, MARK, type Html, animateNumber, app, categoryName, emptyState, html, icon, label, live, mount, onLeave, plural, preservingFocus, thumbImg, units, writeParams } from "./ui";
+import { CREST, MARK, type Html, animateNumber, app, categoryName, emptyState, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, thumbImg, units, writeParams } from "./ui";
 
 type LendingItem = { id: string; name: string; category: string; unit: string; itemType: string; available: number; audience: string; photo: string | null; iconKey?: string | null };
 type Catalog = { revision: number; items: LendingItem[]; categories: string[] };
 type Sort = "name" | "available";
-
-const LOCKUP = html`<span class="lockup">${CREST}<span class="lockup__rule" aria-hidden="true"></span>${MARK}<span class="lockup__text"><strong>Department of Logistics</strong> <span>HAU University Student Council</span></span></span>`;
 
 const USC_FACEBOOK = "https://www.facebook.com/holyangeluniversitysc";
 
@@ -12,10 +10,10 @@ function page(content: Html, current: "" | "home" | "lending"): void {
   mount(app, html`
     <header class="site-header">
       <div class="container site-header__inner">
-        <a class="site-header__brand" href="/" data-route aria-label="Department of Logistics HAU University Student Council home">${LOCKUP}</a>
+        <a class="site-header__brand" href="/" data-route aria-label="Department of Logistics HAU University Student Council home">${CREST}<span class="site-header__name" aria-hidden="true">Department of Logistics</span></a>
         <nav class="site-nav" aria-label="Main">
-          <a class="site-nav__link" href="/lending" data-route ${current === "lending" ? html`aria-current="page"` : ""}>Lending Hub</a>
-          <a class="site-nav__link" href="/staff" data-route>Staff sign in</a>
+          <a class="site-nav__link site-nav__link--secondary" href="/lending" data-route ${current === "lending" ? html`aria-current="page"` : ""}>Lending Hub</a>
+          <a class="site-nav__link site-nav__link--pill" href="/staff" data-route>Staff sign in</a>
         </nav>
       </div>
     </header>
@@ -71,17 +69,28 @@ export function landing(): void {
     <section class="hero" aria-labelledby="hero-title">
       <div class="container hero__inner">
         <div class="hero__copy">
-          <p class="hero__eyebrow">Holy Angel University · University Student Council</p>
           <h1 id="hero-title">Borrow equipment from the USC Department of Logistics</h1>
           <p class="hero__lede">Check what is on the shelf, then borrow it in person at the Logistics office.</p>
           <div class="hero__actions">
-            <a class="button button--on-dark button--lg" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
+            <a class="button hero__primary" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
             <a class="text-link text-link--light hero__secondary" href="#steps-title">How borrowing works</a>
           </div>
         </div>
-        <aside class="hero__services" aria-label="Logistics services"><p class="hero__eyebrow">Department of Logistics</p><h2>Find what you need.<br />Keep it ready for the next person.</h2><a href="/lending" data-route><strong>Lending Hub ${icon("arrow")}</strong><span>Browse equipment and current availability.</span></a><a href="/self-service" data-route><strong>Self-Service ${icon("arrow")}</strong><span>Record an item you take, use or return, when the service is open.</span></a><a href="/staff" data-route><strong>Staff sign-in ${icon("arrow")}</strong><span>Manage stock, lending and item records.</span></a></aside>
+        <form class="hero__find" action="/lending" method="get" role="search" aria-labelledby="find-title">
+          <h2 id="find-title">Find equipment</h2>
+          <p>Search the Lending Hub for what you need and see how many are in the office now.</p>
+          <div class="hero__field">
+            ${icon("search")}
+            <label class="visually-hidden" for="find-q">Equipment name</label>
+            <input id="find-q" name="q" type="search" placeholder="Projector, table, extension cord…" autocomplete="off" enterkeyhint="search" data-search />
+            <button type="submit" aria-label="Search the Lending Hub">${icon("arrow")}</button>
+          </div>
+          <a class="hero__available" href="/lending?available=1" data-route>Show what is available now ${icon("arrow")}</a>
+        </form>
       </div>
     </section>
+
+    <div class="container"><aside class="hero__services" aria-label="Logistics services"><a href="/lending" data-route>${icon("swap")}<strong>Lending Hub</strong><span>Browse equipment and current availability.</span></a><a href="/self-service" data-route>${icon("phone")}<strong>Self-Service</strong><span>Record an item you take, use or return, when the service is open.</span></a><a href="/staff" data-route>${icon("user")}<strong>Staff sign-in</strong><span>Manage stock, lending and item records.</span></a></aside></div>
 
     <section class="section" aria-labelledby="steps-title">
       <div class="container">
@@ -95,6 +104,15 @@ export function landing(): void {
     </section>
 
   </main>`, "home");
+
+  // The entry card is a plain GET form to /lending; with the router running it navigates in place. It shows no counts and
+  // makes no catalog request: availability lives only in the Lending Hub.
+  const find = app.querySelector<HTMLFormElement>(".hero__find")!;
+  find.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const query = String(new FormData(find).get("q") ?? "").trim();
+    navigate(query ? `/lending?q=${encodeURIComponent(query)}` : "/lending");
+  });
 }
 
 export function lending(): void {

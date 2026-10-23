@@ -32,7 +32,7 @@ for (const route of ROUTES) {
       for (const brand of await page.locator(".site-header__brand, .ss-bar__brand").all()) {
         const visible = (await brand.innerText()).trim().replace(/\s+/g, " ");
         await expect(brand).toHaveAccessibleName(new RegExp(visible.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
-        const title = await brand.locator(".lockup__text, .ss-bar__title").textContent();
+        const title = await brand.locator(".site-header__name, .ss-bar__title").textContent();
         const text = (title ?? "").trim().replace(/\s+/g, " ");
         expect(text).not.toBe("");
         await expect(brand).toHaveAccessibleName(new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));

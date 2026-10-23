@@ -16,9 +16,11 @@ test("landing shows the institutional identity and current Logistics services", 
   page.on("request", (request) => { if (request.url().includes("/api/public/catalog")) catalogRequests += 1; });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Borrow equipment from the USC Department of Logistics" })).toBeVisible();
-  const box = (await page.locator(".site-header__brand .mark").boundingBox())!;
-  expect(box.height).toBeGreaterThanOrEqual(40);
+  // LH-IP02-S02: the crest leads the header; the DOL mark sits beside it in the footer, its proportions kept.
   await expect(page.locator(".site-header__brand .crest")).toBeVisible();
+  await expect(page.locator(".site-header__brand .mark")).toHaveCount(0);
+  const box = (await page.locator(".site-footer__marks .mark").boundingBox())!;
+  expect(box.height).toBeGreaterThanOrEqual(32);
   await expect(page.getByRole("complementary", { name: "Logistics services" })).toBeVisible();
   await expect(page.locator(".hero__services").getByRole("link", { name: /Self-Service/ })).toHaveAttribute("href", "/self-service");
   await expect(page.locator(".hero__services").getByRole("link", { name: /Staff sign-in/ })).toHaveAttribute("href", "/staff");
@@ -31,6 +33,16 @@ test("landing shows the institutional identity and current Logistics services", 
   await expect(page.locator(".shelf")).toHaveCount(0);
   expect(catalogRequests).toBe(0);
   await expect(page.getByRole("link", { name: /Browse the Lending Hub/ })).toHaveAttribute("href", "/lending");
+  // The entry card is a data-free search into the Lending Hub: a GET form to /lending and an "available now" link.
+  const find = page.getByRole("search", { name: "Find equipment" });
+  await expect(find).toHaveAttribute("action", "/lending");
+  await expect(find.getByRole("link", { name: /Show what is available now/ })).toHaveAttribute("href", "/lending?available=1");
+  expect(catalogRequests).toBe(0);
+  await find.getByRole("searchbox", { name: "Equipment name" }).fill("folding table");
+  await find.getByRole("button", { name: "Search the Lending Hub" }).click();
+  await expect(page).toHaveURL(/\/lending\?q=folding(%20|\+)table$/);
+  await expect(page.getByRole("heading", { name: "Lending Hub", level: 1 })).toBeVisible();
+  await expect(page.getByRole("searchbox").first()).toHaveValue("folding table");
 });
 
 test("Lending Hub groups by category, filters, and keeps filters in the URL", async ({ page }) => {
