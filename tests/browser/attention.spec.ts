@@ -65,8 +65,8 @@ test.describe("Attention inbox", () => {
     await expect(page.getByRole("link", { name: /^Loans.*3 need attention/ })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Stock.*1 needs attention/ })).toBeVisible();
     await expect(page.locator(".attn-band__title")).toHaveText(["Today", "This week", "When there is time"]);
-    await expect(page.getByRole("heading", { level: 2, name: "Overdue loans" })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 2, name: "Items not yet sorted" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 4, name: "Overdue loans" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 4, name: "Items not yet sorted" })).toBeVisible();
     // Each entry names its reason and goes straight to where the next step is made.
     await expect(page.getByRole("link", { name: /Open the loan/ }).first()).toHaveAttribute("href", /\/staff\/loans\?loan=LN-1/);
     await expect(page.getByRole("link", { name: "Classify it" })).toHaveAttribute("href", "/staff/items?item=ITM-0900&tab=details");
@@ -87,6 +87,10 @@ test.describe("Attention inbox", () => {
     await mock(page, [overdue(1), out, kit, unclassified]);
     await page.goto("/staff/attention");
     await expect(page.locator("#attn-count")).toHaveText("3 to act on · 1 when there is time");
+    // The filters fold behind one button until they are wanted.
+    await expect(page.getByLabel("From")).toBeHidden();
+    await page.getByRole("button", { name: "Filters" }).click();
+    await expect(page.getByRole("button", { name: "Filters" })).toHaveAttribute("aria-expanded", "true");
     await page.getByLabel("From").selectOption("Stock");
     await expect(page.locator("#attn-count")).toHaveText("1 to act on");
     await expect(page).toHaveURL(/source=Stock/);
@@ -115,6 +119,34 @@ test.describe("Attention inbox", () => {
     await expect(list.locator(".attn-row")).toHaveCount(100);
     await expect(page.getByRole("button", { name: "Show fewer" })).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByText("Showing the first 100 of 140.")).toBeVisible();
+  });
+
+  test("the record document offers the same guarded action as the row, sent once, and closes when the entry clears", async ({ page }) => {
+    const state = await mock(page, [damaged, out]);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route("**/api/staff/loans/*/review", async (route) => {
+      await held;
+      state.reviewed.push(route.request().url().split("/").at(-2)!);
+      state.entries = state.entries.filter((entry) => entry.key !== damaged.key);
+      return route.fulfill({ contentType: "application/json", body: JSON.stringify({ reviewed: true }) });
+    });
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.goto("/staff/attention");
+    await page.getByRole("button", { name: /^Tripod/ }).click();
+    const doc = page.locator("#attn-doc");
+    await expect(doc.getByRole("heading", { level: 2, name: "Tripod" })).toBeVisible();
+    await expect(doc.getByRole("link", { name: /Open the loan/ })).toHaveAttribute("href", "/staff/loans?view=history&loan=LN-9");
+    const mark = doc.getByRole("button", { name: "Mark reviewed" });
+    await mark.click();
+    // Busy until the server answers, so a second press sends nothing.
+    await expect(mark).toBeDisabled();
+    release();
+    await expect(page.getByText("Marked as reviewed.")).toBeVisible();
+    await expect(doc).toBeHidden();
+    await expect(page.getByText("Tripod")).toHaveCount(0);
+    expect(state.reviewed).toEqual(["LN-9"]);
+    await expect(page).toHaveURL(/\/staff\/attention$/);
   });
 
   test("nothing to do shows a calm empty state and no numbers", async ({ page }) => {
@@ -211,7 +243,7 @@ test.describe("Identity needs review", () => {
     for (const viewport of [{ width: 320, height: 700 }, { width: 1366, height: 900 }]) {
       await page.setViewportSize(viewport);
       await page.goto("/staff/attention?reason=IDENTITY_REVIEW");
-      await expect(page.getByRole("heading", { level: 2, name: "Identity needs review" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 4, name: "Identity needs review" })).toBeVisible();
       const first = page.locator("li").filter({ hasText: "Phone take of Markers 1" });
       await expect(first).toContainText("Juan gave no student ID number.");
       await expect(first.getByRole("button", { name: "Confirm identity" })).toBeVisible();

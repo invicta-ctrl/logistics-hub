@@ -532,19 +532,26 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 /* ==========================================================================
    Staff workspace
    ========================================================================== */
-.app-bar { position: sticky; top: 0; z-index: 30; container-type: inline-size; border-bottom: 1px solid var(--on-dark-line); background: radial-gradient(90rem 12rem at 12% -6rem, rgb(122 20 25 / 55%), transparent 70%), var(--brand-dark); color: var(--on-dark); box-shadow: 0 1px 0 rgb(43 10 12 / 10%), 0 6px 16px -12px rgb(43 10 12 / 45%); }
+/* LH-IP02-S01: the staff frame is the HAU USC oxblood (deep oxblood in staff-dark). On desktop and tablet header.app-bar is a fixed rail
+   and each page sits in a rounded work panel inside the frame; --app-bar is then the panel's top inset, so every sticky offset that reads it
+   stays right. On phones header.app-bar is a top bar and the sections move to a bottom bar. */
+:root { --frame: #7a1419; --rail: 15rem; }
+:root[data-theme="dark"] { --frame: #2b0a0c; }
+.app-bar { position: sticky; top: 0; z-index: 30; container-type: inline-size; border-bottom: 1px solid rgb(255 255 255 / 14%); background: var(--frame); color: var(--on-dark); }
 .app-bar__inner { display: flex; min-height: var(--app-bar); align-items: center; gap: var(--space-6); max-width: 90rem; margin-inline: auto; padding-inline: max(var(--gutter), env(safe-area-inset-left, 0px)) max(var(--gutter), env(safe-area-inset-right, 0px)); }
 .app-bar :focus-visible { outline-color: var(--gold-action); }
-.app-bar__brand { display: flex; min-width: 0; flex: 0 1 auto; align-items: center; gap: var(--space-3); border-radius: var(--radius); text-decoration: none; }
-.app-bar__brand .mark { height: 2.5rem; }
+.app-bar__brand { display: flex; min-width: 0; flex: 0 1 auto; align-items: center; gap: var(--space-3); border-radius: var(--radius-lg); color: var(--on-dark); text-decoration: none; transition: background-color var(--dur-1); }
+.app-bar__brand .crest { width: auto; height: 2.5rem; }
 .app-bar__brand > :first-child { flex: none; }
-.app-bar__title { display: grid; min-width: 0; overflow: hidden; font-family: var(--serif); font-size: var(--text-md); line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
-.app-bar__title small { color: var(--on-dark-2); font-family: var(--sans); font-size: var(--text-sm); }
-/* On a 320 px phone, or when large text leaves no room beside the avatar, the mark alone stands for the name (the page title says where you are). */
+.app-bar__title { min-width: 0; overflow: hidden; font-size: var(--text-md); font-weight: 600; letter-spacing: -.005em; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+/* On a 320 px phone, or when large text leaves no room beside the avatar, the crest alone stands for the name (the page title says where you are). */
 @container (max-width: 21rem) { .app-bar__title { display: none; } }
-/* Sections: text links with a gold underline on desktop; the same links become the phone bottom bar. */
+.app-bar__dept { display: none; }
+/* Sections: the rail's grouped list on desktop and tablet; on phones Home, Find and More form the bottom bar. */
 .app-nav { display: flex; align-self: stretch; }
-.app-nav__link { position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: var(--space-2); padding-inline: var(--space-3); border: 0; background: none; color: var(--on-dark-2); font-size: var(--text-base); font-weight: 500; text-decoration: none; white-space: nowrap; transition: color var(--dur-1); }
+.app-nav__group { display: contents; }
+.app-nav__label { display: none; }
+.app-nav__link { position: relative; isolation: isolate; display: inline-flex; align-items: center; gap: var(--space-2); padding-inline: var(--space-3); border: 0; background: none; color: var(--on-dark-2); font-size: var(--text-base); font-weight: 500; text-decoration: none; white-space: nowrap; transition: color var(--dur-1), background-color var(--dur-1); }
 .app-nav__link > .icon { display: none; }
 .app-nav__link::after { position: absolute; right: var(--space-3); bottom: 0; left: var(--space-3); height: 2px; border-radius: 2px 2px 0 0; background: var(--gold-action); content: ""; opacity: 0; }
 .app-nav__link:hover { color: var(--on-dark); }
@@ -552,7 +559,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .app-nav__link[aria-current="page"], .app-nav__more.is-current { color: var(--on-dark); }
 .app-nav__link[aria-current="page"]::after, .app-nav__more.is-current::after { opacity: 1; }
 .app-nav__text { display: inline-flex; align-items: center; }
-.app-nav__more { display: none; }
+.app-nav__more, .app-nav__find { display: none; }
 .nav-badge { display: inline-grid; min-width: 1.25rem; height: 1.25rem; margin-left: var(--space-2); padding-inline: var(--space-1); place-items: center; border-radius: var(--radius-pill); background: var(--gold-action); color: var(--brand-deep); font-size: var(--text-sm); font-weight: 700; line-height: 1; }
 /* The signed-in identity: the avatar opens the account menu. */
 .account { display: inline-flex; min-height: var(--target); flex: none; align-items: center; gap: var(--space-3); margin-left: auto; padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1); border: 0; border-radius: var(--radius-pill); background: none; color: inherit; font-size: var(--text-sm); font-weight: 500; text-align: left; transition: background-color var(--dur-1); }
@@ -1932,3 +1939,96 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
 
 /* A theme change supplies its own circular reveal (src/theme.ts), so the default cross-fade is off while it runs (as in self-service.css). */
 :root.theme-switching::view-transition-old(root), :root.theme-switching::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+
+/* ==========================================================================
+   LH-IP02-S01 staff rail (desktop and tablet) and the phone bottom bar's Home · Find · More.
+   Last in the file so it settles the earlier top-bar rules at the same widths.
+   ========================================================================== */
+@media (min-width: 761px) {
+  :root { --app-bar: 1rem; }
+  body:has(.app-bar) { background: var(--frame); }
+  .app-bar { position: fixed; inset: 0 auto 0 0; width: var(--rail); border: 0; container-type: normal; }
+  .app-bar__inner { position: relative; height: 100%; min-height: 0; flex-direction: column; align-items: stretch; gap: var(--space-4); max-width: none; margin: 0; padding: var(--space-4); }
+  .app-bar__inner > * { flex-shrink: 0; }
+  .app-bar__brand { margin-right: 2.75rem; padding: var(--space-1) var(--space-2); }
+  .app-bar__brand:hover { background: rgb(43 10 12 / 22%); }
+  .app-bar__brand .crest { height: 2.75rem; }
+  .app-search { width: 100%; min-height: 2.5rem; margin: 0; justify-content: flex-start; border-color: rgb(255 255 255 / 14%); border-radius: var(--radius-lg); background: rgb(43 10 12 / 22%); }
+  .app-search__text { flex: 1; }
+  .app-bell { position: absolute; top: var(--space-5); right: var(--space-3); width: 2.5rem; height: 2.5rem; margin: 0; }
+  .app-bell:hover { background: rgb(43 10 12 / 22%); }
+  .app-nav { flex: 1 1 auto; min-height: 0; flex-direction: column; gap: var(--space-4); margin-inline: calc(-1 * var(--space-2)); padding-inline: var(--space-2); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 24%) transparent; }
+  .app-nav__group { display: grid; gap: 2px; }
+  .app-nav__label { display: block; margin: 0 0 var(--space-1); padding-inline: var(--space-3); color: var(--on-dark-2); font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+  .app-nav__link { min-height: 2.5rem; gap: var(--space-3); padding-inline: var(--space-3); border-radius: var(--radius-lg); font-size: .875rem; }
+  .app-nav__link > .icon { --icon-size: 1.25rem; display: block; transition: transform var(--dur-2) var(--ease-settle), color var(--dur-1); }
+  .app-nav__link::after { display: none; }
+  .app-nav__link:hover { background: rgb(43 10 12 / 22%); }
+  .app-nav__link:hover > .icon { transform: translateX(2px); }
+  .app-nav__link[aria-current="page"] { background: rgb(43 10 12 / 38%); }
+  .app-nav__link[aria-current="page"] > .icon { color: var(--gold-action); }
+  .app-nav__text { flex: 1; justify-content: space-between; }
+  .app-bar__dept { display: flex; align-items: center; gap: var(--space-3); margin: 0; padding: var(--space-3) var(--space-2) 0; border-top: 1px solid rgb(255 255 255 / 14%); color: var(--on-dark-2); }
+  .app-bar__dept .mark { width: auto; height: 1.75rem; }
+  .app-bar__dept-text { display: grid; color: var(--on-dark); font-size: .8125rem; font-weight: 500; line-height: 1.3; }
+  .app-bar__dept-text small { color: var(--on-dark-2); font-size: .75rem; font-weight: 400; }
+  .account { width: 100%; margin: 0; padding: var(--space-2); border-radius: var(--radius-lg); }
+  .account:hover, .account[aria-expanded="true"] { background: rgb(43 10 12 / 22%); }
+  .app-main { width: auto; max-width: none; min-height: calc(100dvh - 2 * var(--app-bar)); margin: var(--space-2) var(--space-2) var(--space-2) var(--rail); padding-top: var(--space-2); border-radius: var(--radius-xl); background: var(--bg); box-shadow: 0 1px 2px rgb(43 10 12 / 18%); }
+  .menu { inset: auto auto var(--space-3) calc(var(--rail) + var(--space-2)); }
+  /* Nothing runs across the top here, so table headers hold to the top edge itself. */
+  .data-table th { top: 0; }
+}
+/* The rail's tooltip: one label in the top layer, so no scrolling rail clips it. Only the icon rail shows it. */
+.rail-tip { position: fixed; inset: auto; top: 0; left: 0; z-index: 60; margin: 0; padding: var(--space-1) var(--space-2); transform: translateY(-50%); border: 0; border-radius: var(--radius); background: var(--text); box-shadow: var(--shadow-md); color: var(--bg); font-size: .8125rem; font-weight: 500; line-height: 1.25rem; white-space: nowrap; pointer-events: none; }
+.app-nav__all { display: none; }
+/* Tablet: the rail keeps every destination as an icon; names stay in the accessibility tree. */
+@media (min-width: 761px) and (max-width: 1180px) {
+  .app-nav__all { display: flex; }
+  /* "All destinations" and the account open the same menu, which names every destination here. */
+  .menu__list--more { display: grid; margin-bottom: var(--space-2); padding-bottom: var(--space-2); border-bottom: 1px solid var(--line); }
+  :root { --rail: 4.5rem; }
+  .app-bar__inner { align-items: center; padding-inline: var(--space-2); }
+  .app-bar__title, .app-nav__text, .app-search__text, .app-bar__dept-text, .account__name { position: absolute; width: 1px; height: 1px; min-width: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .app-bar__brand { margin: 0; padding: var(--space-1); }
+  .app-search { width: var(--target); height: var(--target); justify-content: center; padding: 0; }
+  .app-search__keys { display: none; }
+  .app-bell { position: static; }
+  .app-nav { align-items: center; gap: var(--space-3); margin: 0; padding: 0; }
+  .app-nav__label { display: none; }
+  .app-nav__group { justify-items: center; }
+  .app-nav__group + .app-nav__group { padding-top: var(--space-3); border-top: 1px solid rgb(255 255 255 / 14%); }
+  .app-nav__link { width: var(--target); min-height: var(--target); justify-content: center; padding: 0; }
+  .app-nav__link:hover > .icon { transform: none; }
+  .app-bar__dept { justify-content: center; padding-inline: 0; }
+  .account { width: auto; justify-content: center; padding: var(--space-1); }
+}
+/* Tablet rail targets are 40 px circles. */
+@media (min-width: 761px) and (max-width: 1180px) {
+  .app-nav__link, .app-search, .app-bell { width: 2.5rem; min-height: 2.5rem; height: 2.5rem; border-radius: 50%; }
+}
+/* On a short window the rail tightens, so every destination stays in view without scrolling the list. */
+@media (min-width: 761px) and (max-height: 960px) {
+  .app-bar__inner { gap: var(--space-3); padding-block: var(--space-3); }
+  .app-nav { gap: var(--space-2); }
+  .app-nav__link { min-height: 2rem; }
+  .app-nav__group + .app-nav__group { padding-top: var(--space-2); }
+}
+@media (min-width: 1181px) and (max-height: 800px) {
+  .app-bar__brand .crest { height: 2.25rem; }
+  .app-nav__label { margin-bottom: 0; }
+  .app-bar__dept { padding-top: var(--space-2); }
+  .account { padding-block: var(--space-1); }
+}
+/* A phone on its side gets the rail: it and the panel stay clear of the notch and the home indicator. */
+@media (min-width: 761px) {
+  .app-bar { width: calc(var(--rail) + env(safe-area-inset-left, 0px)); padding: 0 0 env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
+  .app-main { margin-left: calc(var(--rail) + env(safe-area-inset-left, 0px)); margin-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px)); }
+  .menu { left: calc(var(--rail) + env(safe-area-inset-left, 0px) + var(--space-2)); bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px)); }
+}
+/* Phones: the bottom bar is Home, Find and More; every other destination is listed under More. */
+@media (max-width: 760px) {
+  .app-nav__all { display: none; }
+  .app-nav__find { display: flex; }
+  .app-bar .app-search { display: none; }
+}

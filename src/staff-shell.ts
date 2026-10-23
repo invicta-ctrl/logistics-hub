@@ -6,7 +6,7 @@
 import type { DepartmentCode } from "./directory-policy";
 import { setAccess } from "./catalogue-store";
 import { staffDark } from "./theme";
-import { ApiError, MARK, type Html, type IconName, api, app, emptyState, failure, formatDate, html, icon, mount, navigate, onLeave, setMessage, toast } from "./ui";
+import { ApiError, CREST, MARK, type Html, type IconName, api, app, emptyState, failure, formatDate, html, icon, mount, navigate, onLeave, setMessage, toast } from "./ui";
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
 /** Who a sign-in is for: the staff of a USC department (DoL, DEM, …), an officer, or an administrator or owner (accounts.ts). */
@@ -19,18 +19,77 @@ export type Session = {
   /** The Staff Directory entry linked to this sign-in, if an administrator linked one. */
   directory: { name: string; department: string; position: string | null } | null;
 };
-type Section = "home" | "items" | "stock" | "loans" | "self-service" | "activity" | "attention" | "admin" | "account";
+type Section = "home" | "items" | "stock" | "locations" | "kits" | "catalogue" | "loans" | "self-service" | "activity" | "attention" | "admin" | "account";
 
 
-/** The staff sections in working order. On phones the first four sit in the bottom bar; `more` ones move under More. */
-const SECTIONS: ReadonlyArray<{ id: Section; href: string; text: string; icon: IconName; more?: true }> = [
-  { id: "items", href: "/staff/items", text: "Items", icon: "box" },
-  { id: "stock", href: "/staff/stock", text: "Stock", icon: "stack" },
-  { id: "loans", href: "/staff/loans", text: "Loans", icon: "swap" },
-  { id: "self-service", href: "/staff/self-service", text: "Self-Service", icon: "phone" },
-  { id: "activity", href: "/staff/activity", text: "Activity", icon: "history", more: true },
-  { id: "admin", href: "/staff/admin", text: "Administration", icon: "shield", more: true }
+/**
+ * The staff destinations, grouped as the rail shows them (LH-IP02-S01). Home leads without a label; on phones Home, Find and More sit in
+ * the bottom bar and every other destination is listed under More.
+ */
+const SECTIONS: ReadonlyArray<{ id: Section; href: string; text: string; icon: IconName; group: string }> = [
+  { id: "home", href: "/staff/home", text: "Home", icon: "home", group: "" },
+  { id: "items", href: "/staff/items", text: "Items", icon: "box", group: "Resources" },
+  { id: "stock", href: "/staff/stock", text: "Stock", icon: "stack", group: "Resources" },
+  { id: "locations", href: "/staff/locations", text: "Locations", icon: "pin", group: "Resources" },
+  { id: "kits", href: "/staff/kits", text: "Kits", icon: "basket", group: "Resources" },
+  { id: "catalogue", href: "/staff/catalogue", text: "Catalogue", icon: "camera", group: "Resources" },
+  { id: "loans", href: "/staff/loans", text: "Loans", icon: "swap", group: "Circulation" },
+  { id: "self-service", href: "/staff/self-service", text: "Self-Service", icon: "phone", group: "Circulation" },
+  { id: "activity", href: "/staff/activity", text: "Activity", icon: "history", group: "Records" },
+  { id: "admin", href: "/staff/admin", text: "Administration", icon: "shield", group: "Manage" }
 ];
+
+/** Locations and Kits load as part of Items; their own address decides which rail entry is current. Attention is Home's queue. */
+function currentSection(section: Section): Section {
+  const path = window.location.pathname.replace(/\/+$/, "");
+  if (path.startsWith("/staff/locations")) return "locations";
+  if (path.startsWith("/staff/kits")) return "kits";
+  return section === "attention" ? "home" : section;
+}
+
+/**
+ * The icon rail (tablet widths) names each control in a tooltip: after a short pause under a mouse or pen, at once on keyboard focus.
+ * It is one label in the top layer, so no scrolling rail can clip it; Escape puts it away, and the name is already each control's own.
+ */
+function railTips(): void {
+  const tip = document.querySelector<HTMLElement>(".rail-tip");
+  const bar = document.querySelector<HTMLElement>(".app-bar");
+  if (!tip || !bar || !("showPopover" in HTMLElement.prototype)) return;
+  const compact = window.matchMedia("(min-width: 761px) and (max-width: 1180px)");
+  let timer = 0;
+  let shownFor: Element | null = null;
+  const hide = () => {
+    window.clearTimeout(timer);
+    shownFor = null;
+    if (tip.matches(":popover-open")) tip.hidePopover();
+  };
+  const show = (target: HTMLElement, delay: number) => {
+    window.clearTimeout(timer);
+    if (!compact.matches) return;
+    timer = window.setTimeout(() => {
+      if (!target.isConnected) return;
+      const box = target.getBoundingClientRect();
+      tip.textContent = target.dataset.tip ?? "";
+      tip.style.left = `${Math.round(box.right + 8)}px`;
+      tip.style.top = `${Math.round(box.top + box.height / 2)}px`;
+      shownFor = target;
+      if (!tip.matches(":popover-open")) tip.showPopover();
+    }, delay);
+  };
+  const tipped = (node: EventTarget | null) => node instanceof Element ? node.closest<HTMLElement>("[data-tip]") : null;
+  bar.addEventListener("pointerover", (event) => {
+    const target = tipped(event.target);
+    if (target && target !== shownFor && event.pointerType !== "touch") show(target, 400);
+  });
+  bar.addEventListener("pointerout", (event) => { const target = tipped(event.target); if (target && !target.contains(event.relatedTarget as Node | null)) hide(); });
+  bar.addEventListener("focusin", (event) => { const target = tipped(event.target); if (target?.matches(":focus-visible")) show(target, 0); });
+  bar.addEventListener("focusout", hide);
+  bar.addEventListener("click", hide);
+  const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") hide(); };
+  document.addEventListener("keydown", onKey);
+  window.addEventListener("scroll", hide, { passive: true, capture: true });
+  onLeave(() => { hide(); document.removeEventListener("keydown", onKey); window.removeEventListener("scroll", hide, { capture: true }); });
+}
 
 /** Loads the signed-in account, or routes to sign-in / the forced password change. */
 export async function loadSession(section: Section): Promise<Session | null> {
@@ -52,31 +111,38 @@ export async function loadSession(section: Section): Promise<Session | null> {
 }
 
 /**
- * The one staff app shell. Desktop and tablet show every section in the top bar; phones move them to a
- * bottom bar with More. The avatar opens the account menu (My account, Lending Hub, Sign out), which on
- * phones also lists the sections behind More, so each destination has exactly one place per layout.
+ * The one staff app shell (LH-IP02-S01). On desktop and tablet `header.app-bar` is the oxblood rail: brand, Find, the attention bell, the
+ * grouped sections, and the department and account pinned at the bottom. On phones it is a top bar, and Home, Find and More sit in a bottom
+ * bar; More opens the account menu (My account, Lending Hub, Sign out), which on phones also lists every other section, so each destination
+ * has exactly one place per layout. Home is the one current destination for both of its entries (Home and Attention).
  */
 export function shell(session: Session, section: Section, main: Html): void {
-  const current = (id: Section) => section === id ? html`aria-current="page"` : "";
+  const here = currentSection(section);
+  const current = (id: Section) => here === id ? html`aria-current="page"` : "";
   const sections = session.mustChangePassword || session.hub === false ? [] : SECTIONS.filter((entry) => entry.id !== "admin" || session.role !== "STAFF");
   const reviews = session.selfServiceReviews;
   const badge = (id: Section) => id === "self-service" && reviews
     ? html`<span class="nav-badge" aria-hidden="true">${reviews}</span><span class="visually-hidden">, ${reviews} ${reviews === 1 ? "record" : "records"} to check</span>`
     : id === "loans" || id === "stock" ? html`<span class="attn-slot" data-attention="${id === "loans" ? "Loans" : "Stock"}"></span>` : "";
-  const overflow = sections.filter((entry) => entry.more);
+  const overflow = sections.filter((entry) => entry.id !== "home");
+  const groups = [...new Set(sections.map((entry) => entry.group))];
   const avatar = html`<span class="avatar" aria-hidden="true">${initials(session.displayName)}</span>`;
   mount(app, html`
     <header class="app-bar">
       <div class="app-bar__inner">
-        <a class="app-bar__brand" href="/staff/home" data-route ${current("home")}><span aria-hidden="true">${MARK}</span><span class="app-bar__title">Logistics Hub <small>Staff workspace</small></span></a>
+        <a class="app-bar__brand" href="/staff/home" data-route data-tip="Logistics Hub"><span aria-hidden="true">${CREST}</span><span class="app-bar__title">Logistics Hub</span></a>
+        ${sections.length ? html`<button class="app-search" type="button" data-tip="Search" data-palette data-admin="${session.role === "STAFF" ? "0" : "1"}" aria-haspopup="dialog" aria-keyshortcuts="${MAC ? "Meta+K" : "Control+K"}">${icon("search")}<span class="app-search__text">Search</span><kbd class="app-search__keys" aria-hidden="true">${SEARCH_KEYS}</kbd></button>` : ""}
+        ${sections.length ? html`<a class="app-bell" href="/staff/attention" data-route data-tip="Attention">${icon("bell")}<span class="visually-hidden">Attention</span><span class="attn-slot" data-attention="all"></span></a>` : ""}
         ${sections.length ? html`<nav class="app-nav" aria-label="Sections">
-          ${sections.map((entry) => html`<a class="app-nav__link ${entry.more ? "app-nav__link--more" : ""}" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}<span class="app-nav__text">${entry.text}${badge(entry.id)}</span></a>`)}
-          <button class="app-nav__link app-nav__more ${overflow.some((entry) => entry.id === section) || section === "account" ? "is-current" : ""}" type="button" popovertarget="staff-menu">${icon("dots")}<span class="app-nav__text">More</span></button>
+          ${groups.map((group) => html`<div class="app-nav__group">${group ? html`<p class="app-nav__label" aria-hidden="true">${group}</p>` : ""}${sections.filter((entry) => entry.group === group).map((entry) => html`<a class="app-nav__link ${entry.id === "home" ? "" : "app-nav__link--more"}" href="${entry.href}" data-route data-tip="${entry.text}" ${current(entry.id)}>${icon(entry.icon)}<span class="app-nav__text">${entry.text}${badge(entry.id)}</span></a>`)}</div>`)}
+          <button class="app-nav__link app-nav__all" type="button" popovertarget="staff-menu" data-tip="All destinations">${icon("dots")}<span class="app-nav__text">All destinations</span></button>
+          <button class="app-nav__link app-nav__find" type="button" data-find>${icon("search")}<span class="app-nav__text">Find</span></button>
+          <button class="app-nav__link app-nav__more ${overflow.some((entry) => entry.id === here) || here === "account" ? "is-current" : ""}" type="button" popovertarget="staff-menu">${icon("dots")}<span class="app-nav__text">More</span></button>
         </nav>` : ""}
-        ${sections.length ? html`<button class="app-search" type="button" data-palette data-admin="${session.role === "STAFF" ? "0" : "1"}" aria-haspopup="dialog" aria-keyshortcuts="${MAC ? "Meta+K" : "Control+K"}">${icon("search")}<span class="app-search__text">Search</span><kbd class="app-search__keys" aria-hidden="true">${SEARCH_KEYS}</kbd></button>` : ""}
-        ${sections.length ? html`<a class="app-bell" href="/staff/attention" data-route ${current("attention")}>${icon("bell")}<span class="visually-hidden">Attention</span><span class="attn-slot" data-attention="all"></span></a>` : ""}
-        <button class="account" type="button" popovertarget="staff-menu">${avatar}<span class="account__name"><span class="visually-hidden">Account: </span>${session.displayName}<small>${accessLabel(sessionAccess(session))}</small></span></button>
+        <p class="app-bar__dept"><span aria-hidden="true">${MARK}</span><span class="app-bar__dept-text">Department of Logistics<small>HAU USC</small></span></p>
+        <button class="account" type="button" popovertarget="staff-menu" data-tip="${session.displayName}">${avatar}<span class="account__name"><span class="visually-hidden">Account: </span>${session.displayName}<small>${accessLabel(sessionAccess(session))}</small></span></button>
       </div>
+      <div class="rail-tip" popover="manual" aria-hidden="true"></div>
     </header>
     <div class="menu" id="staff-menu" popover>
       <div class="menu__identity">${avatar}<p><strong>${session.displayName}</strong><span>${accessLabel(sessionAccess(session))} · <span class="mono">${session.username}</span></span></p><button class="menu__theme" type="button" data-staff-theme aria-label="Dark theme" aria-pressed="${String(staffDark())}">${icon("sun")}${icon("moon")}</button></div>
@@ -108,6 +174,7 @@ export function shell(session: Session, section: Section, main: Html): void {
     else { menu.hidden = true; expanded(false); }
   });
   document.querySelector("#staff-logout")!.addEventListener("click", signOut);
+  railTips();
   if (sections.length) watchAttention();
   const search = document.querySelector<HTMLElement>("[data-palette]");
   if (search) {
@@ -116,6 +183,8 @@ export function shell(session: Session, section: Section, main: Html): void {
     const warm = () => { void import("./search-palette").then((module) => module.warmPalette()).catch(() => { /* opening reports it */ }); };
     search.addEventListener("pointerenter", warm, { once: true });
     search.addEventListener("focus", warm, { once: true });
+    // The phone bottom bar's Find opens the same search as the bar's search button.
+    document.querySelector("[data-find]")?.addEventListener("click", () => openSearch(search));
   }
   listenForSearchKey();
 }

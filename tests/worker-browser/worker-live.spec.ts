@@ -419,12 +419,13 @@ const onScreen = () => [...document.querySelectorAll(".account, .app-nav__link")
   return box.width === 0 || (box.left >= 0 && box.right <= window.innerWidth && box.bottom <= window.innerHeight);
 });
 
-test("phones get the daily sections in a bottom bar and the rest under More", async ({ page }) => {
+test("phones get Home, Find and More in a bottom bar and every other section under More", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 });
   await signIn(page);
   const sections = page.getByRole("navigation", { name: "Sections" });
-  for (const name of ["Items", "Stock", "Loans", "Self-Service"]) await expect(sections.getByRole("link", { name })).toBeVisible();
-  await expect(sections.getByRole("link", { name: "Activity" })).toBeHidden();
+  await expect(sections.getByRole("link", { name: /^Home/ })).toBeVisible();
+  await expect(sections.getByRole("button", { name: "Find" })).toBeVisible();
+  for (const name of ["Items", "Stock", "Loans", "Self-Service", "Activity"]) await expect(sections.getByRole("link", { name })).toBeHidden();
   const bar = (await sections.boundingBox())!;
   expect(bar.y + bar.height).toBeCloseTo(800, 0);
   expect(bar.height).toBeGreaterThanOrEqual(44);
@@ -433,6 +434,7 @@ test("phones get the daily sections in a bottom bar and the rest under More", as
   await expect(more).toHaveAttribute("aria-expanded", "true");
   const menu = page.locator("#staff-menu");
   await expect(menu.getByRole("link", { name: "My account" })).toBeVisible();
+  for (const name of ["Items", "Stock", "Loans", "Self-Service"]) await expect(menu.getByRole("link", { name })).toBeVisible();
   await expect(menu.getByRole("link", { name: "Administration" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();

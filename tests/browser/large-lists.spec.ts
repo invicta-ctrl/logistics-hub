@@ -52,6 +52,8 @@ async function captureLayout(page: Page, testInfo: TestInfo, name: string, viewp
   }, containerWidth);
   await page.screenshot({ path: testInfo.outputPath(`${name}.png`), animations: "disabled" });
   if (table === "items") await dataTable.locator("tbody tr").nth(10).scrollIntoViewIfNeeded();
+  // Where the table already starts on screen (the side rail leaves more room above it), scroll past its top so the header has to hold.
+  if (table === "items") await dataTable.evaluate((element) => { const top = element.getBoundingClientRect().top; if (top > 0) window.scrollBy(0, top + 200); });
   return dataTable.evaluate((element, { name, viewport, containerWidth }) => {
     const wrap = element.closest<HTMLElement>(".data-table-wrap")!;
     const wrapRect = wrap.getBoundingClientRect();
@@ -68,7 +70,9 @@ async function captureLayout(page: Page, testInfo: TestInfo, name: string, viewp
     const header = element.querySelector<HTMLElement>("thead");
     const headerCell = element.querySelector<HTMLElement>("thead th");
     const headerTop = headerCell ? Math.round(headerCell.getBoundingClientRect().top) : null;
-    const appBarBottom = document.querySelector<HTMLElement>(".app-bar")?.getBoundingClientRect().bottom ?? null;
+    // A header holds just under the top bar, or at the top edge where the bar is a side rail (LH-IP02-S01).
+    const bar = document.querySelector<HTMLElement>(".app-bar")?.getBoundingClientRect() ?? null;
+    const appBarBottom = bar ? (bar.height >= window.innerHeight - 1 ? 0 : bar.bottom) : null;
     const itemId = element.querySelector<HTMLElement>(".cell-id");
     const idColumn = element.querySelector<HTMLElement>("tbody .col-id");
     return {

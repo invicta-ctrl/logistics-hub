@@ -56,7 +56,9 @@ test.describe("Staff theme", () => {
     await choose(page, "dark");
     await expect.poll(() => theme(page)).toBe("dark");
     expect(await stored(page)).toBe("dark");
-    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(20, 6, 9)");
+    // The frame around the work panel turns the deep oxblood, and the panel itself the dark page colour.
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(43, 10, 12)");
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector(".app-main")!).backgroundColor)).toBe("rgb(20, 6, 9)");
     expect(await page.evaluate(() => document.querySelector('meta[name="color-scheme"]')!.getAttribute("content"))).toBe("dark");
     await page.reload();
     await expect(page.locator(".app-bar")).toBeVisible();

@@ -83,7 +83,9 @@ test("with 200% text on a 320 px phone every section stays on screen, named in f
     const box = (await link.boundingBox())!;
     expect(box.x >= 0 && box.x + box.width <= 320 && box.y + box.height <= 640, await link.innerText()).toBe(true);
   }
-  for (const name of ["Items", "Stock", "Loans", "Self-Service"]) await expect(page.getByRole("link", { name: new RegExp(`^${name}`) })).toBeVisible();
+  // The phone bar is Home, Find and More (LH-IP02-S01); every other section is in the menu More opens.
+  await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Home/ })).toBeVisible();
   await page.getByRole("button", { name: "More" }).click();
   await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
+  for (const name of ["Items", "Stock", "Loans", "Self-Service"]) await expect(page.locator("#staff-menu").getByRole("link", { name: new RegExp(`^${name}`) })).toBeVisible();
 });

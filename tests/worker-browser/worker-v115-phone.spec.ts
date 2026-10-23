@@ -103,9 +103,13 @@ test("unsafe areas: controls stay clear of the notch and the home indicator", as
           if (/skip-link|visually-hidden/.test(String(control.className))) continue;
           // Only what is on screen right now matters; the page below the fold scrolls into the safe part.
           if (box.bottom <= 0 || box.top >= height) continue;
-          // A strip that scrolls sideways carries its own items in and out of view; its edge is what is judged.
+          // A strip that scrolls sideways carries its own items in and out of view; its edge is what is judged. So does a list that
+          // scrolls up and down inside a fixed bar, such as the side rail on a phone turned on its side (LH-IP02-S01).
           let strip = false;
-          for (let node = control.parentElement; node && !strip; node = node.parentElement) { const style = getComputedStyle(node); strip = /auto|scroll/.test(style.overflowX) && node.scrollWidth > node.clientWidth; }
+          for (let node = control.parentElement; node && !strip; node = node.parentElement) {
+            const style = getComputedStyle(node);
+            strip = (/auto|scroll/.test(style.overflowX) && node.scrollWidth > node.clientWidth) || (node !== document.body && node !== document.documentElement && /auto|scroll/.test(style.overflowY) && node.scrollHeight > node.clientHeight);
+          }
           if (strip) continue;
           const fixedBottom = getComputedStyle(control).position === "fixed" || !!control.closest(".app-nav, .toasts, .bulk-bar");
           // A text link's invisible hit padding (0.5rem each side) may reach past the edge; its words may not.
@@ -239,7 +243,7 @@ for (const [label, size, zoom] of [["390 px", { width: 390, height: 844 }, "100%
     await judge(page, "Add person", SAFE);
     await page.keyboard.press("Escape");
     await page.goto("/staff/home");
-    await page.locator("#home-search").click();
+    await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "Find" }).click();
     await judge(page, "Search", SAFE);
     await context.close();
   });

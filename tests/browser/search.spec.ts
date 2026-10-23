@@ -211,13 +211,17 @@ test("typing never asks the Worker, each opening revalidates, and a failure says
   await expect(page.getByRole("option", { name: /^Overdue loans/ })).toBeVisible();
 });
 
-test("phones open search from the top bar, full screen with a way back, and the bottom bar is unchanged", async ({ page }) => {
+test("phones open search from Find in the bottom bar, full screen with a way back", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await setup(page);
-  await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link")).toHaveCount(4);
-  const button = page.getByRole("button", { name: "Search", exact: true });
+  // The phone bar is Home, Find and More (LH-IP02-S01); every other section is listed under More.
+  const bar = page.getByRole("navigation", { name: "Sections" });
+  await expect(bar.getByRole("link")).toHaveCount(1);
+  await expect(bar.getByRole("button", { name: "Find" })).toBeVisible();
+  await expect(bar.getByRole("button", { name: "More" })).toBeVisible();
+  const button = bar.getByRole("button", { name: "Find" });
   const box = (await button.boundingBox())!;
-  expect(box.y).toBeLessThan(80);
+  expect(box.y).toBeGreaterThan(844 - 120);
   expect(box.width).toBeGreaterThanOrEqual(44);
   expect(box.height).toBeGreaterThanOrEqual(44);
   await button.click();
@@ -238,7 +242,7 @@ test("200% text on a 320 px phone keeps every result readable inside the screen"
   await page.setViewportSize({ width: 320, height: 700 });
   await setup(page);
   await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
-  const button = page.getByRole("button", { name: "Search", exact: true });
+  const button = page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "Find" });
   const box = (await button.boundingBox())!;
   expect(box.x + box.width).toBeLessThanOrEqual(320);
   await button.click();

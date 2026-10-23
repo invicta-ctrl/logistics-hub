@@ -87,7 +87,7 @@ test.describe("the account menu", () => {
     await expect(page).toHaveURL(/\/staff\/account$/);
   });
 
-  test("on a phone, More opens the same menu with the sections that do not fit the bar", async ({ page }) => {
+  test("on a phone, More opens the same menu with every section beyond Home", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/staff/account");
     const more = page.getByRole("button", { name: "More" });
@@ -96,7 +96,7 @@ test.describe("the account menu", () => {
     await expect(menu).toBeVisible();
     await expect(more).toHaveAttribute("aria-expanded", "true");
     const sections = menu.getByRole("list", { name: "More sections" });
-    await expect(sections.getByRole("link")).toHaveText(["Activity", "Administration"]);
+    await expect(sections.getByRole("link")).toHaveText(["Items", "Stock", "Locations", "Kits", "Catalogue", "Loans", "Self-Service", "Activity", "Administration"]);
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
     await expect(more).toHaveAttribute("aria-expanded", "false");

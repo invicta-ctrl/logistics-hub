@@ -1,12 +1,14 @@
 import "./home.css";
-import { ATTENTION_PAINTED, type AttentionGroup, SEARCH_KEYS, ageOf, attentionNow, loadSession, refreshAttention, shell } from "./staff-shell";
-import { ApiError, type Html, type IconName, api, emptyState, expired, failure, formatDateTime, html, icon, live, mount, onLeave, plural } from "./ui";
+import { queueMarkup, startQueue } from "./attention-workspace";
+import { ATTENTION_PAINTED, type AttentionGroup, ageOf, attentionNow, loadSession, refreshAttention, shell } from "./staff-shell";
+import { ApiError, type Html, api, expired, failure, formatDateTime, html, icon, live, mount, onLeave, plural } from "./ui";
 
 /*
- * Home (/staff/home): where staff start. It answers "what should I do next?" from three things that already exist: what needs a person
- * (the same numbers as the bell, from the staff bar's Attention summary, so nothing is asked twice), your own unfinished
- * place checks, and a few links for the work staff start most. Practical insights come last and arrive after the page is drawn, so
- * they can be slow or fail without ever holding up the rest. Nothing here is stored, and nothing here changes a record.
+ * Home (/staff/home) and Attention (/staff/attention) are one workspace (LH-IP02-S01): a heading, the Attention queue, and a
+ * context column. Home opens on what to act on today or this week; Attention opens on everything. The context column holds
+ * your own unfinished place checks and the practical insights, and gives way to an entry's record document when one is chosen.
+ * Insights arrive after the page is drawn, so they can be slow or fail without ever holding up the queue. Nothing here is
+ * stored, and nothing here changes a record except the queue's own guarded actions.
  */
 
 type Resumable = {
@@ -17,19 +19,6 @@ type InsightCard = { id: string; title: string; window: string; rule: string; ro
 type Completeness = { id: string; title: string; window: string; rule: string; rows: Array<{ name: string; have: number; of: number; gap: number; href: string; gapText: string }> };
 type Insights = { revision: number; asOf: string; cards: InsightCard[]; completeness: Completeness };
 
-/** The work staff start most, in working order. Everyone sees these; administrators also see the two Administration pages. */
-const ACTIONS: ReadonlyArray<{ href: string; icon: IconName; title: string; detail: string; admin?: true }> = [
-  { href: "/staff/items?add=1", icon: "plus", title: "Add items", detail: "Create an item" },
-  { href: "/staff/loans", icon: "swap", title: "Lend or return", detail: "Loans out and back in" },
-  { href: "/staff/stock", icon: "stack", title: "Stock in or out", detail: "Deliveries, takes and counts" },
-  { href: "/staff/locations", icon: "pin", title: "Find a place", detail: "Where things are kept" },
-  { href: "/staff/kits", icon: "box", title: "Check a kit", detail: "What is in it and what is short" },
-  { href: "/staff/admin/directory", icon: "user", title: "Staff Directory", detail: "USC people and their accounts", admin: true },
-  { href: "/staff/admin", icon: "shield", title: "Accounts and settings", detail: "Sign-ins and Self-Service", admin: true }
-];
-/** Reasons listed before a link to everything else, so the first screen stays short. */
-const SHOWN = 6;
-
 const greeting = (name: string) => {
   const hour = new Date().getHours();
   return `${hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening"}, ${name.split(/\s+/)[0] ?? name}`;
@@ -38,81 +27,41 @@ const greeting = (name: string) => {
 const today = new Intl.DateTimeFormat("en-PH", { weekday: "long", month: "long", day: "numeric", timeZone: "Asia/Manila" });
 const isoDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" });
 const toAct = (group: AttentionGroup) => group.byUrgency.NOW + group.byUrgency.SOON;
-const attentionHref = (group: AttentionGroup) => `/staff/attention?reason=${group.reason}`;
 
-/** The stage's two lines: who is here, then the one answer that matters ("17 things to act on…", or that nothing needs a person). */
+/** Home's line under the heading: who is here, then the one answer that matters ("17 things to act on…", or that nothing needs a person). */
 function ledeMarkup(name: string, act: number | null): Html {
   const summary = act === null ? "" : act ? html`<strong>${plural(act, "thing")}</strong> to act on today or this week.` : "Nothing needs a person right now.";
-  return html`<span class="home-stage__hello">${greeting(name)}.</span> <span class="home-stage__summary">${summary}</span>`;
-}
-
-/*
- * The stage's drawing: a storeroom shelf in elevation, drawn like a drafting sheet, with one tagged crate. It stands for the
- * Hub's physical work and nothing else: it shows no count, place or status, never changes with the data, and is hidden from
- * assistive technology.
- */
-const STAGE_SCENE = html`<svg class="home-stage__scene" viewBox="0 0 360 200" aria-hidden="true" focusable="false">
-  <g class="home-scene__measure"><path d="M40 20v10M220 20v10M40 25h180"/><path d="M46 22l-6 3 6 3M214 22l6 3-6 3"/></g>
-  <g class="home-scene__ground"><path d="M0 184h360"/><path d="M8 184l-6 8M28 184l-6 8M48 184l-6 8M68 184l-6 8M88 184l-6 8M108 184l-6 8M128 184l-6 8M148 184l-6 8M168 184l-6 8M188 184l-6 8M208 184l-6 8M228 184l-6 8M248 184l-6 8M268 184l-6 8M288 184l-6 8M308 184l-6 8M328 184l-6 8M348 184l-6 8"/></g>
-  <g class="home-scene__shelf"><path d="M40 40v144M220 40v144M44 40v144M216 40v144"/><path class="home-scene__board" d="M36 40h188v5H36zM36 80h188v5H36zM36 128h188v5H36z"/></g>
-  <g class="home-scene__things">
-    <path class="home-scene__solid" d="M54 52h46v28H54z"/><path d="M54 60h46M77 52v8"/>
-    <path class="home-scene__solid" d="M106 62h32v18h-32z"/>
-    <path class="home-scene__solid" d="M148 56h60v24h-60z"/><path class="home-scene__slot" d="M166 63h24v8h-24z"/>
-    <path class="home-scene__solid" d="M54 96h7v32h-7zM63 92h7v36h-7zM72 98h7v30h-7zM81 94h7v34h-7z"/>
-    <path class="home-scene__solid" d="M104 100h104v28H104z"/><path d="M146 107h20a3 3 0 0 1 0 6h-20a3 3 0 0 1 0-6z"/>
-    <path class="home-scene__solid" d="M54 140h88v44H54z"/><path d="M54 140l88 44M54 184l88-44"/>
-    <circle class="home-scene__solid" cx="180" cy="166" r="18"/><circle cx="180" cy="166" r="10"/><circle cx="180" cy="166" r="3"/>
-  </g>
-  <g class="home-scene__truck"><path d="M262 92v84h40"/><path d="M256 92h12"/><path class="home-scene__solid" d="M268 128h36v44h-36z"/><path d="M268 140h36"/><circle class="home-scene__solid" cx="270" cy="178" r="6"/></g>
-  <g class="home-scene__tag"><path d="M142 150l14 5"/><path class="home-scene__label" d="M156 149l20 7-4 12-20-7z"/><circle cx="159" cy="155" r="1.6"/></g>
-</svg>`;
-
-function attentionMarkup(groups: AttentionGroup[]): Html {
-  // Today before This week; each keeps the order the Worker gave it.
-  const urgent = groups.filter((group) => toAct(group) > 0).sort((a, b) => Number(b.byUrgency.NOW > 0) - Number(a.byUrgency.NOW > 0));
-  const routine = groups.filter((group) => toAct(group) === 0 && group.total > 0);
-  const act = urgent.reduce((sum, group) => sum + toAct(group), 0);
-  const waiting = routine.length ? html`<p class="home-routine">When there is time: ${routine.map((group, at) => html`${at ? " · " : ""}<a class="text-link" href="${attentionHref(group)}" data-route>${group.label} <span class="mono">${group.total.toLocaleString()}</span></a>`)}</p>` : "";
-  if (!urgent.length) {
-    return html`<div class="home-clear">${icon("check")}<div><p class="home-clear__title">Nothing needs a person right now</p><p class="muted">Loans are on time, stock is in hand and no record is waiting. This page fills in by itself when something does.</p></div></div>${waiting}`;
-  }
-  return html`<ul class="home-list" aria-label="What needs a person, ${plural(act, "thing")}">${urgent.slice(0, SHOWN).map((group) => {
-    const parts = [group.byUrgency.NOW ? `${group.byUrgency.NOW.toLocaleString()} today` : "", group.byUrgency.SOON ? `${group.byUrgency.SOON.toLocaleString()} this week` : "", group.byUrgency.LATER ? `${group.byUrgency.LATER.toLocaleString()} when there is time` : ""].filter(Boolean);
-    return html`<li><a class="home-row" href="${attentionHref(group)}" data-route>
-      <span class="home-row__count">${toAct(group).toLocaleString()}</span>
-      <span class="home-row__text"><span class="home-row__title">${group.label}</span><span class="home-row__meta"><span class="tag ${group.byUrgency.NOW ? "tag--bad" : "tag--warn"}">${group.source}</span> ${parts.join(" · ")}</span></span>
-      ${icon("next")}</a></li>`;
-  })}</ul>
-  ${urgent.length > SHOWN ? html`<p class="home-more"><a class="text-link" href="/staff/attention" data-route>Everything in Attention (${urgent.length - SHOWN} more)</a></p>` : ""}${waiting}`;
+  return html`<span class="ws-head__hello">${greeting(name)}.</span> <span class="ws-head__summary">${summary}</span>`;
 }
 
 function continueMarkup(work: Resumable): Html {
-  const rows: Html[] = [];
-  for (const check of work.checks) {
-    rows.push(html`<li><a class="home-row" href="/staff/catalogue?audit=${check.id}" data-route>
-      <span class="home-row__text"><span class="home-row__title">Check of ${check.place ?? "a place"}</span><span class="home-row__meta">${check.status === "PAUSED" ? "Paused" : "Open"} · ${plural(check.expected, "item")} expected · last worked on ${ageOf(check.updatedAt)}</span></span>
-      <span class="home-row__go">Resume ${icon("next")}</span></a></li>`);
-  }
-  return html`<ul class="home-list" aria-labelledby="home-continue-title">${rows}</ul>`;
+  return html`<ul class="home-list" aria-labelledby="home-continue-title">${work.checks.map((check) => html`<li><a class="home-row" href="/staff/catalogue?audit=${check.id}" data-route>
+      ${icon("pin")}<span class="home-row__text"><span class="home-row__title">Check of ${check.place ?? "a place"}</span><span class="home-row__meta">${check.status === "PAUSED" ? "Paused" : "Open"} · ${plural(check.expected, "item")} expected · last worked on ${ageOf(check.updatedAt)}</span></span>
+      <span class="home-row__go">Resume ${icon("next")}</span></a></li>`)}</ul>`;
+}
+
+/** Where an insight comes from and what it is for stays one press away, so the column reads as the evidence itself. */
+function aboutMarkup(id: string, window: string, rule: string, note: Html | string = ""): Html {
+  return html`<button class="home-about" type="button" aria-expanded="false" aria-controls="about-${id}">About this insight${icon("sortDown")}</button>
+    <div class="home-about__body" id="about-${id}" hidden><p class="home-card__meta">${window} · ${rule}</p>${note}</div>`;
 }
 
 function cardMarkup(card: InsightCard): Html {
   return html`<article class="home-card" aria-labelledby="insight-${card.id}">
     <h3 id="insight-${card.id}">${card.title}</h3>
-    <p class="home-card__meta">${card.window} · ${card.rule}</p>
     <ul class="home-card__list">${card.rows.map((row) => html`<li><a class="home-card__name" href="${row.href}" data-route>${row.name}</a><span class="home-card__why">${row.evidence}</span></li>`)}</ul>
-    ${card.advisory ? html`<p class="home-card__note">Advice only. Nothing is ordered or changed from here.</p>` : ""}</article>`;
+    ${card.advisory ? html`<p class="home-card__note">Advice only. Nothing is ordered or changed from here.</p>` : ""}
+    ${aboutMarkup(card.id, card.window, card.rule)}</article>`;
 }
 
 function completenessMarkup(card: Completeness): Html {
   return html`<article class="home-card" aria-labelledby="insight-${card.id}">
     <h3 id="insight-${card.id}">${card.title}</h3>
-    <p class="home-card__meta">${card.window} · ${card.rule}</p>
     <ul class="home-card__list">${card.rows.map((row) => html`<li>
       <span class="home-card__name">${row.name}</span>
       <span class="home-card__why"><span class="mono">${row.have.toLocaleString()} of ${row.of.toLocaleString()}</span> ${row.gap ? html`· <a class="text-link" href="${row.href}" data-route>${row.gap.toLocaleString()} ${row.gapText}</a>` : "· all done"}</span>
-      <progress class="home-meter" value="${row.have}" max="${Math.max(row.of, 1)}" aria-hidden="true"></progress></li>`)}</ul></article>`;
+      <progress class="home-meter" value="${row.have}" max="${Math.max(row.of, 1)}" aria-hidden="true"></progress></li>`)}</ul>
+    ${aboutMarkup(card.id, card.window, card.rule)}</article>`;
 }
 
 function insightsMarkup(data: Insights): Html {
@@ -120,70 +69,59 @@ function insightsMarkup(data: Insights): Html {
     <div class="home-cards">${data.cards.map(cardMarkup)}${completenessMarkup(data.completeness)}</div>`;
 }
 
-export async function homeWorkspace(): Promise<void> {
-  const session = await loadSession("home");
+/** Both entries mount this: the same heading, queue and context column, with only the queue's opening view different. */
+export async function workspace(entry: "home" | "attention"): Promise<void> {
+  const session = await loadSession(entry);
   if (!session) return;
-  document.title = "Home · Staff workspace";
-  const admin = session.role !== "STAFF";
-  const actions = ACTIONS.filter((action) => !action.admin || admin);
-  shell(session, "home", html`
-    <header class="home-stage drafting">
-      <div class="home-stage__title">
-        <div class="home-stage__kicker"><h1>Home</h1><time datetime="${isoDay.format(new Date())}">${today.format(new Date())}</time></div>
-        <p id="home-lede" class="home-stage__lede" aria-live="polite">${ledeMarkup(session.displayName, null)}</p>
-      </div>
-      <button class="home-search" type="button" id="home-search" aria-haspopup="dialog">${icon("search")}<span class="home-search__text">Search items, places and kits</span><kbd aria-hidden="true">${SEARCH_KEYS}</kbd></button>
-      ${STAGE_SCENE}
-    </header>
-    <div class="home-grid">
-      <div class="home-main">
-        <section class="home-section" aria-labelledby="home-attention-title">
-          <div class="home-section__head"><h2 id="home-attention-title">Needs attention</h2><a class="text-link" href="/staff/attention" data-route>Open Attention</a></div>
-          <div id="home-attention" aria-busy="true"><div class="skeleton skeleton--block"></div></div>
-        </section>
-        <section class="home-section" id="home-continue" aria-labelledby="home-continue-title" hidden>
-          <div class="home-section__head"><h2 id="home-continue-title">Continue</h2></div>
-          <div id="home-continue-body"></div>
-        </section>
-      </div>
-      <section class="home-side" aria-labelledby="home-actions-title">
-        <div class="home-section__head"><h2 id="home-actions-title">Quick actions</h2></div>
-        <ul class="home-list">${actions.map((action) => html`<li><a class="home-row" href="${action.href}" data-route><span class="home-row__icon">${icon(action.icon)}</span><span class="home-row__text"><span class="home-row__title">${action.title}</span><span class="home-row__meta">${action.detail}</span></span>${icon("next")}</a></li>`)}</ul>
-      </section>
-    </div>
-    <section class="home-section home-insights" aria-labelledby="home-insights-title">
-      <div class="home-section__head"><h2 id="home-insights-title">Insights</h2><p class="home-section__aside" id="home-insights-asof">Patterns from the Hub's own records, each with its window and its evidence.</p></div>
-      <div id="home-insights" aria-busy="true"><div class="skeleton skeleton--block"></div></div>
-    </section>`);
+  const home = entry === "home";
+  const path = home ? "/staff/home" : "/staff/attention";
+  document.title = `${home ? "Home" : "Attention"} · Staff workspace`;
+  shell(session, entry, html`
+    <div class="ws">
+      <header class="ws-head">
+        <div class="ws-head__title"><h1>${home ? "Home" : "Attention"}</h1><time datetime="${isoDay.format(new Date())}">${today.format(new Date())}</time></div>
+        ${home ? html`<p id="home-lede" class="ws-head__lede" aria-live="polite">${ledeMarkup(session.displayName, null)}</p>`
+          : html`<p class="ws-head__lede">What needs a person right now. Each entry clears by itself once the cause is fixed.</p>`}
+      </header>
+      ${queueMarkup(home ? "active" : "any")}
+      <aside class="ws-context" aria-label="Context">
+        <div class="ws-context__doc" id="attn-doc" hidden></div>
+        <div class="ws-context__today" id="ws-today">
+          <section class="ws-context__part" id="home-continue" aria-labelledby="home-continue-title" hidden>
+            <h2 class="ws-label" id="home-continue-title">Continue</h2>
+            <div id="home-continue-body"></div>
+          </section>
+          <section class="ws-context__part home-insights" aria-labelledby="home-insights-title">
+            <div class="ws-label-row"><h2 class="ws-label" id="home-insights-title">Insights</h2><p class="home-section__aside" id="home-insights-asof">From the Hub's own records</p></div>
+            <div id="home-insights" aria-busy="true"><div class="skeleton skeleton--text"></div><div class="skeleton skeleton--text"></div></div>
+          </section>
+        </div>
+      </aside>
+      <dialog class="sheet attn-sheet" id="attn-sheet" aria-labelledby="attn-doc-title"></dialog>
+    </div>`);
 
-  const lede = document.querySelector<HTMLElement>("#home-lede")!;
-  const dateline = document.querySelector<HTMLTimeElement>(".home-stage__kicker time")!;
-  const attentionBox = document.querySelector<HTMLElement>("#home-attention")!;
+  startQueue(home ? "active" : "any");
+
+  // Home's line under the heading is the staff bar's own answer; this only reads it, and paints again each time the bar does.
+  if (home) {
+    const lede = document.querySelector<HTMLElement>("#home-lede")!;
+    const dateline = document.querySelector<HTMLTimeElement>(".ws-head__title time")!;
+    const paintLede = () => {
+      const now = attentionNow();
+      if (!now) return;
+      mount(lede, ledeMarkup(session.displayName, (now.groups ?? []).reduce((sum, group) => sum + toAct(group), 0)));
+      // The date moves on with the greeting, so a Home left open overnight does not keep yesterday.
+      const day = new Date();
+      if (dateline.dateTime !== isoDay.format(day)) { dateline.dateTime = isoDay.format(day); dateline.textContent = today.format(day); }
+    };
+    document.addEventListener(ATTENTION_PAINTED, paintLede);
+    onLeave(() => document.removeEventListener(ATTENTION_PAINTED, paintLede));
+    paintLede();
+    void refreshAttention(true);
+  }
+
+  // Your own unfinished work. The part exists only while there is some.
   const continueBox = document.querySelector<HTMLElement>("#home-continue")!;
-  document.querySelector("#home-search")!.addEventListener("click", () => document.querySelector<HTMLElement>("[data-palette]")?.click());
-
-  // What needs a person is the staff bar's own answer; this only reads it, and paints again each time the bar does.
-  const paintAttention = () => {
-    const now = attentionNow();
-    if (!now) return;
-    const groups = now.groups ?? [];
-    attentionBox.removeAttribute("aria-busy");
-    mount(attentionBox, attentionMarkup(groups));
-    const act = groups.reduce((sum, group) => sum + toAct(group), 0);
-    mount(lede, ledeMarkup(session.displayName, act));
-    // The date moves on with the greeting, so a Home left open overnight does not keep yesterday.
-    const day = new Date();
-    if (dateline.dateTime !== isoDay.format(day)) { dateline.dateTime = isoDay.format(day); dateline.textContent = today.format(day); }
-  };
-  document.addEventListener(ATTENTION_PAINTED, paintAttention);
-  onLeave(() => document.removeEventListener(ATTENTION_PAINTED, paintAttention));
-  paintAttention();
-  // Home always asks again: the kept answer may be 30 seconds old, and this page is where it is read.
-  void refreshAttention(true).then(() => {
-    if (!attentionNow()) { attentionBox.removeAttribute("aria-busy"); mount(attentionBox, emptyState("What needs attention could not be loaded", "The rest of Home still works. Open Attention to try again.", html`<a class="button button--secondary" href="/staff/attention" data-route>Open Attention</a>`, "error", 3)); }
-  });
-
-  // Your own unfinished work. The section exists only while there is some.
   live<Resumable>("/api/staff/home", {
     interval: 30_000,
     onData: (work) => {
@@ -194,14 +132,21 @@ export async function homeWorkspace(): Promise<void> {
     onError: (error: ApiError) => { if (error.status === 401) expired(); }
   });
 
-  // Insights come last and alone: slow or failing, they leave everything above as it is.
+  // Insights come last and alone: slow or failing, they leave the queue as it is.
   const box = document.querySelector<HTMLElement>("#home-insights")!;
+  box.addEventListener("click", (event) => {
+    const about = (event.target as HTMLElement).closest<HTMLButtonElement>(".home-about");
+    if (!about) return;
+    const open = about.getAttribute("aria-expanded") !== "true";
+    about.setAttribute("aria-expanded", String(open));
+    document.getElementById(about.getAttribute("aria-controls")!)!.hidden = !open;
+  });
   let active = true;
   onLeave(() => { active = false; });
-  // Home is left the moment the address changes, while the next page's code may still be loading: an answer that arrives
+  // The page is left the moment the address changes, while the next page's code may still be loading: an answer that arrives
   // then, an ended session included, belongs to the page the person left and never sends them anywhere. Like the router,
   // this ignores trailing slashes, so Home opened as /staff/home/ is still here.
-  const here = () => active && window.location.pathname.replace(/\/+$/, "") === "/staff/home";
+  const here = () => active && window.location.pathname.replace(/\/+$/, "") === path;
   const loadInsights = () => {
     box.setAttribute("aria-busy", "true");
     api<Insights>("/api/staff/home/insights", { priority: "low" } as RequestInit).then((data) => {
@@ -218,4 +163,9 @@ export async function homeWorkspace(): Promise<void> {
     });
   };
   loadInsights();
+}
+
+/** /staff/home: the workspace opened on what to act on today or this week. */
+export async function homeWorkspace(): Promise<void> {
+  await workspace("home");
 }
