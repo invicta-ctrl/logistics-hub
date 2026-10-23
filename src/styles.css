@@ -408,6 +408,8 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .hero__available { display: inline-flex; align-items: center; gap: var(--space-2); justify-self: start; color: var(--on-dark); font-weight: 500; text-decoration: underline; text-decoration-color: rgb(251 246 238 / 35%); text-underline-offset: 6px; transition: text-decoration-color var(--dur-1); }
 .hero__available:hover { text-decoration-color: var(--gold-action); }
 .hero__available .icon { --icon-size: var(--icon-sm); }
+/* A finger gets the full target on the landing's standalone link too. */
+@media (pointer: coarse) { .hero__available { min-height: var(--target); } }
 
 /* Services strip overlaps the band edge, then the page returns to the neutral base. */
 .hero__services { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: -3rem; border-radius: var(--radius-xl); background: var(--surface); box-shadow: 0 1px 2px rgb(28 18 20 / 6%), 0 24px 48px -24px rgb(28 18 20 / 25%); color: var(--text); }
