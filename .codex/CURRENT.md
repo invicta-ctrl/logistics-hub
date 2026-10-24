@@ -1,26 +1,20 @@
 # Current Work Pointer — Logistics Hub
 
-**2026-10-24 | V1.16 RELEASED_VERIFIED; V2 ready for Road to V3. Next: V1.16.1, the IP-0.2 redesign (PR #61).** Production serves `main` `f61ee1b1d4bea731abdec8ce776cc65d1be185ae` (V1.16, application source `0636485`), byte-identical to a local build (checked 2026-10-24 05:12 UTC). Main CI `39782831614`, CodeQL `39782831971` and the Deploy dry run `39788179957` are SUCCESS. On 2026-10-24 Earl confirmed V1.16 and its five notes in Administration > System > This version and that final owner QA is good. The record is `docs/road-to-v2/releases/v1.16.md`. Rollback stays V1.15 `6ceefb5`, Build `d3328855941d`. The 2026-10-22 checkpoint below is history.
+**2026-10-24 | V1.16.1 RELEASED_VERIFIED: the IP-0.2 redesign is live. Nothing is in progress.** Production serves `main` `ce4a57e` (V1.16.1, application source `03019a9`), byte-identical to a local build. Main CI, CodeQL and the Deploy dry run are SUCCESS. Earl confirmed V1.16.1 and its five notes in Administration > System and that his QA of the new screens is good. The record is `docs/road-to-v2/releases/v1.16.1.md`, and V1.16 before it is RELEASED_VERIFIED too. Rollback is the V1.16 build of `main` `3eb9e73`. The next independently merged product change is V1.16.2.
 
 ## Current release checkpoint — 2026-10-24
 
 - **V1.16:** RELEASED_VERIFIED and closed. On Earl's direction ("LAUNCH V2 NOW"), the coordinator declares V2 ready for Road to V3, as the V1.16 spec's final gate allows.
-- **V1.16.1 (in progress):** Earl chose to ship the IP-0.2 redesign as the next revision: LH-IP02-S01, S02 and S03 on `slice/ip02-shell-home-landing`, PR #61. Done:
-  - the version identity: `product-release.json`, application source `03019a9`;
-  - the release record: `docs/road-to-v2/releases/v1.16.1.md`;
-  - the accepted specifications, in `docs/specs/accepted/2026-10-23-ip02-redesign/`;
-  - an independent review (eight findings, fixed in `75508ae`) and the pull request's review (two findings, fixed in `03019a9`).
-  Left:
-  - exact-head CI, CodeQL and Worker E2E;
-  - a fast-forward merge, then the deploy check;
-  - Earl's Administration > System check of V1.16.1, then RELEASED_VERIFIED.
-  LH-IP02-S04 is accepted but not started and is not part of V1.16.1.
+- **V1.16.1:** RELEASED_VERIFIED on 2026-10-24.
+  - The IP-0.2 redesign (LH-IP02-S01, S02 and S03), merged as PR #61 by fast-forward.
+  - The independent review's eight findings are fixed in `75508ae`; the pull request review's two are fixed in `03019a9`.
+  - LH-IP02-S04 (the remaining page bodies) is accepted but not started; it needs its own implementation GO.
 - **V2.1 (RTV3-01):** not started. It needs Earl's acceptance of its specification under `docs/specs/accepted/road-to-v3/`; none exists yet.
 - **Pull requests:**
   - PR #54: closed on 2026-10-24 by Earl's decision. PR #60 says it supersedes #54 and keeps #54's historical audit.
   - PR #60 (version-governance gate): open draft, unchanged.
   - PR #62 (Dependabot vite 7.3.7): open, unchanged.
-- **Branches:** no merged branch remains to prune. Every open branch above carries unmerged work.
+- **Branches:** the merged and closed branches are deleted. On GitHub only `main`, #60's and #62's remain, each with unmerged work.
 
 ## Release checkpoint — 2026-10-22 (history)
 

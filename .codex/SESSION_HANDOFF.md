@@ -1,6 +1,6 @@
 # Session Handoff — Logistics Hub
 
-**2026-10-24 | V1.16 RELEASED_VERIFIED and closed; V2 ready for Road to V3. Next: V1.16.1, the IP-0.2 redesign (PR #61).** Do not reopen V1.16 or PR59: both are done. The live pointer is `.codex/CURRENT.md`; this handoff agrees with it.
+**2026-10-24 | V1.16.1 RELEASED_VERIFIED: the IP-0.2 redesign is live. Nothing is in progress.** Production serves `main` `ce4a57e` (V1.16.1, application source `03019a9`), byte-identical to a local build. Main CI, CodeQL and the Deploy dry run are SUCCESS. Earl confirmed V1.16.1 and its five notes in Administration > System and that his QA of the new screens is good. The record is `docs/road-to-v2/releases/v1.16.1.md`, and V1.16 before it is RELEASED_VERIFIED too. Rollback is the V1.16 build of `main` `3eb9e73`. The next independently merged product change is V1.16.2. Do not reopen V1.16, V1.16.1, PR59 or PR #61: all are done. The live pointer is `.codex/CURRENT.md`; this handoff agrees with it.
 
 ## Current handoff — 2026-10-24
 
@@ -9,9 +9,10 @@
   - Production serves V1.16 (application source `0636485`), byte-identical to a local build.
   - Earl confirmed V1.16 and its five notes in Administration > System and that final owner QA is good.
   - The coordinator declared V2 ready for Road to V3 on his direction.
-- **V1.16.1 (next, in progress):** the IP-0.2 redesign (LH-IP02-S01, S02 and S03) on `slice/ip02-shell-home-landing`, PR #61.
-  - Its identity (`product-release.json`), record (`docs/road-to-v2/releases/v1.16.1.md`), specs and independent review are done.
-  - Left: exact-head CI, a fast-forward merge, the deploy check, and Earl's Administration > System check, then RELEASED_VERIFIED.
+- **V1.16.1:** RELEASED_VERIFIED on 2026-10-24.
+  - The IP-0.2 redesign (LH-IP02-S01, S02 and S03), merged as PR #61 by fast-forward.
+  - The independent review's eight findings are fixed in `75508ae`; the pull request review's two are fixed in `03019a9`.
+  - LH-IP02-S04 (the remaining page bodies) is accepted but not started; it needs its own implementation GO.
 - **V2.1 (RTV3-01):** not started. It needs Earl's acceptance of its specification under `docs/specs/accepted/road-to-v3/`.
 - **Pull requests:**
   - #54: closed by Earl's decision; #60 says it supersedes it.
