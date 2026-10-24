@@ -244,8 +244,12 @@ export function navigate(path: string, replace = false, state: object = {}): voi
 /** The address the current view rendered, or last mirrored into the URL: the router treats a popstate to it as no change. */
 export const shown = { address: "" };
 
+/** True while a sheet that leaving its page closed runs its own tidying: by then the address belongs to the next page. */
+let addressHandedOn = false;
+
 /** Mirrors view state (filters, sort, open item) into the query string without adding history entries. */
 export function writeParams(values: Record<string, string | null | undefined>): void {
+  if (addressHandedOn) return;
   const params = new URLSearchParams(window.location.search);
   for (const [key, value] of Object.entries(values)) {
     if (value) params.set(key, value);
@@ -371,9 +375,14 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog || (event.target as HTMLElement).closest("[data-close]")) close();
   });
+  // Set when leaving the page closed the sheet. Its close then tidies the sheet but leaves the address alone, because the router has
+  // already moved it to the next page (an item's "All activity for this item" link must keep its ?item=).
+  let leaving = false;
   dialog.addEventListener("close", () => {
+    addressHandedOn = leaving;
+    leaving = false;
     // onClose runs first so a caller can take back content it lent to the sheet.
-    options.onClose?.();
+    try { options.onClose?.(); } finally { addressHandedOn = false; }
     dialog.innerHTML = "";
     detach();
     document.removeEventListener("scroll", detach);
@@ -424,7 +433,7 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
     dialog.addEventListener("pointerup", end);
     dialog.addEventListener("pointercancel", end);
   });
-  onLeave(() => { if (dialog.open) dialog.close(); });
+  onLeave(() => { if (dialog.open) { leaving = true; dialog.close(); } });
   return {
     open: (origin) => {
       // Opening another record while the panel is up moves the notch to it; the panel itself stays.

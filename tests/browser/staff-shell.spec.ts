@@ -175,3 +175,30 @@ test("moving between staff pages is instant: the rail and the next page's shape 
   releaseStock();
   await expect(page.locator("#stock-results")).not.toHaveAttribute("aria-busy", "true");
 });
+
+test("an item sheet's link to its activity keeps the item filter: the sheet closed on the way out leaves the next page's address alone", async ({ page }) => {
+  const session = { authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", access: "DoL", hub: true, mustChangePassword: false, recovery: null, selfServiceReviews: 0, selfServiceClosed: false, directory: null };
+  const item = { id: "ITM-0001", name: "Sample marker", aliases: null, category: "SUPPLIES", itemType: "Consumable", unit: "piece", status: "ACTIVE", needsReview: false, lendingAudience: "NOT_AVAILABLE_FOR_LENDING",
+    onHand: 4, reorderThreshold: 0, locationId: null, legacyLocation: null, openReports: 0, listed: false, stockArea: "Inventory", expiresOn: null, lastCountedAt: null, reorderStatus: null, onLoan: 0,
+    consumptionMode: "WHOLE_UNIT", openUnits: 0, openCondition: null, photoId: null, visualType: null, iconKey: null, updatedAt: "2026-10-03T00:00:00.000Z", model: null, serialNumber: null };
+  const asked: string[] = [];
+  await page.route("**/api/staff/session", (route) => route.fulfill({ json: session }));
+  await page.route("**/api/staff/attention/summary", (route) => route.fulfill({ json: { needsAction: 0, bySource: {} } }));
+  await page.route("**/api/staff/inventory", (route) => route.fulfill({ headers: { etag: '"r1"' }, json: { revision: 1, items: [item], categories: ["SUPPLIES"], locations: [], units: ["piece"] } }));
+  await page.route("**/api/staff/locations", (route) => route.fulfill({ json: { revision: 1, locations: [] } }));
+  await page.route("**/api/staff/items/ITM-0001", (route) => route.fulfill({ json: { item: { ...item, notes: null, listingGaps: [], photo: null, location: null, legacyReportedAvailable: null, migratedOnHand: 0, migrationDelta: null, legacySourceSheet: null, legacySourceRow: null, verificationNote: null, importedFrom: null }, movements: [], loans: [], openUnits: [], reports: [], events: [], usesRecorded: 0, unitsEmptied: 0 } }));
+  await page.route("**/api/staff/activity*", (route) => { asked.push(new URL(route.request().url()).search); return route.fulfill({ headers: { etag: '"a"' }, json: { events: [], nextCursor: null } }); });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/staff/items?item=ITM-0001");
+  await expect(page.getByRole("dialog", { name: "Sample marker" })).toBeVisible();
+  await page.getByRole("tab", { name: "History" }).click();
+  await page.getByRole("link", { name: /All activity for this item/ }).click();
+  await expect(page.getByRole("heading", { name: "Activity", level: 1 })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Sample marker" })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/staff\/activity\?item=ITM-0001$/);
+  await expect(page.getByRole("button", { name: /^Remove filter: Item:/ })).toBeVisible();
+  expect(asked.every((search) => search.includes("item=ITM-0001"))).toBe(true);
+  // The address stays the activity page's: nothing of the item page rewrites it afterwards.
+  await page.waitForTimeout(500);
+  await expect(page).toHaveURL(/\/staff\/activity\?item=ITM-0001$/);
+});
