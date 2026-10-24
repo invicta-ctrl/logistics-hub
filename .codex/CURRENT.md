@@ -1,8 +1,25 @@
 # Current Work Pointer — Logistics Hub
 
-**2026-10-22 | V1.16 OPEN / CORRECTIVE_CANDIDATE — the active corrective slice `slice/v1.16-header-gridlines` has immutable application source `0636485f7dcde71c03810f1dc0e44d469c7906a5` (the owner’s manually committed and pushed CSS correction plus two checkpoint records).** The reported Staff Directory topbar marks were the nonfunctional gold ruler decoration from `.app-bar::after`; this candidate removes only that rule, preserving the staff border, active-navigation underline, public header, and all other styles. Application-source CI `39045065182` is SUCCESS (checks and worker E2E; role qualification expected SKIP), and fresh independent review found no blocker; neither qualifies the later metadata commit. V1.16 final acceptance remains withheld, so no `V1.16.1` revision is allocated and no `RELEASED_VERIFIED` claim is authorized. Production was last verified 2026-10-17 23:10 Asia/Manila at V1.16/full `6b8454a34ba3e138a945e78fc3264970bf54ddf3`, Build `02dad4567bb4`; refresh it before merge. Rollback remains V1.15 `6ceefb5b5d0d98feab80359984bd736743b74989`, Build `d3328855941d`. Current ordinary usage is available (5% used); the historical quota stop is inactive and no reset or credits were consumed.
+**2026-10-24 | V1.16 RELEASED_VERIFIED; V2 ready for Road to V3. Next: V1.16.1, the IP-0.2 redesign (PR #61).** Production serves `main` `f61ee1b1d4bea731abdec8ce776cc65d1be185ae` (V1.16, application source `0636485`), byte-identical to a local build (checked 2026-10-24 05:12 UTC). Main CI `39782831614`, CodeQL `39782831971` and the Deploy dry run `39788179957` are SUCCESS. On 2026-10-24 Earl confirmed V1.16 and its five notes in Administration > System > This version and that final owner QA is good. The record is `docs/road-to-v2/releases/v1.16.md`. Rollback stays V1.15 `6ceefb5`, Build `d3328855941d`. The 2026-10-22 checkpoint below is history.
 
-## Current release checkpoint — 2026-10-22
+## Current release checkpoint — 2026-10-24
+
+- **V1.16:** RELEASED_VERIFIED and closed. On Earl's direction ("LAUNCH V2 NOW"), the coordinator declares V2 ready for Road to V3, as the V1.16 spec's final gate allows.
+- **V1.16.1 (in progress):** Earl chose to ship the IP-0.2 redesign as the next revision: LH-IP02-S01, S02 and S03 on `slice/ip02-shell-home-landing`, PR #61. It needs:
+  - its version identity and release record;
+  - exact-head CI, CodeQL and Worker E2E;
+  - an independent review;
+  - a fast-forward merge, then the deploy check;
+  - Earl's Administration > System check of V1.16.1.
+  LH-IP02-S04 is accepted but not started and is not part of V1.16.1.
+- **V2.1 (RTV3-01):** not started. It needs Earl's acceptance of its specification under `docs/specs/accepted/road-to-v3/`; none exists yet.
+- **Pull requests:**
+  - PR #54: closed on 2026-10-24 by Earl's decision. PR #60 says it supersedes #54 and keeps #54's historical audit.
+  - PR #60 (version-governance gate): open draft, unchanged.
+  - PR #62 (Dependabot vite 7.3.7): open, unchanged.
+- **Branches:** no merged branch remains to prune. Every open branch above carries unmerged work.
+
+## Release checkpoint — 2026-10-22 (history)
 
 - **Integration and custody:** PR58 remains merged and protected `main` remains `6b8454a34ba3e138a945e78fc3264970bf54ddf3`. The owner committed and pushed the metadata/record files as `68a415b8c1e87673e42b0e28d8c3d23253f6f918` on 2026-10-18; PR59 (https://github.com/invicta-ctrl/logistics-hub/pull/59) is ready for review on `slice/v1.16-header-gridlines`. On 2026-10-22 Earl said Codex is done with PR59 and asked Claude to finish it; Claude claimed this slice's lock in its own cloud worktree. Codex's Windows lock is Earl's to release; preserve the untracked `NUL` there.
 - **Deployment boundary:** `DEPLOY_FROM_CI` remains dry-run. No deployment command, provider/configuration write, migration, or data write was performed. Automatic Workers Builds succeeded. Direct production verification at 23:10 Asia/Manila found V1.16/full `6b8454a34ba3e138a945e78fc3264970bf54ddf3`, Build `02dad4567bb4` built 23:08, all five candidate notes visible, application services healthy, and migrations through `0030`; no private provider identifiers were recorded.
