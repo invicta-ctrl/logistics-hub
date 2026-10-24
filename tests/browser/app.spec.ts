@@ -720,6 +720,13 @@ test("phones: Items rows keep picture, name, quantity and status; an item sheet 
     expect(status.x).toBeGreaterThan(195);
   }
   await expect(page.locator("tr[data-key=ITM-0473] .cell-place")).toBeHidden();
+  // Select mode keeps each row's two lines: the checkbox sits beside the name, not under it.
+  await page.getByRole("button", { name: "Select" }).click();
+  const box = (await page.locator("tr[data-key=ITM-0463] .col-select").boundingBox())!;
+  const name = (await page.locator("tr[data-key=ITM-0463] .row-link").boundingBox())!;
+  expect(box.y).toBeLessThan(name.y + name.height);
+  expect(box.x + box.width).toBeLessThanOrEqual(name.x);
+  await page.getByRole("button", { name: "Select" }).click();
 
   // The cut-out's sheet: the close button keeps its corner beside a long title, and the pedestal's note is a badge that leaves the item clear.
   await page.locator("tr[data-key=ITM-0473] .row-link").click();
@@ -761,9 +768,12 @@ test("phones: Items rows keep picture, name, quantity and status; an item sheet 
   await picture.getByRole("button", { name: "Close" }).first().click();
   await expect(picture).toBeHidden();
 
-  // Swipe down on the sheet's header to dismiss it: a short drag settles back, a long one closes the sheet.
+  // Swipe down on the sheet's header to dismiss it: a tap does nothing, a short drag settles back, a long one closes the sheet.
   const header = calcSheet.locator(".sheet__header").first();
   const at = (await header.locator("h2").boundingBox())!;
+  await page.mouse.click(at.x + 20, at.y + 10);
+  await page.waitForTimeout(300);
+  await expect(calcSheet).toBeVisible();
   await page.mouse.move(at.x + 20, at.y + 10);
   await page.mouse.down();
   await page.mouse.move(at.x + 20, at.y + 40, { steps: 4 });

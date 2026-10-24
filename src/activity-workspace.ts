@@ -132,8 +132,8 @@ export async function activityWorkspace(): Promise<void> {
       const day = dayOf(entry);
       if (days.at(-1)?.day === day) days.at(-1)!.entries.push(entry); else days.push({ day, entries: [entry] });
     }
-    return html`${days.map(({ day, entries: mine }) => html`<section class="activity-day" aria-labelledby="activity-day-${day || "unknown"}">
-      <h2 class="activity-day__title" id="activity-day-${day || "unknown"}">${dayLabel(day)}</h2>
+    return html`${days.map(({ day, entries: mine }, index) => html`<section class="activity-day" aria-labelledby="activity-day-${index}">
+      <h2 class="activity-day__title" id="activity-day-${index}">${dayLabel(day)}</h2>
       <ol class="activity-list" aria-label="${dayLabel(day)}, newest first">${mine.map(row)}</ol></section>`)}`;
   }
 

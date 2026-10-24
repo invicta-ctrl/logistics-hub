@@ -691,7 +691,11 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .data-table tbody tr:hover { background: var(--hover); }
 .data-table tbody tr.is-open { background: var(--brand-tint); box-shadow: inset 3px 0 0 var(--brand); }
 .data-table tbody tr.is-inactive .row-link, .data-table tbody tr.is-inactive .qty { color: var(--text-3); }
-.data-table tbody tr:last-child td { border-bottom: 1px solid var(--line); }
+.data-table tbody tr:last-child td { border-bottom: 0; }
+/* A list on the page ends on a rule like every row; a table inside a boxed panel keeps the panel's edge. */
+.data-table-wrap > .data-table tbody tr:last-child td { border-bottom: 1px solid var(--line); }
+/* Inside a sheet the sticky header takes the sheet's surface, not the page's paper. */
+.sheet .data-table th { background: var(--surface); }
 .data-table tbody tr.is-changed { animation: highlight 2s var(--ease); }
 .sort-button { display: inline-flex; align-items: center; gap: var(--space-1); margin-left: calc(-1 * var(--space-2)); padding: var(--space-1) var(--space-2); border: 0; border-radius: var(--radius); background: none; color: inherit; font: inherit; }
 .sort-button:hover { background: var(--line); color: var(--text); }
@@ -824,7 +828,8 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .sheet::backdrop { background: var(--scrim); }
 .sheet[open] { display: flex; flex-direction: column; }
 .sheet__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: var(--space-5) var(--space-6); border-top: 0; border-bottom: 1px solid var(--line); }
-dialog.sheet:focus { outline: none; }
+dialog.sheet:focus:not(:focus-visible) { outline: none; }
+dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 .sheet__kicker { color: var(--text-3); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .sheet__header h2 { margin-top: var(--space-1); font-family: var(--serif); font-size: 1.5rem; font-weight: 500; letter-spacing: -.01em; line-height: 1.15; overflow-wrap: anywhere; }
 /* A record's ID as the tag tied to the thing itself: a punched hole, a hairline edge, the code in mono. */
@@ -1234,6 +1239,11 @@ dialog.sheet:focus { outline: none; }
   .data-table-wrap--responsive .data-table.data-table--items td.col-status { grid-row: 2; grid-column: 2; justify-self: end; text-align: right; }
   .data-table-wrap--responsive .data-table:not(.data-table--static) tbody td:last-child { padding-right: 0; }
   .data-table-wrap--responsive .data-table:not(.data-table--static) tbody td:last-child::after { display: none; }
+  /* Select mode: the checkbox takes its own column beside the picture, so a row keeps its two lines. */
+  .data-table-wrap--responsive .data-table.data-table--items tr:has(> td.col-select) { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .data-table-wrap--responsive .data-table.data-table--items tr:has(> td.col-select) > td.col-select { grid-row: 1 / span 2; grid-column: 1; align-self: center; width: auto; padding: 0; }
+  .data-table-wrap--responsive .data-table.data-table--items tr:has(> td.col-select) > td.col-item { grid-column: 2; }
+  .data-table-wrap--responsive .data-table.data-table--items tr:has(> td.col-select) > :is(td.col-qty, td.col-status) { grid-column: 3; }
   .data-table-wrap--responsive .data-table td { height: auto; padding: 0; border: 0; }
   .data-table-wrap--responsive .data-table .col-id, .data-table-wrap--responsive .data-table .col-category, .data-table-wrap--responsive .data-table .col-location { display: none; }
   .data-table-wrap--responsive .data-table--items td.col-item { width: auto; min-height: 2.5rem; padding-left: 3.25rem; }

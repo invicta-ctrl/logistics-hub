@@ -335,22 +335,22 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       : photo.cutout ? html`<button type="button" class="menu__item" role="menuitem" data-original ${cleaning}>${icon("refresh")}Use the original photo</button>`
       : cleanupState()?.canEnable && options.enableCleanup ? html`<button type="button" class="menu__item" role="menuitem" data-enable-cleanup ${cleaning}>${icon("sparkle")}Enable background removal</button>`
       : html`<button type="button" class="menu__item" role="menuitem" data-clean ${busy() || cleanupTask || !photo.cleanable ? html`disabled` : ""}>${icon("sparkle")}Remove background</button>`;
-    return html`<div class="menu menu--row photo-menu" id="${menuId}" popover role="menu" aria-label="${noun === "photo" ? "Photo" : "Picture"} of ${name}">
+    return menuShell(`${noun === "photo" ? "Photo" : "Picture"} of ${name}`, html`
       <button type="button" class="menu__item" role="menuitem" data-view>${icon("eye")}View larger</button>
       <button type="button" class="menu__item" role="menuitem" data-pick ${off}>${icon("refresh")}Change photo</button>
       <button type="button" class="menu__item" role="menuitem" data-crop-existing ${off}>${icon("crop")}Crop thumbnail</button>
       ${cleanup}
       ${iconChoice(off)}
-      <button type="button" class="menu__item menu__item--danger" role="menuitem" data-remove ${off}>${icon("close")}Remove photo</button>
-    </div>`;
+      <button type="button" class="menu__item menu__item--danger" role="menuitem" data-remove ${off}>${icon("close")}Remove photo</button>`);
   };
+  /** The picture's menu: a popover of choices, the same shell with or without a photo. */
+  const menuShell = (label: string, items: Html): Html => html`<div class="menu menu--row photo-menu" id="${menuId}" popover role="menu" aria-label="${label}">${items}</div>`;
   /** The icon an item shows instead of (or until) a photo is chosen from the same menu, in its own small sheet. */
   const iconChoice = (off: Html | string): Html => options.chooseIcon ? html`<button type="button" class="menu__item" role="menuitem" data-choose-icon-sheet ${off}>${icon("box")}Choose icon</button>` : html``;
   /** Before there is a photo, the item's icon opens the same menu: add a photo, or choose the icon. */
-  const emptyMenu = (): Html => html`<div class="menu menu--row photo-menu" id="${menuId}" popover role="menu" aria-label="Picture of ${name}">
+  const emptyMenu = (): Html => menuShell(`Picture of ${name}`, html`
       <button type="button" class="menu__item" role="menuitem" data-pick>${icon("camera")}Add photo</button>
-      ${iconChoice("")}
-    </div>`;
+      ${iconChoice("")}`);
   const menuOpen = (menu: HTMLElement) => "showPopover" in HTMLElement.prototype ? menu.matches(":popover-open") : !menu.hidden;
   const closeMenu = () => {
     const menu = host.querySelector<HTMLElement>(".photo-menu");

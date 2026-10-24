@@ -391,9 +391,13 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
     const startY = event.clientY;
     const startAt = event.timeStamp;
     let distance = 0;
-    dialog.setPointerCapture(event.pointerId);
-    dialog.style.transition = "none";
-    const move = (moved: PointerEvent) => { distance = Math.max(0, moved.clientY - startY); dialog.style.transform = distance ? `translateY(${distance}px)` : ""; };
+    let dragging = false;
+    const move = (moved: PointerEvent) => {
+      distance = Math.max(0, moved.clientY - startY);
+      // A tap is not a drag: the sheet follows the finger only once it has really moved down.
+      if (!dragging && distance > 6) { dragging = true; dialog.setPointerCapture(moved.pointerId); dialog.style.transition = "none"; }
+      if (dragging) dialog.style.transform = distance ? `translateY(${distance}px)` : "";
+    };
     const settle = (to: string, then?: () => void) => {
       const done = () => { window.clearTimeout(fallback); dialog.removeEventListener("transitionend", done); dialog.style.transition = ""; then?.(); };
       const fallback = window.setTimeout(done, 400);
@@ -406,6 +410,11 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
       dialog.removeEventListener("pointermove", move);
       dialog.removeEventListener("pointerup", end);
       dialog.removeEventListener("pointercancel", end);
+      if (!dragging) return;
+      // The click that follows a drag is the drag's own, never a press on the backdrop.
+      const swallow = (click: Event) => { click.stopImmediatePropagation(); };
+      dialog.addEventListener("click", swallow, { capture: true, once: true });
+      window.setTimeout(() => dialog.removeEventListener("click", swallow, { capture: true }), 0);
       const fast = distance > 40 && distance / Math.max(1, ended.timeStamp - startAt) > 0.6;
       if (ended.type === "pointerup" && (distance > Math.min(160, dialog.offsetHeight / 4) || fast) && discardOk()) {
         settle("translateY(100%)", () => { if (dialog.open) dialog.close(); dialog.style.transform = ""; });
