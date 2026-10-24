@@ -35,6 +35,13 @@
 .photo-tile .pedestal__item img { position: absolute; max-width: none; width: calc(100% * 100 / var(--crop-w, 100)); height: calc(100% * 100 / var(--crop-h, 100)); left: calc(-100% * var(--crop-x, 0) / var(--crop-w, 100)); top: calc(-100% * var(--crop-y, 0) / var(--crop-h, 100)); object-fit: fill; }
 .photo-tile__note { position: absolute; top: var(--space-2); left: var(--space-2); z-index: 2; display: inline-flex; align-items: center; gap: .25rem; padding: .125rem .5rem; border-radius: var(--radius-pill); background: rgb(255 255 255 / 78%); color: var(--stage-ink); font-size: .75rem; font-weight: 500; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
 .photo-tile__note .icon { --icon-size: .875rem; }
-.photo-actions__note { align-self: center; color: var(--text-3); font-size: var(--text-sm); }
+/* An item photo's menu opens from the photo itself (owner, 24 October 2026). */
+.photo-tile[data-photo-menu] { cursor: pointer; transition: box-shadow var(--dur-1), transform var(--dur-1); }
+.photo-tile[data-photo-menu]:hover { box-shadow: inset 0 0 0 1px var(--stage-edge), 0 6px 16px -8px rgb(28 18 20 / 30%); }
+.photo-tile[data-photo-menu]:active { transform: scale(.99); }
+.photo-tile[data-photo-menu][aria-expanded="true"] { outline: 2px solid var(--brand); outline-offset: 3px; }
+.photo-menu .menu__item:disabled { opacity: .45; cursor: default; }
+.menu.menu--row.photo-menu { width: max-content; min-width: 14rem; max-width: calc(100vw - 2 * var(--gutter)); }
+.photo-menu .menu__item--danger, .photo-menu .menu__item--danger .icon { color: var(--bad); }
 @media (prefers-reduced-motion: no-preference) { .pedestal__item { transition: opacity var(--dur-2) var(--ease-settle); } }
 @media (forced-colors: active) { .pedestal__plinth::before, .pedestal__plinth::after, .item-visual.photo-pedestal::before, .item-visual.photo-pedestal::after { border: 1px solid CanvasText; } }

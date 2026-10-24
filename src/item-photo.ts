@@ -2,7 +2,7 @@ import { cutoutProblem, cutoutShares, subjectCrop } from "./cutout-share";
 import type { PhotoCleanup, PhotoCrop } from "./catalog-draft";
 export type { PhotoCleanup } from "./catalog-draft";
 import type { VisualItem } from "./item-icons";
-import { ApiError, type Html, api, dataUrl, failure, html, icon, jpegOf, itemVisual, itemThumbnailUrl, refreshItemThumbnail, mount, thumbnailVersion, toast } from "./ui";
+import { ApiError, type Html, api, bindRowActionMenus, dataUrl, failure, html, icon, jpegOf, itemVisual, itemThumbnailUrl, refreshItemThumbnail, mount, thumbnailVersion, toast } from "./ui";
 export { openViewer } from "./item-viewer";
 
 /** `cutout`: a cleaned picture (background removed) is kept beside the original. `cleanable`: the Worker can make one (src/item-cutout.ts). */
@@ -283,7 +283,6 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   let cleanupTask: AbortController | null = null;
   let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
   let confirming = false;
-  let editing = noun !== "photo";
   let error = "";
   const tile = host.querySelector<HTMLElement>("[data-tile]")!;
   const actions = host.querySelector<HTMLElement>("[data-actions]")!;
@@ -302,16 +301,53 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   const busy = () => state !== "" || cropping;
   /** The profile tile shows the cleaned picture when there is one. */
   const tileUrl = (id: string) => (photo?.cutout && photo.id === id ? shownUrl(photo, "thumb") : options.thumbUrl(id));
-  const show = (picture: Html, buttons: Html) => { mount(tile, picture); mount(actions, buttons); };
+  const show = (picture: Html, buttons: Html) => {
+    // A redraw (the profile refreshing after a save) replaces the photo's menu, so a menu the person has open opens again.
+    const open = host.querySelector<HTMLElement>(".photo-menu");
+    const reopen = Boolean(open && menuOpen(open));
+    mount(tile, picture); mount(actions, buttons); bindRowActionMenus(host);
+    if (reopen) host.querySelector<HTMLButtonElement>("[data-photo-menu]")?.click();
+  };
   const cleanupState = (): PhotoCleanup | null | undefined => options.cleanupState?.() ?? photo;
   const enableButton = (): Html => cleanupState()?.canEnable && options.enableCleanup ? html`<button type="button" class="button button--secondary button--sm" data-enable-cleanup ${busy() ? "disabled" : ""}>Enable background removal</button>` : html``;
   const cleanupHint = (): Html => options.cleanup && cleanupState()?.cleanupReason ? html`<p class="field__hint" role="status">${cleanupState()!.cleanupReason}</p>` : html``;
 
-  /** Item photos only: remove the background, or go back to the original. The original photo is never changed by either. */
-  const cleanButton = (): Html => {
-    if (!options.cleanup || !photo) return html``;
-    if (photo.cutout) return html`<button type="button" class="button button--ghost button--sm" data-original ${busy() || cleanupTask ? "disabled" : ""}>Use the original photo</button><span class="photo-actions__note">The original photo is kept.</span>`;
-    return html`<button type="button" class="button button--ghost button--sm" data-clean ${busy() || cleanupTask || !photo.cleanable ? "disabled" : ""}>Remove background</button>${enableButton()}`;
+
+  /*
+   * Item photos keep everything about the photo in one menu that opens from the photo itself (owner, 24 October 2026): view it larger,
+   * change it, take a new one, crop its thumbnail, remove or restore its background, or remove it. The menu's items are the same
+   * controls as before, so the handlers below are unchanged; only where they are shown moved.
+   */
+  const menuId = `photo-menu-${options.id}`;
+  const menuTrigger = (label: string) => html`data-photo-menu data-row-menu="start" popovertarget="${menuId}" aria-controls="${menuId}" aria-expanded="false" aria-haspopup="menu" aria-label="${label}"`;
+  const photoMenu = (): Html => {
+    // A background removal finishing in the background never stops the person changing, cropping or removing the photo meanwhile.
+    const off = busy() ? html`disabled` : "";
+    const cleaning = busy() || cleanupTask ? html`disabled` : "";
+    const cleanup = !options.cleanup || !photo ? html``
+      : photo.cutout ? html`<button type="button" class="menu__item" role="menuitem" data-original ${cleaning}>${icon("refresh")}Use the original photo</button>`
+      : cleanupState()?.canEnable && options.enableCleanup ? html`<button type="button" class="menu__item" role="menuitem" data-enable-cleanup ${cleaning}>${icon("sparkle")}Enable background removal</button>`
+      : html`<button type="button" class="menu__item" role="menuitem" data-clean ${busy() || cleanupTask || !photo.cleanable ? html`disabled` : ""}>${icon("sparkle")}Remove background</button>`;
+    return html`<div class="menu menu--row photo-menu" id="${menuId}" popover role="menu" aria-label="${noun === "photo" ? "Photo" : "Picture"} of ${name}">
+      <button type="button" class="menu__item" role="menuitem" data-view>${icon("eye")}View larger</button>
+      <button type="button" class="menu__item" role="menuitem" data-pick ${off}>${icon("refresh")}Change photo</button>
+      <button type="button" class="menu__item" role="menuitem" data-camera ${off}>${icon("camera")}Take photo</button>
+      <button type="button" class="menu__item" role="menuitem" data-crop-existing ${off}>${icon("crop")}Crop thumbnail</button>
+      ${cleanup}
+      <button type="button" class="menu__item menu__item--danger" role="menuitem" data-remove ${off}>${icon("close")}Remove photo</button>
+    </div>`;
+  };
+  const menuOpen = (menu: HTMLElement) => "showPopover" in HTMLElement.prototype ? menu.matches(":popover-open") : !menu.hidden;
+  const closeMenu = () => {
+    const menu = host.querySelector<HTMLElement>(".photo-menu");
+    if (!menu || !menuOpen(menu)) return;
+    if ("hidePopover" in menu && "showPopover" in HTMLElement.prototype) menu.hidePopover();
+    else { menu.hidden = true; host.querySelector("[data-photo-menu]")?.setAttribute("aria-expanded", "false"); }
+  };
+  /** Opens the photo's menu from elsewhere (the viewer's Edit photo) and puts the keyboard on its first choice. */
+  const openMenu = () => {
+    host.querySelector<HTMLButtonElement>("[data-photo-menu]")?.click();
+    requestAnimationFrame(() => host.querySelector<HTMLElement>(".photo-menu .menu__item:not(:disabled)")?.focus());
   };
 
   const draw = () => {
@@ -338,19 +374,29 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick>${options.visual ? itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual") : icon("camera")}<span>${options.visual ? "Add photo" : `Add ${noun}`}</span></button>`,
         html`<div class="photo-actions"><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button></div>${alert}`);
     }
+    const opens = noun === "photo";
     show(options.visual && options.visual().visualType === "SYSTEM_ICON"
-      ? html`<button type="button" class="photo-tile" data-view aria-label="View saved ${noun} of ${name}">${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}</button>`
+      ? html`<button type="button" class="photo-tile" ${opens ? menuTrigger(`Photo of ${name}: view, change, crop or remove it`) : html`data-view aria-label="View saved ${noun} of ${name}"`}>${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}</button>`
       : photo.cutout && options.cleanup
       // A cleaned picture stands on a pedestal (LH-IP02-S03): the transparent cut-out, cropped to the item, on a plinth (photo-frame.ts).
-      ? html`<button type="button" class="photo-tile photo-tile--pedestal" data-view aria-label="View ${noun} of ${name}, background removed"><span class="pedestal" aria-hidden="true"><i class="pedestal__plinth"></i><span class="pedestal__item"><img src="${shownUrl(photo, "display")}${thumbnailVersion(photo.id) ? `?r=${thumbnailVersion(photo.id)}` : ""}" alt="" data-pedestal data-fallback="${tileUrl(photo.id)}" decoding="async" /></span></span><span class="photo-tile__note">${icon("check")}Background removed</span></button>`
-      : html`<button type="button" class="photo-tile" data-view aria-label="View ${noun} of ${name}">${options.visual ? itemVisual({ ...options.visual(), photoId: photo.id }, tileUrl, "profile-visual", true) : html`<img src="${tileUrl(photo.id)}" alt="" width="160" height="160" />`}</button>`,
-      html`${!editing ? alert : html`${confirming
+      ? html`<button type="button" class="photo-tile photo-tile--pedestal" ${opens ? menuTrigger(`Photo of ${name}, background removed: view, change, crop or restore it`) : html`data-view aria-label="View ${noun} of ${name}, background removed"`}><span class="pedestal" aria-hidden="true"><i class="pedestal__plinth"></i><span class="pedestal__item"><img src="${shownUrl(photo, "display")}${thumbnailVersion(photo.id) ? `?r=${thumbnailVersion(photo.id)}` : ""}" alt="" data-pedestal data-fallback="${tileUrl(photo.id)}" decoding="async" /></span></span><span class="photo-tile__note">${icon("check")}Background removed</span></button>`
+      : html`<button type="button" class="photo-tile" ${opens ? menuTrigger(`Photo of ${name}: view, change, crop${options.cleanup ? " or remove its background" : " or remove it"}`) : html`data-view aria-label="View ${noun} of ${name}"`}>${options.visual ? itemVisual({ ...options.visual(), photoId: photo.id }, tileUrl, "profile-visual", true) : html`<img src="${tileUrl(photo.id)}" alt="" width="160" height="160" />`}</button>`,
+      opens
+        ? html`${photoMenu()}${confirming ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>
+            <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : `Remove ${noun}`}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>` : ""}${state === "cleaning" ? html`<p class="field__hint" role="status">Working…</p>` : ""}${cleanupTask ? html`<p class="field__hint" role="status">Removing background…</p>` : ""}${cleanupHint()}${alert}`
+        : html`${confirming
         ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>
             <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : `Remove ${noun}`}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>`
-        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button>${options.noun === "photo" ? html`<button type="button" class="button button--secondary button--sm" data-crop-existing>Crop thumbnail</button>` : ""}<button type="button" class="button button--ghost button--sm" data-remove>Remove</button>${cleanButton()}${noun === "photo" ? html`<button type="button" class="button button--ghost button--sm" data-close-photo-editor>Done</button>` : ""}</div>${state === "cleaning" ? html`<p class="field__hint" role="status">Working…</p>` : ""}`}${cleanupTask ? html`<p class="field__hint" role="status">Removing background…</p>` : ""}${cleanupHint()}${alert}`}`);
+        : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button><button type="button" class="button button--ghost button--sm" data-remove>Remove</button></div>`}${alert}`);
   };
-  const focus = (selector: string) => host.querySelector<HTMLElement>(selector)?.focus();
-  const panelActions = ["data-pick", "data-camera", "data-view", "data-remove", "data-keep", "data-remove-confirmed", "data-clean", "data-original", "data-crop-existing", "data-close-photo-editor"];
+  // An item photo's controls are in its menu: a control that is gone, or hidden in the closed menu, gives focus back to the photo.
+  const focus = (selector: string) => {
+    const target = host.querySelector<HTMLElement>(selector);
+    const menu = target?.closest<HTMLElement>(".photo-menu");
+    if (noun === "photo" && (!target || (menu && !menuOpen(menu)))) host.querySelector<HTMLElement>("[data-photo-menu]")?.focus();
+    else target?.focus();
+  };
+  const panelActions = ["data-pick", "data-camera", "data-view", "data-remove", "data-keep", "data-remove-confirmed", "data-clean", "data-original", "data-crop-existing", "data-photo-menu"];
   const heldAction = () => panelActions.find((name) => host.querySelector(`[${name}]:focus`));
   const stopCleanup = () => {
     if (cleanupTimer) clearTimeout(cleanupTimer);
@@ -463,11 +509,12 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
 
   host.addEventListener("click", async (event) => {
     const target = event.target as HTMLElement;
+    // A choice in the photo's menu closes the menu before it acts.
+    if (target.closest(".photo-menu .menu__item")) closeMenu();
     if (busy()) return;
     if (target.closest("[data-pick]")) input.click();
     else if (target.closest("[data-camera]")) camera.click();
-    else if (target.closest("[data-view]") && photo) options.view(photo, noun === "photo" ? () => { if (!host.isConnected || busy()) return; editing = true; draw(); focus("[data-crop-existing]"); } : undefined);
-    else if (target.closest("[data-close-photo-editor]")) { editing = false; confirming = false; draw(); focus("[data-view]"); }
+    else if (target.closest("[data-view]") && photo) options.view(photo, noun === "photo" ? () => { if (!host.isConnected || busy()) return; draw(); openMenu(); } : undefined);
     else if (target.closest("[data-enable-cleanup]") && cleanupState()?.canEnable && options.enableCleanup) {
       state = "cleaning"; error = ""; draw();
       try {
@@ -522,10 +569,9 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
         cropExisting = false;
         state = "";
         if (cleanAfterSave && (!options.cleanup || !photo.cleanable)) error = photo.cleanupReason || "Background removal is unavailable. The saved original photo is kept.";
-        editing = cleanAfterSave || noun !== "photo";
         draw();
         toast(`${noun === "photo" ? "Photo" : "Picture"} saved.`);
-        focus(cleanAfterSave && noun === "photo" ? "[data-close-photo-editor]" : "[data-view]");
+        focus(noun === "photo" ? "[data-photo-menu]" : "[data-view]");
         const savedId = photo.id;
         void Promise.resolve(options.changed(photo)).catch(() => undefined).then(() => {
           if (cleanAfterSave && options.cleanup && host.isConnected && !busy() && !staged && photo?.id === savedId && photo.cleanable) cleanSavedPhoto(savedId, savedUpdatedAt);

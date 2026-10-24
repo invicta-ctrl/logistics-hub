@@ -41,7 +41,9 @@ test("item visuals: suggestion, keyboard picker, reset, photo preference and fai
   const detail = await (await page.request.get(`/api/staff/items/${id}`)).json();
   const photoId = detail.item.photo.id;
   await page.route(`**/api/staff/media/${photoId}/display`, (route) => route.abort());
-  await panel.getByRole("button", { name: "View photo of Canon Projector Visual Test" }).click();
+  // An item photo opens its own menu, which views it larger (owner, 24 October 2026).
+  await panel.getByRole("button", { name: /^Photo of Canon Projector Visual Test/ }).click();
+  await panel.getByRole("menuitem", { name: "View larger", exact: true }).click();
   await expect(page.locator("dialog.viewer .viewer__fallback .item-icon")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator("dialog.viewer")).toHaveCount(0);

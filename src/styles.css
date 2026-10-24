@@ -754,7 +754,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview) { background: var(--stage); box-shadow: var(--edge-light), inset 0 0 0 1px var(--stage-edge), 0 1px 2px rgb(43 10 12 / 6%), 0 18px 28px -18px rgb(43 10 12 / 45%); }
 .theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview)::after { display: none; }
 .theater .profile__photo:has(.item-visual--loaded, .photo-tile--preview)::after { position: absolute; right: 12%; bottom: -.625rem; left: 12%; z-index: -1; height: .875rem; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 10 12 / 24%), transparent); content: ""; }
-.theater .photo-tile[data-view]:hover:has(.item-visual--loaded) { background: color-mix(in srgb, var(--stage) 88%, #fff); }
+.theater .photo-tile:is([data-view], [data-photo-menu]):hover:has(.item-visual--loaded) { background: color-mix(in srgb, var(--stage) 88%, #fff); }
 .theater .photo-tile .item-visual { position: relative; background: transparent; }
 .theater .photo-tile .item-visual > .item-icon { width: 56%; height: 56%; max-width: none; max-height: none; stroke-width: 1.25; filter: drop-shadow(0 1px 0 rgb(255 255 255 / 90%)); }
 /* No photo yet: adding one is a quiet label on the plinth, not a dashed hole. */

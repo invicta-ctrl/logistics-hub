@@ -56,6 +56,8 @@ const ICONS = {
   sortDown: "m8 10 4 4 4-4",
   box: "M4 7.5 12 4l8 3.5v9L12 20l-8-3.5v-9ZM4 7.5l8 3.5 8-3.5M12 11v9",
   eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12ZM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
+  crop: "M7 3v12.5A1.5 1.5 0 0 0 8.5 17H21M3 7h12.5A1.5 1.5 0 0 1 17 8.5V21",
+  sparkle: "M12 4.5 13.6 9 18 10.5 13.6 12 12 16.5 10.4 12 6 10.5 10.4 9ZM18 16v3M16.5 17.5h3",
   eyeOff: "M3 3l18 18M10.6 5.1A9.9 9.9 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3 3.9M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2",
   pin: "M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21ZM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z",
   refresh: "M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4",
@@ -161,7 +163,7 @@ export function rowActionMenu(id: string, label: string, actions: Html): Html {
   return html`<span class="row-menu"><button class="button button--ghost button--sm row-menu__trigger" type="button" data-row-menu popovertarget="${id}" aria-controls="${id}" aria-expanded="false" aria-label="More actions for ${label}">${icon("more")}<span>More actions</span></button><div class="menu menu--row" id="${id}" popover><ul class="menu__list">${actions}</ul></div></span>`;
 }
 
-/** Keeps each row menu aligned with its opener, including the small no-Popover fallback. */
+/** Keeps each row menu aligned with its opener, including the small no-Popover fallback. `data-row-menu="start"` opens it from the opener's left edge. */
 export function bindRowActionMenus(scope: HTMLElement): void {
   const native = "showPopover" in HTMLElement.prototype;
   const triggers = [...scope.querySelectorAll<HTMLButtonElement>("[data-row-menu]")];
@@ -169,7 +171,7 @@ export function bindRowActionMenus(scope: HTMLElement): void {
     const triggerRect = trigger.getBoundingClientRect();
     const menuRect = menu.getBoundingClientRect();
     const gutter = 8;
-    const left = Math.max(gutter, Math.min(triggerRect.right - menuRect.width, window.innerWidth - menuRect.width - gutter));
+    const left = Math.max(gutter, Math.min(trigger.dataset.rowMenu === "start" ? triggerRect.left : triggerRect.right - menuRect.width, window.innerWidth - menuRect.width - gutter));
     const below = triggerRect.bottom + 4;
     const top = below + menuRect.height <= window.innerHeight - gutter ? below : Math.max(gutter, triggerRect.top - menuRect.height - 4);
     menu.style.left = `${Math.round(left)}px`;

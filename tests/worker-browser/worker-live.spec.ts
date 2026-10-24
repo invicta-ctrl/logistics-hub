@@ -1,5 +1,16 @@
 import fs from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+
+/** Item photos keep their controls in a menu that opens from the photo itself (owner, 24 October 2026). */
+async function openMenu(panel: Locator): Promise<void> {
+  if (!(await panel.getByRole("menu").isVisible())) await panel.locator("[data-photo-menu]").click();
+  await expect(panel.getByRole("menu")).toBeVisible();
+}
+async function choose(panel: Locator, name: string): Promise<void> {
+  await openMenu(panel);
+  await panel.getByRole("menuitem", { name, exact: true }).click();
+}
+
 
 const username = process.env.E2E_USERNAME!;
 const password = process.env.E2E_PASSWORD!;
@@ -881,7 +892,7 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await cameraInput.setInputFiles({ name: "camera.jpg", mimeType: "image/jpeg", buffer: phonePhoto(6) });
   await panel.getByRole("button", { name: "Save photo" }).click();
   await expect(page.getByText("Photo saved.")).toBeVisible();
-  await expect(panel.getByRole("button", { name: "View photo of Scissors" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: /^Photo of Scissors/ })).toBeVisible();
 
   // Stored upright (960x356 landscape turned to portrait), small, clean and cached for a day; the original is never uploaded.
   const photo = (await detail())!;
@@ -901,7 +912,7 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   // Closing the viewer hands its history entry back a moment later; a person never acts inside that moment, a test must wait for it.
   const settled = () => expect.poll(() => page.evaluate(() => !window.history.state?.viewer)).toBe(true);
   const before = await history();
-  await panel.getByRole("button", { name: "View photo of Scissors" }).click();
+  await choose(panel, "View larger");
   await expect(viewer).toBeVisible();
   await expect(viewer.getByRole("img", { name: "Photo of Scissors" })).toBeVisible();
   expect(await viewer.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(356);
@@ -910,24 +921,24 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await page.keyboard.press("Escape");
   await expect(viewer).toBeHidden();
   await expect(sheet).toBeVisible();
-  await expect(panel.getByRole("button", { name: "View photo of Scissors" })).toBeFocused();
+  await expect(panel.locator("[data-photo-menu]")).toBeFocused();
   await expect.poll(() => page.evaluate(() => Boolean(window.history.state?.viewer))).toBe(false);
-  await panel.getByRole("button", { name: "View photo of Scissors" }).click();
+  await choose(panel, "View larger");
   await expect(viewer).toBeVisible();
   await page.goBack();
   await expect(viewer).toBeHidden();
   // Back closed only the viewer: the same page, with the same item open and not reloaded.
   await expect(page).toHaveURL(/\/staff\/items\?item=ITM-0262$/);
   await expect(sheet).toBeVisible();
-  await expect(panel.getByRole("button", { name: "View photo of Scissors" })).toBeFocused();
-  await panel.getByRole("button", { name: "View photo of Scissors" }).click();
+  await expect(panel.locator("[data-photo-menu]")).toBeFocused();
+  await choose(panel, "View larger");
   await viewer.getByRole("button", { name: "Close photo" }).click();
   await expect(viewer).toBeHidden();
   await settled();
   // With reduced motion the viewer opens at once, with no transition.
   await page.emulateMedia({ reducedMotion: "reduce" });
   const count = await transitions();
-  await panel.getByRole("button", { name: "View photo of Scissors" }).click();
+  await choose(panel, "View larger");
   await expect(viewer).toBeVisible();
   expect(await transitions()).toBe(count);
   await page.keyboard.press("Escape");
@@ -953,16 +964,18 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
 
   // Replace: a new photo takes the place, and the old address stops working.
   await row.getByRole("button", { name: "Scissors" }).click();
-  await panel.locator("[data-view]").click();
+  await choose(panel, "View larger");
+  // The viewer's Edit photo opens the photo's own menu.
   await viewer.getByRole("button", { name: "Edit photo", exact: true }).click();
   await expect(viewer).toHaveCount(0);
   await settled();
-  await expect(panel.getByRole("button", { name: "Change photo" })).toBeVisible();
+  await expect(panel.getByRole("menuitem", { name: "Change photo" })).toBeVisible();
   // Opening the picker and walking away from it must leave the profile open (the picker's own cancel must not close the sheet).
-  await panel.getByRole("button", { name: "Change photo" }).click();
+  await panel.getByRole("menuitem", { name: "Change photo" }).click();
   await page.waitForTimeout(500);
   await expect(sheet).toBeVisible();
-  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), panel.getByRole("button", { name: "Change photo" }).click()]);
+  await openMenu(panel);
+  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), panel.getByRole("menuitem", { name: "Change photo" }).click()]);
   await chooser.setFiles({ name: "upright.jpg", mimeType: "image/jpeg", buffer: phonePhoto(1) });
   await expect(panel.getByRole("img", { name: /Preview of the new photo/ })).toBeVisible();
   await panel.getByRole("button", { name: "Save photo" }).click();
@@ -972,18 +985,18 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   expect(replaced.width).toBeGreaterThan(replaced.height);
   expect((await page.request.get(`/api/staff/media/${photo.id}/thumb`)).status()).toBe(404);
   await expect(row.locator(".thumb [data-item-photo]")).toHaveAttribute("src", thumbnailSrc(replaced.id));
-  await panel.locator("[data-view]").click();
+  await choose(panel, "View larger");
   await viewer.getByRole("button", { name: "Edit photo", exact: true }).click();
   await expect(viewer).toHaveCount(0);
   await settled();
 
   // Remove asks first; Keep changes nothing.
-  await panel.getByRole("button", { name: "Remove", exact: true }).click();
+  await choose(panel, "Remove photo");
   await expect(panel.getByRole("group", { name: "Confirm" })).toContainText("Remove this photo?");
   await panel.getByRole("button", { name: "Keep" }).click();
   expect(await detail()).not.toBeNull();
-  await panel.getByRole("button", { name: "Remove", exact: true }).click();
-  await panel.getByRole("button", { name: "Remove photo" }).click();
+  await choose(panel, "Remove photo");
+  await panel.getByRole("group", { name: "Confirm" }).getByRole("button", { name: "Remove photo" }).click();
   await expect(page.getByText("Photo removed.")).toBeVisible();
   await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
   expect(await detail()).toBeNull();
@@ -1025,20 +1038,20 @@ test("item photos: a photo someone else added meanwhile is never overwritten, an
   await panel.getByRole("button", { name: "Save photo" }).click();
   await expect(page.getByText(/Someone else changed this photo/)).toBeVisible();
   // Their photo is shown, mine is gone, and nothing of mine was stored.
-  await expect(panel.getByRole("button", { name: "View photo of Scotch Tape" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: /^Photo of Scotch Tape/ })).toBeVisible();
   await expect(panel.getByRole("img", { name: /Preview of the new photo/ })).toHaveCount(0);
   const item = await (await page.request.get("/api/staff/items/ITM-0263")).json() as { item: { photo: { id: string } } };
   expect(item.item.photo.id).toBe(theirId);
-  await panel.locator("[data-view]").click();
+  await choose(panel, "View larger");
   await page.locator("dialog.viewer").getByRole("button", { name: "Edit photo", exact: true }).click();
   await expect(page.locator("dialog.viewer")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => !history.state?.viewer)).toBe(true);
-  await expect(panel.getByRole("button", { name: "Change photo" })).toBeVisible();
+  await expect(panel.getByRole("menuitem", { name: "Change photo" })).toBeVisible();
 
   // A 320 px phone, with the photo: every control is named, and nothing scrolls sideways.
   await page.setViewportSize({ width: 320, height: 640 });
   await page.reload();
-  await expect(panel.getByRole("button", { name: "View photo of Scotch Tape" })).toBeVisible();
+  await expect(panel.getByRole("button", { name: /^Photo of Scotch Tape/ })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   expect(await sheet.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
   const unnamed = await sheet.locator("button, input, [role=tab]").evaluateAll((controls) => controls.filter((control) => !(control.getAttribute("aria-label") || control.textContent?.trim() || (control as HTMLInputElement).labels?.length)).length);
@@ -1050,7 +1063,7 @@ test("item photos: an open profile follows a photo someone else changed, so its 
   await signIn(page);
   await page.goto("/staff/items?item=ITM-0263");
   const sheet = page.getByRole("dialog", { name: "Scotch Tape" });
-  const shown = sheet.locator("#photo-panel [data-view] img");
+  const shown = sheet.locator("#photo-panel [data-photo-menu] img");
   await expect(shown).toBeVisible();
   const current = (await (await page.request.get("/api/staff/items/ITM-0263")).json() as { item: { photo: { id: string } } }).item.photo.id;
   const small = await page.evaluate(() => {
@@ -1065,7 +1078,7 @@ test("item photos: an open profile follows a photo someone else changed, so its 
     display: { name: "display.jpg", mimeType: "image/jpeg", buffer: bytes }, thumb: { name: "thumb.jpg", mimeType: "image/jpeg", buffer: bytes }, expected: current } });
   const next = (await replaced.json() as { photo: { id: string } }).photo.id;
   await expect(shown).toHaveAttribute("src", thumbnailSrc(next), { timeout: 30_000 });
-  await sheet.locator("#photo-panel [data-view]").click();
+  await choose(sheet.locator("#photo-panel"), "View larger");
   const viewer = page.getByRole("dialog", { name: "Photo of Scotch Tape" });
   await expect(viewer).toBeVisible();
   expect(await viewer.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(64);

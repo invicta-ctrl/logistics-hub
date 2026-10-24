@@ -1,6 +1,17 @@
 import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
-import { type Page, type Request, expect, test } from "@playwright/test";
+import { type Locator, type Page, type Request, expect, test } from "@playwright/test";
+
+/** Item photos keep their controls in a menu that opens from the photo itself (owner, 24 October 2026). */
+async function openMenu(panel: Locator): Promise<void> {
+  if (!(await panel.getByRole("menu").isVisible())) await panel.locator("[data-photo-menu]").click();
+  await expect(panel.getByRole("menu")).toBeVisible();
+}
+async function choose(panel: Locator, name: string): Promise<void> {
+  await openMenu(panel);
+  await panel.getByRole("menuitem", { name, exact: true }).click();
+}
+
 
 // A completed cleanup starts a profile refresh; let its route handler finish before disposing the request context.
 test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: "wait" }); });
@@ -101,7 +112,7 @@ async function itemWithPhoto(page: Page, baseURL: string, cutoutBody: Buffer): P
     ? route.fulfill({ body: state.thumb, contentType: "image/jpeg" }) : route.fallback());
   await page.goto(`/staff/items?item=${id}`);
   const panel = page.locator("#photo-panel");
-  await expect(panel.getByRole("button", { name: "Remove background" })).toHaveCount(0);
+  await expect(panel.getByRole("menuitem", { name: "Remove background" })).toHaveCount(0);
   const image = await page.evaluate(() => {
     const canvas = document.createElement("canvas"); canvas.width = 600; canvas.height = 400;
     const draw = canvas.getContext("2d")!; draw.fillStyle = "#45685a"; draw.fillRect(0, 0, 600, 400);
@@ -112,10 +123,12 @@ async function itemWithPhoto(page: Page, baseURL: string, cutoutBody: Buffer): P
   await expect(panel.locator("[data-tile] .item-visual--loaded img")).toBeVisible();
   const photoId = (await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id as string;
   await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", thumbnailSrc(photoId));
-  await panel.locator("[data-view]").click();
+  await choose(panel, "View larger");
+  // The viewer's Edit photo opens the photo's menu.
   await page.locator("dialog.viewer").getByRole("button", { name: "Edit photo", exact: true }).click();
   await expect(page.locator("dialog.viewer")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => !history.state?.viewer)).toBe(true);
+  await expect(panel.getByRole("menu")).toBeVisible();
   return { id, photoId, state };
 }
 
@@ -123,19 +136,20 @@ test("picture cleanup: remove the background, see the cleaned picture, go back t
   const { photoId, state } = await itemWithPhoto(page, baseURL!, providerCutout);
   const original = await (await page.request.get(`/api/staff/media/${photoId}/display`)).body();
   const panel = page.locator("#photo-panel");
-  await panel.getByRole("button", { name: "Remove background" }).click();
-  await expect(panel.getByRole("button", { name: "Use the original photo" })).toBeVisible();
-  expect(state.posted).toEqual([{ expected: photoId }, { expected: photoId, accept: true }]);
+  await choose(panel, "Remove background");
   // The cleaned picture stands on the pedestal: the cut-out itself, fetched fresh after the change (LH-IP02-S03).
   await expect(panel.locator("[data-tile] .pedestal img")).toHaveAttribute("src", `/api/staff/media/${photoId}/cutout?r=1`);
   await expect(panel.locator("[data-tile] .pedestal__item")).toHaveClass(/is-seated/);
-  await expect(panel.getByText("The original photo is kept.")).toBeVisible();
+  expect(state.posted).toEqual([{ expected: photoId }, { expected: photoId, accept: true }]);
   expect(await (await page.request.get(`/api/staff/media/${photoId}/display`)).body()).toEqual(original);
-  // Focus lands on the button that now undoes it.
-  await expect(panel.getByRole("button", { name: "Use the original photo" })).toBeFocused();
+  // Focus returns to the photo, whose menu now offers to undo it.
+  await expect(panel.locator("[data-photo-menu]")).toBeFocused();
+  await openMenu(panel);
+  await expect(panel.getByRole("menuitem", { name: "Use the original photo" })).toBeVisible();
 
-  await panel.getByRole("button", { name: "Use the original photo" }).click();
-  await expect(panel.getByRole("button", { name: "Remove background" })).toBeVisible();
+  await choose(panel, "Use the original photo");
+  await openMenu(panel);
+  await expect(panel.getByRole("menuitem", { name: "Remove background" })).toBeVisible();
   expect(state.deletes).toBe(1);
   await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", thumbnailSrc(photoId, 2));
 });
@@ -143,13 +157,14 @@ test("picture cleanup: remove the background, see the cleaned picture, go back t
 test("a cut that is not a real cutout is undone at once and the original stays", async ({ page, baseURL }) => {
   const { photoId, state } = await itemWithPhoto(page, baseURL!, tiny(true));
   const panel = page.locator("#photo-panel");
-  await panel.getByRole("button", { name: "Remove background" }).click();
+  await choose(panel, "Remove background");
   await expect(panel.getByRole("alert")).toContainText("No background was found to remove. The original photo is still in use.");
   expect(state.cleaned).toBe(false);
   // Asked for a cut, judged it, rejected it: never accepted.
   expect(state.posted).toEqual([{ expected: photoId }]);
   expect(state.deletes).toBe(1);
-  await expect(panel.getByRole("button", { name: "Remove background" })).toBeVisible();
+  await openMenu(panel);
+  await expect(panel.getByRole("menuitem", { name: "Remove background" })).toBeVisible();
   await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", thumbnailSrc(photoId));
 });
 
@@ -167,7 +182,7 @@ test("an existing photo crops at full phone width with reachable controls", asyn
   await page.setViewportSize({ width: 390, height: 650 });
   const { id, state } = await itemWithPhoto(page, baseURL!, providerCutout);
   const panel = page.locator("#photo-panel");
-  await panel.getByRole("button", { name: "Crop thumbnail", exact: true }).click();
+  await choose(panel, "Crop thumbnail");
   await expect(panel.getByRole("button", { name: "Resize crop from bottom right", exact: true })).toBeEnabled();
   await expect(panel.locator("[data-tile]")).toBeHidden();
   const crop = (await panel.locator(".photo-crop").boundingBox())!;
@@ -192,11 +207,11 @@ test("a replacement saves before cleanup, cleans its new media id and preserves 
   });
   await replacement(page); await page.getByRole("button", { name: "Save & remove background", exact: true }).click();
   await expect(page.getByText("Background removed.", { exact: true })).toBeVisible();
-  await page.locator("#photo-panel [data-view]").click();
+  await choose(page.locator("#photo-panel"), "View larger");
   await page.locator("dialog.viewer").getByRole("button", { name: "Edit photo", exact: true }).click();
   await expect(page.locator("dialog.viewer")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => !history.state?.viewer)).toBe(true);
-  await expect(page.getByRole("button", { name: "Use the original photo", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Use the original photo", exact: true })).toBeVisible();
   const next = (await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id;
   expect(next).not.toBe(photoId);
   expect(state.posted).toEqual([{ expected: next }, { expected: next, accept: true }]);
@@ -220,9 +235,9 @@ for (const failure of ["save conflict", "cleanup unavailable"] as const) test(`r
 test("the cleaned picture opens large over the dark overlay with its edges intact", async ({ page, baseURL }, info) => {
   const { photoId } = await itemWithPhoto(page, baseURL!, providerCutout);
   const panel = page.locator("#photo-panel");
-  await panel.getByRole("button", { name: "Remove background" }).click();
-  await expect(panel.getByRole("button", { name: "Use the original photo" })).toBeVisible();
-  await panel.getByRole("button", { name: /View photo of/ }).click();
+  await choose(panel, "Remove background");
+  await expect(panel.locator("[data-tile] .pedestal__item")).toHaveClass(/is-seated/);
+  await choose(panel, "View larger");
   const viewer = page.locator("dialog.viewer");
   await expect(viewer.locator("img")).toHaveAttribute("src", `/api/staff/media/${photoId}/cutout`);
   await expect(viewer.locator("img")).toBeVisible();

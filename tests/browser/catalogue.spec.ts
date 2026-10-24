@@ -1617,19 +1617,20 @@ test("Save & remove background publishes the photo before its optional cleanup s
   await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "item.png", mimeType: "image/png", buffer: PNG });
   await panel.getByRole("button", { name: "Save & remove background", exact: true }).click();
   await expect(page.getByText("Photo saved.", { exact: true })).toBeVisible();
-  await expect(panel.locator("[data-close-photo-editor]")).toBeFocused();
+  // Saved: focus is on the photo, which opens everything else about it.
+  await expect(panel.locator("[data-photo-menu]")).toBeFocused();
   await expect(panel).toHaveAttribute("data-changes", "1");
   await expect(panel.locator("[data-pick]")).toBeEnabled();
   await expect(panel.locator("[data-clean]")).toBeDisabled();
   await page.evaluate((id) => (window as unknown as { cleanupPanel: { render: (photo: { id: string; width: number; height: number; cleanable: boolean }) => void } }).cleanupPanel.render({ id, width: 1, height: 1, cleanable: true }), photoId);
-  await panel.locator("[data-camera]").focus();
+  await panel.locator("[data-photo-menu]").focus();
   releaseCleanup();
   await expect(page.getByText("Background removed.", { exact: true })).toBeVisible();
-  await expect(panel.locator("[data-camera]")).toBeFocused();
+  await expect(panel.locator("[data-photo-menu]")).toBeFocused();
   await expect(panel).toHaveAttribute("data-changes", "2");
   await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "ordinary-save.png", mimeType: "image/png", buffer: PNG });
   await panel.locator("[data-save]").click();
-  await expect(panel.locator("[data-view]")).toBeFocused();
+  await expect(panel.locator("[data-photo-menu]")).toBeFocused();
 });
 
 test("background cleanup ignores stale acceptance after a new photo or detached panel", async ({ page }) => {

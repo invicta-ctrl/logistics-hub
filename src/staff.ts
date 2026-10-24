@@ -882,7 +882,7 @@ export async function workspace(): Promise<void> {
       thumbUrl: (id) => photoUrl(id, "thumb"),
       hintAdd: "Everyone sees this photo on the Lending Hub and Self-Service. Show the item itself, not people or documents.",
       hintHas: "Everyone sees this photo on the Lending Hub and Self-Service. The large version stays staff-only.", removeNote: "The item keeps its stock and history.",
-      view: (shown, edit) => void openViewer(shownUrl(shown, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLElement>("#photo-panel [data-view] img"), item.name, resolveItemIcon(detail!.item).key, edit),
+      view: (shown, edit) => void openViewer(shownUrl(shown, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLElement>("#photo-panel .photo-tile img"), item.name, resolveItemIcon(detail!.item).key, edit),
       changed: async (next) => { if (detail?.item.id === item.id) detail = { ...detail, item: { ...detail.item, photo: next } }; await refreshStock(item.id); await poll.refresh(); },
       // Someone else changed the photo first: show theirs, and the list with it.
       refresh: async () => { await refreshStock(item.id); await poll.refresh(); }
