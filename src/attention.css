@@ -100,4 +100,7 @@
   .attn-reason { flex: none; white-space: nowrap; }
   .attn-reasons__later { flex: none; flex-basis: auto; margin: 0 0 0 var(--space-2); white-space: nowrap; }
   .attn-filters .table-toolbar__count { width: auto; }
+  /* A row opens its record already, so the row drops its repeated "Open the item" link; guarded actions stay where they are. */
+  .attn-row__actions > a.button { display: none; }
+  .attn-row__actions:not(:has(> button)) { display: none; }
 }

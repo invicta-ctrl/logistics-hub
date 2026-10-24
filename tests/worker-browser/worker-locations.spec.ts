@@ -134,7 +134,9 @@ test.describe.serial("smart locations", () => {
     const row = page.locator("tr", { hasText: "E2E Stapler" });
     await expect(row.locator(".place-leaf")).toHaveText("Shelf 2");
     await expect(row.locator(".col-location .cell-sub")).toHaveText("Storage Area › Cabinet 1");
-    await page.getByLabel("Place", { exact: true }).selectOption({ label: "Storage Area" }).catch(async () => { await page.getByRole("button", { name: "Filters" }).click(); await page.getByLabel("Place", { exact: true }).selectOption({ label: "Storage Area" }); });
+    // The filters sit behind the one Filters button at every width (LH-IP02-S04).
+    await page.getByRole("button", { name: /^Filters/ }).click();
+    await page.getByLabel("Place", { exact: true }).selectOption({ label: "Storage Area" });
     await expect(page).toHaveURL(/location=LOC-/);
     await expect(row).toBeVisible();
     await page.getByLabel("Place", { exact: true }).selectOption("__none");

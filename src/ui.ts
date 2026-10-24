@@ -422,6 +422,8 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
       if (dialog.open) { if (origin) anchor(origin); return; }
       opener = document.activeElement as HTMLElement | null;
       dialog.showModal();
+      // The sheet takes focus itself rather than its close button, so no ring sits on the X before anyone uses the keyboard; Tab reaches it next.
+      if (document.activeElement instanceof HTMLElement && document.activeElement.matches("[data-close]")) { dialog.tabIndex = -1; dialog.focus({ preventScroll: true }); }
       anchor(origin);
     },
     close,

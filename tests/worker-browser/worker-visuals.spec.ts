@@ -16,9 +16,16 @@ test("item visuals: suggestion, keyboard picker, reset, photo preference and fai
   const { id } = await response.json();
   await page.goto(`/staff/items?item=${id}`);
   const panel = page.locator("#photo-panel");
-  await page.getByRole("tab", { name: "Edit details" }).click();
-  await page.locator("#item-advanced > summary").click();
-  const controls = page.locator("#item-visual-control");
+  // An item's picture lives in one place (Earl, 2026-10-24): its own menu opens the Item picture sheet with the icon and photo choices.
+  const picture = page.getByRole("dialog", { name: "Item picture" });
+  const controls = picture.locator("#item-visual-control");
+  const openPicture = async () => {
+    await panel.locator("[data-photo-menu]").click();
+    await panel.getByRole("menuitem", { name: "Choose icon", exact: true }).click();
+    await expect(picture).toBeVisible();
+  };
+  const closePicture = async () => { await picture.getByRole("button", { name: "Close" }).first().click(); await expect(picture).toBeHidden(); };
+  await openPicture();
   await expect(controls).toContainText("Projector · automatic");
   await expect(panel.locator("[data-tile] .item-icon")).toBeVisible();
   await controls.getByRole("button", { name: "Choose another icon" }).click();
@@ -28,6 +35,7 @@ test("item visuals: suggestion, keyboard picker, reset, photo preference and fai
   await expect(controls).toContainText("Camera · chosen icon");
   await controls.getByRole("button", { name: "Use suggested icon" }).click();
   await expect(controls).toContainText("Projector · automatic");
+  await closePicture();
 
   const image = await page.evaluate(() => {
     const canvas = document.createElement("canvas"); canvas.width = 600; canvas.height = 400;
@@ -37,7 +45,9 @@ test("item visuals: suggestion, keyboard picker, reset, photo preference and fai
   await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "projector.jpg", mimeType: "image/jpeg", buffer: Buffer.from(image, "base64") });
   await panel.getByRole("button", { name: "Save photo" }).click();
   await expect(panel.locator("[data-tile] .item-visual--loaded img")).toBeVisible();
+  await openPicture();
   await expect(controls.getByRole("button", { name: "Real photo", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await closePicture();
   const detail = await (await page.request.get(`/api/staff/items/${id}`)).json();
   const photoId = detail.item.photo.id;
   await page.route(`**/api/staff/media/${photoId}/display`, (route) => route.abort());
@@ -48,6 +58,7 @@ test("item visuals: suggestion, keyboard picker, reset, photo preference and fai
   await page.keyboard.press("Escape");
   await expect(page.locator("dialog.viewer")).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => !history.state?.viewer)).toBe(true);
+  await openPicture();
   await controls.getByRole("button", { name: "System icon", exact: true }).click();
   await expect(panel.locator("[data-tile] img")).toHaveCount(0);
   expect((await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id).toBe(photoId);
@@ -58,6 +69,7 @@ test("item visuals: suggestion, keyboard picker, reset, photo preference and fai
   expect((await page.request.get(`/api/public/media/${photoId}/thumb`)).status()).toBe(200);
   await expect(panel.locator("[data-tile] img")).toHaveCount(0);
   await expect(panel.locator("[data-tile] .item-icon")).toBeVisible();
+  await closePicture();
   await context.setOffline(true);
   await expect(panel.locator("[data-tile] .item-icon")).toBeVisible();
   await context.setOffline(false);

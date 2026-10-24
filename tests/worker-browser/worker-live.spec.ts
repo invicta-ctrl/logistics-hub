@@ -384,6 +384,8 @@ test("migrated review: fill the gaps, mark reviewed, and move to the next record
   await page.getByRole("searchbox", { name: "Search items" }).fill("e2e alias");
   await expect(page.locator("tbody tr")).toHaveCount(1);
   await page.getByRole("searchbox", { name: "Search items" }).fill("");
+  // The filters sit behind the one Filters button (LH-IP02-S04).
+  await page.getByRole("button", { name: /^Filters/ }).click();
   await page.getByLabel("Place", { exact: true }).selectOption({ label: "E2E shelf A" });
   await expect(page.locator("tbody tr")).toHaveCount(1);
   await page.locator("tbody .row-link").first().click();
@@ -492,7 +494,10 @@ test("stock workspace: record a delivery, restock and receive, then read it in a
   await expect(page.getByRole("heading", { name: "Stock", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Needs attention/ })).toBeVisible();
 
+  // Update stock is a sheet at every width (LH-IP02-S04); it stays open for the next entry until it is closed.
+  await page.getByRole("button", { name: "Update stock" }).click();
   const panel = page.locator("#record-panel");
+  const closeRecord = async () => { await page.keyboard.press("Escape"); await expect(page.locator("#record-sheet")).toBeHidden(); };
   await panel.getByLabel("Item", { exact: true }).fill("Bond Paper - A4 · ITM-0135");
   await expect(panel.locator("#record-card")).toContainText("0 reams on hand");
   await panel.getByLabel("Quantity on hand").fill("+12");
@@ -504,6 +509,7 @@ test("stock workspace: record a delivery, restock and receive, then read it in a
   await expect(page.getByText("Bond Paper - A4: 0 → 12 reams (new stock received).")).toBeVisible();
   await expect(panel.locator("#receipts")).toContainText("+12 Bond Paper - A4");
   await expect(panel.getByLabel("Item", { exact: true })).toBeFocused();
+  await closeRecord();
 
   const ketchup = page.locator("tr", { hasText: "Banana Ketchup" });
   await ketchup.getByRole("button", { name: "More actions for Banana Ketchup" }).click();
@@ -523,6 +529,7 @@ test("stock workspace: record a delivery, restock and receive, then read it in a
   await expect(page.getByText("Banana Ketchup: 0 → 6 bottles (new stock received).")).toBeVisible();
   await expect(page.getByRole("button", { name: /^Restock list 0/ })).toBeVisible();
   await expect(page.getByText("Closed in the last two weeks")).toBeVisible();
+  await closeRecord();
 
   await page.getByRole("button", { name: /^Activity/ }).click();
   const latest = page.locator(".activity-row").first();
@@ -545,6 +552,9 @@ test("counting records the observed quantity, and pantry lists the catalog's pan
   await panel.getByRole("button", { name: "Save count of 18" }).click();
   await expect(page.getByText(/All Purpose Flour: \d+ → 18 kilos \(physical count\)\./)).toBeVisible();
   await expect(page.locator("tr", { hasText: "All Purpose Flour" })).toHaveCount(0);
+  // The Update stock sheet stays open for the next entry; closing it returns to the lists.
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#record-sheet")).toBeHidden();
   await page.getByRole("button", { name: /^Pantry/ }).click();
   await expect(page.locator("tbody tr")).toHaveCount(10);
   await expect(page.locator("tr", { hasText: "All Purpose Flour" })).toContainText("18 kilos");

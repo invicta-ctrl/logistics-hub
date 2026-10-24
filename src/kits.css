@@ -1,7 +1,7 @@
 /* Kits (V1.8). Tokens only, so light and dark follow the rest of the staff workspace. */
-.kit-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
+.kit-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
 .kit-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-4); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); transition: background-color var(--dur-1); }
-.kit-row:last-child { border-bottom: 0; }
+.kit-row:last-child { border-bottom: 1px solid var(--line); }
 .kit-row:hover { background: var(--hover); }
 .kit-row.is-open { background: var(--brand-tint); box-shadow: inset 3px 0 0 var(--brand); }
 .kit-row.is-inactive .kit-row__name, .kit-row.is-inactive .kit-row__sub { color: var(--text-3); }
