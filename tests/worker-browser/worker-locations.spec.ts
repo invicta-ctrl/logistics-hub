@@ -86,9 +86,12 @@ test.describe.serial("smart locations", () => {
     await dialog.getByLabel("Inside", { exact: true }).selectOption({ label: "Storage Area" });
     await dialog.getByRole("button", { name: "Add place" }).click();
     await expect(dialog.getByRole("alert")).toContainText("Storage Area already has a place called Cabinet 1");
-    // The unsaved name is not lost silently: closing asks first, and the answer here is to discard it.
-    page.once("dialog", (confirm) => { expect(confirm.message()).toContain("Discard"); void confirm.accept(); });
-    await closeSheet(page);
+    // The unsaved name is not lost silently: closing asks first (V1.16.4 §4.7, the app's own question), and the answer here is to discard it.
+    await page.keyboard.press("Escape");
+    const question = page.getByRole("alertdialog", { name: "Discard your changes?" });
+    await expect(question).toBeVisible();
+    await question.getByRole("button", { name: "Discard" }).click();
+    await expect(page.locator("dialog[open]")).toHaveCount(0);
     await page.getByRole("button", { name: /^Storage Area/ }).first().click();
     const storage = page.getByRole("dialog", { name: "Storage Area" });
     await expect(storage.getByLabel("Inside", { exact: true })).not.toContainText("Cabinet 1");

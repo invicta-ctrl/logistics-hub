@@ -320,6 +320,20 @@ async function logout(request: Request, env: Env, url: URL): Promise<Response> {
   return response;
 }
 
+let buildRead: Promise<string | null> | null = null;
+/**
+ * The release this Worker serves: the version in its own deploy's build record, read once per isolate (an isolate never outlives its
+ * deploy). A staff tab on an older release reloads at its next page move (V1.16.4 §4.8). Unknown is null, and tried again next time.
+ */
+function runningBuild(env: Env, origin: string): Promise<string | null> {
+  buildRead ??= Promise.resolve()
+    .then(() => env.ASSETS.fetch(new Request(new URL("/build.json", origin))))
+    .then(async (response) => response.ok ? (await response.json() as { version?: unknown }).version : null)
+    .then((version) => typeof version === "string" ? version : null, () => null)
+    .then((version) => { if (!version) buildRead = null; return version; });
+  return buildRead;
+}
+
 async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionContext): Promise<Response> {
   const mutating = request.method !== "GET";
   if (mutating && !sameOrigin(request, url)) return json({ error: "Invalid request origin." }, 403);
@@ -339,8 +353,9 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
 
   if (path === "/api/staff/session" && method === "GET") {
     const { accountId, sessionId, group, expiresAt, ...profile } = account;
-    const reviews = await selfServiceToCheck(env.DB);
-    return json({ authenticated: true, id: accountId, ...profile, access: accessOf(account.role, group), hub: hubAccess(account), recovery: await recoveryStatus(env.DB, account), selfServiceReviews: reviews, selfServiceClosed: await selfServiceState(env.DB) === "paused", directory: await linkedPerson(env.DB, accountId) });
+    // Every staff page starts here, so its reads go together rather than one after another (V1.16.4 §4.8).
+    const [reviews, recovery, state, directory, build] = await Promise.all([selfServiceToCheck(env.DB), recoveryStatus(env.DB, account), selfServiceState(env.DB), linkedPerson(env.DB, accountId), runningBuild(env, url.origin)]);
+    return json({ authenticated: true, id: accountId, ...profile, access: accessOf(account.role, group), hub: hubAccess(account), recovery, selfServiceReviews: reviews, selfServiceClosed: state === "paused", directory, build });
   }
   if (path === "/api/staff/me" && method === "PATCH") return json(await updateSelf(env.DB, account, await body()));
   if (path === "/api/staff/me/password" && method === "POST") return json(await changeOwnPassword(env.DB, account, await body()));

@@ -1,7 +1,7 @@
 import { PUBLIC_LENDING_ITEM_TYPE } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, isOverdue, loanFields, loanRow, openReturn } from "./loan-form";
 import { loadSession, shell } from "./staff-shell";
-import { type Html, api, emptyState, expired, html, icon, label, live, mount, onLeave, plural, preservingFocus, reducedMotion, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { api, emptyState, expired, type Html, html, icon, label, live, mount, onLeave, plural, preservingFocus, readKept, reducedMotion, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Period = "30d" | "12m" | "all";
 type Purpose = "INDIVIDUAL" | "USC";
@@ -174,7 +174,7 @@ export async function loansWorkspace(): Promise<void> {
   const panel = createSheet(lendSheet, { onClose: () => { lendForm = null; chosen = null; } });
 
   async function loadItems(): Promise<void> {
-    items = (await api<{ items: LendItem[] }>("/api/staff/inventory")).items.filter((item) => item.itemType === PUBLIC_LENDING_ITEM_TYPE && item.status !== "INACTIVE");
+    items = (await readKept<{ items: LendItem[] }>("/api/staff/inventory")).items.filter((item) => item.itemType === PUBLIC_LENDING_ITEM_TYPE && item.status !== "INACTIVE");
   }
 
   function showChosen(): void {

@@ -155,7 +155,7 @@ export async function locationsWorkspace(): Promise<void> {
   }
 
   function openPlace(id: string | null): void {
-    if ((id ?? "") !== (openId ?? "") && !panel.discardOk()) return;
+    if ((id ?? "") !== (openId ?? "") && panel.unsaved()) { void panel.discardOk().then((discard) => { if (discard) openPlace(id); }); return; }
     dirty = false;
     openId = id;
     results.querySelectorAll(".is-open").forEach((row) => row.classList.remove("is-open"));

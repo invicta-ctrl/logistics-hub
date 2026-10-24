@@ -5,7 +5,7 @@ import { openViewer, photoPanel, rowThumb } from "./item-photo";
 import { inOrder, pathOf, placesOf } from "./location-tree";
 import type { PlaceRow } from "./staff";
 import { ageOf, loadSession, shell } from "./staff-shell";
-import { ApiError, type Html, api, emptyState, expired, failure, html, icon, live, mount, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, working, writeParams } from "./ui";
+import { api, ApiError, emptyState, expired, failure, type Html, html, icon, live, mount, onLeave, plural, preservingFocus, readKept, setMessage, sheet as createSheet, sheetContent, toast, working, writeParams } from "./ui";
 
 /*
  * Kits (/staff/kits): groupings such as a Sewing Kit, made of items that already exist. A kit holds no stock. Each component keeps its
@@ -83,13 +83,13 @@ export async function kitsWorkspace(): Promise<void> {
 
   const pathText = (id: string | null) => id ? pathOf(places, id) ?? null : null;
   const loadPlaces = async () => {
-    const { locations } = await api<{ locations: PlaceRow[] }>("/api/staff/locations");
+    const { locations } = await readKept<{ locations: PlaceRow[] }>("/api/staff/locations");
     placeRows = locations;
     places = placesOf(locations);
   };
   let recent: PickItem[] | null = null;
   const loadRecent = async () => { recent ??= (await api<{ items: PickItem[] }>("/api/staff/kit-recent")).items; return recent; };
-  const loadItems = async () => { pickable ??= (await api<{ items: PickItem[] }>("/api/staff/inventory")).items; return pickable; };
+  const loadItems = async () => { pickable ??= (await readKept<{ items: PickItem[] }>("/api/staff/inventory")).items; return pickable; };
 
   /* ---------- The list ---------- */
 
@@ -175,7 +175,7 @@ export async function kitsWorkspace(): Promise<void> {
   const sheetBody = () => sheetElement.querySelector<HTMLElement>(".sheet__body")!;
 
   async function openKit(id: string, next: Mode = "view"): Promise<void> {
-    if (id !== openId && !panel.discardOk()) return;
+    if (id !== openId && !(await panel.discardOk())) return;
     dirty = false;
     openId = id;
     mode = next;
@@ -359,7 +359,7 @@ export async function kitsWorkspace(): Promise<void> {
     const alert = form.querySelector<HTMLElement>("#kit-alert")!;
     componentsEditor(form.querySelector<HTMLElement>("#parts")!, draft, () => { dirty = true; });
     form.addEventListener("input", () => { dirty = true; });
-    form.querySelector("#kit-cancel")!.addEventListener("click", () => { if (!panel.discardOk()) return; dirty = false; mode = "view"; draw(); });
+    form.querySelector("#kit-cancel")!.addEventListener("click", async () => { if (!(await panel.discardOk())) return; dirty = false; mode = "view"; draw(); });
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = new FormData(form);
@@ -388,7 +388,7 @@ export async function kitsWorkspace(): Promise<void> {
   }
 
   async function newKit(): Promise<void> {
-    if (!panel.discardOk()) return;
+    if (!(await panel.discardOk())) return;
     dirty = false;
     openId = null;
     detail = null;
@@ -432,7 +432,7 @@ export async function kitsWorkspace(): Promise<void> {
   /* ---------- Templates ---------- */
 
   async function openTemplate(id: string | null): Promise<void> {
-    if (!panel.discardOk()) return;
+    if (!(await panel.discardOk())) return;
     dirty = false;
     openId = null;
     mode = "template";
@@ -530,7 +530,7 @@ export async function kitsWorkspace(): Promise<void> {
       if (field && itemId && marks.has(itemId)) marks.get(itemId)!.note = field.value;
     });
     sheetElement.querySelector("#check-all")!.addEventListener("click", () => { for (const part of components) if (!marks.has(part.itemId)) marks.set(part.itemId, { outcome: "OK", note: "" }); redraw(); });
-    sheetElement.querySelector("#check-cancel")!.addEventListener("click", () => { if (!panel.discardOk()) return; marks = new Map(); mode = "view"; draw(); });
+    sheetElement.querySelector("#check-cancel")!.addEventListener("click", async () => { if (!(await panel.discardOk())) return; marks = new Map(); mode = "view"; draw(); });
     const finish = sheetElement.querySelector<HTMLButtonElement>("#check-finish")!;
     // One id per check: if the answer is lost and this is pressed again, the server finds the check it already has.
     const checkId = `KC-${crypto.randomUUID()}`;

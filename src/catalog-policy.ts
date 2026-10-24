@@ -276,3 +276,116 @@ export const REVIEW_REASONS = {
   TEST: "A test made in Administration while Self-Service is closed; it changes nothing unless applied"
 } as const;
 export type ReviewReason = keyof typeof REVIEW_REASONS;
+
+/* ---------- Numbers and Student IDs (V1.16.4 §4.6): one rule module for the browser and the Worker ---------- */
+
+/** Why a typed number was refused. Each has its own message (`wholeMessage`). */
+export type WholeError = "EMPTY" | "NOT_NUMBER" | "NEGATIVE" | "FRACTION" | "EXPONENT" | "SEPARATOR" | "TOO_SMALL" | "TOO_LARGE";
+export type Whole = { ok: true; value: number } | { ok: false; error: WholeError };
+export type WholeDomain = { readonly min: number; readonly max: number; readonly signed?: boolean };
+
+/** Each quantity field's domain. A stepper may stop at the ends; a submit outside them is refused, never clamped. */
+export const WHOLE_DOMAINS = {
+  loanQuantity: { min: 1, max: 100_000 },
+  selfServiceQuantity: { min: 1, max: SELF_SERVICE_LIMITS.quantity },
+  count: { min: 0, max: 100_000 },
+  reorderLevel: { min: 0, max: 100_000 },
+  restockQuantity: { min: 1, max: 100_000 },
+  kitQuantity: { min: 1, max: 1_000 }
+} as const satisfies Record<string, WholeDomain>;
+
+/**
+ * A whole number exactly as typed: ASCII digits, with a leading minus only where the field is signed. Nothing is clamped, rounded
+ * or cut, and the text never goes through Number() unchecked, so `1e3`, `0x10`, `+5`, `5.0`, `2.5`, `1,000` and `１２` are each
+ * refused with what is wrong instead of being read as something else.
+ */
+export function parseWhole(text: string, domain: WholeDomain): Whole {
+  const value = text.trim();
+  if (!value) return { ok: false, error: "EMPTY" };
+  const negative = value.startsWith("-");
+  if (negative && !domain.signed && /^-[\d.]/.test(value)) return { ok: false, error: "NEGATIVE" };
+  const digits = negative ? value.slice(1) : value;
+  if (/^\d+$/.test(digits)) {
+    // Past 15 digits a number is no longer exact; every field's maximum is far below that.
+    const number = digits.length > 15 ? Infinity : Number(digits);
+    const signedNumber = negative ? -number : number;
+    if (signedNumber > domain.max) return { ok: false, error: "TOO_LARGE" };
+    if (signedNumber < domain.min) return { ok: false, error: "TOO_SMALL" };
+    return { ok: true, value: signedNumber === 0 ? 0 : signedNumber };
+  }
+  if (/^\d*\.\d*$/.test(digits) && /\d/.test(digits)) return { ok: false, error: "FRACTION" };
+  if (/^(\d+\.?\d*|\.\d+)e[-+]?\d+$/i.test(digits)) return { ok: false, error: "EXPONENT" };
+  if (/^\d+([,\s_'’]\d+)+$/.test(digits)) return { ok: false, error: "SEPARATOR" };
+  return { ok: false, error: "NOT_NUMBER" };
+}
+
+/** The same rule for a value from a JSON body or a form: a JSON number must already be a whole number in range; text is read as typed. */
+export function wholeJson(value: unknown, domain: WholeDomain): Whole {
+  if (typeof value === "string") return parseWhole(value, domain);
+  if (value === null || value === undefined) return { ok: false, error: "EMPTY" };
+  if (typeof value !== "number" || !Number.isFinite(value)) return { ok: false, error: "NOT_NUMBER" };
+  if (value < 0 && !domain.signed) return { ok: false, error: "NEGATIVE" };
+  if (!Number.isInteger(value)) return { ok: false, error: "FRACTION" };
+  if (value > domain.max) return { ok: false, error: "TOO_LARGE" };
+  if (value < domain.min) return { ok: false, error: "TOO_SMALL" };
+  return { ok: true, value: value === 0 ? 0 : value };
+}
+
+/** What each refusal says, the same on the phone, at the desk and from the Worker. `label` names the field in lower case ("quantity"). */
+export function wholeMessage(error: WholeError, label: string, domain: WholeDomain): string {
+  switch (error) {
+    case "EMPTY": return `Enter the ${label}.`;
+    case "NOT_NUMBER": return `Enter the ${label} in digits, like 12.`;
+    case "NEGATIVE": return `The ${label} can't be negative.`;
+    case "FRACTION": return `The ${label} must be a whole number.`;
+    case "EXPONENT": return `Write the ${label} out in full, like 1000.`;
+    case "SEPARATOR": return `Leave out commas and spaces in the ${label}.`;
+    case "TOO_SMALL": return `The ${label} must be at least ${domain.min}.`;
+    case "TOO_LARGE": return `The ${label} can be at most ${domain.max}.`;
+  }
+}
+
+/**
+ * A Student ID as it was typed or pasted: full-width digits from an input method become ASCII (NFKC), and the spaces and dashes of
+ * a written ID ("21-000115") go. Nothing is cut: a ninth digit stays, so the check below can say so.
+ */
+export const normalizeStudentId = (text: string): string => text.normalize("NFKC").replace(/[\s\-‐‑‒–—]/g, "");
+
+export type StudentIdError = "EMPTY" | "NOT_DIGITS" | "LENGTH";
+export const STUDENT_ID_MESSAGES: Record<StudentIdError, string> = {
+  EMPTY: "Enter the Student ID number.",
+  NOT_DIGITS: "A Student ID has digits only.",
+  LENGTH: "A Student ID has exactly 8 digits."
+};
+
+/** Exactly eight digits after normalising, leading zeros kept: the ID is text everywhere and never a number. Older records keep the wider pattern above. */
+export function validateStudentId(text: string): StudentIdError | null {
+  const id = normalizeStudentId(text);
+  if (!id) return "EMPTY";
+  if (!/^\d+$/.test(id)) return "NOT_DIGITS";
+  return id.length === 8 ? null : "LENGTH";
+}
+
+export type LoanDraft = { purpose: unknown; borrowerName: unknown; studentId: unknown; reason: unknown; quantity: unknown; uscOnly?: boolean };
+export type LoanField = "purpose" | "borrowerName" | "studentId" | "reason" | "quantity";
+/** The loan form's fields in the order both surfaces show them, so the first problem is the first field to fix. */
+export const LOAN_FIELDS: readonly LoanField[] = ["purpose", "borrowerName", "studentId", "reason", "quantity"];
+
+/**
+ * One loan policy for the desk and the phone (V1.16.4 §4.5, D1 and D3): Individual and USC use both need a full name, an 8-digit
+ * Student ID and a whole quantity; USC use adds its specific reason, and an item lent for USC use only refuses Individual use.
+ * Answers each field's problem in the words both surfaces show; an empty answer means the draft is complete.
+ */
+export function validateLoanDraft(draft: LoanDraft, quantity: WholeDomain = WHOLE_DOMAINS.loanQuantity): Partial<Record<LoanField, string>> {
+  const problems: Partial<Record<LoanField, string>> = {};
+  const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
+  if (draft.purpose !== "INDIVIDUAL" && draft.purpose !== "USC") problems.purpose = "Choose Individual use or USC use.";
+  else if (draft.purpose === "INDIVIDUAL" && draft.uscOnly) problems.purpose = "This item is lent for USC use only.";
+  if (!text(draft.borrowerName)) problems.borrowerName = "Enter the borrower's full name.";
+  const id = validateStudentId(text(draft.studentId));
+  if (id) problems.studentId = STUDENT_ID_MESSAGES[id];
+  if (draft.purpose === "USC" && !text(draft.reason)) problems.reason = "Enter the specific USC reason.";
+  const count = wholeJson(draft.quantity, quantity);
+  if (!count.ok) problems.quantity = wholeMessage(count.error, "quantity", quantity);
+  return problems;
+}

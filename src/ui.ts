@@ -1,6 +1,7 @@
 import { type VisualItem, itemIconSvg, resolveItemVisual } from "./item-icons";
 import { LABELS } from "./catalog-policy";
 import { frameByPhoto, seatOnPedestal, unframe } from "./photo-frame";
+import { confirmDiscard, confirmSessionEnded, entryState, hasUnsaved, raiseQuestion, trackEdits } from "./unsaved";
 
 export const app = document.querySelector<HTMLDivElement>("#app")!;
 
@@ -236,8 +237,16 @@ export function handOverQuery(): boolean {
   return true;
 }
 
+/**
+ * Moves within the app. A move someone chose (a link, the rail, a row) asks first while something is unsaved; a redirect (`replace`)
+ * never does: account redirects happen at sign-in, before any form, and an ended session asks in its own words (`expired`).
+ */
 export function navigate(path: string, replace = false, state: object = {}): void {
-  window.history[replace ? "replaceState" : "pushState"](state, "", path);
+  if (!replace && hasUnsaved()) {
+    void confirmDiscard().then((discard) => { if (discard) navigate(path, replace, state); });
+    return;
+  }
+  window.history[replace ? "replaceState" : "pushState"](entryState(state, replace), "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
@@ -329,7 +338,11 @@ export function sheetContent(kicker: Html | string, title: string, body: Html, t
     <div class="sheet__body">${body}</div>`;
 }
 
-export type Sheet = { open: (origin?: Element | null) => void; close: (force?: boolean) => void; discardOk: () => boolean };
+/**
+ * `discardOk` asks (Keep editing or Discard) when the sheet holds unsaved edits and answers whether it may go; `unsaved` says whether
+ * it would ask, so a caller can carry on at once when nothing is unsaved.
+ */
+export type Sheet = { open: (origin?: Element | null) => void; close: (force?: boolean) => void; discardOk: () => Promise<boolean>; unsaved: () => boolean };
 
 /**
  * The one sheet behaviour (side panel on desktop, bottom sheet on phones): modal open,
@@ -354,9 +367,18 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
     dialog.dataset.origin = "";
     document.addEventListener("scroll", detach, { once: true, passive: true });
   };
-  const discardOk = () => !options.dirty?.() || window.confirm("Discard your unsaved changes?");
+  // The sheet's edits count while it is open (V1.16.4 §4.7): every way out of it, and out of the page, asks first.
+  let closedByPlatform = false;
+  const edits = () => (dialog.open || closedByPlatform) && Boolean(options.dirty?.());
+  onLeave(trackEdits(edits));
+  const unsaved = () => hasUnsaved([edits]);
+  const discardOk = () => confirmDiscard([edits]);
+  /** Set while the sheet closes on purpose (its own close, or leaving the page); any other close is the platform's. */
+  let intended = false;
   const close = (force = false) => {
-    if (!dialog.open || dialog.classList.contains("is-closing") || (!force && !discardOk())) return;
+    if (!dialog.open || dialog.classList.contains("is-closing")) return;
+    if (!force && unsaved()) { void discardOk().then((discard) => { if (discard) close(true); }); return; }
+    intended = true;
     if (reducedMotion()) return dialog.close();
     dialog.classList.add("is-closing");
     // Only the dialog's own exit animation ends the close; child animations bubble here too.
@@ -371,7 +393,10 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
     dialog.addEventListener("animationend", finish);
   };
   // A file input inside the sheet also fires a bubbling "cancel" when its picker is dismissed; only Escape on the dialog itself closes it.
-  dialog.addEventListener("cancel", (event) => { if (event.target !== dialog) return; event.preventDefault(); close(); });
+  // A cancel that cannot be refused (Android's back, pressed again) closes the sheet regardless; the close below handles that.
+  dialog.addEventListener("cancel", (event) => { if (event.target !== dialog || !event.cancelable) return; event.preventDefault(); close(); });
+  let lastFocus: HTMLElement | null = null;
+  dialog.addEventListener("focusin", (event) => { if (event.target instanceof HTMLElement) lastFocus = event.target; });
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog || (event.target as HTMLElement).closest("[data-close]")) close();
   });
@@ -379,6 +404,18 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
   // already moved it to the next page (an item's "All activity for this item" link must keep its ?item=).
   let leaving = false;
   dialog.addEventListener("close", () => {
+    // The platform closed a sheet that holds edits (Android's back without a cancellable event): it comes back, untouched, and asks.
+    closedByPlatform = !intended && !leaving;
+    const reopen = closedByPlatform && unsaved();
+    closedByPlatform = false;
+    if (reopen) {
+      dialog.showModal();
+      lastFocus?.focus({ preventScroll: true });
+      void discardOk().then((discard) => { if (discard) close(true); });
+      raiseQuestion();
+      return;
+    }
+    intended = false;
     addressHandedOn = leaving;
     leaving = false;
     // onClose runs first so a caller can take back content it lent to the sheet.
@@ -425,9 +462,11 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
       dialog.addEventListener("click", swallow, { capture: true, once: true });
       window.setTimeout(() => dialog.removeEventListener("click", swallow, { capture: true }), 0);
       const fast = distance > 40 && distance / Math.max(1, ended.timeStamp - startAt) > 0.6;
-      if (ended.type === "pointerup" && (distance > Math.min(160, dialog.offsetHeight / 4) || fast) && discardOk()) {
-        settle("translateY(100%)", () => { if (dialog.open) dialog.close(); dialog.style.transform = ""; });
-      } else settle("");
+      const away = ended.type === "pointerup" && (distance > Math.min(160, dialog.offsetHeight / 4) || fast);
+      const down = () => settle("translateY(100%)", () => { if (dialog.open) { intended = true; dialog.close(); } dialog.style.transform = ""; });
+      // Unsaved edits: the sheet settles back first, then asks; Discard closes it as Close does.
+      if (away && !unsaved()) down();
+      else settle("", away ? () => { void discardOk().then((discard) => { if (discard) close(true); }); } : undefined);
     };
     dialog.addEventListener("pointermove", move);
     dialog.addEventListener("pointerup", end);
@@ -445,7 +484,8 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
       anchor(origin);
     },
     close,
-    discardOk
+    discardOk,
+    unsaved
   };
 }
 
@@ -542,9 +582,89 @@ export async function api<T>(url: string, init: RequestInit = {}): Promise<T> {
   return body;
 }
 
-/** Sends a signed-out user back to sign in, explaining why. */
+let ending = false;
+/**
+ * Sends a signed-out user back to sign in, explaining why. Nothing held for the old session survives it. While something is unsaved
+ * it asks first (Stay keeps the page, so the text can still be copied).
+ */
 export function expired(): void {
-  navigate("/staff?expired=1", true);
+  forgetKept();
+  if (ending) return;
+  ending = true;
+  void confirmSessionEnded().then((leave) => {
+    ending = false;
+    if (leave) navigate("/staff?expired=1", true);
+  });
+}
+
+/* ---------- Kept answers (V1.16.4 §4.8) ----------
+ * The staff shell names the catalog-shaped reads (inventory, stock, locations, kits) to keep in memory for the signed-in account, so a
+ * page move draws at once from the last answer and asks the Worker only whether it changed (If-None-Match, a 304 when not). Memory
+ * only: never browser storage, never anything with a borrower in it, and gone on sign-out, on any ended session, when another account
+ * signs in and when another tab signs out. */
+
+type Kept = { etag: string; data: unknown; at: string };
+const kept = new Map<string, Kept>();
+let keptFor = "";
+let keepable = new Set<string>();
+
+/** Starts keeping the answers of `urls` for this account; another account's are dropped first. */
+export function keepFor(account: string, urls: readonly string[]): void {
+  keepable = new Set(urls);
+  if (account === keptFor) return;
+  kept.clear();
+  keptFor = account;
+}
+export function forgetKept(): void { kept.clear(); keptFor = ""; }
+const keepAnswer = (url: string, etag: string, data: unknown) => { if (keptFor && keepable.has(url) && etag) kept.set(url, { etag, data, at: new Date().toISOString() }); };
+
+/**
+ * A kept read for pickers (Loans, Kits, Activity): the kept answer at once when there is one, which is then checked in the background;
+ * otherwise the Worker's. What it lists is for choosing; every write is still checked by the Worker.
+ */
+export async function readKept<T>(url: string): Promise<T> {
+  const held = kept.get(url);
+  const fresh = fetch(url, { credentials: "same-origin", headers: { accept: "application/json", ...(held ? { "if-none-match": held.etag } : {}) } }).then(async (response) => {
+    if (response.status === 304 && held) return held.data as T;
+    const body = await response.json().catch(() => ({})) as T & { error?: string };
+    if (!response.ok) throw new ApiError(response.status, body.error ?? "Something went wrong. Please try again.", body as Record<string, unknown>);
+    keepAnswer(url, response.headers.get("etag") ?? "", body);
+    return body;
+  }, () => { throw new ApiError(0, "You appear to be offline. Check your connection and try again."); });
+  if (!held) return fresh;
+  fresh.catch((error) => { if (error instanceof ApiError && error.status === 401) expired(); });
+  return held.data as T;
+}
+
+/* ---------- Requests started early, and the running release ---------- */
+
+const early = new Map<string, { at: number; answer: Promise<unknown> }>();
+/** Starts a read now (a cold staff page asks who is signed in while its code loads); `takePrefetched` hands the answer over once. */
+export function prefetch(url: string): void {
+  const answer = api(url);
+  answer.catch(() => undefined);
+  early.set(url, { at: Date.now(), answer });
+}
+/** The prefetched answer for `url`, once and only while it is fresh (ten seconds); `null` otherwise. */
+export function takePrefetched<T>(url: string): Promise<T> | null {
+  const started = early.get(url);
+  early.delete(url);
+  return started && Date.now() - started.at < 10_000 ? started.answer as Promise<T> : null;
+}
+
+/** The build this page was loaded from (vite.config.ts writes it into the page); empty in development. */
+const BUILD = document.querySelector<HTMLMetaElement>('meta[name="build"]')?.content ?? "";
+let runningBuild = "";
+/** Records the build the Worker says is running (the session answer carries it). */
+export function noteBuild(running: unknown): void {
+  if (typeof running === "string" && running && BUILD && running !== BUILD) runningBuild = running;
+}
+/**
+ * The release this page runs was replaced: the next page move loads the page afresh, so staff tabs pick up new releases. Never while
+ * something is unsaved, and once per release, so a mixed deploy cannot keep reloading.
+ */
+export function newerBuild(): string | null {
+  return runningBuild && !hasUnsaved() && sessionStorage.getItem("reloaded-for-build") !== runningBuild ? runningBuild : null;
 }
 
 /** The message to show for a failed request; an ended session also routes to sign in. */
@@ -582,6 +702,8 @@ const LIVE_TIMEOUT = 15_000;
 /** After this many checks in a row that found nothing new, an open view asks a third as often until something changes or the person acts. */
 const QUIET_AFTER = 6;
 const QUIET_SLOWDOWN = 3;
+/** Failed checks back off, doubling up to this, so a weak connection or a struggling Worker is not asked every few seconds. */
+const BACKOFF_LIMIT = 5 * 60_000;
 
 /**
  * Keeps a view current by polling an ETag'd endpoint. Unchanged data costs one
@@ -589,9 +711,15 @@ const QUIET_SLOWDOWN = 3;
  * One request is out at a time, so an older answer can never land after a newer
  * one; a refresh asked for meanwhile runs as soon as the current one ends, and
  * its promise resolves only after data fetched after the call has been applied.
+ *
+ * A kept answer (above) is drawn at once and labelled with its time until the Worker confirms or replaces it. Failed checks back off
+ * with jitter, doubling up to five minutes; an answer, coming back online or showing the tab again resets that. The status says
+ * truthfully which it is: connecting, showing data from a stated time, updated, not updating, or offline.
  */
 export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => Promise<void>; stop: () => void } {
-  let etag = options.etag ?? "";
+  const held = kept.get(url);
+  let etag = options.etag ?? held?.etag ?? "";
+  let failures = 0;
   let timer = 0;
   let settle = 0;
   let stopped = false;
@@ -605,14 +733,18 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
   let inFlight: AbortController | null = null;
   // The status names when this view last received changed data, not when it last asked.
   let changedAt = "";
-  const setStatus = (state: "live" | "offline" | "updated") => {
+  const setStatus = (state: "connecting" | "cached" | "live" | "offline" | "error" | "updated") => {
     const element = options.status?.();
     if (!element) return;
     if (state === "live" && element.dataset.state === "updated") return;
-    if (state === "offline") window.clearTimeout(settle);
+    if (state === "offline" || state === "error") window.clearTimeout(settle);
     element.dataset.state = state;
-    element.textContent = state === "offline" ? "Offline, retrying" : `Updated ${changedAt}`;
-    element.title = `Last checked ${formatTime(new Date().toISOString())}`;
+    element.textContent = state === "connecting" ? "Connecting…"
+      : state === "cached" ? `Showing data from ${changedAt}`
+      : state === "offline" ? "Offline, retrying"
+      : state === "error" ? "Not updating, retrying"
+      : `Updated ${changedAt}`;
+    if (state !== "connecting" && state !== "cached") element.title = `Last checked ${formatTime(new Date().toISOString())}`;
     if (state === "updated") {
       window.clearTimeout(settle);
       settle = window.setTimeout(() => { element.dataset.state = "live"; }, 4000);
@@ -631,13 +763,16 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
         if (stopped || id <= accepted) return !stopped;
         accepted = id;
         quiet = 0;
+        failures = 0;
         etag = response.headers.get("etag") ?? "";
+        keepAnswer(url, etag, data);
         changedAt = formatTime(new Date().toISOString());
         options.onData(data);
         if (loaded) setStatus("updated");
         loaded = true;
       } else if (response.status === 304) {
         quiet += 1;
+        failures = 0;
       } else {
         const body = await response.json().catch(() => ({})) as { error?: string };
         throw new ApiError(response.status, body.error ?? "Could not refresh.");
@@ -648,7 +783,9 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
     } catch (error) {
       if (stopped) return false;
       const failure = error instanceof ApiError ? error : new ApiError(0, "Offline");
-      setStatus("offline");
+      failures += 1;
+      setStatus(failure.status === 0 || !navigator.onLine ? "offline" : "error");
+      if (failure.status === 401) forgetKept();
       options.onError?.(failure);
       return failure.status !== 401;
     } finally {
@@ -668,20 +805,36 @@ export function live<T>(url: string, options: LiveOptions<T>): { refresh: () => 
       do { again = false; polling = await request(); } while (again && polling && !stopped);
       running = null;
       window.clearTimeout(timer);
-      if (polling && !stopped && document.visibilityState === "visible") timer = window.setTimeout(() => { scheduled = true; void tick(); }, quiet >= QUIET_AFTER ? options.interval * QUIET_SLOWDOWN : options.interval);
+      // A failing check waits twice as long each time (with jitter, so tabs do not ask together), up to five minutes.
+      const wait = failures ? Math.min(BACKOFF_LIMIT, options.interval * 2 ** failures) * (0.75 + Math.random() * 0.5)
+        : quiet >= QUIET_AFTER ? options.interval * QUIET_SLOWDOWN : options.interval;
+      if (polling && !stopped && document.visibilityState === "visible") timer = window.setTimeout(() => { scheduled = true; void tick(); }, wait);
     })();
     return running;
   };
-  const resume = () => { if (document.visibilityState === "visible") void tick(); };
+  const resume = () => { if (document.visibilityState === "visible") { failures = 0; void tick(); } };
+  const reconnect = () => { failures = 0; void tick(); };
   const stop = () => {
     stopped = true;
     inFlight?.abort();
     window.clearTimeout(timer);
     window.clearTimeout(settle);
     document.removeEventListener("visibilitychange", resume);
+    window.removeEventListener("online", reconnect);
   };
   document.addEventListener("visibilitychange", resume);
+  window.addEventListener("online", reconnect);
   onLeave(stop);
+  if (held) {
+    // The kept answer draws at once (a turn later, so the caller holds this poll first); the request below only confirms it.
+    changedAt = formatTime(held.at);
+    queueMicrotask(() => {
+      if (stopped || loaded) return;
+      loaded = true;
+      options.onData(held.data as T);
+      setStatus("cached");
+    });
+  } else queueMicrotask(() => { if (!stopped && !loaded) setStatus("connecting"); });
   void tick();
   return { refresh: tick, stop };
 }

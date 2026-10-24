@@ -59,6 +59,11 @@ function serviceWorker(): Plugin {
       const hash = createHash("sha256").update(Object.keys(bundle).sort().join("\n"));
       for (const name of PAGES) { const page = bundle[name]; hash.update(page?.type === "asset" ? String(page.source) : ""); }
       const version = hash.digest("hex").slice(0, 12);
+      // Each page names the build it belongs to, so a staff tab can tell when the Worker runs a newer one (V1.16.4 §4.8, src/ui.ts).
+      for (const name of PAGES) {
+        const page = bundle[name];
+        if (page?.type === "asset") page.source = String(page.source).replace("</head>", `  <meta name="build" content="${version}" />\n  </head>`);
+      }
       const output = await build({
         configFile: false,
         publicDir: false,

@@ -483,7 +483,6 @@ export async function workspace(): Promise<void> {
       writeParams({ item: null, add: null });
     }
   });
-  const discardOk = panel.discardOk;
   const closeSheet = () => panel.close(true);
   onLeave(() => { stopAdding(); dirty = false; });
 
@@ -495,7 +494,7 @@ export async function workspace(): Promise<void> {
   }
 
   function openItem(id: string, tab: Tab = "overview"): void {
-    if (openId !== id && !discardOk()) return;
+    if (openId !== id && panel.unsaved()) { void panel.discardOk().then((discard) => { if (discard) openItem(id, tab); }); return; }
     stopAdding();
     dirty = false;
     document.querySelectorAll("tr.is-open").forEach((element) => element.classList.remove("is-open"));
@@ -513,7 +512,8 @@ export async function workspace(): Promise<void> {
   }
 
   function openAdd(): void {
-    if (!session || !discardOk()) return;
+    if (!session) return;
+    if (panel.unsaved()) { void panel.discardOk().then((discard) => { if (discard) openAdd(); }); return; }
     stopAdding();
     const generation = addGeneration;
     dirty = false;

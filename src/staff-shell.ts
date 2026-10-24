@@ -6,7 +6,7 @@
 import type { DepartmentCode } from "./directory-policy";
 import { setAccess } from "./catalogue-store";
 import { staffDark } from "./theme";
-import { ApiError, CREST, MARK, type Html, type IconName, api, app, emptyState, failure, formatDate, html, icon, mount, navigate, onLeave, setMessage, toast } from "./ui";
+import { ApiError, CREST, MARK, type Html, type IconName, api, app, emptyState, expired, failure, forgetKept, formatDate, html, icon, keepFor, mount, navigate, noteBuild, onLeave, prefetch, setMessage, takePrefetched, toast } from "./ui";
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
 /** Who a sign-in is for: the staff of a USC department (DoL, DEM, …), an officer, or an administrator or owner (accounts.ts). */
@@ -15,6 +15,8 @@ export type Access = DepartmentCode | "OFFICER" | "ADMIN" | "OWNER";
 export const sessionAccess = (session: Pick<Session, "role"> & { access?: Access }): Access => session.access ?? (session.role === "STAFF" ? "DoL" : session.role);
 export const accessLabel = (access: Access | string): string => access === "OFFICER" ? "Officer" : access === "ADMIN" ? "Administrator" : access === "OWNER" ? "Owner" : `${access} Staff`;
 export type Session = {
+  /** `build`: the release the Worker is running (V1.16.4), so a tab on an older one reloads at its next page move. */
+  build?: string | null;
   id: string; username: string; displayName: string; role: Role; access?: Access; hub?: boolean; mustChangePassword: boolean; recovery: { configured: boolean; createdAt: string | null } | null; selfServiceReviews: number; selfServiceClosed: boolean;
   /** The Staff Directory entry linked to this sign-in, if an administrator linked one. */
   directory: { name: string; department: string; position: string | null } | null;
@@ -99,13 +101,35 @@ function railTips(): void {
 let known: Session | null = null;
 /** The page that last drew with the kept account. A page drawing itself again (after a change made on it) asks afresh. */
 let knownOn = "";
-/** Forgets the kept account: after signing out or in, and after changing one's own profile or password. */
-export const forgetSession = (): void => { known = null; };
+/** Forgets the kept account and every answer kept for it: after signing out or in, and after changing one's own profile or password. */
+export const forgetSession = (): void => { known = null; forgetKept(); };
 /** Where an account must go instead of this section, if anywhere. */
 const elsewhere = (session: Session, section: Section): string | null =>
   // Staff of other departments and officers have their account page only (the Worker refuses the rest anyway).
   (session.mustChangePassword || session.hub === false) && section !== "account" ? "/staff/account" : null;
-const keep = (session: Session) => { known = session.mustChangePassword || session.hub === false ? null : session; };
+/** The reads a page move may draw from at once (ui.ts): catalog-shaped, the same for every account, and never about a borrower. */
+const KEPT = ["/api/staff/inventory", "/api/staff/stock", "/api/staff/locations", "/api/staff/kits"];
+const keep = (session: Session) => {
+  noteBuild(session.build);
+  known = session.mustChangePassword || session.hub === false ? null : session;
+  // Answers are kept for one account at a time: another account's are dropped here.
+  if (known) keepFor(known.id, KEPT); else forgetKept();
+};
+// A cold staff page asks who is signed in as soon as this code runs, while the page's own code may still be loading (V1.16.4 §4.8).
+if (window.location.pathname.startsWith("/staff/") && window.location.pathname !== "/staff/catalogue" && navigator.onLine) prefetch("/api/staff/session");
+
+/*
+ * Every staff tab hears when another signs out or in (V1.16.4 §4.8), on one channel that carries nothing but the event. A sign-out
+ * elsewhere ended this tab's session too: it forgets what it kept and goes to sign in (asking first while something is unsaved). A
+ * sign-in elsewhere replaced the account behind this tab, so the next page asks afresh who that is.
+ */
+const sessions = "BroadcastChannel" in window ? new BroadcastChannel("staff-session") : null;
+sessions?.addEventListener("message", (event: MessageEvent<{ type?: string }>) => {
+  known = null;
+  forgetKept();
+  if (event.data?.type === "signed-out" && window.location.pathname.startsWith("/staff/") && window.location.pathname !== "/staff/catalogue") expired();
+});
+const tellOtherTabs = (type: "signed-in" | "signed-out") => { try { sessions?.postMessage({ type }); } catch { /* another tab finds out from the Worker */ } };
 
 /** Loads the signed-in account, or routes to sign-in / the forced password change. */
 export async function loadSession(section: Section): Promise<Session | null> {
@@ -121,19 +145,19 @@ export async function loadSession(section: Section): Promise<Session | null> {
     }).catch((error) => {
       if (!(error instanceof ApiError && error.status === 401)) return;
       known = null;
-      if (window.location.pathname === page) navigate("/staff", true);
+      if (window.location.pathname === page) expired();
     });
     return held;
   }
   try {
-    const session = await api<Session>("/api/staff/session");
+    const session = await (takePrefetched<Session>("/api/staff/session") ?? api<Session>("/api/staff/session"));
     const away = elsewhere(session, section);
     if (away) { navigate(away, true); return null; }
     keep(session);
     knownOn = page;
     return session;
   } catch (error) {
-    if (error instanceof ApiError && error.status === 401) { navigate("/staff", true); return null; }
+    if (error instanceof ApiError && error.status === 401) { forgetKept(); navigate("/staff", true); return null; }
     // Staff tools never work offline (there are no offline credentials); Self-Service does.
     const offline = error instanceof ApiError && error.status === 0;
     mount(app, html`<main id="main-content" class="container page-message">${offline
@@ -306,8 +330,9 @@ function watchAttention(): void {
 
 /** Signs out here, in the staff workspace or the Catalog. */
 export async function signOut(): Promise<void> {
-  known = null;
+  forgetSession();
   try { await api("/api/staff/logout", { method: "POST" }); } catch { /* the session is dropped client-side regardless */ }
+  tellOtherTabs("signed-out");
   // Signing out ends offline cataloguing on this device too (the server ended its lease); what waits here stays for the next sign-in.
   await setAccess(null);
   navigate("/staff", true);
@@ -318,7 +343,7 @@ export async function signOut(): Promise<void> {
 
 export function staffLogin(): void {
   // Whoever signs in next is asked for afresh.
-  known = null;
+  forgetSession();
   document.title = "Staff sign in · Department of Logistics";
   const ended = new URLSearchParams(window.location.search).has("expired");
   mount(app, html`<main id="main-content" class="auth">
@@ -378,6 +403,7 @@ export function staffLogin(): void {
     setMessage(alert, "");
     try {
       const result = await api<{ mustChangePassword: boolean }>("/api/staff/login", { method: "POST", body: JSON.stringify({ username: values.get("username"), password: values.get("password") }) });
+      tellOtherTabs("signed-in");
       // The installed Catalog signs in here and goes back to the Catalogue; nothing else is accepted as a destination.
       const next = new URLSearchParams(window.location.search).get("next");
       navigate(result.mustChangePassword ? "/staff/account" : next && /^\/staff\/catalogue(\?session=CS-[0-9a-f-]{36})?$/.test(next) ? next : "/staff/home");

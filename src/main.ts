@@ -7,7 +7,8 @@ import "./styles.css";
 import { landing, lending, notFound, offlinePage } from "./public";
 import { isStandalone, startPwa } from "./pwa";
 import { startTheme, syncTheme } from "./theme";
-import { MARK, app, handOverQuery, html, leave, mount, navigate, shown, toast } from "./ui";
+import { MARK, app, handOverQuery, html, leave, mount, navigate, newerBuild, shown, toast } from "./ui";
+import { holdMove } from "./unsaved";
 
 type View = () => void | Promise<void>;
 
@@ -99,6 +100,15 @@ async function render(): Promise<void> {
   sessionStorage.removeItem("reloaded-for-page");
   // Opened or refreshed on a staff page: the bar and the page's shape show at once, while its code and the session load, instead of
   // a blank screen (V1.15 perceived performance). The page replaces it whole; in-app moves keep the page they leave until then.
+  // A newer release is running (the session answer says so): this move loads the page afresh instead, so the tab picks it up.
+  const newer = !first && path.startsWith("/staff/") ? newerBuild() : null;
+  if (newer) {
+    sessionStorage.setItem("reloaded-for-build", newer);
+    window.location.reload();
+    return;
+  }
+  // A cold staff page loads the shell beside its own code; the shell asks who is signed in as soon as it runs (V1.16.4 §4.8).
+  if (first && path.startsWith("/staff/") && !catalogRoute(path)) void import("./staff-shell").catch(() => undefined);
   if (first && path.startsWith("/staff/") && !app.childElementCount) mount(app, staffPlaceholder);
   else if (!first && path.startsWith("/staff/") && !catalogRoute(path)) showNextPage(path);
   let view: View;
@@ -179,6 +189,8 @@ window.addEventListener("unhandledrejection", (event) => {
 
 // A same-page #fragment jump, or an overlay's own history entry (the photo viewer), also fires popstate; only a new path or query is a new view.
 window.addEventListener("popstate", () => {
+  // Back or Forward while something is unsaved is put back and asked about first (unsaved.ts).
+  if (holdMove()) return;
   if (window.location.pathname + window.location.search === shown.address) return;
   if (window.location.pathname === new URL(shown.address, window.location.href).pathname && handOverQuery()) {
     shown.address = window.location.pathname + window.location.search;
