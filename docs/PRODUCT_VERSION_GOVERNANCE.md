@@ -62,6 +62,14 @@ Before starting a post-release change:
 - Any change to how version metadata is encoded must reuse the single governed build/Administration route and have denial, rollback, stale-cache and cross-device tests. Never expose private build.json or add a duplicate Administration panel.
 - Before the V1.16 version UI is actually deployed, maintain truthful release records; do not claim the planned UI is already live.
 
+## 5A. Pre-merge version guard (owner-authorized policy replacement, 2026-10-23)
+
+- The protected GitHub `checks` job executes `node --test tests/version-governance.test.mjs` and `node scripts/verify-product-version.mjs`. It compares an exact PR base/previous-main commit to the candidate with full Git history. No new product version is minted for documentation, tests, agent governance or CI-only changes.
+- For a product/runtime/build change, the gate requires a changed `product-release.json`, a valid successive version, updated canonical release record, 2–5 plain notes matching the running System parser (2–180 characters), and an immutable full source SHA verified as an ancestor of the candidate. It rejects further product edits after that source checkpoint. This is a **source/metadata gate**, not proof of deploy completion, ownership, security acceptance or business accuracy.
+- **Current V1.16 authority wins:** V1.16's independently delivered pre-acceptance slices were approved under its accepted specification and are not retroactively assigned fabricated V1.15.x patch labels. After V1.16 is actually accepted/deployed, its next independently qualified product fix becomes V1.16.1. The accepted roadmap advances V1.16 → V2.1–V2.9 → V3.0; the checker explicitly recognizes those release boundaries. Historical unknown V1.15 deployments stay UNKNOWN in the separate evidence register.
+- Before treating this CI guard as enforceable, verify the exact current branch-protection required-check rules and deployed Cloudflare Workers Builds trigger. Workers Builds automatically deploys pushes to `main` independently of GitHub CI; the Deploy workflow remains dry-run until the separately accepted V1.17 cutover. An extra CI check does not silently make production CI-gated.
+- New release versions still require the applicable accepted specification, reviewed diff, green exact-head CI and CodeQL, owner release authority, production preflight/rollback and authenticated version readback. The guard adds no new billing, Worker, D1/R2, migration or production configuration write.
+
 ## 6. Mandatory agent release checklist
 
 Before each independent merge/release, Codex, Claude and Forge MUST check and state in the release record:

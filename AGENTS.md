@@ -23,6 +23,8 @@ Product versions for Road to V3 remain **V2.1–V2.9** (RTV3-01–RTV3-09) then 
 
 Every qualifying main merge must have a verified version identity, concise changelog/release record, tests, deployment evidence and truthful Administration > System display **once the accepted V1.16 version feature is actually deployed**. Until then record the revision in repository evidence without pretending the UI exists. Incomplete slices never merge or count as released. This is permanent, not V1.16-only; see detailed governing contract.
 
+**CI release gate:** Every product-changing PR is also checked by `scripts/verify-product-version.mjs` in the required `checks` job, using the exact base and governed artifact metadata; it does not substitute for CI security, Workers Builds/rollback postflight, or owner acceptance. The accepted V1.16 pre-release exception is historical, and V1.16's next verified patch is V1.16.1. See `docs/PRODUCT_VERSION_GOVERNANCE.md` §5A. Do not invent historic V1.15.x revisions.
+
 ## Non-negotiables
 
 - Codex's existing writable/local-preview worktree remains `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`. A second isolated writable Claude UI worktree is permitted **only** under `docs/specs/accepted/2026-10-14-isolated-agent-worktrees.md` and an accepted bounded UI slice.
