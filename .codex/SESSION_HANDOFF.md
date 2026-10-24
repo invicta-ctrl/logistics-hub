@@ -1,6 +1,6 @@
 # Session Handoff — Logistics Hub
 
-**2026-10-24 | V1.16.1 RELEASED_VERIFIED: the IP-0.2 redesign is live. Nothing is in progress.** Production serves `main` `ce4a57e` (V1.16.1, application source `03019a9`), byte-identical to a local build. Main CI, CodeQL and the Deploy dry run are SUCCESS. Earl confirmed V1.16.1 and its five notes in Administration > System and that his QA of the new screens is good. The record is `docs/road-to-v2/releases/v1.16.1.md`, and V1.16 before it is RELEASED_VERIFIED too. Rollback is the V1.16 build of `main` `3eb9e73`. The next independently merged product change is V1.16.2. Do not reopen V1.16, V1.16.1, PR59 or PR #61: all are done. The live pointer is `.codex/CURRENT.md`; this handoff agrees with it.
+**2026-10-24 | V1.16.1 RELEASED_VERIFIED. In progress: V1.16.2, a fix for list thumbnails of background-removed photos (record `docs/road-to-v2/releases/v1.16.2.md`).** Production serves `main` `ce4a57e` (V1.16.1, application source `03019a9`), byte-identical to a local build. Main CI, CodeQL and the Deploy dry run are SUCCESS. Earl confirmed V1.16.1 and its five notes in Administration > System and that his QA of the new screens is good. The record is `docs/road-to-v2/releases/v1.16.1.md`, and V1.16 before it is RELEASED_VERIFIED too. Rollback is the V1.16 build of `main` `3eb9e73`. The next independently merged product change is V1.16.2. Do not reopen V1.16, V1.16.1, PR59 or PR #61: all are done. The live pointer is `.codex/CURRENT.md`; this handoff agrees with it.
 
 ## Current handoff — 2026-10-24
 

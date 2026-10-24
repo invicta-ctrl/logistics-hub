@@ -1,12 +1,9 @@
 {
-  "version": "V1.16.1",
-  "sourceCommit": "03019a98065ebe04ac78ced7582656aacc0c6758",
-  "record": "docs/road-to-v2/releases/v1.16.1.md",
+  "version": "V1.16.2",
+  "sourceCommit": "f8b68fc708a0d6727cab784e72aadae183405936",
+  "record": "docs/road-to-v2/releases/v1.16.2.md",
   "changes": [
-    "A new front page: search the Lending Hub straight from it, with the Logistics services listed underneath.",
-    "Staff navigation is a grouped side rail on computers and tablets, and Home, Find and More on phones.",
-    "Home and Attention are one workspace: one queue with filters, and the chosen record opens beside it.",
-    "Administrators catalogue in Administration › Catalog; staff use the installed Catalog app. Place checks start in Locations.",
-    "Item photos take their own background, cut-outs stand on a pedestal, and photo controls open from the photo."
+    "A photo whose background was removed keeps its place in item lists instead of covering the item's name.",
+    "A photo taken against a white background keeps a visible tile edge in lists, so the item no longer seems to float."
   ]
 }
