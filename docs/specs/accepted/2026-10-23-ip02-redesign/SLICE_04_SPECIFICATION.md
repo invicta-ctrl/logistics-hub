@@ -1,6 +1,6 @@
 # Every staff page in the revision-3 language — slice specification
 ID: LH-IP02-S04 · revision 4
-STATUS: ACCEPTED BY OWNER, 23 October 2026 / NO IMPLEMENTATION GO
+STATUS: ACCEPTED BY OWNER, 23 October 2026 / IMPLEMENTED 24 October 2026 (V1.16.3)
 Prepared against `slice/ip02-shell-home-landing` at `ff7458a`. Runs after LH-IP02-S03, which owns the Catalog, Locations' place checks and picture presentation; S04 reuses what S03 lands and does not redo it.
 
 INTENT: Finish the redesign: every staff page body speaks the language the shell and Home already speak.
@@ -75,4 +75,24 @@ Limited to assertions that depend on page structure:
 
 ## Acceptance record
 - 23 October 2026, Earl: "I accept revision 4's visual intent and LH-IP02-S03 and LH-IP02-S04 as written."
-- Pending: a separate implementation GO, given after LH-IP02-S03 lands.
+- 24 October 2026, Earl: "ship the v2 package", answered as "IP-0.2 redesign, S04", after S03 shipped as V1.16.1. That is the implementation GO; S04 ships as V1.16.3.
+- 24 October 2026, Earl, during the slice, from his phone (folded in as owner directions):
+  - **Phone clutter:**
+    - Items rows: picture, name with its ID and kind, quantity over status; place, alias and the open-units line are left to the item's sheet.
+    - The sheet's close button keeps its corner beside a long title, and sheets open without a focus ring on it.
+    - The pedestal's note becomes a corner badge on a small tile; the place lines get room.
+    - Home's reasons are one sideways row, with Filters and the count on one line; the queue rows drop the repeated "Open the item" link (guarded actions stay).
+  - **One place for an item's picture:**
+    - Pressing the picture, or its icon before there is a photo, opens one menu: add or change the photo, crop, background, choose an icon, remove.
+    - "Take photo" goes, because the phone's own picker already offers the camera.
+    - The icon and photo-or-icon choices move from Review & edit to an Item picture sheet opened from that menu.
+    - On a phone the menu is a bottom action sheet.
+  - **Swipe to dismiss:** a phone's sheet can be dragged down by its header to close it; unsaved changes still ask first.
+  - **The pedestal and photo-matched frames reach the public Lending Hub and Self-Service.**
+- **Implemented on `slice/ip02-s04-page-bodies`:**
+  - **Shared language:** the page frame (48/56 titles, actions level with the lede), quiet views, a pill search, one Filters button at every width, and rows on rules.
+  - **Pages:** Items (one primary action; filters open on arrival when the address narrows the list); Stock (Update stock as a sheet at every width); Activity (by day, with time, module icon and sentence).
+  - **Administration and account:** My account in two columns; System's checks as a ruled list; figures on a ruled line; places, kits and loans as rows.
+  - **Capabilities:** none dropped. Every view, count, filter, address key and guarded action stays.
+- **Files beyond the manifest** (all for the owner's directions above): `src/item-photo.ts`, `src/item-visual-control.ts`, `src/item-visual.css`, `src/ui.ts` (sheet focus and swipe; framing everywhere), `src/attention.css`, `tests/browser/locations.spec.ts` and `tests/worker-browser/worker-visuals.spec.ts`.
+- **Not done in this slice:** a readiness meter on kit rows and item pictures on loan rows. Their current rows keep their content, now on rules.

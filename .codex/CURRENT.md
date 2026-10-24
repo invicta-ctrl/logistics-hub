@@ -1,6 +1,6 @@
 # Current Work Pointer — Logistics Hub
 
-**2026-10-24 | V1.16.1 RELEASED_VERIFIED. In progress: V1.16.2, a fix for list thumbnails of background-removed photos (record `docs/road-to-v2/releases/v1.16.2.md`).** Production serves `main` `ce4a57e` (V1.16.1, application source `03019a9`), byte-identical to a local build. Main CI, CodeQL and the Deploy dry run are SUCCESS. Earl confirmed V1.16.1 and its five notes in Administration > System and that his QA of the new screens is good. The record is `docs/road-to-v2/releases/v1.16.1.md`, and V1.16 before it is RELEASED_VERIFIED too. Rollback is the V1.16 build of `main` `3eb9e73`. The next independently merged product change is V1.16.2.
+**2026-10-24 | V1.16.1 RELEASED_VERIFIED. V1.16.2 (list thumbnails of background-removed photos) is deployed, awaiting Earl's System check. In progress: V1.16.3, LH-IP02-S04 and Earl's phone directions (record `docs/road-to-v2/releases/v1.16.3.md`).** Production serves `main` `ce4a57e` (V1.16.1, application source `03019a9`), byte-identical to a local build. Main CI, CodeQL and the Deploy dry run are SUCCESS. Earl confirmed V1.16.1 and its five notes in Administration > System and that his QA of the new screens is good. The record is `docs/road-to-v2/releases/v1.16.1.md`, and V1.16 before it is RELEASED_VERIFIED too. Rollback is the V1.16 build of `main` `3eb9e73`. The next independently merged product change is V1.16.2.
 
 ## Current release checkpoint — 2026-10-24
 
