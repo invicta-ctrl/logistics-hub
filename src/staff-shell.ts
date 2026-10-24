@@ -91,13 +91,46 @@ function railTips(): void {
   onLeave(() => { hide(); document.removeEventListener("keydown", onKey); window.removeEventListener("scroll", hide, { capture: true }); });
 }
 
+/**
+ * The signed-in account, kept for this page's lifetime so moving between staff pages draws at once (Earl, 2026-10-24). Every move still
+ * asks the Worker again in the background, and a sign-out, an ended session or a required password change takes effect there. An account
+ * that must change its password, or one outside the Hub, is never kept.
+ */
+let known: Session | null = null;
+/** The page that last drew with the kept account. A page drawing itself again (after a change made on it) asks afresh. */
+let knownOn = "";
+/** Forgets the kept account: after signing out or in, and after changing one's own profile or password. */
+export const forgetSession = (): void => { known = null; };
+/** Where an account must go instead of this section, if anywhere. */
+const elsewhere = (session: Session, section: Section): string | null =>
+  // Staff of other departments and officers have their account page only (the Worker refuses the rest anyway).
+  (session.mustChangePassword || session.hub === false) && section !== "account" ? "/staff/account" : null;
+const keep = (session: Session) => { known = session.mustChangePassword || session.hub === false ? null : session; };
+
 /** Loads the signed-in account, or routes to sign-in / the forced password change. */
 export async function loadSession(section: Section): Promise<Session | null> {
+  const page = window.location.pathname;
+  if (known && navigator.onLine && page !== knownOn) {
+    const held = known;
+    knownOn = page;
+    // Draw now with the account already known; the Worker's answer arrives behind it and is what the next move uses.
+    void api<Session>("/api/staff/session").then((fresh) => {
+      keep(fresh);
+      const away = elsewhere(fresh, section);
+      if (away && window.location.pathname === page) navigate(away, true);
+    }).catch((error) => {
+      if (!(error instanceof ApiError && error.status === 401)) return;
+      known = null;
+      if (window.location.pathname === page) navigate("/staff", true);
+    });
+    return held;
+  }
   try {
     const session = await api<Session>("/api/staff/session");
-    if (session.mustChangePassword && section !== "account") { navigate("/staff/account", true); return null; }
-    // Staff of other departments and officers have their account page only (the Worker refuses the rest anyway).
-    if (session.hub === false && section !== "account") { navigate("/staff/account", true); return null; }
+    const away = elsewhere(session, section);
+    if (away) { navigate(away, true); return null; }
+    keep(session);
+    knownOn = page;
     return session;
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) { navigate("/staff", true); return null; }
@@ -273,6 +306,7 @@ function watchAttention(): void {
 
 /** Signs out here, in the staff workspace or the Catalog. */
 export async function signOut(): Promise<void> {
+  known = null;
   try { await api("/api/staff/logout", { method: "POST" }); } catch { /* the session is dropped client-side regardless */ }
   // Signing out ends offline cataloguing on this device too (the server ended its lease); what waits here stays for the next sign-in.
   await setAccess(null);
@@ -283,6 +317,8 @@ export async function signOut(): Promise<void> {
 /* ---------- Sign in ---------- */
 
 export function staffLogin(): void {
+  // Whoever signs in next is asked for afresh.
+  known = null;
   document.title = "Staff sign in · Department of Logistics";
   const ended = new URLSearchParams(window.location.search).has("expired");
   mount(app, html`<main id="main-content" class="auth">

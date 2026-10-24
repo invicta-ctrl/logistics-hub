@@ -50,6 +50,27 @@ const catalogRoute = (path: string) => path === "/staff/catalogue";
 const staffPlaceholder = html`<header class="app-bar"><div class="app-bar__inner"><span class="app-bar__brand" aria-hidden="true"><span>${MARK}</span></span></div></header>
   <main id="main-content" class="app-main" aria-busy="true"><div class="page-header"><span class="skeleton skeleton--heading"></span></div><div class="skeleton skeleton--block"></div></main>`;
 
+/** A page's shape while its code and data load: title and lede, a strip of views, and rows. */
+const pageSkeleton = html`<header class="page-header" aria-hidden="true"><div class="page-header__title"><span class="skeleton skeleton--heading"></span><span class="skeleton skeleton--text"></span></div></header>
+  <div class="views views--loading" aria-hidden="true"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--text"></span></div>
+  <div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 8 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></div>`)}</div>
+  <p class="visually-hidden" role="status">Loading</p>`;
+
+/**
+ * A move between staff pages (Earl, 2026-10-24): the page being left lets go at once, the rail marks where it is going, and the next page's
+ * shape shows while its code and data load, so the switch itself is instant. Nothing of the old page lingers or keeps polling meanwhile.
+ */
+function showNextPage(path: string): void {
+  const main = document.querySelector<HTMLElement>("#main-content.app-main");
+  if (!main || !document.querySelector(".app-bar")) return;
+  leave();
+  for (const link of document.querySelectorAll<HTMLAnchorElement>(".app-nav__link[href]")) {
+    if (link.getAttribute("href") === path) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
+  }
+  main.setAttribute("aria-busy", "true");
+  mount(main, pageSkeleton);
+}
+
 let navigation = 0;
 // A fresh page load already starts at the top, so only in-app navigation moves focus to the page body. It never does inside a
 // frame (Administration's Self-Service test panel): that would pull focus out of the page around it.
@@ -79,6 +100,7 @@ async function render(): Promise<void> {
   // Opened or refreshed on a staff page: the bar and the page's shape show at once, while its code and the session load, instead of
   // a blank screen (V1.15 perceived performance). The page replaces it whole; in-app moves keep the page they leave until then.
   if (first && path.startsWith("/staff/") && !app.childElementCount) mount(app, staffPlaceholder);
+  else if (!first && path.startsWith("/staff/") && !catalogRoute(path)) showNextPage(path);
   let view: View;
   try {
     // Staff tools are not cached. Render their offline message before attempting an

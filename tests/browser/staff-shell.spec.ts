@@ -136,3 +136,42 @@ test.describe("the account menu", () => {
     await expect(avatar).toHaveAttribute("aria-expanded", "false");
   });
 });
+
+test("moving between staff pages is instant: the rail and the next page's shape show at once, before its session and data answer (Earl, 2026-10-24)", async ({ page }) => {
+  const session = { authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", access: "DoL", hub: true, mustChangePassword: false, recovery: null, selfServiceReviews: 0, selfServiceClosed: false, directory: null };
+  const item = { id: "ITM-0001", name: "Sample marker", aliases: null, category: "SUPPLIES", itemType: "Consumable", unit: "piece", status: "ACTIVE", needsReview: false, lendingAudience: "NOT_AVAILABLE_FOR_LENDING",
+    onHand: 4, reorderThreshold: 0, locationId: null, legacyLocation: null, openReports: 0, listed: false, stockArea: "Inventory", expiresOn: null, lastCountedAt: null, reorderStatus: null, onLoan: 0,
+    consumptionMode: "WHOLE_UNIT", openUnits: 0, openCondition: null, photoId: null, visualType: null, iconKey: null, updatedAt: "2026-10-03T00:00:00.000Z", model: null, serialNumber: null };
+  let sessionReads = 0;
+  let releaseStock: () => void = () => {};
+  const stockHeld = new Promise<void>((resolve) => { releaseStock = resolve; });
+  await page.route("**/api/staff/session", async (route) => {
+    sessionReads += 1;
+    // After the first page, the server is slow to say who is signed in; the next page must not wait for it.
+    if (sessionReads > 1) await new Promise((resolve) => setTimeout(resolve, 1_500));
+    await route.fulfill({ json: session });
+  });
+  await page.route("**/api/staff/attention/summary", (route) => route.fulfill({ json: { needsAction: 0, bySource: {} } }));
+  await page.route("**/api/staff/inventory", (route) => route.fulfill({ headers: { etag: '"r1"' }, json: { revision: 1, items: [item], categories: ["SUPPLIES"], locations: [], units: ["piece"] } }));
+  await page.route("**/api/staff/stock", async (route) => {
+    await stockHeld;
+    await route.fulfill({ headers: { etag: '"r1"' }, json: { revision: 1, items: [item], locations: [], reorders: [], activity: [] } });
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/staff/items");
+  await expect(page.getByRole("heading", { name: "Items", level: 1 })).toBeVisible();
+  // Load Stock's code first, as pointing at its link does, so the measurement is the move itself.
+  await page.getByRole("link", { name: "Stock" }).hover();
+  await page.waitForTimeout(300);
+
+  const started = Date.now();
+  await page.getByRole("link", { name: "Stock" }).click();
+  // The page and rail switch at once, with the skeleton standing in while the data is held back.
+  await expect(page.getByRole("heading", { name: "Stock", level: 1 })).toBeVisible({ timeout: 1_000 });
+  expect(Date.now() - started).toBeLessThan(1_000);
+  await expect(page.getByRole("link", { name: "Stock" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { name: "Items", level: 1 })).toHaveCount(0);
+  await expect(page.locator("#stock-results[aria-busy=true]")).toBeVisible();
+  releaseStock();
+  await expect(page.locator("#stock-results")).not.toHaveAttribute("aria-busy", "true");
+});

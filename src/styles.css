@@ -638,6 +638,8 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .review-meter progress::-moz-progress-bar { border-radius: var(--radius-pill); background: var(--ok-dot); }
 .review-meter .text-link { font-size: var(--text-sm); }
 .views { display: flex; gap: var(--space-1); overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+.views--loading { gap: var(--space-6); padding-block: var(--space-3); }
+.views--loading .skeleton { width: 6rem; }
 /* A strip of views or tabs that does not fit (a 320 px phone) fades at the side that has more, so a cut label reads as "scroll
    for more", not as clipped text. Driven by the strip's own scroll: a strip that fits has no timeline, so no fade. */
 @property --strip-fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }

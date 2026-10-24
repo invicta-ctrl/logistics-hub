@@ -2,7 +2,7 @@ import "./admin.css";
 import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
 import { ACCESS_HINT, accessChoices, accessTag, bindCopy, canManage, oneTime } from "./account-ui";
 import { adminPage, confirmImpact } from "./admin-frame";
-import { type Access, type Role, accessLabel, loadSession, sessionAccess, shell } from "./staff-shell";
+import { type Access, type Role, accessLabel, forgetSession, loadSession, sessionAccess, shell } from "./staff-shell";
 import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
 
 type Row = { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number };
@@ -278,6 +278,7 @@ export async function myAccount(): Promise<void> {
     try {
       await api("/api/staff/me/password", { method: "POST", body: JSON.stringify({ currentPassword: values.get("currentPassword"), newPassword: values.get("newPassword") }) });
       toast("Password changed. Your other devices were signed out.");
+      forgetSession();
       if (session.mustChangePassword) navigate("/staff/home", true);
       else { passwordForm.reset(); setMessage(alert, ""); }
     } catch (error) { setMessage(alert, failure(error)); } finally { settle(); }
@@ -291,7 +292,7 @@ export async function myAccount(): Promise<void> {
     try {
       const result = await api<{ changed: number }>("/api/staff/me", { method: "PATCH", body: JSON.stringify({ displayName: values.get("displayName"), username: values.get("username") }) });
       toast(result.changed ? "Profile saved." : "No changes to save.");
-      if (result.changed) navigate("/staff/account", true);
+      if (result.changed) { forgetSession(); navigate("/staff/account", true); }
     } catch (error) { setMessage(form.querySelector("#profile-alert")!, failure(error)); } finally { settle(); }
   });
 
