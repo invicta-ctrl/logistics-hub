@@ -6,10 +6,10 @@
 
 - **V1.16:** RELEASED_VERIFIED and closed. On Earl's direction ("LAUNCH V2 NOW"), the coordinator declares V2 ready for Road to V3, as the V1.16 spec's final gate allows.
 - **V1.16.1 (in progress):** Earl chose to ship the IP-0.2 redesign as the next revision: LH-IP02-S01, S02 and S03 on `slice/ip02-shell-home-landing`, PR #61. Done:
-  - the version identity: `product-release.json`, application source `75508ae`;
+  - the version identity: `product-release.json`, application source `03019a9`;
   - the release record: `docs/road-to-v2/releases/v1.16.1.md`;
   - the accepted specifications, in `docs/specs/accepted/2026-10-23-ip02-redesign/`;
-  - an independent review; its eight findings are fixed in `75508ae`.
+  - an independent review (eight findings, fixed in `75508ae`) and the pull request's review (two findings, fixed in `03019a9`).
   Left:
   - exact-head CI, CodeQL and Worker E2E;
   - a fast-forward merge, then the deploy check;

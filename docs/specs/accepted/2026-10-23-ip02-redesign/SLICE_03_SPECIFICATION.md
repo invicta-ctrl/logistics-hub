@@ -132,3 +132,7 @@ A new fixture file is added only by naming it here first.
   - **Independent review before release:** eight findings, all fixed in `75508ae`. The most serious: a remembered place that had since been retired (409) failed every Catalog sheet start. The others: the remembered place was not kept, the sheet's title id was shared, stone-coloured originals were put on a pedestal, the photo menu lacked menu keys and had a toggle, and a dead Back press followed a cleared Attention entry.
   - **Files beyond the manifest, for those fixes:** `src/catalogue-places.ts` (one remembered-place helper shared by the app and the sheet), `src/catalogue-workspace.ts` (uses it) and `src/attention-workspace.ts` (S01's file).
   - **Specs in the repository:** this packet's accepted specifications are copied to `docs/specs/accepted/2026-10-23-ip02-redesign/` for the release record.
+- 24 October 2026, the pull request's own review (Codex), two findings, fixed in `03019a9` with tests that fail on the old code:
+  - Bounded Attention lists now put what needs a person first. This is a one-line ordering change in `src/attention.ts`, the Worker; the counts and the API's shape are unchanged. Without it, Home's today-and-this-week view could hide a low-stock item behind 100 restocks already requested.
+  - A link within Attention now sets the queue's filters from the address.
+  - **Outside the manifest:** `src/attention.ts` and `tests/attention.test.ts`, which the S01 manifest excluded as backend. Recorded here as review fixes of S01's Home default.
