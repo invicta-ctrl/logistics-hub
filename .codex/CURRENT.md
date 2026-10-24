@@ -5,12 +5,15 @@
 ## Current release checkpoint — 2026-10-24
 
 - **V1.16:** RELEASED_VERIFIED and closed. On Earl's direction ("LAUNCH V2 NOW"), the coordinator declares V2 ready for Road to V3, as the V1.16 spec's final gate allows.
-- **V1.16.1 (in progress):** Earl chose to ship the IP-0.2 redesign as the next revision: LH-IP02-S01, S02 and S03 on `slice/ip02-shell-home-landing`, PR #61. It needs:
-  - its version identity and release record;
+- **V1.16.1 (in progress):** Earl chose to ship the IP-0.2 redesign as the next revision: LH-IP02-S01, S02 and S03 on `slice/ip02-shell-home-landing`, PR #61. Done:
+  - the version identity: `product-release.json`, application source `75508ae`;
+  - the release record: `docs/road-to-v2/releases/v1.16.1.md`;
+  - the accepted specifications, in `docs/specs/accepted/2026-10-23-ip02-redesign/`;
+  - an independent review; its eight findings are fixed in `75508ae`.
+  Left:
   - exact-head CI, CodeQL and Worker E2E;
-  - an independent review;
   - a fast-forward merge, then the deploy check;
-  - Earl's Administration > System check of V1.16.1.
+  - Earl's Administration > System check of V1.16.1, then RELEASED_VERIFIED.
   LH-IP02-S04 is accepted but not started and is not part of V1.16.1.
 - **V2.1 (RTV3-01):** not started. It needs Earl's acceptance of its specification under `docs/specs/accepted/road-to-v3/`; none exists yet.
 - **Pull requests:**

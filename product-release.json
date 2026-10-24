@@ -1,12 +1,12 @@
 {
-  "version": "V1.16",
-  "sourceCommit": "0636485f7dcde71c03810f1dc0e44d469c7906a5",
-  "record": "docs/road-to-v2/releases/v1.16.md",
+  "version": "V1.16.1",
+  "sourceCommit": "75508ae7b2012b3073dbb44d5dd9ed0daa93ba19",
+  "record": "docs/road-to-v2/releases/v1.16.1.md",
   "changes": [
-    "Photo and name suggestions stay optional: they never change stock or hold up saving, and your typing always wins.",
-    "Add items fills in Category and Counted in when a name clearly matches reviewed catalogue items, and says so underneath.",
-    "Administration's System page shows the running version and what's new in it.",
-    "Calmer screens: a new Home, side-by-side item details, quieter overdue loans, plain photo backdrops, a Dark theme, and steady Lending loading.",
-    "Faster staff pages and responsive photo saves: optional background cleanup continues quietly after the new photo appears."
+    "A new front page: search the Lending Hub straight from it, with the Logistics services listed underneath.",
+    "Staff navigation is a grouped side rail on computers and tablets, and Home, Find and More on phones.",
+    "Home and Attention are one workspace: one queue with filters, and the chosen record opens beside it.",
+    "Administrators catalogue in Administration › Catalog; staff use the installed Catalog app. Place checks start in Locations.",
+    "Item photos take their own background, cut-outs stand on a pedestal, and photo controls open from the photo."
   ]
 }
