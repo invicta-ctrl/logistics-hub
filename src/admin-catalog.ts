@@ -15,10 +15,6 @@ function stat(label: string, value: number, note: Html | string, warn = false): 
   return html`<div class="stat ${warn ? "stat--warn" : ""}"><dt>${label}</dt><dd><span class="stat__value">${value.toLocaleString()}</span><span class="stat__note">${note}</span></dd></div>`;
 }
 
-/** Where the Catalog app remembers the place last catalogued (catalogue-workspace.ts); the sheet starts there too. */
-const LAST_PLACE = "catalogue-last-place";
-const lastPlace = (): string | null => { try { return window.localStorage.getItem(LAST_PLACE); } catch { return null; } };
-
 /**
  * Administration > Catalog: cataloguing (LH-IP02-S03), how far classification has got, other names per item, the built-in hints, and the
  * AI setting's honest state. On the website administrators catalogue here, in a sheet; everyone else catalogues in the installed Catalog.
@@ -64,7 +60,7 @@ export async function catalogSettings(): Promise<void> {
       <p>Places and kits are looked after on their own pages: <a href="/staff/locations" data-route>Places</a> (where checking a place starts) and <a href="/staff/kits" data-route>Kits</a>.</p>
     </section>
     <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>
-    <dialog class="sheet sheet--add" id="catalog-sheet" aria-labelledby="sheet-title"></dialog>`
+    <dialog class="sheet sheet--add" id="catalog-sheet" aria-labelledby="catalog-sheet-title"></dialog>`
   });
   if (!session) return;
   let active = true;
@@ -104,11 +100,17 @@ export async function catalogSettings(): Promise<void> {
     mount(host, html`<div class="skeleton skeleton--block"></div>`);
     const current = () => mine === generation && host.isConnected && catalogSheet.open;
     try {
-      const [{ captureScreen }, { startSending }] = await Promise.all([import("./catalogue-capture"), import("./catalogue-sync")]);
+      const [{ captureScreen }, { startSending }, { rememberPlace, rememberedPlace }] = await Promise.all([import("./catalogue-capture"), import("./catalogue-sync"), import("./catalogue-places")]);
       if (!current()) return;
       const begin = (locationId: string | null) => api<{ id: string }>("/api/staff/catalogue/sessions", { method: "POST", body: JSON.stringify({ locationId }) });
-      // A remembered place that has since been retired starts the session with no place rather than not at all.
-      const sessionId = id ?? (await begin(lastPlace()).catch((error) => { if (error instanceof ApiError && error.status === 400 && lastPlace()) return begin(null); throw error; })).id;
+      // The session starts where this person last catalogued. A remembered place that has since been removed (400) or retired (409)
+      // is forgotten, and the session starts with no place rather than not at all.
+      const remembered = rememberedPlace();
+      const sessionId = id ?? (await begin(remembered).catch((error) => {
+        if (!(remembered && error instanceof ApiError && (error.status === 400 || error.status === 409))) throw error;
+        rememberPlace(null);
+        return begin(null);
+      })).id;
       if (!current()) return;
       startSending({ owner: session!.id, legacy: true });
       await captureScreen({ mode: "signed-in", session: session!, access: null }, sessionId, {
@@ -125,7 +127,7 @@ export async function catalogSettings(): Promise<void> {
   }
 
   start.addEventListener("click", () => {
-    mount(catalogSheet, sheetContent("Cataloguing session", "Catalog", html`<div id="catalog-host"></div>`));
+    mount(catalogSheet, sheetContent("Cataloguing session", "Catalog", html`<div id="catalog-host"></div>`, "catalog-sheet-title"));
     catalogPanel.open();
     void runSession(null);
   });

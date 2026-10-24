@@ -3,7 +3,7 @@ import { type DraftFieldName, type PhotoOutcome, composeDraft, needsAttention } 
 import type { ReviewOffer } from "./ai-review-types";
 import { confidentMatch, suggest, verified } from "./catalogue-suggest";
 import { type Detail, type Entry, type SessionRecord, type Snapshot, type SnapshotItem, drop, dropSession, durable, entries, keep, keepSession, sessions, setAccess, setSnapshot, snapshot } from "./catalogue-store";
-import { type PlaceList, bindNewPlace, newPlaceForm, placeList, placeOptions, refreshParents } from "./catalogue-places";
+import { type PlaceList, bindNewPlace, newPlaceForm, placeList, placeOptions, refreshParents, rememberPlace } from "./catalogue-places";
 import { onSyncChange, savedItem, signedOut, syncNow } from "./catalogue-sync";
 import { formatItemName, BEHAVIOURS, BEHAVIOUR_LABELS, type Behaviour, UNSORTED_CATEGORY } from "./catalog-policy";
 import { type Known as DuplicateKnown, type Match, possibleDuplicates } from "./duplicates";
@@ -333,6 +333,8 @@ export async function captureScreen(who: Signed, sessionId: string, hosted?: Hos
     scheduleReview();
     showPlace();
     if (direct) { direct.onDirty(true); return; }
+    // The next session, here or in Administration's Catalog sheet, starts where this one moved to.
+    rememberPlace(id || null);
     panel.hidden = true;
     $("#cat-place").setAttribute("aria-expanded", "false");
     // Where a resumed session opens, here and on the server; every capture also names its own place, so a failure here loses nothing.

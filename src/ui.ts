@@ -317,9 +317,10 @@ export function animateNumber(element: Element | null, to: number, from = Number
 /* ---------- Sheets ---------- */
 
 /** The shared sheet frame: kicker, title, close button, scrolling body. */
-export function sheetContent(kicker: Html | string, title: string, body: Html): Html {
+/** `titleId` names the title for the dialog's aria-labelledby; a page with a second sheet gives that one its own. */
+export function sheetContent(kicker: Html | string, title: string, body: Html, titleId = "sheet-title"): Html {
   return html`<header class="sheet__header">
-      <div><p class="sheet__kicker">${kicker}</p><h2 id="sheet-title">${title}</h2></div>
+      <div><p class="sheet__kicker">${kicker}</p><h2 id="${titleId}">${title}</h2></div>
       <button class="icon-button" type="button" aria-label="Close" data-close>${icon("close")}</button>
     </header>
     <div class="sheet__body">${body}</div>`;

@@ -246,7 +246,7 @@ export function startQueue(scope: QueueScope): void {
   function syncDocument(focus: boolean) {
     const entry = selected && data ? data.entries.find((candidate) => candidate.key === selected) : undefined;
     // An entry that is no longer here (cleared, or an old link) is let go quietly; the queue stays as it is.
-    if (selected && data && !entry) { selected = null; writeParams({ entry: null }); }
+    if (selected && data && !entry) { selected = null; if (window.history.state?.attnEntry) window.history.back(); else writeParams({ entry: null }); }
     markRows();
     if (!entry) {
       drawn = "";

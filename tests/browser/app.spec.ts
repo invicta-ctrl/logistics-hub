@@ -649,16 +649,18 @@ test("staff pictures take their own background, and a cleaned picture stands on 
   const item = (id: string, name: string, photoId: string) => ({ id, name, aliases: null, category: "OFFICE SUPPLIES", itemType: "Consumable", unit: "piece", status: "ACTIVE", needsReview: false,
     lendingAudience: "NOT_AVAILABLE_FOR_LENDING", onHand: 4, reorderThreshold: 0, locationId: null, legacyLocation: null, openReports: 0, listed: false, stockArea: "Inventory", expiresOn: null,
     lastCountedAt: null, reorderStatus: null, onLoan: 0, consumptionMode: "WHOLE_UNIT", openUnits: 0, openCondition: null, photoId, visualType: null, iconKey: null, updatedAt: "2026-10-03T00:00:00.000Z", model: null, serialNumber: null });
-  // Drawn pictures: a projector shot against a pale-blue wall, a cleaned picture flattened onto the stone, and a busy shelf.
+  // Drawn pictures: a projector shot against a pale-blue wall, a cleaned picture flattened onto the stone, a busy shelf, and a stapler
+  // photographed on a desk of nearly the stone's shade but lit unevenly, as a real photo is.
   const svg = (inner: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">${inner}</svg>`;
   const pictures: Record<string, string> = {
     [photo(1)]: svg('<rect width="160" height="160" fill="#dfe8f1"/><rect x="40" y="60" width="80" height="44" rx="8" fill="#2d2f33"/>'),
     [photo(2)]: svg('<rect width="160" height="160" fill="#e8e3dd"/><rect x="50" y="50" width="60" height="50" rx="10" fill="#c8302b"/>'),
-    [photo(3)]: svg('<rect width="160" height="160" fill="#20623b"/><rect width="80" height="160" fill="#f2c94c"/><rect y="80" width="160" height="80" fill="#5b2a86"/>')
+    [photo(3)]: svg('<rect width="160" height="160" fill="#20623b"/><rect width="80" height="160" fill="#f2c94c"/><rect y="80" width="160" height="80" fill="#5b2a86"/>'),
+    [photo(4)]: svg('<defs><linearGradient id="g"><stop offset="0" stop-color="#f0ebe5"/><stop offset="1" stop-color="#e0dbd5"/></linearGradient></defs><rect width="160" height="160" fill="url(#g)"/><rect x="50" y="60" width="60" height="30" rx="6" fill="#3b3f46"/>')
   };
   await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ authenticated: true, id: "ACC-1", username: "staff.one", displayName: "Staff One", role: "STAFF", access: "DoL", hub: true, mustChangePassword: false, recovery: null, selfServiceReviews: 0, selfServiceClosed: false, directory: null }) }));
   await page.route("**/api/staff/inventory", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify({ revision: 1,
-    items: [item("ITM-0001", "Projector", photo(1)), item("ITM-0002", "First aid kit", photo(2)), item("ITM-0003", "Shelf of supplies", photo(3))], categories: ["OFFICE SUPPLIES"], locations: [], units: ["piece"] }) }));
+    items: [item("ITM-0001", "Projector", photo(1)), item("ITM-0002", "First aid kit", photo(2)), item("ITM-0003", "Shelf of supplies", photo(3)), item("ITM-0004", "Stapler", photo(4))], categories: ["OFFICE SUPPLIES"], locations: [], units: ["piece"] }) }));
   await page.route("**/api/staff/media/*/thumb*", (route) => {
     const id = new URL(route.request().url()).pathname.split("/").at(-2)!;
     return route.fulfill({ contentType: "image/svg+xml", body: pictures[id] ?? svg("") });
@@ -675,4 +677,7 @@ test("staff pictures take their own background, and a cleaned picture stands on 
   // A busy edge keeps the neutral frame.
   await expect(frame(3)).toHaveClass(/item-visual--loaded/);
   await expect(frame(3)).not.toHaveClass(/photo-matched/);
+  // An original photo on a stone-coloured desk takes its colour but does not stand on a pedestal: only a cleaned picture does.
+  await expect(frame(4)).toHaveClass(/photo-matched/);
+  await expect(frame(4)).not.toHaveClass(/photo-pedestal/);
 });

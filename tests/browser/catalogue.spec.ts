@@ -223,6 +223,37 @@ test.describe("Administration › Catalog (LH-IP02-S03)", () => {
     await expect(sheet.getByRole("link", { name: "Back to Add items" })).toHaveCount(0);
     expect(server.state.finished).toBe(true);
   });
+
+  test("a remembered place that was retired starts the session with no place, and the place chosen in the sheet is remembered", async ({ page }) => {
+    const server = serve(page);
+    await server.ready;
+    const owner = { ...session, role: "OWNER", access: "OWNER" };
+    const answer = (body: unknown) => (route: Route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+    await page.route("**/api/staff/session", answer(owner));
+    await page.route("**/api/staff/admin/catalog", answer({ active: 3, unclassified: 0, captured: 0, capturedClassified: 0 }));
+    await page.route("**/api/staff/admin/catalog/aliases*", answer({ items: [], more: false }));
+    await page.route("**/api/staff/admin/catalog/proposals", answer({ proposals: [], metrics: [] }));
+    // The place this person last catalogued in has since been retired, so the server refuses to start a session there.
+    await page.route("**/api/staff/catalogue/sessions", async (route) => {
+      if ((route.request().postDataJSON() as { locationId?: string | null }).locationId === "LOC-RETIRED") {
+        await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "That place is inactive, so items cannot be kept there. Choose another place." }) });
+        return;
+      }
+      await route.fallback();
+    });
+    await page.addInitScript(() => window.localStorage.setItem("catalogue-last-place", "LOC-RETIRED"));
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.goto("/staff/admin/catalog");
+    await page.getByRole("button", { name: "Start cataloguing" }).click();
+    const sheet = page.getByRole("dialog", { name: "Catalog" });
+    await expect(sheet.getByText("Cataloguing in")).toBeVisible();
+    expect(server.state.starts).toEqual([{ locationId: null }]);
+    expect(await page.evaluate(() => window.localStorage.getItem("catalogue-last-place"))).toBeNull();
+    // Moving the session to a place makes the next session start there.
+    await sheet.locator("#cat-place").click();
+    await sheet.locator("#cat-place-select").selectOption("LOC-0003");
+    await expect.poll(() => page.evaluate(() => window.localStorage.getItem("catalogue-last-place"))).toBe("LOC-0003");
+  });
 });
 
 test.describe("starting and resuming", () => {
@@ -1628,6 +1659,19 @@ test("Save & remove background publishes the photo before its optional cleanup s
   await expect(page.getByText("Background removed.", { exact: true })).toBeVisible();
   await expect(panel.locator("[data-photo-menu]")).toBeFocused();
   await expect(panel).toHaveAttribute("data-changes", "2");
+  // The photo's menu works as a menu from the keyboard: it opens on its first choice, the arrow keys, Home and End move, and Escape
+  // gives focus back to the photo.
+  await page.keyboard.press("Enter");
+  await expect(panel.getByRole("menuitem", { name: "View larger" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(panel.getByRole("menuitem", { name: "Change photo" })).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(panel.getByRole("menuitem", { name: "Remove photo" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(panel.getByRole("menuitem", { name: "View larger" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(panel.getByRole("menu")).toBeHidden();
+  await expect(panel.locator("[data-photo-menu]")).toBeFocused();
   await panel.locator("input[type=file]:not([capture])").setInputFiles({ name: "ordinary-save.png", mimeType: "image/png", buffer: PNG });
   await panel.locator("[data-save]").click();
   await expect(panel.locator("[data-photo-menu]")).toBeFocused();

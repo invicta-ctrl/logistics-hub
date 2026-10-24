@@ -1,6 +1,12 @@
 import { MAX_DEPTH, type Place, inOrder, pathOf, placesOf } from "./location-tree";
 import { ApiError, type Html, api, failure, html, icon, mount, setMessage } from "./ui";
 
+/** The place this person last catalogued in on this device: the Catalog app and Administration's Catalog sheet both start there. */
+const LAST_PLACE = "catalogue-last-place";
+export const rememberedPlace = (): string | null => { try { return window.localStorage.getItem(LAST_PLACE); } catch { return null; } };
+/** Remembers a session's place; no place (or a place that has been retired) forgets it. A convenience only, so a failure is ignored. */
+export const rememberPlace = (id: string | null): void => { try { if (id) window.localStorage.setItem(LAST_PLACE, id); else window.localStorage.removeItem(LAST_PLACE); } catch { /* a convenience only */ } };
+
 /** The places a cataloguing session can be in: the tree's active places, each labelled with its full path. */
 export type PlaceList = { places: ReturnType<typeof placesOf>; paths: Map<string, string> };
 

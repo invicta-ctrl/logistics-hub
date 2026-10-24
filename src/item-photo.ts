@@ -306,8 +306,15 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     const open = host.querySelector<HTMLElement>(".photo-menu");
     const reopen = Boolean(open && menuOpen(open));
     mount(tile, picture); mount(actions, buttons); bindRowActionMenus(host);
+    // As a menu: opening it puts the keyboard on its first choice, unless a redraw already gave focus back to the one it had.
+    host.querySelector(".photo-menu")?.addEventListener("toggle", (event) => {
+      if ((event as ToggleEvent).newState !== "open") return;
+      requestAnimationFrame(() => { if (!host.querySelector(".photo-menu")?.contains(document.activeElement)) choices()[0]?.focus(); });
+    });
     if (reopen) host.querySelector<HTMLButtonElement>("[data-photo-menu]")?.click();
   };
+  /** The menu's choices that can be made now, in order. */
+  const choices = () => [...host.querySelectorAll<HTMLElement>(".photo-menu .menu__item:not(:disabled)")];
   const cleanupState = (): PhotoCleanup | null | undefined => options.cleanupState?.() ?? photo;
   const enableButton = (): Html => cleanupState()?.canEnable && options.enableCleanup ? html`<button type="button" class="button button--secondary button--sm" data-enable-cleanup ${busy() ? "disabled" : ""}>Enable background removal</button>` : html``;
   const cleanupHint = (): Html => options.cleanup && cleanupState()?.cleanupReason ? html`<p class="field__hint" role="status">${cleanupState()!.cleanupReason}</p>` : html``;
@@ -344,10 +351,11 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     if ("hidePopover" in menu && "showPopover" in HTMLElement.prototype) menu.hidePopover();
     else { menu.hidden = true; host.querySelector("[data-photo-menu]")?.setAttribute("aria-expanded", "false"); }
   };
-  /** Opens the photo's menu from elsewhere (the viewer's Edit photo) and puts the keyboard on its first choice. */
+  /** Opens the photo's menu from elsewhere (the viewer's Edit photo); opening it puts the keyboard on its first choice. Already open, it stays open. */
   const openMenu = () => {
-    host.querySelector<HTMLButtonElement>("[data-photo-menu]")?.click();
-    requestAnimationFrame(() => host.querySelector<HTMLElement>(".photo-menu .menu__item:not(:disabled)")?.focus());
+    const menu = host.querySelector<HTMLElement>(".photo-menu");
+    if (menu && menuOpen(menu)) choices()[0]?.focus();
+    else host.querySelector<HTMLButtonElement>("[data-photo-menu]")?.click();
   };
 
   const draw = () => {
@@ -506,6 +514,18 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       await failed(problem);
     } finally { void Promise.resolve(options.changed(photo)).catch(() => undefined); }
   };
+
+  // Up, Down, Home and End move between the menu's choices, as in any menu; Tab and Escape keep their own meaning.
+  host.addEventListener("keydown", (event) => {
+    const current = (event.target as HTMLElement).closest<HTMLElement>(".photo-menu .menu__item");
+    if (!current) return;
+    const list = choices();
+    const at = list.indexOf(current);
+    const to = { ArrowDown: (at + 1) % list.length, ArrowUp: (at - 1 + list.length) % list.length, Home: 0, End: list.length - 1 }[event.key];
+    if (to === undefined || !list[to]) return;
+    event.preventDefault();
+    list[to].focus();
+  });
 
   host.addEventListener("click", async (event) => {
     const target = event.target as HTMLElement;

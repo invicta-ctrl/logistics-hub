@@ -11,9 +11,13 @@ import { subjectCrop } from "./cutout-share";
 const SIZE = 24;
 /** The largest spread of a colour channel along the edge that still reads as one colour. */
 const UNIFORM = 12;
-/** The stone a cut-out's thumbnail is flattened onto (item-photo.ts STAGE), and how far JPEG compression may move it. */
+/**
+ * The stone a cut-out's thumbnail is flattened onto (item-photo.ts STAGE), how far JPEG compression may move it, and how even that edge is.
+ * A photo merely taken against a wall of a similar shade is lit unevenly, so it stays a framed photo rather than standing on a pedestal.
+ */
 const STAGE = [0xe8, 0xe3, 0xdd] as const;
-const STAGE_TOLERANCE = 8;
+const STAGE_TOLERANCE = 4;
+const STAGE_SPREAD = 3;
 let canvas: HTMLCanvasElement | null = null;
 
 export type Backdrop = { colour: string; cutout: boolean };
@@ -41,7 +45,7 @@ export function backdropOf(image: CanvasImageSource): Backdrop | null {
     const spread = Math.max(...[0, 1, 2].map((channel) => Math.sqrt(edge.reduce((sum, pixel) => sum + (pixel[channel]! - mean[channel]!) ** 2, 0) / edge.length)));
     if (spread > UNIFORM) return null;
     const [red, green, blue] = mean.map(Math.round);
-    return { colour: `rgb(${red} ${green} ${blue})`, cutout: mean.every((value, channel) => Math.abs(value - STAGE[channel]!) <= STAGE_TOLERANCE) };
+    return { colour: `rgb(${red} ${green} ${blue})`, cutout: spread <= STAGE_SPREAD && mean.every((value, channel) => Math.abs(value - STAGE[channel]!) <= STAGE_TOLERANCE) };
   } catch {
     // A picture the browser will not let the page read keeps the neutral frame.
     return null;

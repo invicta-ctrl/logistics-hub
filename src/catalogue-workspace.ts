@@ -1,7 +1,7 @@
 import { checkScreen, checksCard } from "./audit-screen";
 import { captureScreen } from "./catalogue-capture";
 import { type Who, identify, prepare, readiness, ready, refreshSnapshot, turnOff, turnOn } from "./catalogue-offline";
-import { bindNewPlace, newPlaceForm, placeList, placeOptions } from "./catalogue-places";
+import { bindNewPlace, newPlaceForm, placeList, placeOptions, rememberPlace, rememberedPlace } from "./catalogue-places";
 import { type Access, type Detail, type Entry, type SessionInfo, type SessionRecord, drop, entries, keep, keepSession, sessions, snapshot } from "./catalogue-store";
 import { onSyncChange, sendable, startSending, syncNow } from "./catalogue-sync";
 import { BEHAVIOUR_LABELS, BULK_LIMIT, type Behaviour } from "./catalog-policy";
@@ -24,10 +24,6 @@ import { ApiError, type Html, api, emptyState, failure, formatDateTime, html, ic
 type Waiting = { id: string; name: string; place: string | null; capturedAt: string; photoId: string | null; onHand: number; unit: string };
 type State = { session: SessionInfo | null; others: SessionInfo[]; reviewLater: { total: number; items: Waiting[] } };
 type Signed = Exclude<Who, { mode: "closed" } | { mode: "signed-out" }>;
-const LAST_PLACE = "catalogue-last-place";
-
-const remembered = (): string | null => { try { return window.localStorage.getItem(LAST_PLACE); } catch { return null; } };
-const remember = (id: string) => { try { window.localStorage.setItem(LAST_PLACE, id); } catch { /* a convenience only */ } };
 const day = (at: number) => new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(at));
 /** Where sign-in should come back to. */
 export const signInHere = (expired = false) => `/staff?${expired ? "expired=1&" : ""}next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
@@ -119,7 +115,8 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
   const list = placeList(places);
   const records = await sessions();
   const mine = current(records, who.session.id, state?.session ?? null);
-  const choice = remembered() && list.places.get(remembered()!)?.active ? remembered() : null;
+  const remembered = rememberedPlace();
+  const choice = remembered && list.places.get(remembered)?.active ? remembered : null;
   const online = who.mode !== "offline";
   mount(root, html`
     <div id="cat-held"></div>
@@ -171,7 +168,7 @@ async function draw(root: HTMLElement, who: Signed, state: State | null, places:
   go.addEventListener("click", async () => {
     go.disabled = true;
     setAlert(alert, "");
-    remember(select.value);
+    rememberPlace(select.value);
     try {
       navigate(`/staff/catalogue?session=${await start(who, select.value, list.paths.get(select.value) ?? null)}`);
     } catch (error) {
