@@ -108,6 +108,27 @@ test.describe("Attention inbox", () => {
     await expect(page.locator("#attn-count")).toHaveText("1 to act on");
   });
 
+  test("a link within Attention sets the queue as a fresh visit would: an insight's one kind, then the bell's everything", async ({ page }) => {
+    await mock(page, [overdue(1), out, kit, unclassified]);
+    await page.goto("/staff/attention?source=Stock");
+    await expect(page.locator("#attn-count")).toHaveText("1 to act on");
+    // An insight's link to one kind, followed on the same page.
+    await page.evaluate(() => {
+      const link = Object.assign(document.createElement("a"), { href: "/staff/attention?reason=CLASSIFY", textContent: "Sort the unsorted" });
+      link.dataset.route = "";
+      document.querySelector("#main-content")!.append(link);
+    });
+    await page.getByRole("link", { name: "Sort the unsorted" }).click();
+    await expect(page).toHaveURL(/\/staff\/attention\?reason=CLASSIFY$/);
+    await expect(page.locator("#attn-only")).toContainText("Showing only Items not yet sorted");
+    await expect(page.getByLabel("From")).toHaveValue("");
+    await expect(page.locator("#attn-count")).toHaveText("1 when there is time");
+    // The bell's plain Attention link shows everything again, and a poll keeps it so.
+    await page.locator(".app-bell").click();
+    await expect(page.locator("#attn-only")).toBeHidden();
+    await expect(page.locator("#attn-count")).toHaveText("3 to act on · 1 when there is time");
+  });
+
   test("a long group shows five, opens to all, and says when only the oldest are listed", async ({ page }) => {
     await mock(page, Array.from({ length: 100 }, (_, index) => overdue(index)));
     await page.goto("/staff/attention");

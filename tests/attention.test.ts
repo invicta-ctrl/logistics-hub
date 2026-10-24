@@ -301,6 +301,29 @@ describe("kits", () => {
   });
 });
 
+describe("bounded lists", () => {
+  it("list what needs a person first, so a long backlog of requested restocks never hides one that is not requested", async () => {
+    const add = sqlite.prepare("INSERT INTO items(id, name, category, item_type, unit, status, needs_review, reorder_threshold) VALUES(?, ?, 'SUPPLIES', 'Consumable', 'piece', 'ACTIVE', 0, 2)");
+    const asked = sqlite.prepare("INSERT INTO reorders(id, item_id, status, created_at, updated_at) VALUES(?, ?, 'NEEDS_RESTOCK', ?, ?)");
+    const at = new Date().toISOString();
+    // 120 items out of stock with a restock already requested (when there is time) sort by name ahead of one nobody has asked for yet.
+    for (let n = 0; n < 120; n += 1) {
+      const id = `ITM-ASK-${String(n).padStart(4, "0")}`;
+      add.run(id, `A-Asked ${String(n).padStart(4, "0")}`);
+      asked.run(`RO-ASK-${n}`, id, at, at);
+    }
+    add.run("ITM-ASK-LAST", "A-Zz not requested");
+    const all = await inbox();
+    const out = all.entries.filter((entry) => entry.reason === "STOCK_OUT");
+    expect(out).toHaveLength(100);
+    expect(out.find((entry) => entry.title === "A-Zz not requested")).toMatchObject({ urgency: "NOW" });
+    // Everything for today or this week comes before what can wait.
+    const firstLater = out.findIndex((entry) => entry.urgency === "LATER");
+    expect(out.slice(firstLater).every((entry) => entry.urgency === "LATER")).toBe(true);
+    expect(all.groups.find((group) => group.reason === "STOCK_OUT")!.byUrgency.LATER).toBeGreaterThanOrEqual(120);
+  });
+});
+
 describe("catalog completeness", () => {
   it("asks to classify an Unclassified item and to place an item with no place, and clears each when it is done", async () => {
     const unclassified = await item("Mystery box", 1, { itemType: "NEEDS_REVIEW", needsReview: true });

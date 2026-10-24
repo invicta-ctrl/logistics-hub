@@ -302,8 +302,15 @@ export function startQueue(scope: QueueScope): void {
   }
 
   // Back and forward reach the document through the address alone.
+  // Back, forward and links within the page (an insight's reason, the bell's plain Attention) reach the queue through the address
+  // alone: its filters, its one kind and its open entry are read as a fresh visit reads them.
   ownQuery(() => {
-    selected = new URLSearchParams(window.location.search).get("entry");
+    const query = new URLSearchParams(window.location.search);
+    for (const [select, key] of [[source, "source"], [urgency, "urgency"], [age, "age"]] as const) { select.value = ""; pick(select, query.get(key)); }
+    only = query.get("reason");
+    selected = query.get("entry");
+    if (narrowed()) setFilters(true);
+    if (data) render();
     syncDocument(true);
   });
   const onWidth = () => { drawn = ""; syncDocument(false); };

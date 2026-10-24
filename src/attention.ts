@@ -276,7 +276,9 @@ const byUrgency = (rows: Array<{ urgency: Urgency; n: number }>): Record<Urgency
 
 const bindFor = (reason: Reason, today: string, now: number) => reason.bind?.(today, now) ?? [];
 
-const listSql = (reason: Reason) => `SELECT ${reason.cols}, ${reason.urgency} AS urgency ${reason.from} ORDER BY ${reason.order} LIMIT ${PER_REASON}`;
+// Each list is bounded, so what needs a person comes first: a long backlog for when there is time (restocks already requested) never
+// pushes out an entry for today or this week, which Home's view would otherwise lose. Within an urgency the reason's own order holds.
+const listSql = (reason: Reason) => `SELECT ${reason.cols}, ${reason.urgency} AS urgency ${reason.from} ORDER BY CASE ${reason.urgency} WHEN 'NOW' THEN 0 WHEN 'SOON' THEN 1 ELSE 2 END, ${reason.order} LIMIT ${PER_REASON}`;
 const countSql = (reason: Reason) => `SELECT ${reason.urgency} AS urgency, COUNT(*) AS n ${reason.from} GROUP BY 1`;
 
 async function kitEntries(db: D1Database) {
