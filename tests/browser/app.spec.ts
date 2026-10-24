@@ -690,3 +690,103 @@ test("staff pictures take their own background, and a cleaned picture stands on 
   expect(await frame(1).evaluate((element) => getComputedStyle(element).boxShadow)).not.toBe("none");
   await page.locator("table").first().screenshot({ path: "test-results/browser/item-thumbnails.png" });
 });
+
+test("phones: Items rows keep picture, name, quantity and status; an item sheet keeps its close button, a clear pedestal and one picture menu (LH-IP02-S04)", async ({ page }) => {
+  const photo = "00000000-0000-4000-8000-0000000000c1";
+  const base = { aliases: null, category: "OFFICE SUPPLIES", unit: "box", status: "ACTIVE", needsReview: false, lendingAudience: "INDIVIDUAL", reorderThreshold: 0, legacyLocation: null, openReports: 0, listed: true,
+    stockArea: "Inventory", expiresOn: null, lastCountedAt: "2026-10-03T00:00:00.000Z", reorderStatus: null, onLoan: 0, consumptionMode: "WHOLE_UNIT", openUnits: 0, openCondition: null, visualType: null, iconKey: null, updatedAt: "2026-10-03T00:00:00.000Z", model: null, serialNumber: null };
+  const clips = { ...base, id: "ITM-0473", name: "33mm Paper Clips (Assorted)", itemType: "Consumable", onHand: 2, locationId: "LOC-2", photoId: photo, consumptionMode: "GRADUAL", openUnits: 1, openCondition: "PLENTY" };
+  const calc = { ...base, id: "ITM-0463", name: "8-Digit Calculator", itemType: "Loanable", unit: "piece", onHand: 4, locationId: "LOC-2", photoId: null };
+  const svg = (inner: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">${inner}</svg>`;
+  const detailOf = (item: typeof clips | typeof calc, extra: Record<string, unknown>) => ({ item: { ...item, notes: null, listingGaps: [], photoCleanup: { cleanable: true, canEnable: false, cleanupReason: "" }, location: null, legacyReportedAvailable: null,
+    migratedOnHand: 0, migrationDelta: null, legacySourceSheet: null, legacySourceRow: null, verificationNote: null, importedFrom: null, ...extra }, movements: [], loans: [], openUnits: [], reports: [], events: [], usesRecorded: 0, unitsEmptied: 0 });
+  await page.route("**/api/staff/session", (route) => route.fulfill({ json: { authenticated: true, id: "ACC-1", username: "owner.one", displayName: "Owner One", role: "OWNER", access: "OWNER", hub: true, mustChangePassword: false, recovery: null, selfServiceReviews: 0, selfServiceClosed: false, directory: null } }));
+  await page.route("**/api/staff/inventory", (route) => route.fulfill({ headers: { etag: '"r1"' }, json: { revision: 1, items: [calc, clips], categories: ["OFFICE SUPPLIES"],
+    locations: [{ id: "LOC-1", name: "Cabinet 1", parentId: null, active: true }, { id: "LOC-2", name: "Row 2", parentId: "LOC-1", active: true }], units: ["box", "piece"] } }));
+  await page.route("**/api/staff/media/*/thumb*", (route) => route.fulfill({ contentType: "image/svg+xml", body: svg('<rect width="160" height="160" fill="#e8e3dd"/><rect x="60" y="40" width="40" height="80" rx="4" fill="#4b2a86"/>') }));
+  await page.route(`**/api/staff/media/${photo}/cutout*`, (route) => route.fulfill({ contentType: "image/svg+xml", body: svg('<rect x="60" y="40" width="40" height="80" rx="4" fill="#4b2a86"/>') }));
+  await page.route("**/api/staff/items/ITM-0473", (route) => route.fulfill({ json: detailOf(clips, { photo: { id: photo, width: 160, height: 160, cutout: true, cutoutThumb: true, cleanable: true } }) }));
+  await page.route("**/api/staff/items/ITM-0463", (route) => route.fulfill({ json: detailOf(calc, { photo: null }) }));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/staff/items");
+  await expect(page.locator("tr[data-key=ITM-0473]")).toBeVisible();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: "test-results/browser/phone-items.png" });
+  // A row is picture, name with its reference, and quantity over status: one compact block, the status beside the name, not under it.
+  for (const key of ["ITM-0463", "ITM-0473"]) {
+    const row = page.locator(`tr[data-key=${key}]`);
+    expect((await row.boundingBox())!.height).toBeLessThan(110);
+    const status = (await row.locator(".col-status").boundingBox())!;
+    expect(status.x).toBeGreaterThan(195);
+  }
+  await expect(page.locator("tr[data-key=ITM-0473] .cell-place")).toBeHidden();
+
+  // The cut-out's sheet: the close button keeps its corner beside a long title, and the pedestal's note is a badge that leaves the item clear.
+  await page.locator("tr[data-key=ITM-0473] .row-link").click();
+  const sheet = page.getByRole("dialog", { name: "33mm Paper Clips (Assorted)" });
+  await expect(sheet.getByRole("heading", { name: "33mm Paper Clips (Assorted)" })).toBeVisible();
+  await page.waitForTimeout(500);
+  const title = (await sheet.getByRole("heading", { name: "33mm Paper Clips (Assorted)" }).boundingBox())!;
+  const close = (await sheet.getByRole("button", { name: "Close" }).first().boundingBox())!;
+  expect(close.y).toBeLessThan(title.y + title.height);
+  expect(close.x + close.width).toBeGreaterThan(330);
+  await expect(sheet.locator(".photo-tile__note-text")).toHaveCSS("width", "1px");
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: "test-results/browser/phone-item-sheet.png" });
+  await sheet.getByRole("button", { name: "Close" }).first().click();
+
+  // An item without a photo: its icon opens one menu (add a photo, or choose the icon); there is no separate Take photo.
+  await page.locator("tr[data-key=ITM-0463] .row-link").click();
+  const calcSheet = page.getByRole("dialog", { name: "8-Digit Calculator" });
+  const tile = calcSheet.getByRole("button", { name: /^Add photo or choose an icon/ });
+  await expect(tile).toBeVisible();
+  await expect(calcSheet.getByRole("button", { name: "Take photo" })).toHaveCount(0);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: "test-results/browser/phone-item-empty.png" });
+  await tile.click();
+  await expect(calcSheet.getByRole("menuitem", { name: "Add photo" })).toBeVisible();
+  // On a phone the picture's menu is an action sheet along the bottom, wherever the picture sits.
+  const menuBox = (await calcSheet.locator(".photo-menu").boundingBox())!;
+  expect(Math.round(menuBox.y + menuBox.height)).toBeGreaterThanOrEqual(840);
+  expect(Math.round(menuBox.width)).toBe(390);
+  await page.screenshot({ path: "test-results/browser/phone-item-empty-menu.png" });
+  await calcSheet.getByRole("menuitem", { name: "Choose icon" }).click();
+  // The menu closes as its choice opens the picture sheet.
+  await expect(calcSheet.locator(".photo-menu")).toBeHidden();
+  const picture = page.getByRole("dialog", { name: "Item picture" });
+  await expect(picture.getByRole("button", { name: "Choose another icon" })).toBeVisible();
+  await page.screenshot({ path: "test-results/browser/phone-item-picture.png" });
+  // Review & edit no longer carries the picture controls.
+  await expect(calcSheet.locator("form #item-visual-control")).toHaveCount(0);
+  await picture.getByRole("button", { name: "Close" }).first().click();
+  await expect(picture).toBeHidden();
+
+  // Swipe down on the sheet's header to dismiss it: a short drag settles back, a long one closes the sheet.
+  const header = calcSheet.locator(".sheet__header").first();
+  const at = (await header.locator("h2").boundingBox())!;
+  await page.mouse.move(at.x + 20, at.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 20, at.y + 40, { steps: 4 });
+  await page.mouse.up();
+  await expect(calcSheet).toBeVisible();
+  await expect.poll(() => calcSheet.evaluate((element) => (element as HTMLElement).style.transform)).toBe("");
+  await page.mouse.move(at.x + 20, at.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(at.x + 20, at.y + 320, { steps: 8 });
+  await page.mouse.up();
+  await expect(calcSheet).toBeHidden();
+  await expect(page).toHaveURL(/\/staff\/items$/);
+});
+
+test("the public Lending Hub frames its pictures too, and a cleaned one stands on a pedestal (Earl, 2026-10-24)", async ({ page }) => {
+  const photo = "00000000-0000-4000-8000-0000000000d1";
+  const items = [{ id: "ITM-0464", name: "2-Liner Scientific Calculator", category: "SCHOOL SUPPLIES", unit: "piece", available: 1, audience: "STUDENTS_AND_USC_STAFF", photo }];
+  await page.route("**/api/public/catalog", (route) => route.fulfill({ headers: { etag: '"r1"' }, json: { revision: 1, categories: ["SCHOOL SUPPLIES"], items } }));
+  await page.route("**/api/public/media/*/thumb*", (route) => route.fulfill({ contentType: "image/svg+xml",
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><rect width="160" height="160" fill="#e8e3dd"/><rect x="58" y="30" width="44" height="90" rx="6" fill="#3b3f46"/></svg>' }));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/lending");
+  const frame = page.locator(`img[data-photo="${photo}"]`).first().locator("..");
+  await expect(frame).toHaveClass(/photo-pedestal/);
+  await expect(frame).toHaveCSS("position", "absolute");
+});

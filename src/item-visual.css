@@ -41,6 +41,12 @@
 .pedestal__item.is-seated { opacity: 1; }
 .photo-tile .pedestal__item img { position: absolute; max-width: none; width: calc(100% * 100 / var(--crop-w, 100)); height: calc(100% * 100 / var(--crop-h, 100)); left: calc(-100% * var(--crop-x, 0) / var(--crop-w, 100)); top: calc(-100% * var(--crop-y, 0) / var(--crop-h, 100)); object-fit: fill; }
 .photo-tile__note { position: absolute; top: var(--space-2); left: var(--space-2); z-index: 2; display: inline-flex; align-items: center; gap: .25rem; padding: .125rem .5rem; border-radius: var(--radius-pill); background: rgb(255 255 255 / 78%); color: var(--stage-ink); font-size: .75rem; font-weight: 500; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+/* A small tile (a phone's sheet) keeps the item clear: the note becomes a check badge in the corner, its words kept for assistive technology. */
+.photo-tile--pedestal { container-type: inline-size; }
+@container (max-width: 11rem) {
+  .photo-tile__note { top: var(--space-1); right: var(--space-1); left: auto; padding: .25rem; }
+  .photo-tile__note-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 .photo-tile__note .icon { --icon-size: .875rem; }
 /* An item photo's menu opens from the photo itself (owner, 24 October 2026). */
 .photo-tile[data-photo-menu] { cursor: pointer; transition: box-shadow var(--dur-1), transform var(--dur-1); }
@@ -52,3 +58,7 @@
 .photo-menu .menu__item--danger, .photo-menu .menu__item--danger .icon { color: var(--bad); }
 @media (prefers-reduced-motion: no-preference) { .pedestal__item { transition: opacity var(--dur-2) var(--ease-settle); } }
 @media (forced-colors: active) { .pedestal__plinth::before, .pedestal__plinth::after, .item-visual.photo-pedestal::before, .item-visual.photo-pedestal::after { border: 1px solid CanvasText; } }
+/* LH-IP02-S04 · An item without a photo shows its icon; a small camera badge says a photo can be added, and the icon opens the picture's menu. */
+.photo-tile--icon { border-style: solid; }
+.photo-tile__badge { position: absolute; right: var(--space-2); bottom: var(--space-2); display: grid; width: 1.75rem; height: 1.75rem; place-items: center; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line), 0 2px 6px rgb(28 18 20 / 12%); color: var(--brand); }
+.photo-tile__badge .icon { --icon-size: .875rem; }

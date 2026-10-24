@@ -3,7 +3,7 @@ import { ACTIVITY_SOURCES, ACTIVITY_TITLES, ACTIVITY_TYPES, STOCK_AREAS, type Ac
 import { type Place, inOrder, pathOf, placesOf } from "./location-tree";
 import { signed } from "./movement-form";
 import { type Session, loadSession, shell } from "./staff-shell";
-import { type Html, ApiError, api, emptyState, expired, failure, formatDate, formatDateTime, html, icon, label, live, mount, officeDay, onLeave, preservingFocus, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { type Html, type IconName, ApiError, api, emptyState, expired, failure, formatDate, formatDateTime, formatTime, html, icon, label, live, mount, officeDay, onLeave, preservingFocus, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 /*
  * Activity (/staff/activity): one newest-first list of who did what, read from GET /api/staff/activity.
@@ -120,6 +120,23 @@ export async function activityWorkspace(): Promise<void> {
     document.querySelector<HTMLElement>("#activity-clear-search")!.hidden = !search.value;
   }
 
+  /** Each source's mark in the feed, the same picture the rail and Home use for that part of the Hub. */
+  const SOURCE_ICONS: Record<string, IconName> = { MOVEMENT: "stack", LOAN: "swap", PHONE: "phone", CATALOG: "box", ACCOUNT: "user", DIRECTORY: "shield" };
+  /** The day an entry belongs to, as the office counts days: Today, Yesterday, or the date. */
+  const dayOf = (entry: Entry) => entry.at ? officeDay(entry.at) : "";
+  const dayLabel = (day: string) => !day ? "Time unknown" : day === officeDay() ? "Today" : day === officeDay(new Date(Date.now() - 86_400_000)) ? "Yesterday" : formatDate(day);
+  /** The feed by day (LH-IP02-S04): one heading and one list per day, newest first, in the order the entries came. */
+  function feed(list: Entry[]): Html {
+    const days: Array<{ day: string; entries: Entry[] }> = [];
+    for (const entry of list) {
+      const day = dayOf(entry);
+      if (days.at(-1)?.day === day) days.at(-1)!.entries.push(entry); else days.push({ day, entries: [entry] });
+    }
+    return html`${days.map(({ day, entries: mine }) => html`<section class="activity-day" aria-labelledby="activity-day-${day || "unknown"}">
+      <h2 class="activity-day__title" id="activity-day-${day || "unknown"}">${dayLabel(day)}</h2>
+      <ol class="activity-list" aria-label="${dayLabel(day)}, newest first">${mine.map(row)}</ol></section>`)}`;
+  }
+
   function row(entry: Entry): Html {
     const tone = entry.change > 0 ? "is-in" : entry.change < 0 ? "is-out" : "";
     // A catalog or account entry has nothing to do with stock; anything else says so when stock stayed put.
@@ -127,10 +144,12 @@ export async function activityWorkspace(): Promise<void> {
     const reason = entry.reason && !entry.summary.toLowerCase().includes(entry.reason.toLowerCase()) ? entry.reason : null;
     const balance = entry.before !== null && entry.after !== null ? ` · ${entry.before} → ${entry.after}${entry.unit ? ` ${units(entry.after, entry.unit)}` : ""}` : "";
     return html`<li class="activity-row ${tone}" data-key="${entry.id}">
+        <p class="activity-row__time">${entry.at ? html`<time datetime="${entry.at}">${formatTime(entry.at)}</time>` : ""}</p>
+        <span class="activity-row__icon" aria-hidden="true">${icon(SOURCE_ICONS[entry.source] ?? "history")}</span>
         <p class="activity-row__change ${entry.stockChanged ? "" : "activity-row__change--none"}">${change}</p>
         <div class="activity-row__main">
           ${entry.itemId ? html`<a class="row-link activity-row__summary" href="/staff/items?item=${entry.itemId}" data-route>${entry.summary}</a>` : html`<p>${entry.summary}</p>`}
-          <p class="cell-sub">${entry.at ? html`<time datetime="${entry.at}">${formatDateTime(entry.at)}</time>` : "Time unknown"} · <span class="tag">${ACTIVITY_SOURCES[entry.source] ?? entry.source}</span>${entry.attention ? html` <span class="tag tag--warn">Needs attention</span>` : ""}${balance}${entry.itemId ? html` · <span class="mono">${entry.itemId}</span>` : ""}${entry.correlationId.startsWith("LN-")
+          <p class="cell-sub"><span class="visually-hidden">${entry.at ? formatDateTime(entry.at) : "Time unknown"} · </span><span class="tag">${ACTIVITY_SOURCES[entry.source] ?? entry.source}</span>${entry.attention ? html` <span class="tag tag--warn">Needs attention</span>` : ""}${balance}${entry.itemId ? html` · <span class="mono">${entry.itemId}</span>` : ""}${entry.correlationId.startsWith("LN-")
             ? html` · Loan <span class="mono">${entry.correlationId}</span>` : ""}${entry.source === "PHONE" && entry.attention ? html` · <a href="/staff/self-service" data-route>Review in Self-Service</a>` : ""}</p>
           ${reason || entry.note ? html`<p class="activity-row__note">${reason ? html`<span class="muted">Reason:</span> ${reason}` : ""}${reason && entry.note ? " · " : ""}${entry.note ? html`<span class="muted">Note:</span> ${entry.note}` : ""}</p>` : ""}
         </div>
@@ -142,7 +161,7 @@ export async function activityWorkspace(): Promise<void> {
     for (const entry of entries) if (entry.actorId && entry.actorId !== "SELF_SERVICE") actors.set(entry.actorId, entry.actor);
     const text = entries.length ? `${entryCount(entries.length)}${nextCursor ? " shown, older ones below" : ""}` : "No entries";
     if (count.textContent !== text) count.textContent = text;
-    preservingFocus(results, () => mount(results, entries.length ? html`<ol class="activity-list" aria-label="Activity, newest first">${entries.map(row)}</ol>` : filtered()
+    preservingFocus(results, () => mount(results, entries.length ? feed(entries) : filtered()
       ? emptyState("Nothing matches", "Try another search or filter, or clear them to see everything.", html`<button class="button button--secondary" type="button" data-remove="everything">Clear search and filters</button>`)
       : emptyState("No activity yet", "Stock changes, loans, phone records and catalog edits appear here as they happen.")), "a");
     const capped = Boolean(nextCursor) && entries.length >= MAX_SHOWN;

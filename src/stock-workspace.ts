@@ -115,15 +115,14 @@ export async function stockWorkspace(): Promise<void> {
   const form = document.querySelector<HTMLFormElement>("#record-form")!;
   const receipts: Html[] = [];
 
-  /* ---------- Record panel (an aside on desktop, a bottom sheet on phones) ---------- */
+  /* ---------- Record panel: a sheet from Update stock or a row's action (LH-IP02-S04); it waits off screen between uses ---------- */
 
-  const compact = window.matchMedia("(max-width: 960px)");
   const recordSheet = document.querySelector<HTMLDialogElement>("#record-sheet")!;
   const panelNode = document.querySelector<HTMLElement>("#record-panel")!;
   const home = document.querySelector<HTMLElement>("#record-home")!;
   const lent = createSheet(recordSheet, { onClose: () => home.append(panelNode) });
   const showRecord = () => {
-    if (compact.matches) {
+    if (!recordSheet.open) {
       mount(recordSheet, sheetContent("Stock", "Update stock", html``));
       recordSheet.querySelector(".sheet__body")!.append(panelNode);
       lent.open();

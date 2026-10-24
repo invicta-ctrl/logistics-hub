@@ -229,7 +229,7 @@ export async function myAccount(): Promise<void> {
       ${session.directory ? html`<p>Staff Directory: ${session.directory.name}${session.directory.position ? `, ${session.directory.position}` : ""} · ${DEPARTMENTS[session.directory.department as DepartmentCode] ?? session.directory.department}</p>` : ""}</div></header>
     ${session.hub === false && !session.mustChangePassword ? html`<div class="callout callout--action">${icon("info")}<p><strong>Your sign-in is set up as ${accessLabel(sessionAccess(session))}.</strong> The Logistics Hub's items, stock, loans and records are for the Department of Logistics; this page is where you look after your account.</p></div>` : ""}
     ${session.mustChangePassword ? html`<div class="callout callout--action" role="alert">${icon("alert")}<p><strong>Choose your own password to continue.</strong> Your current password was set by an administrator; the rest of the workspace opens once you replace it.</p></div>` : ""}
-    <div class="panels">
+    <div class="panels panels--account">
       <form class="panel form" id="password-form" novalidate>
         <h2 class="panel__title">Password</h2>
         <div class="field"><label for="current">Current password</label><input id="current" name="currentPassword" type="password" autocomplete="current-password" required /></div>

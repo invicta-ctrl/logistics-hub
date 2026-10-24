@@ -337,12 +337,12 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 
 /* ---------- Empty, loading, toast ---------- */
 /* An empty list is a composed, quiet plate, its icon set down on it like an object, not a dashed hole. */
-.empty { position: relative; isolation: isolate; display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-16) var(--space-6); border-radius: var(--radius-lg); background: linear-gradient(180deg, var(--subtle), var(--surface) 78%); box-shadow: inset 0 0 0 1px var(--line); text-align: center; }
+.empty { position: relative; isolation: isolate; display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-16) var(--space-6); text-align: center; }
 .empty > .icon { --icon-size: var(--icon-lg); box-sizing: content-box; margin-bottom: var(--space-2); padding: var(--space-3); border-radius: var(--radius-pill); background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line), 0 10px 16px -10px rgb(43 10 12 / 35%); color: var(--text-3); }
 .empty :is(h1, h2, h3) { font-size: var(--text-lg); }
 .empty p { max-width: 30rem; color: var(--text-2); font-size: var(--text-base); }
 .empty .button { margin-top: var(--space-3); }
-.empty--error { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-bad); }
+.empty--error :is(h1, h2, h3) { color: var(--bad); }
 .empty--error > .icon { color: var(--bad); }
 .skeleton { display: block; border-radius: var(--radius); background: linear-gradient(90deg, var(--subtle) 30%, var(--hover) 50%, var(--subtle) 70%) 0 0 / 300% 100%; }
 .skeleton--text { width: min(60%, 18rem); height: .875rem; }
@@ -614,6 +614,14 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .menu.menu--row.menu--row-fallback { position: static; width: 100%; max-height: none; opacity: 1; transform: none; }
 .app-main { width: 100%; max-width: 90rem; margin-inline: auto; padding: 0 max(var(--gutter), env(safe-area-inset-right, 0px)) var(--space-16) max(var(--gutter), env(safe-area-inset-left, 0px)); }
 .page-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-8); padding-block: var(--space-6) var(--space-4); }
+/*
+ * LH-IP02-S04 · One page frame for every staff page: the title is the page's (Newsreader 48/56, 36/44 on phones, as Home's), with one lede
+ * line under it and the page's actions level with that line. A page header inside a sheet (the Catalog's summary) keeps its own size.
+ */
+.app-main .page-header:not(.cat > .page-header) { align-items: flex-end; padding-block: var(--space-8) var(--space-6); }
+.app-main .page-header:not(.cat > .page-header) h1 { font: 500 3rem/3.5rem var(--serif); letter-spacing: -.022em; }
+.app-main .page-header:not(.cat > .page-header) p { font-size: var(--text-base); }
+@media (max-width: 600px) { .app-main .page-header:not(.cat > .page-header) h1 { font-size: 2.25rem; line-height: 2.75rem; } }
 .page-header h1 { font-family: var(--serif); font-size: var(--text-2xl); font-weight: 500; letter-spacing: -.01em; line-height: 1.15; }
 .page-header p { margin-top: var(--space-1); color: var(--text-2); font-size: var(--text-sm); }
 .page-header__title { display: grid; gap: var(--space-1); min-width: 0; }
@@ -654,28 +662,38 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .view-tab:active, .tabs [role=tab]:active, .subnav__link:active { background: var(--line); }
 .view-tab[aria-pressed="true"], .tabs [role=tab][aria-selected="true"], .subnav__link[aria-current] { border-bottom-color: var(--brand); color: var(--brand); }
 .view-tab:focus-visible, .tabs [role=tab]:focus-visible, .subnav__link:focus-visible { outline-offset: -2px; }
-.view-tab__count { min-width: 1.5rem; padding: .0625rem var(--space-2); border-radius: var(--radius-pill); background: var(--subtle); color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-align: center; }
-.view-tab[aria-pressed="true"] .view-tab__count { background: var(--brand-tint); color: var(--brand); }
-.table-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-block: var(--space-4); }
-.table-filters { display: contents; }
-.filters-toggle { display: none; }
+.view-tab__count { color: var(--text-3); font-size: var(--text-sm); font-weight: 500; font-variant-numeric: tabular-nums; }
+.view-tab[aria-pressed="true"] .view-tab__count { color: var(--text-2); }
+.table-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding-block: var(--space-5) var(--space-4); }
+.table-toolbar .search-field { flex: 0 1 30rem; }
+.table-toolbar .search-field input, .search-field--pill input { height: 2.5rem; border-radius: var(--radius-pill); }
+.filters-toggle { display: inline-flex; flex: none; border-radius: var(--radius-pill); }
+.table-filters { display: none; flex: 1 0 100%; flex-wrap: wrap; gap: var(--space-2); }
+.table-filters.is-open { display: flex; }
+@media (max-width: 600px) { .table-toolbar .search-field input { height: 3rem; } }
 .table-toolbar__count { margin-left: auto; color: var(--text-3); font-size: var(--text-sm); white-space: nowrap; }
 
-.data-table-wrap { overflow: clip; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--edge-light), var(--shadow-sm); }
+.data-table-wrap { overflow: clip; border-top: 1px solid var(--line); }
 .data-table-wrap--responsive { container-type: inline-size; }
 .table-more { display: flex; justify-content: center; margin: var(--space-3) 0 0; }
 .table-more .button { height: auto; min-height: 2.75rem; max-width: 100%; white-space: normal; text-align: center; }
 .data-table { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
-.data-table th { position: sticky; top: var(--app-bar); z-index: 1; height: 2.5rem; padding: 0 var(--space-4); border-bottom: 1px solid var(--line); background: var(--subtle); color: var(--text-2); font-size: var(--text-sm); font-weight: 600; text-align: left; white-space: nowrap; }
-.data-table td { height: 3rem; padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); vertical-align: middle; }
+.data-table th { position: sticky; top: var(--app-bar); z-index: 1; height: 2.75rem; padding: 0 var(--space-4); border-bottom: 1px solid var(--line); background: var(--bg); color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.data-table td { height: 4rem; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); vertical-align: middle; }
+/* A row that opens something says so on hover with a chevron at its end; a static table has none. */
+.data-table:not(.data-table--static) tbody td:last-child { position: relative; padding-right: var(--space-10); }
+.data-table:not(.data-table--static) tbody td:last-child::after { position: absolute; top: 50%; right: var(--space-3); width: 1rem; height: 1rem; margin-top: -.5rem; background: currentColor; color: var(--text-3); content: ""; opacity: 0; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 6 6 6-6 6'/%3E%3C/svg%3E") center / contain no-repeat; transition: opacity var(--dur-1); }
+.data-table:not(.data-table--static) tbody tr:is(:hover, :focus-within) td:last-child::after { opacity: 1; }
 .data-table tbody tr { cursor: pointer; transition: background-color var(--dur-1); }
 .data-table tbody tr:hover { background: var(--hover); }
 .data-table tbody tr.is-open { background: var(--brand-tint); box-shadow: inset 3px 0 0 var(--brand); }
 .data-table tbody tr.is-inactive .row-link, .data-table tbody tr.is-inactive .qty { color: var(--text-3); }
-.data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table tbody tr:last-child td { border-bottom: 1px solid var(--line); }
 .data-table tbody tr.is-changed { animation: highlight 2s var(--ease); }
 .sort-button { display: inline-flex; align-items: center; gap: var(--space-1); margin-left: calc(-1 * var(--space-2)); padding: var(--space-1) var(--space-2); border: 0; border-radius: var(--radius); background: none; color: inherit; font: inherit; }
 .sort-button:hover { background: var(--line); color: var(--text); }
+/* A sortable header reads like the others (a button does not inherit the header's case or spacing by itself). */
+.data-table th .sort-button { letter-spacing: inherit; text-transform: inherit; }
 .sort-button .icon { --icon-size: var(--icon-xs); opacity: 0; }
 .sort-button:is(:hover, :focus-visible) .icon { opacity: .45; }
 [aria-sort="ascending"] .sort-button .icon, [aria-sort="descending"] .sort-button .icon { opacity: 1; color: var(--brand); }
@@ -775,7 +793,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .theater .readout strong { font-size: 2.5rem; letter-spacing: -.02em; }
 .theater .profile__stock { padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); }
 .theater .profile__meta--place { margin-top: var(--space-1); }
-.theater .profile__meta--fresh { margin-top: calc(-1 * var(--space-2)); padding-left: calc(var(--icon-sm) + var(--space-2)); }
+.theater .profile__meta--fresh { margin-top: 0; padding-left: calc(var(--icon-sm) + var(--space-2)); line-height: 1.45; }
 .theater .profile__meta--fresh .icon { display: none; }
 @media (max-width: 760px) {
   .theater { grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--space-3) var(--space-4); padding: var(--space-4); }
@@ -909,10 +927,11 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 @keyframes qty-down { 0%, 50% { color: var(--bad); } }
 
 /* Stock */
-.stock-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 22rem); align-items: start; gap: var(--space-8); }
+/* The lists take the page; Update stock is a sheet (LH-IP02-S04), and its panel waits in a hidden home between uses. */
+.stock-layout { display: block; }
 .stock-main { min-width: 0; }
 .stock-main .views { margin-bottom: var(--space-4); }
-.record-home { position: sticky; top: calc(var(--app-bar) + var(--space-4)); }
+.record-home { display: none; }
 .record-panel { display: grid; gap: var(--space-4); max-height: calc(100dvh - var(--app-bar) - var(--space-8)); overflow-y: auto; padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); overscroll-behavior: contain; }
 .record-panel__title { font-size: var(--text-lg); }
 .record-panel .field-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-4); }
@@ -942,18 +961,23 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .plain-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); padding: var(--space-3) 0; border-bottom: 1px solid var(--line); font-size: var(--text-sm); }
 .plain-list--muted li { color: var(--text-2); }
 .activity-range { margin-bottom: var(--space-4); }
-.activity-list { border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
-.activity-row { display: grid; grid-template-columns: 4rem minmax(0, 1fr); align-items: baseline; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
-.activity-row:last-child { border-bottom: 0; }
-.activity-row__change { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+/* LH-IP02-S04 · The feed by day: a quiet heading, then each entry on a rule with its time, its module's icon, its sentence and, for stock, the change. */
+.activity-day + .activity-day { margin-top: var(--space-8); }
+.activity-day__title { margin-bottom: var(--space-2); color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.activity-list { border-top: 1px solid var(--line); }
+.activity-row { position: relative; display: grid; grid-template-columns: 4.5rem 1.25rem minmax(0, 1fr) auto; grid-template-areas: "time icon main change"; align-items: baseline; gap: var(--space-1) var(--space-4); padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.activity-row__time { grid-area: time; color: var(--text-3); font-size: var(--text-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.activity-row__icon { grid-area: icon; align-self: start; padding-top: .125rem; color: var(--text-3); }
+.activity-row__icon .icon { --icon-size: 1.125rem; }
+.activity-row__main { grid-area: main; min-width: 0; }
+.activity-row__change { grid-area: change; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .activity-row.is-in .activity-row__change { color: var(--ok); }
 .activity-row.is-out .activity-row__change { color: var(--bad); }
 .activity-row__main .row-link { display: inline; }
 .activity-row__main .activity-row__summary { display: block; }
 .activity-row__change--none { color: var(--text-3); font-size: var(--text-sm); font-weight: 400; }
-/* A list with no stock column at all (catalog and account entries only) gives its text the full width. */
-.activity-list:not(:has(.activity-row__change:not(:empty))) .activity-row { grid-template-columns: minmax(0, 1fr); }
-.activity-list:not(:has(.activity-row__change:not(:empty))) .activity-row__change { display: none; }
+/* An entry with nothing about stock (catalog and account entries) shows no change. */
+.activity-row__change:empty { display: none; }
 .activity-row__note { margin-top: var(--space-1); color: var(--text-2); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .activity-row .cell-sub a { color: var(--brand); }
 .activity-more { display: grid; justify-items: center; gap: var(--space-2); margin-top: var(--space-4); font-size: var(--text-sm); }
@@ -974,6 +998,12 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 /* A long action label wraps rather than pushing the panel off a narrow screen at large text sizes. */
 .panel .button { white-space: normal; }
 .panel--wide { grid-column: 1 / -1; }
+/* LH-IP02-S04 · My account: what you change (password, profile) in the main column; your sessions and the owner's recovery key beside it. */
+@media (min-width: 961px) {
+  .panels--account { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); grid-auto-flow: row dense; }
+  .panels--account > #password-form, .panels--account > #profile-form { grid-column: 1; }
+  .panels--account > [aria-labelledby="sessions-title"], .panels--account > [aria-labelledby="recovery-title"] { grid-column: 2; }
+}
 .panel__title { font-size: var(--text-lg); }
 .form-actions--start { justify-content: flex-start; flex-wrap: wrap; }
 .callout--action { margin-bottom: var(--space-6); border-color: var(--line-brand); background: var(--brand-tint); color: var(--brand-hover); }
@@ -1100,8 +1130,9 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 
 .page-header__title .is-bad { color: var(--bad); font-weight: 600; }
 .period-switch { margin-bottom: var(--space-5); }
-.stat-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin-bottom: var(--space-6); }
-.stat { display: grid; align-content: start; gap: var(--space-1); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.stat-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: var(--space-6); border-block: 1px solid var(--line); }
+.stat { display: grid; align-content: start; gap: var(--space-1); padding: var(--space-4) var(--space-5); border-left: 1px solid var(--line); }
+.stat:first-child { padding-left: 0; border-left: 0; }
 .stat dt { color: var(--text-2); font-size: var(--text-sm); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .stat dd { display: grid; gap: var(--space-2); }
 .stat__value { font-size: var(--text-2xl); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
@@ -1190,8 +1221,16 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 @container (max-width: 44rem) {
   .data-table-wrap--responsive .data-table thead { display: none; }
   .data-table-wrap--responsive .data-table, .data-table-wrap--responsive .data-table tbody, .data-table-wrap--responsive .data-table tr, .data-table-wrap--responsive .data-table td { display: block; }
-  .data-table-wrap--responsive .data-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-4); padding: var(--space-4); border-bottom: 1px solid var(--line); }
-  .data-table-wrap--responsive .data-table tbody tr:last-child { border-bottom: 0; }
+  .data-table-wrap--responsive .data-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-4); padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
+  .data-table-wrap--responsive .data-table tbody tr:last-child { border-bottom: 1px solid var(--line); }
+  .data-table-wrap--responsive .data-table tbody tr:last-child td { border-bottom: 0; }
+  /* LH-IP02-S04 · A narrow row keeps only the picture, the name (with its reference and kind), and the quantity over the status. */
+  .data-table-wrap--responsive .data-table--items :is(.cell-place, .cell-alias) { display: none; }
+  .data-table-wrap--responsive .data-table--items td.col-item { grid-row: 1 / span 2; }
+  .data-table-wrap--responsive .data-table--items .col-qty .cell-sub { display: none; }
+  .data-table-wrap--responsive .data-table.data-table--items td.col-status { grid-row: 2; grid-column: 2; justify-self: end; text-align: right; }
+  .data-table-wrap--responsive .data-table:not(.data-table--static) tbody td:last-child { padding-right: 0; }
+  .data-table-wrap--responsive .data-table:not(.data-table--static) tbody td:last-child::after { display: none; }
   .data-table-wrap--responsive .data-table td { height: auto; padding: 0; border: 0; }
   .data-table-wrap--responsive .data-table .col-id, .data-table-wrap--responsive .data-table .col-category, .data-table-wrap--responsive .data-table .col-location { display: none; }
   .data-table-wrap--responsive .data-table--items td.col-item { width: auto; min-height: 2.5rem; padding-left: 3.25rem; }
@@ -1209,10 +1248,9 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 }
 @media (max-width: 760px) {
   .site-header__inner { min-height: 4rem; }
-  .activity-row { grid-template-columns: 3rem minmax(0, 1fr); padding-inline: var(--space-3); }
-  /* A catalog or account entry has no stock column to align with; on phones its text takes the full width. */
-  .activity-row:has(.activity-row__change:empty) { grid-template-columns: minmax(0, 1fr); }
-  .activity-row__change:empty { display: none; }
+  /* Phones: time, sentence and change; the module's icon gives way to the text. */
+  .activity-row { grid-template-columns: 3.5rem minmax(0, 1fr) auto; grid-template-areas: "time main change"; gap: var(--space-1) var(--space-3); }
+  .activity-row__icon { display: none; }
   /* Phones: the four daily sections and More sit in a bottom bar within thumb reach; More opens the account menu as a sheet. */
   html:has(.app-nav) { scroll-padding-bottom: calc(var(--bottom-bar) + var(--safe-bottom) + var(--space-4)); }
   .app-bar__inner { gap: var(--space-3); }
@@ -1256,18 +1294,22 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .menu__item { min-height: var(--target); font-size: var(--text-md); }
   .page-header__actions { width: 100%; justify-content: space-between; }
   .search-field { flex-basis: 0; }
+  .table-toolbar .search-field { flex: 1 0 100%; }
   .filters-toggle { display: inline-flex; flex: none; }
   .table-filters { display: none; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
   .table-filters.is-open { display: grid; }
   .select-field, .select-field--narrow { flex: none; }
-  .table-toolbar__count { width: 100%; margin-left: 0; }
+  .table-toolbar__count { margin-left: auto; }
 
   .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sheet__header, .sheet__body { padding-inline: var(--space-4); }
   .profile { grid-template-columns: 6rem minmax(0, 1fr); gap: var(--space-4); }
   .form-actions--sticky { margin-inline: calc(-1 * var(--space-4)); padding-inline: var(--space-4); }
   .sheet { width: 100%; height: auto; max-height: 92dvh; margin: auto 0 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
-  .sheet__header { position: relative; padding-top: var(--space-6); }
+  .sheet__header { position: relative; padding-top: var(--space-6); touch-action: none; cursor: grab; }
+  /* The photo's menu is an action sheet from the bottom on a phone, as the More menu is: it never depends on where the photo sits. */
+  .menu.menu--row.photo-menu { inset: auto 0 0 !important; width: 100%; max-width: none; max-height: 85dvh; padding: var(--space-3) var(--space-3) calc(var(--space-3) + var(--safe-bottom)); border-width: 1px 0 0; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+  .menu.menu--row.photo-menu::backdrop { background: var(--scrim); }
   .sheet__header::before { position: absolute; top: .5rem; left: 50%; width: 2.5rem; height: .25rem; transform: translateX(-50%); border-radius: var(--radius-pill); background: var(--line-strong); content: ""; }
   .site-footer__brand { flex-direction: column; align-items: flex-start; gap: var(--space-3); }
 }
@@ -1930,6 +1972,7 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
 @media (max-width: 520px) {
   .sheet__header { flex-wrap: wrap; }
   .sheet__header > * { min-width: 0; max-width: 100%; }
+  .sheet__header > :first-child { flex: 1 1 0; }
   .profile__actions, .photo-actions { width: 100%; }
   .photo-actions > .button { white-space: normal; }
   .profile__actions > .photo-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

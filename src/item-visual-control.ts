@@ -4,7 +4,8 @@ import { api, failure, html, mount, raw, toast } from "./ui";
 type EditableVisual = VisualItem & { id: string; updatedAt: string | null };
 
 /** Item-only choices: the shared place picture panel keeps its own behavior. Choices save without editing stock. */
-export function itemVisualControl(host: HTMLElement, current: () => EditableVisual, refresh: () => Promise<void>) {
+/** `addPhoto` is how Real photo asks for a photo when the item has none (the photo's own menu, in the item sheet). */
+export function itemVisualControl(host: HTMLElement, current: () => EditableVisual, refresh: () => Promise<void>, addPhoto?: () => void) {
   let busy = false;
   let picking = false;
   let error = "";
@@ -71,7 +72,7 @@ export function itemVisualControl(host: HTMLElement, current: () => EditableVisu
     else if (button.dataset.visualMode === "SYSTEM_ICON") void save("SYSTEM_ICON", item.iconKey ?? null);
     else if (button.dataset.visualMode === "PHOTO") {
       if (item.photoId) void save("PHOTO", item.iconKey ?? null);
-      else host.closest(".sheet")?.querySelector<HTMLButtonElement>("#photo-panel [data-pick]")?.click();
+      else addPhoto?.();
     }
   });
   render();

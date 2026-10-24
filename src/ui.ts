@@ -119,8 +119,6 @@ export function refreshItemThumbnail(id: string): void {
 export const thumbImg = (item: VisualItem & { photo?: string | null }): Html =>
   itemVisual({ ...item, photoId: item.photo }, itemThumbnailUrl, "item-thumb");
 
-/** Pictures in the staff workspace only (its main area and the sheets in it): public pages and Self-Service keep theirs (LH-IP02-S03). */
-const staffPicture = (image: HTMLImageElement) => Boolean(image.closest(".app-main"));
 // Resource events do not bubble. Capture lets redraws share one fallback handler without per-row listeners.
 document.addEventListener("load", (event) => {
   const image = event.target;
@@ -131,7 +129,8 @@ document.addEventListener("load", (event) => {
   if (image.hasAttribute("data-item-photo")) {
     const frame = image.parentElement;
     frame?.classList.add("item-visual--loaded");
-    if (frame && staffPicture(image)) frameByPhoto(image, frame);
+    // Every item picture takes its own background, and a cleaned one stands on a pedestal: staff pages, the Lending Hub and Self-Service.
+    if (frame) frameByPhoto(image, frame);
     if (frame?.classList.contains("ss-item__visual")) {
       frame.style.setProperty("--item-photo-edge", `${Math.max(image.naturalWidth, image.naturalHeight) / (window.devicePixelRatio || 1)}px`);
     }
@@ -380,6 +379,41 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
     document.removeEventListener("scroll", detach);
     if (opener?.isConnected) opener.focus({ preventScroll: true });
     opener = null;
+  });
+  /*
+   * Phones: a sheet comes up from the bottom with a handle, so it goes down the same way. Dragging its header moves the sheet with the
+   * finger; let go far or fast enough and it closes as Close does (unsaved changes still ask first), otherwise it settles back.
+   */
+  const phone = window.matchMedia("(max-width: 760px)");
+  dialog.addEventListener("pointerdown", (event) => {
+    const target = event.target as HTMLElement;
+    if (!phone.matches || !event.isPrimary || event.button !== 0 || !target.closest(".sheet__header") || target.closest("button, a, input, select, textarea")) return;
+    const startY = event.clientY;
+    const startAt = event.timeStamp;
+    let distance = 0;
+    dialog.setPointerCapture(event.pointerId);
+    dialog.style.transition = "none";
+    const move = (moved: PointerEvent) => { distance = Math.max(0, moved.clientY - startY); dialog.style.transform = distance ? `translateY(${distance}px)` : ""; };
+    const settle = (to: string, then?: () => void) => {
+      const done = () => { window.clearTimeout(fallback); dialog.removeEventListener("transitionend", done); dialog.style.transition = ""; then?.(); };
+      const fallback = window.setTimeout(done, 400);
+      if (reducedMotion()) { dialog.style.transform = to; done(); return; }
+      dialog.style.transition = "transform var(--dur-2) var(--ease)";
+      dialog.addEventListener("transitionend", done);
+      dialog.style.transform = to;
+    };
+    const end = (ended: PointerEvent) => {
+      dialog.removeEventListener("pointermove", move);
+      dialog.removeEventListener("pointerup", end);
+      dialog.removeEventListener("pointercancel", end);
+      const fast = distance > 40 && distance / Math.max(1, ended.timeStamp - startAt) > 0.6;
+      if (ended.type === "pointerup" && (distance > Math.min(160, dialog.offsetHeight / 4) || fast) && discardOk()) {
+        settle("translateY(100%)", () => { if (dialog.open) dialog.close(); dialog.style.transform = ""; });
+      } else settle("");
+    };
+    dialog.addEventListener("pointermove", move);
+    dialog.addEventListener("pointerup", end);
+    dialog.addEventListener("pointercancel", end);
   });
   onLeave(() => { if (dialog.open) dialog.close(); });
   return {

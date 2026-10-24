@@ -71,6 +71,8 @@ test.describe("Items by place", () => {
       await expect(page.locator("#inventory-count")).toHaveText(`${expected(id)} of 600 items`);
       await expect(page).toHaveURL(new RegExp(`location=${id}`));
     }
+    // The filters sit behind the one Filters button (LH-IP02-S04).
+    await page.getByRole("button", { name: /^Filters/ }).click();
     await page.getByLabel("Place", { exact: true }).selectOption("");
     await page.getByLabel("Place", { exact: true }).selectOption("__none");
     await expect(page.locator("#inventory-count")).toHaveText(`${ITEMS.filter((entry) => !entry.locationId).length} of 600 items`);
@@ -121,12 +123,13 @@ test.describe("Items by place", () => {
     }
   });
 
-  test("on a phone and a tablet the place sits under the item name and nothing scrolls sideways", async ({ page }) => {
+  test("on a phone and a tablet a row is picture, name, quantity and status, and nothing scrolls sideways", async ({ page }) => {
     for (const width of [320, 390, 768]) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto("/staff/items");
       await expect(page.locator("#inventory-count")).toHaveText("600 items");
-      await expect(page.locator("tbody tr").nth(1).locator(".cell-place")).toBeVisible();
+      // A narrow row leaves the place to the item's sheet (LH-IP02-S04: Earl found the place under the name cluttered on a phone).
+      await expect(page.locator("tbody tr").nth(1).locator(".cell-place")).toBeHidden();
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), `${width}px`).toBe(0);
     }
   });

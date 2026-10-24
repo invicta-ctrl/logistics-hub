@@ -164,8 +164,6 @@ export async function workspace(): Promise<void> {
         </div>
         <div class="page-header__actions">
           <p class="live-status" id="live-status">Connecting…</p>
-          <a class="button button--secondary" href="/staff/locations" data-route>${icon("pin")}Locations</a>
-          <a class="button button--secondary" href="/staff/kits" data-route>${icon("stack")}Kits</a>
           <button type="button" class="button button--primary" id="add-items">${icon("plus")}Add items</button>
         </div>
       </header>
@@ -184,7 +182,8 @@ export async function workspace(): Promise<void> {
       <div class="bulk-bar" id="bulk-bar" role="region" aria-label="Selected items" hidden></div>
       <div id="inventory-results" aria-busy="true">${tableSkeleton()}</div>
       <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>
-      <dialog class="sheet" id="bulk-sheet" aria-labelledby="sheet-title"></dialog>`);
+      <dialog class="sheet" id="bulk-sheet" aria-labelledby="sheet-title"></dialog>
+      <dialog class="sheet sheet--picture" id="picture-sheet" aria-labelledby="picture-sheet-title"></dialog>`);
 
   const params = new URLSearchParams(window.location.search);
   let inventory: Inventory | null = null;
@@ -368,12 +367,16 @@ export async function workspace(): Promise<void> {
   search.addEventListener("input", () => { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(render, 120); });
   search.addEventListener("keydown", (event) => { if (event.key === "Escape" && search.value) { search.value = ""; render(); } });
   for (const [key, select] of Object.entries(selects)) select.addEventListener("change", () => { filters = { ...filters, [key]: select.value }; render(); });
-  // On phones the three filters fold behind one button instead of stacking above the list.
+  // The three filters fold behind one button (LH-IP02-S04), open on arrival when the address already narrows the list.
   const filtersToggle = document.querySelector<HTMLButtonElement>("#filters-toggle")!;
-  filtersToggle.addEventListener("click", () => {
-    const open = filtersToggle.getAttribute("aria-expanded") !== "true";
+  const showFilters = (open: boolean) => {
     filtersToggle.setAttribute("aria-expanded", String(open));
     document.querySelector("#table-filters")!.classList.toggle("is-open", open);
+  };
+  if (Object.values(filters).some(Boolean)) showFilters(true);
+  filtersToggle.addEventListener("click", () => {
+    const open = filtersToggle.getAttribute("aria-expanded") !== "true";
+    showFilters(open);
     if (open) selects.category.focus();
   });
   document.querySelector("#clear-search")!.addEventListener("click", () => { search.value = ""; render(); search.focus(); });
@@ -722,6 +725,9 @@ export async function workspace(): Promise<void> {
   let linksPanel: ReturnType<typeof bindItemLinks> | null = null;
   let photo: PhotoPanel | null = null;
   let visualControl: ReturnType<typeof itemVisualControl> | null = null;
+  let openPicture: (() => void) | null = null;
+  const pictureSheet = document.querySelector<HTMLDialogElement>("#picture-sheet")!;
+  const picturePanel = createSheet(pictureSheet, { onClose: () => { visualControl = null; sheet.querySelector<HTMLElement>("#photo-panel [data-photo-menu]")?.focus({ preventScroll: true }); } });
   let loanForm: ReturnType<typeof bindLoanForm> | null = null;
   let known: Borrower[] = [];
   let knownLoaded = false;
@@ -882,16 +888,22 @@ export async function workspace(): Promise<void> {
       thumbUrl: (id) => photoUrl(id, "thumb"),
       hintAdd: "Everyone sees this photo on the Lending Hub and Self-Service. Show the item itself, not people or documents.",
       hintHas: "Everyone sees this photo on the Lending Hub and Self-Service. The large version stays staff-only.", removeNote: "The item keeps its stock and history.",
+      chooseIcon: () => openPicture?.(),
       view: (shown, edit) => void openViewer(shownUrl(shown, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLElement>("#photo-panel .photo-tile img"), item.name, resolveItemIcon(detail!.item).key, edit),
       changed: async (next) => { if (detail?.item.id === item.id) detail = { ...detail, item: { ...detail.item, photo: next } }; await refreshStock(item.id); await poll.refresh(); },
       // Someone else changed the photo first: show theirs, and the list with it.
       refresh: async () => { await refreshStock(item.id); await poll.refresh(); }
     });
-    visualControl = itemVisualControl(sheet.querySelector<HTMLElement>("#item-visual-control")!, () => ({ ...detail!.item, photoId: detail!.item.photo?.id, updatedAt: detail!.item.updatedAt }), async () => {
-      const loaded = await fetchDetail(item.id);
-      if (loaded) { detail = loaded; photo?.render(loaded.item.photo); }
-      await poll.refresh();
-    });
+    // The item's picture (LH-IP02-S04): its icon and whether the photo or the icon shows, in a sheet opened from the picture's own menu.
+    openPicture = () => {
+      mount(pictureSheet, sheetContent(item.name, "Item picture", html`<div class="item-visual-control" id="item-visual-control"></div>`, "picture-sheet-title"));
+      visualControl = itemVisualControl(pictureSheet.querySelector<HTMLElement>("#item-visual-control")!, () => ({ ...detail!.item, photoId: detail!.item.photo?.id, updatedAt: detail!.item.updatedAt }), async () => {
+        const loaded = await fetchDetail(item.id);
+        if (loaded) { detail = loaded; photo?.render(loaded.item.photo); }
+        await poll.refresh();
+      }, () => { picturePanel.close(true); sheet.querySelector<HTMLButtonElement>("#photo-panel [data-pick]")?.click(); });
+      picturePanel.open();
+    };
   }
 
   /** Every place in reading order, indented by depth; an inactive place stays listed only for the item that is kept in it. */
@@ -966,7 +978,7 @@ export async function workspace(): Promise<void> {
         <div class="field"><label for="f-lendingAudience">Shown to</label><select id="f-lendingAudience" name="lendingAudience">${options(LENDING_AUDIENCES, item.lendingAudience ?? "NOT_AVAILABLE_FOR_LENDING")}</select></div>
         <div class="listing-status" id="listing-preview" aria-live="polite"></div>
       </div>
-      <div class="item-visual-control" id="item-visual-control"></div><div id="item-links"></div>
+      <div id="item-links"></div>
       </div></details>
       <div class="form-section form-section--last">
         <label class="checkbox"><input type="checkbox" name="reviewed" ${item.needsReview === false ? html`checked` : ""} /><span>Details reviewed and verified</span></label>

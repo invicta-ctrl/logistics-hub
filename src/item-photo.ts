@@ -271,7 +271,7 @@ export type PhotoSubject = {
  * `[data-tile]` for the picture and a `[data-actions]` beside it for the buttons. `refresh` re-reads the record after
  * another person changed the picture first; `changed` runs after every save.
  */
-export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: string; name: string; photo: Photo | null; /** Item photos only: the route that cleans (POST) and restores (DELETE) the background, e.g. /api/staff/items/ITM-0001/cutout. */ cleanup?: string; cleanupState?: () => PhotoCleanup | undefined; enableCleanup?: () => Promise<void>; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo, edit?: () => void) => void; visual?: () => VisualItem; updatedAt?: () => string | null; repairVersion?: (from: string | null, to: string) => void }): PhotoPanel {
+export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: string; name: string; photo: Photo | null; /** Item photos only: the route that cleans (POST) and restores (DELETE) the background, e.g. /api/staff/items/ITM-0001/cutout. */ cleanup?: string; cleanupState?: () => PhotoCleanup | undefined; enableCleanup?: () => Promise<void>; changed: (photo: Photo | null) => void; refresh: () => Promise<void>; view: (photo: Photo, edit?: () => void) => void; /** Item photos only: opens the item's icon and picture choices (LH-IP02-S04). */ chooseIcon?: () => void; visual?: () => VisualItem; updatedAt?: () => string | null; repairVersion?: (from: string | null, to: string) => void }): PhotoPanel {
   const { name, noun, endpoint } = options;
   let photo = options.photo;
   let staged: Prepared | null = null;
@@ -338,12 +338,19 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     return html`<div class="menu menu--row photo-menu" id="${menuId}" popover role="menu" aria-label="${noun === "photo" ? "Photo" : "Picture"} of ${name}">
       <button type="button" class="menu__item" role="menuitem" data-view>${icon("eye")}View larger</button>
       <button type="button" class="menu__item" role="menuitem" data-pick ${off}>${icon("refresh")}Change photo</button>
-      <button type="button" class="menu__item" role="menuitem" data-camera ${off}>${icon("camera")}Take photo</button>
       <button type="button" class="menu__item" role="menuitem" data-crop-existing ${off}>${icon("crop")}Crop thumbnail</button>
       ${cleanup}
+      ${iconChoice(off)}
       <button type="button" class="menu__item menu__item--danger" role="menuitem" data-remove ${off}>${icon("close")}Remove photo</button>
     </div>`;
   };
+  /** The icon an item shows instead of (or until) a photo is chosen from the same menu, in its own small sheet. */
+  const iconChoice = (off: Html | string): Html => options.chooseIcon ? html`<button type="button" class="menu__item" role="menuitem" data-choose-icon-sheet ${off}>${icon("box")}Choose icon</button>` : html``;
+  /** Before there is a photo, the item's icon opens the same menu: add a photo, or choose the icon. */
+  const emptyMenu = (): Html => html`<div class="menu menu--row photo-menu" id="${menuId}" popover role="menu" aria-label="Picture of ${name}">
+      <button type="button" class="menu__item" role="menuitem" data-pick>${icon("camera")}Add photo</button>
+      ${iconChoice("")}
+    </div>`;
   const menuOpen = (menu: HTMLElement) => "showPopover" in HTMLElement.prototype ? menu.matches(":popover-open") : !menu.hidden;
   const closeMenu = () => {
     const menu = host.querySelector<HTMLElement>(".photo-menu");
@@ -375,8 +382,13 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     if (staged) {
       return show(html`<div class="photo-tile photo-tile--preview"><img src="${staged.preview}" alt="Preview of the new ${noun} of ${name}" /></div>`, html`<div class="photo-actions"><button type="button" class="button button--primary button--sm" data-save ${busy() ? "disabled" : ""}>${state === "saving" ? "Saving…" : `Save ${noun}`}</button>
           ${options.cleanup ? html`<button type="button" class="button button--secondary button--sm" data-save-clean ${busy() || !cleanupState()?.cleanable ? "disabled" : ""}>Save &amp; remove background</button>${enableButton()}` : ""}
-          <button type="button" class="button button--secondary button--sm" data-pick ${busy() ? "disabled" : ""}>Choose another</button><button type="button" class="button button--ghost button--sm" data-camera ${busy() ? "disabled" : ""}>Take photo</button>
+          <button type="button" class="button button--secondary button--sm" data-pick ${busy() ? "disabled" : ""}>Choose another</button>${noun === "photo" ? "" : html`<button type="button" class="button button--ghost button--sm" data-camera ${busy() ? "disabled" : ""}>Take photo</button>`}
           <button type="button" class="button button--secondary button--sm" data-crop-photo ${busy() ? "disabled" : ""}>Crop thumbnail</button>${staged.thumb !== originalStaged?.thumb ? html`<button type="button" class="button button--ghost button--sm" data-reset-photo ${busy() ? "disabled" : ""}>Reset crop</button>` : ""}<button type="button" class="button button--ghost button--sm" data-cancel ${busy() ? "disabled" : ""}>Cancel</button></div>${cleanupHint()}${alert}`);
+    }
+    if (!photo && noun === "photo" && options.visual) {
+      // An item without a photo: its icon is the picture, and pressing it opens the menu (a small camera badge says a photo can be added).
+      return show(html`<button type="button" class="photo-tile photo-tile--add photo-tile--icon" ${menuTrigger(`Add photo or choose an icon for ${name}`)}>${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}<span class="photo-tile__badge" aria-hidden="true">${icon("camera")}</span></button>`,
+        html`${emptyMenu()}${alert}`);
     }
     if (!photo) {
       return show(html`<button type="button" class="photo-tile photo-tile--add" data-pick>${options.visual ? itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual") : icon("camera")}<span>${options.visual ? "Add photo" : `Add ${noun}`}</span></button>`,
@@ -387,7 +399,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       ? html`<button type="button" class="photo-tile" ${opens ? menuTrigger(`Photo of ${name}: view, change, crop or remove it`) : html`data-view aria-label="View saved ${noun} of ${name}"`}>${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}</button>`
       : photo.cutout && options.cleanup
       // A cleaned picture stands on a pedestal (LH-IP02-S03): the transparent cut-out, cropped to the item, on a plinth (photo-frame.ts).
-      ? html`<button type="button" class="photo-tile photo-tile--pedestal" ${opens ? menuTrigger(`Photo of ${name}, background removed: view, change, crop or restore it`) : html`data-view aria-label="View ${noun} of ${name}, background removed"`}><span class="pedestal" aria-hidden="true"><i class="pedestal__plinth"></i><span class="pedestal__item"><img src="${shownUrl(photo, "display")}${thumbnailVersion(photo.id) ? `?r=${thumbnailVersion(photo.id)}` : ""}" alt="" data-pedestal data-fallback="${tileUrl(photo.id)}" decoding="async" /></span></span><span class="photo-tile__note">${icon("check")}Background removed</span></button>`
+      ? html`<button type="button" class="photo-tile photo-tile--pedestal" ${opens ? menuTrigger(`Photo of ${name}, background removed: view, change, crop or restore it`) : html`data-view aria-label="View ${noun} of ${name}, background removed"`}><span class="pedestal" aria-hidden="true"><i class="pedestal__plinth"></i><span class="pedestal__item"><img src="${shownUrl(photo, "display")}${thumbnailVersion(photo.id) ? `?r=${thumbnailVersion(photo.id)}` : ""}" alt="" data-pedestal data-fallback="${tileUrl(photo.id)}" decoding="async" /></span></span><span class="photo-tile__note">${icon("check")}<span class="photo-tile__note-text">Background removed</span></span></button>`
       : html`<button type="button" class="photo-tile" ${opens ? menuTrigger(`Photo of ${name}: view, change, crop${options.cleanup ? " or remove its background" : " or remove it"}`) : html`data-view aria-label="View ${noun} of ${name}"`}>${options.visual ? itemVisual({ ...options.visual(), photoId: photo.id }, tileUrl, "profile-visual", true) : html`<img src="${tileUrl(photo.id)}" alt="" width="160" height="160" />`}</button>`,
       opens
         ? html`${photoMenu()}${confirming ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>
@@ -534,6 +546,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     if (busy()) return;
     if (target.closest("[data-pick]")) input.click();
     else if (target.closest("[data-camera]")) camera.click();
+    else if (target.closest("[data-choose-icon-sheet]")) options.chooseIcon?.();
     else if (target.closest("[data-view]") && photo) options.view(photo, noun === "photo" ? () => { if (!host.isConnected || busy()) return; draw(); openMenu(); } : undefined);
     else if (target.closest("[data-enable-cleanup]") && cleanupState()?.canEnable && options.enableCleanup) {
       state = "cleaning"; error = ""; draw();
