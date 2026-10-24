@@ -680,4 +680,13 @@ test("staff pictures take their own background, and a cleaned picture stands on 
   // An original photo on a stone-coloured desk takes its colour but does not stand on a pedestal: only a cleaned picture does.
   await expect(frame(4)).toHaveClass(/photo-matched/);
   await expect(frame(4)).not.toHaveClass(/photo-pedestal/);
+  // Every thumbnail keeps its place in its row, the cleaned one too (removing a background once moved it onto the item's name, V1.16.2),
+  // and a matched frame keeps a visible edge however pale it is.
+  await expect(frame(2)).toHaveCSS("position", "absolute");
+  const left = await Promise.all([1, 2, 3, 4].map(async (n) => (await frame(n).boundingBox())!.x));
+  for (const x of left) expect(Math.abs(x - left[0]!)).toBeLessThan(1);
+  const heights = await page.locator("tr[data-key]").evaluateAll((rows) => rows.map((row) => Math.round(row.getBoundingClientRect().height)));
+  expect(new Set(heights).size).toBe(1);
+  expect(await frame(1).evaluate((element) => getComputedStyle(element).boxShadow)).not.toBe("none");
+  await page.locator("table").first().screenshot({ path: "test-results/browser/item-thumbnails.png" });
 });

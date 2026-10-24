@@ -17,8 +17,15 @@
 .viewer__fallback .item-icon { width: 6rem; height: 6rem; }
 /* LH-IP02-S03 · A picture takes its own background (photo-frame.ts): the frame turns the colour along the photo's edge, so they read as one. */
 .item-visual.photo-matched, .cat-photo.photo-matched { background: var(--photo-bg); }
-/* A cut-out's thumbnail (flattened onto the stone) stands just above a small plinth; the full pedestal is the item sheet's, below. */
-.item-visual.photo-pedestal { position: relative; background: var(--stage); }
+/* In a list a frame as pale as the row (a photo on white) would vanish, leaving the item floating: a hairline keeps the tile. */
+:is(.thumb, .item-thumb).photo-matched { box-shadow: 0 0 0 1px var(--line); }
+/*
+ * A cut-out's thumbnail (flattened onto the stone) stands just above a small plinth; the full pedestal is the item sheet's, below.
+ * The plinth is drawn inside the frame, so the frame must be positioned. List thumbnails already are (absolutely, in their cell), and that
+ * placement must win: the default here has no specificity, or a cut-out's thumbnail drops out of its column onto the item's name.
+ */
+:where(.item-visual.photo-pedestal) { position: relative; }
+.item-visual.photo-pedestal { background: var(--stage); }
 .item-visual.photo-pedestal > .item-visual__photo { align-self: start; height: 74%; margin-top: 5%; }
 .item-visual.photo-pedestal::before, .item-visual.photo-pedestal::after { position: absolute; left: 18%; right: 18%; pointer-events: none; content: ""; }
 .item-visual.photo-pedestal::before { bottom: 6%; height: 10%; border-radius: 0 0 50% 50% / 0 0 40% 40%; background: linear-gradient(90deg, #cdc5bb, #f3efe9 45%, #f3efe9 55%, #cdc5bb); box-shadow: 0 5px 8px -5px rgb(28 18 20 / 35%); }
