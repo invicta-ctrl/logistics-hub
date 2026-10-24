@@ -1,5 +1,5 @@
 import { OPEN_UNIT_CONDITIONS } from "./catalog-policy";
-import { type Actor, BUMP_REVISION, InputError, audit, guarded, openUnitsOf } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, audit, guarded, onHandOf, openUnitsOf } from "./inventory";
 
 /*
  * Open-unit tracking (Part 5B, amendment A12). A Consumable in OPEN_UNIT mode is still counted by its
@@ -25,8 +25,8 @@ export async function openUnitAction(db: D1Database, actor: Actor, itemId: strin
   const action = record.action as typeof ACTIONS[number];
   if (!ACTIONS.includes(action)) throw new InputError(400, "Choose Open, Use, Condition, Empty or Correct.");
   const now = new Date().toISOString();
-  const item = await db.prepare(`SELECT i.unit, i.item_type = 'Consumable' AND i.consumption_mode = 'OPEN_UNIT' AS tracked, i.status, COALESCE(b.on_hand, 0) AS onHand, ${OPEN_COUNT} AS open
-    FROM items i LEFT JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?`).bind(itemId).first<{ unit: string; tracked: number; status: string; onHand: number; open: number }>();
+  const item = await db.prepare(`SELECT i.unit, i.item_type = 'Consumable' AND i.consumption_mode = 'OPEN_UNIT' AS tracked, i.status, ${onHandOf("i.id")} AS onHand, ${OPEN_COUNT} AS open
+    FROM items i WHERE i.id = ?`).bind(itemId).first<{ unit: string; tracked: number; status: string; onHand: number; open: number }>();
   if (!item) throw new InputError(404, "Item not found.");
 
   if (action === "open") {

@@ -1,4 +1,4 @@
-import { stockState } from "./catalog-policy";
+import { EXPIRY_WINDOW_DAYS, STOCK_STATE_LABELS, isExpiring, stockState } from "./catalog-policy";
 import { type Place, pathOf, placesOf } from "./location-tree";
 import { type Preset, bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
@@ -11,7 +11,7 @@ import {
 type StockItem = {
   id: string; name: string; aliases: string | null; category: string; unit: string; status: string; onHand: number; reorderThreshold: number;
   locationId: string | null; stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean;
-  itemType: string; consumptionMode: string; openUnits: number; openCondition: string | null;
+  itemType: string; consumptionMode: string; openUnits: number; openCondition: string | null; onLoan: number;
 };
 type Reorder = { id: string; itemId: string; itemName: string; unit: string; status: string; desiredQuantity: number | null; note: string | null; updatedAt: string; closedAt: string | null; updatedBy: string | null };
 type Activity = { id: string; createdAt: string; itemId: string; itemName: string; unit: string; movementType: string; related: string | null; change: number; afterQuantity: number; reason: string | null; notes: string | null; actor: string | null };
@@ -19,11 +19,11 @@ type Stock = { revision: number; items: StockItem[]; locations: Place[]; reorder
 type View = "attention" | "restock" | "pantry" | "activity";
 type Focus = "all" | "out" | "low" | "count" | "expiring" | "open";
 
-const EXPIRING_DAYS = 14;
 const isOpen = (reorder: Reorder) => reorder.status === "NEEDS_RESTOCK" || reorder.status === "PLANNED";
 const daysUntil = (isoDay: string) => Math.round((Date.parse(`${isoDay}T00:00:00Z`) - Date.parse(`${officeDay()}T00:00:00Z`)) / 86_400_000);
 const tracked = (item: StockItem) => item.itemType === "Consumable" && item.consumptionMode === "OPEN_UNIT";
-const expiring = (item: StockItem) => item.stockArea === "Pantry" && Boolean(item.expiresOn) && daysUntil(item.expiresOn!) <= EXPIRING_DAYS;
+// The one expiry rule and window (catalog-policy.ts), so Stock and the Attention inbox count the same items.
+const expiring = (item: StockItem) => isExpiring(item, officeDay());
 
 /** Why an item needs attention, most urgent first; empty when it does not. */
 function reasons(item: StockItem): Array<Exclude<Focus, "all">> {
@@ -46,9 +46,12 @@ function expiryTag(item: StockItem): Html {
   const days = daysUntil(item.expiresOn);
   const text = formatDate(item.expiresOn);
   if (days < 0) return html`<span class="tag tag--bad">Expired ${text}</span>`;
-  if (days <= EXPIRING_DAYS) return html`<span class="tag tag--warn">${days === 0 ? "Expires today" : `In ${plural(days, "day")}`} · ${text}</span>`;
+  if (days <= EXPIRY_WINDOW_DAYS) return html`<span class="tag tag--warn">${days === 0 ? "Expires today" : `In ${plural(days, "day")}`} · ${text}</span>`;
   return html`<span class="tag">${text}</span>`;
 }
+
+const STOCK_TAG_TONES = { OUT: "tag--bad", ON_LOAN: "tag--pending", LOW: "tag--warn", OK: "tag--ok" } as const;
+const stockTag = (item: StockItem): Html => { const state = stockState(item); return html`<span class="tag ${STOCK_TAG_TONES[state]}">${STOCK_STATE_LABELS[state]}</span>`; };
 
 function whyTags(item: StockItem): Html {
   return html`<span class="tags">${reasons(item).map((reason) => {
@@ -224,7 +227,8 @@ export async function stockWorkspace(): Promise<void> {
     const open = data.reorders.filter(isOpen);
     const closed = data.reorders.filter((reorder) => !isOpen(reorder));
     const byId = new Map(data.items.map((item) => [item.id, item]));
-    const suggestions = data.items.filter((item) => item.status !== "INACTIVE" && item.reorderThreshold > 0 && stockState(item) !== "OK" && !item.reorderStatus);
+    // All on loan is not short: the units come back.
+    const suggestions = data.items.filter((item) => item.status !== "INACTIVE" && item.reorderThreshold > 0 && ["OUT", "LOW"].includes(stockState(item)) && !item.reorderStatus);
     return html`
       ${open.length ? html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Restock list</caption>
@@ -254,7 +258,7 @@ export async function stockWorkspace(): Promise<void> {
       <caption class="visually-hidden">Pantry items</caption>
       <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Expiry</th><th scope="col">Status</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
       <tbody>${pantry.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit, item)}${levelCell(item)}<td>${expiryTag(item)}</td>
-        <td>${stockState(item) === "OUT" ? html`<span class="tag tag--bad">Out of stock</span>` : stockState(item) === "LOW" ? html`<span class="tag tag--warn">Low stock</span>` : html`<span class="tag tag--ok">In stock</span>`}</td>
+        <td>${stockTag(item)}</td>
         <td class="col-actions"><span class="row-actions">${tracked(item)
           ? html`<button type="button" class="button button--secondary button--sm" data-open-units="${item.id}">Open units</button>`
           : html`<button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="CONSUMED" data-delta="-1">Use</button>`}${rowActionMenu(`pantry-actions-${item.id}`, item.name, html`<li><button type="button" class="menu__item" data-record-item="${item.id}" data-reason="DELIVERY">Restock</button></li>`)}</span></td></tr>`)}</tbody></table></div>`;

@@ -14,12 +14,13 @@ const EDGES = { display: 1280, thumb: 320, detail: 960 } as const;
 /** The Worker refuses a variant over 1 MB, so a noisy photo is re-encoded harder before it is sent. */
 const QUALITIES = [0.82, 0.6, 0.4];
 
-export const photoUrl = (id: string, size: Size) => size === "display" ? `/api/staff/media/${id}/display` : itemThumbnailUrl(id, "staff", size);
+export const photoUrl = (id: string, size: Size, version: string | null = null) => size === "display" ? `/api/staff/media/${id}/display` : itemThumbnailUrl(id, "staff", size, version);
 /** The picture an item shows: its cleaned cutout when it has one, else the original at `size`. */
 export const shownUrl = (photo: Photo, size: Size) => (size === "display" && photo.cutout ? `/api/staff/media/${photo.id}/cutout` : photoUrl(photo.id, size));
 
 /** Decorative fixed-size item visual; only loaded real photos open the viewer. */
-export const rowThumb = (item: VisualItem): Html => itemVisual(item, (id) => photoUrl(id, "thumb"), "thumb");
+/** A list row's thumbnail, addressed by the item's last change so the browser keeps it between pages. */
+export const rowThumb = (item: VisualItem & { updatedAt?: string | null }): Html => itemVisual(item, (id) => photoUrl(id, "thumb", item.updatedAt ?? null), "thumb");
 
 /**
  * A 64-bit difference hash of the picture as 16 hex digits: the picture at 9 × 8 grey pixels, one bit for each pixel brighter than

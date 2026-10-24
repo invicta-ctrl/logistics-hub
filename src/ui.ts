@@ -99,8 +99,12 @@ export function itemVisual(item: VisualItem, url: (id: string) => string, classN
     ? html`<img class="item-visual__photo" data-item-photo data-photo="${visual.photoId}" src="${url(visual.photoId)}" alt="${meaningful ? `Photo of ${item.name}` : ""}" width="160" height="160" loading="lazy" decoding="async" />` : ""}</span>`;
 }
 const thumbnailVersions = new Map<string, number>();
-export const itemThumbnailUrl = (id: string, scope: "staff" | "public" = "public", size: "thumb" | "detail" = "thumb") =>
-  `/api/${scope}/media/${id}/${size}?v=2${thumbnailVersions.has(id) ? `&r=${thumbnailVersions.get(id)}` : ""}`;
+/**
+ * A thumbnail's address. `version` (staff lists pass the item's last change, which a new photo, a cleaned picture and its removal all
+ * move) names the picture, so the Worker lets the browser keep it a day instead of asking again on every page (V1.16.4 §4.8).
+ */
+export const itemThumbnailUrl = (id: string, scope: "staff" | "public" = "public", size: "thumb" | "detail" = "thumb", version: string | null = null) =>
+  `/api/${scope}/media/${id}/${size}?v=2${thumbnailVersions.has(id) ? `&r=${thumbnailVersions.get(id)}` : ""}${version && scope === "staff" ? `&p=${encodeURIComponent(version)}` : ""}`;
 
 /** How many times a photo's cleaned picture changed under the same id, so a picture drawn from it again is fetched fresh. */
 export const thumbnailVersion = (id: string): number => thumbnailVersions.get(id) ?? 0;

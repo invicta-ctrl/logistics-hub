@@ -1,5 +1,5 @@
 import { LOAN_OUTCOMES, LOAN_PURPOSES, PUBLIC_LENDING_ITEM_TYPE, STUDENT_ID_PATTERN } from "./catalog-policy";
-import { type Actor, BUMP_REVISION, InputError, LOAN_COLUMNS, audit, countAwareStatus, isoDate, currentItemSQL } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, LOAN_COLUMNS, audit, balanceOf, countAwareStatus, isoDate, currentItemSQL, onHandOf } from "./inventory";
 import { ERASED } from "./retention";
 
 export const LOAN_ID = /^LN-[A-Za-z0-9-]{1,60}$/;
@@ -87,7 +87,7 @@ export function lendStatements(db: D1Database, write: LendWrite): D1PreparedStat
     db.prepare(`INSERT OR IGNORE INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity,
         related_entity_type, related_entity_id, actor_user_id, idempotency_key, status)
       SELECT ?1, ?2, 'LOAN_OUT', 'OUT', i.id, ?3, i.unit, -?3, 'LOAN', ?4, ?5, ?6, ${write.countAware ? countAwareStatus("i.id", "?2") : "'POSTED'"}
-      FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?7 AND ${currentItemSQL()}${write.allowShort ? "" : " AND b.on_hand >= ?3"}`)
+      FROM items i JOIN ${balanceOf("?7")} b ON b.id = i.id WHERE i.id = ?7 AND ${currentItemSQL()}${write.allowShort ? "" : " AND b.on_hand >= ?3"}`)
       .bind(write.movementId, write.at, details.quantity, write.id, write.actorId, write.key, write.itemId),
     db.prepare(`INSERT INTO loans(id, item_id, quantity, purpose, borrower_name, student_id, reason, photo_key, return_by, movement_id, created_at, created_by)
       SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM inventory_movements WHERE id = ?)`)
@@ -99,8 +99,8 @@ export function lendStatements(db: D1Database, write: LendWrite): D1PreparedStat
 }
 
 async function byKey(db: D1Database, key: string) {
-  return db.prepare(`SELECT l.id, l.item_id AS itemId, b.on_hand AS onHand FROM loans l JOIN inventory_movements m ON m.id = l.movement_id
-    JOIN inventory_balances b ON b.id = l.item_id WHERE m.idempotency_key = ?`).bind(key).first<{ id: string; itemId: string; onHand: number }>();
+  return db.prepare(`SELECT l.id, l.item_id AS itemId, ${onHandOf("l.item_id")} AS onHand FROM loans l JOIN inventory_movements m ON m.id = l.movement_id
+    WHERE m.idempotency_key = ?`).bind(key).first<{ id: string; itemId: string; onHand: number }>();
 }
 
 /**
@@ -154,12 +154,12 @@ export async function createLoan(db: D1Database, bucket: R2Bucket, actor: Actor,
     if (saved === false) await bucket.delete(photoKey);
     if (!saved) throw error;
   }
-  const written = await db.prepare("SELECT b.on_hand AS onHand FROM loans l JOIN inventory_balances b ON b.id = l.item_id WHERE l.id = ?").bind(id).first<number>("onHand");
+  const written = await db.prepare(`SELECT ${onHandOf("l.item_id")} AS onHand FROM loans l WHERE l.id = ?`).bind(id).first<number>("onHand");
   if (written !== null) return { id, onHand: written };
   await bucket.delete(photoKey);
   const raced = await byKey(db, key);
   if (raced?.itemId === itemId) return { id: raced.id, onHand: raced.onHand };
-  const balance = await db.prepare("SELECT on_hand AS onHand FROM inventory_balances WHERE id = ?").bind(itemId).first<number>("onHand");
+  const balance = await db.prepare(`SELECT ${onHandOf("?")} AS onHand`).bind(itemId).first<number>("onHand");
   throw new InputError(409, `Only ${balance ?? 0} on hand; cannot lend ${details.quantity}.`);
 }
 

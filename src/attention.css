@@ -42,7 +42,8 @@
 .attn-row__title { font-size: .9375rem; font-weight: 500; line-height: 1.5rem; overflow-wrap: anywhere; }
 .attn-row.is-selected .attn-row__title { color: var(--brand); }
 .attn-row__why { color: var(--text-2); font-size: .8125rem; overflow-wrap: anywhere; }
-.attn-row__since { color: var(--text-3); font-size: .8125rem; white-space: nowrap; }
+/* The urgency's basis and how long it has been so: one quiet line that may wrap on a phone. */
+.attn-row__since { color: var(--text-3); font-size: .8125rem; overflow-wrap: anywhere; }
 .attn-row__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .attn-more { margin: var(--space-1) 0 0 var(--space-2); }
 .attn-note { margin: var(--space-2) var(--space-4) 0; font-size: .8125rem; }

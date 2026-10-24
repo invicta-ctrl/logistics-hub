@@ -20,6 +20,20 @@ const ITEM_COLUMNS = `i.id, i.name, i.aliases, i.category, i.item_type AS itemTy
  i.location_id AS locationId, i.notes, i.updated_at AS updatedAt,
  i.stock_area AS stockArea, i.expires_on AS expiresOn, i.consumption_mode AS consumptionMode, i.model, i.serial_number AS serialNumber, i.visual_type AS visualType, i.icon_key AS iconKey`;
 export const BUMP_REVISION = "UPDATE catalog_revision SET value = value + 1 WHERE id = 1";
+/*
+ * One item's balance from its own ledger rows, read through the item index (V1.16.4 §4.8). The inventory_balances view sums every
+ * item's ledger first whenever it is LEFT JOINed or joined through another key (a movement's or a kit's item), so a read about one
+ * item uses these instead; lists still read the view, once. Each equals the view's figure for that item, superseded and migrated
+ * rows included, and a test holds them to it. `ledger` is the subquery's own alias, so an outer `m` or `l` is never captured.
+ */
+const POSTED_SUM = (also = "") => `COALESCE(SUM(CASE WHEN ledger.status = 'POSTED'${also} THEN ledger.signed_quantity ELSE 0 END), 0)`;
+/** The on-hand of the item `item` names (a column or a bound parameter). */
+export const onHandOf = (item: string) => `(SELECT ${POSTED_SUM()} FROM inventory_movements ledger WHERE ledger.item_id = ${item})`;
+/** The migrated part of that on-hand (the view's `migrated_on_hand`). */
+export const migratedOnHandOf = (item: string) => `(SELECT ${POSTED_SUM(" AND ledger.imported_from IS NOT NULL")} FROM inventory_movements ledger WHERE ledger.item_id = ${item})`;
+/** The view's row for the one item bound as `item`, to join as `b`: always one row, so an item with no movements has 0 on hand. */
+export const balanceOf = (item: string) => `(SELECT ${item} AS id, ${POSTED_SUM()} AS on_hand, ${POSTED_SUM(" AND ledger.imported_from IS NOT NULL")} AS migrated_on_hand
+  FROM inventory_movements ledger WHERE ledger.item_id = ${item})`;
 /**
  * History is shown in business order: migrated rows keep their import order, then everything
  * recorded in the Hub in the order it happened (a phone that synced late slots into place).
@@ -132,12 +146,13 @@ export async function staffInventory(db: D1Database) {
 type AuditRow = { at: string; action: string; details: string | null; actor: string | null };
 
 export async function itemDetail(db: D1Database, id: string) {
-  const [item, movements, events, loans, units, uses, reports] = await db.batch([
-    db.prepare(`SELECT ${ITEM_COLUMNS}, b.legacy_reported_available_qty AS legacyReportedAvailable, b.migrated_on_hand AS migratedOnHand,
-      b.migration_delta AS migrationDelta, i.legacy_source_sheet AS legacySourceSheet, i.legacy_source_row AS legacySourceRow,
+  const [item, movements, events, loans, units, uses, reports, merged] = await db.batch([
+    db.prepare(`SELECT ${ITEM_COLUMNS}, i.legacy_reported_available_qty AS legacyReportedAvailable, b.migrated_on_hand AS migratedOnHand,
+      CASE WHEN i.legacy_reported_available_qty IS NULL THEN NULL ELSE b.migrated_on_hand - i.legacy_reported_available_qty END AS migrationDelta,
+      i.legacy_source_sheet AS legacySourceSheet, i.legacy_source_row AS legacySourceRow,
       i.verification_note AS verificationNote, i.imported_from AS importedFrom, p.media_id AS photoId, p.width AS photoWidth, p.height AS photoHeight,
       lp.path AS location, CASE WHEN i.location_id IS NULL AND trim(i.storage_location) <> '' THEN trim(i.storage_location) END AS legacyLocation
-      FROM items i LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN location_paths lp ON lp.id = i.location_id WHERE i.id = ?`).bind(id),
+      FROM items i LEFT JOIN ${balanceOf("?1")} b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN location_paths lp ON lp.id = i.location_id WHERE i.id = ?1`).bind(id),
     db.prepare(`SELECT * FROM (SELECT m.id, m.created_at AS createdAt, m.movement_type AS movementType, m.signed_quantity AS signedQuantity, m.status,
       m.notes, m.reason, m.related_entity_type AS related, ${actorName("a", "m.actor_user_id")} AS actor, ROW_NUMBER() OVER (ORDER BY ${HISTORY_ORDER}) AS seq,
       COALESCE(l.borrower_name, s.person_name) AS borrower, l.purpose,
@@ -157,12 +172,13 @@ export async function itemDetail(db: D1Database, id: string) {
     db.prepare(`SELECT r.id, r.kind, r.source, r.note, r.created_at AS createdAt, r.resolved_at AS resolvedAt, r.resolution_note AS resolutionNote, lp.path AS location,
         CASE r.source WHEN 'SELF_SERVICE' THEN r.reporter_name ELSE a.display_name END AS reportedBy, x.display_name AS resolvedBy
       FROM location_reports r LEFT JOIN staff_accounts a ON a.id = r.reported_by LEFT JOIN staff_accounts x ON x.id = r.resolved_by LEFT JOIN location_paths lp ON lp.id = r.location_id
-      WHERE r.item_id = ? ORDER BY r.resolved_at IS NOT NULL, r.created_at DESC, r.id LIMIT 20`).bind(id)
+      WHERE r.item_id = ? ORDER BY r.resolved_at IS NOT NULL, r.created_at DESC, r.id LIMIT 20`).bind(id),
+    mergedIntoStatement(db, id)
   ]);
   const found = item.results[0] as (ItemRow & { photoId: string | null; photoWidth: number | null; photoHeight: number | null } & Record<string, unknown>) | undefined;
   if (!found) throw new InputError(404, "Item not found.");
   const { photoId, photoWidth, photoHeight, ...row } = found;
-  const retained = await mergedInto(db, id);
+  const retained = mergedFrom(merged!.results[0]);
   return {
     item: { ...row, name: formatItemName(row.name), needsReview: row.needsReview === 1, listed: isListedForLending(row), listingGaps: listingGaps(row), photo: photoId ? { id: photoId, width: photoWidth, height: photoHeight } : null },
     ...(retained ? { mergedInto: retained } : {}),
@@ -413,8 +429,12 @@ const MOVEMENTS = {
   COUNT: { type: "COUNT_ADJUSTMENT", direction: "ADJUST", signed: "?1 - b.on_hand", guard: "1" }
 } as const;
 
+/**
+ * Records a Stock in, Stock out or count. Whether the item was merged and, for a Stock in that receives a restock entry, whether that
+ * entry is still open are asked together in one batch (the route leaves the merged check to this), and the write itself is guarded
+ * as well: the session, this, the write and its read-back are four sequential calls at most (V1.16.4 §4.8).
+ */
 export async function recordMovement(db: D1Database, actor: Actor, itemId: string, body: unknown) {
-  await requireCurrentItem(db, itemId);
   const record = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   const kind = choice(record, "kind", "movement", ["IN", "OUT", "COUNT"] as const);
   const quantity = whole(record, "quantity", kind === "COUNT" ? "Counted quantity" : "Quantity", kind === "COUNT" ? 0 : 1, 100_000);
@@ -426,12 +446,13 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
   const expected = record.expectedOnHand === undefined || record.expectedOnHand === null ? null : whole(record, "expectedOnHand", "Expected quantity", -1_000_000, 1_000_000);
   if (kind === "COUNT" && expected === null) throw new InputError(400, "Refresh the item before recording a count.");
   const reorderId = record.reorderId === undefined || record.reorderId === null ? null : record.reorderId;
-  if (reorderId !== null) {
-    if (kind !== "IN" || typeof reorderId !== "string" || !/^RO-[A-Za-z0-9-]{1,60}$/.test(reorderId)) throw new InputError(400, "Only a Stock in can receive a restock entry.");
-    const open = await db.prepare(`SELECT 1 FROM reorders WHERE id = ? AND item_id = ? AND status IN (${OPEN_REORDERS})`).bind(reorderId, itemId).first();
-    const received = await db.prepare("SELECT 1 FROM inventory_movements WHERE idempotency_key = ?").bind(key).first();
-    if (!open && !received) throw new InputError(409, "That restock entry is already closed. Refresh to see the latest list.");
-  }
+  if (reorderId !== null && (kind !== "IN" || typeof reorderId !== "string" || !/^RO-[A-Za-z0-9-]{1,60}$/.test(reorderId))) throw new InputError(400, "Only a Stock in can receive a restock entry.");
+  const [merged, entry] = await db.batch([mergedIntoStatement(db, itemId), ...(reorderId === null ? [] : [db.prepare(`SELECT
+      EXISTS (SELECT 1 FROM reorders WHERE id = ?1 AND item_id = ?2 AND status IN (${OPEN_REORDERS})) AS open,
+      EXISTS (SELECT 1 FROM inventory_movements WHERE idempotency_key = ?3) AS received`).bind(reorderId, itemId, key)])]);
+  refuseMerged(mergedFrom(merged!.results[0]));
+  const receiving = entry?.results[0] as { open: number; received: number } | undefined;
+  if (reorderId !== null && !receiving?.open && !receiving?.received) throw new InputError(409, "That restock entry is already closed. Refresh to see the latest list.");
   // A count below the open units must say so: it closes the extra ones (oldest first) in the same batch.
   const reconcile = kind === "COUNT" && record.reconcileOpen === true;
   const movement = MOVEMENTS[kind];
@@ -442,7 +463,7 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
     // Guarded exactly like the count below (same balance, unused key), so both happen or neither does.
     statements.push(db.prepare(`UPDATE open_units SET closed_at = ?1, closed_by = ?2, close_kind = 'COUNTED', movement_id = ?3
       WHERE id IN (SELECT id FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY opened_at DESC, id DESC) AS n FROM open_units WHERE item_id = ?4 AND closed_at IS NULL) WHERE n > ?5)
-        AND (SELECT on_hand FROM inventory_balances WHERE id = ?4) = ?6 AND ${currentItemSQL("?4")} AND NOT EXISTS (SELECT 1 FROM inventory_movements WHERE idempotency_key = ?7)`)
+        AND ${onHandOf("?4")} = ?6 AND ${currentItemSQL("?4")} AND NOT EXISTS (SELECT 1 FROM inventory_movements WHERE idempotency_key = ?7)`)
       .bind(now, actor.accountId, movementId, itemId, quantity, expected, key),
     db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
       SELECT ?1, ?2, ?3, 'UNIT_RECONCILED', 'ITEM', ?4, json_object('closed', changes(), 'counted', ?5) WHERE changes() > 0`)
@@ -453,7 +474,7 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
   statements.push(
     db.prepare(`INSERT OR IGNORE INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, idempotency_key, notes, reason, status)
       SELECT ?2, ?3, '${movement.type}', '${movement.direction}', i.id, ABS(${movement.signed}), i.unit, ${movement.signed}, ?4, ?5, ?6, ?8, 'POSTED'
-      FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.id = ?7 AND ${currentItemSQL()} AND ${movement.guard} AND (?9 IS NULL OR b.on_hand = ?9)`)
+      FROM items i JOIN ${balanceOf("?7")} b ON b.id = i.id WHERE i.id = ?7 AND ${currentItemSQL()} AND ${movement.guard} AND (?9 IS NULL OR b.on_hand = ?9)`)
       .bind(quantity, movementId, now, actor.accountId, key, note, itemId, reason, expected),
     // changes() still refers to the INSERT, so a retry or refused write leaves the revision untouched.
     db.prepare(`${BUMP_REVISION} AND changes() > 0`));
@@ -475,12 +496,12 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
       : `${open} of the units on hand ${open === 1 ? "is" : "are"} open, so ${quantity} cannot be taken out. Mark an open unit empty instead, or correct the open units first.`);
   }
   // Found for a first write and for an idempotent retry alike.
-  const written = await db.prepare(`SELECT m.item_id AS itemId, m.signed_quantity AS change, b.on_hand AS onHand
-    FROM inventory_movements m JOIN inventory_balances b ON b.id = m.item_id WHERE m.idempotency_key = ?`).bind(key).first<{ itemId: string; change: number; onHand: number }>();
+  const written = await db.prepare(`SELECT m.item_id AS itemId, m.signed_quantity AS change, ${onHandOf("m.item_id")} AS onHand
+    FROM inventory_movements m WHERE m.idempotency_key = ?`).bind(key).first<{ itemId: string; change: number; onHand: number }>();
   if (written?.itemId === itemId) return { onHand: written.onHand, change: written.change };
   if (written) throw new InputError(409, "That request was already used for another item. Please try again.");
   await requireCurrentItem(db, itemId);
-  const balance = await db.prepare("SELECT on_hand AS onHand FROM inventory_balances WHERE id = ?").bind(itemId).first<number>("onHand");
+  const balance = await db.prepare(`SELECT ${onHandOf("i.id")} AS onHand FROM items i WHERE i.id = ?`).bind(itemId).first<number>("onHand");
   if (balance === null) throw new InputError(404, "Item not found.");
   if (expected !== null && balance !== expected) throw new InputError(409, `Someone else just changed this item: ${balance} on hand now. Check the figure and save again.`);
   throw new InputError(409, `Only ${balance} on hand; cannot remove ${quantity}.`);
@@ -490,16 +511,21 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
 export const currentItemSQL = (id = "i.id") => `NOT EXISTS (SELECT 1 FROM audit_log merged
   WHERE merged.id = 'IM-' || ${id} AND merged.entity_type = 'ITEM' AND merged.entity_id = ${id} AND merged.action = 'ITEM_MERGED')`;
 
+/** The item `id` was merged into, if any: a statement, so item detail can ask it inside its own batch. */
+const mergedIntoStatement = (db: D1Database, id: string) => db.prepare(`SELECT t.id, t.name FROM audit_log a JOIN items t ON t.id = json_extract(a.details_json, '$.targetId')
+    WHERE a.id = ? AND a.entity_type = 'ITEM' AND a.action = 'ITEM_MERGED' ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1`).bind(`IM-${id}`);
+const mergedFrom = (found: unknown) => found ? { ...(found as { id: string; name: string }), name: formatItemName((found as { name: string }).name) } : null;
+
 export async function mergedInto(db: D1Database, id: string): Promise<{ id: string; name: string } | null> {
-  const found = await db.prepare(`SELECT t.id, t.name FROM audit_log a JOIN items t ON t.id = json_extract(a.details_json, '$.targetId')
-    WHERE a.id = ? AND a.entity_type = 'ITEM' AND a.action = 'ITEM_MERGED' ORDER BY a.created_at DESC, a.rowid DESC LIMIT 1`)
-    .bind(`IM-${id}`).first<{ id: string; name: string }>();
-  return found ? { ...found, name: formatItemName(found.name) } : null;
+  return mergedFrom(await mergedIntoStatement(db, id).first());
+}
+
+function refuseMerged(retained: { id: string; name: string } | null): void {
+  if (retained) throw new InputError(409, `This item was merged into ${retained.name} (${retained.id}). Open that item instead.`);
 }
 
 export async function requireCurrentItem(db: D1Database, id: string): Promise<void> {
-  const retained = await mergedInto(db, id);
-  if (retained) throw new InputError(409, `This item was merged into ${retained.name} (${retained.id}). Open that item instead.`);
+  refuseMerged(await mergedInto(db, id));
 }
 
 type MergeLink = { itemId: string; relatedId: string; kind: string; createdAt: string; createdBy: string | null };

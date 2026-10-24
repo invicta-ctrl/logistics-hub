@@ -1,7 +1,7 @@
 import { PHOTO_MATCH_FROM } from "./ambient-assist";
 import { UNSETTLED_FINDING } from "./audits";
-import { IDENTITY_RULE_KEY, OPEN_REORDER_STATUSES, REVIEW_REASONS, type ReviewReason } from "./catalog-policy";
-import { type Actor, BUMP_REVISION, InputError } from "./inventory";
+import { EXPIRY_SOON_DAYS, EXPIRY_WINDOW_DAYS, IDENTITY_RULE_KEY, OPEN_REORDER_STATUSES, REVIEW_REASONS, type ReviewReason, dayPlus } from "./catalog-policy";
+import { type Actor, BUMP_REVISION, InputError, currentItemSQL, migratedOnHandOf, onHandOf } from "./inventory";
 import { kitsNotReady } from "./kits";
 import { LOAN_ID, officeDay } from "./loans";
 import { ERASED } from "./retention";
@@ -23,6 +23,8 @@ export type Entry = {
   reason: string;
   source: Source;
   urgency: Urgency;
+  /** Why it has this urgency, in a few words, from the same rule that set it: "Out of stock with a reorder level set" (V1.16.4). */
+  basis: string;
   title: string;
   why: string;
   /** When the condition began, where it has a real start; null when it is simply true now. */
@@ -52,13 +54,24 @@ const DAY_MS = 86_400_000;
  */
 const ASKED = `EXISTS (SELECT 1 FROM reorders r WHERE r.item_id = i.id AND r.status IN (${OPEN}))`;
 const STOCK_BASE = "FROM items i JOIN inventory_balances b ON b.id = i.id WHERE i.status <> 'INACTIVE'";
-const IS_OUT = "b.on_hand <= 0";
+// None on hand with units out on loan is All on loan, not Out (V1.16.4 §4.3, catalog-policy.ts stockState); a negative balance stays Out.
+const ON_LOAN = "EXISTS (SELECT 1 FROM loans lent WHERE lent.item_id = i.id AND lent.status = 'OUT')";
+const IS_OUT = `(b.on_hand < 0 OR (b.on_hand = 0 AND NOT ${ON_LOAN}))`;
 const IS_LOW = "b.on_hand > 0 AND i.reorder_threshold > 0 AND b.on_hand <= i.reorder_threshold";
 const OUT_URGENCY = `CASE WHEN ${ASKED} THEN 'LATER' WHEN i.reorder_threshold > 0 THEN 'NOW' ELSE 'SOON' END`;
 const LOW_URGENCY = `CASE WHEN ${ASKED} THEN 'LATER' ELSE 'SOON' END`;
 const STOCK_COUNT = `SELECT CASE WHEN ${IS_OUT} THEN 'STOCK_OUT' ELSE 'STOCK_LOW' END AS reason, CASE WHEN ${IS_OUT} THEN ${OUT_URGENCY} ELSE ${LOW_URGENCY} END AS urgency, COUNT(*) AS n
   ${STOCK_BASE} AND (${IS_OUT} OR (${IS_LOW})) GROUP BY 1, 2`;
 const STOCK_REASONS = new Set(["STOCK_OUT", "STOCK_LOW"]);
+const RESTOCK_ASKED = "Restock already requested";
+
+/*
+ * Needs count: the recorded quantity is doubtful (a migration discrepancy, or a record marked to verify) until someone counts it in
+ * the Hub; the inventory list's `countNeeded` is the same rule. Expiring soon: catalog-policy.ts isExpiring, in SQL. Both read one
+ * item's ledger at a time, and only for the few items their other conditions leave.
+ */
+const NEVER_COUNTED = "NOT EXISTS (SELECT 1 FROM inventory_movements c WHERE c.item_id = i.id AND c.movement_type = 'COUNT_ADJUSTMENT' AND c.imported_from IS NULL)";
+const DOUBTFUL = `(i.status = 'VERIFY' OR (i.legacy_reported_available_qty IS NOT NULL AND ${migratedOnHandOf("i.id")} <> i.legacy_reported_available_qty))`;
 
 const day = new Intl.DateTimeFormat("en-PH", { day: "numeric", month: "short", timeZone: "Asia/Manila" });
 export const dayOf = (value: string) => day.format(new Date(value.length === 10 ? `${value}T00:00:00+08:00` : value));
@@ -80,9 +93,11 @@ type Reason = {
   cols: string;
   order: string;
   bind?: (today: string, now: number) => Array<string | number>;
+  /** Why a row has its urgency: written beside the urgency rule, so the rule and its words live in one place. */
+  basis: (row: Row, now: number) => string;
   /** False when the Self-Service page cannot settle it: the staff shell's Self-Service badge leaves it out. */
   onSelfServicePage?: false;
-  entry: (row: Row, now: number) => Omit<Entry, "key" | "reason" | "source" | "urgency">;
+  entry: (row: Row, now: number) => Omit<Entry, "key" | "reason" | "source" | "urgency" | "basis">;
 };
 
 /** The two catalog gaps, defined once: Attention lists them and Home counts them against the whole catalog. */
@@ -117,6 +132,7 @@ const REASONS: readonly Reason[] = [
     cols: "l.id AS id, i.name AS item, l.quantity AS quantity, l.borrower_name AS who, l.return_by AS due",
     order: "l.return_by, l.id",
     bind: (today) => [today],
+    basis: (row, now) => `Due back ${days(daysAgo(String(row.due), now))} ago`,
     entry: (row, now) => ({
       title: `${row.item}${Number(row.quantity) > 1 ? ` × ${row.quantity}` : ""}`,
       why: `${borrower(String(row.who))} was due to return it ${dayOf(String(row.due))}, ${days(daysAgo(String(row.due), now))} ago.`,
@@ -131,6 +147,7 @@ const REASONS: readonly Reason[] = [
     cols: "l.id AS id, i.name AS item, l.quantity AS quantity, l.status AS status, l.borrower_name AS who, l.closed_at AS at",
     order: "l.closed_at, l.id",
     bind: (_today, now) => [new Date(now - RETURN_PROBLEM_DAYS * DAY_MS).toISOString()],
+    basis: () => "Returned damaged or lost, not reviewed yet",
     entry: (row) => ({
       title: `${row.item}${Number(row.quantity) > 1 ? ` × ${row.quantity}` : ""}`,
       why: `${borrower(String(row.who))} returned it ${row.status === "LOST" ? "as lost" : "damaged"} on ${dayOf(String(row.at))}. Nothing went back to stock.`,
@@ -141,11 +158,14 @@ const REASONS: readonly Reason[] = [
     id: "STOCK_OUT", source: "Stock", label: "Out of stock",
     from: `${STOCK_BASE} AND ${IS_OUT}`,
     urgency: OUT_URGENCY,
-    cols: `i.id AS id, i.name AS item, i.reorder_threshold AS level, ${ASKED} AS asked`,
+    cols: `i.id AS id, i.name AS item, b.on_hand AS onHand, i.reorder_threshold AS level, ${ASKED} AS asked`,
     order: "i.reorder_threshold > 0 DESC, i.name COLLATE NOCASE, i.id",
+    basis: (row) => row.asked ? RESTOCK_ASKED : Number(row.level) > 0 ? "Out of stock with a reorder level set" : "Out of stock, no reorder level set",
     entry: (row) => ({
       title: String(row.item),
-      why: row.asked ? "None left. A restock is already requested." : Number(row.level) > 0 ? `None left, and staff keep at least ${row.level}.` : "None left.",
+      // A negative balance stays Out (V1.16.4 §4.3) and says by how much.
+      why: Number(row.onHand) < 0 ? `None left, and ${-Number(row.onHand)} more went out than the record held.${row.asked ? " A restock is already requested." : Number(row.level) > 0 ? ` Staff keep at least ${row.level}.` : ""}`
+        : row.asked ? "None left. A restock is already requested." : Number(row.level) > 0 ? `None left, and staff keep at least ${row.level}.` : "None left.",
       since: null, href: `/staff/items?item=${row.id}`, action: "Open the item"
     })
   },
@@ -155,9 +175,42 @@ const REASONS: readonly Reason[] = [
     urgency: LOW_URGENCY,
     cols: `i.id AS id, i.name AS item, b.on_hand AS onHand, i.reorder_threshold AS level, ${ASKED} AS asked`,
     order: "i.name COLLATE NOCASE, i.id",
+    basis: (row) => row.asked ? RESTOCK_ASKED : "At or below its reorder level",
     entry: (row) => ({
       title: String(row.item),
       why: `${row.onHand} left; staff keep at least ${row.level}.${row.asked ? " A restock is already requested." : ""}`,
+      since: null, href: `/staff/items?item=${row.id}`, action: "Open the item"
+    })
+  },
+  {
+    id: "NEEDS_COUNT", source: "Stock", label: "Needs count",
+    from: `FROM items i WHERE i.status <> 'INACTIVE' AND ${currentItemSQL()} AND ${NEVER_COUNTED} AND ${DOUBTFUL}`,
+    // Nothing is known to be short: the figure only needs confirming, so it waits for a routine count.
+    urgency: "'LATER'",
+    cols: "i.id AS id, i.name AS item, i.status AS status",
+    order: "i.name COLLATE NOCASE, i.id",
+    basis: () => "Figure not confirmed; nothing known to be short",
+    entry: (row) => ({
+      title: String(row.item),
+      why: row.status === "VERIFY" ? "Its quantity was marked to check and nobody has counted it here yet." : "Its quantity came from the old sheet with a difference, and nobody has counted it here yet.",
+      since: null, href: `/staff/items?item=${row.id}`, action: "Count it"
+    })
+  },
+  {
+    id: "EXPIRING", source: "Stock", label: "Expiring soon",
+    from: `FROM items i WHERE i.status <> 'INACTIVE' AND i.stock_area = 'Pantry' AND i.expires_on IS NOT NULL AND i.expires_on <= ?2 AND ${currentItemSQL()} AND ${onHandOf("i.id")} > 0`,
+    // Past its date: now. Within a week: soon. Within the window: routine.
+    urgency: "CASE WHEN i.expires_on < ?1 THEN 'NOW' WHEN i.expires_on <= ?3 THEN 'SOON' ELSE 'LATER' END",
+    cols: "i.id AS id, i.name AS item, i.expires_on AS expires",
+    order: "i.expires_on, i.name COLLATE NOCASE, i.id",
+    bind: (today) => [today, dayPlus(today, EXPIRY_WINDOW_DAYS), dayPlus(today, EXPIRY_SOON_DAYS)],
+    basis: (row, now) => {
+      const left = Math.round((Date.parse(`${row.expires}T00:00:00Z`) - Date.parse(`${officeDay(new Date(now))}T00:00:00Z`)) / DAY_MS);
+      return left < 0 ? `Expired on ${dayOf(String(row.expires))}` : left === 0 ? "Expires today" : `Expires in ${days(left)}`;
+    },
+    entry: (row) => ({
+      title: String(row.item),
+      why: `Its expiry date is ${dayOf(String(row.expires))}. Use it first, or take it out of stock if it has gone off.`,
       since: null, href: `/staff/items?item=${row.id}`, action: "Open the item"
     })
   },
@@ -168,6 +221,7 @@ const REASONS: readonly Reason[] = [
     urgency: "'SOON'",
     cols: "o.id AS id, o.audit_id AS audit, COALESCE(i.name, 'Not in the catalog') AS item, o.outcome AS outcome, o.counted AS counted, o.expected_on_hand AS expected, lp.path AS place, sp.path AS seen, o.received_at AS at",
     order: "o.received_at, o.rowid",
+    basis: () => "A check found a difference",
     entry: (row) => ({
       title: String(row.item),
       why: row.outcome === "MISMATCH" ? `Counted ${row.counted} at ${row.place ?? "a place"}; the record said ${row.expected}.`
@@ -185,6 +239,7 @@ const REASONS: readonly Reason[] = [
     urgency: "'LATER'",
     cols: "o.id AS id, i.id AS itemId, i.name AS item, o.note AS note, o.received_at AS at",
     order: "o.received_at, o.rowid",
+    basis: () => "Flagged at a check; nothing known to be short",
     entry: (row) => ({
       title: String(row.item),
       why: row.note ? `Looked wrong at a check: ${row.note}` : "Looked wrong at a check.",
@@ -198,6 +253,7 @@ const REASONS: readonly Reason[] = [
     urgency: "'SOON'",
     cols: "i.id AS id, i.name AS item, g.n AS n, g.cant AS cant, g.first AS at",
     order: "g.first, i.id",
+    basis: () => "Reported more than once",
     entry: (row) => ({
       title: String(row.item),
       why: `Reported ${times(Number(row.n))} since ${dayOf(String(row.at))}: ${row.cant} could not find it, ${Number(row.n) - Number(row.cant)} said the place looks wrong.`,
@@ -208,6 +264,7 @@ const REASONS: readonly Reason[] = [
     id: "CLASSIFY", source: "Catalog", label: "Items to classify",
     from: `FROM items i WHERE ${GAP_UNCLASSIFIED}`,
     urgency: "'LATER'", cols: "i.id AS id, i.name AS item", order: "i.name COLLATE NOCASE, i.id",
+    basis: () => "Catalog upkeep",
     entry: (row) => ({ title: String(row.item), why: "Not classified yet, so it stays out of every public list.", since: null, href: `/staff/items?item=${row.id}&tab=details`, action: "Classify it" })
   },
   {
@@ -215,6 +272,7 @@ const REASONS: readonly Reason[] = [
     id: "POSSIBLE_DUPLICATE", source: "Catalog", label: "Possible duplicates",
     from: PHOTO_MATCH_FROM,
     urgency: "'LATER'", cols: "i.id AS id, i.name AS item, o.id AS other, o.name AS otherName, s.updated_at AS at", order: "s.updated_at, i.id",
+    basis: () => "Catalog upkeep",
     entry: (row) => ({
       title: String(row.item), why: `Its photo looks like ${row.otherName}, which is already in the catalog. If it is the same thing, make one of them inactive.`,
       since: String(row.at), href: `/staff/items?item=${row.id}`, action: "Compare", keepBoth: { itemId: String(row.id) }
@@ -224,6 +282,7 @@ const REASONS: readonly Reason[] = [
     id: "NO_PLACE", source: "Catalog", label: "Items without a place",
     from: `FROM items i WHERE ${GAP_NO_PLACE}`,
     urgency: "'LATER'", cols: "i.id AS id, i.name AS item", order: "i.name COLLATE NOCASE, i.id",
+    basis: () => "Catalog upkeep",
     entry: (row) => ({ title: String(row.item), why: "No place is recorded, so nobody can be told where to find it.", since: null, href: `/staff/items?item=${row.id}&tab=details`, action: "Choose a place" })
   },
   {
@@ -234,6 +293,7 @@ const REASONS: readonly Reason[] = [
     cols: "e.id AS id, i.name AS item, e.quantity AS quantity, e.event_type AS type, e.review AS review, e.received_at AS at",
     order: "e.received_at, e.id",
     bind: (_today, now) => [new Date(now - DAY_MS).toISOString()],
+    basis: (row) => row.urgency === "NOW" ? "Held for more than a day" : "Held for less than a day",
     entry: (row) => ({
       title: `Phone ${String(row.type).toLowerCase()} of ${row.item}${Number(row.quantity) > 1 ? ` × ${row.quantity}` : ""}`,
       why: `${REVIEW_REASONS[row.review as ReviewReason] ?? "It needs a person to decide"}.`,
@@ -247,6 +307,7 @@ const REASONS: readonly Reason[] = [
       (SELECT d.full_name FROM staff_directory d WHERE d.student_id = e.student_id) AS directoryName`,
     order: "e.received_at, e.id",
     bind: (_today, now) => [new Date(now - IDENTITY_DAYS * DAY_MS).toISOString()],
+    basis: () => "A phone record's person is unclear",
     entry: (row) => ({
       title: `Phone ${String(row.type).toLowerCase()} of ${row.item}`,
       why: row.problem === "ID_MISSING" ? `${row.who} gave no student ID number.`
@@ -260,6 +321,7 @@ const REASONS: readonly Reason[] = [
     id: "PHONE_REPORT", source: "Self-Service", label: "Reports from phones",
     from: "FROM location_reports r JOIN items i ON i.id = r.item_id WHERE r.source = 'SELF_SERVICE' AND r.resolved_at IS NULL",
     urgency: "'SOON'", cols: "r.id AS id, i.id AS itemId, i.name AS item, r.kind AS kind, r.created_at AS at", order: "r.created_at, r.id",
+    basis: () => "Reported from a phone",
     entry: (row) => ({
       title: String(row.item),
       why: row.kind === "CANT_FIND" ? "Someone using Self-Service could not find it." : "Someone using Self-Service says its place looks wrong.",
@@ -284,7 +346,7 @@ const countSql = (reason: Reason) => `SELECT ${reason.urgency} AS urgency, COUNT
 async function kitEntries(db: D1Database) {
   return (await kitsNotReady(db)).map((kit) => ({
     reason: kit.state === "REPLENISH" ? "KIT_REPLENISH" : "KIT_REVIEW", source: "Kits" as const, urgency: kit.state === "REPLENISH" ? "SOON" as const : "LATER" as const,
-    key: `KIT:${kit.id}`, title: kit.name, why: kit.holding.length ? kit.holding.slice(0, 3).join(" ") : "Nothing is in it yet.", since: null, href: `/staff/kits?kit=${kit.id}`,
+    key: `KIT:${kit.id}`, basis: kit.state === "REPLENISH" ? "Something in it is short" : "Something in it needs a look", title: kit.name, why: kit.holding.length ? kit.holding.slice(0, 3).join(" ") : "Nothing is in it yet.", since: null, href: `/staff/kits?kit=${kit.id}`,
     action: kit.state === "REPLENISH" ? "Open the kit" : "Check the kit"
   }));
 }
@@ -325,7 +387,7 @@ export async function attention(db: D1Database) {
   const entries: Entry[] = [];
   REASONS.forEach((reason, at) => {
     for (const row of lists[at]!.results as Row[]) {
-      entries.push({ key: `${reason.id}:${row.id}`, reason: reason.id, source: reason.source, urgency: row.urgency as Urgency, ...reason.entry(row, now) });
+      entries.push({ key: `${reason.id}:${row.id}`, reason: reason.id, source: reason.source, urgency: row.urgency as Urgency, basis: reason.basis(row, now), ...reason.entry(row, now) });
     }
   });
   entries.push(...kits);

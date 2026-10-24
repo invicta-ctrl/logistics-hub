@@ -3,7 +3,7 @@ import { formatItemName, IDENTITY_RULE_KEY, LOAN_OUTCOMES, type ReviewReason, SE
 import { throttled } from "./accounts";
 import { ancestry, pathOf, placesOf } from "./location-tree";
 import { sharedPlaces } from "./locations";
-import { type Actor, BUMP_REVISION, COUNT_TOLERANCE_DAYS, HISTORY_ORDER, InputError, catalogRevision, countAwareStatus, guarded, currentItemSQL, requireCurrentItem } from "./inventory";
+import { type Actor, BUMP_REVISION, COUNT_TOLERANCE_DAYS, HISTORY_ORDER, InputError, catalogRevision, countAwareStatus, guarded, currentItemSQL, onHandOf, requireCurrentItem } from "./inventory";
 import { LOAN_ID, type LoanDetails, SELF_SERVICE_ACTOR, cleanText, closeStatements, dropUnusedPhoto, lendStatements, loanDetails, officeDay, readPhoto } from "./loans";
 
 /*
@@ -502,7 +502,7 @@ export const balanceCtes = (touched: string) => `touched AS (${touched}),
 function stockIssues(db: D1Database, since: string): D1PreparedStatement {
   return db.prepare(`WITH ${balanceCtes("SELECT DISTINCT item_id FROM self_service_events INDEXED BY idx_self_service_events_received WHERE received_at >= ?1 AND applied = 1")}
     SELECT r.itemId, i.name AS itemName, i.unit, MIN(r.balance) AS lowest, MIN(CASE WHEN r.balance < 0 THEN r.at END) AS since,
-      (SELECT on_hand FROM inventory_balances WHERE id = r.itemId) AS onHand,
+      ${onHandOf("r.itemId")} AS onHand,
       (SELECT COUNT(*) FROM loans WHERE item_id = r.itemId AND status = 'OUT') AS openLoans
     FROM running r JOIN items i ON i.id = r.itemId LEFT JOIN counted c ON c.item_id = r.itemId
     WHERE r.t >= COALESCE(c.at, 0) GROUP BY r.itemId HAVING MIN(r.balance) < 0 ORDER BY i.name`).bind(since);

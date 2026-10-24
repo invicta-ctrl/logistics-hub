@@ -1,4 +1,4 @@
-import { stockState } from "./catalog-policy";
+import { EXPIRY_WINDOW_DAYS, stockState } from "./catalog-policy";
 
 // Shared by the Worker (derivation) and the browser (labels). A kit holds no stock of its own: everything below is read from its
 // components' own records, so a kit's state can never disagree with the items it lists.
@@ -14,8 +14,8 @@ export const KIT_STATE_LABELS: Record<KitState, string> = { READY: "Ready", REPL
 export type ComponentState = "OK" | "SHORT" | "LOW" | "EXPIRING" | "REVIEW";
 export const COMPONENT_STATE_LABELS: Record<ComponentState, string> = { OK: "Ready", SHORT: "Short", LOW: "Running low", EXPIRING: "Expiring", REVIEW: "Needs review" };
 
-/** Days ahead that an expiry date starts to count: a supply kit is not ready with a component about to expire. */
-export const EXPIRY_WINDOW_DAYS = 30;
+/** A supply kit is not ready with a component about to expire: the one expiry window (catalog-policy.ts, V1.16.4 D7). */
+export { EXPIRY_WINDOW_DAYS };
 
 export type ComponentFacts = {
   required: number;

@@ -1,7 +1,8 @@
 import { offerReview, reviewProposals, decideKnowledge } from "./ai-review";
-import { EXPORT_ROWS, activityCsv, activityPage, activityTag, exportName, parseActivityQuery } from "./activity";
+import { EXPORT_ROWS, activityCsv, activityEtag, activityPage, activityProbe, activityTag, exportName, parseActivityQuery, readActivityEtag } from "./activity";
 import { type Account, accessOf, changeOwnPassword, clearThrottle, createAccount, hubAccess, isAdmin, listAccounts, recoverOwner, recoveryStatus, resetPassword, revokeAccountSessions, revokeRecoveryKey, rotateRecoveryKey, securityActivity, sweepStale, throttled, updateAccount, updateSelf } from "./accounts";
-import { json } from "./http";
+import { json, sizes } from "./http";
+import { costLine, measuredD1, measuredR2, serverTiming, startCost } from "./measure";
 import { type AiRunner, MAX_PHOTO_BYTES, assistStatus, keepBoth, photoName, recheckCapturedPhoto, recheckWaiting, setAssist } from "./ambient-assist";
 import { attention, attentionSummary, reviewIdentity, reviewReturn, selfServiceToCheck } from "./attention";
 import { auditDetail, auditReview, auditState, finishAudit, itemFreshness, observe, resolveObservation, startAudit, updateAudit } from "./audits";
@@ -151,9 +152,15 @@ const clientKey = (request: Request, purpose: string) => `${purpose}:${request.h
 async function activity(request: Request, db: D1Database, account: Account, url: URL): Promise<Response> {
   const admin = isAdmin(account);
   const query = parseActivityQuery(url.searchParams);
+  const sent = readActivityEtag(request.headers.get("If-None-Match"));
+  const probe = await activityProbe(db, admin, query);
+  const unchanged = (etag: string) => new Response(null, { status: 304, headers: { etag, "cache-control": "no-store" } });
+  // Nothing that could change this page has moved since the tag was made: answered without reading the page (V1.16.4 §4.8).
+  if (sent?.probe === probe) return unchanged(activityEtag(sent.digest, probe));
   const result = await activityPage(db, admin, query);
-  const etag = await activityTag(admin, query, result);
-  if (request.headers.get("If-None-Match")?.replace(/^W\//, "") === etag) return new Response(null, { status: 304, headers: { etag, "cache-control": "no-store" } });
+  const etag = activityEtag(await activityTag(admin, query, result), probe);
+  // Something moved but not on this page (another reader's events, a hidden account event): still unchanged here.
+  if (sent?.digest === etag.slice(1, 26)) return unchanged(etag);
   return json(result, 200, { etag });
 }
 
@@ -182,12 +189,12 @@ async function activityExport(db: D1Database, account: Account, url: URL): Promi
  */
 const hourSalt = () => `-${new Date().toISOString().slice(0, 13)}`;
 
-async function revisioned(request: Request, db: D1Database, load: () => Promise<object>, salt = ""): Promise<Response> {
+async function revisioned(request: Request, db: D1Database, load: () => Promise<object>, salt = "", cache = "no-store"): Promise<Response> {
   const revision = await catalogRevision(db);
   const etag = `"r${revision}${salt}"`;
   // Compression at the edge may turn a strong ETag into a weak validator for the same revision.
-  if (request.headers.get("If-None-Match")?.replace(/^W\//, "") === etag) return new Response(null, { status: 304, headers: { etag, "cache-control": "no-store" } });
-  return json({ revision, ...await load() }, 200, { etag });
+  if (request.headers.get("If-None-Match")?.replace(/^W\//, "") === etag) return new Response(null, { status: 304, headers: { etag, "cache-control": cache } });
+  return json({ revision, ...await load() }, 200, { etag, "cache-control": cache });
 }
 
 type SignedIn = Account & { expiresAt: number };
@@ -404,7 +411,10 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     return json({ error: target ? "Method not allowed." : "Not found." }, target ? 405 : 404);
   }
 
-  if (path === "/api/staff/inventory" && method === "GET") return revisioned(request, env.DB, async () => ({ ...await staffInventory(env.DB), locations: await locationList(env.DB) }));
+  if (path === "/api/staff/inventory" && method === "GET") return revisioned(request, env.DB, async () => {
+    const [inventory, locations] = await Promise.all([staffInventory(env.DB), locationList(env.DB)]);
+    return { ...inventory, locations };
+  });
   if (path === "/api/staff/locations" && method === "GET") return revisioned(request, env.DB, async () => ({ locations: await locationList(env.DB) }));
   if (path === "/api/staff/search" && method === "GET") return revisioned(request, env.DB, () => searchIndex(env.DB));
   if (path === "/api/staff/locations" && method === "POST") return json(await createLocation(env.DB, account, await body()), 201);
@@ -520,8 +530,9 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   if (keeping && method === "POST") return json(await keepBoth(env.DB, account, keeping[1]!));
   if (path === "/api/staff/attention/summary" && method === "GET") return revisioned(request, env.DB, () => attentionSummary(env.DB), hourSalt());
   if (path === "/api/staff/home" && method === "GET") return json(await resumable(env.DB, account));
-  // Optional insights follow current records after each visit; nothing else waits on this read.
-  if (path === "/api/staff/home/insights" && method === "GET") return json(await insights(env.DB), 200, { "cache-control": "private, no-store" });
+  // Optional insights follow current records after each visit; nothing else waits on this read. Their windows move with the clock,
+  // so the validator is the revision and the hour, like Attention's (V1.16.4 §4.8).
+  if (path === "/api/staff/home/insights" && method === "GET") return revisioned(request, env.DB, () => insights(env.DB), hourSalt(), "private, no-store");
   const reorder = REORDER_PATH.exec(path);
   if (reorder && method === "PATCH") return json(await updateReorder(env.DB, account, reorder[1]!, await body()));
   if (path === "/api/staff/items" && method === "POST") {
@@ -531,15 +542,17 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     return json(await createItem(env.DB, account, parseItemInput(input), opening), 201);
   }
   const media = MEDIA_PATH.exec(path);
-  if (media && method === "GET") return media[2] === "cutout" || media[2] === "pending" ? cutoutPicture(env.CATALOG_MEDIA, media[1]!, media[2] === "pending") : itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!, request.headers.get("if-none-match"));
+  if (media && method === "GET") return media[2] === "cutout" || media[2] === "pending" ? cutoutPicture(env.CATALOG_MEDIA, media[1]!, media[2] === "pending") : itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!, request.headers.get("if-none-match"), url.searchParams.has("p"));
   const match = ITEM_PATH.exec(path);
-  if (match && method !== "GET" && match[2] !== "/merge") await requireCurrentItem(env.DB, match[1]!);
+  // A movement asks this itself, together with its restock entry, to stay within its calls (inventory.ts recordMovement).
+  if (match && method !== "GET" && match[2] !== "/merge" && match[2] !== "/movements") await requireCurrentItem(env.DB, match[1]!);
   if (match?.[2] === "/merge" && method === "POST") return json(await mergeItem(env.DB, account, match[1]!, await body()));
   if (match && !match[2] && method === "GET") {
-    const [detail, freshness, kits, links] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!), linksOf(env.DB, match[1]!)]);
+    // Everything about the item at once, then its photo's stored sizes once the photo is known: two waits (V1.16.4 §4.8).
+    const [detail, freshness, kits, links, photoCleanup] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!),
+      linksOf(env.DB, match[1]!), photoCleanupState(env, account)]);
     // Whether this photo has a cleaned picture, and whether cleaning is offered at all (the Images binding is present).
     const derivatives = detail.item.photo ? await photoDerivatives(env.CATALOG_MEDIA, detail.item.photo.id) : null;
-    const photoCleanup = await photoCleanupState(env, account);
     return json({ ...detail, item: { ...detail.item, photoCleanup, photo: detail.item.photo ? { ...detail.item.photo, ...derivatives, ...photoCleanup } : null }, freshness, kits, links });
   }
   if (match && !match[2] && method === "PATCH") {
@@ -687,7 +700,7 @@ async function route(request: Request, env: Env, url: URL, ctx?: ExecutionContex
   if (path === "/api/self-service/decisions") {
     return request.method === "GET" ? json(await reviewDecisions(env.DB, url.searchParams.get("ids"))) : json({ error: "Method not allowed." }, 405, { allow: "GET" });
   }
-  if (path.startsWith("/api/staff/")) return staffApi(request, env, url, ctx);
+  if (path.startsWith("/api/staff/")) return measuredStaffApi(request, env, url, ctx);
   if (path.startsWith("/api/")) return json({ error: "Not found." }, 404);
   // Items lived at /staff/inventory until V1.1; keep saved links and bookmarks working.
   // The build's record is for Administration's System page, read inside the Worker; the public has no use for it.
@@ -703,6 +716,32 @@ async function route(request: Request, env: Env, url: URL, ctx?: ExecutionContex
   }
   if (path === "/staff" && request.method === "GET" && await accountFor(request, env)) return Response.redirect(new URL("/staff/home", url), 302);
   return assetCaching(await env.ASSETS.fetch(request), path);
+}
+
+/** The route without its record ids (any path segment with a digit in it), so a cost line never carries an id. */
+const routeOf = (path: string) => path.split("/").map((part) => (/\d/.test(part) ? ":id" : part)).join("/");
+
+/**
+ * A staff request with its cost measured (V1.16.4 §4.8.6): its own view of D1 and the buckets counts and times each wait, the answer
+ * carries `Server-Timing`, and every write and every read that sent a body logs one structured line. An expected refusal is answered
+ * here, so it is measured and logged like any answer; anything else fails as before.
+ */
+async function measuredStaffApi(request: Request, env: Env, url: URL, ctx?: ExecutionContext): Promise<Response> {
+  const cost = startCost();
+  const bucket = (binding: R2Bucket | undefined) => (binding ? measuredR2(binding, cost) : binding) as R2Bucket;
+  const measured: Env = { ...env, DB: measuredD1(env.DB, cost), CATALOG_MEDIA: bucket(env.CATALOG_MEDIA), EVIDENCE: bucket(env.EVIDENCE), STAFF_IDS: bucket(env.STAFF_IDS) };
+  let response: Response;
+  try {
+    response = await staffApi(request, measured, url, ctx);
+  } catch (error) {
+    if (!(error instanceof InputError)) throw error;
+    response = json({ error: error.message }, error.status);
+  }
+  const line = costLine(routeOf(url.pathname), request.method, response.status, sizes.get(response) ?? null, cost);
+  if (line) console.log(line);
+  const headers = new Headers(response.headers);
+  headers.set("Server-Timing", serverTiming(cost));
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 /**

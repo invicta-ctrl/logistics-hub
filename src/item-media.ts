@@ -259,14 +259,32 @@ export async function removeItemPhoto(db: D1Database, bucket: R2Bucket, actor: A
 }
 
 /** The original display is immutable; the thumbnail revalidates because cleanup can change it under the same id. */
-async function cleanedThumbnail(bucket: R2Bucket, mediaId: string, size: "thumb" | "detail" = "thumb"): Promise<R2ObjectBody | null> {
-  const source = await bucket.head(`items/${mediaId}/cutout`);
-  if (!source) return null;
-  for (const variant of size === "detail" ? ["detail", "thumb"] : ["thumb"]) {
-    const image = await bucket.get(`items/${mediaId}/cutout-${variant}`);
-    if (image && (!source.httpEtag || image.customMetadata?.source === source.httpEtag)) return image;
-  }
-  return null;
+/**
+ * Which stored picture answers for this photo and size, found with HEADs read together (V1.16.4 §4.8): the cleaned picture while it
+ * matches the current cutout (for detail, the cleaned detail, then the cleaned thumbnail), else the original (a missing detail falls
+ * back to the thumbnail). The bytes are read only when the browser does not hold them already, so a revalidation costs no GET.
+ */
+async function chosenPicture(bucket: R2Bucket, mediaId: string, variant: Variant | "detail"): Promise<{ object: R2Object; cleaned: boolean } | null> {
+  const cleanable = variant === "thumb" || variant === "detail";
+  const [source, cutoutDetail, cutoutThumb, original, thumb] = await Promise.all([
+    cleanable ? bucket.head(`items/${mediaId}/cutout`) : null,
+    variant === "detail" ? bucket.head(`items/${mediaId}/cutout-detail`) : null,
+    cleanable ? bucket.head(`items/${mediaId}/cutout-thumb`) : null,
+    bucket.head(key(mediaId, variant)),
+    variant === "detail" ? bucket.head(key(mediaId, "thumb")) : null
+  ]);
+  const matches = (image: R2Object | null): image is R2Object => Boolean(source && image && (!source.httpEtag || image.customMetadata?.source === source.httpEtag));
+  for (const image of [cutoutDetail, cutoutThumb]) if (matches(image)) return { object: image, cleaned: true };
+  const plain = original ?? thumb;
+  return plain ? { object: plain, cleaned: false } : null;
+}
+
+/** A 304 when the browser holds the chosen picture, else its bytes: read now, by the key the HEAD found. */
+async function answerPicture(bucket: R2Bucket, chosen: { object: R2Object }, headers: Record<string, string>, ifNoneMatch: string | null): Promise<Response> {
+  if (ifNoneMatch?.replace(/^W\//, "") === headers.etag) return new Response(null, { status: 304, headers });
+  const object = await bucket.get(chosen.object.key);
+  if (!object) throw new InputError(404, "Not found.");
+  return new Response(object.body, { headers: { ...headers, etag: object.httpEtag ?? headers.etag!, "content-type": "image/jpeg" } });
 }
 
 /** Staff can regenerate a missing detail derivative only when the selected crop has recorded bounds. */
@@ -282,15 +300,17 @@ export async function photoDerivatives(bucket: R2Bucket, mediaId: string) {
     ...(source ? { cutoutThumb: matches(cutoutThumb), cutoutDetail: matches(cutoutDetail) } : {}) };
 }
 
-export async function itemPhoto(bucket: R2Bucket, mediaId: string, variant: string, ifNoneMatch: string | null = null): Promise<Response> {
+/**
+ * A staff picture. A thumbnail address that names its picture's version (`versioned`: the list's own `p`, which a new photo, a
+ * cleaned picture and its removal all change) may be kept a day; any other thumbnail revalidates every time, so a cleaned or
+ * restored picture shows at once (V1.16.2).
+ */
+export async function itemPhoto(bucket: R2Bucket, mediaId: string, variant: string, ifNoneMatch: string | null = null, versioned = false): Promise<Response> {
   if (!MEDIA_ID.test(mediaId) || (variant !== "detail" && !Object.hasOwn(VARIANTS, variant))) throw new InputError(404, "Not found.");
-  const cleaned = variant === "thumb" || variant === "detail" ? await cleanedThumbnail(bucket, mediaId, variant) : null;
-  const object = cleaned ?? await bucket.get(key(mediaId, variant as Variant | "detail")) ?? (variant === "detail" ? await bucket.get(key(mediaId, "thumb")) : null);
-  if (!object) throw new InputError(404, "Not found.");
-  const headers = { "content-type": "image/jpeg", "cache-control": variant === "display" ? "private, max-age=86400" : "private, no-cache",
-    etag: object.httpEtag ?? `"${mediaId}-${cleaned ? "cleaned" : variant}"` };
-  if (ifNoneMatch?.replace(/^W\//, "") === headers.etag) return new Response(null, { status: 304, headers });
-  return new Response(object.body, { headers });
+  const chosen = await chosenPicture(bucket, mediaId, variant as Variant | "detail");
+  if (!chosen) throw new InputError(404, "Not found.");
+  return answerPicture(bucket, chosen, { "content-type": "image/jpeg", "cache-control": variant === "display" || versioned ? "private, max-age=86400" : "private, no-cache",
+    etag: chosen.object.httpEtag ?? `"${mediaId}-${chosen.cleaned ? "cleaned" : variant}"` }, ifNoneMatch);
 }
 
 /**
@@ -307,10 +327,7 @@ export async function publicThumb(db: D1Database, bucket: R2Bucket, mediaId: str
     FROM item_media m JOIN items i ON i.id = m.item_id WHERE m.media_id = ? AND i.visual_type IS NOT 'SYSTEM_ICON'`).bind(mediaId).first<{ itemType: string; lendingAudience: string; status: string; needsReview: number; consumptionMode: string }>();
   const shown = Boolean(item) && (isListedForLending(item!) || (Boolean(selfServiceAction(item!)) && await selfServiceOpen()));
   if (!shown) throw new InputError(404, "Not found.");
-  const cleaned = await cleanedThumbnail(bucket, mediaId, size);
-  const object = cleaned ?? await bucket.get(key(mediaId, size)) ?? (size === "detail" ? await bucket.get(key(mediaId, "thumb")) : null);
-  if (!object) throw new InputError(404, "Not found.");
-  const headers = { "cache-control": "public, no-cache", etag: object.httpEtag ?? `"${mediaId}-${cleaned ? "cleaned" : "thumb"}"` };
-  if (ifNoneMatch?.replace(/^W\//, "") === headers.etag) return new Response(null, { status: 304, headers });
-  return new Response(object.body, { headers: { ...headers, "content-type": "image/jpeg" } });
+  const chosen = await chosenPicture(bucket, mediaId, size);
+  if (!chosen) throw new InputError(404, "Not found.");
+  return answerPicture(bucket, chosen, { "cache-control": "public, no-cache", etag: chosen.object.httpEtag ?? `"${mediaId}-${chosen.cleaned ? "cleaned" : "thumb"}"` }, ifNoneMatch);
 }

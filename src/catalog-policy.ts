@@ -109,17 +109,38 @@ export function units(count: number, unit: string): string {
   return /(x|ch|sh)$/i.test(unit) ? `${unit}es` : `${unit}s`;
 }
 
-export type StockCandidate = { onHand: number; reorderThreshold: number; status: string };
+/** `onLoan`: units out on loan now, where the caller knows it; without it an item is never called All on loan. */
+export type StockCandidate = { onHand: number; reorderThreshold: number; status: string; onLoan?: number };
+export type StockState = "OUT" | "ON_LOAN" | "LOW" | "OK";
+export const STOCK_STATE_LABELS: Record<StockState, string> = { OUT: "Out of stock", ON_LOAN: "All on loan", LOW: "Low stock", OK: "In stock" };
 
 /**
  * One definition of stock state for the Worker and the browser. Low stock needs a reorder
- * level: without one an item is never called low (no alarm without a threshold).
+ * level: without one an item is never called low (no alarm without a threshold). None on hand
+ * with units out on loan is All on loan, never Out (V1.16.4 §4.3): computed, never stored. A
+ * negative balance (a phone took more than the record held) stays Out.
  */
-export function stockState(item: StockCandidate): "OUT" | "LOW" | "OK" {
+export function stockState(item: StockCandidate): StockState {
+  if (item.onHand === 0 && (item.onLoan ?? 0) > 0) return "ON_LOAN";
   if (item.onHand <= 0) return "OUT";
   if (item.reorderThreshold > 0 && item.onHand <= item.reorderThreshold) return "LOW";
   return "OK";
 }
+
+/** Days ahead that an expiry date starts to count, everywhere (V1.16.4 D7): Stock, the Attention inbox and kits. */
+export const EXPIRY_WINDOW_DAYS = 30;
+/** An expiring item within this many days (or already past its date) is for this week rather than routine. */
+export const EXPIRY_SOON_DAYS = 7;
+/** The office day `days` after `day` (both YYYY-MM-DD). */
+export const dayPlus = (day: string, days: number): string => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
+export type ExpiryCandidate = { status: string; stockArea: string | null; expiresOn: string | null; onHand: number };
+/**
+ * Expiring soon, one rule for Stock and the inbox (attention.ts holds the same in SQL, and a test holds them together): an active
+ * Pantry item with something on hand whose expiry date is within the window or already past. Nothing on hand has nothing to expire.
+ */
+export const isExpiring = (item: ExpiryCandidate, today: string): boolean =>
+  item.status !== "INACTIVE" && item.stockArea === "Pantry" && Boolean(item.expiresOn) && item.onHand > 0 && item.expiresOn! <= dayPlus(today, EXPIRY_WINDOW_DAYS);
 
 export type ListingCandidate = {
   status: string;

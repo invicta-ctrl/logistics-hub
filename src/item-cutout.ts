@@ -40,8 +40,11 @@ export async function cleanupOn(db: D1Database): Promise<boolean> {
 }
 
 export type CleanupStatus = { on: boolean; available: boolean; sentThisMonth: number; monthlyCap: number };
+/** The switch and this month's count in one statement: item detail asks this beside its own reads (V1.16.4 §4.8). */
 export async function cleanupStatus(db: D1Database, images: ImagesRunner | undefined, now = Date.now()): Promise<CleanupStatus> {
-  return { on: await cleanupOn(db), available: Boolean(images), sentThisMonth: await cutoutsThisMonth(db, now), monthlyCap: CUTOUT_MONTHLY_CAP };
+  const row = await db.prepare("SELECT (SELECT value FROM system_settings WHERE key = ?1) AS switch, (SELECT value FROM system_settings WHERE key = ?2) AS sent")
+    .bind(CLEANUP_KEY, monthKey(now)).first<{ switch: string | null; sent: string | null }>();
+  return { on: row?.switch === "on", available: Boolean(images), sentThisMonth: Number(row?.sent ?? 0) || 0, monthlyCap: CUTOUT_MONTHLY_CAP };
 }
 
 /** Owner only (checked by the caller). Setting it to its current value changes nothing and writes no audit entry. */

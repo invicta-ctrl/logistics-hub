@@ -14,7 +14,8 @@ import { ApiError, type Html, api, emptyState, expired, failure, formatDate, for
  */
 
 type Urgency = "NOW" | "SOON" | "LATER";
-type Entry = { key: string; reason: string; source: string; urgency: Urgency; title: string; why: string; since: string | null; href: string; action: string; review?: { loanId: string }; identity?: { eventId: string }; keepBoth?: { itemId: string } };
+/** `basis`: why the entry has its urgency (V1.16.4); absent from an older Worker, and then simply not shown. */
+type Entry = { key: string; reason: string; source: string; urgency: Urgency; basis?: string; title: string; why: string; since: string | null; href: string; action: string; review?: { loanId: string }; identity?: { eventId: string }; keepBoth?: { itemId: string } };
 type Group = { reason: string; source: string; label: string; total: number; byUrgency: Record<Urgency, number> };
 type Answer = { today: string; groups: Group[]; entries: Entry[] };
 /** "active" is Home's view (today and this week); "any" is Attention's, everything. Only the default differs; the keys are the same. */
@@ -104,7 +105,7 @@ export function startQueue(scope: QueueScope): void {
       <button class="attn-row__main" type="button" data-select="${entry.key}" tabindex="-1" ${current ? html`aria-current="true"` : ""}>
         <span class="attn-row__title">${entry.title}</span>
         <span class="attn-row__why">${entry.why}</span>
-        ${entry.since ? html`<span class="attn-row__since">Since ${ageOf(sinceIso(entry.since))}</span>` : ""}
+        ${entry.basis || entry.since ? html`<span class="attn-row__since">${[entry.basis, entry.since ? `Since ${ageOf(sinceIso(entry.since))}` : ""].filter(Boolean).join(" · ")}</span>` : ""}
       </button>
       <span class="attn-row__actions">${actionsMarkup(entry, true)}<a class="button button--ghost button--sm" href="${entry.href}" data-route tabindex="-1">${entry.action}${icon("next")}</a></span></li>`;
   }
@@ -221,7 +222,7 @@ export function startQueue(scope: QueueScope): void {
         </div></div>
       <div class="attn-doc__body">
         <h2 class="attn-doc__title" id="attn-doc-title" tabindex="-1">${entry.title}</h2>
-        <p class="attn-doc__status attn-doc__status--${entry.urgency.toLowerCase()}"><span class="attn-pip attn-pip--${entry.urgency.toLowerCase()}" aria-hidden="true"></span>${URGENCY_LABELS[entry.urgency]} · ${group?.label ?? entry.reason}</p>
+        <p class="attn-doc__status attn-doc__status--${entry.urgency.toLowerCase()}"><span class="attn-pip attn-pip--${entry.urgency.toLowerCase()}" aria-hidden="true"></span>${URGENCY_LABELS[entry.urgency]} · ${group?.label ?? entry.reason}${entry.basis ? ` · ${entry.basis}` : ""}</p>
         ${at < 0 ? html`<p class="attn-doc__note">Not in the list as it is shown now.${only || narrowed() ? html` <button class="text-link" type="button" id="doc-clear">Show everything</button>` : ""}</p>` : ""}
         <section class="attn-doc__why" aria-labelledby="attn-doc-why"><h3 id="attn-doc-why">Why it is here</h3><p>${entry.why}</p></section>
         <dl class="attn-doc__facts">

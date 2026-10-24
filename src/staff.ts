@@ -59,7 +59,7 @@ const VIEWS = {
   ready: { label: "Ready to list", test: (item: Item) => LISTABLE_ITEM_TYPES.has(item.itemType) && !item.listed && active(item) },
   listed: { label: "On Lending Hub", test: (item: Item) => item.listed },
   low: { label: "Low stock", test: (item: Item) => isLow(item) && active(item) },
-  out: { label: "Out of stock", test: (item: Item) => item.onHand <= 0 && active(item) },
+  out: { label: "Out of stock", test: (item: Item) => stockState(item) === "OUT" && active(item) },
   inactive: { label: "Inactive", test: (item: Item) => !active(item) },
   gradual: { label: "Used gradually?", test: openUnitCandidate },
   // Shown only while something is waiting: a report from the shelf or a phone, or a typed location that has no place yet.
@@ -88,8 +88,10 @@ function tags(item: Item): Html {
   if (item.status !== "ACTIVE") list.push(html`<span class="tag ${item.status === "VERIFY" ? "tag--warn" : ""}">${label(item.status)}</span>`);
   if (item.openUnits > item.onHand) list.push(html`<span class="tag tag--warn">Open units need review</span>`);
   if (item.openReports) list.push(html`<span class="tag tag--warn">Location reported</span>`);
-  if (item.onHand <= 0) list.push(html`<span class="tag tag--bad">Out of stock</span>`);
-  else if (isLow(item)) list.push(html`<span class="tag tag--warn">Low stock</span>`);
+  const state = stockState(item);
+  if (state === "OUT") list.push(html`<span class="tag tag--bad">Out of stock</span>`);
+  else if (state === "ON_LOAN") list.push(html`<span class="tag tag--pending">All on loan</span>`);
+  else if (state === "LOW") list.push(html`<span class="tag tag--warn">Low stock</span>`);
   return html`<span class="tags">${list}</span>`;
 }
 
@@ -668,9 +670,9 @@ export async function workspace(): Promise<void> {
   }
 
   function quantityContext({ item, loans, openUnits }: Detail): Html {
-    const state = stockState(item);
     const out = loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
-    return html`${tracksOpenUnits(item) || openUnits.length ? html`<span class="quantity__sealed">${sealedLine(item.onHand, openUnits.length, worstCondition(openUnits))}</span>` : ""}${state === "OUT" ? html`<span class="tag tag--bad">Out of stock</span>` : state === "LOW" ? html`<span class="tag tag--warn">Low stock</span>` : item.reorderThreshold > 0 ? html`<span class="tag tag--ok">Above reorder level</span>` : ""}
+    const state = stockState({ ...item, onLoan: out });
+    return html`${tracksOpenUnits(item) || openUnits.length ? html`<span class="quantity__sealed">${sealedLine(item.onHand, openUnits.length, worstCondition(openUnits))}</span>` : ""}${state === "OUT" ? html`<span class="tag tag--bad">Out of stock</span>` : state === "ON_LOAN" ? html`<span class="tag tag--pending">All on loan</span>` : state === "LOW" ? html`<span class="tag tag--warn">Low stock</span>` : item.reorderThreshold > 0 ? html`<span class="tag tag--ok">Above reorder level</span>` : ""}
       ${item.reorderThreshold > 0 ? html`<span>Reorder level ${item.reorderThreshold}</span>` : ""}
       ${out ? html`<button type="button" class="text-link" data-goto="loan">${out} more on loan</button>` : ""}`;
   }

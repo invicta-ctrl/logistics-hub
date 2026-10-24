@@ -1,8 +1,7 @@
 import { GAP_NO_PLACE, GAP_UNCLASSIFIED, dayOf, times } from "./attention";
 import { behaviourOf, BEHAVIOUR_LABELS } from "./catalog-policy";
-import { openSession } from "./catalogue";
 import { openChecks } from "./audits";
-import { type Actor, currentItemSQL } from "./inventory";
+import { type Actor, currentItemSQL, onHandOf } from "./inventory";
 
 /*
  * Operations home (V1.12). Two reads, neither stored: what this person can pick up where they left off, and a handful of practical
@@ -11,13 +10,15 @@ import { type Actor, currentItemSQL } from "./inventory";
  * most five rows a card), run in one batch, and are fetched after the page is drawn, so a failure here never touches navigation.
  */
 
-/** What this person can resume: their own open cataloguing session and their own open or paused place checks, nobody else's. */
+/**
+ * What this person can resume: their own open or paused place checks, nobody else's. `catalogue` stays in the answer, always null:
+ * Home never showed the cataloguing session, so it is no longer read (V1.16.4 §5); the Catalogue offers its own resume.
+ */
 export async function resumable(db: D1Database, actor: Actor) {
-  const [session, checks] = await db.batch([openSession(db, actor), openChecks(db, actor)]);
-  const mine = session!.results[0] as { id: string; place: string | null; startedAt: string; updatedAt: string; saved: number } | undefined;
+  const { results } = await openChecks(db, actor).all();
   return {
-    catalogue: mine ? { id: mine.id, place: mine.place, saved: mine.saved, startedAt: mine.startedAt, updatedAt: mine.updatedAt } : null,
-    checks: (checks!.results as Array<{ id: string; place: string | null; status: string; expectedAtStart: number; startedAt: string; updatedAt: string }>)
+    catalogue: null,
+    checks: (results as Array<{ id: string; place: string | null; status: string; expectedAtStart: number; startedAt: string; updatedAt: string }>)
       .map((check) => ({ id: check.id, place: check.place, status: check.status, expected: check.expectedAtStart, startedAt: check.startedAt, updatedAt: check.updatedAt }))
   };
 }
@@ -50,7 +51,7 @@ export async function insights(db: D1Database, now = Date.now()) {
     db.prepare(`SELECT i.id AS id, i.name AS name, COUNT(*) AS n, MAX(l.created_at) AS last FROM loans l INDEXED BY idx_loans_created JOIN items i ON i.id = l.item_id
       WHERE l.created_at >= ?1 AND i.status <> 'INACTIVE' AND ${currentItemSQL()} GROUP BY l.item_id HAVING COUNT(*) >= ?2 ORDER BY n DESC, last DESC, i.name COLLATE NOCASE LIMIT ${ROWS}`).bind(day(WINDOWS.borrowed), AT_LEAST),
     // The window's own index: left to itself the planner walks the item index and so the whole ledger. On hand is read for the few rows kept.
-    db.prepare(`SELECT t.*, (SELECT b.on_hand FROM inventory_balances b WHERE b.id = t.id) AS onHand FROM (
+    db.prepare(`SELECT t.*, ${onHandOf("t.id")} AS onHand FROM (
         SELECT i.id AS id, i.name AS name, i.unit AS unit, i.reorder_threshold AS level, -SUM(m.signed_quantity) AS taken, COUNT(*) AS n
         FROM inventory_movements m INDEXED BY idx_inventory_movements_created JOIN items i ON i.id = m.item_id
         WHERE m.created_at >= ?1 AND m.movement_type = 'STOCK_OUT' AND m.status = 'POSTED' AND m.imported_from IS NULL AND i.item_type = 'Consumable' AND i.status <> 'INACTIVE' AND ${currentItemSQL()}

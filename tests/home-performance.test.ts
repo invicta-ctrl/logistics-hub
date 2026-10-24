@@ -76,10 +76,11 @@ const timed = async (run: () => Promise<unknown>) => {
 const note = (line: string) => { if (process.env.HOME_PERF_LOG) appendFileSync(process.env.HOME_PERF_LOG, `${line}\n`); };
 
 describe("Home's reads", () => {
-  it("resumes work in two tiny queries, off the critical path of nothing else", async () => {
+  it("resumes work in one tiny query, off the critical path of nothing else", async () => {
     const actor = { accountId: "ACC-P", username: "perf", displayName: "Perf", role: "STAFF" } as never;
     const result = await resumable(database.d1, actor);
-    expect(result.catalogue?.place).toBe("Perf shelf");
+    // The cataloguing session is no longer read (V1.16.4 §5).
+    expect(result.catalogue).toBeNull();
     expect(result.checks).toHaveLength(1);
     const spent = await timed(() => resumable(database.d1, actor));
     note(`resumable work: ${spent.median.toFixed(2)} ms median, ${spent.worst.toFixed(2)} ms worst`);

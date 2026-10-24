@@ -27,8 +27,9 @@ function anyKeyBucket(name: Bucket): R2Bucket {
       reads.push({ bucket: name, key });
       return { body: new Blob([name]).stream(), httpMetadata: { contentType: "image/jpeg" } };
     },
-    // These boundary fixtures contain ordinary photos, without accepted cutouts.
-    head: async () => null,
+    // These boundary fixtures contain ordinary photos, without accepted cutouts. An item photo is found by HEAD before its bytes are
+    // read (V1.16.4 §4.8), so the ordinary sizes exist and every cutout key does not; only a GET counts as reading the bucket.
+    head: async (key: string) => (key.includes("/cutout") ? null : { key, size: 1 }),
     put: async () => undefined,
     delete: async () => undefined,
     list: async () => ({ objects: [], truncated: false })

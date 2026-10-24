@@ -1,4 +1,4 @@
-import { type Actor, BUMP_REVISION, InputError, audit, pathsOf, text, usablePlace, currentItemSQL } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, audit, onHandOf, pathsOf, text, usablePlace, currentItemSQL } from "./inventory";
 import { CHECK_OUTCOMES, COMPONENT_STATE_LABELS, type CheckOutcome, type ComponentState, readComponent, readKit } from "./kit-policy";
 import { LOCATION_ID } from "./location-tree";
 
@@ -92,12 +92,12 @@ type Fact = {
 /** Every component of the kits asked for (all of them without `only`) with the facts its state is read from. */
 async function components(db: D1Database, only?: string): Promise<Map<string, Fact[]>> {
   const { results } = await db.prepare(`SELECT kc.kit_id AS kitId, kc.item_id AS itemId, kc.required, i.name, i.unit, i.category, i.item_type AS itemType, i.consumption_mode AS consumptionMode, i.icon_key AS iconKey, i.visual_type AS visualType,
-      p.media_id AS photoId, i.status AS itemStatus, i.reorder_threshold AS reorderThreshold, i.expires_on AS expiresOn, COALESCE(b.on_hand, 0) AS onHand,
+      p.media_id AS photoId, i.status AS itemStatus, i.reorder_threshold AS reorderThreshold, i.expires_on AS expiresOn, ${onHandOf("i.id")} AS onHand,
       (SELECT COALESCE(SUM(l.quantity), 0) FROM loans l WHERE l.item_id = i.id AND l.status = 'OUT') AS onLoan,
       (SELECT COALESCE(SUM(k2.required), 0) FROM kit_components k2 JOIN kits k ON k.id = k2.kit_id WHERE k2.item_id = i.id AND k.active = 1) AS demand,
       (SELECT o.condition FROM open_units o WHERE o.item_id = i.id AND o.closed_at IS NULL ORDER BY CASE o.condition WHEN 'LOW' THEN 0 WHEN 'HALF' THEN 1 WHEN 'PLENTY' THEN 2 ELSE 3 END LIMIT 1) AS openCondition,
       seen.outcome AS seen, seen.note AS seenNote, seen.checked_at AS seenAt
-    FROM kit_components kc JOIN items i ON i.id = kc.item_id LEFT JOIN inventory_balances b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id
+    FROM kit_components kc JOIN items i ON i.id = kc.item_id LEFT JOIN item_media p ON p.item_id = i.id
     LEFT JOIN (SELECT c.kit_id, o.item_id, o.outcome, o.note, c.checked_at, ROW_NUMBER() OVER (PARTITION BY c.kit_id, o.item_id ORDER BY c.checked_at DESC, c.rowid DESC) AS n
       FROM kit_check_observations o JOIN kit_checks c ON c.id = o.check_id) seen ON seen.kit_id = kc.kit_id AND seen.item_id = kc.item_id AND seen.n = 1
     ${only ? "WHERE kc.kit_id = ?1" : ""} ORDER BY kc.kit_id, kc.position`).bind(...(only ? [only] : [])).all<Fact>();
@@ -300,7 +300,7 @@ export async function checkKit(db: D1Database, actor: Actor, id: string, input: 
   await db.batch([
     db.prepare("INSERT INTO kit_checks(id, kit_id, checked_by, checked_at, note, ok_count, flagged_count, unchecked_count) VALUES(?, ?, ?, ?, ?, ?, ?, ?)").bind(checkId, id, actor.accountId, now, note, ok, flagged, unchecked),
     ...observations.map((entry) => db.prepare(`INSERT INTO kit_check_observations(check_id, item_id, outcome, required, on_hand, note)
-      SELECT ?1, ?2, ?3, kc.required, COALESCE(b.on_hand, 0), ?4 FROM kit_components kc LEFT JOIN inventory_balances b ON b.id = kc.item_id WHERE kc.kit_id = ?5 AND kc.item_id = ?2`)
+      SELECT ?1, ?2, ?3, kc.required, ${onHandOf("kc.item_id")}, ?4 FROM kit_components kc WHERE kc.kit_id = ?5 AND kc.item_id = ?2`)
       .bind(checkId, entry.itemId, entry.outcome, entry.note, id)),
     audit(db, actor.accountId, "KIT_CHECKED", "KIT", id, { name: kit.name, checkId, ok, flagged, unchecked }),
     db.prepare(BUMP_REVISION)

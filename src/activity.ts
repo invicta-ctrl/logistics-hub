@@ -483,14 +483,34 @@ export function exportName(now: Date): string {
   return `logistics-activity-${manila.slice(0, 10).replaceAll("-", "")}-${manila.slice(11, 16).replace(":", "")}.csv`;
 }
 
+const hex = async (value: unknown, bytes: number) =>
+  [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(value)))).subarray(0, bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+const question = (admin: boolean, { filters, cursor, limit }: ActivityQuery) => [admin ? "all" : "operational", Object.entries(filters).sort(([a], [b]) => a.localeCompare(b)), cursor, limit];
+
 /**
  * The revision of this exact answer: a digest of what the reader may see plus the normalized question
  * and the role scope. It moves for anything visible (a rename, a same-time or backdated entry) and for
  * nothing hidden (an account event a STAFF reader cannot see), so it is the validator for this endpoint only.
  */
 export async function activityTag(admin: boolean, query: ActivityQuery, result: { events: ActivityEvent[]; nextCursor: string | null }): Promise<string> {
-  const { filters, cursor, limit } = query;
-  const canonical = JSON.stringify([admin ? "all" : "operational", Object.entries(filters).sort(([a], [b]) => a.localeCompare(b)), cursor, limit, result]);
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical)));
-  return `"a${[...digest.subarray(0, 12)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}"`;
+  return `a${await hex([...question(admin, query), result], 12)}`;
+}
+
+/**
+ * What moves whenever anything Activity shows can have changed (V1.16.4 §4.8): a new movement, audit entry or phone record (their
+ * highest row ids), the catalog revision (every write that renames an item, place or kit, closes a loan or settles a phone record
+ * bumps it) and the latest change to a staff account (a display name). One cheap statement, read before the page query, and hashed
+ * with the question, so a tag is only ever reused for the page it was made for.
+ */
+export async function activityProbe(db: D1Database, admin: boolean, query: ActivityQuery): Promise<string> {
+  const marks = await db.prepare(`SELECT (SELECT MAX(rowid) FROM inventory_movements) AS movements, (SELECT MAX(rowid) FROM audit_log) AS audit,
+    (SELECT MAX(rowid) FROM self_service_events) AS phones, (SELECT value FROM catalog_revision WHERE id = 1) AS revision, (SELECT MAX(updated_at) FROM staff_accounts) AS people`).first();
+  return hex([...question(admin, query), marks], 6);
+}
+
+/** The validator: the answer's digest, then the probe it was made under. A V1.16.3 tab's tag (the digest alone) still matches. */
+export const activityEtag = (digest: string, probe: string) => `"${digest}-${probe}"`;
+export function readActivityEtag(sent: string | null): { digest: string; probe: string | null } | null {
+  const match = /^"(a[0-9a-f]{24})(?:-([0-9a-f]{12}))?"$/.exec(sent?.replace(/^W\//, "") ?? "");
+  return match ? { digest: match[1]!, probe: match[2] ?? null } : null;
 }

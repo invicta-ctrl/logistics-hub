@@ -84,14 +84,10 @@ describe("continue", () => {
     expect(await resumable()).toEqual({ catalogue: null, checks: [] });
   });
 
-  it("offers this person's own open cataloguing session, and drops it once it is finished", async () => {
+  it("no longer reads the cataloguing session Home never showed; the field stays, as null (V1.16.4 §5)", async () => {
     const started = await as(one, "/api/staff/catalogue/sessions", "POST", { locationId: shelf });
-    const { id } = await json<{ id: string }>(started);
-    expect((await resumable()).catalogue).toMatchObject({ id, place: "Home shelf", saved: 0 });
-    // Someone else's open session is not theirs to resume.
-    expect((await resumable(two)).catalogue).toBeNull();
-    expect((await as(one, `/api/staff/catalogue/sessions/${id}/finish`, "POST")).status).toBe(200);
-    expect((await resumable()).catalogue).toBeNull();
+    expect(started.status).toBe(201);
+    expect(await resumable()).toEqual({ catalogue: null, checks: [] });
   });
 
   it("offers this person's open and paused checks of a place, never someone else's or a finished one", async () => {

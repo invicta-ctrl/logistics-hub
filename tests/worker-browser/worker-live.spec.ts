@@ -15,6 +15,8 @@ async function choose(panel: Locator, name: string): Promise<void> {
 const username = process.env.E2E_USERNAME!;
 const password = process.env.E2E_PASSWORD!;
 const thumbnailSrc = (id: string) => `/api/staff/media/${id}/thumb?v=2`;
+/** A list row names the picture by the item's last change, so the browser may keep it (V1.16.4 §4.8). */
+const rowThumbnailSrc = (id: string) => new RegExp(`^/api/staff/media/${id}/thumb\\?v=2&p=[^&]+$`);
 
 async function signIn(page: Page) {
   await page.goto("/staff");
@@ -959,7 +961,7 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   // The list shows the small variant, only for rows near the screen, and the thumbnail opens the viewer too.
   await sheet.getByRole("button", { name: "Close" }).click();
   const row = page.locator('tr[data-key="ITM-0262"]');
-  await expect(row.locator(".thumb [data-item-photo]")).toHaveAttribute("src", thumbnailSrc(photo.id));
+  await expect(row.locator(".thumb [data-item-photo]")).toHaveAttribute("src", rowThumbnailSrc(photo.id));
   await expect(row.locator(".thumb [data-item-photo]")).toHaveAttribute("loading", "lazy");
   await expect(row.locator(".thumb [data-item-photo]")).toHaveCSS("width", "40px");
   // Decorative beside the name (the same photo opens from the profile), so screen readers hear the name once.
@@ -994,7 +996,7 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   expect(replaced.id).not.toBe(photo.id);
   expect(replaced.width).toBeGreaterThan(replaced.height);
   expect((await page.request.get(`/api/staff/media/${photo.id}/thumb`)).status()).toBe(404);
-  await expect(row.locator(".thumb [data-item-photo]")).toHaveAttribute("src", thumbnailSrc(replaced.id));
+  await expect(row.locator(".thumb [data-item-photo]")).toHaveAttribute("src", rowThumbnailSrc(replaced.id));
   await choose(panel, "View larger");
   await viewer.getByRole("button", { name: "Edit photo", exact: true }).click();
   await expect(viewer).toHaveCount(0);

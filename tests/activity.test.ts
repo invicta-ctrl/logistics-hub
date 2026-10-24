@@ -283,7 +283,9 @@ describe("activity read model", () => {
     const before = await tag();
     sqlite.prepare("UPDATE loans SET borrower_name = 'Somebody Else', student_id = '20-0000-000' WHERE id = 'LN-Q'").run();
     expect((await tag(before.etag)).status).toBe(304);
+    // Every write the Hub makes to a loan bumps the revision, which the change probe reads (V1.16.4 §4.8); this edit does the same.
     sqlite.prepare("UPDATE loans SET reason = 'Kiosk needle, second table' WHERE id = 'LN-Q'").run();
+    sqlite.prepare("UPDATE catalog_revision SET value = value + 1 WHERE id = 1").run();
     expect((await tag(before.etag)).status).toBe(200);
   });
 
@@ -467,7 +469,8 @@ describe("activity read model", () => {
       movement("ITM-R", "STOCK_IN", 1, "2026-09-30T03:00:00.000Z");
       const first = await tag();
       expect(first.status).toBe(200);
-      expect(first.etag).toMatch(/^"a[0-9a-f]{24}"$/);
+      // The answer's digest, then the change probe it was made under (V1.16.4 §4.8).
+      expect(first.etag).toMatch(/^"a[0-9a-f]{24}-[0-9a-f]{12}"$/);
       expect((await tag("", staffCookie, first.etag)).status).toBe(304);
       expect((await tag("", staffCookie, `W/${first.etag}`)).status).toBe(304);
       // Backdated and same-time entries are invisible to a counter but change what the page shows.
@@ -477,7 +480,8 @@ describe("activity read model", () => {
       const sameTime = (movement("ITM-R", "STOCK_IN", 1, "2026-09-30T03:00:00.000Z"), await tag("", staffCookie, backdated.etag));
       expect(sameTime.status).toBe(200);
       // A rename of the actor is in the text, so it is a change too.
-      sqlite.prepare("UPDATE staff_accounts SET display_name = 'Renamed Person' WHERE id = 'ACC-1'").run();
+      // Renaming an account stamps it (accounts.ts), which the change probe reads.
+      sqlite.prepare("UPDATE staff_accounts SET display_name = 'Renamed Person', updated_at = '2026-09-30T06:00:00.000Z' WHERE id = 'ACC-1'").run();
       const renamed = await tag("", staffCookie, sameTime.etag);
       expect(renamed.status).toBe(200);
       // A different question gets a different tag even over the same rows.
