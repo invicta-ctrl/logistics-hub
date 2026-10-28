@@ -233,6 +233,7 @@ export async function myAccount(): Promise<void> {
   if (!session) return;
   document.title = "My account · Staff workspace";
   const recovery = session.recovery;
+  let configured = Boolean(recovery?.configured);
   shell(session, "account", html`
     <header class="page-header"><div><h1>My account</h1><p>${session.displayName} · <span class="mono">${session.username}</span> · ${accessLabel(sessionAccess(session))}</p>
       ${session.directory ? html`<p>Staff Directory: ${session.directory.name}${session.directory.position ? `, ${session.directory.position}` : ""} · ${DEPARTMENTS[session.directory.department as DepartmentCode] ?? session.directory.department}</p>` : ""}</div></header>
@@ -278,9 +279,11 @@ export async function myAccount(): Promise<void> {
   bindCopy(main);
 
   const passwordForm = document.querySelector<HTMLFormElement>("#password-form")!;
+  const profileForm = document.querySelector<HTMLFormElement>("#profile-form");
   // A half-typed password or profile change asks before any way out (V1.16.4 §4.7); a saved one clears or leaves the page.
-  const pageEdits = [passwordForm, document.querySelector<HTMLFormElement>("#profile-form")].flatMap((form) => form ? [formEdits(form)] : []);
-  onLeave(trackEdits(() => pageEdits.some((edits) => edits.dirty())));
+  const passwordEdits = formEdits(passwordForm);
+  const profileEdits = profileForm ? formEdits(profileForm) : null;
+  onLeave(trackEdits(() => passwordEdits.dirty() || Boolean(profileEdits?.dirty())));
   passwordForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const values = new FormData(passwordForm);
@@ -304,7 +307,11 @@ export async function myAccount(): Promise<void> {
     try {
       const result = await api<{ changed: number }>("/api/staff/me", { method: "PATCH", body: JSON.stringify({ displayName: values.get("displayName"), username: values.get("username") }) });
       toast(result.changed ? "Profile saved." : "No changes to save.");
-      if (result.changed) { forgetSession(); navigate("/staff/account", true); }
+      if (!result.changed) return;
+      forgetSession();
+      // The page is drawn again for the new name, unless a password is half typed: a redraw would empty it without asking.
+      if (passwordEdits.dirty()) profileEdits?.reset();
+      else navigate("/staff/account", true);
     } catch (error) { setMessage(form.querySelector("#profile-alert")!, failure(error)); } finally { settle(); }
   });
 
@@ -314,17 +321,26 @@ export async function myAccount(): Promise<void> {
   });
 
   document.querySelector("#rotate-key")?.addEventListener("click", async () => {
-    if (recovery?.configured && !window.confirm("Replace your recovery key? The current one (including a paired computer's copy) stops working.")) return;
+    if (configured && !window.confirm("Replace your recovery key? The current one (including a paired computer's copy) stops working.")) return;
     try {
       const { recoveryKey } = await api<{ recoveryKey: string }>("/api/staff/me/recovery-key", { method: "POST" });
       mount(document.querySelector("#recovery-result")!, oneTime("Your owner recovery key", recoveryKey, "Shown once. Store it offline (print it, or save it in a password manager). Anyone holding it can reset your owner password, so keep it private. Re-pair the Owner Console if you use it."));
       toast("New recovery key issued. The previous key no longer works.");
+      configured = true;
     } catch (error) { setMessage(document.querySelector("#recovery-alert")!, failure(error)); }
   });
 
   document.querySelector("#revoke-key")?.addEventListener("click", async () => {
     if (!window.confirm("Revoke your recovery key? You will have no way to recover a forgotten owner password until you create a new one.")) return;
-    try { await api("/api/staff/me/recovery-key", { method: "DELETE" }); toast("Recovery key revoked."); navigate("/staff/account", true); }
-    catch (error) { setMessage(document.querySelector("#recovery-alert")!, failure(error)); }
+    try {
+      await api("/api/staff/me/recovery-key", { method: "DELETE" });
+      toast("Recovery key revoked.");
+      // Shown in place, so a half-typed password or profile change stays as it is.
+      configured = false;
+      mount(document.querySelector(".recovery-status")!, html`<span class="tag tag--warn">Not configured</span>`);
+      document.querySelector("#rotate-key")!.textContent = "Create recovery key";
+      document.querySelector("#revoke-key")?.remove();
+      document.querySelector<HTMLElement>("#rotate-key")!.focus();
+    } catch (error) { setMessage(document.querySelector("#recovery-alert")!, failure(error)); }
   });
 }

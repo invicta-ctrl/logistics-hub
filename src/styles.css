@@ -641,7 +641,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .page-header__up a:hover { color: var(--brand); text-decoration: underline; }
 .page-header__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 /* The smallest phones at large text: a title hyphenates and an action wraps its words, rather than either running past the edge. */
-.page-header h1, .ws-head__title h1 { min-width: 0; overflow-wrap: break-word; hyphens: auto; }
+.page-header h1, .ws-head__title h1 { min-width: 0; overflow-wrap: break-word; }
 .page-header__actions .button { max-width: 100%; white-space: normal; }
 .review-meter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); color: var(--text-2); font-size: var(--text-sm); }
 .review-meter p { margin: 0; }

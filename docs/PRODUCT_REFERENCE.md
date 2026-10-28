@@ -214,7 +214,7 @@ Design, permissions and measurements: `docs/GLOBAL_SEARCH.md`.
 - **Next actions.** Only work that is open for this person and still valid: their paused or in-progress place checks, each with **Resume** (`/api/staff/home`, `src/home.ts` `resumable`). A finished or abandoned one never appears, and the group is hidden when empty. The answer's `catalogue` field stays, always `null`.
 - **Insights.** A closed disclosure that asks `/api/staff/home/insights` only when opened (`private, no-store`, revalidated against the catalog revision and the hour), each a question, its window, its rule and the evidence in a sentence. None is a score, none orders or changes anything, and none names a borrower or an account. A failure stays inside it, with **Try again**. The catalog completeness card is no longer shown; the server still returns it.
 
-**One request.** Home asks only `/api/staff/attention`, and the bar's counts come from the same answer, so Home and the bell cannot disagree.
+**One source for the counts.** Needs attention, When there is time and the bar's counts all come from one `/api/staff/attention` answer, so Home and the bell cannot disagree. Next actions asks `/api/staff/home`, and Insights asks only when opened.
 
 | Question | Source | Window | Rule | Shown |
 |---|---|---|---|---|

@@ -896,8 +896,9 @@ export async function workspace(): Promise<void> {
         Object.assign(item, stored);
         if (detail?.item.id === item.id) detail = { ...detail, item: { ...detail.item, ...stored } };
         sync();
-        // Saved, the Save button goes; focus stays in the form, where Reset puts it, rather than falling to the page.
-        level.focus({ preventScroll: true });
+        // Saved, the Save button goes; focus stays in the form, where Reset puts it, rather than falling to the page. Someone who
+        // moved on while it saved keeps their place.
+        if (document.activeElement === submit || document.activeElement === document.body || !document.activeElement) level.focus({ preventScroll: true });
         toast(result.changed ? "Stock settings saved." : "No changes to save.");
         await refreshStock(item.id);
         await poll.refresh();
@@ -1471,7 +1472,9 @@ export async function workspace(): Promise<void> {
       }
     });
     preview();
-    const edits = formEdits(form);
+    // The new-place part saves on its own and is left out of the form's fields; a name typed there and not yet added is still an edit.
+    const placeName = form.querySelector<HTMLInputElement>("#np-name")!;
+    const edits = formEdits(form, () => (!newPlace.hidden && placeName.value.trim() ? `new place: ${placeName.value.trim()}` : ""));
     itemEdits.push(edits.dirty);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();

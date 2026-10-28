@@ -178,6 +178,35 @@ test.describe("kept answers and polling (§4.8)", () => {
     await expect.poll(() => asked.length).toBeGreaterThan(now);
     await expect(page.locator("#live-status")).not.toHaveText("Not updating, retrying");
   });
+
+  test("a hidden tab asks nothing until it is shown again, then asks at once", async ({ page }) => {
+    await staffPages(page);
+    const asked: number[] = [];
+    await page.route("**/api/staff/inventory", (route) => {
+      asked.push(Date.now());
+      return route.fulfill({ headers: { etag: '"r1"' }, json: { revision: 1, items: [item], categories: ["SUPPLIES"], locations: [], units: ["piece"] } });
+    });
+    await page.clock.install();
+    const pass = async (milliseconds: number) => { for (let spent = 0; spent < milliseconds; spent += 1000) { await page.clock.runFor(1000); await page.waitForTimeout(8); } };
+    const show = (state: "hidden" | "visible") => page.evaluate((value) => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => value });
+      document.dispatchEvent(new Event("visibilitychange"));
+    }, state);
+    await page.goto("/staff/items");
+    await expect.poll(() => asked.length).toBe(1);
+    // Visible, the list asks again on its pace.
+    await pass(30_000);
+    expect(asked.length).toBeGreaterThan(1);
+    // Hidden: the check already out may finish, and then nothing more, however long the tab stays hidden.
+    await show("hidden");
+    await pass(15_000);
+    const hidden = asked.length;
+    await pass(600_000);
+    expect(asked.length).toBe(hidden);
+    // Shown again: one check at once, then the usual pace.
+    await show("visible");
+    await expect.poll(() => asked.length).toBe(hidden + 1);
+  });
 });
 
 test.describe("other tabs and releases (§4.8)", () => {

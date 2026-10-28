@@ -151,6 +151,22 @@ test("Stock settings save on their own, ask before an unsaved change is lost, an
   expect(state.sent.details[0]).not.toHaveProperty("expiresOn");
 });
 
+test("someone who moves to another field while Stock settings save keeps their place", async ({ page }) => {
+  const state = fresh({ onHand: 4 });
+  await staffPages(page, state);
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/staff/items/ITM-0001/settings", async (route) => { await held; await route.fallback(); });
+  await page.goto("/staff/items?item=ITM-0001");
+  const settings = sheetOf(page).locator("#settings-form");
+  await settings.getByLabel("Reorder level").fill("6");
+  await settings.getByRole("button", { name: "Save settings" }).click();
+  await settings.getByLabel("Stock area").focus();
+  release();
+  await expect(page.getByText("Stock settings saved.")).toBeVisible();
+  await expect(settings.getByLabel("Stock area")).toBeFocused();
+});
+
 test("a stale Stock settings save is refused and offers the latest details", async ({ page }) => {
   const state = fresh({ onHand: 4 });
   await staffPages(page, state);

@@ -148,6 +148,27 @@ describe("a retried Lend (R5)", () => {
     expect(written()).toMatchObject({ loans: 1, movements: 1, audit: 1, photos: 1 });
   });
 
+  it("finds the loan a retry made even when the retry's details are now refused, so midnight never lends twice", async () => {
+    const id = await loanable("Tripod", 3);
+    const key = "wp5-midnight-key-0001";
+    const first = await lend(id, { key, returnBy: officeDay() });
+    expect(first.status).toBe(201);
+    const { id: loanId } = await first.json() as { id: string };
+    // The answer was lost; the retry arrives after the office's midnight, when that return date is in the past.
+    vi.useFakeTimers({ now: Date.now() + 86_400_000, toFake: ["Date"] });
+    try {
+      // A day later the eight-hour session has ended: the desk signs in again, and its retry still carries the same key.
+      const login = await call("/api/staff/login", { method: "POST", headers: { origin, "content-type": "application/json", "cf-connecting-ip": "ip-ACC-1-later" }, body: JSON.stringify({ username: "staff.one", password: "correct horse battery" }) });
+      cookies.STAFF = login.headers.get("set-cookie")!.split(";")[0]!;
+      const retry = await lend(id, { key, returnBy: officeDay(new Date(Date.now() - 86_400_000)) });
+      expect(retry.status).toBe(201);
+      expect(await retry.json()).toEqual({ id: loanId, onHand: 2, replayed: true, differs: true });
+      // A new request with the same past date is still refused.
+      expect((await lend(id, { returnBy: officeDay(new Date(Date.now() - 86_400_000)) })).status).toBe(400);
+    } finally { vi.useRealTimers(); }
+    expect(written()).toMatchObject({ loans: 1, movements: 1, audit: 1, photos: 1 });
+  });
+
   it("makes one loan when the same key arrives twice at once", async () => {
     const id = await loanable("Speaker", 3);
     const key = "wp5-race-key-0001";

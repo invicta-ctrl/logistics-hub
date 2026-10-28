@@ -726,9 +726,10 @@ async function route(request: Request, env: Env, url: URL, ctx?: ExecutionContex
 
 /**
  * The route as a cost line records it: only the short lower-case words a route is made of, anything else (a record id, text a caller
- * typed) as ":id". A request that is signed out, or finds nothing (no such route or record), is logged without its address at all.
+ * typed) as ":id". A request that is signed out, refused before or at its route's gate (another origin, a password to change, no Hub
+ * access, not an administrator), or finds nothing (no such route or record) is logged without its address at all.
  */
-const routeOf = (path: string, status: number) => status === 401 ? "signed-out" : status === 404 ? "not-found"
+const routeOf = (path: string, status: number) => status === 401 ? "signed-out" : status === 403 ? "refused" : status === 404 ? "not-found"
   : path.split("/").map((part) => (/^[a-z-]{0,40}$/.test(part) ? part : ":id")).join("/");
 
 /**

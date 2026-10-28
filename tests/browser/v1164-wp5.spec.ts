@@ -177,3 +177,18 @@ test("one request key lives until the server answers: a lost answer re-sends it,
   expect(new Set(sent.map((body) => body.key)).size).toBe(3);
   expect(sent[3]!.key).not.toBe(sent[2]!.key);
 });
+
+test("a retry the server answers with the details first sent is a warning, not a success", async ({ page }) => {
+  await desk(page, {}, (_body, index) => index === 0 ? "abort" : { status: 201, json: { id: "LN-0", onHand: 4, replayed: true, differs: true } });
+  const form = page.locator("#loan-form");
+  await form.getByLabel("Borrower's full name").fill("Juan Dela Cruz");
+  await form.getByLabel("Student ID number").fill("21000115");
+  await form.locator("input[type=file]").setInputFiles(PHOTO);
+  await form.getByRole("button", { name: "Lend 1 piece" }).click();
+  await expect(form.getByRole("alert")).toContainText("you appear to be offline");
+  await form.getByLabel("Borrower's full name").fill("Juan Dela Cruz Jr");
+  await form.getByRole("button", { name: "Lend 1 piece" }).click();
+  const warning = page.locator(".toast", { hasText: "Later changes were not saved." });
+  await expect(warning).toBeVisible();
+  await expect(warning).toHaveClass(/toast--error/);
+});

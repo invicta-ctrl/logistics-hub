@@ -381,6 +381,51 @@ test("a new place started and cancelled in the item form is not the item's edit"
   await expect(question(page)).toHaveCount(0);
 });
 
+test("a new place's name typed and not yet added is an edit: closing asks, and Keep editing keeps it", async ({ page }) => {
+  await staffPages(page);
+  await page.goto("/staff/items?item=ITM-0001&tab=details");
+  const sheet = page.getByRole("dialog", { name: "Sample tripod" });
+  await sheet.getByRole("button", { name: "New place" }).click();
+  await sheet.locator("#np-name").fill("Shelf 3");
+  await page.keyboard.press("Escape");
+  await expect(question(page)).toBeVisible();
+  await page.getByRole("button", { name: "Keep editing" }).click();
+  await expect(sheet).toBeVisible();
+  await expect(sheet.locator("#np-name")).toHaveValue("Shelf 3");
+});
+
+test("saving the profile while a new password is half typed keeps the password and does not draw the page again", async ({ page }) => {
+  await staffPages(page);
+  await page.route("**/api/staff/me", (route) => route.request().method() === "PATCH" ? route.fulfill({ json: { changed: 1 } }) : route.fallback());
+  await page.goto("/staff/account");
+  await page.locator("#current").fill("old secret 1");
+  await page.locator("#next").fill("new secret");
+  await page.locator("#name").fill("Staff One Reyes");
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(page.getByText("Profile saved.")).toBeVisible();
+  await expect(page.locator("#next")).toHaveValue("new secret");
+  await expect(page.locator("#name")).toHaveValue("Staff One Reyes");
+  // The profile is saved; the half-typed password is still an edit, and only it.
+  await page.locator("#current").fill("");
+  await page.locator("#next").fill("");
+  await rail(page, "Items").click();
+  await expect(page.getByRole("heading", { name: "Items", level: 1 })).toBeVisible();
+  await expect(question(page)).toHaveCount(0);
+});
+
+test("revoking the recovery key shows it in place and keeps a half-typed profile change", async ({ page }) => {
+  await staffPages(page, owner);
+  await page.route("**/api/staff/me/recovery-key", (route) => route.request().method() === "DELETE" ? route.fulfill({ json: { revoked: true } }) : route.fallback());
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.goto("/staff/account");
+  await page.locator("#name").fill("Owner Sample Reyes");
+  await page.getByRole("button", { name: "Revoke recovery key" }).click();
+  await expect(page.locator(".recovery-status")).toHaveText("Not configured");
+  await expect(page.getByRole("button", { name: "Revoke recovery key" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Create recovery key" })).toBeFocused();
+  await expect(page.locator("#name")).toHaveValue("Owner Sample Reyes");
+});
+
 test("Keep editing after Sign out in the account menu puts focus back on the menu's button, not the page", async ({ page }) => {
   await staffPages(page);
   await page.goto("/staff/account");

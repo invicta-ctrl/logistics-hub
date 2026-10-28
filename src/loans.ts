@@ -127,10 +127,11 @@ async function byKey(db: D1Database, key: string) {
  * corrected after an answer was lost), the answer says so (`differs`), so the desk is told the loan kept the details first sent.
  */
 const SAME_LOAN: Array<keyof LoanDetails> = ["purpose", "borrowerName", "studentId", "reason", "quantity", "returnBy"];
-function replayOf(earlier: ({ id: string; itemId: string; onHand: number } & LoanDetails) | null, itemId: string, details: LoanDetails) {
+/** `details` is null when the retry's own details are now refused: they cannot be the ones the loan kept. */
+function replayOf(earlier: ({ id: string; itemId: string; onHand: number } & LoanDetails) | null, itemId: string, details: LoanDetails | null) {
   if (!earlier) return null;
   if (earlier.itemId !== itemId) throw new InputError(409, "That request was already used for another item. Please try again.");
-  const differs = SAME_LOAN.some((field) => (earlier[field] ?? null) !== (details[field] ?? null));
+  const differs = !details || SAME_LOAN.some((field) => (earlier[field] ?? null) !== (details[field] ?? null));
   return { id: earlier.id, onHand: earlier.onHand, replayed: true as const, ...(differs ? { differs: true as const } : {}) };
 }
 
@@ -158,13 +159,19 @@ export async function dropUnusedPhoto(db: D1Database, bucket: R2Bucket, key: str
  * the photo is removed again.
  */
 export async function createLoan(db: D1Database, bucket: R2Bucket, actor: Actor, itemId: string, form: FormData) {
-  const details = loanDetails((key) => form.get(key), officeDay());
   const key = form.get("key");
-  if (typeof key !== "string" || !/^[A-Za-z0-9-]{8,80}$/.test(key)) throw new InputError(400, "Missing request key.");
-
+  const keyed = typeof key === "string" && /^[A-Za-z0-9-]{8,80}$/.test(key);
+  const read = () => loanDetails((name) => form.get(name), officeDay());
   // A retried request that already succeeded returns the loan it made, marked as such, so the desk shows it instead of a second (R5).
-  const earlier = replayOf(await byKey(db, key), itemId, details);
-  if (earlier) return earlier;
+  // It is found before the details are checked: a retry its rules now refuse (a return date that midnight made past) still finds its loan.
+  const found = keyed ? await byKey(db, key) : null;
+  if (found) {
+    let retried: LoanDetails | null = null;
+    try { retried = read(); } catch (error) { if (!(error instanceof InputError)) throw error; }
+    return replayOf(found, itemId, retried)!;
+  }
+  const details = read();
+  if (!keyed) throw new InputError(400, "Missing request key.");
   const item = await db.prepare("SELECT item_type AS itemType, status, lending_audience AS audience FROM items WHERE id = ?").bind(itemId).first<{ itemType: string; status: string; audience: string }>();
   if (!item) throw new InputError(404, "Item not found.");
   if (item.itemType !== PUBLIC_LENDING_ITEM_TYPE) throw new InputError(400, "Only Loanable items can be lent. Change the item's type first.");

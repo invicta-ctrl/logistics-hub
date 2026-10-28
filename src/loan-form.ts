@@ -269,8 +269,9 @@ export function bindLoanForm(form: HTMLFormElement, options: {
       return;
     }
     // An earlier Lend whose answer was lost had already saved it: say so, and the list shows that loan rather than a second.
+    // Changed details that were not saved are a warning, not a success.
     toast(differs ? `This loan of ${target.name} was already saved, with the details first sent. Later changes were not saved.`
-      : replayed ? `This loan of ${target.name} was already saved.` : `Lent ${count} ${units(count, target.unit)} of ${target.name} to ${name.value.trim()}.`);
+      : replayed ? `This loan of ${target.name} was already saved.` : `Lent ${count} ${units(count, target.unit)} of ${target.name} to ${name.value.trim()}.`, differs ? "error" : "ok");
     reset();
     keyItem = null;
     try {
