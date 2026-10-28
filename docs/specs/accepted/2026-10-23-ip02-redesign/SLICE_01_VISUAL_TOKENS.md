@@ -66,6 +66,7 @@ Text never shrinks to fit; rows grow or wrap instead. References (`DM-0218`) and
   - Top: the HAU USC crest (38×44) and "Logistics Hub" 16/24 600.
   - Find: a 40px button with "Ctrl K"/"⌘ K".
   - Groups: Home (no label), then Resources, Circulation, Records and Manage, each with a label; links are 40px.
+    - *Amended by [V1.16.4](../2026-10-24-v1.16.4-integrated-cleanup.md) §4.2:* Items is the parent of All items, Low & out of stock, Stock & movements, Pantry, Locations and Kits. The rail lists them under Items, in that order, and the tablet's All destinations and the phone's More keep the same order.
   - Pinned bottom: the Department of Logistics mark (32×28) with "Department of Logistics / HAU USC", then the account row (32px circular avatar) and a theme button.
   - Only the link list scrolls. Below 960px of height, links become 32px and groups sit 8px apart.
 - **Queue:**

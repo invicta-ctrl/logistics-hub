@@ -112,7 +112,7 @@ Daily quantity work over the same items and ledger (Items stays the catalog work
 - **Header:** today's movement count and who recorded the last one; one "Update stock" action.
 - **Needs attention:** one list with filter chips (Out of stock, Low stock, Needs count, Expiring, and **Open units need review** only when a stored state has more units open than on hand). Each row says why, and offers the next action (Stock in or Count, Add to restock). Items without a reorder level are never called low; a hint says how many have none.
 - **Restock list:** a lightweight replenishment list, not procurement: restock quantity, Needs restock → Planned, **Receive** (records a Stock in that closes the entry) or Dismiss; suggestions from reorder levels; closed entries from the last two weeks.
-- **Pantry:** items whose stock area is Pantry (a catalog field; 10 food and kitchen items migrated), with reorder level, optional earliest expiry (Expired, or expiring within 14 days) and quick Use (or **Open units** for an open-unit item) and Restock actions.
+- **Pantry:** items whose stock area is Pantry (a catalog field; 10 food and kitchen items migrated), with on hand, its minimum (the reorder level), the shortage below it, what was used in the last 30 days, optional earliest expiry (Expired, or expiring within 30 days: one window for Pantry, Stock's Expiring soon, the Attention inbox and kits, V1.16.4 D7) and quick Use (or **Open units** for an open-unit item) and Restock actions.
 - **Activity:** today's or recent staff movements, each with the change, before → after, reason, actor and time.
 - **Update stock:** item search (name or ID), then the same quantity editor as the item sheet (`src/movement-form.ts`). Row actions preset it: Stock in suggests "new stock received", Count opens a physical count, Use removes one as consumed, Receive adds the restock quantity and closes the restock entry. After saving, the item field is ready for the next entry, and a session list shows what was just recorded. An open-unit item also shows its open units here. A count below the open units asks to close the extra ones (oldest first) in the same save; any other change below them is refused. A sticky panel on desktop; a bottom sheet on phones and tablets.
 
@@ -121,7 +121,7 @@ Daily quantity work over the same items and ledger (Items stays the catalog work
 Internal lending, recorded by staff (the public Lending Hub still only shows availability).
 - **Lending** happens from an item's **Loan** tab or from **Lend an item** on this page (item search, then the same form, `src/loan-form.ts`):
   - **Individual use:** borrower's full name, **student ID number** and a **photo** are required;
-  - **USC use:** the name of the person using it, a **photo** and a **specific reason** are required; the student ID is optional;
+  - **USC use:** the same full name, **8-digit student ID number** and **photo**, plus a **specific reason** (V1.16.4 D1: Individual and USC use differ only by the reason, at the desk and on the phone). An item lent for USC use only cannot be lent for Individual use; the Worker refuses it before writing anything (D3);
   - quantity (up to what is on the shelf) and an optional return-by date. The photo is taken or chosen on the device, shrunk to 1600 px JPEG in the browser, and kept in R2. A returning student's name fills in from their ID.
 - **Out now:** every open loan, overdue first (a return-by date before today, Manila time), with who, what, since when, the reason, and **Return**.
 - **Return** shows the hand-over photo and asks how it came back: **returned in good condition** (back on the shelf), **damaged** or **lost or not returned** (both stay off the shelf and need a note).
@@ -166,24 +166,26 @@ A **kit** is a named list of existing items with how many of each it should hold
 
 **Attention** (`/staff/attention`, the bell in the staff bar) lists what needs a person, and nothing else. It is **derived, never stored**: each entry exists exactly while its cause is true, so there is no status to keep in step, no "dismiss", and fixing the cause (returning the loan, restocking, settling the finding, classifying the item) is what clears it. Passive history stays in Activity. Staff who may use the Logistics workspace can read it; other departments and officers cannot (`/api/staff/attention`, `/api/staff/attention/summary`).
 
-Each reason is a SQL condition over records that already exist, used for both the (bounded, 100 per reason) list and its true count, so the two cannot disagree. Urgency is one fixed rule per reason, never a score:
+Each reason is a SQL condition over records that already exist, used for both the (bounded, 100 per reason) list and its true count, so the two cannot disagree. Urgency is one fixed rule per reason, never a score. It shows as **Now**, **Soon** or **When there is time** (V1.16.4; before, Today, This week and Routine), and every entry says the basis of its urgency in a few words ("Out of stock with a reorder level set", "Expires in 3 days"):
 
 | Reason (group heading) | Source | Condition | Urgency | Next action |
 |---|---|---|---|---|
-| Overdue loans | Loans | an `OUT` loan whose return date has passed | Today | the loan, marked in its list |
-| Damaged or lost returns | Loans | a `DAMAGED` or `LOST` loan closed in the last 60 days, not yet marked reviewed | This week | the return in the loan history, or **Mark reviewed** in place |
-| Phone records to check | Self-Service | an unresolved Self-Service record held for review | Today when held over a day, else this week | Self-Service review |
-| Reports from phones | Self-Service | an unresolved "can't find it" or "place looks wrong" report from a phone | This week | the item |
-| Out of stock | Stock | an item that is not inactive and has none left (the Stock page's rule) | Today when it has a reorder level, else this week; routine once a restock is requested | the item |
-| Low stock | Stock | on hand above 0 and at or under the item's level | This week; routine once a restock is requested | the item |
-| Check findings to settle | Locations | a finished check's mismatch, can't-find, found-elsewhere or unlisted finding with no resolution, no later look and no later count | This week | the check |
-| Reported more than once | Locations | an item with two or more unresolved location reports | This week | the item |
-| Kits to replenish / review | Kits | an active kit that is Needs replenishment (this week) or Needs review (routine) | as stated | the kit |
-| Records that look wrong | Catalog | a check marked the record as wrong and the item has not been edited since | Routine | the item's Details |
-| Items to classify | Catalog | an active Unclassified item | Routine | the item's Details, which shows the top suggestion with how sure it is and why |
-| Items without a place | Catalog | an active, classified item with no place | Routine | the item's Details |
+| Overdue loans | Loans | an `OUT` loan whose return date has passed | Now | the loan, marked in its list |
+| Damaged or lost returns | Loans | a `DAMAGED` or `LOST` loan closed in the last 60 days, not yet marked reviewed | Soon | the return in the loan history, or **Mark reviewed** in place |
+| Phone records to check | Self-Service | an unresolved Self-Service record held for review | Now when held over a day, else Soon | Self-Service review |
+| Reports from phones | Self-Service | an unresolved "can't find it" or "place looks wrong" report from a phone | Soon | the item |
+| Out of stock | Stock | an item that is not inactive with a negative balance, or none on hand and none out on loan (V1.16.4 §4.3: none on hand with units on loan is **All on loan**, not Out; a negative balance says by how much) | Now when it has a reorder level, else Soon; When there is time once a restock is requested | the item |
+| Low stock | Stock | on hand above 0 and at or under the item's level | Soon; When there is time once a restock is requested | the item |
+| Needs count | Stock | an item whose figure came from the old sheet with a difference, or was marked to verify, and has not been counted in the Hub since | When there is time | the item, to count it |
+| Expiring soon | Stock | a Pantry item with some on hand whose expiry date is within 30 days or past | Now once past, Soon within 7 days, else When there is time | the item |
+| Check findings to settle | Locations | a finished check's mismatch, can't-find, found-elsewhere or unlisted finding with no resolution, no later look and no later count | Soon | the check |
+| Reported more than once | Locations | an item with two or more unresolved location reports | Soon | the item |
+| Kits to replenish / review | Kits | an active kit that is Needs replenishment (Soon) or Needs review (When there is time) | as stated | the kit |
+| Records that look wrong | Catalog | a check marked the record as wrong and the item has not been edited since | When there is time | the item's Details |
+| Items to classify | Catalog | an active Unclassified item | When there is time | the item's Details, which shows the top suggestion with how sure it is and why |
+| Items without a place | Catalog | an active, classified item with no place | When there is time | the item's Details |
 
-**Counts.** The bell and the Loans and Stock numbers count only Today and This week; routine entries are listed but never counted. The page says the split ("21 to act on · 394 when there is time"). The shell asks for the numbers once after a page is drawn, keeps the answer for 30 seconds, and fails quietly. The Self-Service number in the bar is the same definition as the inbox's Self-Service groups.
+**Counts.** The bell and the Loans and Stock numbers count only Now and Soon; entries for when there is time are listed but never counted. The page says the split ("21 to act on · 394 when there is time"). The shell asks for the numbers once after a page is drawn, keeps the answer for 30 seconds, and fails quietly; on Home and Attention the bar takes them from the page's own `/api/staff/attention` answer instead (V1.16.4). The Self-Service number in the bar is the same definition as the inbox's Self-Service groups.
 
 **What a person records.** Only **Mark reviewed** on a damaged or lost return: one `LOAN_REVIEWED` audit entry per loan (idempotent), shown in Activity as "X reviewed the damaged return of Y". It changes no stock and no loan. Nothing else in Attention writes anything, and no rule approves evidence, changes stock, or judges a person.
 
@@ -205,12 +207,14 @@ Design, permissions and measurements: `docs/GLOBAL_SEARCH.md`.
 
 ## Home (V1.12)
 
-**Home** (`/staff/home`) is where staff land after signing in, and where the logo and **Home** in the account menu lead. It answers "what should I do next?" and is not a seventh section in the bar (six already fill a phone with More); search finds it too ("Home"). One sentence greets the person with the count to act on. Under it:
+**Home** (`/staff/home`) is where staff land after signing in, and where the logo and **Home** in the account menu lead. It answers "what should I do next?" and is not a seventh section in the bar (six already fill a phone with More); search finds it too ("Home"). One sentence greets the person with the count to act on. Under it are four groups, in this order (V1.16.4 §4.1):
 
-- **Needs attention.** Attention's own groups, most urgent first, at most six rows, each a count, the reason, its source and "N today · N this week". A row opens Attention showing only that reason (`/staff/attention?reason=…`), so the count and the list are the same set; **Show everything** lifts it. Routine entries (counted nowhere) are one line, "When there is time". Nothing to do reads "Nothing needs a person right now". The numbers are the answer the bell already loaded (`/api/staff/attention/summary`), so Home and the bell cannot disagree.
-- **Continue.** Only work that is open for this person and still valid: their open cataloguing session (and its place) and their paused or in-progress place checks, each with **Resume** into that work (`/api/staff/home`, `src/home.ts` `resumable`, using the same open-work queries as the Catalogue and Checks pages). A finished or abandoned one never appears.
-- **Quick actions.** By role, never by inferred habit: Add items, Lend or return, Stock in or out, Find a place, Check a kit; administrators and the Owner also get Staff Directory and Accounts and settings. Nothing is remembered in the browser.
-- **Insights.** Loaded after the rest, separately (`/api/staff/home/insights`, `private, max-age=120`), each a question, its window, its rule and the evidence in a sentence. None is a score, none orders or changes anything, and none names a borrower or an account. If they fail, Home says so and offers **Try again**; navigation and the rest of Home are untouched.
+- **Needs attention.** Each reason with entries for Now or Soon, Now first, in the queue's order: up to three entries per reason, each with what, why, the basis of its urgency, the next action and a link to the record. **View all N** opens Attention on that reason (`/staff/attention?reason=…`), N being the reason's true total, so the count and the list are the same set. Nothing to do reads "Nothing needs a person right now".
+- **When there is time.** The reasons that can wait, as one row of reason names with their totals, each opening its list. On phones the row scrolls sideways inside itself (as Earl directed in V1.16.3); the page never does.
+- **Next actions.** Only work that is open for this person and still valid: their paused or in-progress place checks, each with **Resume** (`/api/staff/home`, `src/home.ts` `resumable`). A finished or abandoned one never appears, and the group is hidden when empty. The answer's `catalogue` field stays, always `null`.
+- **Insights.** A closed disclosure that asks `/api/staff/home/insights` only when opened (`private, no-store`, revalidated against the catalog revision and the hour), each a question, its window, its rule and the evidence in a sentence. None is a score, none orders or changes anything, and none names a borrower or an account. A failure stays inside it, with **Try again**. The catalog completeness card is no longer shown; the server still returns it.
+
+**One request.** Home asks only `/api/staff/attention`, and the bar's counts come from the same answer, so Home and the bell cannot disagree.
 
 | Question | Source | Window | Rule | Shown |
 |---|---|---|---|---|

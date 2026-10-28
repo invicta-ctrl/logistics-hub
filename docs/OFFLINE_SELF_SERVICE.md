@@ -63,14 +63,17 @@ The phone keeps one full snapshot in IndexedDB and refreshes it on launch, every
 The wire part (sent unchanged on every retry):
 
 ```
-{ v: 1, id: UUID, seq: 1, 2, 3 …, type: TAKE | BORROW | USE | RETURN, itemId, quantity (1–30; always 1 for USE),
+{ v: 1 | 2, id: UUID, seq: 1, 2, 3 …, type: TAKE | BORROW | USE | RETURN, itemId, quantity (1–30; always 1 for USE),
   occurredAt: ISO (phone clock), catalogRevision,
-  person: { name, studentId? },
-  purpose?, reason?, returnBy?            // BORROW (Individual: name + student ID; USC: name + reason)
+  person: { name, studentId },            // v2: an 8-digit student ID on every action; v1 may lack it
+  purpose?, reason?, returnBy?            // BORROW (Individual and USC alike: name + student ID + photo; USC adds the reason)
   loanEventId?, outcome?, note? }         // RETURN (note required unless good; a photo of the item is always required)
 ```
 
 plus local bookkeeping: `state` (`pending | synced | review | rejected`), `message`, `attempts`, `nextAttemptAt`, `appliedRevision`, `hasPhoto`, `itemName`, `unit`.
+
+- **Version 2** (V1.15 identity amendment §E/§F) needs a full name, an 8-digit student ID and a photo for every action, with no USC exemption; Individual and USC use differ only by the reason. Records saved as version 1 before that rule still sync under the rules they were made with.
+- **The student ID field** (V1.16.4 §4.5, `src/student-id-field.ts`, shared with the desk and the Staff Directory) is a text field with the numeric keypad. It normalises what is pasted or typed (`21-000115` becomes `21000115`, spaces go, full-width digits become ASCII) and never cuts anything: a ninth digit stays and the field says "A Student ID has exactly 8 digits." The Worker checks the ID exactly as sent, keeps leading zeros and never rewrites it.
 
 - `id` is generated **before** saving and is the idempotency key end to end.
 - `seq` is the phone's own order; a return is always sent after its borrow.

@@ -17,6 +17,7 @@ Every page uses the same parts, drawn from revision 3's tokens:
    - At most one primary action and one secondary action.
    - The live status sits beside them.
 2. **Views.**
+   - *Amended by [V1.16.4](../2026-10-24-v1.16.4-integrated-cleanup.md) §4.2 for Items:* Items has no row of view tabs. Work to do is a wrapping To do line showing only the tasks that have any, and what to show (On Lending Hub, Low stock, Out of stock, All on loan, Inactive) is a Show choice inside Filters. Every old `?view=` address opens the same list. Other pages keep their tabs.
    - One row of quiet tabs with counts.
    - A 2 px accent underline marks the current view.
    - The row scrolls sideways on phones.
@@ -37,7 +38,7 @@ Every page uses the same parts, drawn from revision 3's tokens:
 ## Per page (capabilities kept, layout changed)
 | Page | Source | Layout change | Must keep |
 |---|---|---|---|
-| Items | src/staff.ts | Photo rows; review progress in the lede; item sheet led by the picture, then on-hand, then Overview, Review and edit, History | Views and their counts, filters, select and bulk actions, deep links (`?item=`, `?add=1`, `&tab=`), photo flows from S03 |
+| Items | src/staff.ts | Photo rows (views amended by V1.16.4 §4.2, see Views above); review progress in the lede; item sheet led by the picture, then on-hand, then Overview, Review and edit, History | Views and their counts, filters, select and bulk actions, deep links (`?item=`, `?add=1`, `&tab=`), photo flows from S03 |
 | Stock | src/stock-workspace.ts | One-tap filters; rows with on-hand, why and the one primary action; Update stock as a sheet | Views, reorder note, row menus and their keyboard behaviour, pending and conflict states |
 | Loans | src/loans-workspace.ts, src/loan-form.ts | Rows with the item picture and due status; Lend an item as a sheet | Views, deep links (`?loan=`, `view=history`), the focused-row behaviour, loan photos |
 | Locations | src/locations-workspace.ts, src/location-tree.ts | Rows with item count and last check; place sheet (S03 adds the check) | Tree order, inactive toggle, place media and reports |
