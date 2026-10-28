@@ -628,6 +628,9 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .page-header h1 { font-family: var(--serif); font-size: var(--text-2xl); font-weight: 500; letter-spacing: -.01em; line-height: 1.15; }
 .page-header p { margin-top: var(--space-1); color: var(--text-2); font-size: var(--text-sm); }
 .page-header__title { display: grid; gap: var(--space-1); min-width: 0; }
+.page-header__up { margin: 0; font-size: .8125rem; line-height: 1.25rem; }
+.page-header__up a { color: var(--text-2); font-weight: 500; text-decoration: none; }
+.page-header__up a:hover { color: var(--brand); text-decoration: underline; }
 .page-header__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .review-meter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); color: var(--text-2); font-size: var(--text-sm); }
 .review-meter p { margin: 0; }
@@ -964,6 +967,10 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .col-level .cell-label { display: none; }
 .input-compact { width: 6rem !important; min-height: 2.25rem !important; padding-block: var(--space-1) !important; text-align: right; font-variant-numeric: tabular-nums; }
 .chips--flush { margin: 0 0 var(--space-4); padding: 0; flex-wrap: wrap; overflow: visible; }
+/* Items' To do (V1.16.4 §4.2): only the tasks that have any, on a line that wraps, so nothing scrolls sideways. */
+.todo-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-4); }
+.todo-line[hidden] { display: none; }
+.todo-line__label { margin-right: var(--space-1); color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .hint-line { display: flex; align-items: flex-start; gap: var(--space-2); margin-bottom: var(--space-4); color: var(--text-2); font-size: var(--text-sm); }
 .hint-line .icon { --icon-size: var(--icon-sm); color: var(--text-3); }
 .subsection { margin-top: var(--space-8); }
@@ -2109,4 +2116,33 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
   .app-nav__all { display: none; }
   .app-nav__find { display: flex; }
   .app-bar .app-search { display: none; }
+}
+
+/* ==========================================================================
+   V1.16.4 §4.2: Items is a parent. Its children sit indented under it in the wide rail and are listed under it, in the same order,
+   in the tablet's All destinations and the phone's More. The parent is marked as the current set; the child is the current page.
+   ========================================================================== */
+.app-nav__children { display: none; margin: 0; padding: 0; list-style: none; }
+.menu__parent { display: grid; gap: 2px; }
+.menu__heading { margin: var(--space-1) 0 0; padding: 0 var(--space-3); color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .08em; line-height: 1.5rem; text-transform: uppercase; }
+.menu__children { display: grid; gap: 2px; margin: 0; padding: 0 0 var(--space-1); list-style: none; }
+.menu__children .menu__item { padding-left: var(--space-5); }
+.app-nav__link[aria-current="true"] { color: var(--on-dark); }
+@media (max-width: 760px) {
+  .app-nav .app-nav__link[aria-current="true"] { color: var(--brand); }
+}
+@media (min-width: 761px) {
+  .app-nav__link[aria-current="true"] > .icon { color: var(--gold-action); }
+}
+/* The icon rail shows only the parent, so there it carries the current page's mark and the Stock count. */
+@media (min-width: 761px) and (max-width: 1180px) {
+  .app-nav__link[aria-current="true"] { background: rgb(43 10 12 / 38%); }
+}
+@media (min-width: 1181px) {
+  .app-nav__children { display: grid; gap: 2px; }
+  .app-nav__child { display: flex; min-height: 2.25rem; padding-left: calc(var(--space-3) + 1.25rem + var(--space-3)); color: var(--on-dark-2); font-size: .8125rem; }
+  .app-nav [data-parent] .attn-slot { display: none; }
+}
+@media (min-width: 1181px) and (max-height: 800px) {
+  .app-nav__child { min-height: 2rem; }
 }

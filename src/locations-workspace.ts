@@ -1,7 +1,7 @@
 import { openViewer, photoPanel } from "./item-photo";
 import { MAX_DEPTH, VISIBILITIES, VISIBILITY_LABELS, ancestry, inOrder, levelsBelow, lookAlikes, pathOf, placesOf, withinPlace } from "./location-tree";
 import type { PlaceRow } from "./staff";
-import { ageOf, loadSession, shell } from "./staff-shell";
+import { UP_TO_ITEMS, ageOf, loadSession, shell } from "./staff-shell";
 import type { Session } from "./staff-shell";
 import { ApiError, type Html, api, emptyState, expired, failure, html, icon, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, writeParams } from "./ui";
 
@@ -25,10 +25,9 @@ export async function locationsWorkspace(): Promise<void> {
   document.title = "Locations · Staff workspace";
   shell(session, "items", html`
     <header class="page-header">
-      <div class="page-header__title"><h1>Locations</h1><p>Where things are kept. Items point at a place, so its directions and picture are written once and shared.</p></div>
+      <div class="page-header__title">${UP_TO_ITEMS}<h1>Locations</h1><p>Where things are kept. Items point at a place, so its directions and picture are written once and shared.</p></div>
       <div class="page-header__actions">
         <p class="live-status" id="live-status">Connecting…</p>
-        <a class="button button--secondary" href="/staff/items" data-route>${icon("box")}Items</a>
         <button class="button button--primary" type="button" id="new-place">${icon("plus")}New place</button>
       </div>
     </header>

@@ -4,7 +4,7 @@ import { CHECK_LABELS, CHECK_OUTCOMES, COMPONENT_STATE_LABELS, KIT_STATE_LABELS,
 import { openViewer, photoPanel, rowThumb } from "./item-photo";
 import { inOrder, pathOf, placesOf } from "./location-tree";
 import type { PlaceRow } from "./staff";
-import { ageOf, loadSession, shell } from "./staff-shell";
+import { UP_TO_ITEMS, ageOf, loadSession, shell } from "./staff-shell";
 import { api, ApiError, emptyState, expired, failure, type Html, html, icon, live, mount, onLeave, plural, preservingFocus, readKept, setMessage, sheet as createSheet, sheetContent, toast, working, writeParams } from "./ui";
 
 /*
@@ -38,10 +38,9 @@ export async function kitsWorkspace(): Promise<void> {
   document.title = "Kits · Staff workspace";
   shell(session, "items", html`
     <header class="page-header">
-      <div class="page-header__title"><h1>Kits</h1><p>Groups of items kept together, like a sewing kit. A kit holds no stock of its own: it shows whether the items inside are ready.</p></div>
+      <div class="page-header__title">${UP_TO_ITEMS}<h1>Kits</h1><p>Groups of items kept together, like a sewing kit. A kit holds no stock of its own: it shows whether the items inside are ready.</p></div>
       <div class="page-header__actions">
         <p class="live-status" id="live-status">Connecting…</p>
-        <a class="button button--secondary" href="/staff/items" data-route>${icon("box")}Items</a>
         <button class="button button--primary" type="button" id="new-kit">${icon("plus")}New kit</button>
       </div>
     </header>

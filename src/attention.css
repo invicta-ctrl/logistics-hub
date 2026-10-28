@@ -6,7 +6,6 @@
 
 /* One button per kind, with its count: the quickest way to look at just one. */
 .attn-reasons { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
-.attn-reasons__later { flex-basis: 100%; margin-top: var(--space-2); color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .attn-reason { display: inline-flex; min-height: 2.5rem; align-items: center; gap: var(--space-2); padding: 0 var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface); color: var(--text); font-size: .875rem; font-weight: 500; transition: background-color var(--dur-1), border-color var(--dur-1), transform var(--dur-1); }
 .attn-reason:hover { border-color: var(--line-strong); background: var(--hover); }
 .attn-reason:active { transform: scale(.98); }
@@ -99,7 +98,6 @@
 @media (max-width: 760px) {
   .attn-reasons { flex-wrap: nowrap; margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); overflow-x: auto; scrollbar-width: none; }
   .attn-reason { flex: none; white-space: nowrap; }
-  .attn-reasons__later { flex: none; flex-basis: auto; margin: 0 0 0 var(--space-2); white-space: nowrap; }
   .attn-filters .table-toolbar__count { width: auto; }
   /* A row opens its record already, so the row drops its repeated "Open the item" link; guarded actions stay where they are. */
   .attn-row__actions > a.button { display: none; }

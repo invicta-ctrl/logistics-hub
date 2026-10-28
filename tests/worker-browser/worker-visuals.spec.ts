@@ -63,7 +63,8 @@ test("item visuals: suggestion, keyboard picker, reset, photo preference and fai
   await expect(panel.locator("[data-tile] img")).toHaveCount(0);
   expect((await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id).toBe(photoId);
   expect((await page.request.get(`/api/public/media/${photoId}/thumb`)).status()).toBe(404);
-  await page.route(`**/api/staff/media/${photoId}/thumb?v=2*`, (route) => route.abort());
+  // The sheet's tile is the detail picture (V1.16.4 §4.4); the list keeps the thumbnail. Neither can load.
+  await page.route(new RegExp(`/api/staff/media/${photoId}/(?:thumb|detail)\\?v=2`), (route) => route.abort());
   await controls.getByRole("button", { name: "Real photo", exact: true }).click();
   await expect(controls.getByRole("button", { name: "Real photo", exact: true })).toHaveAttribute("aria-pressed", "true");
   expect((await page.request.get(`/api/public/media/${photoId}/thumb`)).status()).toBe(200);

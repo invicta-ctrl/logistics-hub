@@ -64,7 +64,7 @@ for (const [width, text] of [[320, ""], [320, "150%"], [375, ""], [414, ""], [37
     await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
     expect(await problems(page), "menu").toEqual(clean);
     // Every section stays reachable from this layout: in the bar, or in the menu that just opened.
-    for (const name of ["Items", "Stock", "Loans", "Self-Service", "Activity", "Administration", "My account", "Public Lending Hub"]) {
+    for (const name of ["All items", "Low & out of stock", "Stock & movements", "Pantry", "Locations", "Kits", "Loans", "Self-Service", "Activity", "Administration", "My account", "Public Lending Hub"]) {
       expect(await page.getByRole("link", { name: new RegExp(`^${name}`) }).filter({ visible: true }).count(), name).toBeGreaterThan(0);
     }
   });
@@ -87,5 +87,5 @@ test("with 200% text on a 320 px phone every section stays on screen, named in f
   await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Home/ })).toBeVisible();
   await page.getByRole("button", { name: "More" }).click();
   await expect(page.getByRole("button", { name: "Sign out", exact: true })).toBeVisible();
-  for (const name of ["Items", "Stock", "Loans", "Self-Service"]) await expect(page.locator("#staff-menu").getByRole("link", { name: new RegExp(`^${name}`) })).toBeVisible();
+  for (const name of ["All items", "Low & out of stock", "Loans", "Self-Service"]) await expect(page.locator("#staff-menu").getByRole("link", { name: new RegExp(`^${name}`) })).toBeVisible();
 });

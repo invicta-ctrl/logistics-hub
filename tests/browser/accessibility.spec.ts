@@ -151,7 +151,7 @@ test.describe("Staff Directory", () => {
     await expect(table.locator("tbody tr")).toHaveCount(230);
     await expect(page.getByRole("button", { name: /more/ })).toHaveCount(0);
     // A new filter starts from the first page again.
-    await page.getByLabel("Item").fill("Sample Item 1");
+    await page.getByLabel("Item", { exact: true }).fill("Sample Item 1");
     await expect(table.locator("tbody tr")).toHaveCount(100);
   });
 

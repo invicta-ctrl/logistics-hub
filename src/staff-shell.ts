@@ -25,28 +25,57 @@ type Section = "home" | "items" | "stock" | "locations" | "kits" | "catalogue" |
 
 
 /**
- * The staff destinations, grouped as the rail shows them (LH-IP02-S01). Home leads without a label; on phones Home, Find and More sit in
- * the bottom bar and every other destination is listed under More. Cataloguing is not one of them (LH-IP02-S03): administrators start it
- * from Administration › Catalog, and everyone else catalogues in the installed Catalog app.
+ * The staff destinations, grouped as the rail shows them (LH-IP02-S01; V1.16.4 §4.2). Home and Items lead without a label; on phones Home,
+ * Find and More sit in the bottom bar and every other destination is listed under More. Cataloguing is not one of them (LH-IP02-S03):
+ * administrators start it from Administration › Catalog, and everyone else catalogues in the installed Catalog app.
  */
 const SECTIONS: ReadonlyArray<{ id: Section; href: string; text: string; icon: IconName; group: string }> = [
   { id: "home", href: "/staff/home", text: "Home", icon: "home", group: "" },
-  { id: "items", href: "/staff/items", text: "Items", icon: "box", group: "Resources" },
-  { id: "stock", href: "/staff/stock", text: "Stock", icon: "stack", group: "Resources" },
-  { id: "locations", href: "/staff/locations", text: "Locations", icon: "pin", group: "Resources" },
-  { id: "kits", href: "/staff/kits", text: "Kits", icon: "basket", group: "Resources" },
+  { id: "items", href: "/staff/items", text: "Items", icon: "box", group: "" },
   { id: "loans", href: "/staff/loans", text: "Loans", icon: "swap", group: "Circulation" },
   { id: "self-service", href: "/staff/self-service", text: "Self-Service", icon: "phone", group: "Circulation" },
   { id: "activity", href: "/staff/activity", text: "Activity", icon: "history", group: "Records" },
   { id: "admin", href: "/staff/admin", text: "Administration", icon: "shield", group: "Manage" }
 ];
+/**
+ * Items' children (V1.16.4 §4.2), in the one order the wide rail, the tablet's All destinations and the phone's More all use. Stock is
+ * three of them, told apart by its `view` (`views`: the ones each covers; `null` is the default list). "Low & out of stock" carries the
+ * Stock count: the NOW and SOON stock reasons, the bell's Stock source.
+ */
+const ITEM_CHILDREN: ReadonlyArray<{ href: string; text: string; icon: IconName; path: string; views?: ReadonlyArray<string | null>; attention?: string }> = [
+  { href: "/staff/items", text: "All items", icon: "box", path: "/staff/items" },
+  { href: "/staff/stock", text: "Low & out of stock", icon: "stack", path: "/staff/stock", views: [null, "attention"], attention: "Stock" },
+  { href: "/staff/stock?view=activity", text: "Stock & movements", icon: "swap", path: "/staff/stock", views: ["activity", "restock"] },
+  { href: "/staff/stock?view=pantry", text: "Pantry", icon: "basket", path: "/staff/stock", views: ["pantry"] },
+  { href: "/staff/locations", text: "Locations", icon: "pin", path: "/staff/locations" },
+  { href: "/staff/kits", text: "Kits", icon: "basket", path: "/staff/kits" }
+];
+const pathOf = (url: URL) => url.pathname.replace(/\/+$/, "");
 
-/** Locations and Kits load as part of Items; their own address decides which rail entry is current. Attention is Home's queue. */
+/** The child an address belongs to, by its path and, on Stock, its view (an unknown view is the default list, as Stock reads it); -1 for none. */
+function childOf(href: string): number {
+  const url = new URL(href, window.location.origin);
+  const path = pathOf(url);
+  const view = url.searchParams.get("view");
+  const mine = ITEM_CHILDREN.flatMap((child, at) => child.path === path ? [{ child, at }] : []);
+  return (mine.find(({ child }) => child.views?.includes(view)) ?? mine.find(({ child }) => child.views?.includes(null)) ?? mine[0])?.at ?? -1;
+}
+
+/** Stock, Locations and Kits are Items' children, so Items is the current section on all four paths. Attention is Home's queue. */
 function currentSection(section: Section): Section {
-  const path = window.location.pathname.replace(/\/+$/, "");
-  if (path.startsWith("/staff/locations")) return "locations";
-  if (path.startsWith("/staff/kits")) return "kits";
+  if (childOf(window.location.href) >= 0) return "items";
   return section === "attention" ? "home" : section;
+}
+
+/**
+ * Marks the child `href` belongs to as the current page, in the rail and in the menu. The router redraws the shell on every move;
+ * Stock changes its view in place (`replaceState`, which the router never sees), so it calls this on every view change.
+ */
+export function markCurrent(href = `${window.location.pathname}${window.location.search}`): void {
+  const at = childOf(href);
+  document.querySelectorAll<HTMLElement>("[data-child]").forEach((link) => {
+    if (Number(link.dataset.child) === at) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
+  });
 }
 
 /**
@@ -175,14 +204,20 @@ export async function loadSession(section: Section): Promise<Session | null> {
  */
 export function shell(session: Session, section: Section, main: Html): void {
   const here = currentSection(section);
-  const current = (id: Section) => here === id ? html`aria-current="page"` : "";
+  // Items is a parent: the page itself is one of its children, so Items is marked as the current set, never as the page.
+  const current = (id: Section) => here === id ? html`aria-current="${id === "items" ? "true" : "page"}"` : "";
   const sections = session.mustChangePassword || session.hub === false ? [] : SECTIONS.filter((entry) => entry.id !== "admin" || session.role !== "STAFF");
   const reviews = session.selfServiceReviews;
+  // Items carries the Stock count for the icon rail, which does not show its children; the wide rail shows it on the child instead.
   const badge = (id: Section) => id === "self-service" && reviews
     ? html`<span class="nav-badge" aria-hidden="true">${reviews}</span><span class="visually-hidden">, ${reviews} ${reviews === 1 ? "record" : "records"} to check</span>`
-    : id === "loans" || id === "stock" ? html`<span class="attn-slot" data-attention="${id === "loans" ? "Loans" : "Stock"}"></span>` : "";
+    : id === "loans" || id === "items" ? html`<span class="attn-slot" data-attention="${id === "loans" ? "Loans" : "Stock"}"></span>` : "";
   const overflow = sections.filter((entry) => entry.id !== "home");
   const groups = [...new Set(sections.map((entry) => entry.group))];
+  const shown = childOf(window.location.href);
+  const childCurrent = (at: number) => at === shown ? html`aria-current="page"` : "";
+  const railChildren = html`<ul class="app-nav__children" aria-label="Items">${ITEM_CHILDREN.map((child, at) => html`<li><a class="app-nav__link app-nav__child" href="${child.href}" data-route data-child="${at}" ${childCurrent(at)}><span class="app-nav__text">${child.text}${child.attention ? html`<span class="attn-slot" data-attention="${child.attention}"></span>` : ""}</span></a></li>`)}</ul>`;
+  const menuChildren = html`<li class="menu__parent"><p class="menu__heading" id="menu-items">Items</p><ul class="menu__children" aria-labelledby="menu-items">${ITEM_CHILDREN.map((child, at) => html`<li><a class="menu__item" href="${child.href}" data-route data-child="${at}" ${childCurrent(at)}>${icon(child.icon)}${child.text}</a></li>`)}</ul></li>`;
   const avatar = html`<span class="avatar" aria-hidden="true">${initials(session.displayName)}</span>`;
   mount(app, html`
     <header class="app-bar">
@@ -191,7 +226,7 @@ export function shell(session: Session, section: Section, main: Html): void {
         ${sections.length ? html`<button class="app-search" type="button" data-tip="Search" data-palette data-admin="${session.role === "STAFF" ? "0" : "1"}" aria-haspopup="dialog" aria-keyshortcuts="${MAC ? "Meta+K" : "Control+K"}">${icon("search")}<span class="app-search__text">Search</span><kbd class="app-search__keys" aria-hidden="true">${SEARCH_KEYS}</kbd></button>` : ""}
         ${sections.length ? html`<a class="app-bell" href="/staff/attention" data-route data-tip="Attention">${icon("bell")}<span class="visually-hidden">Attention</span><span class="attn-slot" data-attention="all"></span></a>` : ""}
         ${sections.length ? html`<nav class="app-nav" aria-label="Sections">
-          ${groups.map((group) => html`<div class="app-nav__group">${group ? html`<p class="app-nav__label" aria-hidden="true">${group}</p>` : ""}${sections.filter((entry) => entry.group === group).map((entry) => html`<a class="app-nav__link ${entry.id === "home" ? "" : "app-nav__link--more"}" href="${entry.href}" data-route data-tip="${entry.text}" ${current(entry.id)}>${icon(entry.icon)}<span class="app-nav__text">${entry.text}${badge(entry.id)}</span></a>`)}</div>`)}
+          ${groups.map((group) => html`<div class="app-nav__group">${group ? html`<p class="app-nav__label" aria-hidden="true">${group}</p>` : ""}${sections.filter((entry) => entry.group === group).map((entry) => html`<a class="app-nav__link ${entry.id === "home" ? "" : "app-nav__link--more"}" href="${entry.href}" data-route data-tip="${entry.text}" ${entry.id === "items" ? html`data-parent` : ""} ${current(entry.id)}>${icon(entry.icon)}<span class="app-nav__text">${entry.text}${badge(entry.id)}</span></a>${entry.id === "items" ? railChildren : ""}`)}</div>`)}
           <button class="app-nav__link app-nav__all" type="button" popovertarget="staff-menu" data-tip="All destinations">${icon("dots")}<span class="app-nav__text">All destinations</span></button>
           <button class="app-nav__link app-nav__find" type="button" data-find>${icon("search")}<span class="app-nav__text">Find</span></button>
           <button class="app-nav__link app-nav__more ${overflow.some((entry) => entry.id === here) || here === "account" ? "is-current" : ""}" type="button" popovertarget="staff-menu">${icon("dots")}<span class="app-nav__text">More</span></button>
@@ -203,7 +238,7 @@ export function shell(session: Session, section: Section, main: Html): void {
     </header>
     <div class="menu" id="staff-menu" popover>
       <div class="menu__identity">${avatar}<p><strong>${session.displayName}</strong><span>${accessLabel(sessionAccess(session))} · <span class="mono">${session.username}</span></span></p><button class="menu__theme" type="button" data-staff-theme aria-label="Dark theme" aria-pressed="${String(staffDark())}">${icon("sun")}${icon("moon")}</button></div>
-      ${overflow.length ? html`<ul class="menu__list menu__list--more" aria-label="More sections">${overflow.map((entry) => html`<li><a class="menu__item" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}${entry.text}</a></li>`)}</ul>` : ""}
+      ${overflow.length ? html`<ul class="menu__list menu__list--more" aria-label="More sections">${overflow.map((entry) => entry.id === "items" ? menuChildren : html`<li><a class="menu__item" href="${entry.href}" data-route ${current(entry.id)}>${icon(entry.icon)}${entry.text}</a></li>`)}</ul>` : ""}
       <ul class="menu__list">
         ${sections.length ? html`<li><a class="menu__item" href="/staff/home" data-route ${current("home")}>${icon("home")}Home</a></li>` : ""}
         <li><a class="menu__item" href="/staff/account" data-route ${current("account")}>${icon("user")}My account</a></li>
@@ -232,7 +267,8 @@ export function shell(session: Session, section: Section, main: Html): void {
   });
   document.querySelector("#staff-logout")!.addEventListener("click", signOut);
   railTips();
-  if (sections.length) watchAttention();
+  // Home and Attention hold the queue, whose answer carries these numbers, so there the bar takes them from it (supplyAttention).
+  if (sections.length) watchAttention(here !== "home");
   const search = document.querySelector<HTMLElement>("[data-palette]");
   if (search) {
     search.addEventListener("click", () => openSearch(search));
@@ -306,6 +342,19 @@ export const attentionNow = (): AttentionSummary | null => summary?.data ?? null
 /** Fired on the document each time the bar's numbers are painted, so a page that shows them (Home) stays in step with the bell. */
 export const ATTENTION_PAINTED = "attention:painted";
 
+/**
+ * The bar's numbers from a queue answer the page already holds (Home and Attention), so those pages never ask for the summary too
+ * (V1.16.4 §4.1). They are the same sums of the same groups as the summary's (attention.ts `attentionSummary`).
+ */
+export function supplyAttention(groups: AttentionGroup[]): void {
+  const bySource: Record<string, number> = {};
+  for (const group of groups) bySource[group.source] = (bySource[group.source] ?? 0) + group.byUrgency.NOW + group.byUrgency.SOON;
+  summary = { at: Date.now(), data: { needsAction: Object.values(bySource).reduce((sum, count) => sum + count, 0), bySource, groups } };
+  // The last summary's tag is older than these numbers, so the next summary request asks in full.
+  summaryTag = "";
+  paintAttention();
+}
+
 /** Asks again now (after something was fixed here) or when the kept answer is older than 30 seconds. */
 export function refreshAttention(force = false): Promise<void> {
   if (!force && summary && Date.now() - summary.at < SUMMARY_TTL) { paintAttention(); return Promise.resolve(); }
@@ -322,7 +371,8 @@ export function refreshAttention(force = false): Promise<void> {
   return summaryRequest;
 }
 
-function watchAttention(): void {
+function watchAttention(ask: boolean): void {
+  if (!ask) { paintAttention(); return; }
   void refreshAttention();
   const timer = window.setInterval(() => { if (!document.hidden) void refreshAttention(); }, 60_000);
   onLeave(() => window.clearInterval(timer));
@@ -417,6 +467,9 @@ export function staffLogin(): void {
 }
 
 /* ---------- Small helpers the staff pages share ---------- */
+
+/** The way up from one of Items' children (Stock, Locations, Kits) to Items, above the page's title (V1.16.4 §4.2). */
+export const UP_TO_ITEMS = html`<p class="page-header__up"><a href="/staff/items" data-route>Items<span aria-hidden="true"> ›</span></a></p>`;
 
 export function initials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]!.toUpperCase()).join("");

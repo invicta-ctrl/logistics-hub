@@ -319,7 +319,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "catalogue", title: "Add items", detail: "Create an item", href: "/staff/items?add=1", terms: ["add items", "add item", "new item", "catalogue", "catalog", "capture"], start: true },
   { id: "stock", title: "Stock", detail: "Page", href: "/staff/stock", terms: ["stock", "stock in", "stock out", "pantry"] },
   { id: "loans", title: "Loans", detail: "Page", href: "/staff/loans", terms: ["loans", "lend", "lending", "borrowed", "returns"] },
-  { id: "places", title: "Places", detail: "Page, where things are kept", href: "/staff/locations", terms: ["places", "locations", "where", "shelves"], start: true },
+  { id: "places", title: "Locations", detail: "Page, where things are kept", href: "/staff/locations", terms: ["places", "locations", "where", "shelves"], start: true },
   { id: "kits", title: "Kits", detail: "Page", href: "/staff/kits", terms: ["kits", "kit templates", "containers"], start: true },
   { id: "self-service", title: "Self-Service review", detail: "Page", href: "/staff/self-service", terms: ["self service", "phone records", "phones", "qr"] },
   { id: "activity", title: "Activity", detail: "Page, who did what", href: "/staff/activity", terms: ["activity", "history", "audit", "log", "export"] },

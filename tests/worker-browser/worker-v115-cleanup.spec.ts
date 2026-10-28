@@ -217,7 +217,7 @@ test("a replacement saves before cleanup, cleans its new media id and preserves 
   expect(next).not.toBe(photoId);
   expect(state.posted).toEqual([{ expected: next }, { expected: next, accept: true }]);
   expect(await (await page.request.get(`/api/staff/media/${next}/display`)).body()).toEqual(original);
-  await expect(page.locator("#photo-panel [data-tile] .pedestal img")).toHaveAttribute("src", `/api/staff/media/${next}/cutout?r=1`);
+  await expect(page.locator("#photo-panel [data-tile] .pedestal img")).toHaveAttribute("src", tileSrc(next, 1));
 });
 
 for (const failure of ["save conflict", "cleanup unavailable"] as const) test(`replacement ${failure} keeps an original and never cleans a conflicting save`, async ({ page, baseURL }) => {

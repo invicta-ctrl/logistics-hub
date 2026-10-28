@@ -2,7 +2,7 @@ import { EXPIRY_WINDOW_DAYS, isExpiring, stockState } from "./catalog-policy";
 import { type Place, pathOf, placesOf } from "./location-tree";
 import { type Preset, bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
-import { loadSession, shell } from "./staff-shell";
+import { UP_TO_ITEMS, loadSession, markCurrent, shell } from "./staff-shell";
 import {
   type Html, api, categoryName, emptyState, expired, failure, formatDate, formatDateTime, formatTime, html, icon, label, live, mount,
   bindRowActionMenus, formatQuantity, officeDay, onLeave, plural, preservingFocus, rowActionMenu, sheet as createSheet, sheetContent, toast, units, working, writeParams
@@ -41,6 +41,8 @@ function reasons(item: StockItem): Array<Exclude<Focus, "all">> {
 }
 
 const FOCUS: Record<Exclude<Focus, "all">, string> = { out: "Out of stock", low: "Low stock", count: "Needs count", expiring: "Expiring soon", open: "Open units need review" };
+/** The default view lists the stock reasons in this order (V1.16.4 §4.2): Out, Low, Needs count, Expiring soon, Open units. */
+const REASON_ORDER = Object.keys(FOCUS);
 
 function expiryTag(item: StockItem): Html {
   if (!item.expiresOn) return html`<span class="muted">—</span>`;
@@ -74,7 +76,7 @@ export async function stockWorkspace(): Promise<void> {
   document.title = "Stock · Staff workspace";
   shell(session, "stock", html`
     <header class="page-header">
-      <div class="page-header__title"><h1>Stock</h1><p id="stock-today">Loading today's activity…</p></div>
+      <div class="page-header__title">${UP_TO_ITEMS}<h1>Stock</h1><p id="stock-today">Loading today's activity…</p></div>
       <div class="page-header__actions">
         <p class="live-status" id="live-status">Connecting…</p>
         <button class="button button--primary record-open" type="button" data-record>${icon("plus")}Update stock</button>
@@ -207,7 +209,7 @@ export async function stockWorkspace(): Promise<void> {
     const needing = data.items.filter((item) => reasons(item).length);
     const counts = Object.fromEntries((Object.keys(FOCUS) as Array<keyof typeof FOCUS>).map((key) => [key, needing.filter((item) => reasons(item).includes(key)).length]));
     const shown = needing.filter((item) => focus === "all" || reasons(item).includes(focus))
-      .sort((a, b) => ["out", "open", "low", "count", "expiring"].indexOf(reasons(a)[0]!) - ["out", "open", "low", "count", "expiring"].indexOf(reasons(b)[0]!) || a.name.localeCompare(b.name));
+      .sort((a, b) => REASON_ORDER.indexOf(reasons(a)[0]!) - REASON_ORDER.indexOf(reasons(b)[0]!) || a.name.localeCompare(b.name));
     const unset = data.items.filter((item) => item.status !== "INACTIVE" && item.reorderThreshold <= 0).length;
     return html`<div class="chips chips--flush" role="group" aria-label="Show">
         ${[["all", "Everything", needing.length], ...Object.entries(FOCUS).filter(([key]) => key !== "open" || counts.open || focus === "open").map(([key, text]) => [key, text, counts[key]])].map(([key, text, count]) =>
@@ -294,6 +296,8 @@ export async function stockWorkspace(): Promise<void> {
     if (!stock) return;
     results.removeAttribute("aria-busy");
     writeParams({ view: view === "attention" ? null : view, show: view === "attention" && focus !== "all" ? focus : null, range: view === "activity" && !todayOnly ? "recent" : null });
+    // The address changed in place, which the router never sees: the rail follows the view here.
+    markCurrent();
     const needing = stock.items.filter((item) => reasons(item).length).length;
     const today = stock.activity.filter((entry) => officeDay(entry.createdAt) === officeDay());
     const pantry = stock.items.filter((item) => item.stockArea === "Pantry" && item.status !== "INACTIVE");

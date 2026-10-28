@@ -56,11 +56,11 @@ test("with every photo and optional panel failing, staff and students still do t
   await page.goto("/staff/home");
   await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
   await expect(page.locator("#main-content").getByRole("heading", { name: "Needs attention", level: 2 })).toBeVisible();
-  // The queue is Home's own (LH-IP02-S01): it loads even with the bar's summary and the insights failing.
-  await expect(page.locator("#attn-results")).not.toHaveAttribute("aria-busy", "true");
+  // What needs attention is Home's own (LH-IP02-S01): it loads even with the bar's summary and the insights failing.
+  await expect(page.locator("#home-attn")).not.toHaveAttribute("aria-busy", "true");
   // On a phone the bar is Home, Find and More (LH-IP02-S01): Items is in the menu More opens.
   await page.getByRole("navigation", { name: "Sections" }).getByRole("button", { name: "More" }).click();
-  await page.locator("#staff-menu").getByRole("link", { name: "Items", exact: true }).click();
+  await page.locator("#staff-menu").getByRole("link", { name: "All items", exact: true }).click();
   await page.getByRole("searchbox").first().fill(name);
   const row = page.locator("#main-content").getByRole("button", { name }).first();
   await expect(row).toBeVisible();

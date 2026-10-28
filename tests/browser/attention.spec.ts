@@ -63,8 +63,9 @@ test.describe("Attention inbox", () => {
     // 3 loans (2 overdue + 1 return), 1 stock, 1 kit; the Unclassified item is routine, so it is listed but not counted.
     await expect(page.locator(".app-bell")).toContainText("5 things need attention");
     await expect(page.getByRole("link", { name: /^Loans.*3 need attention/ })).toBeVisible();
-    await expect(page.getByRole("link", { name: /^Stock.*1 needs attention/ })).toBeVisible();
-    await expect(page.locator(".attn-band__title")).toHaveText(["Today", "This week", "When there is time"]);
+    await expect(page.getByRole("link", { name: /^Low & out of stock.*1 needs attention/ })).toBeVisible();
+    // How soon, with no date behind it (V1.16.4 §4.1).
+    await expect(page.locator(".attn-band__title")).toHaveText(["Now", "Soon", "When there is time"]);
     await expect(page.getByRole("heading", { level: 4, name: "Overdue loans" })).toBeVisible();
     await expect(page.getByRole("heading", { level: 4, name: "Items not yet sorted" })).toBeVisible();
     // Each entry names its reason and goes straight to where the next step is made.

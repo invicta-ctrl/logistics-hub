@@ -67,13 +67,20 @@ const VIEWS = {
   listed: { label: "On Lending Hub", test: (item: Item) => item.listed },
   low: { label: "Low stock", test: (item: Item) => isLow(item) && active(item) },
   out: { label: "Out of stock", test: (item: Item) => stockState(item) === "OUT" && active(item) },
+  onloan: { label: "All on loan", test: (item: Item) => stockState(item) === "ON_LOAN" && active(item) },
   inactive: { label: "Inactive", test: (item: Item) => !active(item) },
   gradual: { label: "Used gradually?", test: openUnitCandidate },
-  // Shown only while something is waiting: a report from the shelf or a phone, or a typed location that has no place yet.
-  reports: { label: "Location reports", test: (item: Item) => item.openReports > 0, quiet: true },
-  unplaced: { label: "Needs a place", test: (item: Item) => !item.locationId && Boolean(item.legacyLocation), quiet: true }
-} satisfies Record<string, { label: string; test: (item: Item) => boolean; quiet?: true }>;
+  // A report from the shelf or a phone, or a typed location that has no place yet.
+  reports: { label: "Location reports", test: (item: Item) => item.openReports > 0 },
+  unplaced: { label: "Needs a place", test: (item: Item) => !item.locationId && Boolean(item.legacyLocation) }
+} satisfies Record<string, { label: string; test: (item: Item) => boolean }>;
 type View = keyof typeof VIEWS;
+/**
+ * The Items page has no row of view tabs (V1.16.4 §4.2). Work to do is a wrapping line of the tasks that have any; what to show is a
+ * choice inside Filters. Both set the one `view`, so every old `?view=` address still opens its list.
+ */
+const TODO: View[] = ["review", "ready", "unplaced", "reports", "gradual"];
+const SHOW: View[] = ["listed", "low", "out", "onloan", "inactive"];
 const NO_LOCATION = "__none";
 /** Rows drawn at first, and added by each "Show more". */
 const ROW_PAGE = 100;
@@ -213,11 +220,12 @@ export async function workspace(): Promise<void> {
           <button type="button" class="button button--primary" id="add-items">${icon("plus")}Add items</button>
         </div>
       </header>
-      <div class="views" id="views" role="group" aria-label="Item views"></div>
+      <div class="todo-line" id="todo" role="group" aria-labelledby="todo-label" hidden></div>
       <div class="table-toolbar">
         <label class="search-field">${icon("search")}<span class="visually-hidden">Search items</span><input id="inventory-search" type="search" autocomplete="off" spellcheck="false" placeholder="Search name, other name, ID, category, place" data-search /><kbd aria-hidden="true">/</kbd><button class="search-field__clear" type="button" id="clear-search" aria-label="Clear search" hidden>${icon("close")}</button></label>
         <button class="button button--secondary filters-toggle" type="button" id="filters-toggle" aria-expanded="false" aria-controls="table-filters">${icon("filter")}<span>Filters</span></button>
         <div class="table-filters" id="table-filters">
+          <div class="select-field"><label class="visually-hidden" for="filter-show">Show</label><select id="filter-show"></select></div>
           <div class="select-field"><label class="visually-hidden" for="filter-category">Category</label><select id="filter-category"></select></div>
           <div class="select-field"><label class="visually-hidden" for="filter-location">Place</label><select id="filter-location"></select></div>
           <div class="select-field select-field--narrow"><label class="visually-hidden" for="filter-type">Type</label><select id="filter-type"></select></div>
@@ -272,6 +280,7 @@ export async function workspace(): Promise<void> {
     location: document.querySelector<HTMLSelectElement>("#filter-location")!,
     type: document.querySelector<HTMLSelectElement>("#filter-type")!
   };
+  const showSelect = document.querySelector<HTMLSelectElement>("#filter-show")!;
   const results = document.querySelector<HTMLDivElement>("#inventory-results")!;
   search.value = params.get("q") ?? "";
 
@@ -325,10 +334,13 @@ export async function workspace(): Promise<void> {
     results.removeAttribute("aria-busy");
     const items = inventory.items;
     writeParams({ view: view === "all" ? null : view, q: search.value.trim(), ...filters, sort: sortKey === "name" && sortDir === 1 ? null : `${sortKey}-${sortDir === 1 ? "asc" : "desc"}` });
-    mount(document.querySelector("#views")!, html`${Object.entries(VIEWS).flatMap(([key, value]) => {
-      const count = items.filter(value.test).length;
-      return "quiet" in value && !count && key !== view ? [] : [html`<button type="button" class="view-tab" data-view="${key}" aria-pressed="${key === view}">${value.label}<span class="view-tab__count">${count}</span></button>`];
-    })}`);
+    const counts = Object.fromEntries(Object.entries(VIEWS).map(([key, value]) => [key, items.filter(value.test).length])) as Record<View, number>;
+    // The tasks with anything to do, and the one being shown even once it is done; pressing it again shows every item.
+    const tasks = TODO.filter((key) => counts[key] || key === view);
+    const todo = document.querySelector<HTMLElement>("#todo")!;
+    todo.hidden = !tasks.length;
+    mount(todo, html`<span class="todo-line__label" id="todo-label">To do</span>${tasks.map((key) => html`<button type="button" class="chip" data-view="${key}" aria-pressed="${key === view}">${VIEWS[key].label}<span class="chip__count">${counts[key].toLocaleString()}</span></button>`)}`);
+    fillSelect(showSelect, `All items (${items.length.toLocaleString()})`, SHOW.map((key): [string, string] => [key, `${VIEWS[key].label} (${counts[key].toLocaleString()})`]), SHOW.includes(view) ? view : "");
     const reviewed = items.filter((item) => !item.needsReview).length;
     const meter = document.querySelector<HTMLElement>("#review-meter")!;
     meter.hidden = reviewed === items.length;
@@ -336,7 +348,7 @@ export async function workspace(): Promise<void> {
     fillSelect(selects.category, "All categories", inventory.categories.map((value) => [value, categoryName(value)]), filters.category);
     fillSelect(selects.location, "All places", [[NO_LOCATION, "No place set"], ...inOrder(places).map(({ place }): [string, string] => [place.id, `${paths.get(place.id)}${place.active ? "" : " (inactive)"}`])], filters.location);
     fillSelect(selects.type, "All types", ITEM_TYPES.map((value) => [value, label(value)]), filters.type);
-    const active = Object.values(filters).filter(Boolean).length;
+    const active = Object.values(filters).filter(Boolean).length + Number(SHOW.includes(view));
     document.querySelector("#filters-toggle span")!.textContent = active ? `Filters (${active})` : "Filters";
     const query = search.value.trim().toLowerCase();
     // A place stands for everything kept in it and in the places inside it.
@@ -419,6 +431,7 @@ export async function workspace(): Promise<void> {
   search.addEventListener("input", () => { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(render, 120); });
   search.addEventListener("keydown", (event) => { if (event.key === "Escape" && search.value) { search.value = ""; render(); } });
   for (const [key, select] of Object.entries(selects)) select.addEventListener("change", () => { filters = { ...filters, [key]: select.value }; render(); });
+  showSelect.addEventListener("change", () => { view = (showSelect.value || "all") as View; render(); });
   // The three filters fold behind one button (LH-IP02-S04), open on arrival when the address already narrows the list.
   const filtersToggle = document.querySelector<HTMLButtonElement>("#filters-toggle")!;
   const showFilters = (open: boolean) => {
@@ -429,7 +442,7 @@ export async function workspace(): Promise<void> {
   filtersToggle.addEventListener("click", () => {
     const open = filtersToggle.getAttribute("aria-expanded") !== "true";
     showFilters(open);
-    if (open) selects.category.focus();
+    if (open) showSelect.focus();
   });
   document.querySelector("#clear-search")!.addEventListener("click", () => { search.value = ""; render(); search.focus(); });
   // Arrow keys move between rows; Home/End jump to the ends; Enter opens (native button).
@@ -445,9 +458,9 @@ export async function workspace(): Promise<void> {
     links[next].scrollIntoView({ block: "nearest" });
   });
   const setView = (next: View) => { view = next; render(); };
-  document.querySelector("#views")!.addEventListener("click", (event) => {
-    const tab = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-view]");
-    if (tab) setView(tab.dataset.view as View);
+  document.querySelector("#todo")!.addEventListener("click", (event) => {
+    const task = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-view]");
+    if (task) setView(task.dataset.view === view ? "all" : task.dataset.view as View);
   });
   document.querySelector("#review-meter")!.addEventListener("click", (event) => {
     if ((event.target as HTMLElement).closest("[data-view]")) { setView("review"); document.querySelector<HTMLButtonElement>('[data-view="review"]')?.focus(); }

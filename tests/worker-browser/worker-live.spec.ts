@@ -383,7 +383,9 @@ test("migrated review: fill the gaps, mark reviewed, and move to the next record
   await expect(page.locator("#review-meter")).toContainText(`${reviewedBefore + 1} of ${total} records reviewed`);
   await page.keyboard.press("Escape");
 
-  await page.getByRole("button", { name: /^All items/ }).click();
+  // Pressing the task being shown again shows every item (V1.16.4 §4.2).
+  await page.locator("#todo").getByRole("button", { name: /^Needs details check/ }).click();
+  await expect(page).not.toHaveURL(/view=/);
   await page.getByRole("searchbox", { name: "Search items" }).fill("e2e alias");
   await expect(page.locator("tbody tr")).toHaveCount(1);
   await page.getByRole("searchbox", { name: "Search items" }).fill("");
@@ -424,7 +426,10 @@ test("create, warn on a duplicate name, then deactivate without deleting", async
   await sheet.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Stock settings saved.")).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: /^Inactive/ }).click();
+  // What the list shows is a choice inside Filters (V1.16.4 §4.2).
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  await page.getByRole("combobox", { name: "Show", exact: true }).selectOption("inactive");
+  await expect(page).toHaveURL(/view=inactive/);
   await expect(page.getByRole("button", { name: "E2E Extension Cord" })).toBeVisible();
 });
 
@@ -440,7 +445,7 @@ test("phones get Home, Find and More in a bottom bar and every other section und
   const sections = page.getByRole("navigation", { name: "Sections" });
   await expect(sections.getByRole("link", { name: /^Home/ })).toBeVisible();
   await expect(sections.getByRole("button", { name: "Find" })).toBeVisible();
-  for (const name of ["Items", "Stock", "Loans", "Self-Service", "Activity"]) await expect(sections.getByRole("link", { name })).toBeHidden();
+  for (const name of ["Items", "Low & out of stock", "Loans", "Self-Service", "Activity"]) await expect(sections.getByRole("link", { name: new RegExp(`^${name}`) })).toBeHidden();
   const bar = (await sections.boundingBox())!;
   expect(bar.y + bar.height).toBeCloseTo(800, 0);
   expect(bar.height).toBeGreaterThanOrEqual(44);
@@ -449,7 +454,8 @@ test("phones get Home, Find and More in a bottom bar and every other section und
   await expect(more).toHaveAttribute("aria-expanded", "true");
   const menu = page.locator("#staff-menu");
   await expect(menu.getByRole("link", { name: "My account" })).toBeVisible();
-  for (const name of ["Items", "Stock", "Loans", "Self-Service"]) await expect(menu.getByRole("link", { name })).toBeVisible();
+  // Items' own pages are listed under it (V1.16.4 §4.2).
+  for (const name of ["All items", "Low & out of stock", "Loans", "Self-Service"]) await expect(menu.getByRole("link", { name: new RegExp(`^${name}`) })).toBeVisible();
   await expect(menu.getByRole("link", { name: "Administration" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
@@ -492,9 +498,10 @@ test("staff workspace fits a 320 px phone", async ({ page }) => {
 
 test("stock workspace: record a delivery, restock and receive, then read it in activity", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("link", { name: "Stock" }).click();
+  // Stock is reached through Items' own pages (V1.16.4 §4.2), its default view the low and out-of-stock list (§4.3).
+  await page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: /^Low & out of stock/ }).click();
   await expect(page.getByRole("heading", { name: "Stock", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Needs attention/ })).toBeVisible();
+  await expect(page.locator("#stock-views").getByRole("button", { name: /^Low & out of stock/ })).toHaveAttribute("aria-pressed", "true");
 
   // Update stock is a sheet at every width (LH-IP02-S04); it stays open for the next entry until it is closed.
   await page.getByRole("button", { name: "Update stock" }).click();
@@ -533,7 +540,7 @@ test("stock workspace: record a delivery, restock and receive, then read it in a
   await expect(page.getByText("Closed in the last two weeks")).toBeVisible();
   await closeRecord();
 
-  await page.getByRole("button", { name: /^Activity/ }).click();
+  await page.locator("#stock-views").getByRole("button", { name: /^Movements/ }).click();
   const latest = page.locator(".activity-row").first();
   await expect(latest).toContainText("+6");
   await expect(latest).toContainText("Banana Ketchup · Stock in · New stock received");
@@ -560,7 +567,7 @@ test("counting records the observed quantity, and pantry lists the catalog's pan
   await page.getByRole("button", { name: /^Pantry/ }).click();
   await expect(page.locator("tbody tr")).toHaveCount(10);
   await expect(page.locator("tr", { hasText: "All Purpose Flour" })).toContainText("18 kilos");
-  await page.getByRole("button", { name: /^Activity/ }).click();
+  await page.locator("#stock-views").getByRole("button", { name: /^Movements/ }).click();
   await expect(page.locator(".activity-row").first()).toContainText("Count correction");
 });
 

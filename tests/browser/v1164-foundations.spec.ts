@@ -75,7 +75,7 @@ test.describe("unsaved edits (§4.7)", () => {
     await page.locator("#f-name").fill("Changed Name");
 
     // A rail link.
-    await page.locator(".app-nav").getByRole("link", { name: "Stock" }).dispatchEvent("click");
+    await page.locator(".app-nav").getByRole("link", { name: "Low & out of stock" }).dispatchEvent("click");
     await expect(question(page)).toBeVisible();
     await page.getByRole("button", { name: "Keep editing" }).click();
     await expect(page).toHaveURL(/\/staff\/items/);
@@ -133,7 +133,7 @@ test.describe("kept answers and polling (§4.8)", () => {
     const { inventoryAsks } = await staffPages(page);
     await page.goto("/staff/items");
     await expect(page.getByRole("button", { name: "Sample marker" }).first()).toBeVisible();
-    await page.locator(".app-nav").getByRole("link", { name: "Stock" }).click();
+    await page.locator(".app-nav").getByRole("link", { name: "Low & out of stock" }).click();
     await expect(page.getByRole("heading", { name: "Stock", level: 1 })).toBeVisible();
     // Hold the check back: the kept list must show without it.
     let release: () => void = () => {};
@@ -210,7 +210,7 @@ test.describe("other tabs and releases (§4.8)", () => {
     await page.goto("/staff/items");
     await expect(page.getByRole("heading", { name: "Items", level: 1 })).toBeVisible();
     await page.evaluate(() => { (window as Window & { marker?: boolean }).marker = true; });
-    await page.locator(".app-nav").getByRole("link", { name: "Stock" }).click();
+    await page.locator(".app-nav").getByRole("link", { name: "Low & out of stock" }).click();
     await expect(page.getByRole("heading", { name: "Stock", level: 1 })).toBeVisible();
     // A fresh load: what the old page set is gone.
     expect(await page.evaluate(() => (window as Window & { marker?: boolean }).marker)).toBeUndefined();

@@ -1,5 +1,44 @@
-/* Home and Attention, one workspace (LH-IP02-S01, revision 3). Tokens only, so light and dark follow the rest of the staff workspace.
-   A heading, the queue, and a context column: the column sits beside the queue on wide screens and below it otherwise. */
+/* Home and Attention (LH-IP02-S01; V1.16.4 §4.1). Tokens only, so light and dark follow the rest of the staff workspace.
+   Home is four groups, each under a ruled heading, with rules between rows. Attention is a heading, the queue, and a context column
+   that sits beside the queue on wide screens and below it otherwise. */
+.home { display: grid; max-width: 60rem; gap: var(--space-10); padding-top: var(--space-6); }
+.home-group { display: grid; gap: var(--space-4); min-width: 0; }
+.home-group__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); padding-bottom: var(--space-2); border-bottom: 1px solid var(--line-strong); }
+.home-group__head h2, .home-disclosure h2 { margin: 0; font-size: 1.5rem; font-weight: 600; letter-spacing: -.015em; line-height: 2rem; }
+.home-group__head .live-status { min-width: 0; }
+.home-reason { display: grid; gap: var(--space-1); }
+.home-reason + .home-reason { margin-top: var(--space-4); }
+.home-reason__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-4); padding-inline: var(--space-3); }
+.home-reason__head h3 { margin: 0; color: var(--text-2); font-size: .8125rem; font-weight: 600; letter-spacing: .04em; line-height: 1.25rem; text-transform: uppercase; }
+.home-reason__all { font-size: .875rem; font-weight: 500; }
+.home-pip { display: inline-block; width: .5rem; height: .5rem; flex: none; align-self: flex-start; margin-top: .4375rem; border-radius: 50%; }
+.home-pip--now { background: var(--bad); }
+.home-pip--soon { background: var(--gold); }
+@media (forced-colors: active) { .home-pip { border: 1px solid CanvasText; } }
+.home-row__basis { color: var(--text-3); font-size: .75rem; overflow-wrap: anywhere; }
+/* What can wait: its reasons on one line that wraps; on phones one row that scrolls inside itself (kept from V1.16.3). */
+.home-laters { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.home-later { display: inline-flex; min-height: var(--target-min); align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-pill); color: var(--text); font-size: .875rem; font-weight: 500; text-decoration: none; white-space: nowrap; transition: background-color var(--dur-1), border-color var(--dur-1); }
+.home-later:hover { border-color: var(--line-strong); background: var(--hover); }
+.home-later:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.home-later__count { color: var(--text-2); font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) {
+  .home-laters { flex-wrap: nowrap; margin-inline: calc(-1 * var(--gutter)); padding: 0 var(--gutter) var(--space-1); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .home-laters::-webkit-scrollbar { display: none; }
+  .home-later { flex: none; }
+}
+/* Insights: closed until asked for. The summary is the group's heading row. */
+.home-disclosure > summary { display: flex; min-height: var(--target); align-items: center; justify-content: space-between; gap: var(--space-3); padding-bottom: var(--space-2); border-bottom: 1px solid var(--line-strong); cursor: pointer; list-style: none; }
+.home-disclosure > summary::-webkit-details-marker { display: none; }
+.home-disclosure > summary:focus-visible { border-radius: var(--radius); outline: 2px solid var(--brand); outline-offset: 2px; }
+.home-disclosure > summary > .icon { flex: none; color: var(--text-2); transition: transform var(--dur-2) var(--ease-settle); }
+.home-disclosure[open] > summary > .icon { transform: rotate(180deg); }
+.home-disclosure__title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
+#home-insights { padding-top: var(--space-4); }
+/* Beside Attention's queue the two groups are notes, so their headings are quieter than the queue's. */
+.ws-context .home-group__head h2, .ws-context .home-disclosure h2 { font-size: 1rem; line-height: 1.5rem; }
+.home-skeleton { display: grid; gap: var(--space-4); padding: var(--space-3); }
+.home-skeleton__row { display: grid; gap: var(--space-2); }
 .ws { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-8); padding-top: var(--space-6); }
 .ws-head { display: grid; gap: var(--space-2); }
 .ws-head__title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); }
@@ -12,9 +51,6 @@
 .ws-queue { min-width: 0; }
 .ws-context { min-width: 0; }
 .ws-context__today { display: grid; gap: var(--space-8); }
-.ws-context__part { display: grid; gap: var(--space-3); }
-.ws-label { margin: 0; color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .08em; line-height: 1rem; text-transform: uppercase; }
-.ws-label-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-3); }
 .home-section__aside { margin: 0; color: var(--text-3); font-size: .8125rem; }
 /* Beside the queue: a quiet full-height column whose record action stays in view without scrolling the page. */
 @media (min-width: 1181px) {
@@ -30,8 +66,9 @@
 @media (min-width: 1600px) { .ws { grid-template-columns: minmax(0, 1fr) clamp(25rem, 26vw, 30rem); } }
 @media (max-width: 600px) { .ws-head__title h1 { font-size: 2.25rem; line-height: 2.75rem; } }
 
-/* Continue: your own paused or open place checks, one press from where you left off. */
+/* Rows: what needs attention, and your own paused or open place checks, each one press from its record. */
 .home-list { margin: 0; padding: 0; list-style: none; }
+.home-list > li + li { border-top: 1px solid var(--line); }
 .home-row { display: flex; min-height: var(--target); align-items: center; gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-lg); color: inherit; text-decoration: none; transition: background-color var(--dur-1); }
 .home-row:hover { background: var(--hover); }
 .home-row:focus-visible { outline: 2px solid var(--brand); outline-offset: 0; }
@@ -62,10 +99,6 @@ a.home-card__name:hover { color: var(--brand); }
 .home-about > .icon { transition: transform var(--dur-2) var(--ease-settle); }
 .home-about[aria-expanded="true"] > .icon { transform: rotate(180deg); }
 .home-about__body { display: grid; gap: var(--space-1); }
-.home-meter { width: 100%; height: .25rem; appearance: none; border: 0; border-radius: var(--radius-pill); background: var(--line); overflow: hidden; }
-.home-meter::-webkit-progress-bar { background: var(--line); }
-.home-meter::-webkit-progress-value { background: var(--brand); border-radius: var(--radius-pill); }
-.home-meter::-moz-progress-bar { background: var(--brand); border-radius: var(--radius-pill); }
 .home-failed { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line-warn); border-radius: var(--radius-lg); background: var(--warn-tint); }
 .home-failed > .icon { color: var(--warn); }
 .home-failed p { flex: 1 1 12rem; margin: 0; font-size: .875rem; }

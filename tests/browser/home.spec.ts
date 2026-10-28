@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /*
- * Home and Attention as one workspace (LH-IP02-S01) on fictional data with the API mocked: what needs a person (the bell's own
- * numbers), the reasons that filter the queue in place, the record document and its place in history, your unfinished work, and
- * insights that can fail without holding anything up.
+ * Home and Attention (LH-IP02-S01; V1.16.4 §4.1) on fictional data with the API mocked. Home is four groups: what needs attention, three
+ * entries a reason with the way to the rest; what can wait, as its reasons; your own next actions; and Insights, closed until asked for
+ * and able to fail without holding anything up. Attention is the queue, with the record document and its place in history.
  */
 
 const session = (role: "OWNER" | "STAFF") => ({ authenticated: true, id: `ACC-${role}`, username: `${role.toLowerCase()}.sample`, displayName: `${role === "OWNER" ? "Owner" : "Staff"} Sample`, role, access: "DoL", hub: true, mustChangePassword: false, recovery: { configured: true, createdAt: null }, selfServiceReviews: 0, selfServiceClosed: false, directory: null });
@@ -46,9 +46,9 @@ const WORK = {
 
 type Setup = { role?: "OWNER" | "STAFF"; groups?: Group[]; work?: unknown; insights?: unknown; insightsStatus?: number };
 async function setup(page: Page, { role = "STAFF", groups = BUSY, work = NO_WORK, insights = INSIGHTS, insightsStatus = 200 }: Setup = {}) {
-  const asked = { queue: 0, insights: 0 };
+  const asked = { queue: 0, insights: 0, summary: 0 };
   await page.route("**/api/staff/session", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(session(role)) }));
-  await page.route("**/api/staff/attention/summary", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(summaryOf(groups)) }));
+  await page.route("**/api/staff/attention/summary", (route) => { asked.summary += 1; return route.fulfill({ contentType: "application/json", body: JSON.stringify(summaryOf(groups)) }); });
   await page.route("**/api/staff/attention", (route) => { asked.queue += 1; return route.fulfill({ contentType: "application/json", body: JSON.stringify({ today: "2026-10-23", groups, entries: entriesOf(groups) }) }); });
   await page.route("**/api/staff/home", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(work) }));
   await page.route("**/api/staff/home/insights", (route) => {
@@ -60,57 +60,70 @@ async function setup(page: Page, { role = "STAFF", groups = BUSY, work = NO_WORK
 }
 const sideways = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 const sections = (page: Page) => page.getByRole("navigation", { name: "Sections" });
+/** Opens Insights, which asks for nothing until it is opened. */
+const openInsights = (page: Page) => page.locator("#home-insights-box > summary").click();
 
 test.describe("Home", () => {
-  test("shows what needs a person with the bell's numbers, most urgent first, and each reason filters the queue in place", async ({ page }) => {
-    await setup(page);
+  test("is four groups: what needs attention, three a reason with its true total; what can wait, as its reasons; next actions; insights", async ({ page }) => {
+    const asked = await setup(page, { work: WORK });
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.goto("/staff/home");
     await expect(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
-    // 3 overdue + 1 return + (2 + 4) out + 5 low + 2 kits: the routine ones (12 to classify, 3 without a place) are not counted.
+    await expect(page.locator(".home-reason").first()).toBeVisible();
+    await expect(page.locator("main h2")).toHaveText(["Needs attention", "When there is time", "Next actions", "Insights"]);
+    // 3 overdue + 1 return + (2 + 4) out + 5 low + 2 kits: the routine ones (6 out, 12 to classify, 3 without a place) are not counted.
     await expect(page.locator(".app-bell")).toContainText("17 things need attention");
-    await expect(page.locator("#home-lede")).toContainText("17 things to act on today or this week.");
-    await expect(page.locator("#attn-count")).toHaveText("17 to act on");
-    const reasons = page.locator("#attn-reasons .attn-reason");
-    await expect(reasons.locator(".attn-reason__label")).toHaveText(["Overdue loans", "Out of stock", "Damaged or lost returns", "Low stock", "Kits to replenish", "Items to classify", "Items without a place"]);
-    await expect(reasons.locator(".attn-reason__count")).toHaveText(["3", "6", "1", "5", "2", "12", "3"]);
-    // Home opens on today and this week: routine work waits behind its own reasons.
-    await expect(page.getByRole("heading", { name: "Items to classify" })).toHaveCount(0);
-
-    // A reason shows exactly the set its count describes, without leaving Home.
-    await page.locator("#attn-reasons").getByRole("button", { name: /^Out of stock/ }).click();
-    await expect(page).toHaveURL(/\/staff\/home\?reason=STOCK_OUT$/);
-    await expect(page.locator("#attn-only")).toContainText("Showing only Out of stock.");
-    await expect(page.locator("#attn-count")).toHaveText("6 to act on");
-    await expect(page.getByRole("heading", { level: 4, name: "Overdue loans" })).toHaveCount(0);
-    await expect(page.locator("#attn-reasons").getByRole("button", { name: /^Out of stock/ })).toHaveAttribute("aria-pressed", "true");
-    // A routine reason shows its work for when there is time.
-    await page.locator("#attn-reasons").getByRole("button", { name: /^Items without a place/ }).click();
-    await expect(page).toHaveURL(/urgency=LATER/);
-    await expect(page.locator("#attn-count")).toHaveText("3 when there is time");
-    await page.getByRole("button", { name: "Show everything" }).click();
-    await page.getByRole("button", { name: "Clear filters" }).first().click();
-    await expect(page).toHaveURL(/\/staff\/home$/);
-    await expect(page.locator("#attn-count")).toHaveText("17 to act on");
+    await expect(page.locator("#home-lede")).toContainText("17 things to act on.");
+    // Reasons with something for now lead; within that, the server's order.
+    await expect(page.locator(".home-reason h3")).toHaveText(["Overdue loans", "Out of stock", "Damaged or lost returns", "Low stock", "Kits to replenish"]);
+    const out = page.getByRole("region", { name: "Out of stock" });
+    await expect(out.locator(".home-row")).toHaveCount(3);
+    await expect(out.locator(".home-row__title")).toHaveText(["Out of stock now 1", "Out of stock now 2", "Out of stock soon 1"]);
+    await expect(out.locator(".home-row").first()).toHaveAttribute("href", "/staff/items?item=ITM-STOCK_OUT-1");
+    await expect(out.locator(".home-row").first()).toContainText("Sample reason for out of stock.");
+    await expect(out.locator(".home-row").first()).toContainText("Open the item");
+    // "View all" names the reason's true total, routine entries included, and opens the queue on that reason.
+    await expect(out.getByRole("link", { name: "View all 12 out of stock" })).toHaveAttribute("href", "/staff/attention?reason=STOCK_OUT");
+    await expect(page.getByRole("region", { name: "Damaged or lost returns" }).locator(".home-row")).toHaveCount(1);
+    // No invented time bucket.
+    await expect(page.locator("main")).not.toContainText("Today");
+    await expect(page.locator("main")).not.toContainText("This week");
+    const later = page.getByRole("list", { name: "When there is time" }).getByRole("link");
+    await expect(later.locator(".home-later__label")).toHaveText(["Out of stock", "Items to classify", "Items without a place"]);
+    await expect(later.locator(".home-later__count")).toHaveText(["6", "12", "3"]);
+    await expect(later.nth(1)).toHaveAttribute("href", "/staff/attention?reason=CLASSIFY&urgency=LATER");
     expect(await sideways(page)).toBe(0);
+    // One queue poll, and Home never asks for the summary or Insights on its own.
+    expect(asked).toEqual({ queue: 1, insights: 0, summary: 0 });
+
+    await out.getByRole("link", { name: "View all 12 out of stock" }).click();
+    await expect(page).toHaveURL(/\/staff\/attention\?reason=STOCK_OUT$/);
+    await expect(page.locator("#attn-only")).toContainText("Showing only Out of stock.");
+    await page.goBack();
+    await page.getByRole("list", { name: "When there is time" }).getByRole("link", { name: /^Items without a place/ }).click();
+    await expect(page).toHaveURL(/\/staff\/attention\?reason=NO_PLACE&urgency=LATER$/);
+    await expect(page.locator("#attn-count")).toHaveText("3 when there is time");
   });
 
   test("is calm when nothing needs a person", async ({ page }) => {
     await setup(page, { groups: BUSY.map((entry) => ({ ...entry, total: 0, byUrgency: { NOW: 0, SOON: 0, LATER: 0 } })) });
     await page.goto("/staff/home");
     await expect(page.getByRole("heading", { name: "Nothing needs a person right now" })).toBeVisible();
-    await expect(page.locator(".attn-row")).toHaveCount(0);
-    await expect(page.locator("#attn-reasons")).toBeHidden();
+    await expect(page.locator(".home-row")).toHaveCount(0);
+    await expect(page.locator("#home-later")).toBeHidden();
+    await expect(page.locator("#home-continue")).toBeHidden();
     await expect(page.locator(".app-bell")).not.toContainText("attention");
     await expect(page.locator("#home-lede")).toContainText("Nothing needs a person right now.");
   });
 
-  test("Home and Attention are one workspace: one poll, Home current on both, and the bell opening everything", async ({ page }) => {
+  test("Home and Attention each poll the queue once and take the bar's numbers from it: no summary request, Home current on both", async ({ page }) => {
     const asked = await setup(page);
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.goto("/staff/home");
-    await expect(page.locator(".attn-row").first()).toBeVisible();
+    await expect(page.locator(".home-row").first()).toBeVisible();
     await expect(sections(page).getByRole("link", { name: /^Home/ })).toHaveAttribute("aria-current", "page");
+    // 6 out and 5 low to act on: the same NOW and SOON stock reasons as the bell's Stock source.
+    await expect(sections(page).getByRole("link", { name: /^Low & out of stock/ })).toContainText("11 need attention");
     await page.locator(".app-bell").click();
     await expect(page).toHaveURL(/\/staff\/attention$/);
     await expect(page.getByRole("heading", { level: 1, name: "Attention" })).toBeVisible();
@@ -119,30 +132,36 @@ test.describe("Home", () => {
     await expect(page.getByRole("heading", { level: 4, name: "Items to classify" })).toBeVisible();
     await expect(page.locator("#attn-count")).toHaveText("17 to act on · 21 when there is time");
     await expect(page.locator("#ws-today")).toBeVisible();
-    // Each entry asked for its queue once; neither left a poll behind.
-    expect(asked.queue).toBe(2);
+    await expect(page.locator(".app-bell")).toContainText("17 things need attention");
+    expect(asked).toEqual({ queue: 2, insights: 0, summary: 0 });
   });
 
-  test("offers to continue open physical checks while cataloguing stays in Quick Catalog", async ({ page }) => {
+  test("next actions resume open physical checks in Locations, while cataloguing stays in Quick Catalog", async ({ page }) => {
     await setup(page, { work: { catalogue: WORK.catalogue, checks: [] } });
     await page.goto("/staff/home");
     await expect(page.getByRole("heading", { level: 2, name: "Needs attention" })).toBeVisible();
+    await expect(page.locator(".home-row").first()).toBeVisible();
     await expect(page.locator("#home-continue")).toBeHidden();
-    await expect(page.getByRole("heading", { name: "Continue" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Next actions" })).toBeHidden();
 
     const other = await page.context().newPage();
     await setup(other, { work: WORK });
     await other.goto("/staff/home");
     const resume = other.locator("#home-continue .home-row");
     await expect(resume).toHaveCount(1);
-    await expect(resume.first()).toHaveAttribute("href", "/staff/catalogue?audit=LA-00000000-0000-4000-9000-000000000001");
+    await expect(resume.first()).toHaveAttribute("href", "/staff/locations?check=LA-00000000-0000-4000-9000-000000000001");
     await expect(resume.first()).toContainText("Paused · 38 items expected");
   });
 
-  test("shows each insight with its evidence, its window and rule one press away, and says plainly when advice is only advice", async ({ page }) => {
-    await setup(page);
+  test("Insights ask for nothing until opened, then show each insight with its evidence and its window and rule one press away", async ({ page }) => {
+    const asked = await setup(page);
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.goto("/staff/home");
+    await expect(page.locator(".home-row").first()).toBeVisible();
+    await expect(page.locator("#home-insights-box")).not.toHaveAttribute("open");
+    await expect(page.getByRole("article", { name: "What equipment is borrowed most?" })).toBeHidden();
+    expect(asked.insights).toBe(0);
+    await openInsights(page);
     const borrowed = page.getByRole("article", { name: "What equipment is borrowed most?" });
     await expect(borrowed.getByRole("link", { name: "Projector - portable" })).toHaveAttribute("href", "/staff/items?item=ITM-0001");
     await expect(borrowed).toContainText("Lent 9 times; the latest on 3 Oct.");
@@ -153,26 +172,30 @@ test.describe("Home", () => {
     await expect(page.locator("#home-insights-asof")).toHaveText(/^Updated /);
     await expect(borrowed).not.toContainText("Advice only");
     await expect(page.getByRole("article", { name: "What keeps running short?" })).toContainText("Advice only. Nothing is ordered or changed from here.");
-    const complete = page.getByRole("article", { name: "How complete is the catalog?" });
-    await expect(complete).toContainText("468 of 480");
-    await expect(complete.getByRole("link", { name: "12 to classify" })).toHaveAttribute("href", "/staff/attention?reason=CLASSIFY");
+    // The catalog-completeness card duplicated the queue's own counts, so it is gone.
+    await expect(page.getByRole("article", { name: "How complete is the catalog?" })).toHaveCount(0);
+    // Closing and opening again asks nothing more.
+    await openInsights(page);
+    await openInsights(page);
+    expect(asked.insights).toBe(1);
     expect(await sideways(page)).toBe(0);
   });
 
   test("says so, and keeps working, when nothing repeats", async ({ page }) => {
     await setup(page, { insights: NOTHING });
     await page.goto("/staff/home");
+    await openInsights(page);
     await expect(page.getByText("Nothing is repeating enough to show.")).toBeVisible();
-    await expect(page.getByRole("article", { name: "How complete is the catalog?" })).toContainText("all done");
   });
 
-  test("a failing insight query leaves everything else working, and can be tried again", async ({ page }) => {
+  test("a failing insight query stays inside Insights, leaves everything else working, and can be tried again", async ({ page }) => {
     const asked = await setup(page, { insightsStatus: 500 });
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.goto("/staff/home");
+    await openInsights(page);
     await expect(page.locator("#home-insights")).toContainText("Insights could not be loaded.");
-    // The queue is untouched, and so is the navigation.
-    await expect(page.locator("#attn-count")).toHaveText("17 to act on");
+    // What needs attention is untouched, and so is the navigation.
+    await expect(page.locator(".home-reason h3").first()).toHaveText("Overdue loans");
     await page.route("**/api/staff/home/insights", (route) => { asked.insights += 1; return route.fulfill({ contentType: "application/json", body: JSON.stringify(INSIGHTS) }); });
     await page.getByRole("button", { name: "Try again" }).click();
     await expect(page.getByRole("article", { name: "What equipment is borrowed most?" })).toBeVisible();
@@ -184,6 +207,7 @@ test.describe("Home", () => {
   test("opened as /staff/home/ it still says when insights fail, and shows them when tried again", async ({ page }) => {
     const asked = await setup(page, { insightsStatus: 500 });
     await page.goto("/staff/home/");
+    await openInsights(page);
     await expect(page.locator("#home-insights")).toContainText("Insights could not be loaded.");
     await page.route("**/api/staff/home/insights", (route) => { asked.insights += 1; return route.fulfill({ contentType: "application/json", body: JSON.stringify(INSIGHTS) }); });
     await page.getByRole("button", { name: "Try again" }).click();
@@ -205,8 +229,9 @@ test.describe("Home", () => {
     });
     try {
       await page.goto("/staff/home");
+      await openInsights(page);
       await asked;
-      await expect(page.locator("#attn-count")).toHaveText("17 to act on");
+      await expect(page.locator(".home-reason h3").first()).toHaveText("Overdue loans");
       await sections(page).getByRole("link", { name: /^Loans/ }).click();
       await expect(page).toHaveURL(/\/staff\/loans$/);
       const reply = page.waitForResponse((response) => response.url().endsWith("/api/staff/home/insights") && response.status() === 401);
@@ -216,6 +241,7 @@ test.describe("Home", () => {
       await expect(page).toHaveURL(/\/staff\/loans$/);
       await page.route("**/api/staff/home/insights", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(INSIGHTS) }));
       await page.getByRole("link", { name: /Logistics Hub/ }).first().click();
+      await openInsights(page);
       await expect(page.getByRole("article", { name: "What equipment is borrowed most?" })).toBeVisible();
     } finally { release(); }
   });
@@ -231,16 +257,30 @@ test.describe("Home", () => {
     await expect(page).toHaveURL(/\/staff\/home$/);
   });
 
+  test("an old Home address carrying the queue's keys opens the queue on the same records", async ({ page }) => {
+    await setup(page);
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.goto("/staff/home?reason=STOCK_OUT");
+    await expect(page).toHaveURL(/\/staff\/attention\?reason=STOCK_OUT$/);
+    await expect(page.locator("#attn-only")).toContainText("Showing only Out of stock.");
+    await page.goto("/staff/home?entry=LOAN_OVERDUE%3ANOW-1");
+    await expect(page).toHaveURL(/\/staff\/attention\?entry=LOAN_OVERDUE%3ANOW-1$/);
+    await expect(page.locator("#attn-doc").getByRole("heading", { level: 2, name: "Overdue loans now 1" })).toBeVisible();
+  });
+
   for (const [name, width, height] of [["phone", 390, 844], ["narrow phone", 320, 640], ["tablet", 768, 1024]] as const) {
-    test(`fits a ${name} with no sideways scroll, in the order queue, continue, insights`, async ({ page }) => {
+    test(`fits a ${name} with no sideways scroll, in the order needs attention, when there is time, next actions, insights`, async ({ page }) => {
       await setup(page, { work: WORK });
       await page.setViewportSize({ width, height });
       await page.goto("/staff/home");
-      await expect(page.getByRole("article", { name: "What equipment is borrowed most?" })).toBeVisible();
+      await expect(page.locator(".home-row").first()).toBeVisible();
       await expect(page.locator("#home-continue")).toBeVisible();
       expect(await sideways(page)).toBe(0);
-      const tops = await page.evaluate(() => ["#attn-results", "#home-continue", "#home-insights"].map((selector) => document.querySelector(selector)!.getBoundingClientRect().top));
+      const tops = await page.evaluate(() => ["#home-attn", "#home-later", "#home-continue", "#home-insights-box"].map((selector) => document.querySelector(selector)!.getBoundingClientRect().top));
       expect(tops).toEqual([...tops].sort((a, b) => a - b));
+      // On phones what can wait is one row that scrolls inside itself (kept from V1.16.3); the page never does.
+      const row = await page.locator("#home-later-list").evaluate((list) => ({ wraps: getComputedStyle(list).flexWrap, scroll: getComputedStyle(list).overflowX }));
+      expect(row).toEqual(width < 761 ? { wraps: "nowrap", scroll: "auto" } : { wraps: "wrap", scroll: "visible" });
     });
   }
 });
@@ -249,12 +289,12 @@ test.describe("The record document", () => {
   test("opens beside the queue with what the entry carries, its source link, and one history entry that Back closes", async ({ page }) => {
     await setup(page);
     await page.setViewportSize({ width: 1366, height: 900 });
-    await page.goto("/staff/home");
+    await page.goto("/staff/attention");
     await page.getByRole("button", { name: /^Overdue loans now 1/ }).click();
-    await expect(page).toHaveURL(/\/staff\/home\?entry=LOAN_OVERDUE%3ANOW-1$/);
+    await expect(page).toHaveURL(/\/staff\/attention\?entry=LOAN_OVERDUE%3ANOW-1$/);
     const doc = page.locator("#attn-doc");
     await expect(doc.getByRole("heading", { level: 2, name: "Overdue loans now 1" })).toBeVisible();
-    await expect(doc).toContainText("Today · Overdue loans");
+    await expect(doc).toContainText("Now · Overdue loans");
     await expect(doc).toContainText("Sample reason for overdue loans.");
     await expect(doc.getByRole("link", { name: /Open the item/ })).toHaveAttribute("href", "/staff/items?item=ITM-LOAN_OVERDUE-1");
     await expect(page.locator("#ws-today")).toBeHidden();
@@ -264,7 +304,7 @@ test.describe("The record document", () => {
     await expect(page).toHaveURL(/entry=LOAN_OVERDUE%3ANOW-2$/);
     await expect(doc.getByRole("heading", { level: 2, name: "Overdue loans now 2" })).toBeVisible();
     await page.goBack();
-    await expect(page).toHaveURL(/\/staff\/home$/);
+    await expect(page).toHaveURL(/\/staff\/attention$/);
     await expect(doc).toBeHidden();
     await expect(page.locator("#ws-today")).toBeVisible();
   });
@@ -272,7 +312,7 @@ test.describe("The record document", () => {
   test("the queue is one tab stop: arrows move, Enter opens, moving moves the selection, and Escape closes and returns focus", async ({ page }) => {
     await setup(page);
     await page.setViewportSize({ width: 1366, height: 900 });
-    await page.goto("/staff/home");
+    await page.goto("/staff/attention");
     const rows = page.locator(".attn-row__main");
     await expect(rows.first()).toBeVisible();
     expect(await rows.evaluateAll((buttons) => buttons.filter((button) => (button as HTMLElement).tabIndex === 0).length)).toBe(1);
@@ -290,14 +330,14 @@ test.describe("The record document", () => {
     await expect(page).toHaveURL(/entry=LOAN_OVERDUE%3ANOW-2$/);
     await page.keyboard.press("Escape");
     await expect(page.locator("#attn-doc")).toBeHidden();
-    await expect(page).toHaveURL(/\/staff\/home$/);
+    await expect(page).toHaveURL(/\/staff\/attention$/);
     await expect(rows.nth(1)).toBeFocused();
   });
 
   test("on a phone it opens as a sheet that Back and Close both put away", async ({ page }) => {
     await setup(page);
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/staff/home");
+    await page.goto("/staff/attention");
     await page.getByRole("button", { name: /^Overdue loans now 1/ }).click();
     const sheet = page.getByRole("dialog", { name: "Overdue loans now 1" });
     await expect(sheet).toBeVisible();
@@ -305,11 +345,11 @@ test.describe("The record document", () => {
     expect(await sideways(page)).toBe(0);
     await page.goBack();
     await expect(sheet).toBeHidden();
-    await expect(page).toHaveURL(/\/staff\/home$/);
+    await expect(page).toHaveURL(/\/staff\/attention$/);
     await page.getByRole("button", { name: /^Low stock soon 1/ }).click();
     await page.getByRole("dialog", { name: "Low stock soon 1" }).getByRole("button", { name: "Close" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page).toHaveURL(/\/staff\/home$/);
+    await expect(page).toHaveURL(/\/staff\/attention$/);
   });
 
   test("a link to an entry opens it, and one that no longer exists is let go quietly", async ({ page }) => {
@@ -317,9 +357,9 @@ test.describe("The record document", () => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.goto("/staff/attention?entry=STOCK_OUT%3ALATER-2");
     await expect(page.locator("#attn-doc").getByRole("heading", { level: 2, name: "Out of stock later 2" })).toBeVisible();
-    await page.goto("/staff/home?entry=LOAN_OVERDUE%3ANOW-404");
-    await expect(page.locator("#attn-count")).toHaveText("17 to act on");
-    await expect(page).toHaveURL(/\/staff\/home$/);
+    await page.goto("/staff/attention?entry=LOAN_OVERDUE%3ANOW-404");
+    await expect(page.locator("#attn-count")).toHaveText("17 to act on · 21 when there is time");
+    await expect(page).toHaveURL(/\/staff\/attention$/);
     await expect(page.locator("#attn-doc")).toBeHidden();
   });
 });
@@ -330,11 +370,13 @@ test.describe("Home accessibility", () => {
     for (const width of [320, 390, 768, 1366]) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto("/staff/home");
+      await expect(page.locator(".home-row").first()).toBeVisible();
+      await openInsights(page);
       await expect(page.getByRole("article", { name: "What equipment is borrowed most?" })).toBeVisible();
       await expect(page.locator("main h1")).toHaveCount(1);
       const problems = await page.evaluate(() => ({
-        unnamed: [...document.querySelectorAll("main button, main a[href]")].filter((control) => !(control.textContent ?? "").trim() && !control.getAttribute("aria-label")).length,
-        loose: [...document.querySelectorAll("main .home-row, main .attn-row")].filter((row) => !row.closest("li")).length
+        unnamed: [...document.querySelectorAll("main button, main a[href], main summary")].filter((control) => !(control.textContent ?? "").trim() && !control.getAttribute("aria-label")).length,
+        loose: [...document.querySelectorAll("main .home-row, main .home-later")].filter((row) => !row.closest("li")).length
       }));
       expect(problems, `${width}px`).toEqual({ unnamed: 0, loose: 0 });
       expect(await sideways(page), `${width}px`).toBe(0);

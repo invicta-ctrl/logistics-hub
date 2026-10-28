@@ -96,7 +96,9 @@ test.describe("the account menu", () => {
     await expect(menu).toBeVisible();
     await expect(more).toHaveAttribute("aria-expanded", "true");
     const sections = menu.getByRole("list", { name: "More sections" });
-    await expect(sections.getByRole("link")).toHaveText(["Items", "Stock", "Locations", "Kits", "Loans", "Self-Service", "Activity", "Administration"]);
+    // Items' children under it, in the rail's order (V1.16.4 §4.2), then the other sections.
+    await expect(sections.getByRole("list", { name: "Items" }).getByRole("link")).toHaveText(["All items", "Low & out of stock", "Stock & movements", "Pantry", "Locations", "Kits"]);
+    await expect(sections.getByRole("link")).toHaveText(["All items", "Low & out of stock", "Stock & movements", "Pantry", "Locations", "Kits", "Loans", "Self-Service", "Activity", "Administration"]);
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();
     await expect(more).toHaveAttribute("aria-expanded", "false");
@@ -161,15 +163,17 @@ test("moving between staff pages is instant: the rail and the next page's shape 
   await page.goto("/staff/items");
   await expect(page.getByRole("heading", { name: "Items", level: 1 })).toBeVisible();
   // Load Stock's code first, as pointing at its link does, so the measurement is the move itself.
-  await page.getByRole("link", { name: "Stock" }).hover();
+  const stock = page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Low & out of stock" });
+  await stock.hover();
   await page.waitForTimeout(300);
 
   const started = Date.now();
-  await page.getByRole("link", { name: "Stock" }).click();
+  await stock.click();
   // The page and rail switch at once, with the skeleton standing in while the data is held back.
   await expect(page.getByRole("heading", { name: "Stock", level: 1 })).toBeVisible({ timeout: 1_000 });
   expect(Date.now() - started).toBeLessThan(1_000);
-  await expect(page.getByRole("link", { name: "Stock" })).toHaveAttribute("aria-current", "page");
+  await expect(stock).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "Sections" }).getByRole("link", { name: "Items", exact: true })).toHaveAttribute("aria-current", "true");
   await expect(page.getByRole("heading", { name: "Items", level: 1 })).toHaveCount(0);
   await expect(page.locator("#stock-results[aria-busy=true]")).toBeVisible();
   releaseStock();

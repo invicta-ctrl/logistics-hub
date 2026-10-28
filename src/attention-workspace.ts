@@ -1,5 +1,5 @@
 import "./attention.css";
-import { ageOf, refreshAttention } from "./staff-shell";
+import { ageOf, supplyAttention } from "./staff-shell";
 import { ApiError, type Html, api, emptyState, expired, failure, formatDate, formatDateTime, html, icon, live, mount, navigate, onLeave, ownQuery, preservingFocus, sheet, toast, writeParams } from "./ui";
 
 /*
@@ -7,10 +7,9 @@ import { ApiError, type Html, api, emptyState, expired, failure, formatDate, for
  * Self-Service. Nothing is stored here. An entry is shown for as long as its cause is true, so fixing the cause (returning the loan,
  * restocking, settling the finding) is what clears it, and each entry opens the record where that next step is made.
  *
- * Home and Attention are one workspace (LH-IP02-S01): both mount the composition in home-workspace.ts, and this module is its
- * queue. Home opens on what to act on today or this week; /staff/attention opens on everything, as every existing link expects.
- * Choosing an entry opens its record document beside the queue, or in a sheet on narrower screens, with one `entry` key in the
- * address so Back closes it.
+ * /staff/attention mounts it in the composition in home-workspace.ts, opened on everything, as every existing link expects. Home
+ * shows the first entries of each reason and links here for the rest (V1.16.4 §4.1). Choosing an entry opens its record document
+ * beside the queue, or in a sheet on narrower screens, with one `entry` key in the address so Back closes it.
  */
 
 type Urgency = "NOW" | "SOON" | "LATER";
@@ -18,11 +17,10 @@ type Urgency = "NOW" | "SOON" | "LATER";
 type Entry = { key: string; reason: string; source: string; urgency: Urgency; basis?: string; title: string; why: string; since: string | null; href: string; action: string; review?: { loanId: string }; identity?: { eventId: string }; keepBoth?: { itemId: string } };
 type Group = { reason: string; source: string; label: string; total: number; byUrgency: Record<Urgency, number> };
 type Answer = { today: string; groups: Group[]; entries: Entry[] };
-/** "active" is Home's view (today and this week); "any" is Attention's, everything. Only the default differs; the keys are the same. */
-export type QueueScope = "active" | "any";
 
 const SOURCES = ["Loans", "Stock", "Locations", "Kits", "Catalog", "Self-Service"] as const;
-const URGENCY_LABELS: Record<Urgency, string> = { NOW: "Today", SOON: "This week", LATER: "When there is time" };
+/** How soon, with no date behind it: SOON is not "this week" (V1.16.4 §4.1). The values and every address keep NOW, SOON and LATER. */
+const URGENCY_LABELS: Record<Urgency, string> = { NOW: "Now", SOON: "Soon", LATER: "When there is time" };
 const URGENCY_TAG: Record<Urgency, string> = { NOW: "tag--bad", SOON: "tag--warn", LATER: "" };
 const URGENCY_ORDER: Urgency[] = ["NOW", "SOON", "LATER"];
 const AGES = [{ id: "", text: "Any age" }, { id: "7", text: "Older than a week" }, { id: "30", text: "Older than a month" }] as const;
@@ -37,7 +35,7 @@ const toAct = (group: Group) => group.byUrgency.NOW + group.byUrgency.SOON;
 const SKELETON = html`<div class="attn-skeleton" aria-hidden="true">${[1, 2, 3, 4].map(() => html`<div class="attn-skeleton__row"><span class="skeleton attn-skeleton__pip"></span><span class="attn-skeleton__lines"><span class="skeleton"></span><span class="skeleton"></span></span></div>`)}</div><span class="sr-only">Loading what needs attention</span>`;
 
 /** The queue's own markup. The composition places it beside the context column. */
-export function queueMarkup(scope: QueueScope): Html {
+export function queueMarkup(): Html {
   return html`<section class="ws-queue" aria-labelledby="attn-title">
     <div class="ws-queue__head"><h2 id="attn-title">Needs attention</h2><p class="live-status" id="live-status">Connecting…</p></div>
     <div class="attn-reasons" id="attn-reasons" role="group" aria-label="Show one kind" hidden></div>
@@ -47,7 +45,7 @@ export function queueMarkup(scope: QueueScope): Html {
       <p class="table-toolbar__count" id="attn-count" aria-live="polite"></p>
       <div class="table-filters" id="table-filters">
         <div class="field"><label for="filter-source">From</label><select id="filter-source"><option value="">Everywhere</option>${SOURCES.map((source) => html`<option value="${source}">${source}</option>`)}</select></div>
-        <div class="field"><label for="filter-urgency">How soon</label><select id="filter-urgency"><option value="">${scope === "active" ? "Today and this week" : "Any"}</option>${URGENCY_ORDER.map((urgency) => html`<option value="${urgency}">${URGENCY_LABELS[urgency]}</option>`)}</select></div>
+        <div class="field"><label for="filter-urgency">How soon</label><select id="filter-urgency"><option value="">Any</option>${URGENCY_ORDER.map((urgency) => html`<option value="${urgency}">${URGENCY_LABELS[urgency]}</option>`)}</select></div>
         <div class="field"><label for="filter-age">Age</label><select id="filter-age">${AGES.map((age) => html`<option value="${age.id}">${age.text}</option>`)}</select></div>
       </div>
     </div>
@@ -70,7 +68,7 @@ function actionsMarkup(entry: Entry, inRow: boolean): Html {
  * the guarded actions, and the record document in `#attn-doc` (wide) or the `#attn-sheet` dialog. `#ws-today` is the context
  * column's resting content, hidden while a document is beside the queue.
  */
-export function startQueue(scope: QueueScope): void {
+export function startQueue(): void {
   const params = new URLSearchParams(window.location.search);
   const source = document.querySelector<HTMLSelectElement>("#filter-source")!;
   const urgency = document.querySelector<HTMLSelectElement>("#filter-urgency")!;
@@ -94,10 +92,6 @@ export function startQueue(scope: QueueScope): void {
 
   const old = (entry: Entry, days: number) => entry.since !== null && Date.now() - Date.parse(sinceIso(entry.since)) >= days * 86_400_000;
   const narrowed = () => Boolean(source.value || urgency.value || age.value);
-  // Home leaves routine work out until it is asked for; Attention shows everything.
-  const activeOnly = () => scope === "active" && !urgency.value;
-  /** A group's true size in this view, from the Worker's totals rather than the entries it listed. */
-  const scopedTotal = (group: Group) => activeOnly() ? toAct(group) : group.total;
 
   function rowMarkup(entry: Entry): Html {
     const current = entry.key === selected;
@@ -113,27 +107,20 @@ export function startQueue(scope: QueueScope): void {
   function groupMarkup(group: Group, entries: Entry[], level: Urgency): Html {
     const open = expanded.has(group.reason);
     const shown = open ? entries : entries.slice(0, SHOWN);
-    const bounded = !narrowed() && scopedTotal(group) > entries.length;
+    const bounded = !narrowed() && group.total > entries.length;
     const id = `attn-${group.reason}`;
     return html`<section class="attn-group" aria-labelledby="${id}">
-      <div class="attn-group__head"><h4 id="${id}">${group.label}</h4><span class="tag ${URGENCY_TAG[level]}">${group.source} · ${narrowed() ? entries.length : scopedTotal(group)}</span></div>
+      <div class="attn-group__head"><h4 id="${id}">${group.label}</h4><span class="tag ${URGENCY_TAG[level]}">${group.source} · ${narrowed() ? entries.length : group.total}</span></div>
       <ul class="attn-list" aria-labelledby="${id}">${shown.map(rowMarkup)}</ul>
       ${entries.length > SHOWN ? html`<button class="button button--ghost button--sm attn-more" type="button" data-more="${group.reason}" aria-expanded="${open}">${open ? "Show fewer" : bounded ? `Show the first ${entries.length}` : `Show all ${entries.length}`}</button>` : ""}
-      ${bounded && open ? html`<p class="muted attn-note">Showing the first ${entries.length} of ${scopedTotal(group)}. The rest appear as these are cleared.</p>` : ""}
+      ${bounded && open ? html`<p class="muted attn-note">Showing the first ${entries.length} of ${group.total}. The rest appear as these are cleared.</p>` : ""}
     </section>`;
   }
 
-  /*
-   * One button per kind, with the same count its list will show. On Home the kinds to act on come first; routine kinds follow
-   * with their "when there is time" count, and choosing one shows exactly those.
-   */
+  /** One button per kind, with the same count its list will show. */
   function reasonsMarkup(groups: Group[]): Html {
-    const button = (group: Group, count: number, later: boolean) => html`<button class="attn-reason" type="button" data-reason="${group.reason}" ${later ? html`data-later` : ""} aria-pressed="${only === group.reason}">
-      <span class="attn-reason__label">${group.label}</span><span class="attn-reason__count">${count.toLocaleString()}</span></button>`;
-    if (scope === "any") return html`${groups.filter((group) => group.total > 0).map((group) => button(group, group.total, false))}`;
-    const urgent = groups.filter((group) => toAct(group) > 0).sort((a, b) => Number(b.byUrgency.NOW > 0) - Number(a.byUrgency.NOW > 0));
-    const routine = groups.filter((group) => toAct(group) === 0 && group.total > 0);
-    return html`${urgent.map((group) => button(group, toAct(group), false))}${routine.length ? html`<span class="attn-reasons__later">When there is time</span>${routine.map((group) => button(group, group.byUrgency.LATER, true))}` : ""}`;
+    return html`${groups.filter((group) => group.total > 0).map((group) => html`<button class="attn-reason" type="button" data-reason="${group.reason}" aria-pressed="${only === group.reason}">
+      <span class="attn-reason__label">${group.label}</span><span class="attn-reason__count">${group.total.toLocaleString()}</span></button>`)}`;
   }
 
   /** The entries in the order they are on screen, for previous and next. */
@@ -163,13 +150,13 @@ export function startQueue(scope: QueueScope): void {
     const minDays = age.value ? Number(age.value) : 0;
     const byReason = new Map<string, Entry[]>();
     for (const entry of data.entries) {
-      if ((only && entry.reason !== only) || (activeOnly() && entry.urgency === "LATER") || (source.value && entry.source !== source.value) || (urgency.value && entry.urgency !== urgency.value) || (minDays && !old(entry, minDays))) continue;
+      if ((only && entry.reason !== only) || (source.value && entry.source !== source.value) || (urgency.value && entry.urgency !== urgency.value) || (minDays && !old(entry, minDays))) continue;
       byReason.set(entry.reason, [...(byReason.get(entry.reason) ?? []), entry]);
     }
     const sections = data.groups.filter((group) => byReason.has(group.reason));
     // The same split as the bell: what needs a person now or this week, and what can wait. The bell counts only the first.
     const shownCount = (group: Group, entries: Entry[], urgent: boolean) => narrowed() ? entries.filter((entry) => (entry.urgency !== "LATER") === urgent).length
-      : urgent ? toAct(group) : activeOnly() ? 0 : group.byUrgency.LATER;
+      : urgent ? toAct(group) : group.byUrgency.LATER;
     const soon = sections.reduce((sum, group) => sum + shownCount(group, byReason.get(group.reason)!, true), 0);
     const later = sections.reduce((sum, group) => sum + shownCount(group, byReason.get(group.reason)!, false), 0);
     document.querySelector("#attn-count")!.textContent = soon + later ? [soon ? `${soon.toLocaleString()} to act on` : "", later ? `${later.toLocaleString()} when there is time` : ""].filter(Boolean).join(" · ") : "";
@@ -178,8 +165,6 @@ export function startQueue(scope: QueueScope): void {
         ? emptyState("Nothing left here", "Everything of this kind has been dealt with. It disappears from this page by itself.", html`<button class="button button--secondary" type="button" id="clear-all">Show everything</button>`, "", 3)
         : narrowed()
         ? emptyState("Nothing matches these filters", "Clear the filters to see everything that needs a person.", html`<button class="button button--secondary" type="button" id="clear-all">Clear filters</button>`, "", 3)
-        : scope === "active"
-        ? emptyState("Nothing needs a person right now", "Loans are on time, stock is in hand and no record is waiting. This fills in by itself when something does.", "", "", 3)
         : emptyState("Nothing needs attention", "Loans are on time, stock is in hand, and no record is waiting for a person. This page fills in by itself when something needs a look.", "", "", 3)));
       syncDocument(false);
       return;
@@ -321,7 +306,8 @@ export function startQueue(scope: QueueScope): void {
   const poll = live<Answer>("/api/staff/attention", {
     interval: 15_000,
     status: () => document.querySelector("#live-status"),
-    onData: (next) => { data = next; render(); void refreshAttention(true); },
+    // The bar's numbers come from this answer, so the page never asks for the summary as well (V1.16.4 §4.1).
+    onData: (next) => { data = next; render(); supplyAttention(next.groups); },
     onError: (error: ApiError) => {
       if (error.status === 401) expired();
       else if (!data) { results.removeAttribute("aria-busy"); mount(results, emptyState("Attention could not be loaded", `${error.message} Retrying automatically.`, "", "error", 3)); }
@@ -351,8 +337,6 @@ export function startQueue(scope: QueueScope): void {
     if (!button) return;
     const reason = button.dataset.reason!;
     only = only === reason ? null : reason;
-    // A routine kind on Home is shown as what it is: work for when there is time.
-    if (scope === "active") urgency.value = only && button.hasAttribute("data-later") ? "LATER" : "";
     render();
   });
 
