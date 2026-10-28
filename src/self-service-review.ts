@@ -3,6 +3,7 @@ import { REVIEW_REASONS, type ReviewReason, foldReference, selfServiceReference 
 import { REPORT_LABELS, type ReportKind } from "./location-tree";
 import { loadSession, shell } from "./staff-shell";
 import { type Html, CREST, MARK, api, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, onLeave, plural, preservingFocus, toast, units, writeParams } from "./ui";
+import { trackEdits } from "./unsaved";
 
 /*
  * Staff view of phone self-service (/staff/self-service). Normal records reconcile on their own;
@@ -161,6 +162,28 @@ export async function selfServiceReview(): Promise<void> {
   let data: Review | null = null;
   let find = "";
   const results = document.querySelector<HTMLElement>("#ss-results")!;
+  /**
+   * Notes typed and loans chosen in the cards, by card (V1.16.4 §4.7). A live refresh or a change of view redraws the list; what was
+   * typed is put back into the same card, with the caret where it was, until it is sent or its record is no longer open.
+   */
+  const held = new Map<string, Map<string, string>>();
+  const cardId = (card: HTMLElement) => card.dataset.key ?? `report-${card.dataset.reportId}`;
+  const untouched = (field: HTMLInputElement | HTMLSelectElement) => field instanceof HTMLSelectElement
+    ? field.selectedIndex === Math.max(0, [...field.options].findIndex((option) => option.defaultSelected)) : field.value === field.defaultValue;
+  const keep = (event: Event) => {
+    const field = event.target as HTMLInputElement | HTMLSelectElement;
+    const card = field.closest<HTMLElement>("[data-key], [data-report-id]");
+    if (!card || !field.name || field.type === "hidden") return;
+    const fields = held.get(cardId(card)) ?? new Map<string, string>();
+    if (untouched(field)) fields.delete(field.name); else fields.set(field.name, field.value);
+    if (fields.size) held.set(cardId(card), fields); else held.delete(cardId(card));
+  };
+  results.addEventListener("input", keep);
+  results.addEventListener("change", keep);
+  onLeave(trackEdits(() => held.size > 0));
+  const putBack = () => results.querySelectorAll<HTMLElement>("[data-key], [data-report-id]").forEach((card) => {
+    held.get(cardId(card))?.forEach((value, name) => { const field = card.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${name}"]`); if (field) field.value = value; });
+  });
 
   function render(): void {
     writeParams({ view: view === "attention" ? null : view });
@@ -170,7 +193,17 @@ export async function selfServiceReview(): Promise<void> {
     if (!data) return;
     mount(document.querySelector("#ss-summary")!, html`${plural(data.enabledItems, "item")} offered on phones · ${attention ? `${attention} need${attention === 1 ? "s" : ""} attention` : "nothing needs attention"}`);
     results.removeAttribute("aria-busy");
-    preservingFocus(results, () => mount(results, view === "poster" ? poster() : view === "activity" ? activity(data!) : needsAttention(data!)));
+    const draw = () => { mount(results, view === "poster" ? poster() : view === "activity" ? activity(data!) : needsAttention(data!)); putBack(); };
+    const typing = document.activeElement;
+    if ((typing instanceof HTMLInputElement || typing instanceof HTMLSelectElement) && typing.id && results.contains(typing)) {
+      const caret = typing instanceof HTMLInputElement ? [typing.selectionStart, typing.selectionEnd] as const : null;
+      draw();
+      const again = document.getElementById(typing.id);
+      if (again instanceof HTMLInputElement || again instanceof HTMLSelectElement) {
+        again.focus({ preventScroll: true });
+        if (caret && again instanceof HTMLInputElement) again.setSelectionRange(caret[0], caret[1]);
+      }
+    } else preservingFocus(results, draw);
   }
 
   function needsAttention(review: Review): Html {
@@ -212,7 +245,12 @@ export async function selfServiceReview(): Promise<void> {
   const poll = live<Review>("/api/staff/self-service", {
     interval: 15_000,
     status: () => document.querySelector("#live-status"),
-    onData: (next) => { data = next; render(); },
+    onData: (next) => {
+      data = next;
+      const open = new Set([...next.open.map((entry) => entry.id), ...next.locationReports.map((report) => `report-${report.id}`)]);
+      for (const id of held.keys()) if (!open.has(id)) held.delete(id);
+      render();
+    },
     onError: (error) => {
       if (error.status === 401) expired();
       else if (!data) { results.removeAttribute("aria-busy"); mount(results, emptyState("Self-Service could not be loaded", `${error.message} Retrying automatically.`, "", "error")); }
@@ -238,6 +276,7 @@ export async function selfServiceReview(): Promise<void> {
       resolve.disabled = true;
       try {
         await api(`/api/staff/location-reports/${resolve.dataset.resolveReport}/resolve`, { method: "POST", body: JSON.stringify({ note }) });
+        held.delete(`report-${resolve.dataset.resolveReport}`);
         toast("Report resolved.");
         await poll.refresh();
       } catch (error) {
@@ -255,6 +294,7 @@ export async function selfServiceReview(): Promise<void> {
     button.disabled = true;
     try {
       await api(`/api/staff/self-service/${form.dataset.entry}/resolve`, { method: "POST", body: JSON.stringify({ action, note: values.get("note") || null, ...(action === "match" ? { loanId: values.get("loanId") } : {}) }) });
+      held.delete(form.dataset.entry!);
       toast(action === "apply" ? "Applied." : action === "match" ? "Confirmed: the loan is closed." : "Marked as checked.");
       await poll.refresh();
     } catch (error) {

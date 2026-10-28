@@ -6,6 +6,7 @@
 import type { DepartmentCode } from "./directory-policy";
 import { setAccess } from "./catalogue-store";
 import { staffDark } from "./theme";
+import { confirmDiscard } from "./unsaved";
 import { ApiError, CREST, MARK, type Html, type IconName, api, app, emptyState, expired, failure, forgetKept, formatDate, html, icon, keepFor, mount, navigate, noteBuild, onLeave, prefetch, setMessage, takePrefetched, toast } from "./ui";
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
@@ -379,7 +380,9 @@ function watchAttention(ask: boolean): void {
 }
 
 /** Signs out here, in the staff workspace or the Catalog. */
+/** Signs out, after asking while anything is unsaved (V1.16.4 §4.7): Keep editing leaves the session and the page as they were. */
 export async function signOut(): Promise<void> {
+  if (!await confirmDiscard()) return;
   forgetSession();
   try { await api("/api/staff/logout", { method: "POST" }); } catch { /* the session is dropped client-side regardless */ }
   tellOtherTabs("signed-out");

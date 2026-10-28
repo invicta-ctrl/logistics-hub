@@ -5,6 +5,7 @@ import { BEHAVIOUR_LABELS } from "./catalog-policy";
 import { KNOWLEDGE, KNOWLEDGE_VERSION } from "./item-knowledge";
 import type { SessionInfo } from "./catalogue-store";
 import { ApiError, type Html, api, categoryName, emptyState, expired, failure, html, icon, mount, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
+import { formEdits } from "./unsaved";
 
 type Coverage = { active: number; unclassified: number; captured: number; capturedClassified: number };
 type AliasItem = { id: string; name: string; category: string; aliases: string | null; updatedAt: string | null };
@@ -73,9 +74,10 @@ export async function catalogSettings(): Promise<void> {
   const start = document.querySelector<HTMLButtonElement>("#catalog-start")!;
   let cleanups: Array<() => void> = [];
   let generation = 0;
-  let dirty = false;
+  /** The open capture form's own check (V1.16.4 §4.7). */
+  let edited: () => boolean = () => false;
   const runCleanups = () => { const done = cleanups; cleanups = []; generation += 1; done.forEach((cleanup) => cleanup()); };
-  const catalogPanel = createSheet(catalogSheet, { dirty: () => dirty, onClose: () => { runCleanups(); dirty = false; void loadOpenSession(); } });
+  const catalogPanel = createSheet(catalogSheet, { dirty: () => edited(), onClose: () => { runCleanups(); edited = () => false; void loadOpenSession(); } });
   onLeave(runCleanups);
 
   /** Says whether this person has a session open (here or on any device), so the button resumes it rather than seeming to start afresh. */
@@ -93,7 +95,7 @@ export async function catalogSettings(): Promise<void> {
   async function runSession(id: string | null): Promise<void> {
     runCleanups();
     const mine = generation;
-    dirty = false;
+    edited = () => false;
     const host = catalogSheet.querySelector<HTMLElement>("#catalog-host");
     if (!host) return;
     host.className = "";
@@ -116,7 +118,7 @@ export async function catalogSettings(): Promise<void> {
       await captureScreen({ mode: "signed-in", session: session!, access: null }, sessionId, {
         host,
         onCleanup: (cleanup) => { if (current()) cleanups.push(cleanup); else cleanup(); },
-        onDirty: (next) => { if (current()) dirty = next; },
+        edits: (check) => { if (current()) edited = check; },
         session: { reopen: (next) => void runSession(next) }
       });
     } catch (error) {
@@ -184,7 +186,8 @@ export async function catalogSettings(): Promise<void> {
 
   /* ---------- Other names ---------- */
   const sheet = document.querySelector<HTMLDialogElement>("#sheet")!;
-  const panel = createSheet(sheet);
+  let namesEdited: () => boolean = () => false;
+  const panel = createSheet(sheet, { dirty: () => namesEdited(), onClose: () => { namesEdited = () => false; } });
   let items: AliasItem[] = [];
   let more = false;
   let searchedFor = "";
@@ -226,6 +229,7 @@ export async function catalogSettings(): Promise<void> {
     </form>`));
     panel.open();
     const form = sheet.querySelector<HTMLFormElement>("#names-form")!;
+    namesEdited = formEdits(form).dirty;
     form.querySelector<HTMLInputElement>("#names-input")!.focus();
     form.addEventListener("submit", async (event) => {
       event.preventDefault();

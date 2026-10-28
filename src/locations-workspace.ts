@@ -4,6 +4,7 @@ import type { PlaceRow } from "./staff";
 import { UP_TO_ITEMS, ageOf, loadSession, shell } from "./staff-shell";
 import type { Session } from "./staff-shell";
 import { ApiError, type Html, api, emptyState, expired, failure, html, icon, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, writeParams } from "./ui";
+import { formEdits, warnOnUnload } from "./unsaved";
 
 /*
  * Locations (/staff/locations): the places items are kept, as the tree staff think in (Office → Storage Area → Cabinet 1 →
@@ -46,7 +47,8 @@ export async function locationsWorkspace(): Promise<void> {
   let paths = new Map<string, string>();
   let rows = new Map<string, PlaceRow>();
   let openId: string | null = null;
-  let dirty = false;
+  /** The place form's edits, against how it was drawn (V1.16.4 §4.7): a form typed back to what it was is clean. */
+  let edited: () => boolean = () => false;
   let pendingOpen = params.get("place");
   const sheetElement = document.querySelector<HTMLDialogElement>("#sheet")!;
   const results = document.querySelector<HTMLElement>("#place-results")!;
@@ -55,10 +57,10 @@ export async function locationsWorkspace(): Promise<void> {
   search.value = params.get("q") ?? "";
 
   const panel = createSheet(sheetElement, {
-    dirty: () => dirty,
-    onClose: () => { openId = null; dirty = false; writeParams({ place: null }); results.querySelectorAll(".is-open").forEach((row) => row.classList.remove("is-open")); }
+    dirty: () => edited(),
+    onClose: () => { openId = null; edited = () => false; writeParams({ place: null }); results.querySelectorAll(".is-open").forEach((row) => row.classList.remove("is-open")); }
   });
-  onLeave(() => { dirty = false; });
+  onLeave(() => { edited = () => false; });
 
   /* ---------- The tree ---------- */
 
@@ -155,7 +157,7 @@ export async function locationsWorkspace(): Promise<void> {
 
   function openPlace(id: string | null): void {
     if ((id ?? "") !== (openId ?? "") && panel.unsaved()) { void panel.discardOk().then((discard) => { if (discard) openPlace(id); }); return; }
-    dirty = false;
+    edited = () => false;
     openId = id;
     results.querySelectorAll(".is-open").forEach((row) => row.classList.remove("is-open"));
     if (id) results.querySelector(`[data-key="${CSS.escape(id)}"]`)?.classList.add("is-open");
@@ -232,7 +234,7 @@ export async function locationsWorkspace(): Promise<void> {
         name.value = "";
         adding.hidden = true;
         choose(id);
-        dirty = true;
+        warnOnUnload();
         select.focus();
         toast(`${value} added to the list.`);
       } catch (error) {
@@ -252,7 +254,7 @@ export async function locationsWorkspace(): Promise<void> {
         await api(`/api/staff/locations/${chosen.id}?expected=${encodeURIComponent(chosen.updatedAt)}`, { method: "DELETE" });
         await poll.refresh();
         choose("");
-        dirty = true;
+        warnOnUnload();
         toast(`${chosen.name} removed.`);
       } catch (error) {
         setMessage(problem, html`${failure(error)} <button type="button" class="text-link" data-open-chosen>Open ${chosen.name}</button>`);
@@ -290,7 +292,7 @@ export async function locationsWorkspace(): Promise<void> {
     });
     const place = sheetElement.querySelector<HTMLFormElement>("#place-form")!;
     const alert = place.querySelector<HTMLElement>("#place-alert")!;
-    place.addEventListener("input", () => { dirty = true; });
+    edited = formEdits(place).dirty;
     place.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = new FormData(place);
@@ -304,21 +306,21 @@ export async function locationsWorkspace(): Promise<void> {
       try {
         if (!row) {
           const { id } = await api<{ id: string }>("/api/staff/locations", { method: "POST", body: JSON.stringify(body) });
-          dirty = false;
+          edited = () => false;
           pendingOpen = id;
           await poll.refresh();
           toast("Place added. Add directions or a picture next.");
           return;
         }
         const result = await api<{ changed: number }>(`/api/staff/locations/${row.id}`, { method: "PATCH", body: JSON.stringify(body) });
-        dirty = false;
+        edited = () => false;
         await poll.refresh();
         openPlace(row.id);
         toast(result.changed ? "Changes saved." : "No changes to save.");
       } catch (error) {
         const stale = error instanceof ApiError && error.status === 409 && /Someone else/.test(error.message);
         setMessage(alert, stale ? html`${failure(error)} <button type="button" class="text-link" data-reload>Load the latest details</button>` : failure(error));
-        alert.querySelector("[data-reload]")?.addEventListener("click", async () => { dirty = false; await poll.refresh(); openPlace(row!.id); });
+        alert.querySelector("[data-reload]")?.addEventListener("click", async () => { edited = () => false; await poll.refresh(); openPlace(row!.id); });
         button.disabled = false;
       }
     });

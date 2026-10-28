@@ -13,6 +13,7 @@ import { bulkBar } from "./bulk-select";
 import { placeList } from "./catalogue-places";
 import { ageOf, loadSession, shell } from "./staff-shell";
 import { ApiError, type Html, animateNumber, api, categoryName, emptyState, expired, failure, formatDateTime, formatQuantity, html, icon, label, live, mount, onLeave, plural, preservingFocus, raw, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
+import { formEdits } from "./unsaved";
 
 type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
@@ -254,7 +255,13 @@ export async function workspace(): Promise<void> {
   let filters = { category: params.get("category") ?? "", location: params.get("location") ?? "", type: params.get("type") ?? "" };
   let openId: string | null = null;
   let detail: Detail | null = null;
-  let dirty = false;
+  /** Add items' edits: its capture form's own check. */
+  let addEdits: () => boolean = () => false;
+  /**
+   * The open item's forms, each compared with how it was drawn (V1.16.4 §4.7): details, quantity, Lend, a resolve note and Add to kit.
+   * A form typed back to what it was, or no longer shown, holds nothing.
+   */
+  let itemEdits: Array<() => boolean> = [];
   /** Whether the open item's Stock settings differ from what is saved (bindSettings). */
   let settingsChanged: () => boolean = () => false;
   /** Older pages of the open item's history, shown below its first page, and where the next one starts. */
@@ -538,19 +545,20 @@ export async function workspace(): Promise<void> {
     sheet.classList.remove("sheet--add");
   };
   const panel = createSheet(sheet, {
-    dirty: () => dirty || settingsChanged(),
+    dirty: () => addEdits() || settingsChanged() || itemEdits.some((edited) => edited()),
     onClose: () => {
       stopAdding();
       document.querySelector(`tr[data-key="${CSS.escape(openId ?? "")}"]`)?.classList.remove("is-open");
       openId = null;
       detail = null;
-      dirty = false;
+      addEdits = () => false;
+      itemEdits = [];
       settingsChanged = () => false;
       writeParams({ item: null, add: null });
     }
   });
   const closeSheet = () => panel.close(true);
-  onLeave(() => { stopAdding(); dirty = false; settingsChanged = () => false; });
+  onLeave(() => { stopAdding(); addEdits = () => false; itemEdits = []; settingsChanged = () => false; });
 
   function sheetShell(kicker: Html | string, title: string, body: Html): void {
     // Replacing the sheet's content (the loaded record after its placeholder) would drop keyboard focus onto the page behind.
@@ -562,7 +570,8 @@ export async function workspace(): Promise<void> {
   function openItem(id: string, tab: Tab = "overview"): void {
     if (openId !== id && panel.unsaved()) { void panel.discardOk().then((discard) => { if (discard) openItem(id, tab); }); return; }
     stopAdding();
-    dirty = false;
+    addEdits = () => false;
+    itemEdits = [];
     document.querySelectorAll("tr.is-open").forEach((element) => element.classList.remove("is-open"));
     const origin = document.querySelector(`tr[data-key="${CSS.escape(id)}"]`);
     origin?.classList.add("is-open");
@@ -582,7 +591,8 @@ export async function workspace(): Promise<void> {
     if (panel.unsaved()) { void panel.discardOk().then((discard) => { if (discard) openAdd(); }); return; }
     stopAdding();
     const generation = addGeneration;
-    dirty = false;
+    addEdits = () => false;
+    itemEdits = [];
     openId = null;
     detail = null;
     pendingItem = null;
@@ -605,7 +615,7 @@ export async function workspace(): Promise<void> {
         await captureScreen({ mode: "signed-in", session, access: null }, started.id, {
           host,
           onCleanup: (cleanup) => { if (current()) addCleanups.push(cleanup); else cleanup(); },
-          onDirty: (next) => { if (current()) dirty = next; }
+          edits: (check) => { if (current()) addEdits = check; }
         });
       } catch (error) {
         if (!current()) return;
@@ -648,7 +658,8 @@ export async function workspace(): Promise<void> {
       photo?.render(loaded.item.photo);
       linksPanel?.render();
       visualControl?.render();
-      mount(sheet.querySelector("#reports-card")!, reportsCard(detail));
+      const reportsHost = sheet.querySelector<HTMLElement>("#reports-card")!;
+      if (!reportsHost.querySelector(".report__form")) mount(reportsHost, reportsCard(detail));
       mount(sheet.querySelector("#profile-info")!, profileInfo(detail));
       mount(sheet.querySelector("#quantity-context")!, quantityContext(detail));
       mount(sheet.querySelector("#history")!, historyMarkup(detail));
@@ -694,6 +705,7 @@ export async function workspace(): Promise<void> {
       <input id="resolve-note-${row.dataset.reportId}" name="note" maxlength="300" autocomplete="off" placeholder="Found it on shelf B" /></div>
       <div class="report__alert form-alert" role="alert" hidden></div>
       <div class="where__buttons"><button class="button button--primary button--sm" type="submit">Resolve report</button><button class="button button--ghost button--sm" type="button" data-resolve-cancel>Cancel</button></div></form>`.value);
+    itemEdits.push(formEdits(row.querySelector<HTMLElement>(".report__form")!).dirty);
     row.querySelector<HTMLInputElement>(".report__form input")!.focus();
   }
 
@@ -706,10 +718,11 @@ export async function workspace(): Promise<void> {
     try {
       await api(`/api/staff/location-reports/${row.dataset.reportId}/resolve`, { method: "POST", body: JSON.stringify({ note: form.querySelector<HTMLInputElement>("input[name=note]")!.value }) });
       toast("Report resolved.");
+      form.remove();
       if (openId) await refreshStock(openId);
       await poll.refresh();
     } catch (error) {
-      if (error instanceof ApiError && error.status === 409) { toast(error.message, "error"); if (openId) await refreshStock(openId); await poll.refresh(); return; }
+      if (error instanceof ApiError && error.status === 409) { toast(error.message, "error"); form.remove(); if (openId) await refreshStock(openId); await poll.refresh(); return; }
       setMessage(alert, failure(error));
       submit.disabled = false;
     }
@@ -889,7 +902,7 @@ export async function workspace(): Promise<void> {
       } catch (error) {
         const stale = error instanceof ApiError && error.status === 409;
         setMessage(alert, stale ? html`${failure(error)} <button type="button" class="text-link" data-reload>Load the latest details</button>` : failure(error));
-        alert.querySelector("[data-reload]")?.addEventListener("click", () => { dirty = false; settingsChanged = () => false; void loadDetail(item.id, "overview"); });
+        alert.querySelector("[data-reload]")?.addEventListener("click", () => { itemEdits = []; settingsChanged = () => false; void loadDetail(item.id, "overview"); });
       } finally {
         submit.disabled = false;
       }
@@ -934,6 +947,8 @@ export async function workspace(): Promise<void> {
           <div class="kit-adder__actions"><button class="button button--primary button--sm" type="submit">Add to kit</button><button class="button button--ghost button--sm" type="button" data-kit-cancel>Cancel</button></div>
         </form>`
         : html`<p class="muted">${kits.some((kit) => kit.active) ? "It is already in every kit in use." : "There are no kits in use yet."} <a class="text-link" href="/staff/kits" data-route>Kits</a></p>`);
+      const kitForm = host.querySelector<HTMLElement>("[data-kit-form]");
+      if (kitForm) itemEdits.push(formEdits(kitForm).dirty);
       host.querySelector<HTMLElement>("#ka-kit, a")?.focus();
     } catch (error) {
       mount(host, html`<p class="form-alert" role="alert">${failure(error)}</p>`);
@@ -1064,7 +1079,8 @@ export async function workspace(): Promise<void> {
 
   function renderDetail(loaded: Detail, tab: Tab): void {
     detail = loaded;
-    dirty = false;
+    addEdits = () => false;
+    itemEdits = [];
     settingsChanged = () => false;
     extraMovements = [];
     extraEvents = [];
@@ -1191,6 +1207,8 @@ export async function workspace(): Promise<void> {
       known: () => known,
       onLent: async (lent) => { await refreshStock(lent.id); await poll.refresh(); }
     }) : null;
+    itemEdits.push(stockForm.edited);
+    if (loanForm) itemEdits.push(loanForm.edited);
     bindDetailsForm(item);
     bindSettings(item);
     photo = photoPanel(sheet.querySelector<HTMLElement>("#photo-panel")!, {
@@ -1424,7 +1442,6 @@ export async function workspace(): Promise<void> {
         chooser.value = made;
         nameInput.value = "";
         closeNewPlace();
-        dirty = true;
         preview();
         toast("Place added.");
         chooser.focus();
@@ -1436,7 +1453,6 @@ export async function workspace(): Promise<void> {
       }
     });
     form.addEventListener("input", (event) => {
-      dirty = true;
       // Choosing Borrow or Take lists the item, unless staff already picked who sees it.
       const audience = form.querySelector<HTMLSelectElement>("#f-lendingAudience")!;
       if ((event.target as HTMLElement).id === "f-itemType" && audience.value === "NOT_AVAILABLE_FOR_LENDING" && LISTABLE_ITEM_TYPES.has((event.target as HTMLSelectElement).value)) audience.value = "STUDENTS_AND_USC_STAFF";
@@ -1453,6 +1469,8 @@ export async function workspace(): Promise<void> {
       }
     });
     preview();
+    const edits = formEdits(form);
+    itemEdits.push(edits.dirty);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const submitter = (event as SubmitEvent).submitter as HTMLButtonElement | null;
@@ -1485,7 +1503,7 @@ export async function workspace(): Promise<void> {
         const queue = [...shownIds];
         const result = await api<{ changed: number; updatedAt: string | null }>(`/api/staff/items/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ ...readDetails(form, item), updatedAt: item.updatedAt ?? null }) });
         item.updatedAt = result.updatedAt;
-        dirty = false;
+        edits.reset();
         if (intent === "merge" && source) {
           savedBeforeMerge = true;
           await api(`/api/staff/items/${encodeURIComponent(id)}/merge`, { method: "POST", body: JSON.stringify({ sourceId: source.id, sourceUpdatedAt: source.updatedAt, updatedAt: item.updatedAt, sourceOnHand: source.onHand, targetOnHand, confirmed: true }) });
@@ -1507,7 +1525,7 @@ export async function workspace(): Promise<void> {
       } catch (error) {
         const stale = error instanceof ApiError && error.status === 409;
         setMessage(alert, stale ? html`${savedBeforeMerge ? "Details saved. " : ""}${failure(error)} <button type="button" class="text-link" data-reload>Load the latest details</button>` : `${savedBeforeMerge ? "Details saved. " : ""}${failure(error)}`);
-        alert.querySelector("[data-reload]")?.addEventListener("click", () => { dirty = false; void loadDetail(item.id!, "details"); });
+        alert.querySelector("[data-reload]")?.addEventListener("click", () => { itemEdits = []; void loadDetail(item.id!, "details"); });
       } finally {
         buttons.forEach((button) => { button.disabled = false; });
       }

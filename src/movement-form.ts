@@ -1,5 +1,6 @@
 import { MOVEMENT_REASONS } from "./catalog-policy";
 import { type Html, api, failure, html, icon, label, mount, plural, setMessage, toast, units } from "./ui";
+import { formEdits } from "./unsaved";
 
 /**
  * `openUnits`: how many of an open-unit item's units are open; a change may not go below them. `reorder`: the item's open restock
@@ -67,7 +68,7 @@ export function quantityEditor(prefix: string): Html {
 export function bindQuantityEditor(form: HTMLFormElement, options: {
   target: () => Target | null;
   onRecorded: (target: Target, result: Recorded, reason: string) => void | Promise<void>;
-}): { refresh: () => void; preset: (preset: Preset) => void } {
+}): { refresh: () => void; preset: (preset: Preset) => void; edited: () => boolean } {
   const input = form.querySelector<HTMLInputElement>("input[name=total]")!;
   const note = form.querySelector<HTMLInputElement>("input[name=note]")!;
   const alert = form.querySelector<HTMLElement>("[data-alert]")!;
@@ -93,6 +94,8 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
   };
   const chosen = () => form.querySelector<HTMLInputElement>("input[name=reason]:checked")?.value ?? "";
   const dirty = () => counting || input.value.trim() !== String(base);
+  // What the person changed since the editor was last set (V1.16.4 §4.7): a Receive's preset figure is where it starts, not an edit.
+  const edits = formEdits(form);
 
   const update = () => {
     const target = options.target();
@@ -163,6 +166,7 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
     key = crypto.randomUUID();
     setMessage(alert, "");
     update();
+    edits.reset();
   };
 
   const invalid = (element: HTMLElement, message: string) => {
@@ -255,7 +259,10 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
       context.hidden = !preset.context;
       context.textContent = preset.context ?? "";
       update();
+      edits.reset();
       input.focus();
-    }
+    },
+    /** Whether leaving now would lose a change: a figure or count still to save that differs from how the editor was set. */
+    edited: () => dirty() && edits.dirty()
   };
 }

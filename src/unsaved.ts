@@ -30,6 +30,28 @@ export function trackEdits(dirty: Check): () => void {
 /** Whether anything (or anything in `scope`) holds edits not yet saved and not discarded. */
 export const hasUnsaved = (scope: Iterable<Check> = checks): boolean => [...scope].some(holds);
 
+/** What a person can change in `root`'s fields, as one string: values, choices and chosen files. A search box finds; it edits nothing. */
+function fieldsOf(root: ParentNode): string {
+  const parts: string[] = [];
+  root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input:not([type=search]), select, textarea").forEach((field, index) => {
+    const name = field.name || field.id || String(index);
+    if (field instanceof HTMLInputElement && (field.type === "checkbox" || field.type === "radio")) parts.push(`${name}:${field.value}=${field.checked}`);
+    else if (field instanceof HTMLInputElement && field.type === "file") parts.push(`${name}=${[...field.files ?? []].map((file) => `${file.name}/${file.size}`).join()}`);
+    else parts.push(`${name}=${field.value}`);
+  });
+  return parts.join("\n");
+}
+
+/**
+ * One form's edits, compared with how it was drawn, so a form typed back to what it was is clean again. `extra` adds what the form
+ * keeps outside its fields (a prepared photo). `reset` takes the current state as saved; a form no longer in the page holds nothing.
+ */
+export function formEdits(root: HTMLElement, extra: () => string = () => ""): { dirty: () => boolean; reset: () => void } {
+  const read = () => `${fieldsOf(root)}\n${extra()}`;
+  let saved = read();
+  return { dirty: () => root.isConnected && read() !== saved, reset: () => { saved = read(); } };
+}
+
 /* ---------- The question ---------- */
 
 let open: { dialog: HTMLDialogElement; answer: Promise<boolean> } | null = null;

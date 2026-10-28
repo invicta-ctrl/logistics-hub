@@ -6,6 +6,7 @@ import { inOrder, pathOf, placesOf } from "./location-tree";
 import type { PlaceRow } from "./staff";
 import { UP_TO_ITEMS, ageOf, loadSession, shell } from "./staff-shell";
 import { api, ApiError, emptyState, expired, failure, type Html, html, icon, live, mount, onLeave, plural, preservingFocus, readKept, setMessage, sheet as createSheet, sheetContent, toast, working, writeParams } from "./ui";
+import { formEdits, warnOnUnload } from "./unsaved";
 
 /*
  * Kits (/staff/kits): groupings such as a Sewing Kit, made of items that already exist. A kit holds no stock. Each component keeps its
@@ -66,7 +67,8 @@ export async function kitsWorkspace(): Promise<void> {
   let openId: string | null = null;
   let detail: Detail | null = null;
   let mode: Mode = "view";
-  let dirty = false;
+  /** The open form's edits, against how it was drawn (V1.16.4 §4.7): a form typed back to what it was is clean. */
+  let edited: () => boolean = () => false;
   let marks = new Map<string, { outcome: CheckOutcome; note: string }>();
   let pendingOpen = params.get("kit");
   const sheetElement = document.querySelector<HTMLDialogElement>("#sheet")!;
@@ -76,10 +78,10 @@ export async function kitsWorkspace(): Promise<void> {
   search.value = params.get("q") ?? "";
 
   const panel = createSheet(sheetElement, {
-    dirty: () => dirty || (mode === "check" && marks.size > 0),
-    onClose: () => { openId = null; detail = null; dirty = false; marks = new Map(); mode = "view"; writeParams({ kit: null }); results.querySelectorAll(".is-open").forEach((row) => row.classList.remove("is-open")); }
+    dirty: () => edited() || (mode === "check" && marks.size > 0),
+    onClose: () => { openId = null; detail = null; edited = () => false; marks = new Map(); mode = "view"; writeParams({ kit: null }); results.querySelectorAll(".is-open").forEach((row) => row.classList.remove("is-open")); }
   });
-  onLeave(() => { dirty = false; marks = new Map(); });
+  onLeave(() => { edited = () => false; marks = new Map(); });
 
   const pathText = (id: string | null) => id ? pathOf(places, id) ?? null : null;
   const loadPlaces = async () => {
@@ -176,7 +178,7 @@ export async function kitsWorkspace(): Promise<void> {
 
   async function openKit(id: string, next: Mode = "view"): Promise<void> {
     if (id !== openId && !(await panel.discardOk())) return;
-    dirty = false;
+    edited = () => false;
     openId = id;
     mode = next;
     marks = new Map();
@@ -367,9 +369,9 @@ export async function kitsWorkspace(): Promise<void> {
       <div class="form-actions form-actions--sticky"><button class="button button--primary" type="submit">Save changes</button><button class="button button--ghost" type="button" id="kit-cancel">Cancel</button></div></form>`);
     const form = sheetElement.querySelector<HTMLFormElement>("#kit-form")!;
     const alert = form.querySelector<HTMLElement>("#kit-alert")!;
-    componentsEditor(form.querySelector<HTMLElement>("#parts")!, draft, () => { dirty = true; });
-    form.addEventListener("input", () => { dirty = true; });
-    form.querySelector("#kit-cancel")!.addEventListener("click", async () => { if (!(await panel.discardOk())) return; dirty = false; mode = "view"; draw(); });
+    componentsEditor(form.querySelector<HTMLElement>("#parts")!, draft, warnOnUnload);
+    edited = formEdits(form, () => JSON.stringify(draftBody(draft))).dirty;
+    form.querySelector("#kit-cancel")!.addEventListener("click", async () => { if (!(await panel.discardOk())) return; edited = () => false; mode = "view"; draw(); });
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = new FormData(form);
@@ -383,14 +385,14 @@ export async function kitsWorkspace(): Promise<void> {
       try {
         const result = await api<{ changed: number }>(`/api/staff/kits/${kit.id}`, { method: "PATCH", body: JSON.stringify({ name, description: String(values.get("description") ?? ""), locationId: String(values.get("locationId") ?? "") || null,
           active: values.get("active") === "on", updatedAt: kit.updatedAt, components: draftBody(draft) }) });
-        dirty = false;
+        edited = () => false;
         await poll.refresh();
         await openKit(kit.id);
         toast(result.changed ? "Changes saved." : "No changes to save.");
       } catch (error) {
         const stale = error instanceof ApiError && error.status === 409 && /Someone else/.test(error.message);
         setMessage(alert, stale ? html`${failure(error)} <button type="button" class="text-link" data-reload>Load the latest</button>` : failure(error));
-        alert.querySelector("[data-reload]")?.addEventListener("click", async () => { dirty = false; await openKit(kit.id); });
+        alert.querySelector("[data-reload]")?.addEventListener("click", async () => { edited = () => false; await openKit(kit.id); });
         button.disabled = false;
       }
     });
@@ -399,7 +401,7 @@ export async function kitsWorkspace(): Promise<void> {
 
   async function newKit(): Promise<void> {
     if (!(await panel.discardOk())) return;
-    dirty = false;
+    edited = () => false;
     openId = null;
     detail = null;
     mode = "edit";
@@ -416,7 +418,7 @@ export async function kitsWorkspace(): Promise<void> {
       <div class="form-actions form-actions--sticky"><button class="button button--primary" type="submit">Make kit</button></div></form>`);
     const form = sheetElement.querySelector<HTMLFormElement>("#kit-form")!;
     const alert = form.querySelector<HTMLElement>("#kit-alert")!;
-    form.addEventListener("input", () => { dirty = true; });
+    edited = formEdits(form).dirty;
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = new FormData(form);
@@ -427,7 +429,7 @@ export async function kitsWorkspace(): Promise<void> {
       try {
         const { id } = await api<{ id: string }>("/api/staff/kits", { method: "POST", body: JSON.stringify({ name: String(values.get("name")), description: String(values.get("description") ?? ""),
           locationId: String(values.get("locationId") ?? "") || null, ...(values.get("templateId") ? { templateId: String(values.get("templateId")) } : {}) }) });
-        dirty = false;
+        edited = () => false;
         await poll.refresh();
         await openKit(id, values.get("templateId") ? "view" : "edit");
         toast(values.get("templateId") ? "Kit made from the template." : "Kit made. Add its components next.");
@@ -443,7 +445,7 @@ export async function kitsWorkspace(): Promise<void> {
 
   async function openTemplate(id: string | null): Promise<void> {
     if (!(await panel.discardOk())) return;
-    dirty = false;
+    edited = () => false;
     openId = null;
     mode = "template";
     type Template1 = { id: string; name: string; description: string | null; active: boolean; updatedAt: string };
@@ -466,8 +468,8 @@ export async function kitsWorkspace(): Promise<void> {
       <div class="form-actions form-actions--sticky"><button class="button button--primary" type="submit">${template ? "Save changes" : "Make template"}</button></div></form>`);
     const form = sheetElement.querySelector<HTMLFormElement>("#template-edit")!;
     const alert = form.querySelector<HTMLElement>("#template-alert")!;
-    componentsEditor(form.querySelector<HTMLElement>("#parts")!, draft, () => { dirty = true; });
-    form.addEventListener("input", () => { dirty = true; });
+    componentsEditor(form.querySelector<HTMLElement>("#parts")!, draft, warnOnUnload);
+    edited = formEdits(form, () => JSON.stringify(draftBody(draft))).dirty;
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const values = new FormData(form);
@@ -481,7 +483,7 @@ export async function kitsWorkspace(): Promise<void> {
       try {
         if (template) await api(`/api/staff/kit-templates/${template.id}`, { method: "PATCH", body: JSON.stringify({ ...body, active: values.get("active") === "on", updatedAt: template.updatedAt }) });
         else await api("/api/staff/kit-templates", { method: "POST", body: JSON.stringify(body) });
-        dirty = false;
+        edited = () => false;
         await poll.refresh();
         panel.close(true);
         toast(template ? "Template saved." : "Template made.");

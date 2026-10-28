@@ -11,6 +11,7 @@ import { cropEditor, preparePhoto, photoUrl, type Prepared } from "./item-photo"
 import { whenIdle } from "./pwa";
 import { catalogueShell } from "./catalogue-shell";
 import { ApiError, type Html, api, categoryName, dataUrl, emptyState, expired, failure, html, icon, label, leave, live, mount, navigate, onLeave as onPageLeave, plural, preservingFocus, setMessage, toast, units } from "./ui";
+import { formEdits } from "./unsaved";
 
 /*
  * The capture screen of a cataloguing session (/staff/catalogue?session=…): one form, kept on screen, that turns a thing on a shelf
@@ -46,7 +47,8 @@ const countsOf = (list: Entry[]) => list.reduce<Record<string, number>>((out, en
  * (one item, no session place, "direct"); with it, a cataloguing session in a sheet (Administration › Catalog, LH-IP02-S03), which keeps
  * its place, Save & next and Finish exactly as the Catalog does, and asks the sheet to draw it again where the Catalog would navigate.
  */
-export type Hosted = { host: HTMLElement; onCleanup: (fn: () => void) => void; onDirty: (dirty: boolean) => void; session?: { reopen: (id: string) => void } };
+/** `edits` hands the host the check its sheet asks before it goes: what is entered here differs from the form as drawn or last saved. */
+export type Hosted = { host: HTMLElement; onCleanup: (fn: () => void) => void; edits: (check: () => boolean) => void; session?: { reopen: (id: string) => void } };
 
 export async function captureScreen(who: Signed, sessionId: string, hosted?: Hosted): Promise<void> {
   /** Add items: one item in a sheet, with no session place. Everything else (the Catalog, a session in a sheet) is a cataloguing session. */
@@ -115,6 +117,8 @@ export async function captureScreen(who: Signed, sessionId: string, hosted?: Hos
   let reviewTimer: ReturnType<typeof setTimeout> | undefined;
   let wantedReview: { id: string; revision: number; name: string } | null = null;
   let behaviour: Behaviour | null = null;
+  // What is entered, against the form as drawn or as last saved (V1.16.4 §4.7): a form typed back to it holds nothing.
+  let edits: ReturnType<typeof formEdits> | null = null;
   /** True once Save has shown the possible matches: the next Save is the person saying "a different one". */
   let armed = false;
   let preparing = false;
@@ -239,7 +243,6 @@ export async function captureScreen(who: Signed, sessionId: string, hosted?: Hos
   // Native fields emit input as they change; their later blur/change must not invalidate a displayed decision.
   form.addEventListener("input", (event) => {
     if ((event.target as HTMLElement).closest(".cat-ai, #cat-crop")) return;
-    hosted?.onDirty(true);
     if ((event.target as HTMLElement).id === "cat-reviewed") return;
     invalidateReview();
     scheduleReview();
@@ -332,7 +335,7 @@ export async function captureScreen(who: Signed, sessionId: string, hosted?: Hos
     placeId = id;
     scheduleReview();
     showPlace();
-    if (direct) { direct.onDirty(true); return; }
+    if (direct) return;
     // The next session, here or in Administration's Catalog sheet, starts where this one moved to.
     rememberPlace(id || null);
     panel.hidden = true;
@@ -506,7 +509,6 @@ export async function captureScreen(who: Signed, sessionId: string, hosted?: Hos
     if (existing) { const name = existing.dataset.useExisting; clear(false); toast(name ? `Not added. ${name} is open in a new tab to update.` : "Not added."); return; }
     const button = target.closest<HTMLElement>("[data-behaviour], [data-fill], [data-step], #cat-use-all");
     if (!button) return;
-    hosted?.onDirty(true);
     invalidateReview();
     if (button.dataset.behaviour) choose(button.dataset.behaviour as Behaviour);
     else if (button.dataset.fill) { const kind = button.dataset.fill as "category" | "unit"; touched[kind] = true; written[kind] = null; field(`cat-${kind}`).value = button.dataset.value ?? ""; armed = false; draw(); }
@@ -590,7 +592,6 @@ export async function captureScreen(who: Signed, sessionId: string, hosted?: Hos
     const chosen = chooser.files?.[0];
     chooser.value = "";
     if (!chosen) return;
-    hosted?.onDirty(true);
     const revision = ++photoRevision;
     invalidateReview();
     $("#cat-crop").hidden = true;
@@ -704,7 +705,7 @@ export async function captureScreen(who: Signed, sessionId: string, hosted?: Hos
     drawPhoto();
     draw();
     if (direct) showPlace();
-    hosted?.onDirty(false);
+    edits?.reset();
     field("cat-name").focus();
     if (keepShared) field("cat-name").select();
     if (keepShared) scheduleReview();
@@ -910,7 +911,6 @@ export async function captureScreen(who: Signed, sessionId: string, hosted?: Hos
       $("#cat-crop").hidden = true;
       const body = entry.body;
       if (direct) { placeId = typeof body.locationId === "string" ? body.locationId : null; field("cat-reviewed").checked = body.reviewed === true; showPlace(); }
-      hosted?.onDirty(true);
       field("cat-name").value = String(body.name);
       behaviour = body.behaviour as Behaviour;
       field("cat-qty").value = String(body.quantity);
@@ -1041,6 +1041,8 @@ export async function captureScreen(who: Signed, sessionId: string, hosted?: Hos
   waiting = await here();
   draw();
   drawList();
+  edits = formEdits(form, () => `${photo || preparing ? "photo" : ""}|${behaviour ?? ""}|${placeId ?? ""}`);
+  hosted?.edits(() => edits?.dirty() ?? false);
   field("cat-name").focus();
   void syncNow();
 }

@@ -9,6 +9,7 @@ import { type Readiness, applyUpdate, canPromptInstall, hasUpdate, isStandalone,
 import { ancestry, placesOf, type ReportKind } from "./location-tree";
 import { type GroupId, GROUPS, behaviourLine, conciseLocation, frequentItems, groupName, groupOf, grouped, isGroup, matching } from "./self-service-browse";
 import { bindStudentId, studentIdProblem } from "./student-id-field";
+import { formEdits } from "./unsaved";
 import { type Step, openWhereIsIt } from "./where-is-it";
 import { ApiError, CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, keepFailure, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, itemVisual, itemThumbnailUrl, units } from "./ui";
 
@@ -45,8 +46,8 @@ let profile: store.Profile = { name: "", studentId: "" };
 let ready: Readiness | null = null;
 let syncing = false;
 let offline = !navigator.onLine;
-/** A form in a sheet has input that closing would lose. */
-let dirty = false;
+/** Whether the sheet's form holds input that closing would lose: its fields and photo against how it was drawn (V1.16.4 §4.7). */
+let edited: () => boolean = () => false;
 /** The office has closed Self-Service (the Worker says so); undefined until this phone has heard either way. */
 let paused: boolean | undefined;
 /** Shown inside Administration's test panel (only this site may frame it): records are tests the server holds for staff. */
@@ -839,7 +840,6 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
   const studentField = form.querySelector<HTMLInputElement>("#ss-student");
   if (studentField) bindStudentId(studentField, form.querySelector<HTMLElement>("#ss-student-hint"));
   form.addEventListener("input", () => {
-    dirty = true;
     setMessage(alert, "");
     form.querySelectorAll("[aria-invalid]").forEach((field) => field.removeAttribute("aria-invalid"));
     updateFields();
@@ -854,7 +854,7 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
       navigator.vibrate?.(8);
       updateFields();
     }
-    if (target.closest("[data-change-identity]")) { dirty = true; revealIdentity(); form.querySelector<HTMLInputElement>("#ss-name")?.focus(); }
+    if (target.closest("[data-change-identity]")) { revealIdentity(); form.querySelector<HTMLInputElement>("#ss-name")?.focus(); }
     if (target.closest("[data-pick]")) form.querySelector<HTMLInputElement>("#ss-photo")?.click();
     if (target.closest("[data-clear-photo]")) { photo = null; photoUrl = null; showPhoto(null); }
   });
@@ -869,7 +869,6 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
   form.querySelector<HTMLInputElement>("#ss-photo")?.addEventListener("change", (event) => {
     const chosen = (event.target as HTMLInputElement).files?.[0];
     if (!chosen) return;
-    dirty = true;
     if (photoBox) mount(photoBox, html`<p class="photo-field__busy">Preparing the photo…</p>`);
     preparing = (async () => {
       try {
@@ -887,6 +886,8 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
       }
     })();
   });
+
+  edited = formEdits(form, () => photo || preparing ? "photo" : "").dirty;
 
   const read = () => {
     const data = new FormData(form);
@@ -948,7 +949,7 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
           profile = { name: draft.person.name, studentId: draft.person.studentId ?? profile.studentId };
           void store.setMeta("profile", profile);
         }
-        dirty = false;
+        edited = () => false;
         navigator.vibrate?.(15);
         onSaved(saved);
         void requestPersistence();
@@ -1007,9 +1008,9 @@ export async function selfService(): Promise<void> {
   /** Set when code closes the sheet and moves the address itself. */
   let steering = false;
   const control = sheet(dialog, {
-    dirty: () => dirty,
+    dirty: () => edited(),
     onClose: () => {
-      dirty = false;
+      edited = () => false;
       receiptFor = null;
       // Closing with X, Escape or the backdrop also steps the address back; a direct link has nothing behind it, so the page underneath replaces it.
       if (opensSheet(params()) && !steering) {
@@ -1046,7 +1047,6 @@ export async function selfService(): Promise<void> {
     const body = screen === "return" ? returnSheet(loan!) : item!.action === "BORROW" ? borrowSheet(item!) : item!.action === "TAKE" ? takeSheet(item!) : useSheet(item!);
     mount(dialog, body);
     control.open();
-    dirty = false;
     const form = dialog.querySelector<HTMLFormElement>("form")!;
     bindForm(form, item, loan, (saved) => {
       receiptFor = saved.id;
@@ -1066,11 +1066,7 @@ export async function selfService(): Promise<void> {
 
   ownQuery(() => {
     const current = params();
-    // Back while a form has input asks first, and stays put if the answer is no.
-    if (dialog.open && dirty && !opensSheet(current) && !window.confirm("Discard what you've entered?")) {
-      window.history.forward();
-      return;
-    }
+    // Back while the form has input was already asked about, in the app's own question, before this runs (`holdMove`).
     if (opensSheet(current)) { syncSheet(); return; }
     // The address moved on (back, Done): the sheet goes, and the address already reflects it.
     if (dialog.open) { receiptFor = null; steering = true; control.close(true); }

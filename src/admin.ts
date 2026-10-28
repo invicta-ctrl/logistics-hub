@@ -3,7 +3,8 @@ import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
 import { ACCESS_HINT, accessChoices, accessTag, bindCopy, canManage, oneTime } from "./account-ui";
 import { adminPage, confirmImpact } from "./admin-frame";
 import { type Access, type Role, accessLabel, forgetSession, loadSession, sessionAccess, shell } from "./staff-shell";
-import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
+import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
+import { formEdits, trackEdits } from "./unsaved";
 
 type Row = { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number };
 
@@ -56,7 +57,9 @@ export async function staffAccounts(): Promise<void> {
   const sheet = document.querySelector<HTMLDialogElement>("#sheet")!;
   let rows: Row[] = [];
   bindCopy(sheet);
-  const panel = createSheet(sheet);
+  // What the open sheet's forms hold that is not saved (V1.16.4 §4.7); a form already answered (created, reset) holds nothing.
+  let edited: () => boolean = () => false;
+  const panel = createSheet(sheet, { dirty: () => edited(), onClose: () => { edited = () => false; } });
   const close = () => panel.close(true);
 
   async function load(): Promise<void> {
@@ -104,6 +107,8 @@ export async function staffAccounts(): Promise<void> {
       <div class="form-actions"><button class="button button--primary" type="submit">Create account</button></div>
     </form><div id="create-result"></div>`);
     const form = sheet.querySelector<HTMLFormElement>("#create-form")!;
+    const edits = formEdits(form);
+    edited = () => !form.hidden && edits.dirty();
     bindPasswordFields(form, "c");
     form.querySelector<HTMLInputElement>("#c-name")!.focus();
     form.addEventListener("submit", async (event) => {
@@ -176,6 +181,9 @@ export async function staffAccounts(): Promise<void> {
       } catch (error) { setMessage(sheet.querySelector("#profile-alert")!, failure(error)); } finally { settle(); }
     });
     const reset = sheet.querySelector<HTMLFormElement>("#password-form")!;
+    const profileEdits = formEdits(profile);
+    const resetEdits = formEdits(reset);
+    edited = () => profileEdits.dirty() || resetEdits.dirty();
     bindPasswordFields(reset, "p");
     reset.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -185,6 +193,7 @@ export async function staffAccounts(): Promise<void> {
         mount(sheet.querySelector("#password-result")!, result.generatedPassword
           ? oneTime(`New temporary password for ${row.username}`, result.generatedPassword, "Shown once and never stored. They must choose their own password at next sign-in.")
           : html`<p class="callout">${icon("check")}<span>Password reset. They must choose their own at next sign-in.</span></p>`);
+        resetEdits.reset();
         toast(`Password reset for ${row.username}.`);
         void load();
       } catch (error) { setMessage(sheet.querySelector("#password-alert")!, failure(error)); } finally { settle(); }
@@ -269,6 +278,9 @@ export async function myAccount(): Promise<void> {
   bindCopy(main);
 
   const passwordForm = document.querySelector<HTMLFormElement>("#password-form")!;
+  // A half-typed password or profile change asks before any way out (V1.16.4 §4.7); a saved one clears or leaves the page.
+  const pageEdits = [passwordForm, document.querySelector<HTMLFormElement>("#profile-form")].flatMap((form) => form ? [formEdits(form)] : []);
+  onLeave(trackEdits(() => pageEdits.some((edits) => edits.dirty())));
   passwordForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const values = new FormData(passwordForm);

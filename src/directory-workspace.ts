@@ -4,6 +4,7 @@ import { type Loan, loanRow, openReturn } from "./loan-form";
 import { tiltTile } from "./card-motion";
 import { type Card, type View, cardForm, cardSource, fillTiles, forgetScans, importArchive, makeMissingImages, openCard } from "./staff-ids";
 import { bindStudentId, studentIdProblem } from "./student-id-field";
+import { formEdits } from "./unsaved";
 import { type Access, type Role, type Session, accessLabel, initials, loadSession, shell } from "./staff-shell";
 import { adminTabs } from "./admin-frame";
 import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatQuantity, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
@@ -87,7 +88,9 @@ export async function staffDirectory(): Promise<void> {
   shell(session, "admin", html`<div id="directory"></div><dialog class="sheet sheet--wide" id="sheet" aria-labelledby="sheet-title"></dialog>`);
   const root = document.querySelector<HTMLElement>("#directory")!;
   const sheetElement = document.querySelector<HTMLDialogElement>("#sheet")!;
-  const panel = createSheet(sheetElement);
+  // The open sheet's own check (V1.16.4 §4.7): the editor's fields against how they were drawn, or an import chosen and not yet sent.
+  let sheetEdited: () => boolean = () => false;
+  const panel = createSheet(sheetElement, { dirty: () => sheetEdited(), onClose: () => { sheetEdited = () => false; } });
   let people: Person[] | null = null;
   let loading: Promise<void> | null = null;
   onLeave(forgetScans);
@@ -278,6 +281,7 @@ export async function staffDirectory(): Promise<void> {
     form.querySelector<HTMLInputElement>("#p-name")!.focus();
     const studentId = form.querySelector<HTMLInputElement>("#p-student")!;
     bindStudentId(studentId, form.querySelector<HTMLElement>("#p-student-hint"));
+    sheetEdited = formEdits(form).dirty;
     studentId.addEventListener("input", () => studentId.removeAttribute("aria-invalid"));
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -316,7 +320,7 @@ export async function staffDirectory(): Promise<void> {
     mount(sheetElement, sheetContent("Owner · Staff Directory", "Import official ID scans", html`<div id="import-host"></div>`));
     panel.open();
     const existing = new Map((people ?? []).filter((person) => person.sourceKey).map((person) => [person.sourceKey!, { hasId: person.hasId }]));
-    importArchive(sheetElement.querySelector<HTMLElement>("#import-host")!, existing, async () => { people = null; await load().catch(() => undefined); });
+    sheetEdited = importArchive(sheetElement.querySelector<HTMLElement>("#import-host")!, existing, async () => { people = null; await load().catch(() => undefined); });
     sheetElement.addEventListener("close", () => { if (!new URLSearchParams(window.location.search).get("person")) void list(); }, { once: true });
   }
 

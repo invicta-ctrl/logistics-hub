@@ -2,6 +2,7 @@ import "./id-card.css";
 import { LANDED_MS, cardMotion, flyIn, flyOut, liftShadow } from "./card-motion";
 import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
 import { ISSUE_KINDS, type IssueKind, type Pair, type Preflight, preflight } from "./staff-import";
+import { trackEdits } from "./unsaved";
 import { ApiError, type Html, api, dataUrl, failure, formatDateTime, html, icon, jpegOf, mount, navigate, onLeave, plural, reducedMotion, setMessage, toast } from "./ui";
 
 /*
@@ -625,6 +626,8 @@ export function cardForm(host: HTMLElement, person: Who, expected: string | null
       <div class="form-actions form-actions--start"><button class="button button--primary" type="submit" ${busy || !chosen.front || !chosen.back ? "disabled" : ""}>${busy ? "Saving…" : "Save scans"}</button>
       <button class="button button--ghost" type="button" data-cancel ${busy ? "disabled" : ""}>Cancel</button></div></form>`);
   draw();
+  // Scans chosen and not saved ask before the page is left (V1.16.4 §4.7); Cancel and a save redraw the profile, which ends this form.
+  onLeave(trackEdits(() => host.isConnected && host.querySelector(".scan-form") !== null && Boolean(chosen.front || chosen.back)));
   host.addEventListener("change", async (event) => {
     const input = event.target as HTMLInputElement;
     const which = input.dataset.pick as Side | undefined;
@@ -666,9 +669,10 @@ const departmentName = (code: string) => DEPARTMENTS[code as DepartmentCode] ?? 
 /**
  * The import, in the sheet `host`: choose the downloaded Official IDs folder (or files) → a preflight that reads only names and
  * hashes on this device → the owner reviews it → only the complete, unambiguous pairs not already in the directory are sent,
- * one at a time. Everything else stays on the device, listed for a person to sort out.
+ * one at a time. Everything else stays on the device, listed for a person to sort out. Answers whether the import holds work not
+ * yet done (V1.16.4 §4.7): a reviewed check with pairs ready to send, or an import still sending.
  */
-export function importArchive(host: HTMLElement, existing: Existing, done: () => Promise<void>): void {
+export function importArchive(host: HTMLElement, existing: Existing, done: () => Promise<void>): () => boolean {
   let files = new Map<string, File>();
   let report: Preflight | null = null;
   let outcomes: Outcome[] = [];
@@ -793,6 +797,7 @@ export function importArchive(host: HTMLElement, existing: Existing, done: () =>
     if (target.closest("[data-retry]") && !running) void run(outcomes.filter((entry) => entry.status === "failed"));
   });
   choose();
+  return () => host.isConnected && (running || host.querySelector("[data-run]:not([disabled])") !== null);
 }
 
 /** "Imported 3 Oct 2026 by Alex Reyes from Name_Front_DEM.png and Name_Back_DEM.png." */

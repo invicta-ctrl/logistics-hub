@@ -1,6 +1,7 @@
 import { LOAN_FIELDS, type LoanField, WHOLE_DOMAINS, normalizeStudentId, parseWhole, validateLoanDraft } from "./catalog-policy";
 import { bindStudentId } from "./student-id-field";
-import { type Html, ApiError, api, dataUrl, failure, formatDate, formatDateTime, html, icon, label, mount, officeDay, setMessage, shrinkPhoto, toast, units } from "./ui";
+import { type Html, ApiError, api, dataUrl, failure, formatDate, formatDateTime, html, icon, label, mount, officeDay, onLeave, setMessage, shrinkPhoto, toast, units } from "./ui";
+import { confirmDiscard, formEdits, hasUnsaved, trackEdits } from "./unsaved";
 
 export type Loan = {
   id: string; itemId: string; itemName: string; unit: string; quantity: number; purpose: "INDIVIDUAL" | "USC"; borrowerName: string;
@@ -109,7 +110,7 @@ export function bindLoanForm(form: HTMLFormElement, options: {
   target: () => LoanTarget | null;
   known: () => Borrower[];
   onLent: (target: LoanTarget) => void | Promise<void>;
-}): { refresh: () => void } {
+}): { refresh: () => void; edited: () => boolean } {
   const alert = form.querySelector<HTMLElement>("[data-alert]")!;
   const submit = form.querySelector<HTMLButtonElement>("[data-submit]")!;
   const quantity = form.querySelector<HTMLInputElement>("input[name=quantity]")!;
@@ -138,12 +139,14 @@ export function bindLoanForm(form: HTMLFormElement, options: {
       : html`<button type="button" class="photo-field__pick" data-pick aria-describedby="${file.getAttribute("aria-describedby")!}">${icon("camera")}<span>Take or choose a photo</span></button>`);
   };
 
+  // What the person entered, against the empty form (V1.16.4 §4.7): set once the form is first drawn, and again after each loan.
+  let edits: ReturnType<typeof formEdits> | null = null;
   const update = () => {
     const target = options.target();
-    // An item lent for USC use only is lent for USC use (D3): Individual use cannot be chosen for it.
+    // An item lent for USC use only is lent for USC use (D3): Individual use cannot be chosen for it. The form choosing it is not an edit.
     const uscOnly = Boolean(target?.uscOnly);
     individual.disabled = uscOnly;
-    if (uscOnly && !usc.checked) usc.checked = true;
+    if (uscOnly && !usc.checked) { const clean = !edits?.dirty(); usc.checked = true; if (clean) edits?.reset(); }
     form.querySelector<HTMLElement>("[data-usc-only]")!.hidden = !uscOnly;
     form.querySelector<HTMLElement>("[data-reason]")!.hidden = purpose() !== "USC";
     returnBy.min = officeDay();
@@ -170,6 +173,7 @@ export function bindLoanForm(form: HTMLFormElement, options: {
     showPhoto(null);
     key = crypto.randomUUID();
     update();
+    edits?.reset();
   };
 
   form.addEventListener("input", (event) => {
@@ -275,7 +279,8 @@ export function bindLoanForm(form: HTMLFormElement, options: {
     }
   });
   update();
-  return { refresh: update };
+  edits = formEdits(form, () => photo ? "photo" : "");
+  return { refresh: update, edited: () => edits!.dirty() };
 }
 
 /** Ends a loan: good return (back on the shelf), damaged, or lost. The photo is shown to check the hand-over. */
@@ -311,9 +316,20 @@ export function openReturn(loan: Loan, onDone: () => void | Promise<void>): void
     form.querySelector("[data-effect]")!.textContent = value === "RETURNED" ? `Puts ${count} back on the shelf.` : `Closes the loan. The ${units(loan.quantity, loan.unit)} stay${loan.quantity === 1 ? "s" : ""} off the shelf.`;
     submit.textContent = value === "RETURNED" ? "Mark returned" : value === "DAMAGED" ? "Mark damaged" : "Mark lost";
   };
-  const close = () => dialog.close();
-  dialog.addEventListener("close", () => { dialog.remove(); if (opener?.isConnected) opener.focus({ preventScroll: true }); });
-  dialog.addEventListener("click", (event) => { if (event.target === dialog || (event.target as HTMLElement).closest("[data-close]")) close(); });
+  // A chosen outcome or a typed note asks before the dialog goes (V1.16.4 §4.7); leaving the page closes it, after the page asked.
+  const edits = formEdits(form);
+  const check = () => dialog.open && edits.dirty();
+  const untrack = trackEdits(check);
+  let leaving = false;
+  const close = async (force = false) => { if (force || await confirmDiscard([check])) dialog.close(); };
+  onLeave(() => { if (dialog.open) { leaving = true; dialog.close(); } });
+  // Back, Forward or a move within the page (closing the item behind it) closes it as well; while it holds edits that move is held
+  // and asked about first, and a Discard takes it again.
+  const moved = () => { if (dialog.open && !hasUnsaved([check])) { leaving = true; dialog.close(); } };
+  window.addEventListener("popstate", moved);
+  dialog.addEventListener("close", () => { untrack(); window.removeEventListener("popstate", moved); dialog.remove(); if (!leaving && opener?.isConnected) opener.focus({ preventScroll: true }); });
+  dialog.addEventListener("cancel", (event) => { if (event.target !== dialog || !event.cancelable) return; event.preventDefault(); void close(); });
+  dialog.addEventListener("click", (event) => { if (event.target === dialog || (event.target as HTMLElement).closest("[data-close]")) void close(); });
   form.addEventListener("change", update);
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -323,7 +339,7 @@ export function openReturn(loan: Loan, onDone: () => void | Promise<void>): void
     try {
       await api(`/api/staff/loans/${encodeURIComponent(loan.id)}/return`, { method: "POST", body: JSON.stringify({ outcome: value, note: note.value }) });
       toast(value === "RETURNED" ? `${loan.itemName} returned by ${loan.borrowerName}.` : `${loan.itemName} marked ${label(value).toLowerCase()}.`);
-      close();
+      void close(true);
       await onDone();
     } catch (error) {
       setMessage(alert, failure(error));
@@ -331,5 +347,6 @@ export function openReturn(loan: Loan, onDone: () => void | Promise<void>): void
     }
   });
   update();
+  edits.reset();
   dialog.showModal();
 }

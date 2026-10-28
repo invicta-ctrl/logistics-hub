@@ -123,7 +123,8 @@ export async function stockWorkspace(): Promise<void> {
   const recordSheet = document.querySelector<HTMLDialogElement>("#record-sheet")!;
   const panelNode = document.querySelector<HTMLElement>("#record-panel")!;
   const home = document.querySelector<HTMLElement>("#record-home")!;
-  const lent = createSheet(recordSheet, { onClose: () => home.append(panelNode) });
+  // A figure typed and not saved asks before the sheet or the page goes (V1.16.4 §4.7).
+  const lent = createSheet(recordSheet, { dirty: () => movement.edited(), onClose: () => home.append(panelNode) });
   const showRecord = () => {
     if (!recordSheet.open) {
       mount(recordSheet, sheetContent("Stock", "Update stock", html``));

@@ -2,6 +2,7 @@ import { BULK_LIMIT, STOCK_AREAS, UNSORTED_CATEGORY } from "./catalog-policy";
 import type { PlaceList } from "./catalogue-places";
 import { placeOptions } from "./catalogue-places";
 import { type Html, api, categoryName, failure, html, icon, label, mount, plural, setMessage, sheet, sheetContent, toast } from "./ui";
+import { formEdits } from "./unsaved";
 
 /*
  * Bulk edits in Items (Select → choose items → one change): a place, a category, a stock area, or "reviewed". The change is
@@ -28,7 +29,9 @@ export type BulkDeps = {
 };
 
 export function bulkBar(bar: HTMLElement, dialog: HTMLDialogElement, deps: BulkDeps): { draw: () => void } {
-  const panel = sheet(dialog);
+  // A change chosen and not applied asks before the sheet goes (V1.16.4 §4.7).
+  let edits: ReturnType<typeof formEdits> | null = null;
+  const panel = sheet(dialog, { dirty: () => edits?.dirty() ?? false });
 
   const draw = () => {
     const count = deps.selected().length;
@@ -65,6 +68,7 @@ export function bulkBar(bar: HTMLElement, dialog: HTMLDialogElement, deps: BulkD
 
   function bind(action: Action, items: Selected[], list: PlaceList): void {
     const form = dialog.querySelector<HTMLFormElement>("#bulk-form")!;
+    edits = formEdits(form);
     const apply = form.querySelector<HTMLButtonElement>("#bulk-apply")!;
     const alert = form.querySelector<HTMLElement>("#bulk-alert")!;
     const names = (some: Selected[]) => `${some.slice(0, 5).map((item) => item.name).join(", ")}${some.length > 5 ? ` and ${some.length - 5} more` : ""}`;
@@ -117,6 +121,7 @@ export function bulkBar(bar: HTMLElement, dialog: HTMLDialogElement, deps: BulkD
         await deps.refresh();
         return;
       }
+      edits?.reset();
       await deps.refresh();
       deps.keepOnly(skipped.map((entry) => entry.id));
       toast(`${applied ? plural(applied, "item") : "Nothing"} changed${skipped.length ? `, ${skipped.length} skipped` : ""}.`);

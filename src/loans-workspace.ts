@@ -171,7 +171,8 @@ export async function loansWorkspace(): Promise<void> {
   const lendSheet = document.querySelector<HTMLDialogElement>("#lend-sheet")!;
   let items: LendItem[] = [];
   let chosen: LendItem | null = null;
-  const panel = createSheet(lendSheet, { onClose: () => { lendForm = null; chosen = null; } });
+  // A loan being entered asks before the sheet or the page goes (V1.16.4 §4.7).
+  const panel = createSheet(lendSheet, { dirty: () => lendForm?.edited() ?? false, onClose: () => { lendForm = null; chosen = null; } });
 
   async function loadItems(): Promise<void> {
     items = (await readKept<{ items: LendItem[] }>("/api/staff/inventory")).items.filter((item) => item.itemType === PUBLIC_LENDING_ITEM_TYPE && item.status !== "INACTIVE");
