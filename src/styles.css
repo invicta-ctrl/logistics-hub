@@ -1141,6 +1141,8 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   .account { min-width: var(--target); }
   /* A link that sits in a line or a cell keeps its place: padding gives the finger room and the negative margin takes it back. */
   .text-link, .row-link, a.home-card__name { padding: .75rem .5rem; margin: -.75rem -.5rem; }
+  /* The Items link above a title: a finger's full height, with the negative margin keeping its line as it was. */
+  .page-header__up a { min-height: var(--target); margin-block: calc((1.25rem - var(--target)) / 2); }
 }
 
 .photo-field { display: grid; gap: var(--space-2); }
