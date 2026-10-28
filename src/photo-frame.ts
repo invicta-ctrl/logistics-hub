@@ -52,11 +52,15 @@ export function backdropOf(image: CanvasImageSource): Backdrop | null {
   }
 }
 
-/** Frames `frame` by the picture now inside it. It runs on every load, so a changed or cleaned picture is framed afresh. */
+/**
+ * Frames `frame` by the picture now inside it. It runs on every load, so a changed or cleaned picture is framed afresh. Where the Worker
+ * said whether the picture is a cut-out (`data-cutout` on the item sheet, V1.16.4 §4.4), that decides the pedestal, not the edge's colour.
+ */
 export function frameByPhoto(image: HTMLImageElement, frame: HTMLElement): void {
   const backdrop = backdropOf(image);
+  const known = image.dataset.cutout;
   frame.classList.toggle("photo-matched", Boolean(backdrop));
-  frame.classList.toggle("photo-pedestal", Boolean(backdrop?.cutout));
+  frame.classList.toggle("photo-pedestal", known ? known === "1" : Boolean(backdrop?.cutout));
   if (backdrop) frame.style.setProperty("--photo-bg", backdrop.colour);
   else frame.style.removeProperty("--photo-bg");
 }

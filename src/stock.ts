@@ -9,8 +9,24 @@ const ITEM_ID = /^ITM-[A-Za-z0-9-]{1,24}$/;
 
 /** Everything the Stock workspace needs, polled as one revisioned payload. */
 export async function stockOverview(db: D1Database) {
-  const [inventory, locations, reorders, activity] = await Promise.all([staffInventory(db), locationList(db), listReorders(db), recentActivity(db)]);
-  return { ...inventory, locations, reorders, activity };
+  const [inventory, locations, reorders, activity, used] = await Promise.all([staffInventory(db), locationList(db), listReorders(db), recentActivity(db), pantryUse(db)]);
+  return { ...inventory, locations, reorders, activity, used };
+}
+
+/** The window of Pantry's "used in the last 30 days", in days. */
+const USE_WINDOW_DAYS = 30;
+
+/**
+ * What each Pantry item gave out in the last 30 days (V1.16.4 §4.3): its posted Stock outs, which are staff uses and stock outs, phone
+ * takes and emptied open units. A sum of what happened, never a prediction. The window starts on the hour, as the answer's validator
+ * does (worker.ts), so an answer kept for the hour is still exact.
+ */
+async function pantryUse(db: D1Database): Promise<Record<string, number>> {
+  const since = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000 - USE_WINDOW_DAYS * 86_400_000).toISOString();
+  const { results } = await db.prepare(`SELECT m.item_id AS itemId, -SUM(m.signed_quantity) AS used FROM inventory_movements m JOIN items i ON i.id = m.item_id
+    WHERE i.stock_area = 'Pantry' AND m.movement_type = 'STOCK_OUT' AND m.status = 'POSTED' AND m.imported_from IS NULL AND ${utc("m.created_at")} >= ?
+    GROUP BY m.item_id`).bind(since).all<{ itemId: string; used: number }>();
+  return Object.fromEntries(results.map((row) => [row.itemId, row.used]));
 }
 
 /** Open entries, plus the last two weeks of closed ones so staff can see what was just done. */

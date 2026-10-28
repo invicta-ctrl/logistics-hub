@@ -1,8 +1,11 @@
 import { MOVEMENT_REASONS } from "./catalog-policy";
 import { type Html, api, failure, html, icon, label, mount, plural, setMessage, toast, units } from "./ui";
 
-/** `openUnits`: how many of an open-unit item's units are open; a change may not go below them. */
-export type Target = { id: string; name: string; unit: string; onHand: number; openUnits?: number };
+/**
+ * `openUnits`: how many of an open-unit item's units are open; a change may not go below them. `reorder`: the item's open restock
+ * entry, which a Stock in offers to close in the same write (V1.16.4 §4.3).
+ */
+export type Target = { id: string; name: string; unit: string; onHand: number; openUnits?: number; reorder?: { id: string; status: string } | null };
 export type Recorded = { onHand: number; change: number };
 /** A row action's starting point: move the figure by `delta` (or to `total`) and suggest a reason. */
 export type Preset = { delta?: number; total?: number; reason?: string; reorderId?: string | null; context?: string };
@@ -49,6 +52,7 @@ export function quantityEditor(prefix: string): Html {
       <fieldset class="reason-picker"><legend>Reason <span class="field__required">required</span></legend><div class="reason-picker__options" data-reasons></div></fieldset>
       <div class="field"><label for="${prefix}-note"><span data-note-label>Note</span> <span class="field__optional" data-note-optional>optional</span></label><input id="${prefix}-note" name="note" maxlength="500" autocomplete="off" /></div>
       <label class="checkbox" data-reconcile hidden><input type="checkbox" name="reconcileOpen" /><span data-reconcile-text></span></label>
+      <label class="checkbox" data-restock-close hidden><input type="checkbox" name="closeRestock" checked /><span data-restock-text></span></label>
       <div class="form-alert" role="alert" hidden data-alert></div>
       <div class="form-actions"><button class="button button--primary" type="submit" data-submit>Save</button><button class="button button--ghost" type="button" data-cancel>Cancel</button></div>
     </div>
@@ -131,6 +135,10 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
       const extra = opened - total;
       form.querySelector("[data-reconcile-text]")!.textContent = `Also close ${extra === 1 ? `1 open ${target.unit}` : `the ${extra} oldest open ${units(extra, target.unit)}`}: the count found ${extra === 1 ? "it" : "them"} gone (${opened} open now).`;
     }
+    // A Stock in for an item on the restock list offers to close its entry; a Receive from the list already does.
+    const closer = form.querySelector<HTMLElement>("[data-restock-close]")!;
+    closer.hidden = !(delta > 0 && target.reorder && !reorderId);
+    if (!closer.hidden) form.querySelector("[data-restock-text]")!.textContent = `Close its ${target.reorder!.status === "PLANNED" ? "planned" : "requested"} restock with this stock in`;
     const noteRequired = reason === "OTHER";
     form.querySelector("[data-note-optional]")!.textContent = noteRequired ? "required" : "optional";
     note.required = noteRequired;
@@ -150,6 +158,7 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
     input.value = options.target() ? String(base) : "";
     note.value = "";
     form.querySelector<HTMLInputElement>("input[name=reconcileOpen]")!.checked = false;
+    form.querySelector<HTMLInputElement>("input[name=closeRestock]")!.checked = true;
     context.hidden = true;
     key = crypto.randomUUID();
     setMessage(alert, "");
@@ -207,9 +216,10 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
     if (total < open && reason !== "COUNT") return invalid(input, `${plural(open, target.unit)} ${open === 1 ? "is" : "are"} open. Mark an open ${target.unit} empty instead, or record a count.`);
     if (total < open && !reconcile.checked) return invalid(reconcile, `Tick the box to close the open ${units(open - total, target.unit)} this count found gone.`);
     const delta = total - base;
+    const closing = !form.querySelector<HTMLElement>("[data-restock-close]")!.hidden && form.querySelector<HTMLInputElement>("input[name=closeRestock]")!.checked ? target.reorder?.id ?? null : null;
     const body = reason === "COUNT"
       ? { kind: "COUNT", quantity: total, note: note.value.trim() || "Physical count", expectedOnHand: base, key, reconcileOpen: total < open }
-      : { kind: delta > 0 ? "IN" : "OUT", quantity: Math.abs(delta), reason, note: note.value, expectedOnHand: base, key, reorderId: delta > 0 ? reorderId : null };
+      : { kind: delta > 0 ? "IN" : "OUT", quantity: Math.abs(delta), reason, note: note.value, expectedOnHand: base, key, reorderId: delta > 0 ? reorderId ?? closing : null };
     submit.disabled = true;
     setMessage(alert, "");
     try {

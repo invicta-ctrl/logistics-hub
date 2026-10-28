@@ -1,12 +1,9 @@
 {
-  "version": "V1.16.3",
-  "sourceCommit": "88b6c743431b5438670efce3296aa3c85bd5607e",
-  "record": "docs/road-to-v2/releases/v1.16.3.md",
+  "version": "V1.16.4",
+  "sourceCommit": "bb680588613786259425ad6c114d2582b5361952",
+  "record": "docs/road-to-v2/releases/v1.16.4.md",
   "changes": [
-    "Every staff page shares one look: larger titles, quiet tabs, one Filters button and lists on rules instead of boxes.",
-    "Phones: cleaner Items rows, sheets you can swipe down to close, and Home's reasons in one sideways row.",
-    "An item's picture lives in one place: press the picture or its icon to add, change, crop or choose an icon.",
-    "Update stock opens as a sheet, and Activity is grouped by day with each entry's time.",
-    "Background-removed photos stand on a pedestal on the Lending Hub and in Self-Service too."
+    "Moving between staff pages is instant: the page and the rail switch at once, with a loading outline until its data arrives.",
+    "Pages no longer wait to re-check who is signed in before drawing; the check runs in the background."
   ]
 }

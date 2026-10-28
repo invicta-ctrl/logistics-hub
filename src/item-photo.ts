@@ -2,7 +2,7 @@ import { cutoutProblem, cutoutShares, subjectCrop } from "./cutout-share";
 import type { PhotoCleanup, PhotoCrop } from "./catalog-draft";
 export type { PhotoCleanup } from "./catalog-draft";
 import type { VisualItem } from "./item-icons";
-import { ApiError, type Html, api, bindRowActionMenus, dataUrl, failure, html, icon, jpegOf, itemVisual, itemThumbnailUrl, refreshItemThumbnail, mount, thumbnailVersion, toast } from "./ui";
+import { ApiError, type Html, api, bindRowActionMenus, dataUrl, failure, html, icon, jpegOf, itemVisual, itemThumbnailUrl, refreshItemThumbnail, mount, toast } from "./ui";
 export { openViewer } from "./item-viewer";
 
 /** `cutout`: a cleaned picture (background removed) is kept beside the original. `cleanable`: the Worker can make one (src/item-cutout.ts). */
@@ -298,10 +298,19 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
   camera.setAttribute("capture", "environment");
   camera.setAttribute("aria-label", `Take a ${noun} of ${name}`);
   host.append(camera);
+  // A cleaned picture whose detail picture and thumbnail both fail shows the item's icon on the tile (V1.16.4 §4.4, ui.ts).
+  tile.addEventListener("pedestal-broken", () => {
+    const pedestal = tile.querySelector(".pedestal");
+    if (!pedestal || !options.visual) return;
+    const icon = document.createElement("span");
+    mount(icon, itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual"));
+    pedestal.closest(".photo-tile")?.classList.remove("photo-tile--pedestal");
+    pedestal.replaceWith(...icon.childNodes);
+  });
   let selection = 0;
   const busy = () => state !== "" || cropping;
-  /** The profile tile shows the cleaned picture when there is one. */
-  const tileUrl = (id: string) => (photo?.cutout && photo.id === id ? shownUrl(photo, "thumb") : options.thumbUrl(id));
+  /** The profile tile's picture: the Worker answers with the cleaned one when there is one (item-media.ts chosenPicture). */
+  const tileUrl = (id: string) => options.thumbUrl(id);
   const show = (picture: Html, buttons: Html) => {
     // A redraw (the profile refreshing after a save) replaces the photo's menu, so a menu the person has open opens again.
     const open = host.querySelector<HTMLElement>(".photo-menu");
@@ -388,7 +397,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
     }
     if (!photo && noun === "photo" && options.visual) {
       // An item without a photo: its icon is the picture, and pressing it opens the menu (a small camera badge says a photo can be added).
-      return show(html`<button type="button" class="photo-tile photo-tile--add photo-tile--icon" ${menuTrigger(`Add photo or choose an icon for ${name}`)}>${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}<span class="photo-tile__badge" aria-hidden="true">${icon("camera")}</span></button>`,
+      return show(html`<button type="button" class="photo-tile photo-tile--add photo-tile--icon photo-tile--chip" ${menuTrigger(`Add photo or choose an icon for ${name}`)}>${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}<span class="photo-tile__badge" aria-hidden="true">${icon("camera")}</span></button>`,
         html`${emptyMenu()}${alert}`);
     }
     if (!photo) {
@@ -400,7 +409,7 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
       ? html`<button type="button" class="photo-tile" ${opens ? menuTrigger(`Photo of ${name}: view, change, crop or remove it`) : html`data-view aria-label="View saved ${noun} of ${name}"`}>${itemVisual({ ...options.visual(), photoId: null }, options.thumbUrl, "profile-visual")}</button>`
       : photo.cutout && options.cleanup
       // A cleaned picture stands on a pedestal (LH-IP02-S03): the transparent cut-out, cropped to the item, on a plinth (photo-frame.ts).
-      ? html`<button type="button" class="photo-tile photo-tile--pedestal" ${opens ? menuTrigger(`Photo of ${name}, background removed: view, change, crop or restore it`) : html`data-view aria-label="View ${noun} of ${name}, background removed"`}><span class="pedestal" aria-hidden="true"><i class="pedestal__plinth"></i><span class="pedestal__item"><img src="${shownUrl(photo, "display")}${thumbnailVersion(photo.id) ? `?r=${thumbnailVersion(photo.id)}` : ""}" alt="" data-pedestal data-fallback="${tileUrl(photo.id)}" decoding="async" /></span></span><span class="photo-tile__note">${icon("check")}<span class="photo-tile__note-text">Background removed</span></span></button>`
+      ? html`<button type="button" class="photo-tile photo-tile--pedestal" ${opens ? menuTrigger(`Photo of ${name}, background removed: view, change, crop or restore it`) : html`data-view aria-label="View ${noun} of ${name}, background removed"`}><span class="pedestal" aria-hidden="true"><i class="pedestal__plinth"></i><span class="pedestal__item"><img src="${tileUrl(photo.id)}" alt="" data-pedestal data-fallback="${photoUrl(photo.id, "thumb")}" decoding="async" /></span></span><span class="photo-tile__note">${icon("check")}<span class="photo-tile__note-text">Background removed</span></span></button>`
       : html`<button type="button" class="photo-tile" ${opens ? menuTrigger(`Photo of ${name}: view, change, crop${options.cleanup ? " or remove its background" : " or remove it"}`) : html`data-view aria-label="View ${noun} of ${name}"`}>${options.visual ? itemVisual({ ...options.visual(), photoId: photo.id }, tileUrl, "profile-visual", true) : html`<img src="${tileUrl(photo.id)}" alt="" width="160" height="160" />`}</button>`,
       opens
         ? html`${photoMenu()}${confirming ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>
@@ -409,6 +418,8 @@ export function photoPanel(host: HTMLElement, options: PhotoSubject & { id: stri
         ? html`<div class="inline-confirm" role="group" aria-label="Confirm"><p>Remove this ${noun}? ${options.removeNote}</p>
             <div class="inline-confirm__actions"><button type="button" class="button button--danger button--sm" data-remove-confirmed ${busy() ? "disabled" : ""}>${state === "removing" ? "Removing…" : `Remove ${noun}`}</button><button type="button" class="button button--ghost button--sm" data-keep>Keep</button></div></div>`
         : html`<div class="photo-actions"><button type="button" class="button button--secondary button--sm" data-pick>${icon("camera")}Change<span class="visually-hidden"> ${noun}</span></button><button type="button" class="button button--ghost button--sm" data-camera>Take photo</button><button type="button" class="button button--ghost button--sm" data-remove>Remove</button></div>`}${alert}`);
+    // The Worker says whether a photo is a cut-out; the tile never guesses it from the picture's edge (V1.16.4 §4.4, photo-frame.ts).
+    tile.querySelector("img[data-item-photo]")?.setAttribute("data-cutout", photo.cutout ? "1" : "0");
   };
   // An item photo's controls are in its menu: a control that is gone, or hidden in the closed menu, gives focus back to the photo.
   const focus = (selector: string) => {

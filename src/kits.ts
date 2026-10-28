@@ -111,8 +111,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 function derive(facts: Fact[]) {
   const when = today();
   const read = facts.map((fact) => {
-    const { state, reason } = readComponent({ ...fact, openCondition: fact.openCondition, seen: fact.seen }, when);
-    return { fact, state, reason };
+    const { state, label, reason } = readComponent({ ...fact, openCondition: fact.openCondition, seen: fact.seen }, when);
+    return { fact, state, label, reason };
   });
   return { rows: read, ...readKit(read.map((entry) => entry.state)) };
 }
@@ -177,9 +177,9 @@ export async function kitDetail(db: D1Database, id: string) {
     .all<{ itemId: string; name: string; outcome: CheckOutcome; note: string | null }>()).results : [];
   return {
     kit: shape(row, facts, places),
-    components: rows.map(({ fact, state, reason }) => ({
+    components: rows.map(({ fact, state, label, reason }) => ({
       itemId: fact.itemId, name: fact.name, unit: fact.unit, category: fact.category, itemType: fact.itemType, consumptionMode: fact.consumptionMode, iconKey: fact.iconKey, visualType: fact.visualType, photoId: fact.photoId,
-      required: fact.required, demand: fact.demand, onHand: fact.onHand, onLoan: fact.onLoan, expiresOn: fact.expiresOn, state, reason,
+      required: fact.required, demand: fact.demand, onHand: fact.onHand, onLoan: fact.onLoan, expiresOn: fact.expiresOn, state, label, reason,
       seen: fact.seen ? { outcome: fact.seen, note: fact.seenNote, at: fact.seenAt } : null
     })),
     checks: checks.results,

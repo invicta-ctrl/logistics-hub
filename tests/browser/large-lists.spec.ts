@@ -170,7 +170,7 @@ test("formats stock quantities and keeps Items sorting calm", async ({ page }) =
   await expect(page.locator(`tr[data-key="${largeStock.id}"] .col-qty`)).toContainText("1,500");
   await expect(page.locator(`tr[data-key="${largeStock.id}"] .col-level`)).toContainText("Reorder level: 2,000");
   await expect(page.locator(`tr[data-key="${zeroLevel.id}"] .col-level`)).toContainText("Reorder level: Not set");
-  await page.getByRole("button", { name: /Restock list/ }).click();
+  await page.locator("#stock-views").getByRole("button", { name: /^Restock/ }).click();
   await expect(page.locator('tr[data-key="REO-00001"] .col-qty')).toContainText("1,500");
   await expect(page.getByLabel(`Restock quantity for ${largeStock.name}`)).toHaveValue("2500");
   await expect(page.getByLabel(`Restock quantity for ${largeStock.name}`)).toHaveCSS("text-align", "right");
@@ -266,7 +266,7 @@ test("Stock row menus keep one primary action and restore focus after Escape", a
   await expect(more).toBeFocused();
   await expect(more).toHaveAttribute("aria-expanded", "false");
 
-  await page.getByRole("button", { name: /Restock list/ }).click();
+  await page.locator("#stock-views").getByRole("button", { name: /^Restock/ }).click();
   await expect(page.getByRole("button", { name: "Receive" })).toBeVisible();
   const restockMore = page.getByRole("button", { name: `More actions for ${stockItem.name}` });
   await expect(restockMore).toBeVisible();

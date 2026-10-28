@@ -150,6 +150,11 @@ document.addEventListener("error", (event) => {
     image.parentElement?.classList.add("is-seated");
     return;
   }
+  // Its thumbnail failed too: the tile shows the item's icon instead, as any broken item picture does (item-photo.ts).
+  if (image instanceof HTMLImageElement && image.parentElement?.classList.contains("pedestal__item")) {
+    image.dispatchEvent(new Event("pedestal-broken", { bubbles: true }));
+    return;
+  }
   if (image instanceof HTMLImageElement && image.hasAttribute("data-item-photo")) {
     image.parentElement?.classList.remove("item-visual--loaded");
     if (image.parentElement) unframe(image.parentElement);

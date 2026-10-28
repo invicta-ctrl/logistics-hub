@@ -32,29 +32,35 @@ export type ComponentFacts = {
   seen: CheckOutcome | null;
 };
 
-export type ComponentReading = { state: ComponentState; reason: string | null };
+/**
+ * `label` names the one cause (V1.16.4 §4.3 status axes): a component that needs a person says which axis, Inactive, Needs count,
+ * Unclassified, Missing or Damaged, never a general "Needs review".
+ */
+export type ComponentReading = { state: ComponentState; label: string; reason: string | null };
+const reading = (state: ComponentState, reason: string | null, label: string = COMPONENT_STATE_LABELS[state]): ComponentReading => ({ state, label, reason });
 
 const pieces = (count: number) => `${count} on the shelf`;
 
 /** One component's state and, when it is not Ready, the plain sentence that says why. `today` is an ISO date. */
 export function readComponent(facts: ComponentFacts, today: string): ComponentReading {
-  if (facts.itemStatus !== "ACTIVE") return { state: "REVIEW", reason: facts.itemStatus === "INACTIVE" ? "This item is retired." : "This item is waiting to be verified." };
-  if (facts.itemType === "NEEDS_REVIEW") return { state: "REVIEW", reason: "This item is not classified yet." };
-  if (facts.seen === "MISSING") return { state: "REVIEW", reason: "Missing at the last check." };
-  if (facts.seen === "DAMAGED") return { state: "REVIEW", reason: "Damaged at the last check." };
+  if (facts.itemStatus === "INACTIVE") return reading("REVIEW", "This item is retired.", "Inactive");
+  if (facts.itemStatus !== "ACTIVE") return reading("REVIEW", "This item is waiting to be verified.", "Needs count");
+  if (facts.itemType === "NEEDS_REVIEW") return reading("REVIEW", "This item is not classified yet.", "Unclassified");
+  if (facts.seen === "MISSING") return reading("REVIEW", "Missing at the last check.", "Missing");
+  if (facts.seen === "DAMAGED") return reading("REVIEW", "Damaged at the last check.", "Damaged");
   if (facts.onHand < facts.demand) {
     const shared = facts.demand > facts.required ? ` (${facts.demand} across kits)` : "";
-    return { state: "SHORT", reason: `Needs ${facts.required}${shared}, ${pieces(facts.onHand)}${facts.onLoan ? `, ${facts.onLoan} on loan` : ""}.` };
+    return reading("SHORT", `Needs ${facts.required}${shared}, ${pieces(facts.onHand)}${facts.onLoan ? `, ${facts.onLoan} on loan` : ""}.`);
   }
   if (facts.expiresOn) {
     const days = Math.floor((Date.parse(`${facts.expiresOn}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
-    if (days < 0) return { state: "EXPIRING", reason: "Expired." };
-    if (days <= EXPIRY_WINDOW_DAYS) return { state: "EXPIRING", reason: days === 0 ? "Expires today." : `Expires in ${days} ${days === 1 ? "day" : "days"}.` };
+    if (days < 0) return reading("EXPIRING", "Expired.");
+    if (days <= EXPIRY_WINDOW_DAYS) return reading("EXPIRING", days === 0 ? "Expires today." : `Expires in ${days} ${days === 1 ? "day" : "days"}.`);
   }
-  if (facts.seen === "LOW") return { state: "LOW", reason: "Running low at the last check." };
-  if (facts.openCondition === "LOW") return { state: "LOW", reason: "The open one is running low." };
-  if (stockState({ onHand: facts.onHand, reorderThreshold: facts.reorderThreshold, status: facts.itemStatus }) === "LOW") return { state: "LOW", reason: "At or below its reorder level." };
-  return { state: "OK", reason: null };
+  if (facts.seen === "LOW") return reading("LOW", "Running low at the last check.");
+  if (facts.openCondition === "LOW") return reading("LOW", "The open one is running low.");
+  if (stockState({ onHand: facts.onHand, reorderThreshold: facts.reorderThreshold, status: facts.itemStatus }) === "LOW") return reading("LOW", "At or below its reorder level.");
+  return reading("OK", null);
 }
 
 /** The kit's state from its components. A kit with nothing in it has nothing to be ready with. */

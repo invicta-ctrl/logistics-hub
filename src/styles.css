@@ -778,9 +778,9 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
    off the stage with its own shadow. */
 .theater .photo-tile { border-radius: var(--radius-xl); background: transparent; box-shadow: none; }
 .theater .photo-tile::after { position: absolute; right: 22%; bottom: 17%; left: 22%; z-index: -1; height: .875rem; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 10 12 / 26%), transparent); content: ""; }
-.theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview) { background: var(--stage); box-shadow: var(--edge-light), inset 0 0 0 1px var(--stage-edge), 0 1px 2px rgb(43 10 12 / 6%), 0 18px 28px -18px rgb(43 10 12 / 45%); }
-.theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview)::after { display: none; }
-.theater .profile__photo:has(.item-visual--loaded, .photo-tile--preview)::after { position: absolute; right: 12%; bottom: -.625rem; left: 12%; z-index: -1; height: .875rem; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 10 12 / 24%), transparent); content: ""; }
+.theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview, .photo-tile--pedestal) { background: var(--stage); box-shadow: var(--edge-light), inset 0 0 0 1px var(--stage-edge), 0 1px 2px rgb(43 10 12 / 6%), 0 18px 28px -18px rgb(43 10 12 / 45%); }
+.theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview, .photo-tile--pedestal)::after { display: none; }
+.theater .profile__photo:has(.item-visual--loaded, .photo-tile--preview, .photo-tile--pedestal)::after { position: absolute; right: 12%; bottom: -.625rem; left: 12%; z-index: -1; height: .875rem; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 10 12 / 24%), transparent); content: ""; }
 .theater .photo-tile:is([data-view], [data-photo-menu]):hover:has(.item-visual--loaded) { background: color-mix(in srgb, var(--stage) 88%, #fff); }
 .theater .photo-tile .item-visual { position: relative; background: transparent; }
 .theater .photo-tile .item-visual > .item-icon { width: 56%; height: 56%; max-width: none; max-height: none; stroke-width: 1.25; filter: drop-shadow(0 1px 0 rgb(255 255 255 / 90%)); }
@@ -1407,6 +1407,20 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .cell-place { display: none; }
 .place-leaf { color: var(--text); font-weight: 500; }
 .profile__where { margin-top: var(--space-1); }
+/* V1.16.4 §4.3 · The item sheet is the hub: one next action under the stock figure, and the stock settings beside the quantity. */
+.profile__next { margin: 0; }
+.stock-settings { display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--line); }
+.stock-settings .section-label { margin-bottom: 0; }
+.stock-settings__form { grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: var(--space-3) var(--space-4); }
+.stock-settings__alert, .stock-settings__save { grid-column: 1 / -1; }
+.stock-settings__save { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.stock-settings__save:not(:has(> :not([hidden]))) { display: none; }
+.stock-settings__links, .stock-settings__restock { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.kit-adder__form { display: grid; grid-template-columns: minmax(0, 1fr) 6rem; gap: var(--space-3); align-items: end; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius); }
+.kit-adder__form > .form-alert, .kit-adder__actions { grid-column: 1 / -1; }
+.kit-adder__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.history__more { margin-top: var(--space-3); }
+.history__more:empty { display: none; }
 .place-extra { display: grid; gap: var(--space-2); }
 .place-extra p { margin: 0; }
 .place-preview:empty { display: none; }

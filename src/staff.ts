@@ -1,7 +1,7 @@
 import { resolveItemIcon } from "./item-icons";
 import { itemVisualControl } from "./item-visual-control";
 import { suggest, type Suggestion } from "./catalogue-suggest";
-import { formatItemName, BEHAVIOUR_LABELS, type Behaviour, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, behaviourFields, listingGaps, stockState } from "./catalog-policy";
+import { formatItemName, BEHAVIOUR_LABELS, type Behaviour, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, STOCK_STATE_LABELS, behaviourFields, listingGaps, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type Photo, type PhotoCleanup, type PhotoPanel, openViewer, photoPanel, photoUrl, rowThumb, shownUrl } from "./item-photo";
@@ -12,7 +12,7 @@ import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { bulkBar } from "./bulk-select";
 import { placeList } from "./catalogue-places";
 import { ageOf, loadSession, shell } from "./staff-shell";
-import { ApiError, type Html, animateNumber, api, categoryName, emptyState, expired, failure, formatDateTime, formatQuantity, html, icon, label, live, mount, onLeave, plural, preservingFocus, raw, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { ApiError, type Html, animateNumber, api, categoryName, emptyState, expired, failure, formatDateTime, formatQuantity, html, icon, label, live, mount, onLeave, plural, preservingFocus, raw, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
 
 type Item = {
   id: string; name: string; aliases: string | null; category: string; itemType: string; unit: string; status: string; needsReview: boolean;
@@ -31,9 +31,15 @@ type Report = {
   id: string; kind: ReportKind; source: "STAFF" | "SELF_SERVICE"; note: string | null; createdAt: string; resolvedAt: string | null; resolutionNote: string | null;
   location: string | null; reportedBy: string | null; resolvedBy: string | null;
 };
-type Movement = { id: string; createdAt: string; movementType: string; signedQuantity: number; status: string; notes: string | null; reason: string | null; related: string | null; actor: string | null; afterQuantity: number; borrower: string | null; purpose: string | null };
+type Movement = { id: string; createdAt: string; sortAt?: string; movementType: string; signedQuantity: number; status: string; notes: string | null; reason: string | null; related: string | null; actor: string | null; afterQuantity: number; borrower: string | null; purpose: string | null };
 type Change = { from: unknown; to: unknown };
-type CatalogEvent = { at: string; action: string; actor: string | null; details: Record<string, unknown> };
+type CatalogEvent = { id?: string; at: string; sortAt?: string; action: string; actor: string | null; details: Record<string, unknown> };
+/** Where the next page of an item's history starts (inventory.ts historyCursor). */
+type HistoryCursor = { at: string; id: string };
+/** The item's open restock entry, if it has one. */
+type OpenReorder = { id: string; status: string; desiredQuantity: number | null; updatedAt: string };
+type KitChoice = { id: string; name: string; active: boolean };
+type KitDetail = { kit: KitChoice & { description: string | null; locationId: string | null; updatedAt: string }; components: Array<{ itemId: string; required: number }> };
 type DetailItem = Item & {
   location: string | null; notes: string | null; updatedAt: string | null; listingGaps: string[]; photo: Photo | null; photoCleanup?: PhotoCleanup;
   legacyReportedAvailable: number | null; migratedOnHand: number; migrationDelta: number | null;
@@ -43,7 +49,8 @@ type DetailItem = Item & {
 type Freshness = { lastVerifiedAt: string | null; lastCountedAt: string | null; openDiscrepancy: { outcome: string; at: string; auditId: string } | null };
 /** A check's finding, as the profile says it. */
 const FINDING_WORDS: Record<string, string> = { MISMATCH: "a different count", CANT_FIND: "it couldn’t be found", FOUND_HERE: "it somewhere else", NEEDS_REVIEW: "the record looks wrong" };
-type Detail = { mergedInto?: { id: string; name: string } | null; item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness; kits?: Array<{ id: string; name: string; active: boolean; required: number }>; links?: ItemLink[] };
+type Detail = { mergedInto?: { id: string; name: string } | null; item: DetailItem; movements: Movement[]; events: CatalogEvent[]; loans: Loan[]; openUnits: OpenUnit[]; reports: Report[]; usesRecorded: number; unitsEmptied: number; freshness?: Freshness; kits?: Array<{ id: string; name: string; active: boolean; required: number }>; links?: ItemLink[];
+  historyNext?: HistoryCursor | null; reorder?: OpenReorder | null };
 type SortKey = "id" | "name" | "category" | "location" | "onHand";
 type Tab = "overview" | "loan" | "details" | "history";
 
@@ -55,7 +62,7 @@ const worstCondition = (units: OpenUnit[]) => ["LOW", "HALF", "PLENTY"].find((co
 const isLow = (item: Pick<Item, "onHand" | "reorderThreshold" | "status">) => stockState(item) === "LOW";
 const VIEWS = {
   all: { label: "All items", test: (_: Item) => true },
-  review: { label: "Needs review", test: (item: Item) => item.needsReview },
+  review: { label: "Needs details check", test: (item: Item) => item.needsReview },
   ready: { label: "Ready to list", test: (item: Item) => LISTABLE_ITEM_TYPES.has(item.itemType) && !item.listed && active(item) },
   listed: { label: "On Lending Hub", test: (item: Item) => item.listed },
   low: { label: "Low stock", test: (item: Item) => isLow(item) && active(item) },
@@ -81,18 +88,55 @@ const LENDING_FIELDS = ["lendingAudience", "defaultLoanDays", "maximumLoanQty"];
 
 /* ---------- Shared item markup ---------- */
 
+const STOCK_TAG_TONES = { OUT: "tag--bad", ON_LOAN: "tag--pending", LOW: "tag--warn", OK: "tag--ok" } as const;
+/** An open restock entry, as its tag says it. */
+const RESTOCK_LABELS: Record<string, string> = { NEEDS_RESTOCK: "Restock requested", PLANNED: "Restock planned" };
+/** The status choices, each on its axis: VERIFY is an active item whose figure needs a count (V1.16.4 §4.3). */
+const STATUS_CHOICES: Record<string, string> = { ACTIVE: "Active", VERIFY: "Active, needs a count", INACTIVE: "Inactive" };
+
+/**
+ * An item's tags, one per status axis (V1.16.4 §4.3), so no tag text stands for two fields: lifecycle (Inactive), classification
+ * (Unclassified), details check (Needs details check), quantity confidence (Needs count), availability (computed) and restock.
+ */
 function tags(item: Item): Html {
   const list: Html[] = [];
   if (item.listed) list.push(html`<span class="tag tag--ok">On Lending Hub</span>`);
-  if (item.needsReview) list.push(html`<span class="tag tag--pending">Needs review</span>`);
-  if (item.status !== "ACTIVE") list.push(html`<span class="tag ${item.status === "VERIFY" ? "tag--warn" : ""}">${label(item.status)}</span>`);
+  if (item.status === "INACTIVE") list.push(html`<span class="tag">Inactive</span>`);
+  if (item.itemType === "NEEDS_REVIEW") list.push(html`<span class="tag tag--pending">Unclassified</span>`);
+  if (item.needsReview) list.push(html`<span class="tag tag--pending">Needs details check</span>`);
+  if (item.countNeeded) list.push(html`<span class="tag tag--warn">Needs count</span>`);
   if (item.openUnits > item.onHand) list.push(html`<span class="tag tag--warn">Open units need review</span>`);
   if (item.openReports) list.push(html`<span class="tag tag--warn">Location reported</span>`);
   const state = stockState(item);
-  if (state === "OUT") list.push(html`<span class="tag tag--bad">Out of stock</span>`);
-  else if (state === "ON_LOAN") list.push(html`<span class="tag tag--pending">All on loan</span>`);
-  else if (state === "LOW") list.push(html`<span class="tag tag--warn">Low stock</span>`);
+  if (state !== "OK") list.push(html`<span class="tag ${STOCK_TAG_TONES[state]}">${STOCK_STATE_LABELS[state]}</span>`);
+  if (item.reorderStatus) list.push(html`<span class="tag tag--gold">${RESTOCK_LABELS[item.reorderStatus] ?? label(item.reorderStatus)}</span>`);
   return html`<span class="tags">${list}</span>`;
+}
+
+/** One history entry in two answers: by id, or, from a Worker before V1.16.4, by its time and action. */
+const sameEvent = (a: CatalogEvent, b: CatalogEvent) => a.id ? a.id === b.id : a.at === b.at && a.action === b.action;
+/** Out on loan now, from the item's own loans. */
+const onLoanOf = (loans: Loan[]) => loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
+
+/** The list row's facts for the open item, read from its own record: what its tags and next action go by. */
+function profileFacts({ item, loans, freshness, reorder, openUnits, reports }: Detail): Item {
+  const lastCountedAt = freshness?.lastCountedAt ?? item.lastCountedAt ?? null;
+  return { ...item, onLoan: onLoanOf(loans), openUnits: openUnits.length, openReports: reports.filter((report) => !report.resolvedAt).length, reorderStatus: reorder?.status ?? null, lastCountedAt,
+    countNeeded: item.status !== "INACTIVE" && !lastCountedAt && ((item.migrationDelta ?? 0) !== 0 || item.status === "VERIFY") };
+}
+
+type NextAction = { key: "classify" | "count" | "place" | "stock-in" | "lend" | "return"; label: string };
+/** The one next step the item's state asks for (V1.16.4 §4.3), most pressing first; an inactive item has none. */
+function nextAction(detail: Detail): NextAction | null {
+  const facts = profileFacts(detail);
+  if (facts.status === "INACTIVE") return null;
+  if (facts.itemType === "NEEDS_REVIEW") return { key: "classify", label: "Classify" };
+  if (facts.countNeeded) return { key: "count", label: "Count" };
+  if (!facts.locationId) return { key: "place", label: "Choose place" };
+  const state = stockState(facts);
+  if (state === "ON_LOAN") return { key: "return", label: "Return" };
+  if (state === "OUT" || state === "LOW") return { key: "stock-in", label: "Stock in" };
+  return facts.itemType === PUBLIC_LENDING_ITEM_TYPE && facts.onHand > 0 ? { key: "lend", label: "Lend" } : { key: "stock-in", label: "Stock in" };
 }
 
 /** The metadata a reviewer confirms for a migrated record. */
@@ -203,6 +247,12 @@ export async function workspace(): Promise<void> {
   let openId: string | null = null;
   let detail: Detail | null = null;
   let dirty = false;
+  /** Whether the open item's Stock settings differ from what is saved (bindSettings). */
+  let settingsChanged: () => boolean = () => false;
+  /** Older pages of the open item's history, shown below its first page, and where the next one starts. */
+  let extraMovements: Movement[] = [];
+  let extraEvents: CatalogEvent[] = [];
+  let historyNext: HistoryCursor | null = null;
   let pendingItem = params.get("add") === "1" ? null : params.get("item");
   const pendingTab = (["overview", "loan", "details", "history"] as const).find((value) => value === params.get("tab")) ?? "overview";
   let shownIds: string[] = [];
@@ -475,18 +525,19 @@ export async function workspace(): Promise<void> {
     sheet.classList.remove("sheet--add");
   };
   const panel = createSheet(sheet, {
-    dirty: () => dirty,
+    dirty: () => dirty || settingsChanged(),
     onClose: () => {
       stopAdding();
       document.querySelector(`tr[data-key="${CSS.escape(openId ?? "")}"]`)?.classList.remove("is-open");
       openId = null;
       detail = null;
       dirty = false;
+      settingsChanged = () => false;
       writeParams({ item: null, add: null });
     }
   });
   const closeSheet = () => panel.close(true);
-  onLeave(() => { stopAdding(); dirty = false; });
+  onLeave(() => { stopAdding(); dirty = false; settingsChanged = () => false; });
 
   function sheetShell(kicker: Html | string, title: string, body: Html): void {
     // Replacing the sheet's content (the loaded record after its placeholder) would drop keyboard focus onto the page behind.
@@ -574,8 +625,13 @@ export async function workspace(): Promise<void> {
       const loaded = await fetchDetail(id);
       if (!loaded || !detail) return;
       const { onHand, photo: loadedPhoto, openReports, location, legacyLocation, iconKey, visualType, updatedAt } = loaded.item;
+      // Older pages already shown stay shown: what the new first page no longer holds joins them (V1.16.4 §4.3).
+      if (extraMovements.length || extraEvents.length) {
+        extraMovements = [...detail.movements, ...extraMovements].filter((entry) => !loaded.movements.some((fresh) => fresh.id === entry.id));
+        extraEvents = [...detail.events, ...extraEvents].filter((entry) => !loaded.events.some((fresh) => sameEvent(fresh, entry)));
+      } else historyNext = loaded.historyNext ?? null;
       detail = { ...detail, item: { ...detail.item, onHand, photo: loadedPhoto, openReports, location, legacyLocation, iconKey, visualType, updatedAt }, movements: loaded.movements, loans: loaded.loans, events: loaded.events,
-        openUnits: loaded.openUnits, reports: loaded.reports, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied, freshness: loaded.freshness, kits: loaded.kits, links: loaded.links };
+        openUnits: loaded.openUnits, reports: loaded.reports, usesRecorded: loaded.usesRecorded, unitsEmptied: loaded.unitsEmptied, freshness: loaded.freshness, kits: loaded.kits, links: loaded.links, reorder: loaded.reorder ?? null };
       photo?.render(loaded.item.photo);
       linksPanel?.render();
       visualControl?.render();
@@ -583,6 +639,10 @@ export async function workspace(): Promise<void> {
       mount(sheet.querySelector("#profile-info")!, profileInfo(detail));
       mount(sheet.querySelector("#quantity-context")!, quantityContext(detail));
       mount(sheet.querySelector("#history")!, historyMarkup(detail));
+      const more = sheet.querySelector("#history-more");
+      if (more) mount(more, historyMore());
+      const restock = sheet.querySelector("#restock-state");
+      if (restock) mount(restock, restockState(detail));
       openPanel?.render();
       const loanList = sheet.querySelector("#item-loans");
       if (loanList) mount(loanList, itemLoansMarkup(detail));
@@ -647,10 +707,13 @@ export async function workspace(): Promise<void> {
    * type, category, the recorded place, and how fresh that is. The place is what the record says, never a live position: the line
    * under it says when the item was last seen there.
    */
-  function profileInfo({ item, loans, freshness, kits }: Detail): Html {
-    const out = loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
+  function profileInfo(loaded: Detail): Html {
+    const { item, loans, freshness, kits } = loaded;
+    const out = onLoanOf(loans);
+    const next = nextAction(loaded);
     return html`<div class="profile__stock"><p class="readout"><strong>${item.onHand}</strong> <span>${units(item.onHand, item.unit)} on hand</span></p>${out ? html`<p class="readout readout--loan"><strong>${out}</strong> <span>on loan</span></p>` : ""}</div>
-      ${tags(item)}
+      ${next ? html`<p class="profile__next"><button type="button" class="button button--primary button--sm" data-next="${next.key}">${next.label}</button></p>` : ""}
+      ${tags(profileFacts(loaded))}
       <p class="profile__meta">${label(item.itemType)} · ${categoryName(item.category)}</p>
       ${item.model || item.serialNumber ? html`<p class="profile__meta">${[item.model && `Model ${item.model}`, item.serialNumber && `Serial ${item.serialNumber}`].filter(Boolean).join(" · ")}</p>` : ""}
       <p class="profile__meta profile__meta--place"><span class="profile__label">Recorded place</span>${icon("pin")}<span>${item.location ?? html`<span class="muted">No place set</span>`}${!item.location && item.legacyLocation ? html`<span class="muted"> · typed earlier: ${item.legacyLocation}</span>` : ""}</span></p>
@@ -666,11 +729,11 @@ export async function workspace(): Promise<void> {
     const counted = last ? `counted ${ageOf(last)}` : "never counted here";
     const open = freshness?.openDiscrepancy;
     return html`${seen || last ? html`<p class="profile__meta profile__meta--fresh">${icon("clock")}<span>${seen ? `${seen} · ${counted}` : counted.charAt(0).toUpperCase() + counted.slice(1)}</span></p>` : ""}
-      ${open ? html`<p class="profile__meta profile__meta--finding">${icon("alert")}<span>A check found: ${FINDING_WORDS[open.outcome] ?? "something to look at"} (${ageOf(open.at)}). <a class="text-link" href="/staff/catalogue?audit=${open.auditId}">Settle it</a></span></p>` : ""}`;
+      ${open ? html`<p class="profile__meta profile__meta--finding">${icon("alert")}<span>A check found: ${FINDING_WORDS[open.outcome] ?? "something to look at"} (${ageOf(open.at)}). <a class="text-link" href="/staff/catalogue?audit=${open.auditId}" data-route>Settle it</a></span></p>` : ""}`;
   }
 
   function quantityContext({ item, loans, openUnits }: Detail): Html {
-    const out = loans.filter((loan) => loan.status === "OUT").reduce((sum, loan) => sum + loan.quantity, 0);
+    const out = onLoanOf(loans);
     const state = stockState({ ...item, onLoan: out });
     return html`${tracksOpenUnits(item) || openUnits.length ? html`<span class="quantity__sealed">${sealedLine(item.onHand, openUnits.length, worstCondition(openUnits))}</span>` : ""}${state === "OUT" ? html`<span class="tag tag--bad">Out of stock</span>` : state === "ON_LOAN" ? html`<span class="tag tag--pending">All on loan</span>` : state === "LOW" ? html`<span class="tag tag--warn">Low stock</span>` : item.reorderThreshold > 0 ? html`<span class="tag tag--ok">Above reorder level</span>` : ""}
       ${item.reorderThreshold > 0 ? html`<span>Reorder level ${item.reorderThreshold}</span>` : ""}
@@ -699,16 +762,17 @@ export async function workspace(): Promise<void> {
     return html`
       <form id="stock-form" class="form quantity" novalidate aria-label="Update the quantity">${quantityEditor("stock")}<p class="quantity__context" id="quantity-context">${quantityContext(detail)}</p></form>
       ${tracksOpenUnits(item) || detail.openUnits.length ? html`<div id="open-units"></div>` : ""}
+      ${settingsMarkup(detail)}
       ${delta !== 0 ? html`<div class="callout">${icon("info")}<p><strong>Migration evidence.</strong> At migration the legacy snapshot reported ${item.legacyReportedAvailable} ${units(item.legacyReportedAvailable ?? 0, item.unit)}, but the migrated movement ledger derives ${item.migratedOnHand}. The difference is preserved as recorded, not guessed. Once a physical count confirms the real figure, record it with a Count.</p></div>` : ""}
       ${item.verificationNote ? html`<div class="callout">${icon("alert")}<p><strong>Verify:</strong> ${item.verificationNote}</p></div>` : ""}
       ${item.needsReview ? html`<section class="card card--review" aria-labelledby="review-title">
-          <div class="card__head"><h3 id="review-title">Needs review</h3><button type="button" class="button button--secondary button--sm" data-goto="details">Review details</button></div>
+          <div class="card__head"><h3 id="review-title">Needs details check</h3><button type="button" class="button button--secondary button--sm" data-goto="details">Review details</button></div>
           <p class="card__text">This record came from the legacy system. Confirm its details, then mark it reviewed.</p>
           ${checklist(reviewChecklist(item))}
         </section>` : ""}
       <dl class="facts">
         <div><dt>Unit</dt><dd>${item.unit}</dd></div>
-        <div><dt>Status</dt><dd>${label(item.status)}${item.needsReview ? "" : html` · Reviewed`}</dd></div>
+        <div><dt>Status</dt><dd>${item.status === "INACTIVE" ? "Inactive" : "Active"}${item.itemType === "NEEDS_REVIEW" ? " · unclassified" : ""} · ${item.needsReview ? "needs a details check" : "details checked"}</dd></div>
         ${item.aliases ? html`<div><dt>Other names</dt><dd>${item.aliases}</dd></div>` : ""}
       </dl>
       <div id="reports-card">${reportsCard(detail)}</div>
@@ -720,6 +784,206 @@ export async function workspace(): Promise<void> {
           : html`<p class="card__text">${label(item.lendingAudience)}</p>`}
       </section>
       <p class="provenance">${origin}</p></div></details>`;
+  }
+
+  /**
+   * Stock settings in the item's sheet (V1.16.4 §4.3): reorder level, stock area, expiry and status, saved on their own, with Add to
+   * restock and Add to kit beside them, so nobody leaves Items for these.
+   */
+  function settingsMarkup(loaded: Detail): Html {
+    const { item } = loaded;
+    const options = (values: readonly string[], current: string, names: Record<string, string> = {}) => values.map((value) => html`<option value="${value}" ${value === current ? html`selected` : ""}>${names[value] ?? label(value)}</option>`);
+    return html`<section class="stock-settings" aria-labelledby="settings-title">
+      <h3 class="section-label" id="settings-title">Stock settings</h3>
+      <form id="settings-form" class="form stock-settings__form" novalidate>
+        <div class="field"><label for="s-reorderThreshold">Reorder level</label><input id="s-reorderThreshold" name="reorderThreshold" type="number" inputmode="numeric" min="0" max="100000" step="1" value="${item.reorderThreshold}" aria-describedby="s-reorder-hint" /><p class="field__hint" id="s-reorder-hint">Low at or below this. 0 turns it off.</p></div>
+        <div class="field"><label for="s-stockArea">Stock area</label><select id="s-stockArea" name="stockArea">${options(STOCK_AREAS, item.stockArea ?? "Inventory")}</select></div>
+        <div class="field" data-settings-expiry ${(item.stockArea ?? "Inventory") === "Pantry" ? "" : html`hidden`}><label for="s-expiresOn">Earliest expiry <span class="field__optional">optional</span></label><input id="s-expiresOn" name="expiresOn" type="date" value="${item.expiresOn ?? ""}" /></div>
+        <div class="field"><label for="s-status">Status</label><select id="s-status" name="status">${options(ITEM_STATUSES, item.status ?? "ACTIVE", STATUS_CHOICES)}</select></div>
+        <div class="form-alert stock-settings__alert" role="alert" hidden data-settings-alert></div>
+        <div class="stock-settings__save"><button type="submit" class="button button--primary button--sm" data-settings-save hidden>Save settings</button><button type="button" class="button button--ghost button--sm" data-settings-reset hidden>Cancel</button></div>
+      </form>
+      <div class="stock-settings__links"><span class="stock-settings__restock" id="restock-state">${restockState(loaded)}</span>
+        <button type="button" class="button button--secondary button--sm" data-add-kit aria-expanded="false" aria-controls="kit-adder">${icon("stack")}Add to kit</button></div>
+      <div class="kit-adder" id="kit-adder" hidden></div>
+    </section>`;
+  }
+
+  /** The item's place on the restock list: its entry's state and a link to the list, or the button that adds it. */
+  function restockState({ item, reorder }: Detail): Html {
+    if (reorder) return html`<span class="tag tag--gold">${RESTOCK_LABELS[reorder.status] ?? label(reorder.status)}</span> <a class="text-link" href="/staff/stock?view=restock" data-route>Restock list</a>`;
+    return item.status === "INACTIVE" ? html`` : html`<button type="button" class="button button--secondary button--sm" data-add-restock>${icon("plus")}Add to restock</button>`;
+  }
+
+  /** Wires the Stock settings form to the item. `item` is the object the edit form holds too, so both send the latest version. */
+  function bindSettings(item: DetailItem): void {
+    const form = sheet.querySelector<HTMLFormElement>("#settings-form");
+    if (!form) return;
+    const alert = form.querySelector<HTMLElement>("[data-settings-alert]")!;
+    const read = () => {
+      const values = new FormData(form);
+      const level = String(values.get("reorderThreshold") ?? "").trim();
+      return { status: String(values.get("status")), reorderThreshold: level === "" ? 0 : Number(level), stockArea: String(values.get("stockArea")), expiresOn: String(values.get("expiresOn") ?? "") };
+    };
+    const saved = () => ({ status: item.status, reorderThreshold: item.reorderThreshold, stockArea: item.stockArea ?? "Inventory", expiresOn: item.expiresOn ?? "" });
+    const changed = () => JSON.stringify(read()) !== JSON.stringify(saved());
+    settingsChanged = () => form.isConnected && changed();
+    const sync = () => {
+      form.querySelector<HTMLElement>("[data-settings-expiry]")!.hidden = read().stockArea !== "Pantry";
+      const edited = changed();
+      form.querySelectorAll<HTMLElement>("[data-settings-save], [data-settings-reset]").forEach((button) => { button.hidden = !edited; });
+    };
+    form.addEventListener("input", () => {
+      form.querySelectorAll("[aria-invalid]").forEach((element) => element.removeAttribute("aria-invalid"));
+      setMessage(alert, "");
+      sync();
+    });
+    form.addEventListener("change", sync);
+    form.querySelector("[data-settings-reset]")!.addEventListener("click", () => {
+      const was = saved();
+      form.querySelector<HTMLInputElement>("#s-reorderThreshold")!.value = String(was.reorderThreshold);
+      form.querySelector<HTMLSelectElement>("#s-stockArea")!.value = was.stockArea;
+      form.querySelector<HTMLInputElement>("#s-expiresOn")!.value = was.expiresOn;
+      form.querySelector<HTMLSelectElement>("#s-status")!.value = was.status;
+      setMessage(alert, "");
+      sync();
+      form.querySelector<HTMLElement>("#s-reorderThreshold")!.focus();
+    });
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const values = read();
+      const level = form.querySelector<HTMLInputElement>("#s-reorderThreshold")!;
+      if (!Number.isInteger(values.reorderThreshold) || values.reorderThreshold < 0 || values.reorderThreshold > 100_000) {
+        level.setAttribute("aria-invalid", "true");
+        setMessage(alert, "Reorder level must be a whole number from 0 to 100,000.");
+        level.focus();
+        return;
+      }
+      const submit = form.querySelector<HTMLButtonElement>("[data-settings-save]")!;
+      submit.disabled = true;
+      setMessage(alert, "");
+      try {
+        const result = await api<{ changed: number; updatedAt: string | null }>(`/api/staff/items/${encodeURIComponent(item.id)}/settings`, { method: "PATCH", body: JSON.stringify({ ...values, updatedAt: item.updatedAt ?? null }) });
+        const stored = { ...values, expiresOn: values.expiresOn || null, updatedAt: result.updatedAt };
+        Object.assign(item, stored);
+        if (detail?.item.id === item.id) detail = { ...detail, item: { ...detail.item, ...stored } };
+        sync();
+        toast(result.changed ? "Stock settings saved." : "No changes to save.");
+        await refreshStock(item.id);
+        await poll.refresh();
+      } catch (error) {
+        const stale = error instanceof ApiError && error.status === 409;
+        setMessage(alert, stale ? html`${failure(error)} <button type="button" class="text-link" data-reload>Load the latest details</button>` : failure(error));
+        alert.querySelector("[data-reload]")?.addEventListener("click", () => { dirty = false; settingsChanged = () => false; void loadDetail(item.id, "overview"); });
+      } finally {
+        submit.disabled = false;
+      }
+    });
+    sync();
+  }
+
+  async function addToRestock(button: HTMLButtonElement): Promise<void> {
+    if (!detail) return;
+    const { id, name } = detail.item;
+    const done = working(button);
+    try {
+      await api("/api/staff/reorders", { method: "POST", body: JSON.stringify({ itemId: id }) });
+      toast(`${name} added to the restock list.`);
+      await refreshStock(id);
+      sheet.querySelector<HTMLElement>("#restock-state a")?.focus();
+      await poll.refresh();
+    } catch (error) {
+      toast(failure(error), "error");
+      if (error instanceof ApiError && error.status === 409) await refreshStock(id);
+    } finally { done(); }
+  }
+
+  /** Opens (or closes) the small form that puts the item into a kit in use, from the kits it is not in yet. */
+  async function toggleKitAdder(button: HTMLButtonElement): Promise<void> {
+    const host = sheet.querySelector<HTMLElement>("#kit-adder");
+    if (!host || !detail) return;
+    if (!host.hidden) { closeKitAdder(); return; }
+    host.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    mount(host, html`<p class="muted" role="status">Loading kits…</p>`);
+    const id = detail.item.id;
+    try {
+      const { kits } = await api<{ kits: KitChoice[] }>("/api/staff/kits");
+      if (detail?.item.id !== id || host.hidden) return;
+      const already = new Set((detail.kits ?? []).map((kit) => kit.id));
+      const open = kits.filter((kit) => kit.active && !already.has(kit.id));
+      mount(host, open.length ? html`<form class="kit-adder__form" data-kit-form novalidate>
+          <div class="field"><label for="ka-kit">Kit</label><select id="ka-kit" name="kit">${open.map((kit) => html`<option value="${kit.id}">${kit.name}</option>`)}</select></div>
+          <div class="field kit-adder__qty"><label for="ka-qty">Needed</label><input id="ka-qty" name="required" type="number" inputmode="numeric" min="1" max="1000" step="1" value="1" /></div>
+          <div class="form-alert" role="alert" hidden data-kit-alert></div>
+          <div class="kit-adder__actions"><button class="button button--primary button--sm" type="submit">Add to kit</button><button class="button button--ghost button--sm" type="button" data-kit-cancel>Cancel</button></div>
+        </form>`
+        : html`<p class="muted">${kits.some((kit) => kit.active) ? "It is already in every kit in use." : "There are no kits in use yet."} <a class="text-link" href="/staff/kits" data-route>Kits</a></p>`);
+      host.querySelector<HTMLElement>("#ka-kit, a")?.focus();
+    } catch (error) {
+      mount(host, html`<p class="form-alert" role="alert">${failure(error)}</p>`);
+    }
+  }
+
+  function closeKitAdder(): void {
+    const host = sheet.querySelector<HTMLElement>("#kit-adder");
+    if (!host) return;
+    host.hidden = true;
+    mount(host, html``);
+    const button = sheet.querySelector<HTMLButtonElement>("[data-add-kit]");
+    button?.setAttribute("aria-expanded", "false");
+    button?.focus();
+  }
+
+  /** Adds the item to a kit by saving that kit's whole list with it at the end, under the kit's own version check. */
+  async function addToKit(form: HTMLFormElement): Promise<void> {
+    if (!detail) return;
+    const item = detail.item;
+    const alert = form.querySelector<HTMLElement>("[data-kit-alert]")!;
+    const quantity = form.querySelector<HTMLInputElement>("#ka-qty")!;
+    const required = Number(quantity.value.trim());
+    if (!/^\d{1,4}$/.test(quantity.value.trim()) || required < 1 || required > 1000) {
+      quantity.setAttribute("aria-invalid", "true");
+      setMessage(alert, "Needed must be a whole number from 1 to 1,000.");
+      quantity.focus();
+      return;
+    }
+    quantity.removeAttribute("aria-invalid");
+    const kitId = form.querySelector<HTMLSelectElement>("#ka-kit")!.value;
+    const done = working(form);
+    setMessage(alert, "");
+    try {
+      const { kit, components } = await api<KitDetail>(`/api/staff/kits/${encodeURIComponent(kitId)}`);
+      await api(`/api/staff/kits/${encodeURIComponent(kitId)}`, { method: "PATCH", body: JSON.stringify({
+        name: kit.name, description: kit.description, locationId: kit.locationId, active: kit.active, updatedAt: kit.updatedAt,
+        components: [...components.map((part) => ({ itemId: part.itemId, required: part.required })), { itemId: item.id, required }] }) });
+      toast(`${item.name} added to ${kit.name}.`);
+      closeKitAdder();
+      await refreshStock(item.id);
+    } catch (error) {
+      setMessage(alert, failure(error));
+    } finally { done(); }
+  }
+
+  /** The button under the history that brings its next older page, while there is one. */
+  const historyMore = (): Html => historyNext ? html`<button type="button" class="button button--secondary button--sm" data-history-more>Show older history</button>` : html``;
+
+  async function loadOlderHistory(button: HTMLButtonElement): Promise<void> {
+    if (!detail || !historyNext) return;
+    const id = detail.item.id;
+    const done = working(button);
+    try {
+      const page = await api<{ movements: Movement[]; events: CatalogEvent[]; next: HistoryCursor | null }>(`/api/staff/items/${encodeURIComponent(id)}/history?before=${encodeURIComponent(`${historyNext.at},${historyNext.id}`)}`);
+      if (detail?.item.id !== id) return;
+      extraMovements = [...extraMovements, ...page.movements];
+      extraEvents = [...extraEvents, ...page.events];
+      historyNext = page.next;
+      mount(sheet.querySelector("#history")!, historyMarkup(detail));
+      mount(sheet.querySelector("#history-more")!, historyMore());
+      (sheet.querySelector<HTMLElement>("[data-history-more]") ?? sheet.querySelector<HTMLElement>("#panel-history"))?.focus({ preventScroll: true });
+    } catch (error) {
+      toast(failure(error), "error");
+    } finally { done(); }
   }
 
   let stockForm: ReturnType<typeof bindQuantityEditor> | null = null;
@@ -749,19 +1013,19 @@ export async function workspace(): Promise<void> {
   }
 
   function historyMarkup({ movements, events, reports }: Detail): Html {
-    type Entry = { at: string; markup: Html };
+    type Entry = { at: string; id: string; markup: Html };
     const entries: Entry[] = [
-      ...movements.map((movement) => {
+      ...[...movements, ...extraMovements].map((movement) => {
         const quantity = movement.signedQuantity;
         const tone = quantity > 0 ? "is-in" : quantity < 0 ? "is-out" : "";
-        return { at: movement.createdAt, markup: html`<li class="history__item ${tone}">
+        return { at: movement.sortAt ?? movement.createdAt, id: movement.id, markup: html`<li class="history__item ${tone}">
           <div><p class="history__title">${movementTitle(movement.related === "OPEN_UNIT" ? "UNIT_EMPTIED" : movement.movementType, quantity, movement.reason, movement.borrower)}${movement.purpose ? html` <span class="muted">(${movement.purpose === "USC" ? "USC use" : "individual use"})</span>` : ""}${movement.status === "SUPERSEDED" ? html` <span class="muted">(recorded offline before a later count, so not counted again)</span>` : movement.status !== "POSTED" ? ` (${movement.status.toLowerCase()})` : ""}</p>
             <p class="history__meta"><time datetime="${movement.createdAt}">${formatDateTime(movement.createdAt)}</time> · ${movement.actor ?? "Legacy system"}</p>
             ${movement.notes ? html`<p class="history__note">${movement.notes}</p>` : ""}</div>
           <p class="history__qty ${tone}">${signed(quantity)}<span class="history__after">${movement.afterQuantity - quantity} → ${movement.afterQuantity}</span></p></li>` };
       }),
       // A loan and a good return already appear as movements; only damaged or lost closings add a line.
-      ...events.filter((event) => event.action !== "LOAN_CREATED" && !(event.action === "LOAN_CLOSED" && event.details.outcome === "RETURNED")).map((event) => {
+      ...[...events, ...extraEvents].filter((event) => event.action !== "LOAN_CREATED" && !(event.action === "LOAN_CLOSED" && event.details.outcome === "RETURNED")).map((event) => {
         const changes = event.action === "ITEM_UPDATED"
           ? Object.entries(event.details).filter(([field]) => FIELD_LABELS[field]).map(([field, value]) => html`<li><span>${FIELD_LABELS[field]}</span> ${formatValue(field, (value as Change).from)} → <strong>${formatValue(field, (value as Change).to)}</strong></li>`)
           : [];
@@ -771,19 +1035,24 @@ export async function workspace(): Promise<void> {
         // What was typed with a report or its resolution lives on the report; the history shows it where it happened.
         const report = reports.find((entry) => entry.id === event.details.reportId);
         const typed = event.action === "LOCATION_REPORTED" ? report?.note : event.action === "LOCATION_REPORT_RESOLVED" ? report?.resolutionNote : null;
-        return { at: event.at, markup: html`<li class="history__item is-catalog">
+        return { at: event.sortAt ?? event.at, id: event.id ?? "", markup: html`<li class="history__item is-catalog">
           <div><p class="history__title">${eventTitle(event)}</p>
             <p class="history__meta"><time datetime="${event.at}">${formatDateTime(event.at)}</time> · ${event.actor ?? "System"}</p>
             ${typeof mergeId === "string" ? html`<p class="history__note"><a class="text-link" href="/staff/items?item=${encodeURIComponent(mergeId)}" data-route>${event.action === "ITEM_MERGED" ? "Retained item" : "Merged from"}: ${String(mergeName ?? mergeId)} (${mergeId})</a></p>` : ""}
             ${changes.length ? html`<ul class="history__changes">${changes}</ul>` : event.action === "ITEM_CREATED" && opening > 0 ? html`<p class="history__note">Opening quantity ${opening}</p>` : typed ? html`<p class="history__note">${typed}</p>` : ""}</div></li>` };
       })
-    ].sort((a, b) => b.at.localeCompare(a.at));
+    // Newest first by the one time, then id: the order the pages are cut in (inventory.ts historyPage).
+    ].sort((a, b) => a.at < b.at ? 1 : a.at > b.at ? -1 : a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
     return entries.length ? html`${entries.map((entry) => entry.markup)}` : html`<li class="history__empty">No history recorded yet.</li>`;
   }
 
   function renderDetail(loaded: Detail, tab: Tab): void {
     detail = loaded;
     dirty = false;
+    settingsChanged = () => false;
+    extraMovements = [];
+    extraEvents = [];
+    historyNext = loaded.historyNext ?? null;
     const { item } = loaded;
     if (loaded.mergedInto) {
       sheetShell(html`<span class="mono">${item.id}</span>`, item.name, html`
@@ -809,11 +1078,12 @@ export async function workspace(): Promise<void> {
       </div>
       <section id="panel-overview" class="panel-stack" role="tabpanel" aria-labelledby="tab-overview" tabindex="0" ${tab === "overview" ? "" : html`hidden`}>${overviewMarkup(loaded)}</section>
       ${lendable ? html`<section id="panel-loan" class="panel-stack" role="tabpanel" aria-labelledby="tab-loan" ${tab === "loan" ? "" : html`hidden`}>
-        ${item.status === "INACTIVE" ? html`<div class="callout">${icon("info")}<p>Inactive items cannot be lent. Reactivate it in Edit details first.</p></div>` : html`<form id="loan-form" class="form" novalidate aria-labelledby="lend-title"><h3 class="section-label" id="lend-title">Lend this item</h3>${loanFields("loan")}</form>`}
+        ${item.status === "INACTIVE" ? html`<div class="callout">${icon("info")}<p>Inactive items cannot be lent. Reactivate it in Stock settings on the Overview first.</p></div>` : html`<form id="loan-form" class="form" novalidate aria-labelledby="lend-title"><h3 class="section-label" id="lend-title">Lend this item</h3>${loanFields("loan")}</form>`}
         <div id="item-loans" class="panel-stack">${itemLoansMarkup(loaded)}</div>
       </section>` : ""}
       <section id="panel-details" role="tabpanel" aria-labelledby="tab-details" ${tab === "details" ? "" : html`hidden`}>${detailsFormMarkup(item)}</section>
       <section id="panel-history" class="panel-stack" role="tabpanel" aria-labelledby="tab-history" tabindex="0" ${tab === "history" ? "" : html`hidden`}><ol class="history" id="history">${historyMarkup(loaded)}</ol>
+        <div class="history__more" id="history-more">${historyMore()}</div>
         <p><a class="text-link" href="/staff/activity?item=${item.id}" data-route>All activity for this item ${icon("arrow")}</a></p></section>`);
     const tabButtons = [...sheet.querySelectorAll<HTMLButtonElement>("[role=tab]")];
     const select = (target: HTMLButtonElement) => {
@@ -826,6 +1096,21 @@ export async function workspace(): Promise<void> {
       if (target.id === "tab-loan") void loadKnown();
     };
     if (tab === "loan") void loadKnown();
+    /** Carries out the profile's next action where it is done: the stock editor, the loan tab or Edit details. */
+    const runNext = (key: string) => {
+      if (key === "count" || key === "stock-in") {
+        select(sheet.querySelector<HTMLButtonElement>("#tab-overview")!);
+        const reorder = detail?.reorder;
+        stockForm?.preset(key === "count" ? { reason: "COUNT" } : { reason: "DELIVERY", ...(reorder?.desiredQuantity ? { delta: reorder.desiredQuantity } : {}) });
+        return;
+      }
+      const lending = key === "lend" || key === "return";
+      const panelTab = sheet.querySelector<HTMLButtonElement>(`#tab-${lending ? "loan" : "details"}`);
+      if (!panelTab) return;
+      select(panelTab);
+      const field = { lend: "#loan-studentId", return: "#item-loans [data-return]", classify: "#f-itemType", place: "#f-locationId" }[key];
+      (sheet.querySelector<HTMLElement>(field ?? "") ?? panelTab).focus();
+    };
     tabButtons.forEach((button, index) => {
       button.addEventListener("click", () => select(button));
       button.addEventListener("keydown", (event) => {
@@ -847,17 +1132,28 @@ export async function workspace(): Promise<void> {
       const loan = giveBack && detail?.loans.find((entry) => entry.id === giveBack.dataset.return);
       if (loan) openReturn(loan, async () => { await refreshStock(loan.itemId); await poll.refresh(); });
       if (element.closest("[data-where]")) showWhere();
+      const next = element.closest<HTMLElement>("[data-next]");
+      if (next) runNext(next.dataset.next!);
+      const restock = element.closest<HTMLButtonElement>("[data-add-restock]");
+      if (restock) void addToRestock(restock);
+      const kit = element.closest<HTMLButtonElement>("[data-add-kit]");
+      if (kit) void toggleKitAdder(kit);
+      if (element.closest("[data-kit-cancel]")) closeKitAdder();
+      const older = element.closest<HTMLButtonElement>("[data-history-more]");
+      if (older) void loadOlderHistory(older);
       const resolve = element.closest<HTMLButtonElement>("[data-resolve]");
       if (resolve) openResolve(resolve);
       if (element.closest("[data-resolve-cancel]")) { const row = element.closest<HTMLElement>("[data-report-id]")!; row.querySelector(".report__form")?.remove(); row.querySelector<HTMLButtonElement>("[data-resolve]")!.hidden = false; row.querySelector<HTMLButtonElement>("[data-resolve]")!.focus(); }
     });
     sheet.querySelector(".sheet__body")!.addEventListener("submit", (event) => {
+      const kitForm = (event.target as HTMLElement).closest<HTMLFormElement>("[data-kit-form]");
+      if (kitForm) { event.preventDefault(); void addToKit(kitForm); return; }
       const form = (event.target as HTMLElement).closest<HTMLFormElement>(".report__form");
       if (!form) return;
       event.preventDefault();
       void sendResolve(form);
     });
-    const target = () => detail ? { id: detail.item.id, name: detail.item.name, unit: detail.item.unit, onHand: detail.item.onHand, openUnits: detail.openUnits.length } : null;
+    const target = () => detail ? { id: detail.item.id, name: detail.item.name, unit: detail.item.unit, onHand: detail.item.onHand, openUnits: detail.openUnits.length, reorder: detail.reorder ?? null } : null;
     const openHost = sheet.querySelector<HTMLElement>("#open-units");
     openPanel = openHost ? bindOpenUnits(openHost, () => detail && { ...detail.item, openUnits: detail.openUnits, usesRecorded: detail.usesRecorded, unitsEmptied: detail.unitsEmptied },
       async () => { await refreshStock(item.id); await poll.refresh(); }) : null;
@@ -880,6 +1176,7 @@ export async function workspace(): Promise<void> {
       onLent: async (lent) => { await refreshStock(lent.id); await poll.refresh(); }
     }) : null;
     bindDetailsForm(item);
+    bindSettings(item);
     photo = photoPanel(sheet.querySelector<HTMLElement>("#photo-panel")!, {
       visual: () => ({ ...detail!.item, photoId: detail!.item.photo?.id }), updatedAt: () => detail!.item.updatedAt,
       // Rebase only our successful photo repair; another writer's detail changes still conflict.
@@ -887,7 +1184,8 @@ export async function workspace(): Promise<void> {
       id: item.id, name: item.name, photo: item.photo, noun: "photo", endpoint: `/api/staff/items/${encodeURIComponent(item.id)}/photo`, cleanup: `/api/staff/items/${encodeURIComponent(item.id)}/cutout`,
       cleanupState: () => detail?.item.photoCleanup,
       enableCleanup: async () => { await api("/api/staff/admin/cleanup", { method: "PATCH", body: JSON.stringify({ on: true }) }); await poll.refresh(); },
-      thumbUrl: (id) => photoUrl(id, "thumb"),
+      // The sheet's tile is the detail size, named by the item's last change so it can be kept (V1.16.4 §4.4).
+      thumbUrl: (id) => photoUrl(id, "detail", detail?.item.updatedAt ?? null),
       hintAdd: "Everyone sees this photo on the Lending Hub and Self-Service. Show the item itself, not people or documents.",
       hintHas: "Everyone sees this photo on the Lending Hub and Self-Service. The large version stays staff-only.", removeNote: "The item keeps its stock and history.",
       chooseIcon: () => openPicture?.(),
@@ -927,7 +1225,6 @@ export async function workspace(): Promise<void> {
     const hinted = (id: string, hint: string) => hint ? html`aria-describedby="f-${id}-hint"` : "";
     const hintMarkup = (id: string, hint: string) => hint ? html`<p class="visually-hidden" id="f-${id}-hint">${hint}</p>` : "";
     const text = (id: string, title: string, value: unknown, attributes: Html | string = "", hint = "", optional = false) => html`<div class="field"><label for="f-${id}">${title}${optional ? html` <span class="field__optional">optional</span>` : ""}</label><input id="f-${id}" name="${id}" value="${value ?? ""}" ${attributes} ${hinted(id, hint)} />${hintMarkup(id, hint)}</div>`;
-    const number = (id: string, title: string, value: unknown, max: number, hint = "") => html`<div class="field"><label for="f-${id}">${title}</label><input id="f-${id}" name="${id}" type="number" inputmode="numeric" min="0" max="${max}" step="1" value="${value ?? 0}" ${hinted(id, hint)} />${hintMarkup(id, hint)}</div>`;
     const reviewing = item.needsReview === true;
     return html`<form id="details-form" class="form" novalidate>
       ${reviewing ? html`<div class="callout callout--review">${icon("info")}<div><p><strong>Reviewing a migrated record.</strong> Check each detail against the physical item, fill in what is missing, then mark it reviewed.</p><div id="review-checklist">${checklist(reviewChecklist(item as Item))}</div></div></div>` : ""}
@@ -965,17 +1262,6 @@ export async function workspace(): Promise<void> {
         <div class="field"><label for="f-notes">Internal notes <span class="field__optional">optional</span></label><textarea id="f-notes" name="notes" maxlength="1000" rows="3" autocapitalize="sentences" autocorrect="on" spellcheck="true">${item.notes ?? ""}</textarea></div>
       </div>
       <div class="form-section">
-        <h3 class="form-section__title">Stock settings</h3>
-        <div class="field-grid">
-          <div class="field"><label for="f-status">Status</label><select id="f-status" name="status">${options(ITEM_STATUSES, item.status ?? "ACTIVE")}</select></div>
-          ${number("reorderThreshold", "Reorder level", item.reorderThreshold, 100_000, "Low stock at or below this. 0 turns it off.")}
-        </div>
-        <div class="field-grid">
-          <div class="field"><label for="f-stockArea">Stock area</label><select id="f-stockArea" name="stockArea">${options(STOCK_AREAS, item.stockArea ?? "Inventory")}</select></div>
-          <div class="field" data-expiry ${(item.stockArea ?? "Inventory") === "Pantry" ? "" : html`hidden`}><label for="f-expiresOn">Earliest expiry <span class="field__optional">optional</span></label><input id="f-expiresOn" name="expiresOn" type="date" value="${item.expiresOn ?? ""}" /></div>
-        </div>
-      </div>
-      <div class="form-section">
         <h3 class="form-section__title">Availability</h3>
         <div class="field"><label for="f-lendingAudience">Shown to</label><select id="f-lendingAudience" name="lendingAudience">${options(LENDING_AUDIENCES, item.lendingAudience ?? "NOT_AVAILABLE_FOR_LENDING")}</select></div>
         <div class="listing-status" id="listing-preview" aria-live="polite"></div>
@@ -993,20 +1279,23 @@ export async function workspace(): Promise<void> {
     </form>`;
   }
 
-  function readDetails(form: HTMLFormElement) {
+  /**
+   * The edit form's values. Status and reorder level are the sheet's Stock settings now (V1.16.4 §4.3): they are sent as saved, from
+   * `item`, which a settings save keeps current; stock area and expiry are left out, so the Worker keeps what is stored.
+   */
+  function readDetails(form: HTMLFormElement, item: Pick<DetailItem, "status" | "reorderThreshold">) {
     const values = new FormData(form);
-    const whole = (key: string) => values.get(key) === "" ? 0 : Number(values.get(key));
     return {
       name: String(values.get("name") ?? ""), aliases: String(values.get("aliases") ?? ""), category: String(values.get("category") ?? ""), unit: String(values.get("unit") ?? ""),
-      itemType: String(values.get("itemType")), status: String(values.get("status")), locationId: String(values.get("locationId") ?? ""),
-      reorderThreshold: whole("reorderThreshold"), lendingAudience: String(values.get("lendingAudience")),
+      itemType: String(values.get("itemType")), status: item.status, locationId: String(values.get("locationId") ?? ""),
+      reorderThreshold: item.reorderThreshold, lendingAudience: String(values.get("lendingAudience")),
       needsReview: values.get("reviewed") !== "on", notes: String(values.get("notes") ?? ""), model: String(values.get("model") ?? ""), serialNumber: String(values.get("serialNumber") ?? ""),
-      stockArea: String(values.get("stockArea") ?? "Inventory"), expiresOn: String(values.get("expiresOn") ?? ""), consumptionMode: String(values.get("consumptionMode") ?? "WHOLE_UNIT")
+      consumptionMode: String(values.get("consumptionMode") ?? "WHOLE_UNIT")
     };
   }
 
   /** Mirrors the Worker's validation so mistakes are caught before a round trip; the Worker still decides. */
-  function invalidFields(form: HTMLFormElement): Array<[HTMLElement, string]> {
+  function invalidFields(form: HTMLFormElement, item: DetailItem): Array<[HTMLElement, string]> {
     const problems: Array<[HTMLElement, string]> = [];
     for (const input of form.querySelectorAll<HTMLInputElement>("input[required]")) {
       if (!input.value.trim()) problems.push([input, `${form.querySelector(`label[for="${input.id}"]`)?.firstChild?.textContent?.trim()} is required.`]);
@@ -1015,7 +1304,7 @@ export async function workspace(): Promise<void> {
       const value = Number(input.value || 0);
       if (!Number.isInteger(value) || value < 0 || value > Number(input.max)) problems.push([input, `${form.querySelector(`label[for="${input.id}"]`)?.textContent?.trim()} must be a whole number from 0 to ${Number(input.max).toLocaleString()}.`]);
     }
-    const values = readDetails(form);
+    const values = readDetails(form, item);
     if (values.lendingAudience !== "NOT_AVAILABLE_FOR_LENDING" && !LISTABLE_ITEM_TYPES.has(values.itemType)) {
       problems.push([form.querySelector<HTMLElement>("#f-lendingAudience")!, "Only Loanable or Consumable items can be listed. Change the type, or choose Not lendable."]);
     }
@@ -1068,7 +1357,7 @@ export async function workspace(): Promise<void> {
       type.focus();
     });
     const preview = () => {
-      const values = readDetails(form);
+      const values = readDetails(form, item);
       const gaps = listingGaps(values);
       const element = form.querySelector("#listing-preview")!;
       element.className = `listing-status ${gaps.length ? "" : "is-listed"}`;
@@ -1077,7 +1366,6 @@ export async function workspace(): Promise<void> {
         : html`${icon("check")}<p>Will appear on the public Lending Hub, and phones can ${values.itemType === PUBLIC_LENDING_ITEM_TYPE ? "borrow" : values.consumptionMode === "OPEN_UNIT" ? "record using" : "take"} it.</p>`);
       const review = form.querySelector("#review-checklist");
       if (review) mount(review, checklist(reviewChecklist(values)));
-      form.querySelector<HTMLElement>("[data-expiry]")!.hidden = values.stockArea !== "Pantry";
       form.querySelector<HTMLElement>("[data-consumption]")!.hidden = values.itemType !== "Consumable";
       showClassification(values);
       const duplicate = form.querySelector<HTMLElement>("#duplicate-hint")!;
@@ -1155,7 +1443,7 @@ export async function workspace(): Promise<void> {
       const intent = mergeChoice ? "merge" : submitter?.dataset.intent ?? "save";
       if (intent === "review-next") form.querySelector<HTMLInputElement>("input[name=reviewed]")!.checked = true;
       form.querySelectorAll("[aria-invalid]").forEach((element) => element.removeAttribute("aria-invalid"));
-      const problems = invalidFields(form);
+      const problems = invalidFields(form, item);
       if (problems.length) {
         problems.forEach(([element]) => element.setAttribute("aria-invalid", "true"));
         setMessage(alert, problems.map(([, message]) => message).join(" "));
@@ -1168,8 +1456,8 @@ export async function workspace(): Promise<void> {
       const source = sourceId ? inventory?.items.find((entry) => entry.id === sourceId && entry.status === "INACTIVE") : undefined;
       const targetOnHand = detail?.item.id === item.id ? detail.item.onHand : item.onHand;
       if (intent === "merge") {
-        if (!source || readDetails(form).status !== "ACTIVE") { setMessage(alert, "Reload and choose an inactive duplicate for this active item."); return; }
-        if (!window.confirm(`Save changes and merge ${source.id} into ${item.id}?\n\nStock: ${source.onHand} + ${targetOnHand} = ${source.onHand + targetOnHand} ${units(source.onHand + targetOnHand, readDetails(form).unit)}. Combine only separate stock.\n\nRemove ${source.id} from the catalogue; keep its history.`)) return;
+        if (!source || readDetails(form, item).status !== "ACTIVE") { setMessage(alert, "Reload and choose an inactive duplicate for this active item."); return; }
+        if (!window.confirm(`Save changes and merge ${source.id} into ${item.id}?\n\nStock: ${source.onHand} + ${targetOnHand} = ${source.onHand + targetOnHand} ${units(source.onHand + targetOnHand, readDetails(form, item).unit)}. Combine only separate stock.\n\nRemove ${source.id} from the catalogue; keep its history.`)) return;
       }
       let savedBeforeMerge = false;
       const buttons = [...form.querySelectorAll<HTMLButtonElement>("button[type=submit], [data-merge]")];
@@ -1179,7 +1467,7 @@ export async function workspace(): Promise<void> {
         const id = item.id!;
         // The queue is the list the reviewer was working through, captured before this save changes it.
         const queue = [...shownIds];
-        const result = await api<{ changed: number; updatedAt: string | null }>(`/api/staff/items/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ ...readDetails(form), updatedAt: item.updatedAt ?? null }) });
+        const result = await api<{ changed: number; updatedAt: string | null }>(`/api/staff/items/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ ...readDetails(form, item), updatedAt: item.updatedAt ?? null }) });
         item.updatedAt = result.updatedAt;
         dirty = false;
         if (intent === "merge" && source) {

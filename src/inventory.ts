@@ -1,3 +1,4 @@
+import { SENTINEL, utc } from "./activity";
 import { itemIconKey, resolveItemIcon } from "./item-icons";
 import { LOCATION_ID } from "./location-tree";
 import { MAX_LINKS } from "./relation-policy";
@@ -143,25 +144,76 @@ export async function staffInventory(db: D1Database) {
   };
 }
 
-type AuditRow = { at: string; action: string; details: string | null; actor: string | null };
+type AuditRow = { id: string; at: string; sortAt: string; action: string; details: string | null; actor: string | null };
+
+/** History entries per page in an item's sheet (V1.16.4 §4.3); Activity remains the full log. */
+const HISTORY_PAGE = 50;
+/** Where a history page ends: the one time of its oldest entry (activity.ts `utc`) and that entry's id. */
+export type HistoryCursor = { at: string; id: string };
+type Keyed = { sortAt: string; id: string };
+const olderThan = (a: Keyed, b: Keyed) => a.sortAt < b.sortAt || (a.sortAt === b.sortAt && a.id < b.id);
+
+/**
+ * One page of an item's history, older than `before` (or the newest): its movements and its audit entries, each newest first by the
+ * one time and then id, one row more than a page so a fuller stream shows. The before → after figures are summed over the whole ledger
+ * in HISTORY_ORDER, whatever the page.
+ */
+function historyStatements(db: D1Database, id: string, before: HistoryCursor | null): [D1PreparedStatement, D1PreparedStatement] {
+  const older = (time: string, key: string) => `(?2 IS NULL OR ${time} < ?2 OR (${time} = ?2 AND ${key} < ?3))`;
+  return [
+    db.prepare(`SELECT * FROM (SELECT m.id, m.created_at AS createdAt, ${utc("m.created_at")} AS sortAt, m.movement_type AS movementType, m.signed_quantity AS signedQuantity, m.status,
+      m.notes, m.reason, m.related_entity_type AS related, ${actorName("a", "m.actor_user_id")} AS actor,
+      COALESCE(l.borrower_name, s.person_name) AS borrower, l.purpose,
+      SUM(CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END) OVER (ORDER BY ${HISTORY_ORDER}) AS afterQuantity
+      FROM inventory_movements m LEFT JOIN staff_accounts a ON a.id = m.actor_user_id
+      LEFT JOIN loans l ON m.related_entity_type = 'LOAN' AND l.id = m.related_entity_id
+      LEFT JOIN self_service_events s ON m.related_entity_type = 'SELF_SERVICE' AND s.id = m.related_entity_id WHERE m.item_id = ?1) h
+      WHERE ${older("h.sortAt", "h.id")} ORDER BY h.sortAt DESC, h.id DESC LIMIT ${HISTORY_PAGE + 1}`).bind(id, before?.at ?? null, before?.id ?? null),
+    db.prepare(`SELECT l.id, l.created_at AS at, ${utc("l.created_at")} AS sortAt, l.action, l.details_json AS details, ${actorName("a", "l.actor_user_id")} AS actor FROM audit_log l
+      LEFT JOIN staff_accounts a ON a.id = l.actor_user_id WHERE l.entity_type = 'ITEM' AND l.entity_id = ?1 AND ${older(utc("l.created_at"), "l.id")}
+      ORDER BY sortAt DESC, l.id DESC LIMIT ${HISTORY_PAGE + 1}`).bind(id, before?.at ?? null, before?.id ?? null)
+  ];
+}
+
+/**
+ * The two streams as one page with no gap: when either had more than a page, the page ends at the later of the two last rows, so
+ * nothing older than that is shown until the next page, which starts just below it.
+ */
+function historyPage<M extends Keyed>(movements: M[], events: AuditRow[]) {
+  const edge = [movements, events].filter((rows) => rows.length > HISTORY_PAGE).map((rows) => rows[HISTORY_PAGE - 1]!)
+    .reduce<Keyed | null>((later, row) => !later || olderThan(later, row) ? row : later, null);
+  const keep = <T extends Keyed>(rows: T[]) => rows.slice(0, HISTORY_PAGE).filter((row) => !edge || !olderThan(row, edge));
+  return {
+    movements: keep(movements),
+    // Parsed here so the browser renders sentences, never raw JSON.
+    events: keep(events).map((event) => ({ id: event.id, at: event.at, sortAt: event.sortAt, action: event.action, actor: event.actor, details: event.details ? JSON.parse(event.details) as Record<string, unknown> : {} })),
+    next: edge ? { at: edge.sortAt, id: edge.id } : null
+  };
+}
+
+/** `before=<time>,<id>` from a history page's `next`, checked before it reaches a query. */
+export function historyCursor(value: string | null): HistoryCursor {
+  const [at = "", id = ""] = (value ?? "").split(",");
+  const time = at === SENTINEL || (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(at) && Number.isFinite(Date.parse(at)));
+  if (!time || !/^[\w.:-]{1,120}$/.test(id)) throw new InputError(400, "That page marker is not valid. Reload the item.");
+  return { at, id };
+}
+
+/** The next page of an item's history (V1.16.4 §4.3): one batch, so one wait. */
+export async function itemHistory(db: D1Database, id: string, before: HistoryCursor) {
+  const [movements, events] = await db.batch(historyStatements(db, id, before));
+  return historyPage(movements!.results as Keyed[], events!.results as AuditRow[]);
+}
 
 export async function itemDetail(db: D1Database, id: string) {
-  const [item, movements, events, loans, units, uses, reports, merged] = await db.batch([
+  const [item, movements, events, loans, units, uses, reports, merged, reorder] = await db.batch([
     db.prepare(`SELECT ${ITEM_COLUMNS}, i.legacy_reported_available_qty AS legacyReportedAvailable, b.migrated_on_hand AS migratedOnHand,
       CASE WHEN i.legacy_reported_available_qty IS NULL THEN NULL ELSE b.migrated_on_hand - i.legacy_reported_available_qty END AS migrationDelta,
       i.legacy_source_sheet AS legacySourceSheet, i.legacy_source_row AS legacySourceRow,
       i.verification_note AS verificationNote, i.imported_from AS importedFrom, p.media_id AS photoId, p.width AS photoWidth, p.height AS photoHeight,
       lp.path AS location, CASE WHEN i.location_id IS NULL AND trim(i.storage_location) <> '' THEN trim(i.storage_location) END AS legacyLocation
       FROM items i LEFT JOIN ${balanceOf("?1")} b ON b.id = i.id LEFT JOIN item_media p ON p.item_id = i.id LEFT JOIN location_paths lp ON lp.id = i.location_id WHERE i.id = ?1`).bind(id),
-    db.prepare(`SELECT * FROM (SELECT m.id, m.created_at AS createdAt, m.movement_type AS movementType, m.signed_quantity AS signedQuantity, m.status,
-      m.notes, m.reason, m.related_entity_type AS related, ${actorName("a", "m.actor_user_id")} AS actor, ROW_NUMBER() OVER (ORDER BY ${HISTORY_ORDER}) AS seq,
-      COALESCE(l.borrower_name, s.person_name) AS borrower, l.purpose,
-      SUM(CASE WHEN m.status = 'POSTED' THEN m.signed_quantity ELSE 0 END) OVER (ORDER BY ${HISTORY_ORDER}) AS afterQuantity
-      FROM inventory_movements m LEFT JOIN staff_accounts a ON a.id = m.actor_user_id
-      LEFT JOIN loans l ON m.related_entity_type = 'LOAN' AND l.id = m.related_entity_id
-      LEFT JOIN self_service_events s ON m.related_entity_type = 'SELF_SERVICE' AND s.id = m.related_entity_id WHERE m.item_id = ?) ORDER BY seq DESC LIMIT 50`).bind(id),
-    db.prepare(`SELECT l.created_at AS at, l.action, l.details_json AS details, ${actorName("a", "l.actor_user_id")} AS actor FROM audit_log l
-      LEFT JOIN staff_accounts a ON a.id = l.actor_user_id WHERE l.entity_type = 'ITEM' AND l.entity_id = ? ORDER BY l.created_at DESC, l.rowid DESC LIMIT 50`).bind(id),
+    ...historyStatements(db, id, null),
     db.prepare(`${LOAN_COLUMNS} WHERE l.item_id = ? ORDER BY l.status = 'OUT' DESC, l.created_at DESC LIMIT 20`).bind(id),
     openUnitsOf(db, id),
     // Two separate measures, never mixed: uses recorded (staff and phones, no stock change) and units used up (each one -1).
@@ -173,22 +225,26 @@ export async function itemDetail(db: D1Database, id: string) {
         CASE r.source WHEN 'SELF_SERVICE' THEN r.reporter_name ELSE a.display_name END AS reportedBy, x.display_name AS resolvedBy
       FROM location_reports r LEFT JOIN staff_accounts a ON a.id = r.reported_by LEFT JOIN staff_accounts x ON x.id = r.resolved_by LEFT JOIN location_paths lp ON lp.id = r.location_id
       WHERE r.item_id = ? ORDER BY r.resolved_at IS NOT NULL, r.created_at DESC, r.id LIMIT 20`).bind(id),
-    mergedIntoStatement(db, id)
+    mergedIntoStatement(db, id),
+    // Its open restock entry, if any: a Stock in from the item's sheet offers to close it in the same write (V1.16.4 §4.3).
+    db.prepare(`SELECT id, status, desired_quantity AS desiredQuantity, updated_at AS updatedAt FROM reorders WHERE item_id = ? AND status IN (${OPEN_REORDERS})`).bind(id)
   ]);
   const found = item.results[0] as (ItemRow & { photoId: string | null; photoWidth: number | null; photoHeight: number | null } & Record<string, unknown>) | undefined;
   if (!found) throw new InputError(404, "Item not found.");
   const { photoId, photoWidth, photoHeight, ...row } = found;
   const retained = mergedFrom(merged!.results[0]);
+  const history = historyPage(movements!.results as Keyed[], events!.results as AuditRow[]);
   return {
     item: { ...row, name: formatItemName(row.name), needsReview: row.needsReview === 1, listed: isListedForLending(row), listingGaps: listingGaps(row), photo: photoId ? { id: photoId, width: photoWidth, height: photoHeight } : null },
     ...(retained ? { mergedInto: retained } : {}),
-    movements: movements.results,
-    loans: loans.results,
+    movements: history.movements,
+    historyNext: history.next,
+    reorder: reorder!.results[0] ?? null,
+    loans: loans!.results,
     openUnits: units!.results,
     reports: reports!.results,
     ...(uses!.results[0] as { usesRecorded: number; unitsEmptied: number }),
-    // Parsed here so the browser renders sentences, never raw JSON.
-    events: (events.results as AuditRow[]).map((event) => ({ at: event.at, action: event.action, actor: event.actor, details: event.details ? JSON.parse(event.details) as Record<string, unknown> : {} }))
+    events: history.events
   };
 }
 
@@ -271,6 +327,21 @@ export function parseItemInput(body: unknown): ItemInput {
   return input;
 }
 
+/** The item sheet's Stock settings alone (V1.16.4 §4.3): reorder level, stock area, expiry and status. */
+export type StockSettings = Pick<ItemInput, "status" | "reorderThreshold" | "stockArea" | "expiresOn">;
+
+/** Reads Stock settings with the edit form's own checks; every other field keeps its stored value. */
+export function parseStockSettings(body: unknown): StockSettings {
+  if (!body || typeof body !== "object") throw new InputError(400, "Invalid stock settings.");
+  const record = body as Record<string, unknown>;
+  return {
+    status: choice(record, "status", "status", ITEM_STATUSES),
+    reorderThreshold: whole(record, "reorderThreshold", "Reorder level", 0, 100_000),
+    stockArea: choice(record, "stockArea", "stock area", STOCK_AREAS),
+    expiresOn: isoDate(record.expiresOn ?? null, "Expiry date")
+  };
+}
+
 /** A calendar date as YYYY-MM-DD, or null when left empty. */
 export function isoDate(value: unknown, label: string): string | null {
   if (value === null || value === "") return null;
@@ -304,8 +375,8 @@ export async function pathsOf(db: D1Database, ids: Array<string | null>): Promis
 }
 
 /** Reuses another item's stored spelling of a category or unit that differs only in letter case. */
-async function canonical(db: D1Database, input: ItemInput, itemId = ""): Promise<ItemInput> {
-  const lookup = (column: string, value: string | null) => value
+async function canonical<T extends Partial<ItemInput>>(db: D1Database, input: T, itemId = ""): Promise<T> {
+  const lookup = (column: string, value: string | null | undefined) => value
     ? db.prepare(`SELECT ${column} AS value FROM items WHERE ${column} = ? COLLATE NOCASE AND id <> ? ORDER BY ${column} = ? DESC LIMIT 1`).bind(value, itemId, value).first<string>("value")
     : Promise.resolve(null);
   const [category, unit] = await Promise.all([lookup("category", input.category), lookup("unit", input.unit)]);
@@ -318,7 +389,7 @@ const EDITABLE: Array<[keyof ItemInput, string]> = [
   ["needsReview", "needs_review"], ["notes", "notes"],
   ["stockArea", "stock_area"], ["expiresOn", "expires_on"], ["consumptionMode", "consumption_mode"], ["model", "model"], ["serialNumber", "serial_number"]
 ];
-const stored = (value: ItemInput[keyof ItemInput]) => typeof value === "boolean" ? Number(value) : value;
+const stored = (value: ItemInput[keyof ItemInput] | undefined) => typeof value === "boolean" ? Number(value) : value;
 
 /**
  * The one audit writer. Details must never contain passwords, hashes, keys or tokens.
@@ -332,21 +403,21 @@ export function audit(db: D1Database, actorId: string | null, action: string, en
 const STALE = "Someone else changed this item while you were editing. Your changes were not saved; review the latest details and try again.";
 
 /**
- * Applies a catalog edit. `expectedUpdatedAt` is the version the editor loaded, so a stale
- * form can never silently overwrite another staff member's change.
+ * Applies a catalog edit: the whole edit form, or the sheet's Stock settings alone (a field not sent keeps its stored value).
+ * `expectedUpdatedAt` is the version the editor loaded, so a stale form can never silently overwrite another staff member's change.
  */
-export async function updateItem(db: D1Database, actor: Actor, id: string, parsed: ItemInput, expectedUpdatedAt: unknown) {
+export async function updateItem(db: D1Database, actor: Actor, id: string, parsed: ItemInput | StockSettings, expectedUpdatedAt: unknown) {
   await requireCurrentItem(db, id);
   if (expectedUpdatedAt !== null && typeof expectedUpdatedAt !== "string") throw new InputError(400, "Missing item version. Reload the item and try again.");
   const current = await db.prepare(`SELECT ${EDITABLE.map(([key, column]) => `${column} AS ${key}`).join(", ")}, updated_at AS updatedAt FROM items WHERE id = ?`).bind(id).first<Record<string, unknown>>();
   if (!current) throw new InputError(404, "Item not found.");
   if (current.updatedAt !== expectedUpdatedAt) throw new InputError(409, STALE);
-  const input = await canonical(db, parsed, id);
+  const input: Partial<ItemInput> = await canonical<Partial<ItemInput>>(db, parsed, id);
   const changed = EDITABLE.filter(([key]) => input[key] !== undefined && current[key] !== stored(input[key]));
   if (!changed.length) return { changed: 0, updatedAt: current.updatedAt };
-  if (changed.some(([key]) => key === "locationId")) await usablePlace(db, input.locationId);
+  if (changed.some(([key]) => key === "locationId")) await usablePlace(db, input.locationId ?? null);
   // History keeps the place in words as it was then ("Office › Cabinet 1"), not an id that may later be renamed.
-  const places = await pathsOf(db, [current.locationId as string | null, input.locationId]);
+  const places = await pathsOf(db, [current.locationId as string | null, input.locationId ?? null]);
   const detail = ([key]: [keyof ItemInput, string]) => key === "locationId"
     ? ["storageLocation", { from: places.get(current.locationId as string) ?? null, to: places.get(input.locationId!) ?? null }]
     : [key, { from: current[key], to: stored(input[key]) }];

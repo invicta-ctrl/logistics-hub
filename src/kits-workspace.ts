@@ -19,7 +19,7 @@ type Summary = { id: string; name: string; description: string | null; locationI
 type Template = { id: string; name: string; description: string | null; active: boolean; updatedAt: string; components: number; kits: number };
 type Answer = { revision: number; kits: Summary[]; templates: Template[] };
 type Part = { itemId: string; name: string; unit: string; category: string; itemType: string; consumptionMode: string; iconKey: string | null; visualType: "SYSTEM_ICON" | "PHOTO" | null; photoId: string | null; required: number; demand: number;
-  onHand: number; onLoan: number; expiresOn: string | null; state: ComponentState; reason: string | null; seen: { outcome: CheckOutcome; note: string | null; at: string } | null };
+  onHand: number; onLoan: number; expiresOn: string | null; state: ComponentState; label?: string; reason: string | null; seen: { outcome: CheckOutcome; note: string | null; at: string } | null };
 type Check = { id: string; checkedAt: string; checkedBy: string; note: string | null; okCount: number; flaggedCount: number; uncheckedCount: number };
 type Detail = { kit: Summary; components: Part[]; checks: Check[]; lastCheck: (Check & { observations: Array<{ itemId: string; name: string; outcome: CheckOutcome; note: string | null }> }) | null };
 type PickItem = { id: string; name: string; unit: string; category: string; itemType: string; consumptionMode: string; status: string; onHand: number; iconKey: string | null; visualType: "SYSTEM_ICON" | "PHOTO" | null; photoId: string | null };
@@ -210,7 +210,7 @@ export async function kitsWorkspace(): Promise<void> {
         ${part.reason ? html`<span class="kit-part__why">${part.reason}</span>` : ""}
         ${part.seen && part.seen.outcome !== "OK" && part.seen.note ? html`<span class="kit-part__why">Last check: “${part.seen.note}”</span>` : ""}
       </div>
-      <span class="tag ${PART_TAG[part.state]} kit-part__state">${icon(PART_ICON[part.state])}${COMPONENT_STATE_LABELS[part.state]}</span>${extra}</li>`;
+      <span class="tag ${PART_TAG[part.state]} kit-part__state">${icon(PART_ICON[part.state])}${part.label ?? COMPONENT_STATE_LABELS[part.state]}</span>${extra}</li>`;
 
   /* ---------- Profile ---------- */
 

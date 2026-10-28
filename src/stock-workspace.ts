@@ -1,4 +1,4 @@
-import { EXPIRY_WINDOW_DAYS, STOCK_STATE_LABELS, isExpiring, stockState } from "./catalog-policy";
+import { EXPIRY_WINDOW_DAYS, isExpiring, stockState } from "./catalog-policy";
 import { type Place, pathOf, placesOf } from "./location-tree";
 import { type Preset, bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
@@ -15,7 +15,8 @@ type StockItem = {
 };
 type Reorder = { id: string; itemId: string; itemName: string; unit: string; status: string; desiredQuantity: number | null; note: string | null; updatedAt: string; closedAt: string | null; updatedBy: string | null };
 type Activity = { id: string; createdAt: string; itemId: string; itemName: string; unit: string; movementType: string; related: string | null; change: number; afterQuantity: number; reason: string | null; notes: string | null; actor: string | null };
-type Stock = { revision: number; items: StockItem[]; locations: Place[]; reorders: Reorder[]; activity: Activity[] };
+/** `used`: each Pantry item's posted Stock outs in the last 30 days (stock.ts pantryUse); absent from a Worker before V1.16.4. */
+type Stock = { revision: number; items: StockItem[]; locations: Place[]; reorders: Reorder[]; activity: Activity[]; used?: Record<string, number> };
 type View = "attention" | "restock" | "pantry" | "activity";
 type Focus = "all" | "out" | "low" | "count" | "expiring" | "open";
 
@@ -39,7 +40,7 @@ function reasons(item: StockItem): Array<Exclude<Focus, "all">> {
   return list;
 }
 
-const FOCUS: Record<Exclude<Focus, "all">, string> = { out: "Out of stock", low: "Low stock", count: "Needs count", expiring: "Expiring", open: "Open units need review" };
+const FOCUS: Record<Exclude<Focus, "all">, string> = { out: "Out of stock", low: "Low stock", count: "Needs count", expiring: "Expiring soon", open: "Open units need review" };
 
 function expiryTag(item: StockItem): Html {
   if (!item.expiresOn) return html`<span class="muted">—</span>`;
@@ -49,9 +50,6 @@ function expiryTag(item: StockItem): Html {
   if (days <= EXPIRY_WINDOW_DAYS) return html`<span class="tag tag--warn">${days === 0 ? "Expires today" : `In ${plural(days, "day")}`} · ${text}</span>`;
   return html`<span class="tag">${text}</span>`;
 }
-
-const STOCK_TAG_TONES = { OUT: "tag--bad", ON_LOAN: "tag--pending", LOW: "tag--warn", OK: "tag--ok" } as const;
-const stockTag = (item: StockItem): Html => { const state = stockState(item); return html`<span class="tag ${STOCK_TAG_TONES[state]}">${STOCK_STATE_LABELS[state]}</span>`; };
 
 function whyTags(item: StockItem): Html {
   return html`<span class="tags">${reasons(item).map((reason) => {
@@ -68,7 +66,7 @@ let placeNames = new Map<string, string>();
 const placeOf = (item: { locationId: string | null }) => (item.locationId ? placeNames.get(item.locationId) : undefined) ?? "No place";
 const itemCell = (item: { id: string; name: string; locationId?: string | null }) => html`<td class="col-item"><a class="row-link" href="/staff/items?item=${item.id}" data-route>${item.name}</a><span class="cell-sub"><span class="mono">${item.id}</span>${item.locationId !== undefined ? html` · ${placeOf({ locationId: item.locationId })}` : ""}</span></td>`;
 const qtyCell = (onHand: number | null, unit: string, item?: StockItem) => html`<td class="col-qty">${onHand === null ? html`<span class="muted">Not available</span>` : html`<span class="qty">${formatQuantity(onHand)}</span> <span class="qty-unit">${units(onHand, unit)}</span>${item?.openUnits ? html`<span class="cell-sub">${sealedLine(onHand, item.openUnits, item.openCondition)}</span>` : ""}`}</td>`;
-const levelCell = (item: StockItem) => html`<td class="col-level"><span class="cell-label">Reorder level: </span>${item.reorderThreshold > 0 ? formatQuantity(item.reorderThreshold) : html`<span class="muted">Not set</span>`}</td>`;
+const levelCell = (item: StockItem, name = "Reorder level") => html`<td class="col-level"><span class="cell-label">${name}: </span>${item.reorderThreshold > 0 ? formatQuantity(item.reorderThreshold) : html`<span class="muted">Not set</span>`}</td>`;
 
 export async function stockWorkspace(): Promise<void> {
   const session = await loadSession("stock");
@@ -133,8 +131,13 @@ export async function stockWorkspace(): Promise<void> {
     (selected ? form.querySelector<HTMLInputElement>("input[name=total]")! : input).focus();
   };
 
+  /** The item's open restock entry, which a Stock in offers to close (V1.16.4 §4.3). */
+  const openEntry = (itemId: string) => {
+    const entry = stock?.reorders.find((reorder) => reorder.itemId === itemId && isOpen(reorder));
+    return entry ? { id: entry.id, status: entry.status } : null;
+  };
   const movement = bindQuantityEditor(form, {
-    target: () => selected,
+    target: () => selected && { ...selected, reorder: openEntry(selected.id) },
     onRecorded: async (target, result, reason) => {
       receipts.unshift(html`<li><strong>${signed(result.change)}</strong> ${target.name} <span class="muted">· ${result.onHand - result.change} → ${result.onHand} ${units(result.onHand, target.unit)} · ${label(reason).toLowerCase()} ${formatTime(new Date().toISOString())}</span></li>`);
       mount(document.querySelector("#receipts")!, html`${receipts.slice(0, 5)}`);
@@ -210,7 +213,7 @@ export async function stockWorkspace(): Promise<void> {
         ${[["all", "Everything", needing.length], ...Object.entries(FOCUS).filter(([key]) => key !== "open" || counts.open || focus === "open").map(([key, text]) => [key, text, counts[key]])].map(([key, text, count]) =>
           html`<button type="button" class="chip" data-focus="${key}" aria-pressed="${key === focus}">${text}<span class="chip__count">${count}</span></button>`)}
       </div>
-      ${unset ? html`<p class="hint-line">${icon("info")}<span>${plural(unset, "active item")} ${unset === 1 ? "has" : "have"} no reorder level, so ${unset === 1 ? "it is" : "they are"} never called low. Set levels in an item's Edit details in <a class="text-link" href="/staff/items" data-route>Items</a>.</span></p>` : ""}
+      ${unset ? html`<p class="hint-line">${icon("info")}<span>${plural(unset, "active item")} ${unset === 1 ? "has" : "have"} no reorder level, so ${unset === 1 ? "it is" : "they are"} never called low. Set a level in the item's Stock settings in <a class="text-link" href="/staff/items" data-route>Items</a>.</span></p>` : ""}
       ${shown.length ? html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Items that need attention</caption>
         <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Why</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -250,18 +253,26 @@ export async function stockWorkspace(): Promise<void> {
         <ul class="plain-list plain-list--muted">${closed.map((reorder) => html`<li><span>${reorder.itemName}</span><span class="muted">${label(reorder.status)} · ${formatDateTime(reorder.closedAt ?? reorder.updatedAt)}${reorder.updatedBy ? ` · ${reorder.updatedBy}` : ""}</span></li>`)}</ul></section>` : ""}`;
   }
 
+  /**
+   * Pantry is the stock list kept to the Pantry stock area (V1.16.4 §4.3), with the figures a pantry is run by: on hand, the minimum
+   * (its reorder level), how far short of it, what was used in the last 30 days and expiry. It writes nothing of its own: Use, Restock
+   * and Count post ledger movements, and open units keep their own records.
+   */
   function pantryMarkup(data: Stock): Html {
     const pantry = data.items.filter((item) => item.stockArea === "Pantry" && item.status !== "INACTIVE")
       .sort((a, b) => Number(expiring(b)) - Number(expiring(a)) || a.name.localeCompare(b.name));
-    if (!pantry.length) return emptyState("No pantry items", "Set an item's stock area to Pantry in Items → Edit details to track it here.");
-    return html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
+    if (!pantry.length) return emptyState("No pantry items", "Set an item's stock area to Pantry in its Stock settings in Items to track it here.");
+    const shortage = (item: StockItem) => item.reorderThreshold > 0 ? item.reorderThreshold - item.onHand : 0;
+    return html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static data-table--pantry">
       <caption class="visually-hidden">Pantry items</caption>
-      <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Expiry</th><th scope="col">Status</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
-      <tbody>${pantry.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit, item)}${levelCell(item)}<td>${expiryTag(item)}</td>
-        <td>${stockTag(item)}</td>
+      <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Minimum</th><th scope="col" class="col-short">Shortage</th><th scope="col" class="col-used">Used, 30 days</th><th scope="col">Expiry</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
+      <tbody>${pantry.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit, item)}${levelCell(item, "Minimum")}
+        <td class="col-short"><span class="cell-label">Shortage: </span>${shortage(item) > 0 ? html`<span class="tag tag--warn">${formatQuantity(shortage(item))} short</span>` : html`<span class="muted">None</span>`}</td>
+        <td class="col-used"><span class="cell-label">Used, last 30 days: </span>${data.used ? formatQuantity(data.used[item.id] ?? 0) : html`<span class="muted">—</span>`}</td>
+        <td>${expiryTag(item)}</td>
         <td class="col-actions"><span class="row-actions">${tracked(item)
           ? html`<button type="button" class="button button--secondary button--sm" data-open-units="${item.id}">Open units</button>`
-          : html`<button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="CONSUMED" data-delta="-1">Use</button>`}${rowActionMenu(`pantry-actions-${item.id}`, item.name, html`<li><button type="button" class="menu__item" data-record-item="${item.id}" data-reason="DELIVERY">Restock</button></li>`)}</span></td></tr>`)}</tbody></table></div>`;
+          : html`<button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="CONSUMED" data-delta="-1">Use</button>`}${rowActionMenu(`pantry-actions-${item.id}`, item.name, html`<li><button type="button" class="menu__item" data-record-item="${item.id}" data-reason="DELIVERY">Restock</button></li><li><button type="button" class="menu__item" data-record-item="${item.id}" data-reason="COUNT">Count</button></li>`)}</span></td></tr>`)}</tbody></table></div>`;
   }
 
   function activityMarkup(data: Stock): Html {
@@ -287,7 +298,8 @@ export async function stockWorkspace(): Promise<void> {
     const today = stock.activity.filter((entry) => officeDay(entry.createdAt) === officeDay());
     const pantry = stock.items.filter((item) => item.stockArea === "Pantry" && item.status !== "INACTIVE");
     const soon = pantry.filter(expiring).length;
-    mount(document.querySelector("#stock-views")!, html`${tab("attention", "Needs attention", needing)}${tab("restock", "Restock list", stock.reorders.filter(isOpen).length)}${tab("pantry", soon ? `Pantry · ${soon} expiring` : "Pantry", pantry.length)}${tab("activity", "Activity", today.length)}`);
+    // The stock views (V1.16.4 §4.3): Low & out of stock by default, Restock and Movements; Pantry is the list kept to the Pantry area.
+    mount(document.querySelector("#stock-views")!, html`${tab("attention", "Low & out of stock", needing)}${tab("restock", "Restock", stock.reorders.filter(isOpen).length)}${tab("activity", "Movements", today.length)}${tab("pantry", soon ? `Pantry · ${soon} expiring` : "Pantry", pantry.length)}`);
     document.querySelector("#stock-today")!.textContent = today.length
       ? `${plural(today.length, "stock movement")} today · last by ${today[0]!.actor ?? "staff"} at ${formatTime(today[0]!.createdAt)}`
       : "No stock movements recorded today yet.";

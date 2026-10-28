@@ -21,7 +21,7 @@ import { locationPicture, publicLocationPicture, putLocationPhoto, removeLocatio
 import { reportLocation, resolveReport } from "./location-reports";
 import { createLocation, deleteLocation, locationList, moveItems, updateLocation } from "./locations";
 import { openUnitAction } from "./open-units";
-import { InputError, audit, catalogRevision, createItem, itemDetail, parseItemInput, publicCatalog, recordMovement, setAliases, staffInventory, updateItem, mergeItem, requireCurrentItem } from "./inventory";
+import { InputError, audit, catalogRevision, createItem, historyCursor, itemDetail, itemHistory, parseItemInput, parseStockSettings, publicCatalog, recordMovement, setAliases, staffInventory, updateItem, mergeItem, requireCurrentItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
 import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
 import { eraseOldDetails, retentionPreview } from "./retention";
@@ -85,7 +85,7 @@ const LEASE_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 const leaseKey = (secret: string) => `catalogue-lease:${secret}`;
 /** Attention: "Keep both" on a possible duplicate found from a synced photo (ambient-assist.ts). */
 const KEEP_BOTH_PATH = /^\/api\/staff\/attention\/possible-duplicate\/(ITM-[A-Za-z0-9-]{1,24})$/;
-const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/cutout|\/location-report|\/visual|\/merge)?$/;
+const ITEM_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})(\/movements|\/loans|\/open-units|\/photo|\/cutout|\/location-report|\/visual|\/merge|\/history|\/settings)?$/;
 const LOCATION_PATH = /^\/api\/staff\/locations\/(LOC-\d{4,})(\/photo|\/move-items)?$/;
 const RELATION_PATH = /^\/api\/staff\/items\/(ITM-[A-Za-z0-9-]{1,24})\/links(?:\/(ITM-[A-Za-z0-9-]{1,24}))?$/;
 const KIT_PATH = /^\/api\/staff\/kits\/(KIT-\d{4,})(\/photo|\/checks)?$/;
@@ -511,7 +511,8 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   const settling = RESOLVE_PATH.exec(path);
   if (settling && method === "POST") return json(await resolveObservation(env.DB, account, settling[1]!, await body()));
   if (path === "/api/staff/items/bulk" && method === "POST") return json(await bulkUpdate(env.DB, account, await body()));
-  if (path === "/api/staff/stock" && method === "GET") return revisioned(request, env.DB, () => stockOverview(env.DB));
+  // Pantry's 30-day use moves with the clock as well as with writes, so the validator carries the hour (V1.16.4 §4.3).
+  if (path === "/api/staff/stock" && method === "GET") return revisioned(request, env.DB, () => stockOverview(env.DB), hourSalt());
   if (path === "/api/staff/loans" && method === "GET") return revisioned(request, env.DB, () => loansOverview(env.DB));
   if (path === "/api/staff/self-service" && method === "GET") return revisioned(request, env.DB, () => selfServiceReview(env.DB));
   if (path === "/api/staff/activity" && method === "GET") return activity(request, env.DB, account, url);
@@ -547,6 +548,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   // A movement asks this itself, together with its restock entry, to stay within its calls (inventory.ts recordMovement).
   if (match && method !== "GET" && match[2] !== "/merge" && match[2] !== "/movements") await requireCurrentItem(env.DB, match[1]!);
   if (match?.[2] === "/merge" && method === "POST") return json(await mergeItem(env.DB, account, match[1]!, await body()));
+  if (match?.[2] === "/history" && method === "GET") return json(await itemHistory(env.DB, match[1]!, historyCursor(url.searchParams.get("before"))));
   if (match && !match[2] && method === "GET") {
     // Everything about the item at once, then its photo's stored sizes once the photo is known: two waits (V1.16.4 §4.8).
     const [detail, freshness, kits, links, photoCleanup] = await Promise.all([itemDetail(env.DB, match[1]!), itemFreshness(env.DB, match[1]!), kitsOfItem(env.DB, match[1]!),
@@ -558,6 +560,10 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   if (match && !match[2] && method === "PATCH") {
     const input = await body() as Record<string, unknown> | null;
     return json(await updateItem(env.DB, account, match[1]!, parseItemInput(input), input?.updatedAt));
+  }
+  if (match?.[2] === "/settings" && method === "PATCH") {
+    const input = await body() as Record<string, unknown> | null;
+    return json(await updateItem(env.DB, account, match[1]!, parseStockSettings(input), input?.updatedAt));
   }
   if (match?.[2] === "/visual" && method === "PATCH") return json(await updateItemVisual(env.DB, account, match[1]!, await body()));
   if (match?.[2] === "/movements" && method === "POST") return json(await recordMovement(env.DB, account, match[1]!, await body()));

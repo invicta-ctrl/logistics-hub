@@ -14,7 +14,8 @@ async function choose(panel: Locator, name: string): Promise<void> {
 
 const username = process.env.E2E_USERNAME!;
 const password = process.env.E2E_PASSWORD!;
-const thumbnailSrc = (id: string) => `/api/staff/media/${id}/thumb?v=2`;
+/** The item sheet's picture: the Worker's detail picture (the cut-out when there is one), addressed by the item's last change (V1.16.4 §4.4). */
+const tileSrc = (id: string, revision = 0) => new RegExp(`^/api/staff/media/${id}/detail\\?v=2${revision ? `&r=${revision}` : ""}&p=[^&]+$`);
 /** A list row names the picture by the item's last change, so the browser may keep it (V1.16.4 §4.8). */
 const rowThumbnailSrc = (id: string) => new RegExp(`^/api/staff/media/${id}/thumb\\?v=2&p=[^&]+$`);
 
@@ -355,7 +356,7 @@ test.describe("owner administration", () => {
 
 test("migrated review: fill the gaps, mark reviewed, and move to the next record", async ({ page }) => {
   await signIn(page);
-  await page.getByRole("button", { name: /^Needs review/ }).click();
+  await page.getByRole("button", { name: /^Needs details check/ }).click();
   await expect(page).toHaveURL(/view=review/);
   const reviewedBefore = Number((await page.locator("#review-meter strong").textContent())!.replace(/\D/g, ""));
   // Other suites may add items; the meter counts every record.
@@ -418,11 +419,10 @@ test("create, warn on a duplicate name, then deactivate without deleting", async
   await expect(page.getByLabel("Quantity on hand")).toHaveValue("3");
   await expect(page.locator(".profile__meta").first()).toContainText("Office Equipment and Supplies");
 
-  await page.getByRole("tab", { name: "Edit details" }).click();
-  await sheet.locator("#item-advanced > summary").click();
+  // Status is one of the item's Stock settings, on its overview (V1.16.4 §4.3).
   await sheet.getByLabel("Status", { exact: true }).selectOption("INACTIVE");
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await expect(page.getByText("Changes saved.")).toBeVisible();
+  await sheet.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByText("Stock settings saved.")).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: /^Inactive/ }).click();
   await expect(page.getByRole("button", { name: "E2E Extension Cord" })).toBeVisible();
@@ -517,7 +517,7 @@ test("stock workspace: record a delivery, restock and receive, then read it in a
   await ketchup.getByRole("button", { name: "More actions for Banana Ketchup" }).click();
   await ketchup.getByRole("button", { name: "Add to restock" }).click();
   await expect(page.getByText("Banana Ketchup added to the restock list.")).toBeVisible();
-  await page.getByRole("button", { name: /^Restock list/ }).click();
+  await page.locator("#stock-views").getByRole("button", { name: /^Restock/ }).click();
   const entry = page.locator("tr", { hasText: "Banana Ketchup" });
   await entry.getByRole("button", { name: "More actions for Banana Ketchup" }).click();
   await entry.getByRole("button", { name: "Mark planned" }).click();
@@ -529,7 +529,7 @@ test("stock workspace: record a delivery, restock and receive, then read it in a
   await expect(panel.getByRole("radio", { name: "New stock received" })).toBeChecked();
   await panel.getByRole("button", { name: "Add 6" }).click();
   await expect(page.getByText("Banana Ketchup: 0 → 6 bottles (new stock received).")).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Restock list 0/ })).toBeVisible();
+  await expect(page.locator("#stock-views").getByRole("button", { name: /^Restock ?0/ })).toBeVisible();
   await expect(page.getByText("Closed in the last two weeks")).toBeVisible();
   await closeRecord();
 
@@ -1089,7 +1089,7 @@ test("item photos: an open profile follows a photo someone else changed, so its 
   const replaced = await page.request.put("/api/staff/items/ITM-0263/photo", { headers: { origin: baseURL! }, multipart: {
     display: { name: "display.jpg", mimeType: "image/jpeg", buffer: bytes }, thumb: { name: "thumb.jpg", mimeType: "image/jpeg", buffer: bytes }, expected: current } });
   const next = (await replaced.json() as { photo: { id: string } }).photo.id;
-  await expect(shown).toHaveAttribute("src", thumbnailSrc(next), { timeout: 30_000 });
+  await expect(shown).toHaveAttribute("src", tileSrc(next), { timeout: 30_000 });
   await choose(sheet.locator("#photo-panel"), "View larger");
   const viewer = page.getByRole("dialog", { name: "Photo of Scotch Tape" });
   await expect(viewer).toBeVisible();

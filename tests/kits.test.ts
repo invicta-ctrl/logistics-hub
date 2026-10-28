@@ -59,20 +59,22 @@ async function sewing() {
 describe("component and kit state", () => {
   const facts = (over: Partial<ComponentFacts> = {}): ComponentFacts => ({ required: 2, demand: 2, onHand: 5, onLoan: 0, reorderThreshold: 0, itemStatus: "ACTIVE", itemType: "Consumable", openCondition: null, expiresOn: null, seen: null, ...over });
   it("reads each reason in plain words, most serious first", () => {
-    expect(readComponent(facts(), "2026-10-05")).toEqual({ state: "OK", reason: null });
-    expect(readComponent(facts({ onHand: 1 }), "2026-10-05")).toEqual({ state: "SHORT", reason: "Needs 2, 1 on the shelf." });
+    expect(readComponent(facts(), "2026-10-05")).toEqual({ state: "OK", label: "Ready", reason: null });
+    expect(readComponent(facts({ onHand: 1 }), "2026-10-05")).toEqual({ state: "SHORT", label: "Short", reason: "Needs 2, 1 on the shelf." });
     expect(readComponent(facts({ onHand: 0, onLoan: 2 }), "2026-10-05").reason).toBe("Needs 2, 0 on the shelf, 2 on loan.");
     expect(readComponent(facts({ onHand: 3, demand: 4 }), "2026-10-05").reason).toBe("Needs 2 (4 across kits), 3 on the shelf.");
-    expect(readComponent(facts({ expiresOn: "2026-10-20" }), "2026-10-05")).toEqual({ state: "EXPIRING", reason: "Expires in 15 days." });
+    expect(readComponent(facts({ expiresOn: "2026-10-20" }), "2026-10-05")).toEqual({ state: "EXPIRING", label: "Expiring", reason: "Expires in 15 days." });
     expect(readComponent(facts({ expiresOn: "2026-10-01" }), "2026-10-05").reason).toBe("Expired.");
     expect(readComponent(facts({ expiresOn: "2027-01-01" }), "2026-10-05").state).toBe("OK");
     expect(readComponent(facts({ onHand: 3, reorderThreshold: 3 }), "2026-10-05").state).toBe("LOW");
     expect(readComponent(facts({ openCondition: "LOW" }), "2026-10-05").state).toBe("LOW");
     expect(readComponent(facts({ seen: "LOW" }), "2026-10-05").state).toBe("LOW");
-    expect(readComponent(facts({ seen: "DAMAGED" }), "2026-10-05")).toEqual({ state: "REVIEW", reason: "Damaged at the last check." });
-    expect(readComponent(facts({ seen: "MISSING", onHand: 0 }), "2026-10-05").state).toBe("REVIEW");
-    expect(readComponent(facts({ itemStatus: "INACTIVE" }), "2026-10-05").state).toBe("REVIEW");
-    expect(readComponent(facts({ itemType: "NEEDS_REVIEW" }), "2026-10-05").state).toBe("REVIEW");
+    expect(readComponent(facts({ seen: "DAMAGED" }), "2026-10-05")).toEqual({ state: "REVIEW", label: "Damaged", reason: "Damaged at the last check." });
+    // V1.16.4 §4.3: a component that needs a person names its one cause, never a general "Needs review".
+    expect(readComponent(facts({ seen: "MISSING", onHand: 0 }), "2026-10-05")).toMatchObject({ state: "REVIEW", label: "Missing" });
+    expect(readComponent(facts({ itemStatus: "INACTIVE" }), "2026-10-05")).toMatchObject({ state: "REVIEW", label: "Inactive" });
+    expect(readComponent(facts({ itemStatus: "VERIFY" }), "2026-10-05")).toMatchObject({ state: "REVIEW", label: "Needs count" });
+    expect(readComponent(facts({ itemType: "NEEDS_REVIEW" }), "2026-10-05")).toMatchObject({ state: "REVIEW", label: "Unclassified" });
   });
   it("a kit needs review before replenishment, and an empty kit is not ready", () => {
     expect(readKit(["OK", "OK"])).toEqual({ state: "READY", ready: 2, total: 2 });
