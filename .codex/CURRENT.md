@@ -1,8 +1,19 @@
 # Current Work Pointer — Logistics Hub
 
+## Claude takeover — 2026-10-28 (single writer)
+
+**V1.16.4 IN PROGRESS; not merged or released.** On 2026-10-28 Earl designated Claude the sole implementation lead for the rest of V1.16.4 ("Codex is no longer the implementation writer for this release") and directed completion, merge, deployment check and safe branch cleanup.
+
+- **Custody.** Writer checkout: `D:/Documents/Codex/HAU-USC Logistics/active/logistics-hub/.claude/worktrees/nav`, same branch `slice/v1.16.4-instant-navigation`, Claude's worktree lock.
+  - Codex's recovered checkout `D:/Documents/HAU-USC Logistics Hub/workspace/logistics-hub-v1164` is left exactly as it was: its Codex lock (2026-10-25), head `b70a584` and one untracked file named `tock receipts"`.
+  - That file is a 40 KB colour-coded copy of the `b70a584` diff, written 2026-10-28 11:39, most likely by a mistyped shell quote. It holds no unique data. Earl may delete it; agents leave it.
+  - That checkout is no longer a writer. Earl can yield its lock with `npm run agent:yield -- codex` there.
+- **Published.** `b70a584` (Earl, restock-race repair, WP0 references) is the base. Claude's WP3 work had been unpublished in the nav worktree; it is rebased onto `b70a584` without conflict, as `feat(v1.16.4): WP3 …`.
+- **Next exact action.** Finish WP3 verification (Worker E2E) and push. Then WP4 navigation and Home, WP5, WP6 and WP7, in the accepted order, each committed and pushed when green. Merge to `main` only when every §7 gate passes together.
+
 ## WP3 restock receipt checkpoint — 2026-10-28
 
-Uncommitted, independently reviewed server repair in `src/inventory.ts` and `tests/v1164-server.test.ts`: the movement INSERT rechecks the selected open reorder in the same D1 batch as its close and audit; retry read-back verifies the linked movement. The deterministic distinct-key race failed before repair and passes after it. `npx vitest run tests/v1164-server.test.ts -t 'concurrent restock receipts'` passed 4 cases; `npx vitest run tests/v1164-server.test.ts tests/worker.test.ts tests/open-units.test.ts tests/audits.test.ts tests/hardening.test.ts` passed 106 tests; `npx tsc -p tsconfig.worker.json` and `git diff --check` passed. Independent static review found no actionable blocker. The concurrency test uses a SQLite D1 stand-in; live D1 race and mid-batch fault injection were not run. Full browser, build, privacy, Worker E2E and final release checks remain open. Do not treat this partial WP3 repair as a release.
+Committed and pushed by Earl as `b70a5843f33886067c12687ae344407a29c94fe5`: an independently reviewed server repair in `src/inventory.ts` and `tests/v1164-server.test.ts`: the movement INSERT rechecks the selected open reorder in the same D1 batch as its close and audit; retry read-back verifies the linked movement. The deterministic distinct-key race failed before repair and passes after it. `npx vitest run tests/v1164-server.test.ts -t 'concurrent restock receipts'` passed 4 cases; `npx vitest run tests/v1164-server.test.ts tests/worker.test.ts tests/open-units.test.ts tests/audits.test.ts tests/hardening.test.ts` passed 106 tests; `npx tsc -p tsconfig.worker.json` and `git diff --check` passed. Independent static review found no actionable blocker. The concurrency test uses a SQLite D1 stand-in; live D1 race and mid-batch fault injection were not run. Full browser, build, privacy, Worker E2E and final release checks remain open. Do not treat this partial WP3 repair as a release.
 
 ## WP0 checkpoint — 2026-10-28
 
