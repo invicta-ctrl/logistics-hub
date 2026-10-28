@@ -474,8 +474,9 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
   statements.push(
     db.prepare(`INSERT OR IGNORE INTO inventory_movements(id, created_at, movement_type, direction, item_id, quantity, unit, signed_quantity, actor_user_id, idempotency_key, notes, reason, status)
       SELECT ?2, ?3, '${movement.type}', '${movement.direction}', i.id, ABS(${movement.signed}), i.unit, ${movement.signed}, ?4, ?5, ?6, ?8, 'POSTED'
-      FROM items i JOIN ${balanceOf("?7")} b ON b.id = i.id WHERE i.id = ?7 AND ${currentItemSQL()} AND ${movement.guard} AND (?9 IS NULL OR b.on_hand = ?9)`)
-      .bind(quantity, movementId, now, actor.accountId, key, note, itemId, reason, expected),
+      FROM items i JOIN ${balanceOf("?7")} b ON b.id = i.id WHERE i.id = ?7 AND ${currentItemSQL()} AND ${movement.guard} AND (?9 IS NULL OR b.on_hand = ?9)
+        AND (?10 IS NULL OR EXISTS (SELECT 1 FROM reorders r WHERE r.id = ?10 AND r.item_id = i.id AND r.status IN (${OPEN_REORDERS})))`)
+      .bind(quantity, movementId, now, actor.accountId, key, note, itemId, reason, expected, reorderId),
     // changes() still refers to the INSERT, so a retry or refused write leaves the revision untouched.
     db.prepare(`${BUMP_REVISION} AND changes() > 0`));
   if (reorderId) {
@@ -496,15 +497,20 @@ export async function recordMovement(db: D1Database, actor: Actor, itemId: strin
       : `${open} of the units on hand ${open === 1 ? "is" : "are"} open, so ${quantity} cannot be taken out. Mark an open unit empty instead, or correct the open units first.`);
   }
   // Found for a first write and for an idempotent retry alike.
-  const written = await db.prepare(`SELECT m.item_id AS itemId, m.signed_quantity AS change, ${onHandOf("m.item_id")} AS onHand
-    FROM inventory_movements m WHERE m.idempotency_key = ?`).bind(key).first<{ itemId: string; change: number; onHand: number }>();
-  if (written?.itemId === itemId) return { onHand: written.onHand, change: written.change };
+  const written = await db.prepare(`SELECT m.item_id AS itemId, m.signed_quantity AS change, ${onHandOf("m.item_id")} AS onHand,
+      (?2 IS NULL OR EXISTS (SELECT 1 FROM reorders r WHERE r.id = ?2 AND r.item_id = m.item_id AND r.movement_id = m.id AND r.status = 'RESTOCKED')) AS matchesReorder
+    FROM inventory_movements m WHERE m.idempotency_key = ?1`).bind(key, reorderId).first<{ itemId: string; change: number; onHand: number; matchesReorder: number }>();
+  if (written?.itemId === itemId && written.matchesReorder) return { onHand: written.onHand, change: written.change };
+  if (written?.itemId === itemId) throw new InputError(409, "That request was already used for another movement. Please try again.");
   if (written) throw new InputError(409, "That request was already used for another item. Please try again.");
   await requireCurrentItem(db, itemId);
-  const balance = await db.prepare(`SELECT ${onHandOf("i.id")} AS onHand FROM items i WHERE i.id = ?`).bind(itemId).first<number>("onHand");
-  if (balance === null) throw new InputError(404, "Item not found.");
-  if (expected !== null && balance !== expected) throw new InputError(409, `Someone else just changed this item: ${balance} on hand now. Check the figure and save again.`);
-  throw new InputError(409, `Only ${balance} on hand; cannot remove ${quantity}.`);
+  const current = await db.prepare(`SELECT ${onHandOf("i.id")} AS onHand,
+      (?2 IS NULL OR EXISTS (SELECT 1 FROM reorders r WHERE r.id = ?2 AND r.item_id = i.id AND r.status IN (${OPEN_REORDERS}))) AS reorderOpen
+    FROM items i WHERE i.id = ?1`).bind(itemId, reorderId).first<{ onHand: number; reorderOpen: number }>();
+  if (!current) throw new InputError(404, "Item not found.");
+  if (!current.reorderOpen) throw new InputError(409, "That restock entry is already closed. Refresh to see the latest list.");
+  if (expected !== null && current.onHand !== expected) throw new InputError(409, `Someone else just changed this item: ${current.onHand} on hand now. Check the figure and save again.`);
+  throw new InputError(409, `Only ${current.onHand} on hand; cannot remove ${quantity}.`);
 }
 
 /** A merged source remains addressable for its history, but is no longer a current item. */

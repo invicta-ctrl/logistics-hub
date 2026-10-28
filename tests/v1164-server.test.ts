@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { isExpiring, stockState } from "../src/catalog-policy";
-import { balanceOf, migratedOnHandOf, onHandOf } from "../src/inventory";
+import { balanceOf, InputError, migratedOnHandOf, onHandOf, recordMovement } from "../src/inventory";
 import { officeDay } from "../src/loans";
 import { hashPassword } from "../src/session";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
@@ -97,6 +97,98 @@ describe("one item's balance (§4.8.2)", () => {
       const plan = (sqlite.prepare(`EXPLAIN QUERY PLAN ${sql}`).all() as Array<{ detail: string }>).map((row) => row.detail).join("\n");
       expect(plan, sql).not.toMatch(/inventory_balances/);
     }
+  });
+});
+
+/** Hold both receipt preflights after they have read the open entry. */
+function concurrentReceiptDb(real: D1Database) {
+  let arrived = 0;
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => { release = resolve; });
+  const d1 = {
+    prepare: (sql: string) => real.prepare(sql),
+    batch: async (statements: D1PreparedStatement[]) => {
+      const result = await real.batch(statements);
+      if (result.length === 2 && Object.hasOwn(result[1]?.results?.[0] ?? {}, "open")) {
+        if (++arrived === 2) release();
+        await barrier;
+      }
+      return result;
+    }
+  } as unknown as D1Database;
+  return { d1, preflights: () => arrived };
+}
+
+describe("concurrent restock receipts (§4.3)", () => {
+  it("allows only one distinct request to consume the same open entry", async () => {
+    const id = await item("Receipt race", 4);
+    const reorder = await json<{ id: string }>(as(one, "/api/staff/reorders", "POST", { itemId: id }));
+    const revision = (sqlite.prepare("SELECT value FROM catalog_revision WHERE id = 1").get() as { value: number }).value;
+    const real = env.DB;
+    const { d1, preflights } = concurrentReceiptDb(real);
+    const bodies = ["race-receipt-one", "race-receipt-two"].map((requestKey) => ({
+      kind: "IN", quantity: 2, reason: "DELIVERY", reorderId: reorder.id, key: requestKey
+    }));
+    const results = await Promise.allSettled(bodies.map((body) => recordMovement(d1, { accountId: "ACC-1" }, id, body)));
+    expect(preflights()).toBe(2);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const loser = results.find((result) => result.status === "rejected") as PromiseRejectedResult;
+    expect(loser.reason).toBeInstanceOf(InputError);
+    expect(loser.reason).toMatchObject({ status: 409 });
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE idempotency_key IN (?, ?)").get(bodies[0]!.key, bodies[1]!.key)).toEqual({ n: 1 });
+    expect(sqlite.prepare("SELECT on_hand AS onHand FROM inventory_balances WHERE id = ?").get(id)).toEqual({ onHand: 6 });
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'REORDER_RESTOCKED' AND entity_id = ?").get(id)).toEqual({ n: 1 });
+    expect(sqlite.prepare("SELECT value FROM catalog_revision WHERE id = 1").get()).toEqual({ value: revision + 1 });
+    const written = sqlite.prepare(`SELECT r.status, m.idempotency_key AS requestKey FROM reorders r JOIN inventory_movements m ON m.id = r.movement_id WHERE r.id = ?`).get(reorder.id) as { status: string; requestKey: string };
+    expect(written.status).toBe("RESTOCKED");
+    const winner = bodies.find((body) => body.key === written.requestKey)!;
+    expect(await recordMovement(real, { accountId: "ACC-1" }, id, winner)).toEqual({ onHand: 6, change: 2 });
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'REORDER_RESTOCKED' AND entity_id = ?").get(id)).toEqual({ n: 1 });
+    expect(sqlite.prepare("SELECT value FROM catalog_revision WHERE id = 1").get()).toEqual({ value: revision + 1 });
+  });
+
+  it("accepts concurrent retries with the same key once", async () => {
+    const id = await item("Receipt retry", 4);
+    const reorder = await json<{ id: string }>(as(one, "/api/staff/reorders", "POST", { itemId: id }));
+    const revision = (sqlite.prepare("SELECT value FROM catalog_revision WHERE id = 1").get() as { value: number }).value;
+    const { d1, preflights } = concurrentReceiptDb(env.DB);
+    const body = { kind: "IN", quantity: 2, reason: "DELIVERY", reorderId: reorder.id, key: "receipt-same-key" };
+    const results = await Promise.all([recordMovement(d1, { accountId: "ACC-1" }, id, body), recordMovement(d1, { accountId: "ACC-1" }, id, body)]);
+    expect(preflights()).toBe(2);
+    expect(results).toEqual([{ onHand: 6, change: 2 }, { onHand: 6, change: 2 }]);
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE idempotency_key = ?").get(body.key)).toEqual({ n: 1 });
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM reorders r JOIN inventory_movements m ON m.id = r.movement_id WHERE r.id = ? AND r.status = 'RESTOCKED'").get(reorder.id)).toEqual({ n: 1 });
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'REORDER_RESTOCKED' AND entity_id = ?").get(id)).toEqual({ n: 1 });
+    expect(sqlite.prepare("SELECT value FROM catalog_revision WHERE id = 1").get()).toEqual({ value: revision + 1 });
+  });
+
+  it("leaves the entry open when a stale movement is refused", async () => {
+    const id = await item("Stale receipt", 4);
+    const reorder = await json<{ id: string }>(as(one, "/api/staff/reorders", "POST", { itemId: id }));
+    const revision = (sqlite.prepare("SELECT value FROM catalog_revision WHERE id = 1").get() as { value: number }).value;
+    const response = await as(one, `/api/staff/items/${id}/movements`, "POST", {
+      kind: "IN", quantity: 2, reason: "DELIVERY", reorderId: reorder.id, expectedOnHand: 3, key: "stale-receipt-key"
+    });
+    expect(response.status).toBe(409);
+    expect(sqlite.prepare("SELECT status, movement_id AS movementId FROM reorders WHERE id = ?").get(reorder.id)).toEqual({ status: "NEEDS_RESTOCK", movementId: null });
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE idempotency_key = ?").get("stale-receipt-key")).toEqual({ n: 0 });
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'REORDER_RESTOCKED' AND entity_id = ?").get(id)).toEqual({ n: 0 });
+    expect(sqlite.prepare("SELECT value FROM catalog_revision WHERE id = 1").get()).toEqual({ value: revision });
+  });
+
+  it("rejects a reused key that belongs to a different movement without closing an open entry", async () => {
+    const id = await item("Reused receipt key", 4);
+    const actor = { accountId: "ACC-1" };
+    const requestKey = "receipt-other-movement";
+    await recordMovement(env.DB, actor, id, { kind: "IN", quantity: 2, reason: "DELIVERY", key: requestKey });
+    const reorder = await json<{ id: string }>(as(one, "/api/staff/reorders", "POST", { itemId: id }));
+    const revision = (sqlite.prepare("SELECT value FROM catalog_revision WHERE id = 1").get() as { value: number }).value;
+    await expect(recordMovement(env.DB, actor, id, { kind: "IN", quantity: 2, reason: "DELIVERY", reorderId: reorder.id, key: requestKey }))
+      .rejects.toMatchObject({ status: 409 });
+    expect(sqlite.prepare("SELECT status, movement_id AS movementId FROM reorders WHERE id = ?").get(reorder.id)).toEqual({ status: "NEEDS_RESTOCK", movementId: null });
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements WHERE idempotency_key = ?").get(requestKey)).toEqual({ n: 1 });
+    expect(sqlite.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'REORDER_RESTOCKED' AND entity_id = ?").get(id)).toEqual({ n: 0 });
+    expect(sqlite.prepare("SELECT value FROM catalog_revision WHERE id = 1").get()).toEqual({ value: revision });
   });
 });
 
