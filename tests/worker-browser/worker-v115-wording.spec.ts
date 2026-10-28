@@ -46,8 +46,9 @@ function problems(seen: Seen[], data: ReadonlySet<string>) {
   for (const entry of seen) {
     const { where, text } = entry;
     const wording = staticWording(entry, data);
-    // What people typed or the catalog holds (names, references, times) is data, not interface wording.
-    if (/row-link|cell-id|account__name|live-status|attn-row__title|hint-row__says|cell-strong|visually-hidden|\[alt\]/.test(where) || /^(Updated|Saved|Last) /.test(text)) continue;
+    // What people typed or the catalog holds (names, references, times) is data, not interface wording. Home's rows (V1.16.4 §4.1)
+    // carry the same Attention entry titles as the queue's rows.
+    if (/row-link|cell-id|account__name|live-status|attn-row__title|home-row__title|hint-row__says|cell-strong|visually-hidden|\[alt\]/.test(where) || /^(Updated|Saved|Last) /.test(text)) continue;
     for (const word of wording.match(/\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/g) ?? []) found.push(`${where}: enum name ${word} in “${text}”`);
     // A reference such as SS-ABCD-EFGH and a column of initials are not words.
     for (const word of wording.replace(/\bSS-[A-Z0-9-]+\b/g, "").match(/\b[A-Z]{3,}\b/g) ?? []) if (!ACRONYMS.has(word)) found.push(`${where}: capitals ${word} in “${text}”`);

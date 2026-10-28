@@ -22,6 +22,8 @@
 .home-later:hover { border-color: var(--line-strong); background: var(--hover); }
 .home-later:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .home-later__count { color: var(--text-2); font-variant-numeric: tabular-nums; }
+/* A finger needs the full target, as every chip has (styles.css, pointer: coarse). */
+@media (pointer: coarse) { .home-later { min-height: var(--target); } }
 @media (max-width: 760px) {
   .home-laters { flex-wrap: nowrap; margin-inline: calc(-1 * var(--gutter)); padding: 0 var(--gutter) var(--space-1); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
   .home-laters::-webkit-scrollbar { display: none; }
