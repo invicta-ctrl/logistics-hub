@@ -275,6 +275,14 @@ describe("cheaper revalidation (§4.8.3, §4.8.4)", () => {
     expect(plain.headers.get("cache-control")).toBe("private, no-cache");
     const versioned = await as(one, `/api/staff/media/${mediaId}/thumb?v=2&p=2026-10-25T00%3A00%3A00.000Z`);
     expect(versioned.headers.get("cache-control")).toBe("private, max-age=86400");
+    // The item sheet's larger picture follows the same rule; an empty version names nothing, so it is not one.
+    await media.bucket.put(`items/${mediaId}/detail`, JPEG);
+    const cacheOf = async (address: string) => (await as(one, address)).headers.get("cache-control");
+    expect(await cacheOf(`/api/staff/media/${mediaId}/detail?v=2`)).toBe("private, no-cache");
+    expect(await cacheOf(`/api/staff/media/${mediaId}/detail?v=2&r=3`)).toBe("private, no-cache");
+    expect(await cacheOf(`/api/staff/media/${mediaId}/detail?v=2&p=2026-10-25T00%3A00%3A00.000Z`)).toBe("private, max-age=86400");
+    expect(await cacheOf(`/api/staff/media/${mediaId}/thumb?v=2&p=`)).toBe("private, no-cache");
+    expect(await cacheOf(`/api/staff/media/${mediaId}/detail?v=2&p=`)).toBe("private, no-cache");
     gets.mockClear();
     const unchanged = await as(one, `/api/staff/media/${mediaId}/thumb?v=2`, "GET", undefined, { "If-None-Match": plain.headers.get("etag")! });
     expect(unchanged.status).toBe(304);

@@ -543,7 +543,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
     return json(await createItem(env.DB, account, parseItemInput(input), opening), 201);
   }
   const media = MEDIA_PATH.exec(path);
-  if (media && method === "GET") return media[2] === "cutout" || media[2] === "pending" ? cutoutPicture(env.CATALOG_MEDIA, media[1]!, media[2] === "pending") : itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!, request.headers.get("if-none-match"), url.searchParams.has("p"));
+  if (media && method === "GET") return media[2] === "cutout" || media[2] === "pending" ? cutoutPicture(env.CATALOG_MEDIA, media[1]!, media[2] === "pending") : itemPhoto(env.CATALOG_MEDIA, media[1]!, media[2]!, request.headers.get("if-none-match"), Boolean(url.searchParams.get("p")));
   const match = ITEM_PATH.exec(path);
   // A movement asks this itself, together with its restock entry, to stay within its calls (inventory.ts recordMovement).
   if (match && method !== "GET" && match[2] !== "/merge" && match[2] !== "/movements") await requireCurrentItem(env.DB, match[1]!);
