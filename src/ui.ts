@@ -376,14 +376,15 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
     dialog.dataset.origin = "";
     document.addEventListener("scroll", detach, { once: true, passive: true });
   };
-  // The sheet's edits count while it is open (V1.16.4 §4.7): every way out of it, and out of the page, asks first.
+  // The sheet's edits count while it is open (V1.16.4 §4.7): every way out of it, and out of the page, asks first. A sheet already
+  // closing on purpose (saved, or its edits discarded) holds nothing, though it stays open through its exit animation.
   let closedByPlatform = false;
-  const edits = () => (dialog.open || closedByPlatform) && Boolean(options.dirty?.());
+  /** Set while the sheet closes on purpose (its own close, or leaving the page); any other close is the platform's. */
+  let intended = false;
+  const edits = () => !intended && (dialog.open || closedByPlatform) && Boolean(options.dirty?.());
   onLeave(trackEdits(edits));
   const unsaved = () => hasUnsaved([edits]);
   const discardOk = () => confirmDiscard([edits]);
-  /** Set while the sheet closes on purpose (its own close, or leaving the page); any other close is the platform's. */
-  let intended = false;
   const close = (force = false) => {
     if (!dialog.open || dialog.classList.contains("is-closing")) return;
     if (!force && unsaved()) { void discardOk().then((discard) => { if (discard) close(true); }); return; }

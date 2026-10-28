@@ -262,7 +262,10 @@ export function bindQuantityEditor(form: HTMLFormElement, options: {
       edits.reset();
       input.focus();
     },
-    /** Whether leaving now would lose a change: a figure or count still to save that differs from how the editor was set. */
-    edited: () => dirty() && edits.dirty()
+    /**
+     * Whether leaving now would lose a change: a figure or count still to save, for the chosen item, that differs from how the editor
+     * was set. With no item chosen there is nothing to save (choosing one starts the editor afresh).
+     */
+    edited: () => options.target() !== null && dirty() && edits.dirty()
   };
 }
