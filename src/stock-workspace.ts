@@ -284,7 +284,7 @@ export async function stockWorkspace(): Promise<void> {
     return html`<div class="sort-toggle activity-range" role="group" aria-label="Period">
         <button type="button" data-range="today" aria-pressed="${todayOnly}">Today</button><button type="button" data-range="recent" aria-pressed="${!todayOnly}">Recent</button>
       </div>
-      ${entries.length ? html`<ol class="activity-list">${entries.map((entry) => html`<li class="activity-row ${entry.change > 0 ? "is-in" : entry.change < 0 ? "is-out" : ""}">
+      ${entries.length ? html`<ol class="activity-list">${entries.map((entry) => html`<li class="activity-row activity-row--plain ${entry.change > 0 ? "is-in" : entry.change < 0 ? "is-out" : ""}">
           <p class="activity-row__change">${signed(entry.change)}</p>
           <div class="activity-row__main">
             <p><a class="row-link" href="/staff/items?item=${entry.itemId}" data-route>${entry.itemName}</a> <span class="muted">· ${movementTitle(entry.related === "OPEN_UNIT" ? "UNIT_EMPTIED" : entry.movementType, entry.change, entry.reason)}</span></p>
