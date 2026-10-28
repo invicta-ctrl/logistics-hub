@@ -70,7 +70,7 @@ const uuid = () => `00000000-0000-4000-8000-${String(++counter).padStart(12, "0"
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0]);
 function lend(itemId: string, fields: Record<string, string>) {
   const form = new FormData();
-  for (const [key, value] of Object.entries({ purpose: "INDIVIDUAL", quantity: "1", key: crypto.randomUUID(), studentId: "TEST-0001", ...fields })) form.set(key, value);
+  for (const [key, value] of Object.entries({ purpose: "INDIVIDUAL", quantity: "1", key: crypto.randomUUID(), studentId: "20000001", ...fields })) form.set(key, value);
   form.set("photo", new File([JPEG as BlobPart], "borrower.jpg", { type: "image/jpeg" }));
   return call(`/api/staff/items/${itemId}/loans`, { method: "POST", headers: { origin, cookie: one }, body: form });
 }

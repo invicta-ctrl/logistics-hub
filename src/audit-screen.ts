@@ -1,3 +1,4 @@
+import { WHOLE_DOMAINS, readWhole } from "./catalog-policy";
 import type { Who } from "./catalogue-offline";
 import { placeOptions, placeList } from "./catalogue-places";
 import { catalogueShell } from "./catalogue-shell";
@@ -258,7 +259,7 @@ async function checking(root: HTMLElement, who: Signed, start: AuditRecord): Pro
     if (counting === item.id) return html`<li class="ck-row is-open" data-item="${item.id}">
         <div class="ck-row__main"><strong>${item.name}</strong><span>${where}</span></div>
         <div class="ck-count"><label for="ck-count-${item.id}">How many are here?</label>
-          <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One fewer">${icon("minus")}</button><input id="ck-count-${item.id}" type="number" inputmode="numeric" min="0" max="100000" step="1" value="${seen?.counted ?? item.onHand}" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div>
+          <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One fewer">${icon("minus")}</button><input id="ck-count-${item.id}" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="${seen?.counted ?? item.onHand}" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div>
           <div class="where__buttons"><button type="button" class="button button--primary" data-save-count>Save count</button><button type="button" class="text-link" data-cancel>Cancel</button></div></div></li>`;
     if (reviewing === item.id) return html`<li class="ck-row is-open" data-item="${item.id}">
         <div class="ck-row__main"><strong>${item.name}</strong><span>${where}</span></div>
@@ -300,8 +301,10 @@ async function checking(root: HTMLElement, who: Signed, start: AuditRecord): Pro
     if (item && target.hasAttribute("data-review")) { reviewing = item.id; counting = null; return draw(); }
     if (item && target.hasAttribute("data-again")) { item.observation = null; return draw(); }
     if (item && target.hasAttribute("data-save-count")) {
-      const value = Number(root.querySelector<HTMLInputElement>(`#ck-count-${CSS.escape(item.id)}`)!.value);
-      if (!Number.isInteger(value) || value < 0 || value > 100_000) { toast("Enter a whole number from 0 to 100000.", "error"); return; }
+      const input = root.querySelector<HTMLInputElement>(`#ck-count-${CSS.escape(item.id)}`)!;
+      const read = readWhole(input.value, WHOLE_DOMAINS.count, "count");
+      if (!read.ok) { input.setAttribute("aria-invalid", "true"); input.focus(); toast(read.message, "error"); return; }
+      const value = read.value;
       counting = null;
       return see(value === item.onHand ? { itemId: item.id, outcome: "CONFIRMED", expectedOnHand: item.onHand, observedAt: now() }
         : { itemId: item.id, outcome: "MISMATCH", expectedOnHand: item.onHand, counted: value, observedAt: now() });
@@ -391,7 +394,7 @@ async function checking(root: HTMLElement, who: Signed, start: AuditRecord): Pro
       countHost.hidden = false;
       mount(countHost, html`<p><strong>${pick.name}</strong> is recorded at ${pathOf(places, pick.locationId) ?? "no place"}.</p>
         <label for="ck-found-qty">How many are here?</label>
-        <div class="stepper"><button type="button" class="stepper__button" data-fstep="-1" aria-label="One fewer">${icon("minus")}</button><input id="ck-found-qty" type="number" inputmode="numeric" min="0" max="100000" step="1" value="1" /><button type="button" class="stepper__button" data-fstep="1" aria-label="One more">${icon("plus")}</button></div>
+        <div class="stepper"><button type="button" class="stepper__button" data-fstep="-1" aria-label="One fewer">${icon("minus")}</button><input id="ck-found-qty" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="1" /><button type="button" class="stepper__button" data-fstep="1" aria-label="One more">${icon("plus")}</button></div>
         <div class="where__buttons"><button type="button" class="button button--primary" data-save-found="${pick.id}">Save as found here</button></div>`);
       countHost.querySelector<HTMLInputElement>("#ck-found-qty")!.focus();
       return;
@@ -403,8 +406,10 @@ async function checking(root: HTMLElement, who: Signed, start: AuditRecord): Pro
     }
     if (target.dataset.saveFound && saved) {
       const pick = saved.items.find((each) => each.id === target.dataset.saveFound)!;
-      const qty = Number(countHost.querySelector<HTMLInputElement>("#ck-found-qty")!.value);
-      if (!Number.isInteger(qty) || qty < 0) { toast("Enter a whole number.", "error"); return; }
+      const input = countHost.querySelector<HTMLInputElement>("#ck-found-qty")!;
+      const read = readWhole(input.value, WHOLE_DOMAINS.count, "quantity");
+      if (!read.ok) { input.setAttribute("aria-invalid", "true"); input.focus(); toast(read.message, "error"); return; }
+      const qty = read.value;
       found.close(true);
       filter = "findings";
       return see({ itemId: pick.id, outcome: "FOUND_HERE", expectedOnHand: pick.onHand, counted: qty, observedAt: now() });
@@ -524,7 +529,10 @@ async function summary(root: HTMLElement, who: Signed, detail: AuditDetail, reco
       body.note = note;
     }
     if (target.hasAttribute("data-fresh")) {
-      body.counted = Number(host.querySelector<HTMLInputElement>("[data-fresh-count]")!.value);
+      const input = host.querySelector<HTMLInputElement>("[data-fresh-count]")!;
+      const read = readWhole(input.value, WHOLE_DOMAINS.count, "count");
+      if (!read.ok) { input.setAttribute("aria-invalid", "true"); input.focus(); toast(read.message, "error"); return; }
+      body.counted = read.value;
       body.expectedOnHand = Number(target.dataset.fresh);
     }
     target.setAttribute("disabled", "");
@@ -555,7 +563,7 @@ function findingRow(entry: Finding): Html {
   const posted = entry.outcome === "CANT_FIND" ? 0 : entry.counted;
   return html`<li class="ck-finding" data-finding="${entry.id}"><strong>${name}</strong><span>${what}</span>
     ${entry.changedSince && countable ? html`<p class="cat-ready cat-ready--bad">${icon("alert")}<span><strong>Stock changed since this was counted.</strong> ${amount(entry.onHandNow, unit)} recorded now. Count it again and post what you see.</span></p>
-      <div class="ck-fresh"><label for="ck-fresh-${entry.id}">How many are there now?</label><div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One fewer">${icon("minus")}</button><input id="ck-fresh-${entry.id}" data-fresh-count type="number" inputmode="numeric" min="0" max="100000" step="1" value="${entry.onHandNow}" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div>
+      <div class="ck-fresh"><label for="ck-fresh-${entry.id}">How many are there now?</label><div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One fewer">${icon("minus")}</button><input id="ck-fresh-${entry.id}" data-fresh-count type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="${entry.onHandNow}" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div>
       <button type="button" class="button button--primary button--sm" data-settle="POSTED_COUNT" data-fresh="${entry.onHandNow}">Post this count</button></div>`
       : countable ? html`<div class="where__buttons"><button type="button" class="button button--primary button--sm" data-settle="POSTED_COUNT">Post count: ${posted}</button>
         ${entry.outcome === "CANT_FIND" ? html`<button type="button" class="button button--secondary button--sm" data-settle="REPORTED">Report its location</button>` : ""}</div>`

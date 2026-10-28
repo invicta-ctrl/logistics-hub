@@ -1,3 +1,5 @@
+import { LOAN_FIELDS, type LoanField, WHOLE_DOMAINS, normalizeStudentId, parseWhole, validateLoanDraft } from "./catalog-policy";
+import { bindStudentId } from "./student-id-field";
 import { type Html, ApiError, api, dataUrl, failure, formatDate, formatDateTime, html, icon, label, mount, officeDay, setMessage, shrinkPhoto, toast, units } from "./ui";
 
 export type Loan = {
@@ -8,7 +10,8 @@ export type Loan = {
   hasPhoto?: number;
 };
 export type Borrower = { name: string; studentId: string };
-type LoanTarget = { id: string; name: string; unit: string; onHand: number };
+/** `uscOnly`: the item is lent for USC use only, so the form is held to USC use (D3). */
+type LoanTarget = { id: string; name: string; unit: string; onHand: number; uscOnly?: boolean };
 
 
 /** Due and overdue are derived from the Manila calendar; nothing is stored as "overdue". */
@@ -62,20 +65,25 @@ export function loanRow(loan: Loan, withItem = false): Html {
     </div></li>`;
 }
 
-/** Form fields; `prefix` keeps IDs unique. The item comes from the caller, not the form. */
+/**
+ * Form fields; `prefix` keeps IDs unique. The item comes from the caller, not the form. Individual and USC use differ only in the USC
+ * reason, and the fields come in the phone's order (V1.16.4 §4.5): purpose, name, Student ID, reason, quantity, return date, photo.
+ */
 export function loanFields(prefix: string): Html {
   return html`<fieldset class="segmented segmented--2"><legend class="visually-hidden">Purpose</legend>
       <label><input type="radio" name="purpose" value="INDIVIDUAL" checked /><span>Individual use</span></label><label><input type="radio" name="purpose" value="USC" /><span>USC use</span></label>
     </fieldset>
+    <p class="field__hint" data-usc-only hidden>Lent for USC use only.</p>
     <div class="field-grid">
-      <div class="field"><label for="${prefix}-studentId">Student ID number <span class="field__optional" data-id-optional>required</span></label><input id="${prefix}-studentId" name="studentId" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false" list="${prefix}-known" /></div>
-      <div class="field"><label for="${prefix}-name" data-name-label>Borrower's full name</label><input id="${prefix}-name" name="borrowerName" maxlength="120" autocomplete="off" spellcheck="false" /></div>
+      <div class="field"><label for="${prefix}-name">Borrower's full name</label><input id="${prefix}-name" name="borrowerName" maxlength="120" autocomplete="off" spellcheck="false" /></div>
+      <div class="field"><label for="${prefix}-studentId">Student ID number</label><input id="${prefix}-studentId" name="studentId" type="text" inputmode="numeric" maxlength="30" autocomplete="off" spellcheck="false" list="${prefix}-known" aria-describedby="${prefix}-studentId-hint" />
+        <p class="field__hint" id="${prefix}-studentId-hint" aria-live="polite">8 digits</p></div>
     </div>
     <datalist id="${prefix}-known"></datalist>
     <div class="field" data-reason hidden><label for="${prefix}-reason">Specific reason</label><textarea id="${prefix}-reason" name="reason" rows="2" maxlength="300" placeholder="What it is for, e.g. stage setup for the general assembly"></textarea></div>
     <div class="field-grid">
       <div class="field"><label for="${prefix}-quantity">Quantity</label>
-        <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One less">${icon("minus")}</button><input id="${prefix}-quantity" name="quantity" type="number" inputmode="numeric" min="1" step="1" value="1" aria-describedby="${prefix}-available" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div>
+        <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One less">${icon("minus")}</button><input id="${prefix}-quantity" name="quantity" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="1" aria-describedby="${prefix}-available" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div>
         <p class="field__hint" id="${prefix}-available" data-available></p></div>
       <div class="field"><label for="${prefix}-returnBy">Return by <span class="field__optional">optional</span></label><input id="${prefix}-returnBy" name="returnBy" type="date" /></div>
     </div>
@@ -92,9 +100,10 @@ export function loanFields(prefix: string): Html {
 }
 
 /**
- * Wires the loan form to the item being lent. Individual use needs a student ID; USC use
- * needs a specific reason; both need a name and a photo. A returning student's name is
- * filled from their ID. Each attempt carries an idempotency key.
+ * Wires the loan form to the item being lent: one policy with the phone (`validateLoanDraft`), so both purposes need a name, an
+ * 8-digit Student ID and a photo, and USC use its reason. A returning student's name is filled from their ID. The request key lives
+ * until the server answers or the item changes (R5): a Lend whose answer was lost sends the same key again, and the Worker answers
+ * with the loan it already made instead of a second.
  */
 export function bindLoanForm(form: HTMLFormElement, options: {
   target: () => LoanTarget | null;
@@ -111,12 +120,17 @@ export function bindLoanForm(form: HTMLFormElement, options: {
   const photoBox = form.querySelector<HTMLElement>("[data-photo]")!;
   const returnBy = form.querySelector<HTMLInputElement>("input[name=returnBy]")!;
   let key = crypto.randomUUID();
+  // The item the key was last sent for: a key names one loan of one item.
+  let keyItem: string | null = null;
   let photo: Blob | null = null;
   // A photo still being prepared when Lend is pressed is waited for, not reported missing.
   let preparing: Promise<void> | null = null;
   let filledName = "";
   let knownSignature = "";
   const purpose = () => (new FormData(form).get("purpose") ?? "INDIVIDUAL") as "INDIVIDUAL" | "USC";
+  const individual = form.querySelector<HTMLInputElement>("input[name=purpose][value=INDIVIDUAL]")!;
+  const usc = form.querySelector<HTMLInputElement>("input[name=purpose][value=USC]")!;
+  bindStudentId(studentId, form.querySelector<HTMLElement>(`#${CSS.escape(studentId.id)}-hint`));
 
   const showPhoto = (preview: string | null) => {
     mount(photoBox, preview
@@ -126,14 +140,16 @@ export function bindLoanForm(form: HTMLFormElement, options: {
 
   const update = () => {
     const target = options.target();
-    const usc = purpose() === "USC";
-    form.querySelector("[data-name-label]")!.textContent = usc ? "Name of the person using it" : "Borrower's full name";
-    form.querySelector("[data-id-optional]")!.textContent = usc ? "optional" : "required";
-    form.querySelector<HTMLElement>("[data-reason]")!.hidden = !usc;
+    // An item lent for USC use only is lent for USC use (D3): Individual use cannot be chosen for it.
+    const uscOnly = Boolean(target?.uscOnly);
+    individual.disabled = uscOnly;
+    if (uscOnly && !usc.checked) usc.checked = true;
+    form.querySelector<HTMLElement>("[data-usc-only]")!.hidden = !uscOnly;
+    form.querySelector<HTMLElement>("[data-reason]")!.hidden = purpose() !== "USC";
     returnBy.min = officeDay();
     const available = target?.onHand ?? 0;
-    quantity.max = String(Math.max(1, available));
-    const value = Number(quantity.value) || 0;
+    const typed = parseWhole(quantity.value, WHOLE_DOMAINS.loanQuantity);
+    const value = typed.ok ? typed.value : 0;
     form.querySelector("[data-available]")!.textContent = !target ? "Choose an item first." : available > 0 ? `${available} ${units(available, target.unit)} on the shelf.` : "None on the shelf right now.";
     submit.disabled = !target || available <= 0;
     submit.textContent = target && value > 0 ? `Lend ${value} ${units(value, target.unit)}` : "Lend";
@@ -157,26 +173,27 @@ export function bindLoanForm(form: HTMLFormElement, options: {
   };
 
   form.addEventListener("input", (event) => {
-    key = crypto.randomUUID();
     form.querySelectorAll("[aria-invalid]").forEach((element) => element.removeAttribute("aria-invalid"));
     setMessage(alert, "");
     if (event.target === studentId) {
       // A returning student: fill the name they used last time, unless staff typed one.
-      const match = options.known().find((borrower) => borrower.studentId === studentId.value.trim().toUpperCase());
+      const match = options.known().find((borrower) => borrower.studentId === studentId.value);
       if (match && (!name.value || name.value === filledName)) { name.value = match.name; filledName = match.name; }
     }
     update();
   });
   form.addEventListener("change", update);
   form.querySelectorAll<HTMLButtonElement>("[data-step]").forEach((button) => button.addEventListener("click", () => {
-    const max = Number(quantity.max) || 1;
-    quantity.value = String(Math.min(max, Math.max(1, (Number(quantity.value) || 0) + Number(button.dataset.step))));
+    // The stepper stays between 1 and what is on the shelf; a typed figure is checked, never clamped, when Lend is pressed.
+    const max = Math.max(1, options.target()?.onHand ?? 1);
+    const typed = parseWhole(quantity.value, WHOLE_DOMAINS.loanQuantity);
+    quantity.value = String(Math.min(max, Math.max(1, (typed.ok ? typed.value : 0) + Number(button.dataset.step))));
     quantity.dispatchEvent(new Event("input", { bubbles: true }));
   }));
   photoBox.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
     if (target.closest("[data-pick]")) file.click();
-    if (target.closest("[data-clear]")) { photo = null; file.value = ""; showPhoto(null); key = crypto.randomUUID(); photoBox.querySelector<HTMLElement>("[data-pick]")?.focus(); }
+    if (target.closest("[data-clear]")) { photo = null; file.value = ""; showPhoto(null); photoBox.querySelector<HTMLElement>("[data-pick]")?.focus(); }
   });
   file.addEventListener("change", () => {
     const chosen = file.files?.[0];
@@ -186,7 +203,6 @@ export function bindLoanForm(form: HTMLFormElement, options: {
       try {
         photo = await shrinkPhoto(chosen);
         showPhoto(await dataUrl(photo));
-        key = crypto.randomUUID();
         photoBox.querySelector<HTMLElement>("[data-pick]")?.focus();
       } catch (error) {
         photo = null;
@@ -210,37 +226,45 @@ export function bindLoanForm(form: HTMLFormElement, options: {
     if (preparing) await preparing;
     const target = options.target();
     if (!target) return setMessage(alert, "Choose an item first.");
-    const usc = purpose() === "USC";
-    const count = Number(quantity.value);
-    if (!usc && !studentId.value.trim()) return invalid(studentId, "Enter the borrower's student ID number.");
-    if (studentId.value.trim() && !/^[A-Za-z0-9][A-Za-z0-9-]{2,29}$/.test(studentId.value.trim())) return invalid(studentId, "A student ID uses only letters, digits and dashes.");
-    if (!name.value.trim()) return invalid(name, usc ? "Enter the name of the person using it." : "Enter the borrower's full name.");
-    if (usc && !reason.value.trim()) return invalid(reason, "Give the specific reason for USC use.");
-    if (!Number.isInteger(count) || count < 1) return invalid(quantity, "Lend at least 1.");
+    const forUsc = purpose() === "USC";
+    // The first problem in the form's order, in the words the phone and the Worker use.
+    const problems = validateLoanDraft({ purpose: purpose(), borrowerName: name.value, studentId: studentId.value, reason: reason.value, quantity: quantity.value, uscOnly: target.uscOnly });
+    const fields: Record<LoanField, HTMLElement> = { purpose: forUsc ? usc : individual, borrowerName: name, studentId, reason, quantity };
+    const first = LOAN_FIELDS.find((field) => problems[field]);
+    if (first) return invalid(fields[first], problems[first]!);
+    const count = (parseWhole(quantity.value, WHOLE_DOMAINS.loanQuantity) as { value: number }).value;
     if (count > target.onHand) return invalid(quantity, `Only ${target.onHand} ${units(target.onHand, target.unit)} on the shelf.`);
     if (!photo) return invalid(photoBox.querySelector<HTMLElement>("[data-pick]") ?? file, "Add a photo of the hand-over.");
     const body = new FormData();
     body.set("purpose", purpose());
     body.set("borrowerName", name.value);
-    body.set("studentId", studentId.value);
-    body.set("reason", usc ? reason.value : "");
+    body.set("studentId", normalizeStudentId(studentId.value));
+    body.set("reason", forUsc ? reason.value : "");
     body.set("quantity", String(count));
     body.set("returnBy", returnBy.value);
+    if (keyItem !== null && keyItem !== target.id) key = crypto.randomUUID();
+    keyItem = target.id;
     body.set("key", key);
     body.set("photo", photo, "loan.jpg");
     submit.disabled = true;
     submit.textContent = "Saving…";
     setMessage(alert, "");
+    let replayed = false;
     try {
-      await api(`/api/staff/items/${encodeURIComponent(target.id)}/loans`, { method: "POST", body });
+      replayed = Boolean((await api<{ replayed?: boolean }>(`/api/staff/items/${encodeURIComponent(target.id)}/loans`, { method: "POST", body })).replayed);
     } catch (error) {
-      setMessage(alert, error instanceof ApiError && error.status === 0 ? "The loan was not saved: you appear to be offline. Your entries are kept; try again." : failure(error));
+      const unanswered = error instanceof ApiError && error.status === 0;
+      // The server answered, so nothing was saved under this key: the next Lend is a new request. With no answer, it may have been.
+      if (!unanswered) key = crypto.randomUUID();
+      setMessage(alert, unanswered ? "The loan was not saved: you appear to be offline. Your entries are kept; try again." : failure(error));
       submit.disabled = false;
       update();
       return;
     }
-    toast(`Lent ${count} ${units(count, target.unit)} of ${target.name} to ${name.value.trim()}.`);
+    // An earlier Lend whose answer was lost had already saved it: say so, and the list shows that loan rather than a second.
+    toast(replayed ? `This loan of ${target.name} was already saved.` : `Lent ${count} ${units(count, target.unit)} of ${target.name} to ${name.value.trim()}.`);
     reset();
+    keyItem = null;
     try {
       await options.onLent(target);
     } catch {

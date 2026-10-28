@@ -1,4 +1,4 @@
-import { EXPIRY_WINDOW_DAYS, isExpiring, stockState } from "./catalog-policy";
+import { EXPIRY_WINDOW_DAYS, WHOLE_DOMAINS, isExpiring, readWhole, stockState } from "./catalog-policy";
 import { type Place, pathOf, placesOf } from "./location-tree";
 import { type Preset, bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
@@ -241,7 +241,7 @@ export async function stockWorkspace(): Promise<void> {
         <tbody>${open.map((reorder) => {
           const item = byId.get(reorder.itemId);
           return html`<tr data-key="${reorder.id}">${itemCell({ id: reorder.itemId, name: reorder.itemName, locationId: item?.locationId ?? null })}${qtyCell(item?.onHand ?? null, reorder.unit)}
-            <td class="col-desired"><label class="visually-hidden" for="desired-${reorder.id}">Restock quantity for ${reorder.itemName}</label><input class="input-compact" id="desired-${reorder.id}" type="number" inputmode="numeric" min="0" max="100000" step="1" value="${reorder.desiredQuantity ?? ""}" placeholder="—" data-desired="${reorder.id}" /></td>
+            <td class="col-desired"><label class="visually-hidden" for="desired-${reorder.id}">Restock quantity for ${reorder.itemName}</label><input class="input-compact" id="desired-${reorder.id}" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="${reorder.desiredQuantity ?? ""}" placeholder="—" data-desired="${reorder.id}" /></td>
             <td><span class="tag ${reorder.status === "PLANNED" ? "tag--gold" : "tag--warn"}">${label(reorder.status)}</span><span class="cell-sub">${reorder.note ?? ""}${reorder.note && reorder.updatedBy ? " · " : ""}${reorder.updatedBy ?? ""}</span></td>
             <td class="col-actions"><span class="row-actions">
               <button type="button" class="button button--primary button--sm" data-receive="${reorder.id}">Receive</button>
@@ -396,9 +396,12 @@ export async function stockWorkspace(): Promise<void> {
     const field = (event.target as HTMLElement).closest<HTMLInputElement>("[data-desired]");
     const reorder = stock?.reorders.find((entry) => entry.id === field?.dataset.desired);
     if (!field || !reorder) return;
-    const value = field.value === "" ? null : Number(field.value);
-    if (value !== null && (!Number.isInteger(value) || value < 0)) { field.setAttribute("aria-invalid", "true"); toast("Restock quantity must be a whole number.", "error"); return; }
-    void patchReorder(reorder, { desiredQuantity: value });
+    // Emptying the field is how a person clears the quantity; anything typed must be a whole number from 1.
+    const typed = field.value.trim();
+    const read = typed ? readWhole(typed, WHOLE_DOMAINS.restockQuantity, "restock quantity") : { ok: true as const, value: null };
+    if (!read.ok) { field.setAttribute("aria-invalid", "true"); toast(read.message, "error"); return; }
+    field.removeAttribute("aria-invalid");
+    void patchReorder(reorder, { desiredQuantity: read.value });
   });
   onLeave(() => { receipts.length = 0; });
 }

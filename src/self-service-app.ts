@@ -1,6 +1,6 @@
 import "@fontsource/newsreader/latin-400-italic.css";
 import "./self-service.css";
-import { SELF_SERVICE_LIMITS, SELF_SERVICE_STUDENT_ID, type SelfServiceAction, selfServiceReference } from "./catalog-policy";
+import { SELF_SERVICE_LIMITS, SELF_SERVICE_STUDENT_ID, type SelfServiceAction, WHOLE_DOMAINS, normalizeStudentId, parseWhole, readWhole, selfServiceReference } from "./catalog-policy";
 import { bindHelp, helpTip } from "./contextual-help";
 import { type CatalogItem, type LocalEvent, type Snapshot, estimate, openLoans, pendingByItem, summary } from "./offline-queue";
 import * as store from "./offline-store";
@@ -8,6 +8,7 @@ import { type Draft, checkDecisions, clearHistory, nextAttemptAt, onSyncMessage,
 import { type Readiness, applyUpdate, canPromptInstall, hasUpdate, isStandalone, onPwaChange, platform, promptInstall, readiness, requestBackgroundSync, requestPersistence, whenIdle } from "./pwa";
 import { ancestry, placesOf, type ReportKind } from "./location-tree";
 import { type GroupId, GROUPS, behaviourLine, conciseLocation, frequentItems, groupName, groupOf, grouped, isGroup, matching } from "./self-service-browse";
+import { bindStudentId, studentIdProblem } from "./student-id-field";
 import { type Step, openWhereIsIt } from "./where-is-it";
 import { ApiError, CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, keepFailure, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, itemVisual, itemThumbnailUrl, units } from "./ui";
 
@@ -498,15 +499,15 @@ async function sendReport(itemId: string, kind: ReportKind, name: string, id: st
 
 /* ---------- Sheets: Take, Borrow, Use, Return ---------- */
 
-function quantityField(max: number): Html {
+function quantityField(): Html {
   return html`<div class="field"><label for="ss-qty">How many?</label>
-      <div class="stepper ss-stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One less">${icon("minus")}</button><input id="ss-qty" name="quantity" type="number" inputmode="numeric" min="1" max="${max}" step="1" value="1" aria-describedby="ss-over" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div>
+      <div class="stepper ss-stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One less">${icon("minus")}</button><input id="ss-qty" name="quantity" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="1" aria-describedby="ss-over" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div>
       <p class="field__hint field__hint--warn" id="ss-over" aria-live="polite" data-over hidden></p></div>`;
 }
 
 const nameField = (label: string, value = profile.name) => html`<div class="field"><label for="ss-name">${label}</label><input id="ss-name" name="name" autocomplete="name" autocapitalize="words" maxlength="120" required value="${value}" enterkeyhint="done" /></div>`;
 const STUDENT_ID_HELP = "Logistics keeps a record of who has each item. Only Logistics staff see it.";
-const studentIdField = (value = rememberedId() ? profile.studentId : "") => html`<div class="field" data-student-id><div class="ss-label-row"><label for="ss-student">Student ID number</label>${helpTip("the student ID", STUDENT_ID_HELP)}</div><input id="ss-student" name="studentId" type="text" inputmode="numeric" pattern="[0-9]{8}" minlength="8" maxlength="8" autocomplete="off" spellcheck="false" required aria-describedby="ss-student-hint" value="${value}" /><p class="field__hint" id="ss-student-hint">8 digits</p></div>`;
+const studentIdField = (value = rememberedId() ? profile.studentId : "") => html`<div class="field" data-student-id><div class="ss-label-row"><label for="ss-student">Student ID number</label>${helpTip("the student ID", STUDENT_ID_HELP)}</div><input id="ss-student" name="studentId" type="text" inputmode="numeric" maxlength="30" autocomplete="off" spellcheck="false" required aria-describedby="ss-student-hint" value="${value}" /><p class="field__hint" id="ss-student-hint" aria-live="polite">8 digits</p></div>`;
 /** Whether the remembered student ID still meets the rule: an older phone may remember one that does not. */
 const rememberedId = () => SELF_SERVICE_STUDENT_ID.test(profile.studentId);
 
@@ -554,7 +555,7 @@ const holdingPhoto = () => photoField(HOLD_TIP, "Hold the item so your face and 
 function takeSheet(item: CatalogItem): Html {
   return sheetFrame(`Take · ${categoryName(item.category)}`, item.name, html`
     <form class="form ss-form" data-form="TAKE" novalidate>
-      ${quantityField(SELF_SERVICE_LIMITS.quantity)}
+      ${quantityField()}
       ${identityBlock("Your full name")}
       ${holdingPhoto()}
       <div class="form-alert" role="alert" hidden data-alert></div>
@@ -586,7 +587,7 @@ function borrowSheet(item: CatalogItem): Html {
           <label><input type="radio" name="purpose" value="INDIVIDUAL" checked /><span>Individual use</span></label><label><input type="radio" name="purpose" value="USC" /><span>USC use</span></label></div></fieldset>`}
       ${identityBlock(uscOnly ? "Full name of the person using it" : "Your full name")}
       <div class="field" data-reason ${uscOnly ? "" : "hidden"}><label for="ss-reason">Specific reason</label><textarea id="ss-reason" name="reason" rows="2" maxlength="300" placeholder="e.g. stage setup for the general assembly"></textarea></div>
-      ${quantityField(SELF_SERVICE_LIMITS.quantity)}
+      ${quantityField()}
       <fieldset class="ss-choices"><legend>Return by <span class="field__optional">optional</span></legend>
         <label><input type="radio" name="returnBy" value="${day(today)}" /><span>Today</span></label>
         <label><input type="radio" name="returnBy" value="${day(tomorrow)}" /><span>Tomorrow</span></label>
@@ -810,10 +811,11 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
 
   /** Keeps the form's dependent parts (labels, hints, optional fields) in step with its input. */
   const updateFields = () => {
-    const count = Math.max(1, Math.min(SELF_SERVICE_LIMITS.quantity, Math.round(Number(quantity?.value) || 1)));
+    // A figure that cannot be read yet says nothing here; Check names what is wrong with it.
+    const typed = quantity ? parseWhole(quantity.value, WHOLE_DOMAINS.selfServiceQuantity) : { ok: true as const, value: 1 };
     const over = form.querySelector<HTMLElement>("[data-over]");
     if (over && item && type !== "RETURN") {
-      over.hidden = count <= available;
+      over.hidden = !typed.ok || typed.value <= available;
       over.textContent = available <= 0 ? "The records show none left. If you have it in hand, record it anyway; staff will recount." : `That's more than the ${available} the records show. Staff will be asked to recount.`;
     }
     const purpose = form.querySelector<HTMLInputElement>("input[name=purpose]:checked, input[type=hidden][name=purpose]")?.value;
@@ -833,20 +835,10 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     form.querySelector<HTMLElement>("[data-identity-fields]")?.removeAttribute("hidden");
   };
 
-  // A pasted "21-000115" must not be cut at eight characters before its dash is dropped.
-  form.addEventListener("paste", (event) => {
-    const field = event.target as HTMLInputElement;
-    if (field.id !== "ss-student") return;
-    event.preventDefault();
-    const digits = (event.clipboardData?.getData("text") ?? "").replace(/\D/g, "");
-    const before = field.value.slice(0, field.selectionStart ?? 0) + digits + field.value.slice(field.selectionEnd ?? 0);
-    field.value = before.slice(0, 8);
-    field.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  form.addEventListener("input", (event) => {
-    // The student ID is eight digits: letters, spaces and dashes are dropped as they are typed or pasted.
-    const typed = event.target as HTMLInputElement;
-    if (typed.id === "ss-student") typed.value = typed.value.replace(/\D/g, "").slice(0, 8);
+  // The Student ID field is the desk's (V1.16.4 §4.5): a pasted "21-000115" becomes 21000115, and a ninth digit is named, not cut.
+  const studentField = form.querySelector<HTMLInputElement>("#ss-student");
+  if (studentField) bindStudentId(studentField, form.querySelector<HTMLElement>("#ss-student-hint"));
+  form.addEventListener("input", () => {
     dirty = true;
     setMessage(alert, "");
     form.querySelectorAll("[aria-invalid]").forEach((field) => field.removeAttribute("aria-invalid"));
@@ -856,7 +848,9 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     const target = event.target as HTMLElement;
     const step = target.closest<HTMLElement>("[data-step]");
     if (step && quantity) {
-      quantity.value = String(Math.max(1, Math.min(SELF_SERVICE_LIMITS.quantity, (Number(quantity.value) || 1) + Number(step.dataset.step))));
+      // The stepper stays from 1 to the limit; a typed figure is checked, never clamped, at Check.
+      const typed = parseWhole(quantity.value, WHOLE_DOMAINS.count);
+      quantity.value = String(Math.max(1, Math.min(SELF_SERVICE_LIMITS.quantity, (typed.ok ? typed.value : 1) + Number(step.dataset.step))));
       navigator.vibrate?.(8);
       updateFields();
     }
@@ -898,12 +892,13 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     const data = new FormData(form);
     return {
       name: String(data.get("name") ?? "").trim().replace(/\s+/g, " "),
-      studentId: String(data.get("studentId") ?? "").trim(),
+      studentId: normalizeStudentId(String(data.get("studentId") ?? "")),
       purpose: String(data.get("purpose") ?? "INDIVIDUAL") as "INDIVIDUAL" | "USC",
       reason: String(data.get("reason") ?? "").trim(),
       outcome: String(data.get("outcome") ?? "RETURNED") as "RETURNED" | "DAMAGED" | "LOST",
       note: String(data.get("note") ?? "").trim(),
-      count: Math.round(Number(data.get("quantity") ?? loan?.quantity ?? 1)),
+      // As typed: read at Check, never rounded (§4.6). A return carries the loan's own quantity.
+      quantity: String(data.get("quantity") ?? loan?.quantity ?? 1),
       returnBy: String(data.get("returnBy") || "") || null,
       remember: data.get("remember") !== null
     };
@@ -911,15 +906,18 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
 
   /** The first problem, with the field to fix it in, or null when the form is ready to check. */
   const validate = (values: ReturnType<typeof read>): [string, string] | null => {
-    const { name, studentId, purpose, reason, outcome, note, count } = values;
+    const { name, studentId, purpose, reason, outcome, note, quantity: typed } = values;
     const needsIdentity = !loan || !loanKnown(loan) || !form.querySelector<HTMLElement>("[data-identity-fields]")?.hidden;
+    // The Student ID and quantity in the desk's words; the name and reason prompts stay the phone's own, spoken to the borrower.
+    const idProblem = needsIdentity ? studentIdProblem(studentId) : null;
+    const counted = readWhole(typed, WHOLE_DOMAINS.selfServiceQuantity, "quantity");
     const problem = needsIdentity && !name ? ["Please enter your full name.", "#ss-name"]
       : needsIdentity && name.split(" ").length < 2 ? ["Please enter your full name, first and last.", "#ss-name"]
-      : needsIdentity && !SELF_SERVICE_STUDENT_ID.test(studentId) ? [studentId ? "The student ID number must be exactly 8 digits." : "Please enter your student ID number.", "#ss-student"]
+      : idProblem ? [idProblem, "#ss-student"]
       : type === "BORROW" && purpose === "USC" && !reason ? ["Say what it's for.", "#ss-reason"]
       : !photo ? [type === "RETURN" ? "Take a photo of the item you are returning." : "Take a photo holding the item.", "[data-pick]"]
       : type === "RETURN" && outcome !== "RETURNED" && !note ? [outcome === "LOST" ? "Say what happened." : "Say what's damaged.", "#ss-note"]
-      : !Number.isInteger(count) || count < 1 || count > SELF_SERVICE_LIMITS.quantity ? [`Choose a quantity from 1 to ${SELF_SERVICE_LIMITS.quantity}.`, "#ss-qty"] : null;
+      : !counted.ok ? [counted.message, "#ss-qty"] : null;
     return problem as [string, string] | null;
   };
   /** Swaps the form for a summary of what will be sent, with one clear way to send it and one to edit it. */
@@ -978,7 +976,9 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
       navigator.vibrate?.([20, 40, 20]);
       return;
     }
-    const { name, studentId, purpose, reason, outcome, note, count, returnBy, remember } = values;
+    const { name, studentId, purpose, reason, outcome, note, returnBy, remember } = values;
+    // Checked above as a whole number from 1 to the limit, so it reads exactly.
+    const count = Number(values.quantity);
     const target = loan ? { itemId: loan.itemId, itemName: loan.itemName, unit: loan.unit } : { itemId: item!.id, itemName: item!.name, unit: item!.unit };
     const person = loan && loanKnown(loan) && form.querySelector<HTMLElement>("[data-identity-fields]")?.hidden ? loan.person : { name, studentId };
     const draft: Draft = type === "TAKE" || type === "USE" ? { type, ...target, quantity: type === "USE" ? 1 : count, person }

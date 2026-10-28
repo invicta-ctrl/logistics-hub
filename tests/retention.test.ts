@@ -123,7 +123,7 @@ describe("retention: erasing who a settled record was", () => {
   it("leaves erased loans out of borrower statistics and suggestions, and has no photo to show for them", async () => {
     loan("LN-ERASED-1");
     loan("LN-ERASED-2");
-    loan("LN-KEPT", { closedDaysAgo: 100, name: "Maria Santos", studentId: "20-1111-111" });
+    loan("LN-KEPT", { closedDaysAgo: 100, name: "Maria Santos", studentId: "20111111" });
     await run();
     const overview = await (await call("staff", "/api/staff/loans")).json() as { closed: Array<{ id: string; borrowerName: string; hasPhoto: number }>; known: Array<{ name: string }>; borrowers: Array<{ name: string }>; totals: Array<{ period: string; loans: number; borrowers: number }> };
     expect(overview.known.map((entry) => entry.name)).toEqual(["Maria Santos"]);

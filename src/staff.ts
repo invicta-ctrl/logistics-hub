@@ -1,7 +1,7 @@
 import { resolveItemIcon } from "./item-icons";
 import { itemVisualControl } from "./item-visual-control";
 import { suggest, type Suggestion } from "./catalogue-suggest";
-import { formatItemName, BEHAVIOUR_LABELS, type Behaviour, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, STOCK_STATE_LABELS, behaviourFields, listingGaps, stockState } from "./catalog-policy";
+import { formatItemName, BEHAVIOUR_LABELS, type Behaviour, CONSUMPTION_MODES, ITEM_STATUSES, ITEM_TYPES, openUnitCandidate, LENDING_AUDIENCES, LISTABLE_ITEM_TYPES, PUBLIC_LENDING_ITEM_TYPE, STOCK_AREAS, STOCK_STATE_LABELS, WHOLE_DOMAINS, behaviourFields, listingGaps, readWhole, stockState } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, loanFields, loanRow, openReturn } from "./loan-form";
 import { bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type Photo, type PhotoCleanup, type PhotoPanel, openViewer, photoPanel, photoUrl, rowThumb, shownUrl } from "./item-photo";
@@ -809,7 +809,7 @@ export async function workspace(): Promise<void> {
     return html`<section class="stock-settings" aria-labelledby="settings-title">
       <h3 class="section-label" id="settings-title">Stock settings</h3>
       <form id="settings-form" class="form stock-settings__form" novalidate>
-        <div class="field"><label for="s-reorderThreshold">Reorder level</label><input id="s-reorderThreshold" name="reorderThreshold" type="number" inputmode="numeric" min="0" max="100000" step="1" value="${item.reorderThreshold}" aria-describedby="s-reorder-hint" /><p class="field__hint" id="s-reorder-hint">Low at or below this. 0 turns it off.</p></div>
+        <div class="field"><label for="s-reorderThreshold">Reorder level</label><input id="s-reorderThreshold" name="reorderThreshold" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="${item.reorderThreshold}" aria-describedby="s-reorder-hint" /><p class="field__hint" id="s-reorder-hint">Low at or below this. 0 turns it off.</p></div>
         <div class="field"><label for="s-stockArea">Stock area</label><select id="s-stockArea" name="stockArea">${options(STOCK_AREAS, item.stockArea ?? "Inventory")}</select></div>
         <div class="field" data-settings-expiry ${(item.stockArea ?? "Inventory") === "Pantry" ? "" : html`hidden`}><label for="s-expiresOn">Earliest expiry <span class="field__optional">optional</span></label><input id="s-expiresOn" name="expiresOn" type="date" value="${item.expiresOn ?? ""}" /></div>
         <div class="field"><label for="s-status">Status</label><select id="s-status" name="status">${options(ITEM_STATUSES, item.status ?? "ACTIVE", STATUS_CHOICES)}</select></div>
@@ -833,12 +833,12 @@ export async function workspace(): Promise<void> {
     const form = sheet.querySelector<HTMLFormElement>("#settings-form");
     if (!form) return;
     const alert = form.querySelector<HTMLElement>("[data-settings-alert]")!;
+    // The reorder level is kept as typed until Save reads it: an empty or mistyped level is never taken as 0 (§4.6).
     const read = () => {
       const values = new FormData(form);
-      const level = String(values.get("reorderThreshold") ?? "").trim();
-      return { status: String(values.get("status")), reorderThreshold: level === "" ? 0 : Number(level), stockArea: String(values.get("stockArea")), expiresOn: String(values.get("expiresOn") ?? "") };
+      return { status: String(values.get("status")), reorderThreshold: String(values.get("reorderThreshold") ?? "").trim(), stockArea: String(values.get("stockArea")), expiresOn: String(values.get("expiresOn") ?? "") };
     };
-    const saved = () => ({ status: item.status, reorderThreshold: item.reorderThreshold, stockArea: item.stockArea ?? "Inventory", expiresOn: item.expiresOn ?? "" });
+    const saved = () => ({ status: item.status, reorderThreshold: String(item.reorderThreshold), stockArea: item.stockArea ?? "Inventory", expiresOn: item.expiresOn ?? "" });
     const changed = () => JSON.stringify(read()) !== JSON.stringify(saved());
     settingsChanged = () => form.isConnected && changed();
     const sync = () => {
@@ -864,14 +864,16 @@ export async function workspace(): Promise<void> {
     });
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const values = read();
+      const typed = read();
       const level = form.querySelector<HTMLInputElement>("#s-reorderThreshold")!;
-      if (!Number.isInteger(values.reorderThreshold) || values.reorderThreshold < 0 || values.reorderThreshold > 100_000) {
+      const threshold = readWhole(typed.reorderThreshold, WHOLE_DOMAINS.reorderLevel, "reorder level");
+      if (!threshold.ok) {
         level.setAttribute("aria-invalid", "true");
-        setMessage(alert, "Reorder level must be a whole number from 0 to 100,000.");
+        setMessage(alert, threshold.message);
         level.focus();
         return;
       }
+      const values = { ...typed, reorderThreshold: threshold.value };
       const submit = form.querySelector<HTMLButtonElement>("[data-settings-save]")!;
       submit.disabled = true;
       setMessage(alert, "");
@@ -927,7 +929,7 @@ export async function workspace(): Promise<void> {
       const open = kits.filter((kit) => kit.active && !already.has(kit.id));
       mount(host, open.length ? html`<form class="kit-adder__form" data-kit-form novalidate>
           <div class="field"><label for="ka-kit">Kit</label><select id="ka-kit" name="kit">${open.map((kit) => html`<option value="${kit.id}">${kit.name}</option>`)}</select></div>
-          <div class="field kit-adder__qty"><label for="ka-qty">Needed</label><input id="ka-qty" name="required" type="number" inputmode="numeric" min="1" max="1000" step="1" value="1" /></div>
+          <div class="field kit-adder__qty"><label for="ka-qty">Needed</label><input id="ka-qty" name="required" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="1" /></div>
           <div class="form-alert" role="alert" hidden data-kit-alert></div>
           <div class="kit-adder__actions"><button class="button button--primary button--sm" type="submit">Add to kit</button><button class="button button--ghost button--sm" type="button" data-kit-cancel>Cancel</button></div>
         </form>`
@@ -954,13 +956,14 @@ export async function workspace(): Promise<void> {
     const item = detail.item;
     const alert = form.querySelector<HTMLElement>("[data-kit-alert]")!;
     const quantity = form.querySelector<HTMLInputElement>("#ka-qty")!;
-    const required = Number(quantity.value.trim());
-    if (!/^\d{1,4}$/.test(quantity.value.trim()) || required < 1 || required > 1000) {
+    const read = readWhole(quantity.value, WHOLE_DOMAINS.kitQuantity, "quantity needed");
+    if (!read.ok) {
       quantity.setAttribute("aria-invalid", "true");
-      setMessage(alert, "Needed must be a whole number from 1 to 1,000.");
+      setMessage(alert, read.message);
       quantity.focus();
       return;
     }
+    const required = read.value;
     quantity.removeAttribute("aria-invalid");
     const kitId = form.querySelector<HTMLSelectElement>("#ka-kit")!.value;
     const done = working(form);
@@ -1166,7 +1169,7 @@ export async function workspace(): Promise<void> {
       event.preventDefault();
       void sendResolve(form);
     });
-    const target = () => detail ? { id: detail.item.id, name: detail.item.name, unit: detail.item.unit, onHand: detail.item.onHand, openUnits: detail.openUnits.length, reorder: detail.reorder ?? null } : null;
+    const target = () => detail ? { id: detail.item.id, name: detail.item.name, unit: detail.item.unit, onHand: detail.item.onHand, uscOnly: detail.item.lendingAudience === "USC_STAFF_ONLY", openUnits: detail.openUnits.length, reorder: detail.reorder ?? null } : null;
     const openHost = sheet.querySelector<HTMLElement>("#open-units");
     openPanel = openHost ? bindOpenUnits(openHost, () => detail && { ...detail.item, openUnits: detail.openUnits, usesRecorded: detail.usesRecorded, unitsEmptied: detail.unitsEmptied },
       async () => { await refreshStock(item.id); await poll.refresh(); }) : null;

@@ -10,7 +10,7 @@ type TopItem = { period: Period; itemId: string; itemName: string; loans: number
 type Total = { period: Period; purpose: Purpose; loans: number; units: number; borrowers: number; problems: number };
 type Overview = { revision: number; today: string; open: Loan[]; closed: Loan[]; borrowers: Ranked[]; items: TopItem[]; totals: Total[]; known: Borrower[] };
 type View = "out" | "people" | "history";
-type LendItem = { id: string; name: string; unit: string; onHand: number; status: string; itemType: string };
+type LendItem = { id: string; name: string; unit: string; onHand: number; status: string; itemType: string; lendingAudience: string };
 
 const PERIODS: Record<Period, string> = { "30d": "Last 30 days", "12m": "Last 12 months", all: "All time" };
 const PURPOSES: Purpose[] = ["INDIVIDUAL", "USC"];
@@ -201,7 +201,8 @@ export async function loansWorkspace(): Promise<void> {
       showChosen();
     });
     lendForm = bindLoanForm(lendSheet.querySelector<HTMLFormElement>("#lend-form")!, {
-      target: () => chosen,
+      // An item lent for USC use only holds the form to USC use (D3).
+      target: () => chosen && { ...chosen, uscOnly: chosen.lendingAudience === "USC_STAFF_ONLY" },
       known: () => data?.known ?? [],
       onLent: async () => {
         await Promise.all([poll.refresh(), loadItems()]);

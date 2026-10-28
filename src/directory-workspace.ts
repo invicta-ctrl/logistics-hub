@@ -3,6 +3,7 @@ import { DEPARTMENTS, DEPARTMENT_CODES, type DepartmentCode } from "./directory-
 import { type Loan, loanRow, openReturn } from "./loan-form";
 import { tiltTile } from "./card-motion";
 import { type Card, type View, cardForm, cardSource, fillTiles, forgetScans, importArchive, makeMissingImages, openCard } from "./staff-ids";
+import { bindStudentId, studentIdProblem } from "./student-id-field";
 import { type Access, type Role, type Session, accessLabel, initials, loadSession, shell } from "./staff-shell";
 import { adminTabs } from "./admin-frame";
 import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatQuantity, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
@@ -265,8 +266,8 @@ export async function staffDirectory(): Promise<void> {
         <div class="field"><label for="p-position">Position <span class="field__optional">optional</span></label><input id="p-position" name="position" value="${person?.position ?? ""}" maxlength="80" autocomplete="off" placeholder="e.g. Director for Logistics" /></div>
       </div>
       <label class="checkbox"><input type="checkbox" name="officer" ${person?.officer ? html`checked` : ""} /><span>Officer of the council</span></label>
-      <div class="field"><label for="p-student">Student ID number <span class="field__optional">optional</span></label><input id="p-student" name="studentId" value="${person?.studentId ?? ""}" maxlength="30" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="p-student-hint" />
-        <p class="field__hint" id="p-student-hint">Type it from a record you trust. It finds their loans and phone records; it is never read from the scan.</p></div>
+      <div class="field"><label for="p-student">Student ID number <span class="field__optional">optional</span></label><input id="p-student" name="studentId" type="text" inputmode="numeric" value="${person?.studentId ?? ""}" maxlength="30" autocomplete="off" spellcheck="false" aria-describedby="p-student-hint" />
+        <p class="field__hint" id="p-student-hint" aria-live="polite">Type it from a record you trust. It finds their loans and phone records; it is never read from the scan.</p></div>
       ${person ? html`<fieldset class="segmented segmented--2"><legend class="visually-hidden">Status</legend>
         <label><input type="radio" name="active" value="1" ${person.active ? html`checked` : ""} /><span>Active</span></label><label><input type="radio" name="active" value="0" ${person.active ? "" : html`checked`} /><span>Inactive</span></label></fieldset>` : ""}
       <div class="form-alert" role="alert" hidden id="person-alert"></div>
@@ -275,8 +276,20 @@ export async function staffDirectory(): Promise<void> {
     panel.open();
     const form = sheetElement.querySelector<HTMLFormElement>("#person-form")!;
     form.querySelector<HTMLInputElement>("#p-name")!.focus();
+    const studentId = form.querySelector<HTMLInputElement>("#p-student")!;
+    bindStudentId(studentId, form.querySelector<HTMLElement>("#p-student-hint"));
+    studentId.addEventListener("input", () => studentId.removeAttribute("aria-invalid"));
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      // A new or changed Student ID has 8 digits (V1.16.4 D2); a stored one in an older format is kept until someone changes it.
+      const typedId = studentId.value.trim();
+      const idProblem = typedId && typedId.toUpperCase() !== (person?.studentId ?? "") ? studentIdProblem(typedId) : null;
+      if (idProblem) {
+        studentId.setAttribute("aria-invalid", "true");
+        setMessage(sheetElement.querySelector("#person-alert")!, idProblem);
+        studentId.focus();
+        return;
+      }
       const values = new FormData(form);
       const body = { name: values.get("name"), department: values.get("department"), position: values.get("position"), officer: values.get("officer") === "on", studentId: values.get("studentId"), ...(person ? { active: values.get("active") === "1", updatedAt: person.updatedAt } : {}) };
       const settle = working(form);

@@ -1,4 +1,7 @@
-import { LOAN_OUTCOMES, LOAN_PURPOSES, PUBLIC_LENDING_ITEM_TYPE, STUDENT_ID_PATTERN } from "./catalog-policy";
+import {
+  LOAN_FIELDS, LOAN_OUTCOMES, LOAN_PURPOSES, PUBLIC_LENDING_ITEM_TYPE, STUDENT_ID_PATTERN, STUDENT_ID_SQL_GLOB, USC_ONLY_MESSAGE, WHOLE_DOMAINS, validateLoanDraft,
+  wholeJson
+} from "./catalog-policy";
 import { type Actor, BUMP_REVISION, InputError, LOAN_COLUMNS, audit, balanceOf, countAwareStatus, isoDate, currentItemSQL, onHandOf } from "./inventory";
 import { ERASED } from "./retention";
 
@@ -41,19 +44,34 @@ export type LoanDetails = {
 };
 
 /**
- * Who is borrowing, how many and until when. One set of rules for the staff form and a phone:
- * Individual use needs a student ID, USC use a specific reason, both a name.
+ * Who is borrowing, how many and until when: one policy for the desk and the phone (V1.16.4 §4.5, D1). Individual and USC use both
+ * need a full name, an 8-digit Student ID and a whole quantity; USC use adds its specific reason. A refusal is the first problem in
+ * the form's order, in the words both forms show (`validateLoanDraft`); the ID is checked as sent, which both forms normalise as it
+ * is typed. `legacy` is a phone record made before the identity rule: it keeps the rules it was made under, so a phone that saved
+ * it offline is never refused for a rule it could not have known.
  */
-export function loanDetails(get: (key: string) => unknown, today: string): LoanDetails {
+export function loanDetails(get: (key: string) => unknown, today: string, legacy = false): LoanDetails {
   const purposeValue = get("purpose");
   if (typeof purposeValue !== "string" || !(LOAN_PURPOSES as readonly string[]).includes(purposeValue)) throw new InputError(400, "Choose Individual use or USC use.");
   const purpose = purposeValue as LoanDetails["purpose"];
-  const borrowerName = cleanText(get("borrowerName"), purpose === "USC" ? "Name of the person using it" : "Borrower's full name", 120, true)!;
-  const studentId = cleanText(get("studentId"), "Student ID number", 30, purpose === "INDIVIDUAL")?.toUpperCase() ?? null;
-  if (studentId && !STUDENT_ID_PATTERN.test(studentId)) throw new InputError(400, "Student ID number may use only letters, digits and dashes.");
-  const reason = cleanText(get("reason"), "Specific reason", 300, purpose === "USC");
-  const quantity = Number(get("quantity"));
-  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100_000) throw new InputError(400, "Quantity must be a whole number from 1 to 100000.");
+  let borrowerName: string, studentId: string | null, reason: string | null, quantity: number;
+  if (legacy) {
+    borrowerName = cleanText(get("borrowerName"), purpose === "USC" ? "Name of the person using it" : "Borrower's full name", 120, true)!;
+    studentId = cleanText(get("studentId"), "Student ID number", 30, purpose === "INDIVIDUAL")?.toUpperCase() ?? null;
+    if (studentId && !STUDENT_ID_PATTERN.test(studentId)) throw new InputError(400, "Student ID number may use only letters, digits and dashes.");
+    reason = cleanText(get("reason"), "Specific reason", 300, purpose === "USC");
+    quantity = Number(get("quantity"));
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100_000) throw new InputError(400, "Quantity must be a whole number from 1 to 100000.");
+  } else {
+    borrowerName = cleanText(get("borrowerName"), "Borrower's full name", 120, false) ?? "";
+    const typedId = cleanText(get("studentId"), "Student ID number", 30, false);
+    reason = cleanText(get("reason"), "Specific reason", 300, false);
+    const problems = validateLoanDraft({ purpose, borrowerName, studentId: typedId, reason, quantity: get("quantity") }, WHOLE_DOMAINS.loanQuantity, true);
+    const first = LOAN_FIELDS.find((field) => problems[field]);
+    if (first) throw new InputError(400, problems[first]!);
+    studentId = typedId;
+    quantity = (wholeJson(get("quantity"), WHOLE_DOMAINS.loanQuantity) as { value: number }).value;
+  }
   const returnBy = isoDate(get("returnBy") || null, "Return date");
   if (returnBy && returnBy < today) throw new InputError(400, "The return date cannot be in the past.");
   return { purpose, borrowerName, studentId, reason, quantity, returnBy };
@@ -131,16 +149,18 @@ export async function createLoan(db: D1Database, bucket: R2Bucket, actor: Actor,
   const key = form.get("key");
   if (typeof key !== "string" || !/^[A-Za-z0-9-]{8,80}$/.test(key)) throw new InputError(400, "Missing request key.");
 
-  // A retried request that already succeeded returns the loan it made.
+  // A retried request that already succeeded returns the loan it made, marked as such, so the desk shows it instead of a second (R5).
   const earlier = await byKey(db, key);
   if (earlier) {
     if (earlier.itemId !== itemId) throw new InputError(409, "That request was already used for another item. Please try again.");
-    return { id: earlier.id, onHand: earlier.onHand };
+    return { id: earlier.id, onHand: earlier.onHand, replayed: true };
   }
-  const item = await db.prepare("SELECT item_type AS itemType, status FROM items WHERE id = ?").bind(itemId).first<{ itemType: string; status: string }>();
+  const item = await db.prepare("SELECT item_type AS itemType, status, lending_audience AS audience FROM items WHERE id = ?").bind(itemId).first<{ itemType: string; status: string; audience: string }>();
   if (!item) throw new InputError(404, "Item not found.");
   if (item.itemType !== PUBLIC_LENDING_ITEM_TYPE) throw new InputError(400, "Only Loanable items can be lent. Change the item's type first.");
   if (item.status === "INACTIVE") throw new InputError(400, "Inactive items cannot be lent. Reactivate the item first.");
+  // A desk loan is live, so there is nothing to hold: Individual use of a USC-only item is refused outright (D3).
+  if (item.audience === "USC_STAFF_ONLY" && details.purpose !== "USC") throw new InputError(400, USC_ONLY_MESSAGE);
   const photo = await readPhoto(form.get("photo"));
 
   const id = `LN-${crypto.randomUUID()}`;
@@ -158,7 +178,7 @@ export async function createLoan(db: D1Database, bucket: R2Bucket, actor: Actor,
   if (written !== null) return { id, onHand: written };
   await bucket.delete(photoKey);
   const raced = await byKey(db, key);
-  if (raced?.itemId === itemId) return { id: raced.id, onHand: raced.onHand };
+  if (raced?.itemId === itemId) return { id: raced.id, onHand: raced.onHand, replayed: true };
   const balance = await db.prepare(`SELECT ${onHandOf("?")} AS onHand`).bind(itemId).first<number>("onHand");
   throw new InputError(409, `Only ${balance ?? 0} on hand; cannot lend ${details.quantity}.`);
 }
@@ -245,9 +265,9 @@ export async function loansOverview(db: D1Database) {
     bind(db.prepare(`${periods} SELECT p.period, l.purpose, COUNT(*) AS loans, SUM(l.quantity) AS units, COUNT(DISTINCT CASE WHEN l.borrower_name = '${ERASED}' THEN NULL ELSE ${who} END) AS borrowers,
         SUM(l.status IN ('DAMAGED', 'LOST')) AS problems FROM periods p JOIN loans l ON l.created_at >= p.since GROUP BY p.period, l.purpose`)),
     // Borrowers of the last year, newest spelling first, so a returning student is filled in from their ID. Older ones are typed again.
-    // The time bound keeps this off the whole loans history.
+    // The time bound keeps this off the whole loans history. Only an ID a new loan accepts is offered (V1.16.4 §4.5).
     db.prepare(`SELECT borrower_name AS name, student_id AS studentId, MAX(created_at) AS lastAt FROM loans
-      WHERE created_at >= ?1 AND student_id IS NOT NULL AND borrower_name <> '${ERASED}' GROUP BY student_id ORDER BY lastAt DESC LIMIT 500`).bind(new Date(now - 365 * DAY_MS).toISOString())
+      WHERE created_at >= ?1 AND student_id GLOB '${STUDENT_ID_SQL_GLOB}' AND borrower_name <> '${ERASED}' GROUP BY student_id ORDER BY lastAt DESC LIMIT 500`).bind(new Date(now - 365 * DAY_MS).toISOString())
   ]);
   return { today: officeDay(), open: open.results, closed: closed.results, borrowers: borrowers.results, items: items.results, totals: totals.results, known: known.results };
 }

@@ -166,11 +166,11 @@ describe("importing official ID scans", () => {
   it("gives scans to the entry that already holds the import's key and has none, keeping the profile people typed", async () => {
     const { id } = await json(await call("OWNER", "/api/staff/admin/directory/import", "POST", pairForm("Mendoza", "DCES")));
     const { person, card } = await json(await call("OWNER", `/api/staff/admin/directory/${id}`));
-    expect((await call("ADMIN", `/api/staff/admin/directory/${id}`, "PATCH", { name: "Maria Luz Mendoza", position: "Executive Staff", studentId: "20-5555-111", updatedAt: person.updatedAt })).status).toBe(200);
+    expect((await call("ADMIN", `/api/staff/admin/directory/${id}`, "PATCH", { name: "Maria Luz Mendoza", position: "Executive Staff", studentId: "20555511", updatedAt: person.updatedAt })).status).toBe(200);
     expect((await call("OWNER", `/api/staff/admin/directory/${id}/id?expected=${card.mediaId}`, "DELETE")).status).toBe(200);
     expect(await json(await call("OWNER", "/api/staff/admin/directory/import", "POST", pairForm("MENDOZA", "dces")))).toEqual({ id, status: "imported" });
     const detail = await json(await call("OWNER", `/api/staff/admin/directory/${id}`));
-    expect(detail.person).toMatchObject({ name: "Maria Luz Mendoza", department: "DCES", position: "Executive Staff", studentId: "20-5555-111", hasId: true, sourceKey: "mendoza|DCES" });
+    expect(detail.person).toMatchObject({ name: "Maria Luz Mendoza", department: "DCES", position: "Executive Staff", studentId: "20555511", hasId: true, sourceKey: "mendoza|DCES" });
     expect(detail.card.mediaId).not.toBe(card.mediaId);
     expect([...ids.objects.keys()].every((key) => key.startsWith(`ids/${detail.card.mediaId}/`))).toBe(true);
     expect(sqlite.prepare("SELECT COUNT(*) AS n FROM staff_directory").get()).toEqual({ n: 1 });
@@ -282,19 +282,19 @@ describe("viewing, replacing and removing scans", () => {
 
 describe("profiles and account links", () => {
   it("edits only from the loaded version, keeps student IDs unique, and logs field names but never values", async () => {
-    const id = await addPerson({ name: "Ana Santos", department: "DoL", position: "Materials committee", studentId: "20-1111-222" });
+    const id = await addPerson({ name: "Ana Santos", department: "DoL", position: "Materials committee", studentId: "20111122" });
     await addPerson({ name: "Ben Lim", department: "DoF" });
     const { person } = await json(await call("ADMIN", `/api/staff/admin/directory/${id}`));
-    expect(person).toMatchObject({ name: "Ana Santos", department: "DoL", position: "Materials committee", studentId: "20-1111-222", officer: false });
-    const saved = await call("ADMIN", `/api/staff/admin/directory/${id}`, "PATCH", { name: "Ana Marie Santos", officer: true, studentId: "20-9999-000", updatedAt: person.updatedAt });
+    expect(person).toMatchObject({ name: "Ana Santos", department: "DoL", position: "Materials committee", studentId: "20111122", officer: false });
+    const saved = await call("ADMIN", `/api/staff/admin/directory/${id}`, "PATCH", { name: "Ana Marie Santos", officer: true, studentId: "20999900", updatedAt: person.updatedAt });
     expect(saved.status).toBe(200);
     expect((await call("ADMIN", `/api/staff/admin/directory/${id}`, "PATCH", { position: "Director", updatedAt: person.updatedAt })).status).toBe(409);
     const other = (await json(await call("ADMIN", "/api/staff/admin/directory"))).people.find((entry: { name: string }) => entry.name === "Ben Lim");
-    expect((await call("ADMIN", `/api/staff/admin/directory/${other.id}`, "PATCH", { studentId: "20-9999-000", updatedAt: other.updatedAt })).status).toBe(409);
+    expect((await call("ADMIN", `/api/staff/admin/directory/${other.id}`, "PATCH", { studentId: "20999900", updatedAt: other.updatedAt })).status).toBe(409);
     expect((await call("ADMIN", "/api/staff/admin/directory", "POST", { name: "No Department" })).status).toBe(400);
     const log = sqlite.prepare("SELECT details_json AS details FROM audit_log WHERE action = 'STAFF_PROFILE_UPDATED'").get() as { details: string };
     expect(JSON.parse(log.details)).toEqual({ name: "Ana Marie Santos", department: "DoL", fields: ["name", "officer", "studentId"] });
-    expect(JSON.stringify(sqlite.prepare("SELECT * FROM audit_log").all())).not.toMatch(/20-9999-000|20-1111-222/);
+    expect(JSON.stringify(sqlite.prepare("SELECT * FROM audit_log").all())).not.toMatch(/20999900|20111122/);
   });
 
   it("links a person to one sign-in explicitly, within the linker's own authority, and says so in the session", async () => {
@@ -463,19 +463,19 @@ describe("usage, loans and activity come from the existing records", () => {
   }
 
   it("links records by the exact student ID only (amendment G): any name typed with it, never by name alone", async () => {
-    const ana = await addPerson({ name: "Ana Santos", department: "DoL", studentId: "20-1111-222" });
-    const ben = await addPerson({ name: "Ben Lim", department: "DEM", studentId: "20-3333-444" });
+    const ana = await addPerson({ name: "Ana Santos", department: "DoL", studentId: "20111122" });
+    const ben = await addPerson({ name: "Ben Lim", department: "DEM", studentId: "20333344" });
     const noId = await addPerson({ name: "Carla Reyes", department: "DEM" });
-    loan("Ana Santos", "20-1111-222");          // her ID and name
-    loan("Ana", "20-1111-222");                 // a first name with her exact ID is still hers
-    loan("Ben Lim", "20-1111-222");             // another person's name cannot move a record carrying her ID
+    loan("Ana Santos", "20111122");          // her ID and name
+    loan("Ana", "20111122");                 // a first name with her exact ID is still hers
+    loan("Ben Lim", "20111122");             // another person's name cannot move a record carrying her ID
     loan("ana santos", null);                    // her exact name with no ID: not linked to anyone
-    loan("Ana Santos", "20-5555-666");          // her name with an ID outside the directory: an ordinary student record
+    loan("Ana Santos", "20555566");          // her name with an ID outside the directory: an ordinary student record
     loan("Carla Reyes", null);                   // a person with no ID on file has no linked records
-    take("Ana Santos", " 20-1111-222 ");        // outer spaces aside
-    take("Ana Santos", "20-1111-222");
-    use("A. Santos", "20-1111-222");            // a phone use moves no stock and still shows
-    use("Ana Santos", "20-1111-222", 0);        // held for staff, not applied: not usage
+    take("Ana Santos", " 20111122 ");        // outer spaces aside
+    take("Ana Santos", "20111122");
+    use("A. Santos", "20111122");            // a phone use moves no stock and still shows
+    use("Ana Santos", "20111122", 0);        // held for staff, not applied: not usage
     const loans = (await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/loans`))).loans as Array<{ borrowerName: string; studentId: string | null }>;
     expect(loans.map((entry) => entry.borrowerName).sort()).toEqual(["Ana", "Ana Santos", "Ben Lim"]);
     const usage = (await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/usage`))).usage as Array<{ kind: string; quantity: number; matchedBy?: string }>;
@@ -496,7 +496,7 @@ describe("usage, loans and activity come from the existing records", () => {
     const ana = await addPerson({ name: "Ana Santos", department: "DoL" });
     expect(await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/activity`))).toEqual({ linked: false, events: [], nextCursor: null });
     await call("ADMIN", `/api/staff/admin/directory/${ana}/account`, "PUT", { accountId: "ACC-staff" });
-    loan("Someone", "20-0000-001");
+    loan("Someone", "20000001");
     const mine = await json(await call("ADMIN", `/api/staff/admin/directory/${ana}/activity`));
     expect(mine.linked).toBe(true);
     expect(mine.events.every((event: { actorId: string }) => event.actorId === "ACC-staff")).toBe(true);

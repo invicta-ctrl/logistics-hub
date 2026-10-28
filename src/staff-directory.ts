@@ -3,7 +3,7 @@
 // (ADMIN or OWNER); changing ID scans is for the OWNER. Nothing here has a public, Self-Service or catalog address.
 import { type Account, accessOf, accountAccess, canManage, newAccount, suggestUsername, throttled } from "./accounts";
 import { activityPage, parseActivityQuery } from "./activity";
-import { STUDENT_ID_PATTERN } from "./catalog-policy";
+import { STUDENT_ID_MESSAGES, studentIdAsSent } from "./catalog-policy";
 import { DEPARTMENTS, type DepartmentCode, departmentCode, sourceKey } from "./directory-policy";
 import { MEDIA_ID, checkJpeg } from "./item-media";
 import { InputError, LOAN_COLUMNS, actorName, audit, isoDate } from "./inventory";
@@ -160,8 +160,12 @@ function department(value: unknown): DepartmentCode {
   return code;
 }
 
-/** The profile fields present in `input`, checked: a full name, a department, an optional position and student ID, and two flags. */
-function profileFields(input: Input): Partial<Record<Field, string | number | null>> {
+/**
+ * The profile fields present in `input`, checked: a full name, a department, an optional position and student ID, and two flags. A new
+ * or changed student ID is held to the 8-digit rule (V1.16.4 §4.5, after the D2 check); `stored` is the profile's own, which an edit may
+ * keep as it is.
+ */
+function profileFields(input: Input, stored: string | null = null): Partial<Record<Field, string | number | null>> {
   const fields: Partial<Record<Field, string | number | null>> = {};
   if ("name" in input) fields.name = cleanText(input.name, "Full name", 120, true);
   if ("department" in input) fields.department = department(input.department);
@@ -169,9 +173,10 @@ function profileFields(input: Input): Partial<Record<Field, string | number | nu
   if ("officer" in input) fields.officer = input.officer === true ? 1 : 0;
   if ("active" in input) fields.active = input.active === false ? 0 : 1;
   if ("studentId" in input) {
-    const studentId = cleanText(input.studentId, "Student ID number", 30, false)?.toUpperCase() ?? null;
-    if (studentId && !STUDENT_ID_PATTERN.test(studentId)) throw new InputError(400, "Student ID number may use only letters, digits and dashes.");
-    fields.studentId = studentId;
+    const typed = cleanText(input.studentId, "Student ID number", 30, false);
+    const problem = typed && typed.toUpperCase() !== stored ? studentIdAsSent(typed) : null;
+    if (problem) throw new InputError(400, STUDENT_ID_MESSAGES[problem]);
+    fields.studentId = !typed ? null : typed.toUpperCase() === stored ? stored : typed;
   }
   return fields;
 }
@@ -208,7 +213,7 @@ export async function updatePerson(db: D1Database, actor: Account, id: string, i
   const current = await personRow(db, id);
   // The profile of someone linked to an administrator or owner sign-in is their verified identity: the same rule as linking it.
   if (current.accountId && !mayLink(actor, { id: current.accountId, role: current.accountRole as Account["role"] })) throw new InputError(403, "Only an owner can edit the profile of a person linked to an administrator or owner sign-in.");
-  const fields = profileFields(data);
+  const fields = profileFields(data, current.studentId);
   const before: Record<Field, string | number | null> = { name: current.fullName, department: current.department, position: current.position, officer: current.officer, studentId: current.studentId, active: current.active };
   const changed = (Object.keys(fields) as Field[]).filter((field) => fields[field] !== before[field]);
   if (!changed.length) return { changed: 0, updatedAt: current.updatedAt };

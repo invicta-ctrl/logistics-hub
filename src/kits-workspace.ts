@@ -1,5 +1,5 @@
 import "./kits.css";
-import { behaviourOf, BEHAVIOUR_LABELS, units } from "./catalog-policy";
+import { behaviourOf, BEHAVIOUR_LABELS, WHOLE_DOMAINS, parseWhole, readWhole, units } from "./catalog-policy";
 import { CHECK_LABELS, CHECK_OUTCOMES, COMPONENT_STATE_LABELS, KIT_STATE_LABELS, type CheckOutcome, type ComponentState, type KitState } from "./kit-policy";
 import { openViewer, photoPanel, rowThumb } from "./item-photo";
 import { inOrder, pathOf, placesOf } from "./location-tree";
@@ -23,7 +23,8 @@ type Part = { itemId: string; name: string; unit: string; category: string; item
 type Check = { id: string; checkedAt: string; checkedBy: string; note: string | null; okCount: number; flaggedCount: number; uncheckedCount: number };
 type Detail = { kit: Summary; components: Part[]; checks: Check[]; lastCheck: (Check & { observations: Array<{ itemId: string; name: string; outcome: CheckOutcome; note: string | null }> }) | null };
 type PickItem = { id: string; name: string; unit: string; category: string; itemType: string; consumptionMode: string; status: string; onHand: number; iconKey: string | null; visualType: "SYSTEM_ICON" | "PHOTO" | null; photoId: string | null };
-type Draft = { itemId: string; name: string; unit: string; required: number };
+/** `typed` is the quantity as the person typed it, read again at Save; `required` is its value while it reads as one. */
+type Draft = { itemId: string; name: string; unit: string; required: number; typed?: string };
 type Mode = "view" | "edit" | "check" | "summary" | "template";
 
 const STATE_TAG: Record<KitState, string> = { READY: "tag--ok", REPLENISH: "tag--warn", REVIEW: "tag--bad" };
@@ -300,7 +301,7 @@ export async function kitsWorkspace(): Promise<void> {
     const pick = host.querySelector<HTMLElement>("#parts-pick")!;
     const input = host.querySelector<HTMLInputElement>("#parts-search")!;
     const drawRows = () => mount(rows, draft.length ? html`${draft.map((entry, index) => html`<li class="kit-edit-row"><span class="kit-edit-row__name">${entry.name}</span>
-        <label class="kit-edit-row__qty"><span class="visually-hidden">How many ${entry.name} the kit holds</span><input type="number" inputmode="numeric" min="1" max="1000" step="1" value="${entry.required}" data-qty="${index}" /></label>
+        <label class="kit-edit-row__qty"><span class="visually-hidden">How many ${entry.name} the kit holds</span><input type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="${entry.typed ?? entry.required}" data-qty="${index}" /></label>
         <button class="icon-button" type="button" data-remove="${index}" aria-label="Remove ${entry.name} from the kit">${icon("close")}</button></li>`)}`
       : html`<li class="muted">Nothing yet. Search below to add the first item.</li>`);
     const drawPick = async () => {
@@ -318,7 +319,10 @@ export async function kitsWorkspace(): Promise<void> {
     host.addEventListener("input", (event) => {
       const qty = (event.target as HTMLElement).closest<HTMLInputElement>("[data-qty]");
       if (!qty) return;
-      draft[Number(qty.dataset.qty)]!.required = Number(qty.value) || 0;
+      const entry = draft[Number(qty.dataset.qty)]!;
+      const read = parseWhole(qty.value, WHOLE_DOMAINS.kitQuantity);
+      entry.typed = qty.value;
+      entry.required = read.ok ? read.value : Number.NaN;
       changed();
     });
     host.addEventListener("click", async (event) => {
@@ -340,7 +344,14 @@ export async function kitsWorkspace(): Promise<void> {
 
   const draftOf = (parts: Part[]): Draft[] => parts.map((part) => ({ itemId: part.itemId, name: part.name, unit: part.unit, required: part.required }));
   const draftBody = (draft: Draft[]) => draft.map(({ itemId, required }) => ({ itemId, required }));
-  const badQuantity = (draft: Draft[]) => draft.find((entry) => !Number.isInteger(entry.required) || entry.required < 1 || entry.required > 1000);
+  /** The first component whose quantity Save cannot take, in its own words; null when every one is a whole number from 1 to 1000. */
+  const badQuantity = (draft: Draft[]) => {
+    for (const entry of draft) {
+      const read = readWhole(entry.typed ?? String(entry.required), WHOLE_DOMAINS.kitQuantity, `quantity of ${entry.name}`);
+      if (!read.ok) return read.message;
+    }
+    return null;
+  };
 
   function editKit(view: Detail): void {
     const { kit } = view;
@@ -365,7 +376,7 @@ export async function kitsWorkspace(): Promise<void> {
       const name = String(values.get("name") ?? "");
       if (!name.trim()) { setMessage(alert, "Give the kit a name."); form.querySelector<HTMLInputElement>("#k-name")!.focus(); return; }
       const wrong = badQuantity(draft);
-      if (wrong) { setMessage(alert, `Give ${wrong.name} a whole number from 1 to 1000.`); return; }
+      if (wrong) { setMessage(alert, wrong); return; }
       const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
       button.disabled = true;
       setMessage(alert, "");
@@ -462,7 +473,7 @@ export async function kitsWorkspace(): Promise<void> {
       const values = new FormData(form);
       if (!String(values.get("name") ?? "").trim()) { setMessage(alert, "Give the template a name."); return; }
       const wrong = badQuantity(draft);
-      if (wrong) { setMessage(alert, `Give ${wrong.name} a whole number from 1 to 1000.`); return; }
+      if (wrong) { setMessage(alert, wrong); return; }
       const button = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
       button.disabled = true;
       setMessage(alert, "");

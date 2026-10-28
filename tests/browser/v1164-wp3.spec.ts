@@ -158,7 +158,7 @@ test("a stale Stock settings save is refused and offers the latest details", asy
   state.item.updatedAt = "2026-10-04T00:00:00.000Z";
   await settings.getByLabel("Reorder level").fill("-1");
   await settings.getByRole("button", { name: "Save settings" }).click();
-  await expect(settings.getByRole("alert")).toHaveText("Reorder level must be a whole number from 0 to 100,000.");
+  await expect(settings.getByRole("alert")).toHaveText("The reorder level can't be negative.");
   await expect(settings.getByLabel("Reorder level")).toBeFocused();
   expect(state.sent.settings).toHaveLength(0);
   await settings.getByLabel("Reorder level").fill("2");
@@ -188,7 +188,7 @@ test("Add to restock and Add to kit work from the item's sheet", async ({ page }
   await expect(adder.getByLabel("Kit").locator("option")).toHaveText(["Craft kit"]);
   await adder.getByLabel("Needed").fill("0");
   await adder.getByRole("button", { name: "Add to kit" }).click();
-  await expect(adder.getByRole("alert")).toHaveText("Needed must be a whole number from 1 to 1,000.");
+  await expect(adder.getByRole("alert")).toHaveText("The quantity needed must be at least 1.");
   expect(state.sent.kits).toHaveLength(0);
   await adder.getByLabel("Needed").fill("2");
   await adder.getByRole("button", { name: "Add to kit" }).click();

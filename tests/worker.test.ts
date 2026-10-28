@@ -406,9 +406,9 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
     const cookie = await signIn();
     const itemId = await lendable(cookie, 3);
     const future = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date(Date.now() + 2 * 86_400_000));
-    expect((await lend(cookie, itemId, { borrowerName: "No Due Date", studentId: "TEST-0001" })).status).toBe(201);
-    expect((await lend(cookie, itemId, { borrowerName: "Due Later", studentId: "TEST-0002", returnBy: future })).status).toBe(201);
-    expect((await lend(cookie, itemId, { borrowerName: "Past Due", studentId: "TEST-0003", returnBy: "2000-01-01" })).status).toBe(400);
+    expect((await lend(cookie, itemId, { borrowerName: "No Due Date", studentId: "20000001" })).status).toBe(201);
+    expect((await lend(cookie, itemId, { borrowerName: "Due Later", studentId: "20000002", returnBy: future })).status).toBe(201);
+    expect((await lend(cookie, itemId, { borrowerName: "Past Due", studentId: "20000003", returnBy: "2000-01-01" })).status).toBe(400);
     const loans = (await overview(cookie)).open.filter((loan) => loan.itemId === itemId);
     expect(loans.map((loan) => [loan.borrowerName, loan.returnBy])).toEqual([["No Due Date", null], ["Due Later", future]]);
     expect(onHand(itemId)).toBe(1);
@@ -421,20 +421,21 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
     const cookie = await signIn();
     const itemId = await lendable(cookie, 5);
     expect((await lend(cookie, itemId, { borrowerName: "Test Borrower" })).status).toBe(400);
-    expect((await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "TEST-0001" }, null)).status).toBe(400);
-    expect((await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "TEST-0001" }, new TextEncoder().encode("not an image"))).status).toBe(400);
-    const request = { borrowerName: "Test Borrower", studentId: "test-0001", quantity: "2", key: "loan-retry-key-01" };
+    expect((await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "20000001" }, null)).status).toBe(400);
+    expect((await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "20000001" }, new TextEncoder().encode("not an image"))).status).toBe(400);
+    const request = { borrowerName: "Test Borrower", studentId: "20000001", quantity: "2", key: "loan-retry-key-01" };
     const first = await lend(cookie, itemId, request);
     expect(first.status).toBe(201);
     const { id } = await first.json() as { id: string };
-    expect(await (await lend(cookie, itemId, request)).json()).toEqual({ id, onHand: 3 });
+    // The retry is answered with the loan it already made, marked as such (R5).
+    expect(await (await lend(cookie, itemId, request)).json()).toEqual({ id, onHand: 3, replayed: true });
     expect(onHand(itemId)).toBe(3);
     expect(sqlite.prepare("SELECT movement_type AS type, signed_quantity AS change, related_entity_id AS loan FROM inventory_movements WHERE item_id = ? AND movement_type = 'LOAN_OUT'").all(itemId)).toEqual([{ type: "LOAN_OUT", change: -2, loan: id }]);
     expect([...photos.keys()]).toEqual([`loans/${id}`]);
     expect(photos.get(`loans/${id}`)!.contentType).toBe("image/jpeg");
     const loan = (await overview(cookie)).open.find((entry) => entry.id === id)!;
-    expect(loan).toMatchObject({ itemId, quantity: 2, purpose: "INDIVIDUAL", borrowerName: "Test Borrower", studentId: "TEST-0001", status: "OUT", createdBy: "Staff One" });
-    const refused = await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "TEST-0001", quantity: "4" });
+    expect(loan).toMatchObject({ itemId, quantity: 2, purpose: "INDIVIDUAL", borrowerName: "Test Borrower", studentId: "20000001", status: "OUT", createdBy: "Staff One" });
+    const refused = await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "20000001", quantity: "4" });
     expect(refused.status).toBe(409);
     expect((await refused.json() as { error: string }).error).toBe("Only 3 on hand; cannot lend 4.");
     expect(photos.size).toBe(1);
@@ -444,10 +445,13 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
   it("lends for USC use with a reason, and lends only active Loanable items", async () => {
     const cookie = await signIn();
     const itemId = await lendable(cookie, 2);
-    expect((await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer" })).status).toBe(400);
-    expect((await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer", reason: "General assembly stage setup" })).status).toBe(201);
+    expect((await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer", studentId: "20000009" })).status).toBe(400);
+    // USC use needs the Student ID as Individual use does (V1.16.4 D1).
+    const noId = await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer", reason: "General assembly stage setup" });
+    expect([noId.status, (await noId.json() as { error: string }).error]).toEqual([400, "Enter the Student ID number."]);
+    expect((await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer", studentId: "20000009", reason: "General assembly stage setup" })).status).toBe(201);
     const consumable = await (await staff(cookie, "/api/staff/items", "POST", { ...loanable, name: "Masking Tape", itemType: "Consumable", lendingAudience: "NOT_AVAILABLE_FOR_LENDING", openingQuantity: 5 })).json() as { id: string };
-    const refused = await lend(cookie, consumable.id, { borrowerName: "Test Borrower", studentId: "TEST-0001" });
+    const refused = await lend(cookie, consumable.id, { borrowerName: "Test Borrower", studentId: "20000001" });
     expect(refused.status).toBe(400);
     expect(photos.size).toBe(1);
   });
@@ -459,7 +463,7 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
     const itemId = await lendable(cookie, 3);
     const ids = [];
     for (const name of ["Test Borrower A", "Test Borrower B", "Test Borrower C"]) {
-      ids.push((await (await lend(cookie, itemId, { borrowerName: name, studentId: `TEST-${ids.length}` })).json() as { id: string }).id);
+      ids.push((await (await lend(cookie, itemId, { borrowerName: name, studentId: `2000000${ids.length}` })).json() as { id: string }).id);
     }
     expect(onHand(itemId)).toBe(0);
     expect((await close(cookie, ids[0]!, { outcome: "RETURNED" })).status).toBe(200);
@@ -486,22 +490,22 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
   it("ranks borrowers separately for individual and USC use, per period", async () => {
     const cookie = await signIn();
     const itemId = await lendable(cookie, 20);
-    for (let index = 0; index < 3; index += 1) await lend(cookie, itemId, { borrowerName: "Test Frequent", studentId: "TEST-0100" });
-    await lend(cookie, itemId, { borrowerName: "Test Once", studentId: "TEST-0200", quantity: "4" });
-    for (let index = 0; index < 2; index += 1) await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer", reason: "Event setup" });
+    for (let index = 0; index < 3; index += 1) await lend(cookie, itemId, { borrowerName: "Test Frequent", studentId: "20000100" });
+    await lend(cookie, itemId, { borrowerName: "Test Once", studentId: "20000200", quantity: "4" });
+    for (let index = 0; index < 2; index += 1) await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer", studentId: "20000300", reason: "Event setup" });
     const { borrowers, totals, items, known } = await overview(cookie);
     const ranked = (period: string, purpose: string) => borrowers.filter((row) => row.period === period && row.purpose === purpose).map((row) => [row.name, row.loans, row.units]);
     expect(ranked("30d", "INDIVIDUAL")).toEqual([["Test Frequent", 3, 3], ["Test Once", 1, 4]]);
     expect(ranked("all", "USC")).toEqual([["Test Officer", 2, 2]]);
     expect(totals.filter((row) => row.period === "30d").map((row) => [row.purpose, row.loans, row.units, row.borrowers]).sort()).toEqual([["INDIVIDUAL", 4, 7, 2], ["USC", 2, 2, 1]]);
     expect(items.find((row) => row.period === "all" && row.itemId === itemId)).toMatchObject({ loans: 6, units: 9 });
-    expect(known.map((row) => row.studentId).sort()).toEqual(["TEST-0100", "TEST-0200"]);
+    expect(known.map((row) => row.studentId).sort()).toEqual(["20000100", "20000200", "20000300"]);
   });
 
   it("keeps loans and photos staff-only, same-origin and revisioned", async () => {
     const cookie = await signIn();
     const itemId = await lendable(cookie, 2);
-    const { id } = await (await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "TEST-0001" })).json() as { id: string };
+    const { id } = await (await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "20000001" })).json() as { id: string };
     for (const path of ["/api/staff/loans", `/api/staff/loans/${id}/photo`]) expect((await call(path)).status).toBe(401);
     const photo = await call(`/api/staff/loans/${id}/photo`, { headers: { cookie } });
     expect(photo.status).toBe(200);

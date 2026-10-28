@@ -5,7 +5,7 @@ import { confidentMatch, suggest, verified } from "./catalogue-suggest";
 import { type Detail, type Entry, type SessionRecord, type Snapshot, type SnapshotItem, drop, dropSession, durable, entries, keep, keepSession, sessions, setAccess, setSnapshot, snapshot } from "./catalogue-store";
 import { type PlaceList, bindNewPlace, newPlaceForm, placeList, placeOptions, refreshParents, rememberPlace } from "./catalogue-places";
 import { onSyncChange, savedItem, signedOut, syncNow } from "./catalogue-sync";
-import { formatItemName, BEHAVIOURS, BEHAVIOUR_LABELS, type Behaviour, UNSORTED_CATEGORY } from "./catalog-policy";
+import { formatItemName, BEHAVIOURS, BEHAVIOUR_LABELS, type Behaviour, UNSORTED_CATEGORY, WHOLE_DOMAINS, readWhole } from "./catalog-policy";
 import { type Known as DuplicateKnown, type Match, possibleDuplicates } from "./duplicates";
 import { cropEditor, preparePhoto, photoUrl, type Prepared } from "./item-photo";
 import { whenIdle } from "./pwa";
@@ -178,7 +178,7 @@ export async function captureScreen(who: Signed, sessionId: string, hosted?: Hos
           <p class="cat-suggest" id="cat-why" aria-live="polite"></p>
         </fieldset>
         <div class="cat-qty field"><label for="cat-qty">${direct ? "Opening quantity" : "How many are here?"}</label>
-          <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One fewer">${icon("minus")}</button><input id="cat-qty" type="number" inputmode="numeric" min="0" max="100000" step="1" value="1" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div></div>
+          <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One fewer">${icon("minus")}</button><input id="cat-qty" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="1" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div></div>
         <p class="cat-suggest" id="cat-draft" role="status"></p>
         <div class="field-grid">
           <div class="field"><label for="cat-category">Category <span class="field__optional" data-optional hidden>optional for now</span></label><input id="cat-category" list="cat-categories" maxlength="100" autocomplete="off" aria-describedby="cat-category-hint" /><datalist id="cat-categories"></datalist><p class="cat-name-hint cat-name-hint--photo" id="cat-category-hint" aria-live="polite"></p><div class="cat-chips" id="cat-category-chips"></div></div>
@@ -194,7 +194,7 @@ export async function captureScreen(who: Signed, sessionId: string, hosted?: Hos
             <div class="field"><label for="cat-aliases">Other names <span class="field__optional">optional</span></label><input id="cat-aliases" maxlength="300" autocomplete="off" autocapitalize="words" autocorrect="on" spellcheck="true" /></div>
           </div>
           <div class="field-grid">
-            <div class="field"><label for="cat-reorder">Reorder level</label><input id="cat-reorder" type="number" min="0" max="100000" step="1" inputmode="numeric" value="0" /></div>
+            <div class="field"><label for="cat-reorder">Reorder level</label><input id="cat-reorder" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="0" /></div>
             <div class="field" id="cat-expiry-field" hidden><label for="cat-expiry">Earliest expiry <span class="field__optional">optional</span></label><input id="cat-expiry" type="date" /></div>
           </div>
           <div class="field"><label for="cat-notes">Notes <span class="field__optional">optional</span></label><textarea id="cat-notes" rows="2" maxlength="1000" autocapitalize="sentences" autocorrect="on" spellcheck="true"></textarea></div>
@@ -718,16 +718,18 @@ export async function captureScreen(who: Signed, sessionId: string, hosted?: Hos
     form.querySelectorAll("[aria-invalid]").forEach((element) => element.removeAttribute("aria-invalid"));
     $("#cat-behaviour").classList.remove("is-invalid");
     const name = value("cat-name");
-    const quantity = field("cat-qty").value === "" ? NaN : Number(field("cat-qty").value);
+    const counted = readWhole(field("cat-qty").value, WHOLE_DOMAINS.count, "quantity");
     if (!name) return invalid("cat-name", "Give it a name, even a temporary one.");
     if (!behaviour) return invalid("cat-behaviour", "Choose how it is used, or Not sure to decide later.");
-    if (!Number.isInteger(quantity) || quantity < 0 || quantity > 100_000) return invalid("cat-qty", "How many must be a whole number from 0 to 100000.");
+    if (!counted.ok) return invalid("cat-qty", counted.message);
+    const quantity = counted.value;
     if (behaviour !== "REVIEW_LATER") {
       if (!value("cat-category")) return invalid("cat-category", "Choose a category, or Not sure to decide later.");
       if (!value("cat-unit")) return invalid("cat-unit", "Say what it is counted in, such as piece, box or ream.");
     }
-    const reorderThreshold = Number(value("cat-reorder") || 0);
-    if (!Number.isInteger(reorderThreshold) || reorderThreshold < 0 || reorderThreshold > 100_000) return invalid("cat-reorder", "Reorder level must be a whole number from 0 to 100000.");
+    const level = readWhole(value("cat-reorder"), WHOLE_DOMAINS.reorderLevel, "reorder level");
+    if (!level.ok) return invalid("cat-reorder", level.message);
+    const reorderThreshold = level.value;
     draw();
     // The possible matches are shown first; the next press says "a different one".
     if (matches.length && !armed) {

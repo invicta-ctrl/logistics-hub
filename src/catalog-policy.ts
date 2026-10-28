@@ -366,6 +366,12 @@ export function wholeMessage(error: WholeError, label: string, domain: WholeDoma
   }
 }
 
+/** `parseWhole` with its message, for a form to show at the field it read: `label` in lower case ("count", "reorder level"). */
+export function readWhole(text: string, domain: WholeDomain, label: string): { ok: true; value: number } | { ok: false; message: string } {
+  const read = parseWhole(text, domain);
+  return read.ok ? read : { ok: false, message: wholeMessage(read.error, label, domain) };
+}
+
 /**
  * A Student ID as it was typed or pasted: full-width digits from an input method become ASCII (NFKC), and the spaces and dashes of
  * a written ID ("21-000115") go. Nothing is cut: a ninth digit stays, so the check below can say so.
@@ -381,11 +387,23 @@ export const STUDENT_ID_MESSAGES: Record<StudentIdError, string> = {
 
 /** Exactly eight digits after normalising, leading zeros kept: the ID is text everywhere and never a number. Older records keep the wider pattern above. */
 export function validateStudentId(text: string): StudentIdError | null {
-  const id = normalizeStudentId(text);
-  if (!id) return "EMPTY";
-  if (!/^\d+$/.test(id)) return "NOT_DIGITS";
-  return id.length === 8 ? null : "LENGTH";
+  return studentIdAsSent(normalizeStudentId(text));
 }
+
+/**
+ * The Worker's check of an ID exactly as it arrived: eight ASCII digits. The forms normalise while the person types, so a written
+ * "21-000115" or a full-width ID reaching the Worker is refused, never rewritten, whatever the sender checked.
+ */
+export function studentIdAsSent(text: string): StudentIdError | null {
+  if (!text) return "EMPTY";
+  if (!/^\d+$/.test(text)) return "NOT_DIGITS";
+  return text.length === 8 ? null : "LENGTH";
+}
+
+/** An item lent for USC use only refuses Individual use, at the desk and from a live phone borrow (D3). */
+export const USC_ONLY_MESSAGE = "This item is lent for USC use only.";
+/** SQLite's test for a Student ID that meets the rule above, for lists that offer only IDs a new loan would accept. */
+export const STUDENT_ID_SQL_GLOB = "[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]";
 
 export type LoanDraft = { purpose: unknown; borrowerName: unknown; studentId: unknown; reason: unknown; quantity: unknown; uscOnly?: boolean };
 export type LoanField = "purpose" | "borrowerName" | "studentId" | "reason" | "quantity";
@@ -395,15 +413,16 @@ export const LOAN_FIELDS: readonly LoanField[] = ["purpose", "borrowerName", "st
 /**
  * One loan policy for the desk and the phone (V1.16.4 §4.5, D1 and D3): Individual and USC use both need a full name, an 8-digit
  * Student ID and a whole quantity; USC use adds its specific reason, and an item lent for USC use only refuses Individual use.
- * Answers each field's problem in the words both surfaces show; an empty answer means the draft is complete.
+ * Answers each field's problem in the words both surfaces show; an empty answer means the draft is complete. `asSent` checks the ID
+ * as the Worker does (`studentIdAsSent`); a form checks what the person typed, which it normalises as they type.
  */
-export function validateLoanDraft(draft: LoanDraft, quantity: WholeDomain = WHOLE_DOMAINS.loanQuantity): Partial<Record<LoanField, string>> {
+export function validateLoanDraft(draft: LoanDraft, quantity: WholeDomain = WHOLE_DOMAINS.loanQuantity, asSent = false): Partial<Record<LoanField, string>> {
   const problems: Partial<Record<LoanField, string>> = {};
   const text = (value: unknown) => typeof value === "string" ? value.trim() : "";
   if (draft.purpose !== "INDIVIDUAL" && draft.purpose !== "USC") problems.purpose = "Choose Individual use or USC use.";
-  else if (draft.purpose === "INDIVIDUAL" && draft.uscOnly) problems.purpose = "This item is lent for USC use only.";
+  else if (draft.purpose === "INDIVIDUAL" && draft.uscOnly) problems.purpose = USC_ONLY_MESSAGE;
   if (!text(draft.borrowerName)) problems.borrowerName = "Enter the borrower's full name.";
-  const id = validateStudentId(text(draft.studentId));
+  const id = (asSent ? studentIdAsSent : validateStudentId)(text(draft.studentId));
   if (id) problems.studentId = STUDENT_ID_MESSAGES[id];
   if (draft.purpose === "USC" && !text(draft.reason)) problems.reason = "Enter the specific USC reason.";
   const count = wholeJson(draft.quantity, quantity);

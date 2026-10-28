@@ -107,21 +107,27 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   await expect(sheet.getByRole("alert")).toContainText("first and last");
   await sheet.getByLabel("Your full name").fill("Maria Santos");
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
-  await expect(sheet.getByRole("alert")).toContainText("Please enter your student ID number.");
-  // Only digits are kept, and no more than eight: dashes, spaces and letters never reach the field.
-  await sheet.getByLabel("Student ID number").pressSequentially("21-0001 15ab9");
-  await expect(sheet.getByLabel("Student ID number")).toHaveValue("21000115");
-  await sheet.getByLabel("Student ID number").fill("");
-  await sheet.getByLabel("Student ID number").evaluate((field: HTMLInputElement) => {
-    const data = new DataTransfer();
-    data.setData("text", "21-000115");
-    field.focus();
-    field.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-  });
-  await expect(sheet.getByLabel("Student ID number")).toHaveValue("21000115");
-  await sheet.getByLabel("Student ID number").fill("2100011");
+  await expect(sheet.getByRole("alert")).toContainText("Enter the Student ID number.");
+  // The desk's field (V1.16.4 §4.5): dashes and spaces are tidied away as they arrive, a ninth digit is named at once and never
+  // cut, and letters stay for the check to name.
+  const id = sheet.getByLabel("Student ID number");
+  await id.pressSequentially("21-0001 15");
+  await expect(id).toHaveValue("21000115");
+  await id.pressSequentially("9");
+  await expect(id).toHaveValue("210001159");
+  await expect(sheet.locator("#ss-student-hint")).toHaveText("A Student ID has exactly 8 digits.");
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
-  await expect(sheet.getByRole("alert")).toContainText("must be exactly 8 digits");
+  await expect(sheet.getByRole("alert")).toContainText("A Student ID has exactly 8 digits.");
+  await id.fill("");
+  await page.keyboard.insertText("21-000115");
+  await expect(id).toHaveValue("21000115");
+  await expect(sheet.locator("#ss-student-hint")).toHaveText("8 digits");
+  await id.fill("2100011a");
+  await sheet.getByRole("button", { name: "Review and borrow" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("A Student ID has digits only.");
+  await id.fill("2100011");
+  await sheet.getByRole("button", { name: "Review and borrow" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("A Student ID has exactly 8 digits.");
   await sheet.getByLabel("Student ID number").fill("21000115");
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Take a photo holding the item.");
@@ -232,17 +238,21 @@ for (const [action, item, title] of [["take", "ITM-0002", "Bottled Water"], ["us
     await page.goto(`/self-service?do=${action}&item=${item}`);
     const sheet = page.getByRole("dialog", { name: title });
     const review = sheet.getByRole("button", { name: `Review and ${action}` });
-    await expect(sheet.getByLabel("Student ID number")).toHaveAttribute("pattern", "[0-9]{8}");
+    // A text field with the number keypad; nothing in the field cuts the ID short (V1.16.4 §4.5).
+    await expect(sheet.getByLabel("Student ID number")).not.toHaveAttribute("pattern", /.*/);
+    await expect(sheet.getByLabel("Student ID number")).toHaveAttribute("maxlength", "30");
     await expect(sheet.getByLabel("Student ID number")).toHaveAttribute("inputmode", "numeric");
     await review.click();
     await expect(sheet.getByRole("alert")).toContainText("Please enter your full name.");
     await sheet.getByLabel("Your full name").fill("Maria Santos");
     await review.click();
-    await expect(sheet.getByRole("alert")).toContainText("Please enter your student ID number.");
-    // Seven digits can be typed and are refused; a ninth digit cannot be typed at all (the field holds eight; the Worker refuses nine anyway).
-    await sheet.getByLabel("Student ID number").fill("1234567");
-    await review.click();
-    await expect(sheet.getByRole("alert")).toContainText("must be exactly 8 digits");
+    await expect(sheet.getByRole("alert")).toContainText("Enter the Student ID number.");
+    // Seven digits and nine are each refused in the same words; the Worker refuses both too.
+    for (const short of ["1234567", "123456789"]) {
+      await sheet.getByLabel("Student ID number").fill(short);
+      await review.click();
+      await expect(sheet.getByRole("alert")).toContainText("A Student ID has exactly 8 digits.");
+    }
     await sheet.getByLabel("Student ID number").fill("21000115");
     await review.click();
     await expect(sheet.getByRole("alert")).toContainText("Take a photo holding the item.");
@@ -272,7 +282,7 @@ test("a phone that remembers an ID that is not eight digits asks again instead o
   await expect(sheet.getByLabel("Your full name")).toHaveValue("Maria Santos");
   await attachPhoto(sheet);
   await sheet.getByRole("button", { name: "Review and take" }).click();
-  await expect(sheet.getByRole("alert")).toContainText("Please enter your student ID number.");
+  await expect(sheet.getByRole("alert")).toContainText("Enter the Student ID number.");
 });
 
 test("a USC-only item asks for a reason and the same identity and photo as every other action", async ({ page }) => {
@@ -282,7 +292,7 @@ test("a USC-only item asks for a reason and the same identity and photo as every
   await expect(sheet.getByLabel("Student ID number")).toHaveAttribute("required", "");
   await sheet.getByLabel("Full name of the person using it").fill("Jose Ramos");
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
-  await expect(sheet.getByRole("alert")).toContainText("Please enter your student ID number.");
+  await expect(sheet.getByRole("alert")).toContainText("Enter the Student ID number.");
   await sheet.getByLabel("Student ID number").fill("21000115");
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Say what it's for.");

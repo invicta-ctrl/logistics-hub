@@ -594,8 +594,12 @@ test("lend for individual and USC use with a photo, return one damaged, and read
   const form = page.locator("#loan-form");
   await form.getByLabel("Borrower's full name").fill("Test Borrower One");
   await form.getByRole("button", { name: "Lend 1 piece" }).click();
-  await expect(form.getByRole("alert")).toHaveText("Enter the borrower's student ID number.");
+  await expect(form.getByRole("alert")).toHaveText("Enter the Student ID number.");
+  // One policy with the phone (V1.16.4 D1): the Student ID is 8 digits, for Individual and USC use alike.
   await form.getByLabel(/Student ID number/).fill("test-0001");
+  await form.getByRole("button", { name: "Lend 1 piece" }).click();
+  await expect(form.getByRole("alert")).toHaveText("A Student ID has digits only.");
+  await form.getByLabel(/Student ID number/).fill("20000001");
   await form.getByRole("button", { name: "Lend 1 piece" }).click();
   await expect(form.getByRole("alert")).toHaveText("Add a photo of the hand-over.");
   await form.locator("input[type=file]").setInputFiles(photo);
@@ -606,15 +610,18 @@ test("lend for individual and USC use with a photo, return one damaged, and read
   await expect(page.getByRole("tab", { name: "Loan · 1 out" })).toBeVisible();
 
   await form.getByRole("radio", { name: "USC use" }).check();
-  await form.getByLabel("Name of the person using it").fill("Test Officer");
+  await form.getByLabel("Borrower's full name").fill("Test Officer");
   await form.locator("input[type=file]").setInputFiles(photo);
   await form.getByRole("button", { name: "Lend 1 piece" }).click();
-  await expect(form.getByRole("alert")).toHaveText("Give the specific reason for USC use.");
+  await expect(form.getByRole("alert")).toHaveText("Enter the Student ID number.");
+  await form.getByLabel(/Student ID number/).fill("20000002");
+  await form.getByRole("button", { name: "Lend 1 piece" }).click();
+  await expect(form.getByRole("alert")).toHaveText("Enter the specific USC reason.");
   await form.getByLabel("Specific reason").fill("Banner cutting for the general assembly");
   await form.getByRole("button", { name: "Lend 1 piece" }).click();
   await expect(page.getByText("Lent 1 piece of Scissors to Test Officer.")).toBeVisible();
   await expect(page.locator("#item-loans")).toContainText("Test Borrower One");
-  await expect(page.locator("#item-loans")).toContainText("TEST-0001");
+  await expect(page.locator("#item-loans")).toContainText("20000001");
   await page.getByRole("tab", { name: "Overview" }).click();
   await expect(page.getByLabel("Quantity on hand")).toHaveValue("7");
   await expect(page.locator("#quantity-context")).toContainText("3 more on loan");
@@ -672,7 +679,7 @@ test("activity: one list of who did what, filters kept in the URL, older pages, 
   await search.fill("Banner cutting");
   await expect(page.locator(".activity-row").first()).toContainText("lent 1 piece of Scissors for USC use");
   // The structured borrower name and student ID are never searched.
-  for (const identity of ["Test Borrower One", "TEST-0001"]) {
+  for (const identity of ["Test Borrower One", "20000001"]) {
     await search.fill(identity);
     await expect(page.getByRole("heading", { name: "Nothing matches" })).toBeVisible();
   }
@@ -736,7 +743,7 @@ test("activity export: the filtered list as a safe CSV file, audited for the own
   expect(lines).toHaveLength(3);
   expect(lines[1]).toContain('"Returned damaged","E2E Staff closed a loan of Scissors as damaged; nothing went back to stock.","E2E Staff","Loans","ITM-0262","Scissors"');
   // The page shows the typed damage note; the file leaves it blank (owner decision B(ii)), and never holds the borrower.
-  for (const secret of ["One blade bent", "Test Borrower One", "TEST-0001"]) expect(text).not.toContain(secret);
+  for (const secret of ["One blade bent", "Test Borrower One", "20000001"]) expect(text).not.toContain(secret);
   await expect(page.getByText("Exported 1 entry.")).toBeVisible();
 
   const owner = await (await browser.newContext()).newPage();

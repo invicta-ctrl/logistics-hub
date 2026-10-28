@@ -1,5 +1,8 @@
 import { resolveItemIcon } from "./item-icons";
-import { formatItemName, IDENTITY_RULE_KEY, LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, SELF_SERVICE_RECORD_VERSION, SELF_SERVICE_STUDENT_ID, STUDENT_ID_PATTERN, selfServiceAction } from "./catalog-policy";
+import {
+  formatItemName, IDENTITY_RULE_KEY, LOAN_OUTCOMES, type ReviewReason, SELF_SERVICE_LIMITS, SELF_SERVICE_RECORD_VERSION, STUDENT_ID_MESSAGES, STUDENT_ID_PATTERN,
+  selfServiceAction, studentIdAsSent
+} from "./catalog-policy";
 import { throttled } from "./accounts";
 import { ancestry, pathOf, placesOf } from "./location-tree";
 import { sharedPlaces } from "./locations";
@@ -154,10 +157,17 @@ export function parseEvent(raw: unknown, batch: Pick<Batch, "sentAt" | "offsetMs
   const catalogRevision = record.catalogRevision === null || record.catalogRevision === undefined ? null : whole(record.catalogRevision, 0, 2 ** 31, "Malformed catalog revision.");
   const person = (record.person && typeof record.person === "object" ? record.person : {}) as Record<string, unknown>;
   const personName = cleanText(person.name, "Your name", 120, true)!;
-  const studentId = cleanText(person.studentId, "Student ID number", 30, current)?.toUpperCase() ?? null;
-  // The Worker holds a new record to the rule whatever the phone checked; an older one only to the office's wider pattern.
-  if (studentId && !(current ? SELF_SERVICE_STUDENT_ID : STUDENT_ID_PATTERN).test(studentId)) {
-    throw bad(current ? "Student ID number must be exactly 8 digits." : "Student ID number may use only letters, digits and dashes.");
+  // The Worker holds a new record to the rule whatever the phone checked, in the words every form uses; an older one only to the
+  // office's wider pattern.
+  const typedId = cleanText(person.studentId, "Student ID number", 30, false);
+  let studentId: string | null;
+  if (current) {
+    const problem = studentIdAsSent(typedId ?? "");
+    if (problem) throw bad(STUDENT_ID_MESSAGES[problem]);
+    studentId = typedId;
+  } else {
+    studentId = typedId?.toUpperCase() ?? null;
+    if (studentId && !STUDENT_ID_PATTERN.test(studentId)) throw bad("Student ID number may use only letters, digits and dashes.");
   }
 
   const deviceMs = isoTime(record.occurredAt, "Malformed time.");
@@ -175,7 +185,7 @@ export function parseEvent(raw: unknown, batch: Pick<Batch, "sentAt" | "offsetMs
     // The staff form's rules, with "today" being the day the borrow happened (for an untrusted
     // clock, the earliest day it could have happened, so the borrow is held rather than refused).
     const fields: Record<string, unknown> = { purpose: record.purpose, borrowerName: person.name, studentId: person.studentId, reason: record.reason, quantity, returnBy: record.returnBy ?? null };
-    event.loan = loanDetails((key) => fields[key], officeDay(new Date(clockIssue ? Math.min(deviceMs, receivedMs) : occurred)));
+    event.loan = loanDetails((key) => fields[key], officeDay(new Date(clockIssue ? Math.min(deviceMs, receivedMs) : occurred)), !current);
   }
   if (type === "RETURN") {
     if (typeof record.outcome !== "string" || !(LOAN_OUTCOMES as readonly string[]).includes(record.outcome)) throw bad("Choose Good condition, Damaged or Lost.");

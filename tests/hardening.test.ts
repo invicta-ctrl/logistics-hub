@@ -223,7 +223,7 @@ describe("R5: a loan's photo survives an answer that never arrived", () => {
     sqlite.exec("UPDATE items SET item_type = 'Loanable', status = 'ACTIVE' WHERE id = 'ITM-0001'");
     const form = () => {
       const data = new FormData();
-      for (const [name, value] of Object.entries({ key: "request-key-1234", purpose: "INDIVIDUAL", borrowerName: "Juan Cruz", studentId: "20-1234-567", quantity: "1" })) data.set(name, value);
+      for (const [name, value] of Object.entries({ key: "request-key-1234", purpose: "INDIVIDUAL", borrowerName: "Juan Cruz", studentId: "20123456", quantity: "1" })) data.set(name, value);
       data.set("photo", new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4])], "p.jpg", { type: "image/jpeg" }));
       return data;
     };

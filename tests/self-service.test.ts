@@ -742,7 +742,8 @@ describe("Self-Service identity (record version 2)", () => {
       const events = [a.current("TAKE", water, { person: { name: "Maria Santos", studentId } }), a.current("USE", paper, { person: { name: "Maria Santos", studentId } }), a.current("BORROW", scissors, { person: { name: "Maria Santos", studentId } })];
       const sent = await results(await a.sync(events));
       expect(sent.map((result) => result.outcome), studentId).toEqual(["rejected", "rejected", "rejected"]);
-      expect(sent.map((result) => result.message), studentId).toEqual(Array(3).fill("Student ID number must be exactly 8 digits."));
+      // In the words every form uses (V1.16.4 §4.5): a written or full-width ID reaching the Worker is refused, never rewritten.
+      expect(sent.map((result) => result.message), studentId).toEqual(Array(3).fill(/^\d+$/.test(studentId) ? "A Student ID has exactly 8 digits." : "A Student ID has digits only."));
     }
     // A missing ID or name is refused the same way; nothing was recorded.
     const missing = [a.current("TAKE", water, { person: { name: "Maria Santos" } }), a.current("TAKE", water, { person: { studentId: "21000115" } }), a.current("BORROW", scissors, { purpose: "USC", person: { name: "Maria Santos" } })];
@@ -816,7 +817,7 @@ describe("Self-Service identity (record version 2)", () => {
     const giveBack = (fields: Record<string, unknown> = {}) => a.current("RETURN", scissors, { loanEventId: borrow.id, ...fields });
     for (const studentId of ["1234567", "123456789", "12-345678", "ABC12345", "12A45678", "1234 5678"]) {
       const sent = await results(await a.sync([giveBack({ person: { name: "Maria Santos", studentId } })]));
-      expect(sent[0], studentId).toMatchObject({ outcome: "rejected", message: "Student ID number must be exactly 8 digits." });
+      expect(sent[0], studentId).toMatchObject({ outcome: "rejected", message: /^\d+$/.test(studentId) ? "A Student ID has exactly 8 digits." : "A Student ID has digits only." });
     }
     const noName = giveBack({ person: { studentId: "21000115" } });
     const noId = giveBack({ person: { name: "Maria Santos" } });
