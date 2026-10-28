@@ -2,14 +2,16 @@
 
 ## Claude takeover — 2026-10-28 (single writer)
 
-**V1.16.4 IN PROGRESS; not merged or released.** On 2026-10-28 Earl designated Claude the sole implementation lead for the rest of V1.16.4 ("Codex is no longer the implementation writer for this release") and directed completion, merge, deployment check and safe branch cleanup.
+**V1.16.4 QUALIFICATION_PENDING: WP3–WP7 complete on the branch; not yet merged or deployed.** On 2026-10-28 Earl designated Claude the sole implementation lead for the rest of V1.16.4 ("Codex is no longer the implementation writer for this release") and directed completion, merge, deployment check and safe branch cleanup.
 
 - **Custody.** Writer checkout: `D:/Documents/Codex/HAU-USC Logistics/active/logistics-hub/.claude/worktrees/nav`, same branch `slice/v1.16.4-instant-navigation`, Claude's worktree lock.
   - Codex's recovered checkout `D:/Documents/HAU-USC Logistics Hub/workspace/logistics-hub-v1164` is left exactly as it was: its Codex lock (2026-10-25), head `b70a584` and one untracked file named `tock receipts"`.
   - That file is a 40 KB colour-coded copy of the `b70a584` diff, written 2026-10-28 11:39, most likely by a mistyped shell quote. It holds no unique data. Earl may delete it; agents leave it.
   - That checkout is no longer a writer. Earl can yield its lock with `npm run agent:yield -- codex` there.
 - **Published.** `b70a584` (Earl, restock-race repair, WP0 references) is the base. Claude's WP3 work had been unpublished in the nav worktree; it is rebased onto `b70a584` without conflict, as `feat(v1.16.4): WP3 …`.
-- **Next exact action.** Finish WP3 verification (Worker E2E) and push. Then WP4 navigation and Home, WP5, WP6 and WP7, in the accepted order, each committed and pushed when green. Merge to `main` only when every §7 gate passes together.
+- **Complete.** WP3–WP7 on `slice/v1.16.4-instant-navigation`. Final application source `e9f6a85889c1fe12d35c71eadc7c9169a390cdb2`; the release commit after it sets V1.16.4 and its five notes. Evidence, the §7 table and the known limits: `docs/road-to-v2/releases/v1.16.4.md`.
+- **Owed by Earl after the deploy.** Administration > System > This version shows V1.16.4 and its notes; Android system Back on a real phone (§7 criterion 7).
+- **Next exact action.** Exact-head CI, CodeQL and Worker E2E on the release commit; then fast-forward `main`, check the deployed assets byte for byte, read production p95 (D6), and hand Earl the System and Android Back checks. RELEASED_VERIFIED only after Earl's System check.
 
 ## WP3 restock receipt checkpoint — 2026-10-28
 

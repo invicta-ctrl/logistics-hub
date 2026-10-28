@@ -1,9 +1,12 @@
 {
   "version": "V1.16.4",
-  "sourceCommit": "bb680588613786259425ad6c114d2582b5361952",
+  "sourceCommit": "e9f6a85889c1fe12d35c71eadc7c9169a390cdb2",
   "record": "docs/road-to-v2/releases/v1.16.4.md",
   "changes": [
-    "Moving between staff pages is instant: the page and the rail switch at once, with a loading outline until its data arrives.",
-    "Pages no longer wait to re-check who is signed in before drawing; the check runs in the background."
+    "Moving between staff pages is instant, and Items now holds All items, Low & out of stock, Stock & movements, Pantry, Locations and Kits.",
+    "Home shows what needs doing now or soon and what can wait; Insights loads only when opened.",
+    "An item's sheet holds its stock settings, Add to restock and Add to kit, older history on request and a sharper picture.",
+    "The desk and phones ask a borrower for the same details, an 8-digit Student ID included, and numbers are read exactly as typed.",
+    "Forms ask before unsaved changes are lost, and only while something really changed."
   ]
 }
