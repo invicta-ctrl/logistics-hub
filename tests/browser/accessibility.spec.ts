@@ -13,7 +13,15 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ maintenance: true }) }));
 });
 
-const sidewaysScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+// The body clips sideways overflow (overflow-x: clip), so the page itself never scrolls: what runs past the edge is cut off instead.
+// The body's own scroll width still counts that content, so both are measured.
+const sidewaysScroll = (page: Page) => page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - document.documentElement.clientWidth);
+const pageScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+const PERSON = "PER-00000000-0000-4000-8000-000000000001";
+// These still cut some content off at 320 px with 200% text, as they did in V1.16.3 (V1.16.4 release record, Known limits); the page
+// itself still never scrolls sideways. Take one out once it fits.
+const CUT_OFF_AT_200 = new Set(["/", "/staff/admin/directory", `/staff/admin/directory?person=${PERSON}&tab=id`]);
+const fitsAt200 = (page: Page, address: string) => (CUT_OFF_AT_200.has(address) ? pageScroll : sidewaysScroll)(page);
 
 for (const route of ROUTES) {
   test(`${route}: one heading, labelled fields, named controls, no sideways scroll`, async ({ page }) => {
@@ -53,7 +61,7 @@ for (const route of ROUTES) {
     await page.goto(route);
     await expect(page.locator("main h1")).toHaveCount(1);
     await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
-    expect(await sidewaysScroll(page)).toBe(0);
+    expect(await fitsAt200(page, route)).toBe(0);
   });
 }
 
@@ -82,7 +90,7 @@ test("moving between pages inside the app still moves focus to the new page", as
 /* ---------- Staff Directory (V1.3), signed in as an owner, on fictional data ---------- */
 
 test.describe("Staff Directory", () => {
-  const ID = "PER-00000000-0000-4000-8000-000000000001";
+  const ID = PERSON;
   const person = (id: string, name: string, department: string, extra = {}) => ({ id, name, department, position: "Materials committee", officer: false, studentId: null, active: true, sourceKey: null,
     createdAt: "2026-10-01T02:00:00.000Z", updatedAt: "2026-10-01T02:00:00.000Z", hasId: false, account: null, ...extra });
   const people = [person(ID, "Ana Marie Santos", "DoL", { officer: true, position: "Director for Logistics", hasId: true, studentId: "20-1111-222" }),
@@ -125,7 +133,7 @@ test.describe("Staff Directory", () => {
       }
       await page.setViewportSize({ width: 320, height: 800 });
       await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
-      expect(await sidewaysScroll(page), `${address} at 200%`).toBe(0);
+      expect(await fitsAt200(page, address), `${address} at 200%`).toBe(0);
     });
   }
 
@@ -229,7 +237,7 @@ test.describe("Administration", () => {
       }
       await page.setViewportSize({ width: 320, height: 800 });
       await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
-      expect(await sidewaysScroll(page), `${address} at 200%`).toBe(0);
+      expect(await fitsAt200(page, address), `${address} at 200%`).toBe(0);
     });
   }
 

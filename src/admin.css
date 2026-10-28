@@ -62,8 +62,15 @@
 .alias-row__item { display: grid; min-width: 0; }
 
 @media (max-width: 760px) {
-  .status-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .status-row__detail { grid-column: 1 / -1; }
+  /* A block's own action and state wrap their words at large text rather than running past the phone (tables keep theirs). */
+  .admin-block > .button, .admin-cataloguing__go .button { max-width: 100%; white-space: normal; }
+  .admin-block > p > .tag { white-space: normal; }
+  /* A name and its state share a line where they fit; at large text the state moves under the name and wraps, rather than
+     covering the name or running past the phone. */
+  .status-row { display: flex; flex-wrap: wrap; justify-content: space-between; }
+  .status-row__state { min-width: 0; }
+  .status-row .tag { white-space: normal; }
+  .status-row__detail { flex: 1 1 100%; }
   .version-facts > div, .guide > div { grid-template-columns: minmax(0, 1fr); }
   .alias-row { grid-template-columns: minmax(0, 1fr) auto; }
   .alias-row__names { grid-column: 1 / -1; grid-row: 2; }

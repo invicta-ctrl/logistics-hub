@@ -117,8 +117,8 @@
 
 /* ---------- Home ---------- */
 .ss-hero { position: relative; display: grid; min-height: clamp(11rem, 30vh, 15rem); align-content: end; gap: .375rem; padding: 1rem .125rem .25rem; }
-/* At 200% text a long word ("Self-Service") is wider than a 320 px phone: it breaks rather than being cut off. */
-.ss-hero h1 { font-family: var(--serif); font-size: clamp(2.25rem, 10vw, 3rem); font-weight: 500; letter-spacing: -.03em; line-height: 1; overflow-wrap: break-word; }
+/* At 200% text a long word ("maintenance") is wider than a 320 px phone: it breaks rather than widening the column and being cut off. */
+.ss-hero h1 { font-family: var(--serif); font-size: clamp(2.25rem, 10vw, 3rem); font-weight: 500; letter-spacing: -.03em; line-height: 1; overflow-wrap: anywhere; }
 .ss-hero__hello { color: var(--text-2); font-size: var(--text-base); }
 
 /* Return and My activity: two compact tiles, side by side where they fit and stacked for large text. */

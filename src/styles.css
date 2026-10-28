@@ -640,8 +640,9 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .page-header__up a { display: inline-flex; min-height: 1.5rem; align-items: center; margin-block: -.125rem; color: var(--text-2); font-weight: 500; text-decoration: none; }
 .page-header__up a:hover { color: var(--brand); text-decoration: underline; }
 .page-header__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
-/* The smallest phones at large text: a title hyphenates and an action wraps its words, rather than either running past the edge. */
-.page-header h1, .ws-head__title h1 { min-width: 0; overflow-wrap: break-word; }
+/* The smallest phones at large text: a long word in a title breaks and an action wraps its words, rather than either widening the
+   page past the edge, where it would be cut off. */
+.page-header h1, .ws-head__title h1 { min-width: 0; overflow-wrap: anywhere; }
 .page-header__actions .button { max-width: 100%; white-space: normal; }
 .review-meter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); color: var(--text-2); font-size: var(--text-sm); }
 .review-meter p { margin: 0; }
@@ -1164,9 +1165,10 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .page-header__title .is-bad { color: var(--bad); font-weight: 600; }
 .period-switch { margin-bottom: var(--space-5); }
 .stat-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: var(--space-6); border-block: 1px solid var(--line); }
-.stat { display: grid; align-content: start; gap: var(--space-1); padding: var(--space-4) var(--space-5); border-left: 1px solid var(--line); }
+.stat { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--space-1); padding: var(--space-4) var(--space-5); border-left: 1px solid var(--line); }
 .stat:first-child { padding-left: 0; border-left: 0; }
-.stat dt { color: var(--text-2); font-size: var(--text-sm); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+/* A label longer than its column at large text ("UNCLASSIFIED") breaks rather than running into the next. */
+.stat dt { color: var(--text-2); font-size: var(--text-sm); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; overflow-wrap: anywhere; }
 .stat dd { display: grid; gap: var(--space-2); }
 .stat__value { font-size: var(--text-2xl); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
 .stat__note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); color: var(--text-3); font-size: var(--text-sm); }
@@ -1197,7 +1199,8 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .rank-row__value strong { color: var(--text); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
 
 @media (max-width: 960px) {
-  .stat-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Two columns, or one once large text needs more than half the width (8rem grows with the text). */
+  .stat-strip { grid-template-columns: repeat(auto-fit, minmax(min(100%, max(8rem, 50% - 1px)), 1fr)); }
   .leaderboards { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 520px) {
