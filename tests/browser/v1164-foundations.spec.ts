@@ -195,6 +195,41 @@ test.describe("other tabs and releases (§4.8)", () => {
     await expect(second).toHaveURL(/\/staff\?expired=1$/);
   });
 
+  test("another account signing in to the same tab is shown nothing kept for the first, and nothing is left in browser storage", async ({ page }) => {
+    const { inventoryAsks } = await staffPages(page);
+    let who: Record<string, unknown> | null = session;
+    await page.route("**/api/staff/session", (route) => route.fulfill({ json: who ?? { authenticated: false } }));
+    await page.route("**/api/staff/logout", (route) => { who = null; return route.fulfill({ json: { ok: true } }); });
+    await page.route("**/api/staff/login", (route) => { who = { ...session, id: "ACC-2", username: "staff.two", displayName: "Staff Two" }; return route.fulfill({ json: { ok: true, mustChangePassword: false } }); });
+    await page.goto("/staff/items");
+    await expect(page.getByRole("button", { name: "Sample marker" }).first()).toBeVisible();
+    await page.getByRole("button", { name: /Account:/ }).click();
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await page.getByRole("textbox", { name: "Username" }).fill("staff.two");
+    await page.getByLabel("Password", { exact: true }).fill("not checked here");
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
+    // The second account's list is held back: nothing of the first may show meanwhile, and the Worker is asked afresh.
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    await page.route("**/api/staff/inventory", async (route) => {
+      inventoryAsks.push(route.request().headers()["if-none-match"]);
+      await held;
+      await route.fulfill({ headers: { etag: '"r2"' }, json: { revision: 2, items: [{ ...item, id: "ITM-0002", name: "Second list" }], categories: ["SUPPLIES"], locations: [], units: ["piece"] } });
+    });
+    const asked = inventoryAsks.length;
+    await page.locator(".app-nav").getByRole("link", { name: "Items", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Items", level: 1 })).toBeVisible();
+    await expect.poll(() => inventoryAsks.length).toBeGreaterThan(asked);
+    expect(inventoryAsks.at(-1)).toBeUndefined();
+    await expect(page.getByRole("button", { name: "Sample marker" })).toHaveCount(0);
+    release();
+    await expect(page.getByRole("button", { name: "Second list" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sample marker" })).toHaveCount(0);
+    const stored = await page.evaluate(async () => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage }, databases: await indexedDB.databases() }));
+    for (const text of ["Sample marker", "Second list", "Staff One", "staff.one", "ACC-1"]) expect(stored).not.toContain(text);
+  });
+
   test("a tab on an older release loads the page afresh at its next move, once", async ({ page }) => {
     await staffPages(page, { session: { ...session, build: "newer" } });
     // The page names the build it came from, as a built page does.

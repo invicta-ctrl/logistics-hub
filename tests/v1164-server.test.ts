@@ -366,3 +366,62 @@ describe("the Attention contract (§5)", () => {
     expect(Object.values(stock).every((count) => count > 0)).toBe(true);
   });
 });
+
+describe("who may open the regrouped pages (§7 criterion 8, R1)", () => {
+  async function account(id: string, role: string, extra: { group?: string; mustChange?: boolean } = {}): Promise<string> {
+    sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash, role, must_change_password) VALUES(?, ?, ?, ?, ?, ?)")
+      .run(id, id.toLowerCase(), id, await hashPassword("correct horse battery"), role, extra.mustChange ? 1 : 0);
+    if (extra.group) sqlite.prepare("INSERT INTO system_settings(key, value, updated_at) VALUES(?, ?, '2026-10-28T00:00:00.000Z')").run(`account_access:${id}`, extra.group);
+    const response = await call("/api/staff/login", { method: "POST", headers: { origin, "content-type": "application/json", "cf-connecting-ip": `ip-${id}` }, body: JSON.stringify({ username: id.toLowerCase(), password: "correct horse battery" }) });
+    expect(response.status, id).toBe(200);
+    return response.headers.get("set-cookie")!.split(";")[0]!;
+  }
+
+  it("gives every page's reads to Logistics staff, administrators and the owner, and nothing to anyone else", async () => {
+    const id = await item("Matrix", 4);
+    const pages = ["/api/staff/home", "/api/staff/home/insights", "/api/staff/attention", "/api/staff/attention/summary", "/api/staff/inventory", "/api/staff/stock",
+      "/api/staff/loans", "/api/staff/locations", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/search", "/api/staff/activity", "/api/staff/self-service",
+      `/api/staff/items/${id}`, `/api/staff/items/${id}/history?before=${encodeURIComponent(`${new Date().toISOString()},MOV-Z`)}`];
+    const administration = ["/api/staff/admin/accounts", "/api/staff/admin/system", "/api/staff/admin/activity"];
+    const kinds: Array<[string, string, number, number, string | undefined]> = [
+      ["STAFF", one, 200, 403, undefined],
+      ["ADMIN", await account("ACC-ADMIN", "ADMIN"), 200, 200, undefined],
+      ["OWNER", await account("ACC-OWNER", "OWNER"), 200, 200, undefined],
+      ["other department", await account("ACC-DEM", "STAFF", { group: "DEM" }), 403, 403, "NO_HUB_ACCESS"],
+      ["must change password", await account("ACC-RESET", "STAFF", { mustChange: true }), 403, 403, "PASSWORD_CHANGE_REQUIRED"],
+      ["signed out", "", 401, 401, undefined]
+    ];
+    for (const [kind, cookie, page, admin, code] of kinds) {
+      for (const path of pages) {
+        const response = await as(cookie, path);
+        expect(response.status, `${kind} ${path}`).toBe(page);
+        if (code) expect((await json(response)).code, `${kind} ${path}`).toBe(code);
+      }
+      for (const path of administration) expect((await as(cookie, path)).status, `${kind} ${path}`).toBe(admin);
+    }
+  });
+
+  it("answers 304 only where every account is shown the same thing", async () => {
+    await item("Matrix same", 2);
+    const owner = await account("ACC-OWNER", "OWNER");
+    for (const path of ["/api/staff/inventory", "/api/staff/locations", "/api/staff/search", "/api/staff/kits", "/api/staff/catalogue/snapshot", "/api/staff/stock",
+      "/api/staff/loans", "/api/staff/self-service", "/api/staff/attention", "/api/staff/attention/summary", "/api/staff/home/insights"]) {
+      const mine = await as(one, path);
+      const theirs = await as(owner, path);
+      // Insights say when they were worked out; the moment is not the reader's.
+      const shown = async (response: Response) => { const { asOf: _, ...rest } = await json(response); return rest; };
+      expect(await shown(theirs), path).toEqual(await shown(mine));
+      expect((await as(owner, path, "GET", undefined, { "if-none-match": mine.headers.get("etag")! })).status, path).toBe(304);
+    }
+  });
+
+  it("refuses a stock movement from anyone outside the Hub and leaves the balance as it was", async () => {
+    const id = await item("Matrix move", 4);
+    const outsiders = [await account("ACC-DEM", "STAFF", { group: "DEM" }), await account("ACC-RESET", "STAFF", { mustChange: true }), ""];
+    for (const cookie of outsiders) {
+      const response = await as(cookie, `/api/staff/items/${id}/movements`, "POST", { key: key(), kind: "OUT", quantity: 1, reason: "USED" });
+      expect([401, 403]).toContain(response.status);
+    }
+    expect((await json(as(one, `/api/staff/items/${id}`))).item.onHand).toBe(4);
+  });
+});

@@ -78,10 +78,10 @@ describe("one Student ID rule for both purposes (D1, §4.5)", () => {
     expect(await refused(await lend(id, { studentId: "" }))).toEqual([400, STUDENT_ID_MESSAGES.EMPTY]);
     expect(await refused(await lend(id, { purpose: "USC", reason: "Stage setup", studentId: "" }))).toEqual([400, STUDENT_ID_MESSAGES.EMPTY]);
     expect(written()).toEqual(before);
-    expect((await lend(id, { studentId: "00012345" })).status).toBe(201);
+    expect((await lend(id, { studentId: "00123456" })).status).toBe(201);
     expect((await lend(id, { purpose: "USC", reason: "Stage setup", studentId: "21000115" })).status).toBe(201);
     const ids = sqlite.prepare("SELECT student_id AS id FROM loans ORDER BY created_at").all() as Array<{ id: string }>;
-    expect(ids.map((row) => row.id)).toEqual(["00012345", "21000115"]);
+    expect(ids.map((row) => row.id)).toEqual(["00123456", "21000115"]);
   });
 
   it("checks the ID exactly as sent: the desk tidies it, the Worker never rewrites it", async () => {
@@ -117,13 +117,15 @@ describe("a USC-only item at the desk (D3)", () => {
 });
 
 describe("the loan quantity as typed (§4.6)", () => {
-  it("refuses an exponent, a hex figure, a sign, a decimal, a fraction, a separator and an empty field, writing nothing", async () => {
+  it("refuses an exponent, a hex figure, a sign, a decimal, a fraction, a separator, full-width digits, NaN, too large and an empty field, writing nothing", async () => {
     const id = await loanable("Chairs", 2000);
     const before = written();
     const cases: Array<[string, string]> = [
       ["1e3", "Write the quantity out in full, like 1000."], ["0x10", "Enter the quantity in digits, like 12."], ["+5", "Enter the quantity in digits, like 12."],
       ["5.0", "The quantity must be a whole number."], ["2.5", "The quantity must be a whole number."], ["1,000", "Leave out commas and spaces in the quantity."],
-      ["", "Enter the quantity."], ["0", "The quantity must be at least 1."], ["-2", "The quantity can't be negative."], ["100001", "The quantity can be at most 100000."]
+      ["", "Enter the quantity."], ["0", "The quantity must be at least 1."], ["-1", "The quantity can't be negative."], ["-2", "The quantity can't be negative."],
+      ["１２", "Enter the quantity in digits, like 12."], ["NaN", "Enter the quantity in digits, like 12."], ["100001", "The quantity can be at most 100000."],
+      ["999999", "The quantity can be at most 100000."]
     ];
     for (const [quantity, message] of cases) expect(await refused(await lend(id, { quantity })), quantity).toEqual([400, message]);
     expect(written()).toEqual(before);

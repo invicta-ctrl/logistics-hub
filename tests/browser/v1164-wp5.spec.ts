@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 
 /*
  * V1.16.4 WP5 (accepted specification §4.5, §4.6, D1, D3, R5) on fictional data with the API mocked: the desk's Lend form keeps the
@@ -112,6 +112,32 @@ test("a quantity that is not a whole number is named and never sent; the stepper
   await expect(page.getByText("Lent 5 pieces of Sample tripod to Juan Dela Cruz.")).toBeVisible();
   expect(sent).toHaveLength(1);
   expect(sent[0]).toMatchObject({ purpose: "INDIVIDUAL", studentId: "21000115", quantity: "5" });
+});
+
+/** The fields a person can see and fill in `form`, by name, in order: the form's snapshot. */
+const shownFields = (form: Locator) => form.locator("input[name], textarea[name], select[name]").evaluateAll((fields) =>
+  [...new Set(fields.filter((field) => (field as HTMLInputElement).type !== "hidden" && !field.closest("[hidden]")).map((field) => (field as HTMLInputElement).name))]);
+
+test("Individual and USC use differ only by the reason, at the desk and on the phone (§7 criterion 5)", async ({ page }) => {
+  await desk(page, {}, saved);
+  const form = page.locator("#loan-form");
+  const individual = await shownFields(form);
+  await form.getByRole("radio", { name: "USC use" }).check();
+  expect(await shownFields(form)).toEqual([...individual.slice(0, individual.indexOf("studentId") + 1), "reason", ...individual.slice(individual.indexOf("studentId") + 1)]);
+
+  await page.route("**/api/self-service/catalog", (route) => route.fulfill({ headers: { etag: '"r7"' }, json: { revision: 7, places: [], items: [{ id: "ITM-0001", name: "Sample tripod", aliases: null,
+    category: "EQUIPMENT", unit: "piece", area: "Inventory", action: "BORROW", available: 5, location: null, locationId: null, audience: "STUDENTS_AND_USC_STAFF" }] } }));
+  await page.route("**/api/self-service/sync", (route) => route.abort());
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/self-service?do=borrow&item=ITM-0001");
+  const phone = page.getByRole("dialog", { name: "Sample tripod" }).locator("form");
+  await expect(phone.locator("#ss-name")).toBeVisible();
+  const phoneIndividual = await shownFields(phone);
+  expect(phoneIndividual.slice(0, 3)).toEqual(["purpose", "name", "studentId"]);
+  await phone.getByRole("radio", { name: "USC use" }).check();
+  const phoneUsc = await shownFields(phone);
+  expect(phoneUsc.filter((name) => !phoneIndividual.includes(name))).toEqual(["reason"]);
+  expect(phoneIndividual.filter((name) => !phoneUsc.includes(name))).toEqual([]);
 });
 
 test("a USC-only item is held to USC use at the desk (D3)", async ({ page }) => {
