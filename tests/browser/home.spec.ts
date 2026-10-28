@@ -82,6 +82,8 @@ test.describe("Home", () => {
     await expect(out.locator(".home-row").first()).toHaveAttribute("href", "/staff/items?item=ITM-STOCK_OUT-1");
     await expect(out.locator(".home-row").first()).toContainText("Sample reason for out of stock.");
     await expect(out.locator(".home-row").first()).toContainText("Open the item");
+    // How soon is said in words as well as by the pip's colour.
+    await expect(out.locator(".home-row__when")).toHaveText(["Now", "Now", "Soon"]);
     // "View all" names the reason's true total, routine entries included, and opens the queue on that reason.
     await expect(out.getByRole("link", { name: "View all 12 out of stock" })).toHaveAttribute("href", "/staff/attention?reason=STOCK_OUT");
     await expect(page.getByRole("region", { name: "Damaged or lost returns" }).locator(".home-row")).toHaveCount(1);

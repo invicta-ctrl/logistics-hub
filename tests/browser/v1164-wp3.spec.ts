@@ -138,6 +138,8 @@ test("Stock settings save on their own, ask before an unsaved change is lost, an
   await expect(page.getByText("Stock settings saved.")).toBeVisible();
   expect(state.sent.settings).toEqual([{ status: "ACTIVE", reorderThreshold: 5, stockArea: "Pantry", expiresOn: "2026-12-01", updatedAt: VERSION }]);
   await expect(save).toBeHidden();
+  // The Save button goes once saved; focus stays in the form rather than falling to the page.
+  await expect(settings.getByLabel("Reorder level")).toBeFocused();
 
   // The edit form sends the version the settings left, and none of the settings' own fields.
   await sheet.getByRole("tab", { name: "Edit details" }).click();

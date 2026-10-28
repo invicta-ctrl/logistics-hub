@@ -254,8 +254,11 @@ export function bindLoanForm(form: HTMLFormElement, options: {
     submit.textContent = "Saving…";
     setMessage(alert, "");
     let replayed = false;
+    let differs = false;
     try {
-      replayed = Boolean((await api<{ replayed?: boolean }>(`/api/staff/items/${encodeURIComponent(target.id)}/loans`, { method: "POST", body })).replayed);
+      const answer = await api<{ replayed?: boolean; differs?: boolean }>(`/api/staff/items/${encodeURIComponent(target.id)}/loans`, { method: "POST", body });
+      replayed = Boolean(answer.replayed);
+      differs = Boolean(answer.differs);
     } catch (error) {
       const unanswered = error instanceof ApiError && error.status === 0;
       // The server answered, so nothing was saved under this key: the next Lend is a new request. With no answer, it may have been.
@@ -266,7 +269,8 @@ export function bindLoanForm(form: HTMLFormElement, options: {
       return;
     }
     // An earlier Lend whose answer was lost had already saved it: say so, and the list shows that loan rather than a second.
-    toast(replayed ? `This loan of ${target.name} was already saved.` : `Lent ${count} ${units(count, target.unit)} of ${target.name} to ${name.value.trim()}.`);
+    toast(differs ? `This loan of ${target.name} was already saved, with the details first sent. Later changes were not saved.`
+      : replayed ? `This loan of ${target.name} was already saved.` : `Lent ${count} ${units(count, target.unit)} of ${target.name} to ${name.value.trim()}.`);
     reset();
     keyItem = null;
     try {

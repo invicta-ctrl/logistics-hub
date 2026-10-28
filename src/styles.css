@@ -317,12 +317,14 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .tag--gold { color: var(--text-2); }
 .tag--gold::before { background: var(--gold); }
 /* Wide enough for "Updated 12:59 PM" from the start, so "Connecting…" turning into a time never re-wraps the buttons beside it. */
-.live-status { display: inline-flex; min-width: 8.75rem; align-items: center; gap: var(--space-2); color: var(--text-3); font-size: var(--text-sm); white-space: nowrap; }
+/* One line where it fits; a narrow header (a phone at large text) wraps it rather than pushing past the edge. */
+.live-status { display: inline-flex; min-width: min(8.75rem, 100%); max-width: 100%; align-items: center; gap: var(--space-2); color: var(--text-3); font-size: var(--text-sm); }
+.live-status::before { flex: none; }
 .live-status::before { width: .4375rem; height: .4375rem; border-radius: 50%; background: var(--line-strong); content: ""; }
 .live-status[data-state="live"]::before { background: var(--ok-dot); }
 .live-status[data-state="updated"] { color: var(--ok); }
-.live-status[data-state="offline"] { color: var(--warn); }
-.live-status[data-state="offline"]::before { background: var(--warn-dot); }
+.live-status[data-state="offline"], .live-status[data-state="error"] { color: var(--warn); }
+.live-status[data-state="offline"]::before, .live-status[data-state="error"]::before { background: var(--warn-dot); }
 .callout { display: flex; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line-warn); border-radius: var(--radius); background: var(--warn-tint); color: var(--warn-ink); font-size: var(--text-sm); line-height: 1.5; }
 .callout .icon { color: var(--warn); }
 .callout--review { border-color: var(--line-brand); background: var(--brand-tint); color: var(--brand-hover); }
@@ -472,6 +474,8 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .sort-toggle button { white-space: nowrap; min-height: 2rem; padding: var(--space-1) var(--space-3); border: 0; border-radius: var(--radius); background: none; color: var(--text-2); font-size: var(--text-sm); font-weight: 500; transition: background-color var(--dur-2), color var(--dur-2), box-shadow var(--dur-2); }
 .sort-toggle button:hover { color: var(--text); }
 .sort-toggle button[aria-pressed="true"] { background: var(--brand-tint); color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+/* On the dark tint the brand red is 4.3:1; its lighter step reads at AA. */
+:root[data-theme="dark"] .sort-toggle button[aria-pressed="true"] { color: var(--brand-hover); }
 .chips { display: flex; gap: var(--space-2); margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); overflow-x: auto; scrollbar-width: thin; }
 #lending-categories { min-height: 2.25rem; }
 #lending-categories .chip--skeleton { width: 5.5rem; pointer-events: none; }
@@ -629,9 +633,13 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .page-header p { margin-top: var(--space-1); color: var(--text-2); font-size: var(--text-sm); }
 .page-header__title { display: grid; gap: var(--space-1); min-width: 0; }
 .page-header__up { margin: 0; font-size: .8125rem; line-height: 1.25rem; }
-.page-header__up a { color: var(--text-2); font-weight: 500; text-decoration: none; }
+/* At least 24 px tall to press (WCAG 2.5.8), without moving the title below it. */
+.page-header__up a { display: inline-flex; min-height: 1.5rem; align-items: center; margin-block: -.125rem; color: var(--text-2); font-weight: 500; text-decoration: none; }
 .page-header__up a:hover { color: var(--brand); text-decoration: underline; }
 .page-header__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
+/* The smallest phones at large text: a title hyphenates and an action wraps its words, rather than either running past the edge. */
+.page-header h1, .ws-head__title h1 { min-width: 0; overflow-wrap: break-word; hyphens: auto; }
+.page-header__actions .button { max-width: 100%; white-space: normal; }
 .review-meter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); color: var(--text-2); font-size: var(--text-sm); }
 .review-meter p { margin: 0; }
 .review-meter strong { color: var(--text); font-variant-numeric: tabular-nums; }
@@ -964,12 +972,15 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .data-table .col-actions:has(.row-actions) { width: 1%; }
 .data-table td.col-item { min-width: 12rem; }
 .col-level, .col-desired { width: 8rem; white-space: nowrap; text-align: right !important; font-variant-numeric: tabular-nums; }
-.col-level .cell-label { display: none; }
+/* A cell's own label is for a narrow row, where the table's headings are hidden. */
+.data-table .cell-label { display: none; }
 .input-compact { width: 6rem !important; min-height: 2.25rem !important; padding-block: var(--space-1) !important; text-align: right; font-variant-numeric: tabular-nums; }
 .chips--flush { margin: 0 0 var(--space-4); padding: 0; flex-wrap: wrap; overflow: visible; }
 /* Items' To do (V1.16.4 §4.2): only the tasks that have any, on a line that wraps, so nothing scrolls sideways. */
 .todo-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-4); }
 .todo-line[hidden] { display: none; }
+/* A chip wider than the line (a phone at large text) wraps its words instead of running past the edge. */
+.todo-line .chip { flex: 0 1 auto; min-width: 0; text-align: left; }
 .todo-line__label { margin-right: var(--space-1); color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .hint-line { display: flex; align-items: flex-start; gap: var(--space-2); margin-bottom: var(--space-4); color: var(--text-2); font-size: var(--text-sm); }
 .hint-line .icon { --icon-size: var(--icon-sm); color: var(--text-3); }
@@ -1265,7 +1276,7 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   .data-table-wrap--responsive .data-table .col-actions .row-actions:has(.row-menu--fallback) { flex-wrap: wrap; }
   .data-table-wrap--responsive .data-table td.col-item { min-width: 0; }
   .data-table-wrap--responsive .data-table .col-level { width: auto; color: var(--text-2); font-size: var(--text-sm); }
-  .data-table-wrap--responsive .data-table .col-level .cell-label { display: inline; }
+  .data-table-wrap--responsive .data-table .cell-label { display: inline; }
   .data-table-wrap--responsive .data-table .col-desired { width: auto; }
 }
 @media (max-width: 760px) {

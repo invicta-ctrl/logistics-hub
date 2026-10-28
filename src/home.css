@@ -11,10 +11,11 @@
 .home-reason__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-4); padding-inline: var(--space-3); }
 .home-reason__head h3 { margin: 0; color: var(--text-2); font-size: .8125rem; font-weight: 600; letter-spacing: .04em; line-height: 1.25rem; text-transform: uppercase; }
 .home-reason__all { font-size: .875rem; font-weight: 500; }
-.home-pip { display: inline-block; width: .5rem; height: .5rem; flex: none; align-self: flex-start; margin-top: .4375rem; border-radius: 50%; }
+.home-pip { display: inline-block; width: .5rem; height: .5rem; align-self: start; margin-top: .4375rem; border-radius: 50%; }
 .home-pip--now { background: var(--bad); }
 .home-pip--soon { background: var(--gold); }
 @media (forced-colors: active) { .home-pip { border: 1px solid CanvasText; } }
+.home-row__when { color: var(--text); font-weight: 600; }
 .home-row__basis { color: var(--text-3); font-size: .75rem; overflow-wrap: anywhere; }
 /* What can wait: its reasons on one line that wraps; on phones one row that scrolls inside itself (kept from V1.16.3). */
 .home-laters { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
@@ -43,9 +44,10 @@
 .home-skeleton__row { display: grid; gap: var(--space-2); }
 .ws { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-8); padding-top: var(--space-6); }
 .ws-head { display: grid; gap: var(--space-2); }
-.ws-head__title { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); }
+.ws-head__title { display: flex; min-width: 0; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-4); }
 .ws-head__title h1 { margin: 0; font: 500 3rem/3.5rem var(--serif); letter-spacing: -.022em; }
-.ws-head__title time { color: var(--text-3); font-size: .8125rem; white-space: nowrap; }
+/* The date moves under the title when the line is short, and wraps itself only when even that is too narrow (large text). */
+.ws-head__title time { color: var(--text-3); font-size: .8125rem; }
 .ws-head__lede { max-width: 40rem; margin: 0; color: var(--text-2); font-size: .9375rem; line-height: 1.6; }
 .ws-head__hello { color: var(--text); font-weight: 500; }
 .ws-head__summary:empty { display: none; }
@@ -68,17 +70,23 @@
 @media (min-width: 1600px) { .ws { grid-template-columns: minmax(0, 1fr) clamp(25rem, 26vw, 30rem); } }
 @media (max-width: 600px) { .ws-head__title h1 { font-size: 2.25rem; line-height: 2.75rem; } }
 
-/* Rows: what needs attention, and your own paused or open place checks, each one press from its record. */
-.home-list { margin: 0; padding: 0; list-style: none; }
+/* Rows: what needs attention, and your own paused or open place checks, each one press from its record: the marker, the words, then
+   the action. A list too narrow for all three on one line (a small phone, or large text) puts the action under the words, so a title
+   is never squeezed beside it. */
+.home-list { margin: 0; padding: 0; list-style: none; container-type: inline-size; }
 .home-list > li + li { border-top: 1px solid var(--line); }
-.home-row { display: flex; min-height: var(--target); align-items: center; gap: var(--space-3); padding: var(--space-3); border-radius: var(--radius-lg); color: inherit; text-decoration: none; transition: background-color var(--dur-1); }
+.home-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; min-height: var(--target); align-items: center; gap: var(--space-1) var(--space-3); padding: var(--space-3); border-radius: var(--radius-lg); color: inherit; text-decoration: none; transition: background-color var(--dur-1); }
+@container (max-width: 22rem) {
+  .home-row { grid-template-columns: auto minmax(0, 1fr); }
+  .home-row__go { grid-column: 2; justify-self: start; }
+}
 .home-row:hover { background: var(--hover); }
 .home-row:focus-visible { outline: 2px solid var(--brand); outline-offset: 0; }
 .home-row > .icon { flex: none; color: var(--text-3); }
-.home-row__text { display: grid; flex: 1; min-width: 0; gap: 2px; }
+.home-row__text { display: grid; min-width: 0; gap: 2px; }
 .home-row__title { font-size: .9375rem; font-weight: 500; overflow-wrap: anywhere; }
 .home-row__meta { color: var(--text-2); font-size: .8125rem; overflow-wrap: anywhere; }
-.home-row__go { display: inline-flex; flex: none; align-items: center; gap: var(--space-1); color: var(--brand); font-size: .875rem; font-weight: 500; }
+.home-row__go { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--brand); font-size: .875rem; font-weight: 500; }
 .home-row__go > .icon { transition: transform var(--dur-1) var(--ease-settle); }
 .home-row:hover .home-row__go > .icon { transform: translateX(4px); }
 

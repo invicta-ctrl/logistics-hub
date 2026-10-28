@@ -141,8 +141,10 @@ describe("a retried Lend (R5)", () => {
     const first = await lend(id, { key });
     expect(first.status).toBe(201);
     const { id: loanId } = await first.json() as { id: string };
+    expect(await (await lend(id, { key })).json()).toEqual({ id: loanId, onHand: 2, replayed: true });
+    // A retry that asks for something else still never lends twice, and says the loan kept the details first sent.
     const again = await lend(id, { key, quantity: "2", borrowerName: "Someone Else" });
-    expect(await again.json()).toEqual({ id: loanId, onHand: 2, replayed: true });
+    expect(await again.json()).toEqual({ id: loanId, onHand: 2, replayed: true, differs: true });
     expect(written()).toMatchObject({ loans: 1, movements: 1, audit: 1, photos: 1 });
   });
 

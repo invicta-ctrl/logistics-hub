@@ -270,7 +270,7 @@ export async function stockWorkspace(): Promise<void> {
       <caption class="visually-hidden">Pantry items</caption>
       <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Minimum</th><th scope="col" class="col-short">Shortage</th><th scope="col" class="col-used">Used, 30 days</th><th scope="col">Expiry</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
       <tbody>${pantry.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit, item)}${levelCell(item, "Minimum")}
-        <td class="col-short"><span class="cell-label">Shortage: </span>${shortage(item) > 0 ? html`<span class="tag tag--warn">${formatQuantity(shortage(item))} short</span>` : html`<span class="muted">None</span>`}</td>
+        <td class="col-short"><span class="cell-label">Shortage: </span>${shortage(item) > 0 ? html`<span class="tag tag--warn">${formatQuantity(shortage(item))} short</span>` : html`<span class="muted">${item.reorderThreshold > 0 && item.onHand === item.reorderThreshold ? "At the minimum" : "None"}</span>`}</td>
         <td class="col-used"><span class="cell-label">Used, last 30 days: </span>${data.used ? formatQuantity(data.used[item.id] ?? 0) : html`<span class="muted">—</span>`}</td>
         <td>${expiryTag(item)}</td>
         <td class="col-actions"><span class="row-actions">${tracked(item)

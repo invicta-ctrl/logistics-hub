@@ -13,12 +13,18 @@
 
 type Check = () => boolean;
 const checks = new Set<Check>();
-/** Checks whose edits the person chose to discard: quiet until something is typed again, so the way out they chose is not asked twice. */
+/**
+ * Checks whose edits the person chose to discard: quiet until something is typed again or the check reads clean (its sheet closed,
+ * its form put back), so the way out they chose is not asked twice and the next edits, typed or clicked, ask again.
+ */
 const discarded = new Set<Check>();
 
 const holds = (check: Check): boolean => {
-  if (discarded.has(check)) return false;
-  try { return check(); } catch { return false; }
+  let dirty: boolean;
+  try { dirty = check(); } catch { dirty = false; }
+  if (!discarded.has(check)) return dirty;
+  if (!dirty) discarded.delete(check);
+  return false;
 };
 
 /** Registers a check while its form exists; the returned function removes it (pages call it from onLeave, sheets when they go). */
@@ -30,10 +36,14 @@ export function trackEdits(dirty: Check): () => void {
 /** Whether anything (or anything in `scope`) holds edits not yet saved and not discarded. */
 export const hasUnsaved = (scope: Iterable<Check> = checks): boolean => [...scope].some(holds);
 
-/** What a person can change in `root`'s fields, as one string: values, choices and chosen files. A search box finds; it edits nothing. */
+/**
+ * What a person can change in `root`'s fields, as one string: values, choices and chosen files. A search box finds; it edits nothing.
+ * Nor does a part with its own save (`data-own-save`, a new place added on the spot): it is not the form's to keep.
+ */
 function fieldsOf(root: ParentNode): string {
   const parts: string[] = [];
   root.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>("input:not([type=search]), select, textarea").forEach((field, index) => {
+    if (field.closest("[data-own-save]")) return;
     const name = field.name || field.id || String(index);
     if (field instanceof HTMLInputElement && (field.type === "checkbox" || field.type === "radio")) parts.push(`${name}:${field.value}=${field.checked}`);
     else if (field instanceof HTMLInputElement && field.type === "file") parts.push(`${name}=${[...field.files ?? []].map((file) => `${file.name}/${file.size}`).join()}`);
@@ -49,10 +59,28 @@ function fieldsOf(root: ParentNode): string {
 export function formEdits(root: HTMLElement, extra: () => string = () => ""): { dirty: () => boolean; reset: () => void } {
   const read = () => `${fieldsOf(root)}\n${extra()}`;
   let saved = read();
-  return { dirty: () => root.isConnected && read() !== saved, reset: () => { saved = read(); } };
+  return { dirty: () => root.isConnected && read() !== saved, reset: () => { saved = read(); warnOnUnload(); } };
 }
 
 /* ---------- The question ---------- */
+
+/** The last button pressed that opens a menu (a popover): a menu can have several (the avatar, and More on phones). */
+let lastOpener: HTMLElement | null = null;
+
+/**
+ * Where Keep editing puts focus back: the control that was focused, or, when that sat in a menu which has closed meanwhile (Sign out in
+ * the account menu), the button that opened the menu, so focus never falls to the page.
+ */
+function returnTo(control: HTMLElement | null): HTMLElement | null {
+  if (!control?.isConnected) return null;
+  // The menu's state, not its layout: a closing menu stays drawn through its exit animation, then takes focus with it.
+  const menu = control.closest<HTMLElement>("[popover][id]");
+  if (!menu || menuOpen(menu)) return control;
+  const openers = [lastOpener, ...document.querySelectorAll<HTMLElement>(`[popovertarget="${CSS.escape(menu.id)}"]`)];
+  return openers.find((opener) => opener?.isConnected && opener.getAttribute("popovertarget") === menu.id && opener.getClientRects().length) ?? control;
+}
+/** Without the Popover API (iOS before 17) a menu is shown and hidden with `hidden`. */
+const menuOpen = (menu: HTMLElement): boolean => { try { return menu.matches(":popover-open"); } catch { return !menu.hidden; } };
 
 let open: { dialog: HTMLDialogElement; answer: Promise<boolean> } | null = null;
 /** Closes still to arrive from moving the question back on top (a dialog's close event comes a task later): they are not an answer. */
@@ -82,7 +110,7 @@ function ask(title: string, body: string, keep: string, leave: string): Promise<
       if (dialog.open) dialog.close();
       dialog.remove();
       open = null;
-      if (!leaving && before?.isConnected) before.focus({ preventScroll: true });
+      if (!leaving) returnTo(before)?.focus({ preventScroll: true });
       resolve(leaving);
     };
     // Anything that closes the question without choosing (Escape, the platform's back) is Keep editing.
@@ -139,7 +167,8 @@ export async function confirmSessionEnded(): Promise<boolean> {
 
 /* ---------- Closing or reloading the tab ---------- */
 
-const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+// Asks again as the tab goes: a save that cleaned the page without an edit event (a reset form) leaves this attached a while.
+const warn = (event: BeforeUnloadEvent) => { if (!hasUnsaved()) return; event.preventDefault(); event.returnValue = ""; };
 let warning = false;
 /**
  * The browser's own warning, attached only while something is unsaved (an unload listener costs the back-forward cache). Browsers
@@ -152,14 +181,17 @@ export function warnOnUnload(): void {
   if (dirty) window.addEventListener("beforeunload", warn);
   else window.removeEventListener("beforeunload", warn);
 }
-// Typing re-arms a discarded form, and every edit decides afresh whether the tab warns. Pages update their own state in their
-// listeners, which run after this capture phase, so the check waits a turn.
+// Typing re-arms a discarded form, and every edit decides afresh whether the tab warns. A press can edit too (a kit part marked) or
+// end the edits (Discard, a save), so it is checked as well, and a discard whose edits have gone is dropped: the next ones, typed or
+// pressed, ask again. Pages update their own state in their listeners, which run after this capture phase, so the check waits a turn.
 const edited = (event: Event) => {
   if (event.type === "input") discarded.clear();
+  if (event.type === "click") lastOpener = (event.target as Element).closest?.<HTMLElement>("[popovertarget]") ?? lastOpener;
   window.setTimeout(warnOnUnload, 0);
 };
 document.addEventListener("input", edited, true);
 document.addEventListener("change", edited, true);
+document.addEventListener("click", edited, true);
 
 /* ---------- Back and Forward ---------- */
 
@@ -174,6 +206,8 @@ export function entryState(state: object, replace: boolean): object {
 }
 
 let restoring = false;
+/** Set while a held move waits for its answer: another Back meanwhile is only put back, so Discard takes one move, not two. */
+let held = false;
 /**
  * Called by the router first on every popstate. A Back or Forward taken while something is unsaved is put back (`history.go`) and
  * asked about; Discard then takes it again. Answers true when the router must ignore this event: the move being held, or the event
@@ -187,6 +221,8 @@ export function holdMove(): boolean {
   if (!delta || !hasUnsaved()) { position = target; return false; }
   restoring = true;
   history.go(-delta);
-  void confirmDiscard().then((discard) => { if (discard) history.go(delta); });
+  if (held) return true;
+  held = true;
+  void confirmDiscard().then((discard) => { held = false; if (discard) history.go(delta); });
   return true;
 }

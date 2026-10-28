@@ -44,10 +44,13 @@ function ledeMarkup(name: string, act: number | null): Html {
 
 const SKELETON = html`<div class="home-skeleton" aria-hidden="true">${[1, 2, 3].map(() => html`<div class="home-skeleton__row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--text"></span></div>`)}</div><span class="visually-hidden">Loading what needs attention</span>`;
 
+/** How soon, in words as well as the pip's colour, as Attention's bands name it. */
+const WHEN: Record<string, string> = { NOW: "Now", SOON: "Soon" };
+
 function entryMarkup(entry: Entry): Html {
   return html`<li><a class="home-row home-row--entry" href="${entry.href}" data-route>
     <span class="home-pip home-pip--${entry.urgency.toLowerCase()}" aria-hidden="true"></span>
-    <span class="home-row__text"><span class="home-row__title">${entry.title}</span><span class="home-row__meta">${entry.why}</span>${entry.basis ? html`<span class="home-row__basis">${entry.basis}</span>` : ""}</span>
+    <span class="home-row__text"><span class="home-row__title">${entry.title}</span><span class="home-row__meta">${WHEN[entry.urgency] ? html`<span class="home-row__when">${WHEN[entry.urgency]}</span> · ` : ""}${entry.why}</span>${entry.basis ? html`<span class="home-row__basis">${entry.basis}</span>` : ""}</span>
     <span class="home-row__go">${entry.action}${icon("next")}</span></a></li>`;
 }
 

@@ -287,3 +287,109 @@ test("the phone's borrower sheet asks in the app's own words when Back is taken,
   await expect(page).toHaveURL(/do=item&item=ITM-0001$/);
   expect(native).toEqual([]);
 });
+
+test("after a Discard, a sheet asks again about edits made only by pressing buttons", async ({ page }) => {
+  await staffPages(page);
+  const part = (itemId: string, name: string) => ({ itemId, name, unit: "piece", category: "SUPPLIES", itemType: "Consumable", consumptionMode: "WHOLE_UNIT", iconKey: null, visualType: null,
+    photoId: null, required: 1, demand: 1, onHand: 3, onLoan: 0, expiresOn: null, state: "OK", reason: null, seen: null });
+  await page.route("**/api/staff/kit-recent", (route) => route.fulfill({ json: { items: [] } }));
+  await page.route("**/api/staff/kits", (route) => route.fulfill({ json: { revision: 1, kits: [{ id: "KIT-0001", name: "Craft kit", description: null, locationId: null, active: true, updatedAt: VERSION }], templates: [] } }));
+  await page.route("**/api/staff/kits/KIT-0001", (route) => route.fulfill({ json: { kit: { id: "KIT-0001", name: "Craft kit", description: null, locationId: null, active: true, updatedAt: VERSION },
+    components: [part("ITM-0002", "Glue stick"), part("ITM-0003", "Paper")], checks: [], lastCheck: null } }));
+
+  await page.goto("/staff/kits?kit=KIT-0001");
+  await page.getByRole("button", { name: "Check kit" }).click();
+  const glue = page.locator('[data-item="ITM-0002"]');
+  await glue.locator('[data-mark="OK"]').click();
+  await page.locator("#check-cancel").click();
+  await expect(question(page)).toBeVisible();
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(page.locator("#check-rows")).toHaveCount(0);
+
+  // A new check, marked only by pressing: the earlier Discard does not cover it.
+  await page.getByRole("button", { name: "Check kit" }).click();
+  await glue.locator('[data-mark="OK"]').click();
+  await page.keyboard.press("Escape");
+  await expect(question(page)).toBeVisible();
+  await page.getByRole("button", { name: "Keep editing" }).click();
+  await expect(glue).toHaveClass(/is-ok/);
+});
+
+test("a saved profile is drawn again and a changed password clears: My account then holds nothing", async ({ page }) => {
+  await staffPages(page);
+  let displayName = "Staff One";
+  await page.route("**/api/staff/session", (route) => route.fulfill({ json: { ...staff, displayName } }));
+  await page.route("**/api/staff/me", (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    displayName = (route.request().postDataJSON() as { displayName: string }).displayName;
+    return route.fulfill({ json: { changed: 1 } });
+  });
+  await page.route("**/api/staff/me/password", (route) => route.fulfill({ json: {} }));
+  const unloadWarns = () => page.evaluate(() => { const event = new Event("beforeunload", { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented; });
+
+  await page.goto("/staff/account");
+  await page.locator("#current").fill("old secret 1");
+  await page.locator("#next").fill("new secret 22");
+  await page.locator("#repeat").fill("new secret 22");
+  expect(await unloadWarns()).toBe(true);
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page.locator("#current")).toHaveValue("");
+  expect(await unloadWarns()).toBe(false);
+
+  await page.locator("#name").fill("Staff One Reyes");
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect.poll(() => displayName).toBe("Staff One Reyes");
+  await expect(page.locator("#name")).toHaveValue("Staff One Reyes");
+  await rail(page, "Items").click();
+  await expect(page.getByRole("heading", { name: "Items", level: 1 })).toBeVisible();
+  await expect(question(page)).toHaveCount(0);
+});
+
+test("Forward pressed again while asked is only put back: Discard moves one entry, not two", async ({ page }) => {
+  await staffPages(page);
+  await page.goto("/staff/account");
+  await rail(page, "Items").click();
+  await expect(page.getByRole("heading", { name: "Items", level: 1 })).toBeVisible();
+  await rail(page, "Loans").click();
+  await expect(page.getByRole("heading", { name: "Loans", level: 1 })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Items", level: 1 })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "My account", level: 1 })).toBeVisible();
+  await page.locator("#name").fill("Staff One Reyes");
+
+  await page.goForward();
+  await expect(question(page)).toBeVisible();
+  await page.goForward();
+  await expect.poll(() => page.url()).toMatch(/\/staff\/account$/);
+  await expect(question(page)).toBeVisible();
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(page.getByRole("heading", { name: "Items", level: 1 })).toBeVisible();
+  await page.waitForTimeout(400);
+  await expect(page).toHaveURL(/\/staff\/items$/);
+});
+
+test("a new place started and cancelled in the item form is not the item's edit", async ({ page }) => {
+  await staffPages(page);
+  await page.goto("/staff/items?item=ITM-0001&tab=details");
+  const sheet = page.getByRole("dialog", { name: "Sample tripod" });
+  await sheet.getByRole("button", { name: "New place" }).click();
+  await sheet.locator("#np-name").fill("Shelf 3");
+  await sheet.locator("[data-np-cancel]").click();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
+  await expect(question(page)).toHaveCount(0);
+});
+
+test("Keep editing after Sign out in the account menu puts focus back on the menu's button, not the page", async ({ page }) => {
+  await staffPages(page);
+  await page.goto("/staff/account");
+  await page.locator("#name").fill("Staff One Reyes");
+  const account = page.locator("button.account");
+  await account.click();
+  await page.locator("#staff-logout").click();
+  await expect(question(page)).toBeVisible();
+  await page.getByRole("button", { name: "Keep editing" }).click();
+  await expect(account).toBeFocused();
+  await expect(page.locator("#name")).toHaveValue("Staff One Reyes");
+});

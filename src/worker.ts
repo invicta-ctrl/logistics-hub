@@ -23,7 +23,7 @@ import { createLocation, deleteLocation, locationList, moveItems, updateLocation
 import { openUnitAction } from "./open-units";
 import { InputError, audit, catalogRevision, createItem, historyCursor, itemDetail, itemHistory, parseItemInput, parseStockSettings, publicCatalog, recordMovement, setAliases, staffInventory, updateItem, mergeItem, requireCurrentItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
-import { closeLoan, createLoan, loanPhoto, loansOverview } from "./loans";
+import { closeLoan, createLoan, loanPhoto, loansOverview, officeDay } from "./loans";
 import { eraseOldDetails, retentionPreview } from "./retention";
 import { selfServiceState, setSelfService } from "./settings";
 import { systemStatus } from "./system-status";
@@ -437,7 +437,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   if (picture && method === "GET") return locationPicture(env.CATALOG_MEDIA, picture[1]!, picture[2]!);
   const resolving = REPORT_PATH.exec(path);
   if (resolving && method === "POST") return json(await resolveReport(env.DB, account, resolving[1]!, await body()));
-  if (path === "/api/staff/kits" && method === "GET") return revisioned(request, env.DB, () => kitList(env.DB), new Date().toISOString().slice(0, 10));
+  if (path === "/api/staff/kits" && method === "GET") return revisioned(request, env.DB, () => kitList(env.DB), officeDay());
   if (path === "/api/staff/kits" && method === "POST") return json(await createKit(env.DB, account, await body()), 201);
   if (path === "/api/staff/kit-recent" && method === "GET") return json(await recentlyCatalogued(env.DB));
   const kit = KIT_PATH.exec(path);
@@ -724,8 +724,12 @@ async function route(request: Request, env: Env, url: URL, ctx?: ExecutionContex
   return assetCaching(await env.ASSETS.fetch(request), path);
 }
 
-/** The route without its record ids (any path segment with a digit in it), so a cost line never carries an id. */
-const routeOf = (path: string) => path.split("/").map((part) => (/\d/.test(part) ? ":id" : part)).join("/");
+/**
+ * The route as a cost line records it: only the short lower-case words a route is made of, anything else (a record id, text a caller
+ * typed) as ":id". A request that is signed out, or finds nothing (no such route or record), is logged without its address at all.
+ */
+const routeOf = (path: string, status: number) => status === 401 ? "signed-out" : status === 404 ? "not-found"
+  : path.split("/").map((part) => (/^[a-z-]{0,40}$/.test(part) ? part : ":id")).join("/");
 
 /**
  * A staff request with its cost measured (V1.16.4 §4.8.6): its own view of D1 and the buckets counts and times each wait, the answer
@@ -743,7 +747,7 @@ async function measuredStaffApi(request: Request, env: Env, url: URL, ctx?: Exec
     if (!(error instanceof InputError)) throw error;
     response = json({ error: error.message }, error.status);
   }
-  const line = costLine(routeOf(url.pathname), request.method, response.status, sizes.get(response) ?? null, cost);
+  const line = costLine(routeOf(url.pathname, response.status), request.method, response.status, sizes.get(response) ?? null, cost);
   if (line) console.log(line);
   const headers = new Headers(response.headers);
   headers.set("Server-Timing", serverTiming(cost));

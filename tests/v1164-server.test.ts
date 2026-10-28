@@ -242,6 +242,16 @@ describe("sequential calls (§4.8.1)", () => {
     // The body that was sent is logged; the 304 that followed is not.
     expect(lines).toHaveLength(1);
   });
+
+  it("never logs text a caller put in the address: signed out, not found, or an odd id", async () => {
+    const lines: unknown[] = [];
+    vi.spyOn(console, "log").mockImplementation((line: unknown) => { lines.push(line); });
+    await as("", "/api/staff/items/Ana-Cruz-20231234/history");
+    await as(one, "/api/staff/no-such-page-ana-cruz");
+    await as(one, "/api/staff/items/<script>alert/history");
+    expect(lines.map((line) => (line as { route: string }).route)).toEqual(["signed-out", "not-found", expect.stringMatching(/^\/api\/staff\/items\/:id\/history$|^not-found$/)]);
+    expect(JSON.stringify(lines)).not.toMatch(/Ana|ana-cruz|script|alert|20231234/);
+  });
 });
 
 describe("cheaper revalidation (§4.8.3, §4.8.4)", () => {

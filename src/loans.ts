@@ -117,8 +117,21 @@ export function lendStatements(db: D1Database, write: LendWrite): D1PreparedStat
 }
 
 async function byKey(db: D1Database, key: string) {
-  return db.prepare(`SELECT l.id, l.item_id AS itemId, ${onHandOf("l.item_id")} AS onHand FROM loans l JOIN inventory_movements m ON m.id = l.movement_id
-    WHERE m.idempotency_key = ?`).bind(key).first<{ id: string; itemId: string; onHand: number }>();
+  return db.prepare(`SELECT l.id, l.item_id AS itemId, ${onHandOf("l.item_id")} AS onHand, l.quantity, l.purpose, l.borrower_name AS borrowerName, l.student_id AS studentId,
+      l.reason, l.return_by AS returnBy FROM loans l JOIN inventory_movements m ON m.id = l.movement_id
+    WHERE m.idempotency_key = ?`).bind(key).first<{ id: string; itemId: string; onHand: number } & LoanDetails>();
+}
+
+/**
+ * A retried request answers with the loan the key already made (R5). When the retry asks for something else (the borrower's name
+ * corrected after an answer was lost), the answer says so (`differs`), so the desk is told the loan kept the details first sent.
+ */
+const SAME_LOAN: Array<keyof LoanDetails> = ["purpose", "borrowerName", "studentId", "reason", "quantity", "returnBy"];
+function replayOf(earlier: ({ id: string; itemId: string; onHand: number } & LoanDetails) | null, itemId: string, details: LoanDetails) {
+  if (!earlier) return null;
+  if (earlier.itemId !== itemId) throw new InputError(409, "That request was already used for another item. Please try again.");
+  const differs = SAME_LOAN.some((field) => (earlier[field] ?? null) !== (details[field] ?? null));
+  return { id: earlier.id, onHand: earlier.onHand, replayed: true as const, ...(differs ? { differs: true as const } : {}) };
 }
 
 /**
@@ -150,11 +163,8 @@ export async function createLoan(db: D1Database, bucket: R2Bucket, actor: Actor,
   if (typeof key !== "string" || !/^[A-Za-z0-9-]{8,80}$/.test(key)) throw new InputError(400, "Missing request key.");
 
   // A retried request that already succeeded returns the loan it made, marked as such, so the desk shows it instead of a second (R5).
-  const earlier = await byKey(db, key);
-  if (earlier) {
-    if (earlier.itemId !== itemId) throw new InputError(409, "That request was already used for another item. Please try again.");
-    return { id: earlier.id, onHand: earlier.onHand, replayed: true };
-  }
+  const earlier = replayOf(await byKey(db, key), itemId, details);
+  if (earlier) return earlier;
   const item = await db.prepare("SELECT item_type AS itemType, status, lending_audience AS audience FROM items WHERE id = ?").bind(itemId).first<{ itemType: string; status: string; audience: string }>();
   if (!item) throw new InputError(404, "Item not found.");
   if (item.itemType !== PUBLIC_LENDING_ITEM_TYPE) throw new InputError(400, "Only Loanable items can be lent. Change the item's type first.");
@@ -178,7 +188,7 @@ export async function createLoan(db: D1Database, bucket: R2Bucket, actor: Actor,
   if (written !== null) return { id, onHand: written };
   await bucket.delete(photoKey);
   const raced = await byKey(db, key);
-  if (raced?.itemId === itemId) return { id: raced.id, onHand: raced.onHand, replayed: true };
+  if (raced?.itemId === itemId) return replayOf(raced, itemId, details)!;
   const balance = await db.prepare(`SELECT ${onHandOf("?")} AS onHand`).bind(itemId).first<number>("onHand");
   throw new InputError(409, `Only ${balance ?? 0} on hand; cannot lend ${details.quantity}.`);
 }

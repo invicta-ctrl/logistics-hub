@@ -1,6 +1,7 @@
 import { type Actor, BUMP_REVISION, InputError, audit, onHandOf, pathsOf, text, usablePlace, currentItemSQL } from "./inventory";
 import { CHECK_OUTCOMES, COMPONENT_STATE_LABELS, type CheckOutcome, type ComponentState, readComponent, readKit } from "./kit-policy";
 import { LOCATION_ID } from "./location-tree";
+import { officeDay } from "./loans";
 
 /*
  * Kits (V1.8): a kit is a list of existing items and how many of each it should hold, plus where it is kept. It owns no stock. Every
@@ -106,7 +107,8 @@ async function components(db: D1Database, only?: string): Promise<Map<string, Fa
   return byKit;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+/** Expiry is judged by the office's day (Asia/Manila), as Stock and Attention judge it (D7), not by the UTC date. */
+const today = () => officeDay();
 
 function derive(facts: Fact[]) {
   const when = today();

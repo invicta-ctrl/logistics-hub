@@ -896,6 +896,8 @@ export async function workspace(): Promise<void> {
         Object.assign(item, stored);
         if (detail?.item.id === item.id) detail = { ...detail, item: { ...detail.item, ...stored } };
         sync();
+        // Saved, the Save button goes; focus stays in the form, where Reset puts it, rather than falling to the page.
+        level.focus({ preventScroll: true });
         toast(result.changed ? "Stock settings saved." : "No changes to save.");
         await refreshStock(item.id);
         await poll.refresh();
@@ -1280,7 +1282,7 @@ export async function workspace(): Promise<void> {
         ${!item.locationId && item.legacyLocation ? html`<div class="callout">${icon("info")}<p>This item’s location was typed earlier as <strong>${item.legacyLocation}</strong>. Choose the matching place, or add it below; the typed text is kept as it was.</p></div>` : ""}
         <div class="place-extra"><div class="place-preview" id="place-preview" aria-live="polite"></div>
           <p><button type="button" class="text-link" data-new-place aria-expanded="false" aria-controls="place-new">${icon("plus")} New place</button></p>
-          <div class="place-new" id="place-new" hidden>
+          <div class="place-new" id="place-new" data-own-save hidden>
             <div class="field-grid"><div class="field"><label for="np-name">Name of the new place</label><input id="np-name" maxlength="120" autocomplete="off" placeholder="Shelf 3" /></div>
               <div class="field"><label for="np-parent">Inside</label><select id="np-parent"></select></div></div>
             <p class="form-alert" id="np-alert" role="alert" hidden></p>

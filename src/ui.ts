@@ -1,7 +1,7 @@
 import { type VisualItem, itemIconSvg, resolveItemVisual } from "./item-icons";
 import { LABELS } from "./catalog-policy";
 import { frameByPhoto, seatOnPedestal, unframe } from "./photo-frame";
-import { confirmDiscard, confirmSessionEnded, entryState, hasUnsaved, raiseQuestion, trackEdits } from "./unsaved";
+import { confirmDiscard, confirmSessionEnded, entryState, hasUnsaved, raiseQuestion, trackEdits, warnOnUnload } from "./unsaved";
 
 export const app = document.querySelector<HTMLDivElement>("#app")!;
 
@@ -255,6 +255,8 @@ export function navigate(path: string, replace = false, state: object = {}): voi
     void confirmDiscard().then((discard) => { if (discard) navigate(path, replace, state); });
     return;
   }
+  // A page replaced by itself (a saved profile, a revoked key) is drawn again: otherwise the router ignores an address it already shows.
+  if (replace && path === window.location.pathname + window.location.search) shown.address = "";
   window.history[replace ? "replaceState" : "pushState"](entryState(state, replace), "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
@@ -426,6 +428,8 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
       return;
     }
     intended = false;
+    // Closed, the sheet holds nothing: the tab stops warning, and edits made after a Discard ask again next time it opens.
+    warnOnUnload();
     addressHandedOn = leaving;
     leaving = false;
     // onClose runs first so a caller can take back content it lent to the sheet.
@@ -625,7 +629,8 @@ export function keepFor(account: string, urls: readonly string[]): void {
   kept.clear();
   keptFor = account;
 }
-export function forgetKept(): void { kept.clear(); keptFor = ""; }
+/** Forgets every answer kept for the account, and any read started early: the next page asks the Worker afresh. */
+export function forgetKept(): void { kept.clear(); keptFor = ""; early.clear(); }
 const keepAnswer = (url: string, etag: string, data: unknown) => { if (keptFor && keepable.has(url) && etag) kept.set(url, { etag, data, at: new Date().toISOString() }); };
 
 /**

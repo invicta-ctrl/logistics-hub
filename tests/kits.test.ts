@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import worker, { type Env } from "../src/worker";
 import { hashPassword } from "../src/session";
+import { officeDay } from "../src/loans";
 import { readComponent, readKit, type ComponentFacts } from "../src/kit-policy";
 import { memoryR2, migratedD1 } from "./d1-sqlite";
 
@@ -238,12 +239,25 @@ describe("checking a kit", () => {
   });
 
   it("an expiring component makes a supply kit need replenishment before it is expired", async () => {
-    const soon = new Date(Date.now() + 10 * 86_400_000).toISOString().slice(0, 10);
+    const soon = officeDay(new Date(Date.now() + 10 * 86_400_000));
     const gauze = await item("Gauze", 5, { expiresOn: soon });
     const kit = (await json<{ id: string }>(as(cookie, "/api/staff/kits", "POST", { name: "First aid", components: [{ itemId: gauze, required: 2 }] }))).id;
     const detail = await stateOf(kit);
     expect(detail.kit.state).toBe("REPLENISH");
     expect(detail.components[0]).toMatchObject({ state: "EXPIRING", reason: "Expires in 10 days." });
+  });
+
+  it("judges expiry by the office's day, as Stock and Attention do, not by the UTC date (D7)", async () => {
+    // 01:30 on 29 October in Manila is still 28 October in UTC.
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-28T17:30:00Z") });
+    try {
+      cookie = await signIn("staff.one");
+      const milk = await item("Milk", 5, { expiresOn: "2026-10-29", stockArea: "Pantry" });
+      const kit = (await json<{ id: string }>(as(cookie, "/api/staff/kits", "POST", { name: "Snack box", components: [{ itemId: milk, required: 1 }] }))).id;
+      expect((await stateOf(kit)).components[0]).toMatchObject({ state: "EXPIRING", reason: "Expires today." });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
