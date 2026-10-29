@@ -1,10 +1,11 @@
 import "./admin.css";
 import { adminPage, confirmImpact } from "./admin-frame";
 import { SELF_SERVICE_COPY as COPY, SELF_SERVICE_RULES } from "./setting-copy";
-import { api, failure, html, plural, setMessage, toast, working } from "./ui";
+import { api, failure, html, plural, setMessage, stillShown, toast, working } from "./ui";
 
 /** Administration > Self-Service: the one switch phones obey, what it changes, and what phones ask for. */
 export async function selfServiceSettings(): Promise<void> {
+  const onPage = stillShown();
   const session = await adminPage("self-service", {
     title: "Self-Service",
     lede: "Whether people can use their own phones, and what phones ask for.",
@@ -50,9 +51,12 @@ export async function selfServiceSettings(): Promise<void> {
     const settle = working(button);
     try {
       await api("/api/staff/admin/self-service", { method: "PATCH", body: JSON.stringify({ state: closing ? "paused" : "open" }) });
+      const done = closing ? "Self-Service is closed for maintenance." : "Self-Service is open.";
+      // Left meanwhile: the change stands, and this page is not drawn over the one now shown.
+      if (!onPage()) { toast(done); return; }
       // The page depends on the setting (the test panel), and a same-address navigation does not re-render: run the view again.
       await selfServiceSettings();
-      toast(closing ? "Self-Service is closed for maintenance." : "Self-Service is open.");
-    } catch (error) { setMessage(document.querySelector("#ss-alert")!, failure(error)); } finally { settle(); }
+      toast(done);
+    } catch (error) { if (onPage()) setMessage(document.querySelector("#ss-alert")!, failure(error)); } finally { settle(); }
   });
 }

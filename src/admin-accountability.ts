@@ -1,10 +1,11 @@
 import "./admin.css";
 import { type AccountEvent, eventText } from "./account-ui";
 import { adminPage, confirmImpact } from "./admin-frame";
-import { api, emptyState, failure, formatDateTime, html, mount, plural, setMessage, toast } from "./ui";
+import { api, emptyState, failure, formatDateTime, html, mount, plural, setMessage, toast, stillShown } from "./ui";
 
 /** Administration > Accountability: what is kept about who borrowed what, when it can be removed, and what administrators have changed. */
 export async function accountability(): Promise<void> {
+  const onPage = stillShown();
   const session = await adminPage("accountability", {
     title: "Accountability",
     lede: "What is kept about who borrowed or took something, and a record of what administrators changed.",
@@ -27,10 +28,12 @@ export async function accountability(): Promise<void> {
   async function loadActivity(): Promise<void> {
     try {
       const { events } = await api<{ events: AccountEvent[] }>("/api/staff/admin/activity");
+      if (!onPage()) return;
       mount(document.querySelector("#activity")!, events.length
         ? html`${events.map((event) => html`<li class="history__item"><div><p class="history__title">${eventText(event)}</p><p class="history__meta"><time datetime="${event.at}">${formatDateTime(event.at)}</time></p></div></li>`)}`
         : html`<li class="history__empty">No account or setting changes yet.</li>`);
     } catch (error) {
+      if (!onPage()) return;
       mount(document.querySelector("#activity")!, html`<li>${emptyState("Activity could not be loaded", failure(error), "", "error", 3)}</li>`);
     }
   }
@@ -41,6 +44,7 @@ export async function accountability(): Promise<void> {
     if (!status) return true;
     try {
       const due = await api<{ loans: number; phoneRecords: number; photos: number }>("/api/staff/admin/retention");
+      if (!onPage()) return false;
       const none = !due.loans && !due.phoneRecords;
       status.textContent = none ? "Nothing is old enough to remove yet." : `Ready to remove: ${plural(due.loans, "loan")}, ${plural(due.phoneRecords, "phone record")} and ${plural(due.photos, "photo")}.`;
       document.querySelector<HTMLButtonElement>("#ret-run")!.disabled = none;

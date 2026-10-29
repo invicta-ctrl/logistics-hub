@@ -5,7 +5,7 @@ import { openViewer, photoPanel, rowThumb } from "./item-photo";
 import { inOrder, pathOf, placesOf } from "./location-tree";
 import type { PlaceRow } from "./staff";
 import { UP_TO_ITEMS, ageOf, loadSession, shell } from "./staff-shell";
-import { api, ApiError, emptyState, expired, failure, type Html, html, icon, live, mount, onLeave, plural, preservingFocus, readKept, setMessage, sheet as createSheet, sheetContent, toast, working, writeParams } from "./ui";
+import { api, ApiError, emptyState, expired, failure, type Html, html, icon, live, mount, onLeave, plural, preservingFocus, readKept, setMessage, sheet as createSheet, sheetContent, toast, working, writeParams, stillShown } from "./ui";
 import { formEdits, warnOnUnload } from "./unsaved";
 
 /*
@@ -35,6 +35,7 @@ const CHECK_ICON: Record<CheckOutcome, "check" | "alert" | "info"> = { OK: "chec
 const behaviourText = (part: { itemType: string; consumptionMode?: string }) => { const behaviour = behaviourOf({ itemType: part.itemType, consumptionMode: part.consumptionMode ?? "WHOLE_UNIT" }); return behaviour ? BEHAVIOUR_LABELS[behaviour] : "Unclassified"; };
 
 export async function kitsWorkspace(): Promise<void> {
+  const onPage = stillShown();
   const session = await loadSession("items");
   if (!session) return;
   document.title = "Kits · Staff workspace";
@@ -189,9 +190,10 @@ export async function kitsWorkspace(): Promise<void> {
       await loadPlaces();
       detail = await api<Detail>(`/api/staff/kits/${encodeURIComponent(id)}`);
     } catch (error) {
-      toast(failure(error), "error");
+      if (onPage()) toast(failure(error), "error");
       return;
     }
+    if (!onPage()) return;
     draw();
   }
 

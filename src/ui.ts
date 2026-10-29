@@ -228,7 +228,16 @@ export const CREST = raw(`<img class="crest" src="/brand/hau-usc-crest.webp" alt
 let leaveView: Array<() => void> = [];
 /** Registers cleanup (timers, listeners) to run when the router leaves the current view. */
 export function onLeave(cleanup: () => void): void { leaveView.push(cleanup); }
-export function leave(): void { leaveView.forEach((cleanup) => cleanup()); leaveView = []; }
+let viewNumber = 0;
+export function leave(): void { viewNumber += 1; leaveView.forEach((cleanup) => cleanup()); leaveView = []; }
+/**
+ * Asked when a view starts, it answers whether that view is still the one shown. A read that answers after its page was left draws
+ * nothing: the page and its elements are gone, and there is no one to tell (V1.16.5).
+ */
+export function stillShown(): () => boolean {
+  const at = viewNumber;
+  return () => at === viewNumber;
+}
 
 let queryOwner: (() => void) | null = null;
 /**

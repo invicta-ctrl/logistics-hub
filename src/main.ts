@@ -57,6 +57,10 @@ const pageSkeleton = html`<header class="page-header" aria-hidden="true"><div cl
   <div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 8 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></div>`)}</div>
   <p class="visually-hidden" role="status">Loading</p>`;
 
+/** A section's shape below a page's title and tabs, which stay (V1.16.5). */
+const sectionSkeleton = html`<div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 6 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></div>`)}</div>
+  <p class="visually-hidden" role="status">Loading</p>`;
+
 /**
  * A move between staff pages (Earl, 2026-10-24): the page being left lets go at once, the rail marks where it is going, and the next page's
  * shape shows while its code and data load, so the switch itself is instant. Nothing of the old page lingers or keeps polling meanwhile.
@@ -69,7 +73,22 @@ function showNextPage(path: string): void {
     if (link.getAttribute("href") === path) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
   }
   main.setAttribute("aria-busy", "true");
-  mount(main, pageSkeleton);
+  // Between the tabs of one page (Administration's sections), its title and tabs stay, the chosen tab is marked, and only what is
+  // below them waits; the section then draws in place.
+  const tabs = main.querySelector<HTMLElement>(":scope > .subnav");
+  const tab = tabs ? [...tabs.querySelectorAll<HTMLAnchorElement>("a[href]")].find((link) => link.getAttribute("href") === path) : undefined;
+  if (!tabs || !tab) { mount(main, pageSkeleton); return; }
+  for (const link of tabs.querySelectorAll("a[href]")) {
+    if (link === tab) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
+  }
+  while (tabs.nextSibling) tabs.nextSibling.remove();
+  // What belongs to the section being left, its lede and its buttons, is hidden where it stands (so nothing moves) and cannot be
+  // used until the next section draws its own.
+  for (const part of main.querySelectorAll<HTMLElement>(":scope > .page-header p, :scope > .page-header .page-header__actions")) {
+    part.inert = true;
+    part.style.visibility = "hidden";
+  }
+  tabs.insertAdjacentHTML("afterend", sectionSkeleton.value);
 }
 
 let navigation = 0;

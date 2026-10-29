@@ -7,7 +7,7 @@ import type { DepartmentCode } from "./directory-policy";
 import { setAccess } from "./catalogue-store";
 import { staffDark } from "./theme";
 import { confirmDiscard } from "./unsaved";
-import { ApiError, CREST, MARK, type Html, type IconName, api, app, emptyState, expired, failure, forgetKept, formatDate, html, icon, keepFor, mount, navigate, noteBuild, onLeave, prefetch, setMessage, takePrefetched, toast } from "./ui";
+import { ApiError, CREST, MARK, type Html, type IconName, api, app, emptyState, expired, failure, forgetKept, formatDate, html, icon, keepFor, mount, navigate, noteBuild, onLeave, prefetch, reducedMotion, setMessage, stillShown, takePrefetched, toast } from "./ui";
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
 /** Who a sign-in is for: the staff of a USC department (DoL, DEM, …), an officer, or an administrator or owner (accounts.ts). */
@@ -84,6 +84,7 @@ export function markCurrent(href = `${window.location.pathname}${window.location
  * It is one label in the top layer, so no scrolling rail can clip it; Escape puts it away, and the name is already each control's own.
  */
 function railTips(): void {
+  hideTip = () => undefined;
   const tip = document.querySelector<HTMLElement>(".rail-tip");
   const bar = document.querySelector<HTMLElement>(".app-bar");
   if (!tip || !bar || !("showPopover" in HTMLElement.prototype)) return;
@@ -117,10 +118,42 @@ function railTips(): void {
   bar.addEventListener("focusin", (event) => { const target = tipped(event.target); if (target?.matches(":focus-visible")) show(target, 0); });
   bar.addEventListener("focusout", hide);
   bar.addEventListener("click", hide);
-  const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") hide(); };
+  hideTip = hide;
+}
+
+let hideTip: () => void = () => undefined;
+/** For each page: Escape and scrolling hide the rail's tip. The bar's own listeners stay with the bar, which outlives its pages. */
+function tipsForPage(): void {
+  const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") hideTip(); };
+  const onScroll = () => hideTip();
   document.addEventListener("keydown", onKey);
-  window.addEventListener("scroll", hide, { passive: true, capture: true });
-  onLeave(() => { hide(); document.removeEventListener("keydown", onKey); window.removeEventListener("scroll", hide, { capture: true }); });
+  window.addEventListener("scroll", onScroll, { passive: true, capture: true });
+  onLeave(() => { hideTip(); document.removeEventListener("keydown", onKey); window.removeEventListener("scroll", onScroll, { capture: true }); });
+}
+
+/** The bar, rail and menu as last drawn, for the next page to keep: the bar element, its markup without current marks, and its section. */
+let drawn: { bar: Element; key: string; section: Section } | null = null;
+const unmarked = (markup: string) => markup.replace(/aria-current="[^"]*"|\bis-current\b/g, "").replace(/\s+/g, " ").replace(/ (?=[>"])/g, "");
+const MARKED = ".app-bar a[href], .app-bar .app-nav__more, #staff-menu a[href]";
+/**
+ * The page element when the bar, rail and menu on screen are this page's apart from which link is current, after moving those marks;
+ * null when they must be drawn afresh (first page, another account or role, a changed menu).
+ */
+function keptChrome(chrome: Html): HTMLElement | null {
+  const bar = app.querySelector(".app-bar");
+  const page = app.querySelector<HTMLElement>("#main-content.app-main");
+  if (!bar || !page || drawn?.bar !== bar || drawn.key !== unmarked(chrome.value)) return null;
+  const fresh = document.createElement("template");
+  fresh.innerHTML = chrome.value;
+  const now = [...app.querySelectorAll(MARKED)];
+  const next = [...fresh.content.querySelectorAll(MARKED)];
+  if (now.length !== next.length) return null;
+  now.forEach((element, at) => {
+    const current = next[at].getAttribute("aria-current");
+    if (current) element.setAttribute("aria-current", current); else element.removeAttribute("aria-current");
+    element.classList.toggle("is-current", next[at].classList.contains("is-current"));
+  });
+  return page;
 }
 
 /**
@@ -163,6 +196,8 @@ const tellOtherTabs = (type: "signed-in" | "signed-out") => { try { sessions?.po
 
 /** Loads the signed-in account, or routes to sign-in / the forced password change. */
 export async function loadSession(section: Section): Promise<Session | null> {
+  // Every staff view starts with this read. One left while it was answered draws nothing: no page, no redirect, no error (V1.16.5).
+  const onPage = stillShown();
   const page = window.location.pathname;
   if (known && navigator.onLine && page !== knownOn) {
     const held = known;
@@ -181,12 +216,14 @@ export async function loadSession(section: Section): Promise<Session | null> {
   }
   try {
     const session = await (takePrefetched<Session>("/api/staff/session") ?? api<Session>("/api/staff/session"));
+    if (!onPage()) return null;
     const away = elsewhere(session, section);
     if (away) { navigate(away, true); return null; }
     keep(session);
     knownOn = page;
     return session;
   } catch (error) {
+    if (!onPage()) return null;
     if (error instanceof ApiError && error.status === 401) { forgetKept(); navigate("/staff", true); return null; }
     // Staff tools never work offline (there are no offline credentials); Self-Service does.
     const offline = error instanceof ApiError && error.status === 0;
@@ -220,7 +257,7 @@ export function shell(session: Session, section: Section, main: Html): void {
   const railChildren = html`<ul class="app-nav__children" aria-label="Items">${ITEM_CHILDREN.map((child, at) => html`<li><a class="app-nav__link app-nav__child" href="${child.href}" data-route data-child="${at}" ${childCurrent(at)}><span class="app-nav__text">${child.text}${child.attention ? html`<span class="attn-slot" data-attention="${child.attention}"></span>` : ""}</span></a></li>`)}</ul>`;
   const menuChildren = html`<li class="menu__parent"><p class="menu__heading" id="menu-items">Items</p><ul class="menu__children" aria-labelledby="menu-items">${ITEM_CHILDREN.map((child, at) => html`<li><a class="menu__item" href="${child.href}" data-route data-child="${at}" ${childCurrent(at)}>${icon(child.icon)}${child.text}</a></li>`)}</ul></li>`;
   const avatar = html`<span class="avatar" aria-hidden="true">${initials(session.displayName)}</span>`;
-  mount(app, html`
+  const chrome = html`
     <header class="app-bar">
       <div class="app-bar__inner">
         <a class="app-bar__brand" href="/staff/home" data-route data-tip="Logistics Hub"><span aria-hidden="true">${CREST}</span><span class="app-bar__title">Logistics Hub</span></a>
@@ -247,11 +284,27 @@ export function shell(session: Session, section: Section, main: Html): void {
         <li><button class="menu__item" type="button" id="staff-logout">${icon("signOut")}Sign out</button></li>
       </ul>
     </div>
-    <main id="main-content" class="app-main">${main}</main>`);
+`;
+  // Moving between pages keeps the bar, the rail and the menu: only the page is drawn, so nothing around it flashes (V1.16.5).
+  const page = keptChrome(chrome);
+  if (page) {
+    closeMenu();
+    page.removeAttribute("aria-busy");
+    mount(page, main);
+    // Another section settles in from half strength; another tab of the same page swaps in place, so its title and tabs stay still.
+    if (drawn!.section !== section && !reducedMotion()) page.animate([{ opacity: 0.5 }, { opacity: 1 }], { duration: 180, easing: "ease-out" });
+    drawn!.section = section;
+    tipsForPage();
+    if (sections.length) watchAttention(here !== "home");
+    return;
+  }
+  mount(app, html`${chrome}<main id="main-content" class="app-main">${main}</main>`);
+  drawn = { bar: app.querySelector(".app-bar")!, key: unmarked(chrome.value), section };
   // Both openers (the avatar and, on phones, More) report whether the menu is open.
   const menu = document.querySelector<HTMLElement>("#staff-menu")!;
   const openers = document.querySelectorAll('[popovertarget="staff-menu"]');
   const expanded = (open: boolean) => openers.forEach((opener) => opener.setAttribute("aria-expanded", String(open)));
+  menuExpanded = expanded;
   expanded(false);
   menu.addEventListener("toggle", (event) => expanded((event as ToggleEvent).newState === "open"));
   // Without the Popover API (iOS before 17) the openers simply show and hide the menu.
@@ -262,12 +315,11 @@ export function shell(session: Session, section: Section, main: Html): void {
   }
   // A choice closes the menu at once, even for the page already shown or while the next page loads.
   menu.addEventListener("click", (event) => {
-    if (!(event.target as Element).closest("a")) return;
-    if (native) menu.hidePopover();
-    else { menu.hidden = true; expanded(false); }
+    if ((event.target as Element).closest("a")) closeMenu();
   });
   document.querySelector("#staff-logout")!.addEventListener("click", signOut);
   railTips();
+  tipsForPage();
   // Home and Attention hold the queue, whose answer carries these numbers, so there the bar takes them from it (supplyAttention).
   if (sections.length) watchAttention(here !== "home");
   const search = document.querySelector<HTMLElement>("[data-palette]");
@@ -281,6 +333,21 @@ export function shell(session: Session, section: Section, main: Html): void {
     document.querySelector("[data-find]")?.addEventListener("click", () => openSearch(search));
   }
   listenForSearchKey();
+}
+
+/** Tells the menu's openers, found as the bar was drawn, whether it is open. */
+let menuExpanded: (open: boolean) => void = () => undefined;
+
+/** Closes the account menu (without the Popover API, its openers are told). A move closes it however it happened: Back, a key, a link. */
+function closeMenu(): void {
+  const menu = document.querySelector<HTMLElement>("#staff-menu");
+  if (!menu) return;
+  if ("showPopover" in HTMLElement.prototype) {
+    if (menu.matches(":popover-open")) menu.hidePopover();
+    return;
+  }
+  menu.hidden = true;
+  menuExpanded(false);
 }
 
 /* ---------- Global search (V1.11): the button above and Ctrl+K / ⌘K open search-palette.ts, loaded on first use. ---------- */

@@ -210,13 +210,13 @@ export async function catalogSettings(): Promise<void> {
     searchedFor = query;
     try {
       const result = await api<{ items: AliasItem[]; more: boolean }>(`/api/staff/admin/catalog/aliases?q=${encodeURIComponent(query)}`);
-      // A slower answer to an earlier search must not replace a newer one.
-      if (query !== searchedFor) return;
+      // A slower answer to an earlier search must not replace a newer one, and nothing is drawn once the page is left.
+      if (query !== searchedFor || !active) return;
       items = result.items;
       more = result.more;
       renderNames();
     } catch (error) {
-      mount(document.querySelector("#names")!, emptyState("Items could not be loaded", failure(error), "", "error", 3));
+      if (active) mount(document.querySelector("#names")!, emptyState("Items could not be loaded", failure(error), "", "error", 3));
     }
   }
 

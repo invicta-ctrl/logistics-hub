@@ -74,6 +74,8 @@ export async function activityWorkspace(): Promise<void> {
   let olderLoaded = false;
   let loaded = false;
   let run = 0;
+  // A load of older entries that answers after the page is left belongs to no list: leaving ends the run as a new search does.
+  onLeave(() => { run += 1; });
   let fetchingOlder = false;
   let poll: { refresh: () => Promise<void>; stop: () => void } | null = null;
   let picker: Picker | null = null;
@@ -262,7 +264,7 @@ export async function activityWorkspace(): Promise<void> {
       olderLoaded = true;
       render();
     } catch (error) {
-      toast(failure(error), "error");
+      if (current === run) toast(failure(error), "error");
     } finally {
       fetchingOlder = false;
       older.removeAttribute("aria-busy");
@@ -399,7 +401,10 @@ export async function activityWorkspace(): Promise<void> {
   });
   search.addEventListener("keydown", (event) => { if (event.key === "Escape" && search.value) { search.value = ""; setFilter("q", ""); } });
   document.querySelector("#activity-clear-search")!.addEventListener("click", () => { search.value = ""; setFilter("q", ""); search.focus(); });
-  // Removing one filter, the sheet's filters, or everything (from the empty state).
+  // Removing one filter, the sheet's filters, or everything (from the empty state). The page area stays from page to page
+  // (V1.16.5), so this listener leaves with the page.
+  const listening = new AbortController();
+  onLeave(() => listening.abort());
   document.querySelector("#main-content")!.addEventListener("click", (event) => {
     const remove = (event.target as HTMLElement).closest<HTMLElement>("[data-remove]")?.dataset.remove;
     if (!remove) return;
@@ -409,6 +414,6 @@ export async function activityWorkspace(): Promise<void> {
     start();
     if (sheetElement.open) { showFilters(); sheetElement.querySelector<HTMLElement>("#f-type")!.focus(); }
     else (remove === "everything" ? search : document.querySelector<HTMLElement>("#activity-filters"))!.focus();
-  });
+  }, { signal: listening.signal });
   start();
 }

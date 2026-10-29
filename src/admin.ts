@@ -3,7 +3,7 @@ import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
 import { ACCESS_HINT, accessChoices, accessTag, bindCopy, canManage, oneTime } from "./account-ui";
 import { adminPage, confirmImpact } from "./admin-frame";
 import { type Access, type Role, accessLabel, forgetSession, loadSession, sessionAccess, shell } from "./staff-shell";
-import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
+import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast, working, stillShown } from "./ui";
 import { formEdits, trackEdits } from "./unsaved";
 
 type Row = { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number };
@@ -32,6 +32,7 @@ function roleImpact(from: Access, to: Access): string {
 }
 
 export async function staffAccounts(): Promise<void> {
+  const onPage = stillShown();
   const session = await adminPage("staff", {
     title: "Staff",
     lede: (session) => session.role === "OWNER" ? "Owners manage every account and role. People's Staff Directory records are kept in the Staff Directory." : "Administrators manage staff accounts. Owner and administrator accounts are managed by an owner.",
@@ -65,6 +66,7 @@ export async function staffAccounts(): Promise<void> {
   async function load(): Promise<void> {
     try {
       const { accounts } = await api<{ accounts: Row[] }>("/api/staff/admin/accounts");
+      if (!onPage()) return;
       rows = accounts;
       mount(document.querySelector("#accounts")!, html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Accounts that can sign in to the staff workspace</caption>
@@ -78,6 +80,7 @@ export async function staffAccounts(): Promise<void> {
           <td class="col-actions">${canManage(session!, row) && row.id !== session!.id ? html`<button type="button" class="button button--secondary button--sm" data-manage="${row.id}">Manage</button>` : row.id === session!.id ? html`<a class="text-link" href="/staff/account" data-route>My account</a>` : html`<span class="muted">Owner only</span>`}</td>
         </tr>`)}</tbody></table></div>`);
     } catch (error) {
+      if (!onPage()) return;
       mount(document.querySelector("#accounts")!, emptyState("Accounts could not be loaded", failure(error), "", "error", 3));
     }
   }
@@ -117,12 +120,14 @@ export async function staffAccounts(): Promise<void> {
       const settle = working(form);
       try {
         const result = await api<{ username: string; generatedPassword: string | null }>("/api/staff/admin/accounts", { method: "POST", body: JSON.stringify({ displayName: values.get("displayName"), username: values.get("username"), access: values.get("access"), ...passwordPayload(form, "c") }) });
+        // The sheet went with the page: say what happened, and that a temporary password was never seen.
+        if (!onPage()) { toast(`Account ${result.username} created.${result.generatedPassword ? " Its temporary password was not shown: reset it to get a new one." : ""}`); return; }
         form.hidden = true;
         mount(sheet.querySelector("#create-result")!, html`${result.generatedPassword ? oneTime(`Temporary password for ${result.username}`, result.generatedPassword, "Shown once and never stored. Give it to them privately; they must choose their own password at first sign-in.") : html`<p class="callout">${icon("check")}<span>Account created. They must replace the temporary password at first sign-in.</span></p>`}
           <div class="form-actions"><button type="button" class="button button--secondary" data-close>Done</button></div>`);
         toast(`Account ${result.username} created.`);
         await load();
-      } catch (error) { setMessage(sheet.querySelector("#create-alert")!, failure(error)); } finally { settle(); }
+      } catch (error) { if (onPage()) setMessage(sheet.querySelector("#create-alert")!, failure(error)); } finally { settle(); }
     });
   }
 
@@ -178,7 +183,7 @@ export async function staffAccounts(): Promise<void> {
         toast(result.changed ? `Saved${result.sessionsRevoked ? "; they were signed out" : ""}.` : "No changes to save.");
         close();
         await load();
-      } catch (error) { setMessage(sheet.querySelector("#profile-alert")!, failure(error)); } finally { settle(); }
+      } catch (error) { if (onPage()) setMessage(sheet.querySelector("#profile-alert")!, failure(error)); } finally { settle(); }
     });
     const reset = sheet.querySelector<HTMLFormElement>("#password-form")!;
     const profileEdits = formEdits(profile);
@@ -190,13 +195,14 @@ export async function staffAccounts(): Promise<void> {
       const settle = working(reset);
       try {
         const result = await api<{ generatedPassword: string | null }>(`/api/staff/admin/accounts/${encodeURIComponent(row.id)}/password`, { method: "POST", body: JSON.stringify(passwordPayload(reset, "p")) });
+        if (!onPage()) { toast(`Password reset for ${row.username}.${result.generatedPassword ? " The temporary password was not shown: reset it again to get a new one." : ""}`); return; }
         mount(sheet.querySelector("#password-result")!, result.generatedPassword
           ? oneTime(`New temporary password for ${row.username}`, result.generatedPassword, "Shown once and never stored. They must choose their own password at next sign-in.")
           : html`<p class="callout">${icon("check")}<span>Password reset. They must choose their own at next sign-in.</span></p>`);
         resetEdits.reset();
         toast(`Password reset for ${row.username}.`);
         void load();
-      } catch (error) { setMessage(sheet.querySelector("#password-alert")!, failure(error)); } finally { settle(); }
+      } catch (error) { if (onPage()) setMessage(sheet.querySelector("#password-alert")!, failure(error)); } finally { settle(); }
     });
     sheet.querySelector("#revoke")!.addEventListener("click", async (event) => {
       const button = event.currentTarget as HTMLButtonElement;
@@ -204,7 +210,7 @@ export async function staffAccounts(): Promise<void> {
       if (!confirmed) return;
       const settle = working(button);
       try { await api(`/api/staff/admin/accounts/${encodeURIComponent(row.id)}/sessions/revoke`, { method: "POST" }); toast(`${row.username} was signed out everywhere.`); close(); await load(); }
-      catch (error) { setMessage(sheet.querySelector("#access-alert")!, failure(error)); }
+      catch (error) { if (onPage()) setMessage(sheet.querySelector("#access-alert")!, failure(error)); }
       finally { settle(); }
     });
     sheet.querySelector("#toggle-active")!.addEventListener("click", async (event) => {
@@ -212,7 +218,7 @@ export async function staffAccounts(): Promise<void> {
       if (row.active && !await confirmImpact({ kicker: `${accessLabel(row.access)} · ${row.username}`, title: `Disable ${row.displayName}?`, impact: html`<p>They are signed out now and cannot sign in until the account is enabled again. Their loans, history and Staff Directory record stay as they are.</p>`, confirm: "Disable account", danger: true })) return;
       const settle = working(button);
       try { await api(`/api/staff/admin/accounts/${encodeURIComponent(row.id)}`, { method: "PATCH", body: JSON.stringify({ active: !row.active }) }); toast(`${row.username} ${row.active ? "disabled" : "enabled"}.`); close(); await load(); }
-      catch (error) { setMessage(sheet.querySelector("#access-alert")!, failure(error)); }
+      catch (error) { if (onPage()) setMessage(sheet.querySelector("#access-alert")!, failure(error)); }
       finally { settle(); }
     });
   }
@@ -229,6 +235,7 @@ export async function staffAccounts(): Promise<void> {
 /* ---------- My account ---------- */
 
 export async function myAccount(): Promise<void> {
+  const onPage = stillShown();
   const session = await loadSession("account");
   if (!session) return;
   document.title = "My account · Staff workspace";
@@ -275,8 +282,8 @@ export async function myAccount(): Promise<void> {
         <div id="recovery-result"></div>
       </section>` : ""}
     </div>`);
-  const main = document.querySelector("#main-content")!;
-  bindCopy(main);
+  // The page area stays from page to page (V1.16.5), so this listener leaves with the page.
+  onLeave(bindCopy(document.querySelector("#main-content")!));
 
   const passwordForm = document.querySelector<HTMLFormElement>("#password-form")!;
   const profileForm = document.querySelector<HTMLFormElement>("#profile-form");
@@ -294,6 +301,7 @@ export async function myAccount(): Promise<void> {
       await api("/api/staff/me/password", { method: "POST", body: JSON.stringify({ currentPassword: values.get("currentPassword"), newPassword: values.get("newPassword") }) });
       toast("Password changed. Your other devices were signed out.");
       forgetSession();
+      if (!onPage()) return;
       if (session.mustChangePassword) navigate("/staff/home", true);
       else { passwordForm.reset(); setMessage(alert, ""); }
     } catch (error) { setMessage(alert, failure(error)); } finally { settle(); }
@@ -309,10 +317,11 @@ export async function myAccount(): Promise<void> {
       toast(result.changed ? "Profile saved." : "No changes to save.");
       if (!result.changed) return;
       forgetSession();
+      if (!onPage()) return;
       // The page is drawn again for the new name, unless a password is half typed: a redraw would empty it without asking.
       if (passwordEdits.dirty()) profileEdits?.reset();
       else navigate("/staff/account", true);
-    } catch (error) { setMessage(form.querySelector("#profile-alert")!, failure(error)); } finally { settle(); }
+    } catch (error) { if (onPage()) setMessage(form.querySelector("#profile-alert")!, failure(error)); } finally { settle(); }
   });
 
   document.querySelector("#revoke-others")?.addEventListener("click", async () => {
@@ -324,10 +333,12 @@ export async function myAccount(): Promise<void> {
     if (configured && !window.confirm("Replace your recovery key? The current one (including a paired computer's copy) stops working.")) return;
     try {
       const { recoveryKey } = await api<{ recoveryKey: string }>("/api/staff/me/recovery-key", { method: "POST" });
+      configured = true;
+      // The key is shown once, on this page. Left meanwhile, it was never seen: saying so beats a key no one has.
+      if (!onPage()) { toast("A new recovery key was issued but not shown, and the previous one no longer works. Open My account and replace it again.", "error"); return; }
       mount(document.querySelector("#recovery-result")!, oneTime("Your owner recovery key", recoveryKey, "Shown once. Store it offline (print it, or save it in a password manager). Anyone holding it can reset your owner password, so keep it private. Re-pair the Owner Console if you use it."));
       toast("New recovery key issued. The previous key no longer works.");
-      configured = true;
-    } catch (error) { setMessage(document.querySelector("#recovery-alert")!, failure(error)); }
+    } catch (error) { if (onPage()) setMessage(document.querySelector("#recovery-alert")!, failure(error)); }
   });
 
   document.querySelector("#revoke-key")?.addEventListener("click", async () => {
@@ -337,10 +348,11 @@ export async function myAccount(): Promise<void> {
       toast("Recovery key revoked.");
       // Shown in place, so a half-typed password or profile change stays as it is.
       configured = false;
+      if (!onPage()) return;
       mount(document.querySelector(".recovery-status")!, html`<span class="tag tag--warn">Not configured</span>`);
       document.querySelector("#rotate-key")!.textContent = "Create recovery key";
       document.querySelector("#revoke-key")?.remove();
       document.querySelector<HTMLElement>("#rotate-key")!.focus();
-    } catch (error) { setMessage(document.querySelector("#recovery-alert")!, failure(error)); }
+    } catch (error) { if (onPage()) setMessage(document.querySelector("#recovery-alert")!, failure(error)); }
   });
 }

@@ -26,12 +26,15 @@ export function oneTime(label: string, value: string, note: string): Html {
   return html`<div class="secret" role="status"><p class="secret__label">${label}</p><div class="secret__row"><code>${value}</code><button type="button" class="button button--secondary button--sm" data-copy="${value}">Copy</button></div><p class="secret__note">${note}</p></div>`;
 }
 
-export function bindCopy(root: Element): void {
-  root.addEventListener("click", async (event) => {
+/** Copy buttons inside `root` copy their value. Returns what removes the listener, for a root that outlives its page. */
+export function bindCopy(root: Element): () => void {
+  const copy = async (event: Event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-copy]");
     if (!button) return;
     try { await navigator.clipboard.writeText(button.dataset.copy ?? ""); button.textContent = "Copied"; } catch { button.textContent = "Select and copy"; }
-  });
+  };
+  root.addEventListener("click", copy);
+  return () => root.removeEventListener("click", copy);
 }
 
 export const EVENT_TEXT: Record<string, (event: AccountEvent) => string> = {
