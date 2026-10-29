@@ -161,12 +161,14 @@ test.describe("Locations page", () => {
     });
     await page.goto("/staff/locations?place=LOC-0003");
     const busy = page.getByRole("dialog", { name: "Cabinet 1" });
+    await busy.getByRole("tab", { name: "Edit details" }).click();
     await expect(busy.getByRole("region", { name: "Delete place" })).toContainText("first");
     await expect(busy.getByRole("button", { name: /^Delete/ })).toHaveCount(0);
     await page.keyboard.press("Escape");
 
     await page.goto("/staff/locations?place=LOC-0098");
     const sheet = page.getByRole("dialog", { name: "Cabinet Row 4" });
+    await sheet.getByRole("tab", { name: "Edit details" }).click();
     page.once("dialog", (dialog) => { expect(dialog.message()).toBe("Delete Cabinet Row 4? This can't be undone."); void dialog.accept(); });
     await sheet.getByRole("button", { name: "Delete Cabinet Row 4" }).click();
     await expect(sheet).toHaveCount(0);
@@ -193,6 +195,7 @@ test.describe("Locations page", () => {
     });
     await page.goto("/staff/locations?place=LOC-0004");
     const sheet = page.getByRole("dialog", { name: "Shelf 2" });
+    await sheet.getByRole("tab", { name: "Edit details" }).click();
     await sheet.getByLabel("Name", { exact: true }).fill("Shelf Two");
     await sheet.getByRole("button", { name: "Add a place to this list" }).click();
     await sheet.getByLabel("New place", { exact: true }).fill("Cabinet 3");
@@ -212,6 +215,7 @@ test.describe("Locations page", () => {
     await page.goto("/staff/locations?place=LOC-0003");
     const sheet = page.getByRole("dialog", { name: "Cabinet 1" });
     await expect(sheet).toBeVisible();
+    await sheet.getByRole("tab", { name: "Edit details" }).click();
     await expect(sheet.getByLabel("Name")).toHaveValue("Cabinet 1");
     await expect(sheet.getByRole("textbox", { name: /Directions/ })).toHaveValue("Grey cabinet on the left wall.");
     await expect(sheet.getByRole("radio", { name: /Staff only/ })).toBeChecked();

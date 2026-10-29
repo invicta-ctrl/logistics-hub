@@ -421,7 +421,8 @@ test("create, warn on a duplicate name, then deactivate without deleting", async
   await expect(page.getByLabel("Quantity on hand")).toHaveValue("3");
   await expect(page.locator(".profile__meta").first()).toContainText("Office Equipment and Supplies");
 
-  // Status is one of the item's Stock settings, on its overview (V1.16.4 §4.3).
+  // Status is one of the item's Stock settings, under Edit details after the item's fields (V1.16.7).
+  await sheet.getByRole("tab", { name: "Edit details" }).click();
   await sheet.getByLabel("Status", { exact: true }).selectOption("INACTIVE");
   await sheet.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Stock settings saved.")).toBeVisible();
@@ -901,7 +902,8 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await expect(libraryInput).toHaveCount(1);
   await expect(cameraInput).toHaveCount(1);
   await expect(panel.getByRole("button", { name: "Add photo" })).toBeVisible();
-  await expect(sheet.locator(".profile__stock")).toContainText("on hand");
+  // The stage holds only the picture; what is on hand reads on the Overview under it (V1.16.7).
+  await expect(sheet.getByLabel("Quantity on hand")).toBeVisible();
 
   // Something that is not a picture is refused in words, and nothing is shown or saved.
   await libraryInput.setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("not an image") });
@@ -1089,7 +1091,8 @@ test("item photos: an open profile follows a photo someone else changed, so its 
   await signIn(page);
   await page.goto("/staff/items?item=ITM-0263");
   const sheet = page.getByRole("dialog", { name: "Scotch Tape" });
-  const shown = sheet.locator("#photo-panel [data-photo-menu] img");
+  // The photo on the stage, not its blurred copy filling the stage around it (V1.16.7).
+  const shown = sheet.locator("#photo-panel [data-photo-menu] img:not(.photo-tile__ambient)");
   await expect(shown).toBeVisible();
   const current = (await (await page.request.get("/api/staff/items/ITM-0263")).json() as { item: { photo: { id: string } } }).item.photo.id;
   const small = await page.evaluate(() => {

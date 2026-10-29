@@ -155,6 +155,11 @@ document.addEventListener("error", (event) => {
     image.dispatchEvent(new Event("pedestal-broken", { bubbles: true }));
     return;
   }
+  // The blurred copy that fills a photo's stage (item-photo.ts) is the same file: when it cannot load, the stage keeps its own colour.
+  if (image instanceof HTMLImageElement && image.classList.contains("photo-tile__ambient")) {
+    image.remove();
+    return;
+  }
   if (image instanceof HTMLImageElement && image.hasAttribute("data-item-photo")) {
     image.parentElement?.classList.remove("item-visual--loaded");
     if (image.parentElement) unframe(image.parentElement);

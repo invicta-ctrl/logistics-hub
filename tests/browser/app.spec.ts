@@ -737,7 +737,10 @@ test("phones: Items rows keep picture, name, quantity and status; an item sheet 
   const close = (await sheet.getByRole("button", { name: "Close" }).first().boundingBox())!;
   expect(close.y).toBeLessThan(title.y + title.height);
   expect(close.x + close.width).toBeGreaterThan(330);
-  await expect(sheet.locator(".photo-tile__note-text")).toHaveCSS("width", "1px");
+  // Since V1.16.7 the stage is the sheet's width, so the note keeps its words; it still leaves the item clear.
+  const note = (await sheet.locator(".photo-tile__note").boundingBox())!;
+  const seated = (await sheet.locator(".pedestal__item").boundingBox())!;
+  expect(note.x + note.width <= seated.x || note.y + note.height <= seated.y).toBe(true);
   await page.waitForTimeout(500);
   await page.screenshot({ path: "test-results/browser/phone-item-sheet.png" });
   await sheet.getByRole("button", { name: "Close" }).first().click();

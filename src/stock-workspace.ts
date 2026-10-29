@@ -1,17 +1,20 @@
 import { EXPIRY_WINDOW_DAYS, WHOLE_DOMAINS, isExpiring, readWhole, stockState } from "./catalog-policy";
+import type { VisualItem } from "./item-icons";
 import { type Place, pathOf, placesOf } from "./location-tree";
 import { type Preset, bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { UP_TO_ITEMS, loadSession, markCurrent, shell } from "./staff-shell";
 import {
   type Html, api, categoryName, emptyState, expired, failure, formatDate, formatDateTime, formatTime, html, icon, label, live, mount,
-  bindRowActionMenus, formatQuantity, officeDay, onLeave, plural, preservingFocus, rowActionMenu, sheet as createSheet, sheetContent, toast, units, working, writeParams
+  bindRowActionMenus, formatQuantity, itemThumbnailUrl, itemVisual, officeDay, onLeave, plural, preservingFocus, rowActionMenu, sheet as createSheet, sheetContent, toast, units, working, writeParams
 } from "./ui";
 
 type StockItem = {
   id: string; name: string; aliases: string | null; category: string; unit: string; status: string; onHand: number; reorderThreshold: number;
   locationId: string | null; stockArea: string | null; expiresOn: string | null; reorderStatus: string | null; countNeeded: boolean;
   itemType: string; consumptionMode: string; openUnits: number; openCondition: string | null; onLoan: number;
+  /** The item's picture, as in All items (inventory.ts staffInventory). */
+  photoId?: string | null; visualType?: VisualItem["visualType"]; iconKey?: string | null; updatedAt?: string | null;
 };
 type Reorder = { id: string; itemId: string; itemName: string; unit: string; status: string; desiredQuantity: number | null; note: string | null; updatedAt: string; closedAt: string | null; updatedBy: string | null };
 type Activity = { id: string; createdAt: string; itemId: string; itemName: string; unit: string; movementType: string; related: string | null; change: number; afterQuantity: number; reason: string | null; notes: string | null; actor: string | null };
@@ -66,7 +69,11 @@ function whyTags(item: StockItem): Html {
 /** Where each item is kept, by its place's full path, from the latest answer. */
 let placeNames = new Map<string, string>();
 const placeOf = (item: { locationId: string | null }) => (item.locationId ? placeNames.get(item.locationId) : undefined) ?? "No place";
-const itemCell = (item: { id: string; name: string; locationId?: string | null }) => html`<td class="col-item"><a class="row-link" href="/staff/items?item=${item.id}" data-route>${item.name}</a><span class="cell-sub"><span class="mono">${item.id}</span>${item.locationId !== undefined ? html` · ${placeOf({ locationId: item.locationId })}` : ""}</span></td>`;
+/**
+ * A row's item: its list thumbnail (or its icon), then its name, linked to its sheet. The thumbnail is All items' own (item-photo.ts rowThumb):
+ * the same size and address, named by the item's last change, so a picture already seen there is not fetched again (V1.16.7).
+ */
+const itemCell = (item: VisualItem & { id: string; locationId?: string | null; updatedAt?: string | null }) => html`<td class="col-item col-item--thumb">${itemVisual(item, (id) => itemThumbnailUrl(id, "staff", "thumb", item.updatedAt ?? null), "thumb")}<a class="row-link" href="/staff/items?item=${item.id}" data-route>${item.name}</a><span class="cell-sub"><span class="mono">${item.id}</span>${item.locationId !== undefined ? html` · ${placeOf({ locationId: item.locationId })}` : ""}</span></td>`;
 const qtyCell = (onHand: number | null, unit: string, item?: StockItem) => html`<td class="col-qty">${onHand === null ? html`<span class="muted">Not available</span>` : html`<span class="qty">${formatQuantity(onHand)}</span> <span class="qty-unit">${units(onHand, unit)}</span>${item?.openUnits ? html`<span class="cell-sub">${sealedLine(onHand, item.openUnits, item.openCondition)}</span>` : ""}`}</td>`;
 const levelCell = (item: StockItem, name = "Reorder level") => html`<td class="col-level"><span class="cell-label">${name}: </span>${item.reorderThreshold > 0 ? formatQuantity(item.reorderThreshold) : html`<span class="muted">Not set</span>`}</td>`;
 
@@ -216,7 +223,7 @@ export async function stockWorkspace(): Promise<void> {
         ${[["all", "Everything", needing.length], ...Object.entries(FOCUS).filter(([key]) => key !== "open" || counts.open || focus === "open").map(([key, text]) => [key, text, counts[key]])].map(([key, text, count]) =>
           html`<button type="button" class="chip" data-focus="${key}" aria-pressed="${key === focus}">${text}<span class="chip__count">${count}</span></button>`)}
       </div>
-      ${unset ? html`<p class="hint-line">${icon("info")}<span>${plural(unset, "active item")} ${unset === 1 ? "has" : "have"} no reorder level, so ${unset === 1 ? "it is" : "they are"} never called low. Set a level in the item's Stock settings in <a class="text-link" href="/staff/items" data-route>Items</a>.</span></p>` : ""}
+      ${unset ? html`<p class="hint-line">${icon("info")}<span>${plural(unset, "active item")} ${unset === 1 ? "has" : "have"} no reorder level, so ${unset === 1 ? "it is" : "they are"} never called low. Set a level in the item's Stock settings, under Edit details in <a class="text-link" href="/staff/items" data-route>Items</a>.</span></p>` : ""}
       ${shown.length ? html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Items that need attention</caption>
         <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Why</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -241,7 +248,7 @@ export async function stockWorkspace(): Promise<void> {
         <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-desired">Restock qty</th><th scope="col">Status</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
         <tbody>${open.map((reorder) => {
           const item = byId.get(reorder.itemId);
-          return html`<tr data-key="${reorder.id}">${itemCell({ id: reorder.itemId, name: reorder.itemName, locationId: item?.locationId ?? null })}${qtyCell(item?.onHand ?? null, reorder.unit)}
+          return html`<tr data-key="${reorder.id}">${itemCell({ ...item, id: reorder.itemId, name: reorder.itemName, locationId: item?.locationId ?? null })}${qtyCell(item?.onHand ?? null, reorder.unit)}
             <td class="col-desired"><label class="visually-hidden" for="desired-${reorder.id}">Restock quantity for ${reorder.itemName}</label><input class="input-compact" id="desired-${reorder.id}" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="${reorder.desiredQuantity ?? ""}" placeholder="—" data-desired="${reorder.id}" /></td>
             <td><span class="tag ${reorder.status === "PLANNED" ? "tag--gold" : "tag--warn"}">${label(reorder.status)}</span><span class="cell-sub">${reorder.note ?? ""}${reorder.note && reorder.updatedBy ? " · " : ""}${reorder.updatedBy ?? ""}</span></td>
             <td class="col-actions"><span class="row-actions">
@@ -264,7 +271,7 @@ export async function stockWorkspace(): Promise<void> {
   function pantryMarkup(data: Stock): Html {
     const pantry = data.items.filter((item) => item.stockArea === "Pantry" && item.status !== "INACTIVE")
       .sort((a, b) => Number(expiring(b)) - Number(expiring(a)) || a.name.localeCompare(b.name));
-    if (!pantry.length) return emptyState("No pantry items", "Set an item's stock area to Pantry in its Stock settings in Items to track it here.");
+    if (!pantry.length) return emptyState("No pantry items", "Set an item's stock area to Pantry in its Stock settings, under Edit details in Items, to track it here.");
     const shortage = (item: StockItem) => item.reorderThreshold > 0 ? item.reorderThreshold - item.onHand : 0;
     return html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static data-table--pantry">
       <caption class="visually-hidden">Pantry items</caption>

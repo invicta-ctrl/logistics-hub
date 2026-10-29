@@ -738,7 +738,9 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .qty-unit { color: var(--text-3); font-size: var(--text-sm); }
 
 /* Item photos (V1.2). Every image box has a fixed size, so rows and the profile never shift as pictures arrive. */
-.data-table--items td.col-item { position: relative; padding-left: calc(var(--space-4) + 2.5rem + var(--space-3)); }
+/* V1.16.7 · Stock's lists (Low & out of stock, Restock, Pantry) show the same thumbnail (.col-item--thumb); only All items opens the viewer from it. */
+.data-table--items td.col-item, .data-table td.col-item--thumb { position: relative; padding-left: calc(var(--space-4) + 2.5rem + var(--space-3)); }
+.col-item--thumb .thumb [data-photo] { cursor: inherit; }
 .thumb { position: absolute; top: 50%; left: var(--space-4); width: 2.5rem; height: 2.5rem; margin-top: -1.25rem; border-radius: var(--radius); background: var(--subtle); }
 .thumb [data-photo] { cursor: zoom-in; }
 .profile { position: relative; display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--space-5); align-items: start; }
@@ -769,11 +771,6 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .profile__meta--fresh .icon { --icon-size: var(--icon-sm); color: var(--text-3); }
 .profile__meta--finding { color: var(--warn-ink); }
 .profile__meta--finding .icon { --icon-size: var(--icon-sm); color: var(--warn); }
-.profile__stock { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-5); }
-.readout { display: flex; align-items: baseline; gap: var(--space-2); }
-.readout strong { font-family: var(--serif); font-size: var(--text-2xl); font-variant-numeric: tabular-nums; font-weight: 500; line-height: 1.1; }
-.readout--loan { color: var(--text-2); }
-.readout--loan strong { color: var(--text-2); }
 .profile__label { display: block; color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 
 /* Plate (2026-10-14): a lit surface for editorial areas (an item's profile, Home's stage). Its drafting grid and crop marks were
@@ -784,45 +781,59 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 :root[data-theme="dark"] .theater .photo-tile .item-visual > .item-icon { filter: none; }
 :root[data-theme="dark"] .theater .photo-tile--add:hover { background: var(--hover); }
 
-/* Resource Theater (2026-10-14): an item's profile is an object study, not a record. The item (its photo, or its icon when it
-   has none) stands on a drafting plate with a floor shadow; beside it, the readings the Hub actually holds. Everything here is
-   the same profile and controls as before; only its staging changed. */
-.theater { gap: var(--space-4) var(--space-6); grid-template-columns: 11rem minmax(0, 1fr); padding: var(--space-6) var(--space-6) var(--space-5); }
-.theater .profile__photo { position: relative; }
-/* The object stands on the stage itself: its icon floats over a soft contact shadow. A photo is a specimen card instead, lifted
-   off the stage with its own shadow. */
-.theater .photo-tile { border-radius: var(--radius-xl); background: transparent; box-shadow: none; }
-.theater .photo-tile::after { position: absolute; right: 22%; bottom: 17%; left: 22%; z-index: -1; height: .875rem; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 10 12 / 26%), transparent); content: ""; }
-.theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview, .photo-tile--pedestal) { background: var(--stage); box-shadow: var(--edge-light), inset 0 0 0 1px var(--stage-edge), 0 1px 2px rgb(43 10 12 / 6%), 0 18px 28px -18px rgb(43 10 12 / 45%); }
-.theater .photo-tile:is(:has(.item-visual--loaded), .photo-tile--preview, .photo-tile--pedestal)::after { display: none; }
-.theater .profile__photo:has(.item-visual--loaded, .photo-tile--preview, .photo-tile--pedestal)::after { position: absolute; right: 12%; bottom: -.625rem; left: 12%; z-index: -1; height: .875rem; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 10 12 / 24%), transparent); content: ""; }
-.theater .photo-tile:is([data-view], [data-photo-menu]):hover:has(.item-visual--loaded) { background: color-mix(in srgb, var(--stage) 88%, #fff); }
-.theater .photo-tile .item-visual { position: relative; background: transparent; }
+/* Resource Theater (2026-10-14; V1.16.7): an item's sheet opens on a stage that holds only its picture, at the stage's own proportions on
+   every screen. A photo stands whole in the stage, lifted by its shadow, and the same picture, blurred, fills the stage around it, so
+   nothing of the item is cropped. Without a photo, its icon stands centred with Add photo under it. What the item is reads on the
+   Overview (.item-profile). */
+.profile.theater { grid-template-columns: minmax(0, 1fr); grid-template-areas: "photo" "actions"; gap: 0; padding: var(--space-2); }
+.theater > .profile__photo { position: relative; grid-area: photo; }
+.theater > .profile__actions { grid-area: actions; justify-items: start; }
+/* The photo's menu is a popover and takes no room; a hint, message or confirmation under the stage does. */
+.theater > .profile__actions:has(> :not([popover])) { padding: var(--space-3) var(--space-2) var(--space-1); }
+.theater .photo-tile { isolation: isolate; aspect-ratio: 16 / 10; max-height: min(30rem, 60svh); border-radius: calc(var(--radius-xl) - var(--space-1)); background: var(--stage); box-shadow: var(--edge-light), inset 0 0 0 1px var(--stage-edge); }
+.theater .photo-tile .item-visual { position: relative; z-index: 1; background: transparent; }
 .theater .photo-tile .item-visual > .item-icon { width: 56%; height: 56%; max-width: none; max-height: none; stroke-width: 1.25; filter: drop-shadow(0 1px 0 rgb(255 255 255 / 90%)); }
-/* No photo yet: adding one is a quiet label on the plinth, not a dashed hole. */
-.theater .photo-tile--add { gap: 0; border: 0; color: var(--text-2); }
-.theater .photo-tile--add .profile-visual { width: 100%; height: 100%; }
-.theater .photo-tile--add > span:last-child { position: absolute; bottom: .25rem; left: 50%; display: inline-flex; max-width: calc(100% - 1rem); align-items: center; padding: .125rem .5rem; transform: translateX(-50%); border-radius: var(--radius-pill); background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line), var(--shadow-sm); font-size: .75rem; white-space: nowrap; }
-.theater .photo-tile--add:hover { background: color-mix(in srgb, var(--brand-tint) 60%, transparent); }
-.theater .photo-tile--add:hover > span:last-child { color: var(--brand); box-shadow: inset 0 0 0 1px var(--line-brand); }
-/* A single action (Take photo) sits under the object; editing a photo's several actions takes the stage's full width. */
-.theater { grid-template-areas: "photo info" "actions info"; grid-template-rows: auto 1fr; }
-.theater > .profile__photo { grid-area: photo; }
-.theater > .profile__info { grid-area: info; }
-.theater > .profile__actions { grid-area: actions; align-self: start; justify-items: center; }
-/* Several photo controls, a confirmation or a message need the plate's full width under the object and its readings. */
-.theater:has(> .profile__actions :is(.photo-actions > :nth-child(2), .inline-confirm, [role=alert], [role=status])) { grid-template-areas: "photo info" "actions actions"; grid-template-rows: auto auto; }
-.theater:has(> .profile__actions :is(.photo-actions > :nth-child(2), .inline-confirm, [role=alert], [role=status])) > .profile__actions { justify-items: start; }
-.theater .profile__info { gap: var(--space-3); padding-top: var(--space-1); }
-.theater .readout strong { font-size: 2.5rem; letter-spacing: -.02em; }
-.theater .profile__stock { padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); }
-.theater .profile__meta--place { margin-top: var(--space-1); }
-.theater .profile__meta--fresh { margin-top: 0; padding-left: calc(var(--icon-sm) + var(--space-2)); line-height: 1.45; }
-.theater .profile__meta--fresh .icon { display: none; }
+.theater .photo-tile > img:not(.photo-tile__ambient) { position: relative; z-index: 1; }
+.theater .photo-tile .item-visual__photo, .theater .photo-tile > img:not(.photo-tile__ambient) { filter: drop-shadow(0 14px 22px rgb(28 18 20 / 26%)); }
+.theater .photo-tile__ambient { position: absolute; top: -12%; left: -12%; z-index: 0; width: 124%; max-width: none; height: 124%; object-fit: cover; opacity: 0; filter: blur(28px) saturate(1.2); pointer-events: none; transition: opacity var(--dur-3) var(--ease-settle); }
+.theater .photo-tile:has(.item-visual--loaded, > img:not(.photo-tile__ambient)) .photo-tile__ambient { opacity: .9; }
+.theater .photo-tile:has(.item-visual--loaded, > img:not(.photo-tile__ambient))::after { position: absolute; inset: 0; z-index: 0; background: linear-gradient(180deg, rgb(255 255 255 / 10%), rgb(28 18 20 / 10%)); content: ""; }
+.theater .photo-tile:is([data-view], [data-photo-menu]):hover { box-shadow: var(--edge-light), inset 0 0 0 1px var(--stage-edge), 0 10px 24px -14px rgb(43 10 12 / 40%); }
+/* A cleaned picture's pedestal is a square scene, centred in the wider stage. */
+.theater .photo-tile--pedestal .pedestal { right: auto; left: 50%; width: auto; height: 100%; aspect-ratio: 1; transform: translateX(-50%); }
+/* No photo yet: the icon stands centred on the stage over a soft contact shadow, with Add photo under it. */
+/* Nothing in it is cropped, so it is not clipped: with large text the stage grows taller than 16:10 to hold the icon and the words. */
+.theater .photo-tile--icon { grid-template-rows: minmax(4.5rem, 1fr) auto; align-content: stretch; justify-items: center; gap: var(--space-3); overflow: visible; padding: 7% var(--space-3) var(--space-4); border: 0; color: var(--text-2); }
+.theater .photo-tile--icon .profile-visual { width: auto; height: 100%; aspect-ratio: 1; overflow: visible; }
+/* At stage size the icon's line is drawn finer, so it keeps the weight it has at list size instead of growing heavy with it. */
+.theater .photo-tile--icon .item-visual > .item-icon { width: 78%; height: 78%; stroke-width: 1; }
+.theater .photo-tile--icon .profile-visual::after { position: absolute; right: 20%; bottom: 1%; left: 20%; z-index: -1; height: 8%; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 10 12 / 24%), transparent); content: ""; }
+.theater .photo-tile--icon .photo-tile__cta { position: static; max-width: 100%; transform: none; }
+.theater .photo-tile--add:hover { background: color-mix(in srgb, var(--stage) 86%, var(--brand-tint)); }
+/* A place without a picture: the camera stands on the stage with Add picture under it, as an item's icon does. */
+.theater .photo-tile--add:not(.photo-tile--icon) { gap: var(--space-3); overflow: visible; padding: var(--space-4) var(--space-3); border: 0; color: var(--text-2); }
+.theater .photo-tile--add:not(.photo-tile--icon) > .icon { --icon-size: 3rem; color: var(--brand); }
+.theater .photo-tile--add:not(.photo-tile--icon) > span { display: inline-flex; min-height: 2rem; align-items: center; padding: .25rem .75rem; border-radius: var(--radius-pill); background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line), var(--shadow-sm); font-weight: 500; }
 @media (max-width: 760px) {
-  .theater { grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--space-3) var(--space-4); padding: var(--space-4); }
-  .theater .readout strong { font-size: 2rem; }
+  .profile.theater { padding: var(--space-1); }
 }
+
+/* V1.16.7 · What the item is, on the Overview under its count (the count keeps its rule): its next step, then the readings the Hub holds. */
+.item-profile { display: grid; gap: var(--space-3); }
+.item-profile .profile__meta--place { margin-top: var(--space-1); }
+.item-profile .profile__meta--fresh { margin-top: 0; padding-left: calc(var(--icon-sm) + var(--space-2)); line-height: 1.45; }
+.item-profile .profile__meta--fresh .icon { display: none; }
+/* V1.16.7 · A place's Overview: where it is and its last check, then the items kept here, each a row that opens the item's sheet. */
+.place-profile { display: grid; gap: var(--space-2); }
+.place-profile .where__buttons { margin-top: var(--space-2); }
+.kept-list { display: grid; border-top: 1px solid var(--line); }
+.kept-row { position: relative; display: grid; min-height: 3.75rem; align-content: center; gap: .125rem; padding: var(--space-2) var(--space-2) var(--space-2) calc(2.5rem + var(--space-3)); border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; transition: background-color var(--dur-1); }
+.kept-row .thumb { left: 0; }
+.kept-row .thumb [data-photo] { cursor: inherit; }
+.kept-row__name { font-weight: 500; overflow-wrap: anywhere; }
+.kept-row__sub { color: var(--text-3); font-size: var(--text-sm); }
+.kept-row:hover { background: var(--hover); }
+.kept-row:hover .kept-row__name { color: var(--brand); text-decoration: underline; text-underline-offset: .15em; }
 
 /* The photo viewer: a full-screen modal dialog; the thumbnail grows into it where view transitions exist. */
 .viewer { width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: transparent; color: #fff; }
@@ -1276,7 +1287,8 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   .data-table-wrap--responsive .data-table.data-table--items tr:has(> td.col-select) > :is(td.col-qty, td.col-status) { grid-column: 3; }
   .data-table-wrap--responsive .data-table td { height: auto; padding: 0; border: 0; }
   .data-table-wrap--responsive .data-table .col-id, .data-table-wrap--responsive .data-table .col-category, .data-table-wrap--responsive .data-table .col-location { display: none; }
-  .data-table-wrap--responsive .data-table--items td.col-item { width: auto; min-height: 2.5rem; padding-left: 3.25rem; }
+  .data-table-wrap--responsive .data-table--items td.col-item { width: auto; }
+  .data-table-wrap--responsive .data-table--items td.col-item, .data-table-wrap--responsive .data-table td.col-item--thumb { min-height: 2.5rem; padding-left: 3.25rem; }
   .data-table-wrap--responsive .data-table--items .cell-id { display: inline; }
   .data-table-wrap--responsive .thumb { left: 0; }
   .data-table-wrap--responsive .data-table .col-qty { grid-row: 1; grid-column: 2; width: auto; max-width: 8rem; white-space: normal; }
@@ -1439,6 +1451,8 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .profile__next { margin: 0; }
 .stock-settings { display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--line); }
 .stock-settings .section-label { margin-bottom: 0; }
+/* V1.16.7 · In Edit details the group follows the item form, whose Save bar reaches into the space below it (.form-actions--sticky). */
+#panel-details > .stock-settings { margin-top: calc(var(--space-6) + var(--space-6)); }
 .stock-settings__form { grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: var(--space-3) var(--space-4); }
 .stock-settings__alert, .stock-settings__save { grid-column: 1 / -1; }
 .stock-settings__save { display: flex; flex-wrap: wrap; gap: var(--space-2); }
@@ -1970,13 +1984,12 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .cat-more { padding-block: var(--space-3); border-block: 1px solid var(--line); }
 .cat-actions .button--secondary { min-height: var(--target); border: 0; background: transparent; color: var(--brand); box-shadow: none; }
 .profile:has(.photo-crop), .profile:has([data-save]) { grid-template-columns: minmax(0, 1fr); }
-.profile.theater:has(.photo-crop, [data-save]) { grid-template-areas: "photo" "info" "actions"; grid-template-rows: auto; }
 .profile:has(.photo-crop) > [data-tile] { display: none; }
 .profile:has(.photo-crop) .profile__actions { justify-items: stretch; }
 /* Location and kit panels keep their photo actions inside the info column. */
 .profile:has(.photo-crop, [data-save]) .profile__info:not(:has([data-actions])) { display: none; }
 .profile:has(.photo-crop, [data-save]) .profile__info:has([data-actions]) > :not([data-actions]) { display: none; }
-.profile:has([data-save]) > [data-tile] { max-width: 10rem; }
+.profile:not(.theater):has([data-save]) > [data-tile] { max-width: 10rem; }
 
 /* Select mode in Items (src/bulk-select.ts) */
 .bulk-bar { position: sticky; top: calc(var(--app-bar) + var(--space-2)); z-index: 6; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid var(--brand); border-radius: var(--radius-lg); background: var(--brand-tint); box-shadow: var(--shadow-md); }

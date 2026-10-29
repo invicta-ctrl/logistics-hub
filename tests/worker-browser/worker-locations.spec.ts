@@ -94,6 +94,8 @@ test.describe.serial("smart locations", () => {
     await expect(page.locator("dialog[open]")).toHaveCount(0);
     await page.getByRole("button", { name: /^Storage Area/ }).first().click();
     const storage = page.getByRole("dialog", { name: "Storage Area" });
+    // A place opens on its Overview; where it is kept is under Edit details (V1.16.7).
+    await storage.getByRole("tab", { name: "Edit details" }).click();
     await expect(storage.getByLabel("Inside", { exact: true })).not.toContainText("Cabinet 1");
 
     const stored = await places(page);

@@ -123,7 +123,7 @@ async function itemWithPhoto(page: Page, baseURL: string, cutoutBody: Buffer): P
   await panel.getByRole("button", { name: "Save photo" }).click();
   await expect(panel.locator("[data-tile] .item-visual--loaded img")).toBeVisible();
   const photoId = (await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id as string;
-  await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", tileSrc(photoId));
+  await expect(panel.locator("[data-tile] img:not(.photo-tile__ambient)").first()).toHaveAttribute("src", tileSrc(photoId));
   await choose(panel, "View larger");
   // The viewer's Edit photo opens the photo's menu.
   await page.locator("dialog.viewer").getByRole("button", { name: "Edit photo", exact: true }).click();
@@ -152,7 +152,7 @@ test("picture cleanup: remove the background, see the cleaned picture, go back t
   await openMenu(panel);
   await expect(panel.getByRole("menuitem", { name: "Remove background" })).toBeVisible();
   expect(state.deletes).toBe(1);
-  await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", tileSrc(photoId, 2));
+  await expect(panel.locator("[data-tile] img:not(.photo-tile__ambient)").first()).toHaveAttribute("src", tileSrc(photoId, 2));
 });
 
 test("a cut that is not a real cutout is undone at once and the original stays", async ({ page, baseURL }) => {
@@ -166,7 +166,7 @@ test("a cut that is not a real cutout is undone at once and the original stays",
   expect(state.deletes).toBe(1);
   await openMenu(panel);
   await expect(panel.getByRole("menuitem", { name: "Remove background" })).toBeVisible();
-  await expect(panel.locator("[data-tile] img").first()).toHaveAttribute("src", tileSrc(photoId));
+  await expect(panel.locator("[data-tile] img:not(.photo-tile__ambient)").first()).toHaveAttribute("src", tileSrc(photoId));
 });
 
 async function replacement(page: Page) {
@@ -230,7 +230,7 @@ for (const failure of ["save conflict", "cleanup unavailable"] as const) test(`r
   const next = (await (await page.request.get(`/api/staff/items/${id}`)).json()).item.photo.id;
   expect(next === photoId).toBe(failure === "save conflict");
   expect(state.posted).toHaveLength(failure === "save conflict" ? 0 : 1);
-  await expect(page.locator("#photo-panel [data-tile] img").first()).toHaveAttribute("src", tileSrc(next));
+  await expect(page.locator("#photo-panel [data-tile] img:not(.photo-tile__ambient)").first()).toHaveAttribute("src", tileSrc(next));
 });
 
 test("the cleaned picture opens large over the dark overlay with its edges intact", async ({ page, baseURL }, info) => {
