@@ -61,6 +61,8 @@ async function placesMatching(db: D1Database, location: string): Promise<string[
 export type ActivityFilters = {
   q?: string; item?: string; actor?: string; source?: string; type?: string; from?: string; to?: string;
   stockArea?: string; location?: string; changed?: "yes" | "no"; attention?: boolean;
+  /** One loan's trail (its loan sheet, V1.16.7): the entries correlated with it. */
+  loan?: string;
 };
 export type ActivityQuery = { filters: ActivityFilters; cursor: string | null; limit: number };
 
@@ -97,7 +99,8 @@ export function parseActivityQuery(params: URLSearchParams): ActivityQuery {
   const filters: ActivityFilters = {
     q: text("q", 80), item: match("item", /^ITM-[A-Za-z0-9-]{1,24}$/), actor: match("actor", /^(ACC-[A-Za-z0-9-]{1,60}|SELF_SERVICE|SYSTEM)$/),
     source: pick("source", SOURCES), type: pick("type", ACTIVITY_TYPES), from: day("from"), to: day("to"),
-    stockArea: pick("stockArea", STOCK_AREAS), location: text("location", 300), changed: pick("changed", ["yes", "no"] as const), attention: pick("attention", ["1"] as const) ? true : undefined
+    stockArea: pick("stockArea", STOCK_AREAS), location: text("location", 300), changed: pick("changed", ["yes", "no"] as const), attention: pick("attention", ["1"] as const) ? true : undefined,
+    loan: match("loan", /^LN-[A-Za-z0-9-]{1,60}$/)
   };
   if (filters.from && filters.to && filters.from > filters.to) throw new InputError(400, "The start date must not be after the end date.");
   const cursor = one("cursor") ?? null;
@@ -229,6 +232,7 @@ export async function activityPage(db: D1Database, admin: boolean, { filters, cu
     const { cols } = arm;
     const where = [arm.where];
     if (filters.item) where.push(`${cols.itemId} = ${bind(filters.item)}`);
+    if (filters.loan) where.push(`${cols.corr} = ${bind(filters.loan)}`);
     if (filters.actor) where.push(filters.actor === "SYSTEM" ? `${cols.actorId} IS NULL` : `${cols.actorId} = ${bind(filters.actor)}`);
     if (filters.source) where.push(`${cols.src} = ${bind(filters.source)}`);
     if (filters.type) where.push(`${cols.type} = ${bind(filters.type)}`);
@@ -271,7 +275,7 @@ export type ActivityEvent = {
 const PURPOSE: Record<string, string> = { INDIVIDUAL: " to an individual", USC: " for USC use" };
 /** How an export entry names the filters it used; their values stay in the audit row only. */
 const FILTER_NAMES: Record<string, string> = {
-  q: "search", source: "source", type: "type", actor: "person", item: "item", from: "start date", to: "end date", stockArea: "stock area", location: "location", changed: "stock change", attention: "needs attention"
+  q: "search", source: "source", type: "type", actor: "person", item: "item", from: "start date", to: "end date", stockArea: "stock area", location: "location", changed: "stock change", attention: "needs attention", loan: "loan"
 };
 
 function toEvent(row: Row): ActivityEvent {

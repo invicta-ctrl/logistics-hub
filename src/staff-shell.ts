@@ -7,7 +7,7 @@ import type { DepartmentCode } from "./directory-policy";
 import { setAccess } from "./catalogue-store";
 import { staffDark } from "./theme";
 import { confirmDiscard } from "./unsaved";
-import { ApiError, CREST, MARK, type Html, type IconName, api, app, emptyState, expired, failure, forgetKept, formatDate, html, icon, keepFor, mount, navigate, noteBuild, onLeave, prefetch, reducedMotion, setMessage, stillShown, takePrefetched, toast } from "./ui";
+import { ApiError, CREST, MARK, SPRING, type Html, type IconName, api, app, emptyState, expired, failure, forgetKept, formatDate, html, icon, keepFor, mount, navigate, noteBuild, onLeave, prefetch, reducedMotion, setMessage, stillShown, takePrefetched, toast } from "./ui";
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
 /** Who a sign-in is for: the staff of a USC department (DoL, DEM, …), an officer, or an administrator or owner (accounts.ts). */
@@ -234,6 +234,72 @@ export async function loadSession(section: Section): Promise<Session | null> {
   }
 }
 
+/* ---------- The rail (V1.16.7, workspace depth slice 3): raised plates, one lit plate that travels, groups that fold ---------- */
+
+/** A group's chevron: a button named for the group, saying whether its destinations are shown. */
+const foldButton = (slug: string, name: string, controls: string): Html =>
+  html`<button type="button" class="app-nav__fold" data-nav-fold="${slug}" aria-expanded="true" aria-controls="${controls}">${icon("next")}<span class="visually-hidden">${name}</span></button>`;
+
+/** The groups folded on this device: kept here only (never in the account), and forgotten if it cannot be read. */
+const FOLDS_KEY = "staff-rail-folded";
+function foldedGroups(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(FOLDS_KEY) ?? "[]") as string[]); } catch { return new Set(); }
+}
+function keepFolded(folded: Set<string>): void {
+  try { localStorage.setItem(FOLDS_KEY, JSON.stringify([...folded])); } catch { /* the rail still folds for this page */ }
+}
+/** Shows a group as folded or open, without moving anything else. */
+function showFold(slug: string, folded: boolean): void {
+  const group = document.querySelector<HTMLElement>(`.app-nav [data-nav-group="${slug}"]`);
+  if (!group) return;
+  group.classList.toggle("is-folded", folded);
+  group.querySelector(`[data-nav-fold="${slug}"]`)?.setAttribute("aria-expanded", String(!folded));
+}
+/** Folds or opens one group and keeps the choice. The lit plate goes with its destination as the rail moves. */
+function foldGroup(slug: string, fold: boolean): void {
+  const folded = foldedGroups();
+  if (fold) folded.add(slug); else folded.delete(slug);
+  keepFolded(folded);
+  showFold(slug, fold);
+}
+/** Draws the kept folds; the group holding the page now shown is always open (opening any of Items' pages unfolds Items). */
+function railFolds(here: Section): void {
+  const folded = foldedGroups();
+  const holding = document.querySelector(".app-nav__link[aria-current]:not(.app-nav__child)")?.closest<HTMLElement>("[data-nav-group]")?.dataset.navGroup;
+  const open = here === "items" ? "items" : holding;
+  if (open && folded.delete(open)) keepFolded(folded);
+  document.querySelectorAll<HTMLElement>(".app-nav [data-nav-group]").forEach((group) => showFold(group.dataset.navGroup!, folded.has(group.dataset.navGroup!)));
+}
+
+/**
+ * The one lit plate: it sits in the current destination and, when the page moves, travels from the old one to the new one (about
+ * 380 ms on the spring) instead of one switching off and another on. It is decoration only: hidden from assistive technology, and
+ * the current page is still marked by aria-current.
+ */
+let lit: HTMLElement | null = null;
+function lightRail(): void {
+  const target = document.querySelector<HTMLElement>(".app-nav .app-nav__link[aria-current]:not(.app-nav__child)");
+  if (!lit) {
+    lit = document.createElement("span");
+    lit.className = "rail-lit";
+    lit.setAttribute("aria-hidden", "true");
+  }
+  if (!target) { lit.remove(); return; }
+  if (lit.parentElement === target) return;
+  const before = lit.isConnected && lit.offsetParent ? lit.getBoundingClientRect() : null;
+  target.prepend(lit);
+  if (!before || reducedMotion()) return;
+  const after = lit.getBoundingClientRect();
+  if (!after.width || !after.height) return;
+  lit.animate([
+    { transform: `translate(${before.left - after.left}px, ${before.top - after.top}px) scale(${before.width / after.width}, ${before.height / after.height})`, transformOrigin: "0 0" },
+    { transform: "none", transformOrigin: "0 0" }
+  ], { duration: 380, easing: SPRING });
+}
+
+// The rail's light and the live dots rest while the tab is hidden, and pick up where they were when it shows again.
+document.addEventListener("visibilitychange", () => document.documentElement.classList.toggle("is-hidden-tab", document.hidden));
+
 /**
  * The one staff app shell (LH-IP02-S01). On desktop and tablet `header.app-bar` is the oxblood rail: brand, Find, the attention bell, the
  * grouped sections, and the department and account pinned at the bottom. On phones it is a top bar, and Home, Find and More sit in a bottom
@@ -254,7 +320,7 @@ export function shell(session: Session, section: Section, main: Html): void {
   const groups = [...new Set(sections.map((entry) => entry.group))];
   const shown = childOf(window.location.href);
   const childCurrent = (at: number) => at === shown ? html`aria-current="page"` : "";
-  const railChildren = html`<ul class="app-nav__children" aria-label="Items">${ITEM_CHILDREN.map((child, at) => html`<li><a class="app-nav__link app-nav__child" href="${child.href}" data-route data-child="${at}" ${childCurrent(at)}><span class="app-nav__text">${child.text}${child.attention ? html`<span class="attn-slot" data-attention="${child.attention}"></span>` : ""}</span></a></li>`)}</ul>`;
+  const railChildren = html`<ul class="app-nav__children" id="nav-items-pages" aria-label="Items">${ITEM_CHILDREN.map((child, at) => html`<li><a class="app-nav__link app-nav__child" href="${child.href}" data-route data-child="${at}" ${childCurrent(at)}><span class="app-nav__text">${child.text}${child.attention ? html`<span class="attn-slot" data-attention="${child.attention}"></span>` : ""}</span></a></li>`)}</ul>`;
   const menuChildren = html`<li class="menu__parent"><p class="menu__heading" id="menu-items">Items</p><ul class="menu__children" aria-labelledby="menu-items">${ITEM_CHILDREN.map((child, at) => html`<li><a class="menu__item" href="${child.href}" data-route data-child="${at}" ${childCurrent(at)}>${icon(child.icon)}${child.text}</a></li>`)}</ul></li>`;
   const avatar = html`<span class="avatar" aria-hidden="true">${initials(session.displayName)}</span>`;
   const chrome = html`
@@ -264,7 +330,18 @@ export function shell(session: Session, section: Section, main: Html): void {
         ${sections.length ? html`<button class="app-search" type="button" data-tip="Search" data-palette data-admin="${session.role === "STAFF" ? "0" : "1"}" aria-haspopup="dialog" aria-keyshortcuts="${MAC ? "Meta+K" : "Control+K"}">${icon("search")}<span class="app-search__text">Search</span><kbd class="app-search__keys" aria-hidden="true">${SEARCH_KEYS}</kbd></button>` : ""}
         ${sections.length ? html`<a class="app-bell" href="/staff/attention" data-route data-tip="Attention">${icon("bell")}<span class="visually-hidden">Attention</span><span class="attn-slot" data-attention="all"></span></a>` : ""}
         ${sections.length ? html`<nav class="app-nav" aria-label="Sections">
-          ${groups.map((group) => html`<div class="app-nav__group">${group ? html`<p class="app-nav__label" aria-hidden="true">${group}</p>` : ""}${sections.filter((entry) => entry.group === group).map((entry) => html`<a class="app-nav__link ${entry.id === "home" ? "" : "app-nav__link--more"}" href="${entry.href}" data-route data-tip="${entry.text}" ${entry.id === "items" ? html`data-parent` : ""} ${current(entry.id)}>${icon(entry.icon)}<span class="app-nav__text">${entry.text}${badge(entry.id)}</span></a>${entry.id === "items" ? railChildren : ""}`)}</div>`)}
+          ${groups.map((group) => {
+            const links = sections.filter((entry) => entry.group === group).map((entry) => {
+              const link = html`<a class="app-nav__link ${entry.id === "home" ? "" : "app-nav__link--more"}" href="${entry.href}" data-route data-tip="${entry.text}" ${entry.id === "items" ? html`data-parent` : ""} ${current(entry.id)}>${icon(entry.icon)}<span class="app-nav__text">${entry.text}${badge(entry.id)}</span></a>`;
+              return entry.id === "items"
+                ? html`<div class="app-nav__items" data-nav-group="items">${link}${foldButton("items", "Items pages", "nav-items-pages")}<div class="app-nav__members"><div class="app-nav__fold-inner">${railChildren}</div></div></div>`
+                : link;
+            });
+            const slug = group.toLowerCase();
+            return group
+              ? html`<div class="app-nav__group" data-nav-group="${slug}"><div class="app-nav__head"><p class="app-nav__label" aria-hidden="true">${group}</p>${foldButton(slug, group, `nav-${slug}`)}</div><div class="app-nav__members" id="nav-${slug}"><div class="app-nav__fold-inner">${links}</div></div></div>`
+              : html`<div class="app-nav__group">${links}</div>`;
+          })}
           <button class="app-nav__link app-nav__all" type="button" popovertarget="staff-menu" data-tip="All destinations">${icon("dots")}<span class="app-nav__text">All destinations</span></button>
           <button class="app-nav__link app-nav__find" type="button" data-find>${icon("search")}<span class="app-nav__text">Find</span></button>
           <button class="app-nav__link app-nav__more ${overflow.some((entry) => entry.id === here) || here === "account" ? "is-current" : ""}" type="button" popovertarget="staff-menu">${icon("dots")}<span class="app-nav__text">More</span></button>
@@ -291,15 +368,24 @@ export function shell(session: Session, section: Section, main: Html): void {
     closeMenu();
     page.removeAttribute("aria-busy");
     mount(page, main);
-    // Another section settles in from half strength; another tab of the same page swaps in place, so its title and tabs stay still.
-    if (drawn!.section !== section && !reducedMotion()) page.animate([{ opacity: 0.5 }, { opacity: 1 }], { duration: 180, easing: "ease-out" });
+    // Another section rises 8 px into place as it fades in (V1.16.7); another tab of the same page swaps in place, so its title and tabs
+    // stay still. The page is drawn first and moves after, so motion never holds content back.
+    if (drawn!.section !== section && !reducedMotion()) page.animate([{ opacity: 0, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], { duration: 220, easing: SPRING });
     drawn!.section = section;
+    railFolds(here);
+    lightRail();
     tipsForPage();
     if (sections.length) watchAttention(here !== "home");
     return;
   }
   mount(app, html`${chrome}<main id="main-content" class="app-main">${main}</main>`);
   drawn = { bar: app.querySelector(".app-bar")!, key: unmarked(chrome.value), section };
+  app.querySelector(".app-nav")?.addEventListener("click", (event) => {
+    const button = (event.target as Element).closest<HTMLButtonElement>("[data-nav-fold]");
+    if (button) foldGroup(button.dataset.navFold!, button.getAttribute("aria-expanded") === "true");
+  });
+  railFolds(here);
+  lightRail();
   // Both openers (the avatar and, on phones, More) report whether the menu is open.
   const menu = document.querySelector<HTMLElement>("#staff-menu")!;
   const openers = document.querySelectorAll('[popovertarget="staff-menu"]');

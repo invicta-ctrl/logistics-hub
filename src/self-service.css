@@ -462,6 +462,11 @@
    ========================================================================== */
 #ss-results { margin-top: 1.25rem; }
 .ss-staff-find { max-width: 28rem; margin-top: 1rem; }
+/* V1.16.7 · One Overview: what needs attention, then the records with their search and Show all records. */
+.ss-overview__attention, .ss-overview__records { display: grid; gap: var(--space-3); margin-top: var(--space-5); }
+.ss-overview__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+.ss-overview__records .ss-staff-find { margin-top: 0; }
+.ss-overview__more { display: flex; justify-content: center; padding: var(--space-4) 0; }
 .ss-staff-ref { display: flex; flex-wrap: wrap; align-items: center; gap: .125rem .75rem; margin-top: .125rem; font-size: var(--text-sm); }
 .review-list { display: grid; gap: .75rem; margin-bottom: 1.5rem; }
 .review-card { padding: 1rem 1.125rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-sm); }

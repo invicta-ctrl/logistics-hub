@@ -1026,6 +1026,22 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .activity-row__change:empty { display: none; }
 .activity-row__note { margin-top: var(--space-1); color: var(--text-2); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .activity-row .cell-sub a { color: var(--brand); }
+/* V1.16.7 · On Activity each entry is one line that opens in place to its detail; the line is the button, its target the whole row. */
+.activity-row--fold { padding: 0; }
+.activity-row--fold > .activity-row__time, .activity-row--fold > .activity-row__icon, .activity-row--fold > .activity-row__change { padding-top: var(--space-3); pointer-events: none; }
+.activity-row__toggle { display: flex; align-items: baseline; gap: var(--space-2); width: 100%; min-height: 2.75rem; padding: var(--space-3) 0; border: 0; background: none; color: var(--text); font: inherit; text-align: start; cursor: pointer; }
+.activity-row__toggle::after { position: absolute; inset: 0; content: ""; }
+.activity-row__toggle:focus-visible { outline: none; }
+.activity-row__toggle:focus-visible::after { border-radius: var(--radius); outline: 2px solid var(--brand); outline-offset: -2px; }
+.activity-row--fold:hover { background: var(--hover); }
+.activity-row__line { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-row--fold.is-open .activity-row__line { overflow: visible; white-space: normal; overflow-wrap: anywhere; }
+.activity-row__toggle .tag { flex: none; }
+.activity-row__detail { grid-column: 1 / -1; padding: 0 0 var(--space-4) calc(4.5rem + 1.25rem + 2 * var(--space-4)); }
+.activity-row__detail a { position: relative; z-index: 1; }
+.activity-detail { grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); }
+.activity-row--fold.is-open .activity-row__detail { animation: activity-open var(--dur-2) var(--ease); }
+@keyframes activity-open { from { opacity: 0; transform: translateY(-.25rem); } }
 .activity-more { display: grid; justify-items: center; gap: var(--space-2); margin-top: var(--space-4); font-size: var(--text-sm); }
 .chip .icon { --icon-size: var(--icon-xs); }
 
@@ -1129,6 +1145,29 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .loan-row__meta { color: var(--text-3); font-size: var(--text-sm); }
 .loan-row__actions { display: flex; flex: none; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
 .loan-row__photo { font-size: var(--text-sm); }
+/* V1.16.7 · On Loans a row leads with the hand-over photo's thumbnail (the camera until it has one) and opens the loan's sheet:
+   the borrower's name is the button, stretched over the row; the item link and Return stay their own targets above it. */
+.loan-row--open { position: relative; justify-content: flex-start; }
+.loan-row--open .loan-row__main { flex: 1; }
+.loan-row--open:hover { background: var(--hover); }
+.loan-row--open.is-overdue:hover { background: linear-gradient(90deg, var(--bad-tint), var(--hover) 45%); }
+.loan-row__open { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.loan-row__open::after { position: absolute; inset: 0; content: ""; }
+.loan-row__open:focus-visible { outline: none; }
+.loan-row__open:focus-visible::after { border-radius: var(--radius); outline: 2px solid var(--brand); outline-offset: -2px; }
+.loan-row--open .row-link, .loan-row--open .loan-row__actions { position: relative; z-index: 1; }
+.loan-thumb { position: relative; display: grid; flex: none; place-items: center; overflow: hidden; width: 3rem; height: 3rem; border-radius: var(--radius); background: var(--subtle); color: var(--text-3); }
+.loan-thumb .icon { --icon-size: 1.25rem; }
+.loan-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.loan-thumb--none { background: none; }
+.loan-sheet__photo { overflow: hidden; margin: 0; border-radius: var(--radius-lg); background: var(--subtle); }
+.loan-sheet__photo img { display: block; width: 100%; max-height: min(60vh, 32rem); object-fit: contain; }
+.loan-sheet__nophoto { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+.loan-sheet__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.loan-trail { display: grid; }
+.loan-trail li { padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
+.loan-trail li:last-child { border-bottom: 0; }
+@media (max-width: 520px) { .loan-sheet__facts { grid-template-columns: minmax(0, 1fr); } .loan-thumb { width: 2.5rem; height: 2.5rem; } }
 .loan-list--closed .loan-row__who strong { font-weight: 500; }
 
 /* Open units (Part 5B): one row per open unit, condition chips, Mark empty as the one primary action. */
@@ -1306,6 +1345,7 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   /* Phones: time, sentence and change; the module's icon gives way to the text. */
   .activity-row { grid-template-columns: 3.5rem minmax(0, 1fr) auto; grid-template-areas: "time main change"; gap: var(--space-1) var(--space-3); }
   .activity-row__icon { display: none; }
+  .activity-row__detail { padding-left: calc(3.5rem + var(--space-3)); }
   /* Phones: the four daily sections and More sit in a bottom bar within thumb reach; More opens the account menu as a sheet. */
   html:has(.app-nav) { scroll-padding-bottom: calc(var(--bottom-bar) + var(--safe-bottom) + var(--space-4)); }
   .app-bar__inner { gap: var(--space-3); }
@@ -2179,4 +2219,70 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
 }
 @media (min-width: 1181px) and (max-height: 800px) {
   .app-nav__child { min-height: 2rem; }
+}
+
+/* ==========================================================================
+   V1.16.7 · Workspace depth slice 3 (its accepted direction): the rail as raised plates, one lit plate that travels, groups that fold.
+   Every motion is transform or opacity on one spring (--spring); the two continuous lights rest while the tab is hidden, and reduced
+   motion keeps none of it.
+   ========================================================================== */
+:root { --spring: linear(0, .009, .035 2.1%, .141 4.4%, .723 12.9%, .938 16.7%, 1.017 20.9%, 1.016 24.4%, 1.003 32.4%, .999 41.7%, 1); }
+/* The wrappers that let groups fold take no part in the layout where groups do not fold (the phone's bar, the tablet's icon rail). */
+.app-nav__head > .app-nav__fold, .app-nav__items > .app-nav__fold { display: none; }
+.app-nav__head { display: contents; }
+.app-nav__members, .app-nav__fold-inner, .app-nav__items { display: contents; }
+.rail-lit { display: none; }
+@media (min-width: 761px) {
+  .app-nav__group { gap: 4px; }
+  /* Each destination is its own plate: a hairline lighter top edge, a soft shadow under it, 4 px from the next. Hovered it lifts 1 px;
+     pressed it sinks 1 px (90 ms). Items' children stay lighter rows inside Items. */
+  .app-nav__link:not(.app-nav__child) { background: rgb(255 255 255 / 5%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 9%), 0 1px 2px rgb(20 4 6 / 38%); transition: transform 90ms var(--ease), box-shadow var(--dur-1), background-color var(--dur-1), color var(--dur-1); }
+  .app-nav__link:not(.app-nav__child):hover { background: rgb(255 255 255 / 9%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 12%), 0 3px 6px rgb(20 4 6 / 42%); transform: translateY(-1px); }
+  .app-nav__link:not(.app-nav__child):active { box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 0 1px rgb(20 4 6 / 50%); transform: translateY(1px); }
+  /* The current destination is lit: raised further, a shade lighter, a gold edge on its left and a warm top highlight. The light is one
+     element that travels between plates (staff-shell.ts), so the plate itself only lifts. */
+  .app-nav__link[aria-current]:not(.app-nav__child) { background: transparent; box-shadow: none; color: var(--on-dark); transform: translateY(-1px); }
+  .rail-lit { position: absolute; inset: 0; z-index: -1; display: block; overflow: hidden; border-radius: inherit; background: linear-gradient(180deg, rgb(255 233 196 / 17%), rgb(255 255 255 / 10%)); box-shadow: inset 3px 0 0 var(--gold-action), inset 0 1px 0 rgb(255 226 168 / 34%), 0 5px 12px -3px rgb(20 4 6 / 58%); pointer-events: none; }
+  .rail-lit::after { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgb(255 232 186 / 24%) 50%, transparent 70%); content: ""; transform: translateX(-110%); }
+  .app-nav__fold:focus-visible { outline: 2px solid var(--gold-action); outline-offset: 1px; }
+}
+/* The icon rail's plates are its 40 px circles; the lit circle keeps a gold ring rather than an edge. */
+@media (min-width: 761px) and (max-width: 1180px) {
+  .rail-lit { box-shadow: inset 0 0 0 1.5px rgb(232 185 60 / 75%), inset 0 1px 0 rgb(255 226 168 / 34%), 0 5px 12px -3px rgb(20 4 6 / 58%); }
+}
+/* The wide rail folds: Circulation, Records and Manage by a chevron on their label, Items by one beside it (Items stays a link). Folded,
+   Items keeps the Low & out of stock count on itself. */
+@media (min-width: 1181px) {
+  .app-nav__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  .app-nav__head .app-nav__label { margin: 0; }
+  .app-nav__head > .app-nav__fold, .app-nav__items > .app-nav__fold { display: grid; }
+  .app-nav__fold { width: 1.75rem; height: 1.75rem; flex: none; place-items: center; margin-right: var(--space-1); padding: 0; border: 0; border-radius: var(--radius); background: none; color: var(--on-dark-2); cursor: pointer; transition: background-color var(--dur-1), color var(--dur-1); }
+  .app-nav__fold:hover { background: rgb(255 255 255 / 9%); color: var(--on-dark); }
+  .app-nav__fold > .icon { --icon-size: 1rem; transform: rotate(90deg); transition: transform 380ms var(--spring); }
+  .app-nav__fold[aria-expanded="false"] > .icon { transform: none; }
+  .app-nav__items { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px var(--space-1); }
+  .app-nav__items > .app-nav__members { grid-column: 1 / -1; }
+  .app-nav__members { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 380ms var(--spring); }
+  /* Room around the plates for their shadow and lift, inside the clip that folds them. */
+  .app-nav__fold-inner { display: grid; min-height: 0; gap: 4px; margin: -3px -4px; padding: 3px 4px; overflow: hidden; }
+  .app-nav__items .app-nav__fold-inner { margin-top: -4px; }
+  .is-folded > .app-nav__members { grid-template-rows: 0fr; }
+  .is-folded > .app-nav__members > .app-nav__fold-inner { visibility: hidden; transition: visibility 0s 380ms; }
+  .app-nav .app-nav__items.is-folded [data-parent] .attn-slot { display: contents; }
+  .app-nav .app-nav__items.is-folded [data-parent] .attn-slot:empty { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  /* Sheets slide in on the spring and close faster than they open. */
+  .sheet[open] { animation-timing-function: var(--spring); animation-duration: 380ms; }
+  /* Living surface 1: a slow band of warm light crosses the lit plate about every 8 seconds. */
+  .rail-lit::after { animation: rail-glint 8s ease-in-out 1.5s infinite; }
+  :root.is-hidden-tab .rail-lit::after { animation-play-state: paused; }
+  @keyframes rail-glint { 0% { transform: translateX(-110%); } 22%, 100% { transform: translateX(110%); } }
+}
+@media (prefers-reduced-motion: no-preference) and (min-width: 761px) {
+  .sheet[open][data-origin] { animation-timing-function: var(--spring); }
+}
+@media (forced-colors: active) {
+  .rail-lit { border: 2px solid CanvasText; }
+  .rail-lit::after { display: none; }
 }

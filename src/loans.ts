@@ -3,7 +3,7 @@ import {
   wholeJson
 } from "./catalog-policy";
 import { type Actor, BUMP_REVISION, InputError, LOAN_COLUMNS, audit, balanceOf, countAwareStatus, isoDate, currentItemSQL, onHandOf } from "./inventory";
-import { ERASED } from "./retention";
+import { ERASED, thumbKey } from "./retention";
 
 export const LOAN_ID = /^LN-[A-Za-z0-9-]{1,60}$/;
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
@@ -296,4 +296,35 @@ export async function loanPhoto(db: D1Database, bucket: R2Bucket, id: string): P
   const object = key ? await bucket.get(key) : null;
   if (!object) throw new InputError(404, "Photo not found.");
   return new Response(object.body, { headers: { "content-type": object.httpMetadata?.contentType ?? "application/octet-stream", "cache-control": "private, no-store" } });
+}
+
+/**
+ * A loan photo's thumbnail (V1.16.7) sits beside the photo in the evidence bucket, under the photo's key and `.thumb`, so it goes
+ * wherever the photo goes: retention deletes both. No other service ever sees the photo: a staff browser that shows the full
+ * photo draws the thumbnail itself and saves it once (`saveLoanThumb`). A loan never changes its photo, so the browser may keep it.
+ */
+const THUMB_MAX_BYTES = 48_000;
+
+export async function loanThumb(db: D1Database, bucket: R2Bucket, id: string): Promise<Response> {
+  if (!LOAN_ID.test(id)) throw new InputError(404, "Thumbnail not found.");
+  const key = await db.prepare("SELECT photo_key AS photoKey FROM loans WHERE id = ?").bind(id).first<string>("photoKey");
+  const object = key ? await bucket.get(thumbKey(key)) : null;
+  if (!object) throw new InputError(404, "Thumbnail not found.");
+  return new Response(object.body, { headers: { "content-type": "image/jpeg", "cache-control": "private, max-age=86400" } });
+}
+
+/** Saves the thumbnail a staff browser drew from the loan's own photo: a small JPEG, once; a thumbnail already saved is kept. */
+export async function saveLoanThumb(db: D1Database, bucket: R2Bucket, id: string, request: Request): Promise<Response> {
+  if (!LOAN_ID.test(id)) throw new InputError(404, "Loan not found.");
+  if (request.headers.get("content-type") !== "image/jpeg") throw new InputError(415, "Send the thumbnail as a JPEG.");
+  if (Number(request.headers.get("content-length")) > THUMB_MAX_BYTES) throw new InputError(413, "That thumbnail is too large.");
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.byteLength > THUMB_MAX_BYTES) throw new InputError(413, "That thumbnail is too large.");
+  if (bytes.byteLength < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) throw new InputError(415, "Send the thumbnail as a JPEG.");
+  const key = await db.prepare("SELECT photo_key AS photoKey FROM loans WHERE id = ?").bind(id).first<string>("photoKey");
+  if (key === null) throw new InputError(404, "Loan not found.");
+  // A photo removed by retention gets no thumbnail back.
+  if (!key) throw new InputError(409, "This loan's photo has been removed.");
+  if (!await bucket.head(thumbKey(key))) await bucket.put(thumbKey(key), bytes, { httpMetadata: { contentType: "image/jpeg" } });
+  return new Response(null, { status: 204 });
 }

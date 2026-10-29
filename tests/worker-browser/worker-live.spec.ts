@@ -203,7 +203,7 @@ test.describe("owner administration", () => {
     // System opens first and reads the real database, storage and build: a fresh local one is all answering, and says what it is.
     await expect(page.getByRole("heading", { name: "Right now" })).toBeVisible();
     await expect(page.locator("#system-summary")).toContainText("Everything checked is working.");
-    await expect(page.locator(".status-row", { hasText: "Database" })).toContainText("Answering");
+    await expect(page.locator(".setting-row", { hasText: "Database" })).toContainText("Answering");
     await page.getByRole("link", { name: "Accountability" }).click();
     // The owner's retention check answers from the real database: a fresh one has nothing due.
     await expect(page.getByRole("region", { name: "Old personal details" }).getByText("Nothing is old enough to remove yet.")).toBeVisible();
@@ -212,12 +212,12 @@ test.describe("owner administration", () => {
     await expect(section.getByText("Open", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Test Self-Service" })).toHaveCount(0);
     expect((await request.get("/api/self-service/catalog")).status()).toBe(200);
-    await section.getByRole("button", { name: "Close for maintenance" }).click();
+    await section.getByRole("button", { name: "Change Self-Service on phones" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Close for maintenance" }).click();
     await expect(section.getByText("Closed for maintenance")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Test Self-Service" })).toBeVisible();
     expect((await request.get("/api/self-service/catalog")).status()).toBe(503);
-    await section.getByRole("button", { name: "Reopen Self-Service" }).click();
+    await section.getByRole("button", { name: "Change Self-Service on phones" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Reopen Self-Service" }).click();
     await expect(section.getByText("Open", { exact: true })).toBeVisible();
     expect((await request.get("/api/self-service/catalog")).status()).toBe(200);
@@ -676,7 +676,9 @@ test("activity: one list of who did what, filters kept in the URL, older pages, 
   await expect(page).toHaveURL(/q=blade\+bent/);
   await expect(page.locator(".activity-row")).toHaveCount(1);
   await expect(page.locator(".activity-row")).toContainText("closed a loan of Scissors as damaged");
-  await expect(page.locator(".activity-row")).toContainText("Note: One blade bent");
+  // One line per entry (V1.16.7): the note is in the entry's detail, opened in place.
+  await page.locator(".activity-row [data-fold]").click();
+  await expect(page.locator(".activity-row__detail")).toContainText("NoteOne blade bent");
   await search.fill("Banner cutting");
   await expect(page.locator(".activity-row").first()).toContainText("lent 1 piece of Scissors for USC use");
   // The structured borrower name and student ID are never searched.
@@ -709,7 +711,8 @@ test("activity: one list of who did what, filters kept in the URL, older pages, 
   await expect(page).toHaveURL(/\/staff\/activity\?source=LOAN$/);
 
   // An entry opens its item; the item's history leads back to its activity.
-  await page.locator(".activity-row__summary").first().click();
+  await page.locator(".activity-row [data-fold]").first().click();
+  await page.locator(".activity-row__detail").getByRole("link", { name: "Scissors" }).click();
   await expect(page.getByRole("dialog", { name: "Scissors" })).toBeVisible();
   await page.getByRole("tab", { name: "History" }).click();
   await page.getByRole("link", { name: /All activity for this item/ }).click();
@@ -845,7 +848,8 @@ test("open units: opt in, open, use, mark low, open another, mark empty, close b
   await expect(rows.filter({ hasText: "review flag" })).toHaveCount(0);
   await expect(rows.nth(1)).toContainText("E2E Staff's count closed 1 open ream of E2E Copy Paper no longer on the shelf.");
   await expect(rows.nth(2)).toContainText("E2E Staff marked an open ream of E2E Copy Paper empty: 7 reams on hand.");
-  await expect(rows.nth(2)).toContainText("8 → 7 reams");
+  await rows.nth(2).locator("[data-fold]").click();
+  await expect(rows.nth(2).locator(".activity-row__detail")).toContainText("8 → 7 reams");
   // Opening, using and marking a condition are recorded and change nothing.
   for (const index of [3, 4, 5, 6]) await expect(rows.nth(index)).toContainText("stock did not change");
 

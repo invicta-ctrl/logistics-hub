@@ -1,5 +1,5 @@
 import { PUBLIC_LENDING_ITEM_TYPE } from "./catalog-policy";
-import { type Borrower, type Loan, bindLoanForm, isOverdue, loanFields, loanRow, openReturn } from "./loan-form";
+import { type Borrower, type Loan, bindLoanForm, isOverdue, loanFields, loanRow, openLoan, openReturn } from "./loan-form";
 import { loadSession, shell } from "./staff-shell";
 import { api, emptyState, expired, type Html, html, icon, label, live, mount, onLeave, plural, preservingFocus, readKept, reducedMotion, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
@@ -59,13 +59,13 @@ export async function loansWorkspace(): Promise<void> {
     // Overdue first, then the longest out.
     const open = overview.open.filter(matches).sort((a, b) => Number(isOverdue(b, overview.today)) - Number(isOverdue(a, overview.today)) || a.createdAt.localeCompare(b.createdAt));
     if (!open.length) return search.value.trim() ? emptyState("No loans match", "Try another name, student ID or item.") : emptyState("Nothing is out on loan", "Lend from an item's Loan tab in Items, or with Lend an item above.");
-    return html`<ul class="loan-list">${open.map((loan) => loanRow(loan, true))}</ul>`;
+    return html`<ul class="loan-list">${open.map((loan) => loanRow(loan, true, true))}</ul>`;
   }
 
   function historyMarkup(overview: Overview): Html {
     const closed = overview.closed.filter(matches);
     if (!closed.length) return search.value.trim() ? emptyState("No returns match", "Try another name, student ID or item.") : emptyState("No returns yet", "Returned, damaged and lost loans appear here.");
-    return html`<ul class="loan-list loan-list--closed">${closed.map((loan) => loanRow(loan, true))}</ul>
+    return html`<ul class="loan-list loan-list--closed">${closed.map((loan) => loanRow(loan, true, true))}</ul>
       ${overview.closed.length === 100 ? html`<p class="hint-line">${icon("info")}<span>Showing the 100 most recent returns.</span></p>` : ""}`;
   }
 
@@ -117,6 +117,8 @@ export async function loansWorkspace(): Promise<void> {
 
   const render = () => {
     if (!data) return;
+    // A loan named by its address (Activity's entries link to their loan) is shown in the list that holds it.
+    if (focusLoan && view === "out" && !data.open.some((loan) => loan.id === focusLoan) && data.closed.some((loan) => loan.id === focusLoan)) view = "history";
     results.removeAttribute("aria-busy");
     writeParams({ view: view === "out" ? null : view, period: view === "people" && period !== "30d" ? period : null, q: search.value.trim() });
     const overdue = data.open.filter((loan) => isOverdue(loan, data!.today)).length;
@@ -157,10 +159,21 @@ export async function loansWorkspace(): Promise<void> {
   let searchTimer = 0;
   onLeave(() => window.clearTimeout(searchTimer));
   search.addEventListener("input", () => { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(render, 120); });
+  /** Loans whose thumbnail is not saved yet: their row keeps the camera icon, and opening one saves it from the photo (loan-form.ts). */
+  const unthumbed = new Set<string>();
+  results.addEventListener("error", (event) => {
+    const image = event.target;
+    if (!(image instanceof HTMLImageElement) || !image.dataset.loanThumb) return;
+    unthumbed.add(image.dataset.loanThumb);
+    image.remove();
+  }, true);
   results.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
     const periodButton = target.closest<HTMLButtonElement>("[data-period]");
     if (periodButton) { period = periodButton.dataset.period as Period; render(); results.querySelector<HTMLElement>(`[data-period="${period}"]`)?.focus(); return; }
+    const opening = target.closest<HTMLButtonElement>("[data-open-loan]");
+    const chosen = opening && [...(data?.open ?? []), ...(data?.closed ?? [])].find((entry) => entry.id === opening.dataset.openLoan);
+    if (chosen) { openLoan(chosen, { onReturn: (loan) => openReturn(loan, poll.refresh), needsThumb: unthumbed.has(chosen.id) }); return; }
     const giveBack = target.closest<HTMLButtonElement>("[data-return]");
     const loan = giveBack && data?.open.find((entry) => entry.id === giveBack.dataset.return);
     if (loan) openReturn(loan, poll.refresh);

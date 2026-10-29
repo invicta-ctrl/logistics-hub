@@ -1,7 +1,7 @@
 import "./admin.css";
 import { DEPARTMENTS, type DepartmentCode } from "./directory-policy";
 import { ACCESS_HINT, accessChoices, accessTag, bindCopy, canManage, oneTime } from "./account-ui";
-import { adminPage, confirmImpact } from "./admin-frame";
+import { adminPage, confirmImpact, verdict } from "./admin-frame";
 import { type Access, type Role, accessLabel, forgetSession, loadSession, sessionAccess, shell } from "./staff-shell";
 import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast, working, stillShown } from "./ui";
 import { formEdits, trackEdits } from "./unsaved";
@@ -38,16 +38,17 @@ export async function staffAccounts(): Promise<void> {
     lede: (session) => session.role === "OWNER" ? "Owners manage every account and role. People's Staff Directory records are kept in the Staff Directory." : "Administrators manage staff accounts. Owner and administrator accounts are managed by an owner.",
     actions: html`<button class="button button--primary" type="button" id="new-account">${icon("plus")}New account</button>`,
     body: () => html`
-    <section aria-labelledby="accounts-title">
-      <h2 id="accounts-title" class="section-title">Accounts</h2>
+    <div id="staff-verdict">${verdict("ok", "Reading the accounts…")}</div>
+    <section class="admin-block settings-group" aria-labelledby="accounts-title">
+      <div class="admin-block__head"><h2 id="accounts-title" class="section-title">Accounts</h2></div>
       <div id="accounts"><div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 4 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span></div>`)}</div></div>
     </section>
-    <section class="admin-block" aria-labelledby="roles-title">
-      <h2 id="roles-title" class="section-title">What each role can do</h2>
+    <section class="admin-block settings-group" aria-labelledby="roles-title">
+      <div class="admin-block__head"><h2 id="roles-title" class="section-title">What each role can do</h2></div>
       <dl class="guide">${ROLE_GUIDE.map((entry) => html`<div><dt>${entry.role}</dt><dd>${entry.can}</dd></div>`)}</dl>
     </section>
-    <section class="admin-block" aria-labelledby="directory-title">
-      <h2 id="directory-title" class="section-title">Staff Directory</h2>
+    <section class="admin-block settings-group" aria-labelledby="directory-title">
+      <div class="admin-block__head"><h2 id="directory-title" class="section-title">Staff Directory</h2></div>
       <p>The directory holds who works in each department, their positions and their official ID cards. An account is linked to a person there, and a sign-in can be created or linked from a person's page.</p>
       <a class="button button--secondary" href="/staff/admin/directory" data-route>Open the Staff Directory</a>
     </section>
@@ -68,6 +69,12 @@ export async function staffAccounts(): Promise<void> {
       const { accounts } = await api<{ accounts: Row[] }>("/api/staff/admin/accounts");
       if (!onPage()) return;
       rows = accounts;
+      // The verdict counts only what the Worker returned: accounts, how many are active, and who must still set a password.
+      const enabled = accounts.filter((row) => row.active).length;
+      const pending = accounts.filter((row) => row.active && row.mustChangePassword).length;
+      mount(document.querySelector("#staff-verdict")!, verdict(pending ? "warn" : "ok",
+        `${plural(accounts.length, "account")}, ${enabled === accounts.length ? "all active" : `${enabled} active`}.`,
+        pending ? `${pending === 1 ? "One person" : `${pending} people`} must still set a password at first sign-in.` : "Everyone who can sign in has set their own password."));
       mount(document.querySelector("#accounts")!, html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Accounts that can sign in to the staff workspace</caption>
         <thead><tr><th scope="col">Account</th><th scope="col">Role</th><th scope="col">Status</th><th scope="col">Last sign-in</th><th scope="col" class="col-qty">Sessions</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
@@ -77,10 +84,11 @@ export async function staffAccounts(): Promise<void> {
           <td><span class="tags">${row.active ? html`<span class="tag tag--ok">Active</span>` : html`<span class="tag tag--bad">Disabled</span>`}${row.mustChangePassword ? html`<span class="tag tag--warn">Must set password</span>` : ""}</span></td>
           <td>${row.lastLoginAt ? formatDateTime(row.lastLoginAt) : html`<span class="muted">Never</span>`}</td>
           <td class="col-qty">${row.openSessions}</td>
-          <td class="col-actions">${canManage(session!, row) && row.id !== session!.id ? html`<button type="button" class="button button--secondary button--sm" data-manage="${row.id}">Manage</button>` : row.id === session!.id ? html`<a class="text-link" href="/staff/account" data-route>My account</a>` : html`<span class="muted">Owner only</span>`}</td>
+          <td class="col-actions">${canManage(session!, row) && row.id !== session!.id ? html`<button type="button" class="button button--secondary button--sm" data-manage="${row.id}">Manage</button>` : row.id === session!.id ? html`<a class="button button--secondary button--sm" href="/staff/account" data-route>My account</a>` : html`<span class="muted">Owner only</span>`}</td>
         </tr>`)}</tbody></table></div>`);
     } catch (error) {
       if (!onPage()) return;
+      mount(document.querySelector("#staff-verdict")!, verdict("warn", "The accounts could not be read.", failure(error)));
       mount(document.querySelector("#accounts")!, emptyState("Accounts could not be loaded", failure(error), "", "error", 3));
     }
   }

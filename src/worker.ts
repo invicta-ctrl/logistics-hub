@@ -23,14 +23,14 @@ import { createLocation, deleteLocation, locationList, moveItems, updateLocation
 import { openUnitAction } from "./open-units";
 import { InputError, audit, catalogRevision, createItem, historyCursor, itemDetail, itemHistory, parseItemInput, parseStockSettings, publicCatalog, recordMovement, setAliases, staffInventory, updateItem, mergeItem, requireCurrentItem } from "./inventory";
 import { createSession, hashPassword, readCookie, verifyPassword, verifySession } from "./session";
-import { closeLoan, createLoan, loanPhoto, loansOverview, officeDay } from "./loans";
+import { closeLoan, createLoan, loanPhoto, loanThumb, loansOverview, officeDay, saveLoanThumb } from "./loans";
 import { eraseOldDetails, retentionPreview } from "./retention";
 import { selfServiceState, setSelfService } from "./settings";
 import { systemStatus } from "./system-status";
 import { linkedPerson } from "./staff-directory";
 import { staffDirectory } from "./staff-directory-routes";
 import { openReorder, stockOverview, updateReorder } from "./stock";
-import { heldPhoto, networkOf, readBatch, resolveReview, reviewDecisions, selfServiceCatalog, selfServiceReview, syncEvents } from "./self-service";
+import { heldPhoto, networkOf, readBatch, resolveReview, reviewDecisions, selfServiceCatalog, selfServiceRecords, selfServiceReview, syncEvents } from "./self-service";
 
 export type Env = {
   DB: D1Database;
@@ -102,7 +102,7 @@ const ITEM_ID = /^ITM-[A-Za-z0-9-]{1,24}$/;
 const MEDIA_PATH = /^\/api\/staff\/media\/([0-9a-f-]{36})\/([a-z]{1,10})$/;
 /** Only sanitized selected-crop derivatives are public; the uncropped display/full cutout remain staff-only. */
 const PUBLIC_THUMB_PATH = /^\/api\/public\/media\/([0-9a-f-]{36})\/(thumb|detail)$/;
-const LOAN_PATH = /^\/api\/staff\/loans\/(LN-[A-Za-z0-9-]{1,60})\/(return|photo|review)$/;
+const LOAN_PATH = /^\/api\/staff\/loans\/(LN-[A-Za-z0-9-]{1,60})\/(return|photo|thumb|review)$/;
 const REORDER_PATH = /^\/api\/staff\/reorders\/(RO-[A-Za-z0-9-]{1,60})$/;
 const REVIEW_PATH = /^\/api\/staff\/self-service\/([0-9a-f-]{36})\/(resolve|photo|identity)$/;
 /** A sync carries at most a few compressed photos; anything larger is not from the app. */
@@ -515,6 +515,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   if (path === "/api/staff/stock" && method === "GET") return revisioned(request, env.DB, () => stockOverview(env.DB), hourSalt());
   if (path === "/api/staff/loans" && method === "GET") return revisioned(request, env.DB, () => loansOverview(env.DB));
   if (path === "/api/staff/self-service" && method === "GET") return revisioned(request, env.DB, () => selfServiceReview(env.DB));
+  if (path === "/api/staff/self-service/records" && method === "GET") return json(await selfServiceRecords(env.DB, url.searchParams.get("cursor")), 200, { "cache-control": "private, no-store" });
   if (path === "/api/staff/activity" && method === "GET") return activity(request, env.DB, account, url);
   if (path === "/api/staff/activity/export" && method === "POST") return activityExport(env.DB, account, url);
   if (path === "/api/staff/reorders" && method === "POST") return json(await openReorder(env.DB, account, await body()), 201);
@@ -525,6 +526,8 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   const loan = LOAN_PATH.exec(path);
   if (loan?.[2] === "return" && method === "POST") return json(await closeLoan(env.DB, account, loan[1]!, await body()));
   if (loan?.[2] === "photo" && method === "GET") return loanPhoto(env.DB, env.EVIDENCE, loan[1]!);
+  if (loan?.[2] === "thumb" && method === "GET") return loanThumb(env.DB, env.EVIDENCE, loan[1]!);
+  if (loan?.[2] === "thumb" && method === "PUT") return saveLoanThumb(env.DB, env.EVIDENCE, loan[1]!, request);
   if (loan?.[2] === "review" && method === "POST") return json(await reviewReturn(env.DB, account, loan[1]!));
   if (path === "/api/staff/attention" && method === "GET") return revisioned(request, env.DB, () => attention(env.DB), hourSalt());
   const keeping = KEEP_BOTH_PATH.exec(path);
@@ -610,7 +613,7 @@ async function staffApi(request: Request, env: Env, url: URL, ctx?: ExecutionCon
   const relation = RELATION_PATH.exec(path);
   if (relation && !relation[2] && method === "POST") return json(await linkItems(env.DB, account, relation[1]!, await body()), 201);
   if (relation?.[2] && method === "DELETE") return json(await unlinkItems(env.DB, account, relation[1]!, relation[2]));
-  const known = match || keeping || relation || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/attention", "/api/staff/attention/summary", "/api/staff/home", "/api/staff/home/insights", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/catalogue/photo-name", "/api/staff/locations", "/api/staff/search", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
+  const known = match || keeping || relation || kit || kitMedia || template || session || media || reorder || loan || review || place || picture || resolving || ["/api/staff/session", "/api/staff/inventory", "/api/staff/stock", "/api/staff/loans", "/api/staff/self-service", "/api/staff/self-service/records", "/api/staff/activity", "/api/staff/activity/export", "/api/staff/reorders", "/api/staff/attention", "/api/staff/attention/summary", "/api/staff/home", "/api/staff/home/insights", "/api/staff/items", "/api/staff/items/bulk", "/api/staff/catalogue", "/api/staff/catalogue/offline", "/api/staff/catalogue/snapshot", "/api/staff/catalogue/sessions", "/api/staff/catalogue/photo-name", "/api/staff/locations", "/api/staff/search", "/api/staff/kits", "/api/staff/kit-recent", "/api/staff/kit-templates", "/api/staff/me", "/api/staff/me/password", "/api/staff/me/sessions/revoke", "/api/staff/me/recovery-key"].includes(path);
   return json({ error: known ? "Method not allowed." : "Not found." }, known ? 405 : 404);
 }
 

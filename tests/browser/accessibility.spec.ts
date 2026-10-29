@@ -300,7 +300,7 @@ test.describe("Administration", () => {
     const nav = page.getByRole("navigation", { name: "Administration" });
     await expect(nav.getByRole("link")).toHaveText(["System", "Self-Service", "Catalog", "Staff", "Accountability"]);
     await expect(nav.locator("[aria-current]")).toHaveText("Self-Service");
-    await page.getByRole("button", { name: "Close for maintenance" }).click();
+    await page.getByRole("button", { name: "Change Self-Service on phones" }).click();
     const dialog = page.getByRole("dialog", { name: "Close Self-Service for maintenance?" });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();

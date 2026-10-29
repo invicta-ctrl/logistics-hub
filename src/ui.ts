@@ -335,6 +335,11 @@ export const formatDate = (isoDay: string): string => dateOnly.format(new Date(`
 /* ---------- Motion ---------- */
 
 export const reducedMotion = (): boolean => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+/**
+ * The one spring (V1.16.7, slice 3): a settle of under 2% with no visible bounce, shared by the rail's lit plate, its folds, the section
+ * bar's marker, sheets and page moves. The same curve is the CSS `--spring` (styles.css).
+ */
+export const SPRING = "linear(0, .009, .035 2.1%, .141 4.4%, .723 12.9%, .938 16.7%, 1.017 20.9%, 1.016 24.4%, 1.003 32.4%, .999 41.7%, 1)";
 
 /** Rolls a number to `to` (from `from`, or its current text), so a change is seen rather than jumped. */
 export function animateNumber(element: Element | null, to: number, from = Number(element?.textContent?.replace(/,/g, ""))): void {

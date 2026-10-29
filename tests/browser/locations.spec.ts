@@ -460,7 +460,7 @@ test.describe("Self-Service review: reports from phones", () => {
       await page.setViewportSize(viewport);
       await page.goto("/staff/self-service");
       await expect(page.locator("#ss-summary")).toContainText("2 need attention");
-      await expect(page.getByRole("button", { name: /Needs attention\s*2/ })).toBeVisible();
+      await expect(page.getByRole("button", { name: /Overview\s*2/ })).toBeVisible();
       const cards = page.locator(".review-card--report");
       await expect(cards).toHaveCount(2);
       await expect(cards.nth(0)).toContainText("I can’t find it");

@@ -1,6 +1,6 @@
 import type { KnowledgeProposal, ReviewStats } from "./ai-review-types";
 import "./admin.css";
-import { adminPage } from "./admin-frame";
+import { adminPage, decisions, verdict } from "./admin-frame";
 import { BEHAVIOUR_LABELS } from "./catalog-policy";
 import { KNOWLEDGE, KNOWLEDGE_VERSION } from "./item-knowledge";
 import type { SessionInfo } from "./catalogue-store";
@@ -25,39 +25,41 @@ export async function catalogSettings(): Promise<void> {
     title: "Catalog",
     lede: "Cataloguing, how complete the catalog is, the other names people search by, and the hints that come with the app.",
     body: () => html`
-    <section class="admin-block admin-block--first admin-cataloguing" aria-labelledby="cataloguing-title">
-      <h2 id="cataloguing-title" class="section-title">Cataloguing</h2>
+    <div id="catalog-verdict">${verdict("ok", "Checking how complete the catalog is…")}</div>
+    <div id="catalog-decide"></div>
+    <section class="admin-band admin-band--glance" aria-labelledby="coverage-title">
+      <h2 id="coverage-title" class="band-title">At a glance</h2>
+      <div id="coverage" aria-busy="true"><div class="skeleton skeleton--block skeleton--coverage" aria-hidden="true"></div></div>
+    </section>
+    <section class="admin-block settings-group admin-cataloguing" aria-labelledby="cataloguing-title">
+      <div class="admin-block__head"><h2 id="cataloguing-title" class="section-title">Cataloguing</h2></div>
       <p>Walk a shelf and add what is on it, one item after another. The place is part of the sheet, so you can start straight away and change it as you move along.</p>
       <div class="admin-cataloguing__go"><button type="button" class="button button--primary button--lg" id="catalog-start">${icon("camera")}<span>Start cataloguing</span></button><p class="muted" id="catalog-open" aria-live="polite"></p></div>
       <p class="admin-cataloguing__app">${icon("install")}<span>Staff catalogue in the installed Catalog app, which also works where there's no signal. <a href="/staff/catalogue" data-route>Install the Catalog app</a></span></p>
     </section>
-    <section class="admin-block" aria-labelledby="coverage-title">
-      <h2 id="coverage-title" class="section-title">Classification</h2>
-      <div id="coverage" aria-busy="true"><div class="skeleton skeleton--block skeleton--coverage" aria-hidden="true"></div></div>
-    </section>
-    <section class="admin-block" aria-labelledby="names-title">
-      <h2 id="names-title" class="section-title">Other names</h2>
+    <section class="admin-block settings-group" aria-labelledby="names-title">
+      <div class="admin-block__head"><h2 id="names-title" class="section-title">Other names</h2></div>
       <p>People find an item by any of its other names in search and while cataloguing. Add the names staff and borrowers actually use.</p>
       <div class="field admin-search"><label for="names-search">Find an item</label><input id="names-search" type="search" autocomplete="off" maxlength="80" placeholder="Name, other name or ID" /></div>
       <div id="names" aria-live="polite"></div>
     </section>
-    <section class="admin-block" aria-labelledby="kb-title">
-      <h2 id="kb-title" class="section-title">Built-in hints</h2>
+    <section class="admin-block settings-group" aria-labelledby="kb-title">
+      <div class="admin-block__head"><h2 id="kb-title" class="section-title">Built-in hints</h2></div>
       <p>When a name contains one of these words, cataloguing suggests what the hint says and shows why. The list ships with the app (version ${KNOWLEDGE_VERSION}, ${plural(KNOWLEDGE.length, "hint")}) and is read-only here; it changes with the app.</p>
       <details class="hint-details"><summary>Show all ${plural(KNOWLEDGE.length, "hint")}</summary>
       <ul class="hint-list">${KNOWLEDGE.map((entry) => html`<li class="hint-row">
         <p class="hint-row__words"><span class="cell-strong">${entry.keywords.join(", ")}</span> <span class="muted">${kindLabel[entry.kind]}</span></p>
         <p class="hint-row__says">${[entry.behaviour && BEHAVIOUR_LABELS[entry.behaviour], entry.unit && `counted by the ${entry.unit}`, entry.category && categoryName(entry.category)].filter(Boolean).join(" · ") || "Nothing on its own"}<span class="muted"> · ${entry.note}</span></p></li>`)}</ul></details>
     </section>
-    <section class="admin-block" aria-labelledby="ai-title">
-      <h2 id="ai-title" class="section-title">AI review and reviewed corrections</h2>
+    <section class="admin-block settings-group" aria-labelledby="ai-title">
+      <div class="admin-block__head"><h2 id="ai-title" class="section-title">AI review and reviewed corrections</h2></div>
       <p>Staff can Keep, Reject or Correct a review-only suggestion in Add items. Kept guesses never become training evidence. AI availability and today's allowance are shown in <a href="/staff/admin" data-route>System</a>.</p>
       <p>Proposals use the last 200 catalogue audit events. Approval records a request for code review; built-in hints change only after a knowledge version update and fixture tests.</p>
       <div id="ai-review-outcomes"></div>
       <div id="ai-proposals" aria-live="polite"></div>
     </section>
-    <section class="admin-block" aria-labelledby="elsewhere-title">
-      <h2 id="elsewhere-title" class="section-title">Looked after elsewhere</h2>
+    <section class="admin-block settings-group" aria-labelledby="elsewhere-title">
+      <div class="admin-block__head"><h2 id="elsewhere-title" class="section-title">Looked after elsewhere</h2></div>
       <p>Places and kits are looked after on their own pages: <a href="/staff/locations" data-route>Places</a> (where checking a place starts) and <a href="/staff/kits" data-route>Kits</a>.</p>
     </section>
     <dialog class="sheet" id="sheet" aria-labelledby="sheet-title"></dialog>
@@ -171,14 +173,28 @@ export async function catalogSettings(): Promise<void> {
     try {
       const data = await api<Coverage>("/api/staff/admin/catalog");
       const classified = data.active - data.unclassified;
+      if (!active) return;
+      // The verdict and the one decision come from the same figures (V1.16.7): nothing is said that the Worker did not count.
+      mount(document.querySelector("#catalog-verdict")!, !data.active
+        ? verdict("ok", "The catalog has no active items yet.", "Start cataloguing to add what is on the shelves.")
+        : data.unclassified
+          ? verdict("warn", `${plural(data.unclassified, "active item")} ${data.unclassified === 1 ? "is" : "are"} not classified yet.`, `${classified.toLocaleString()} of ${data.active.toLocaleString()} are classified (${Math.round((classified / data.active) * 100)}%).`)
+          : verdict("ok", "Every active item is classified.", `${plural(data.active, "active item")} in the catalog.`));
+      mount(document.querySelector("#catalog-decide")!, decisions(data.unclassified ? [{
+        what: `${plural(data.unclassified, "unclassified item")}`,
+        detail: "They stay out of every public list until someone chooses Borrow, Take or Use.",
+        action: html`<a class="button button--secondary button--sm" href="/staff/items?type=NEEDS_REVIEW" data-route>Show them in Items</a>`
+      }] : []));
       mount(target, html`<dl class="stat-strip">
-          ${stat("Active items", data.active, "in the catalog")}
+          ${stat("Active items", data.active, html`<a class="text-link" href="/staff/items" data-route>in the catalog</a>`)}
           ${stat("Classified", classified, data.active ? `${Math.round((classified / data.active) * 100)}% of active items` : "none yet")}
           ${stat("Unclassified", data.unclassified, data.unclassified ? html`<a class="text-link" href="/staff/items?type=NEEDS_REVIEW" data-route>Show them in Items</a>` : "none", data.unclassified > 0)}
           ${stat("Classified at capture", data.capturedClassified, `of ${plural(data.captured, "item")} added in cataloguing sessions`)}
         </dl>
         <p class="admin-source">Unclassified items stay out of every public list until someone chooses Borrow, Take or Use. They also appear under <a href="/staff/attention" data-route>Attention</a>. The app does not record whether a classification started from a suggestion, so no figure for that is shown.</p>`);
     } catch (error) {
+      if (!active) return;
+      mount(document.querySelector("#catalog-verdict")!, verdict("warn", "How complete the catalog is could not be read.", failure(error)));
       mount(target, emptyState("Classification could not be loaded", failure(error), "", "error", 3));
     }
     target.setAttribute("aria-busy", "false");

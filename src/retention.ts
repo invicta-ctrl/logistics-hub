@@ -5,6 +5,8 @@ import { BUMP_REVISION, audit } from "./inventory";
 import type { Account } from "./accounts";
 
 export const ERASED = "[removed]";
+/** A loan photo's thumbnail sits beside it under this key (loans.ts loanThumb), so whatever deletes the photo deletes it too. */
+export const thumbKey = (photoKey: string) => `${photoKey}.thumb`;
 /** A loan's identity goes two years after it closed; a settled phone record's after one year. */
 export const LOAN_DAYS = 730;
 export const PHONE_DAYS = 365;
@@ -61,7 +63,8 @@ export async function eraseOldDetails(db: D1Database, bucket: R2Bucket, actor: A
       UNION SELECT photo_key FROM self_service_events WHERE photo_key IN ${inList("?1")} AND id NOT IN ${inList("?3")}`)
     .bind(JSON.stringify(keys), loanIds, phoneIds).all<{ k: string }>()).results.map((row) => row.k)) : []);
   const doomed = keys.filter((key) => !kept.has(key));
-  for (const key of doomed) await bucket.delete(key);
+  // A loan photo's thumbnail goes with it.
+  for (const key of doomed) { await bucket.delete(key); await bucket.delete(thumbKey(key)); }
 
   const auditId = crypto.randomUUID();
   // ?1/?2 cutoffs, ?3/?4 pinned ids, ?5 deleted keys. The first statement counts exactly the rows the next two change.

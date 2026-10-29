@@ -172,17 +172,18 @@ test.describe("a durable write is acknowledged at once and confirmed only after 
     const state = async () => (await (await page.request.get("/api/staff/session")).json()).selfServiceClosed as boolean;
     try {
       await page.goto("/staff/admin/self-service");
-      await page.getByRole("button", { name: "Close for maintenance" }).click();
+      await page.getByRole("button", { name: "Change Self-Service on phones" }).click();
       const hold = await holdWrites(page, (url, method) => url.pathname === "/api/staff/admin/self-service" && method === "PATCH");
       const confirm = page.getByRole("dialog", { name: "Close Self-Service for maintenance?" }).getByRole("button", { name: "Close for maintenance" });
       await confirm.click();
-      // The dialog is gone, so the page's own button shows that the change is under way.
-      await expect(page.locator("#ss-toggle"), "the switch reacts at once").toBeDisabled({ timeout: 400 });
-      await expect(page.locator("#ss-toggle")).toHaveAttribute("aria-busy", "true");
+      // V1.16.7: the sheet stays until the Worker answers, and its confirm button shows that the change is under way.
+      await expect(confirm, "the confirmation reacts at once").toBeDisabled({ timeout: 400 });
+      await expect(confirm).toHaveAttribute("aria-busy", "true");
       await expect.poll(hold.held).toBe(1);
       await noSuccess(page);
       expect(await state(), "Self-Service is still open").toBe(false);
       hold.release();
+      await expect(page.getByRole("dialog", { name: "Close Self-Service for maintenance?" })).toHaveCount(0);
       await expect(page.locator("#toasts .toast--ok")).toContainText("Self-Service is closed for maintenance.");
       expect(await state()).toBe(true);
     } finally {

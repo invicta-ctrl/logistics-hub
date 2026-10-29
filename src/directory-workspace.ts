@@ -6,7 +6,7 @@ import { type Card, type View, cardForm, cardSource, fillTiles, forgetScans, imp
 import { bindStudentId, studentIdProblem } from "./student-id-field";
 import { formEdits } from "./unsaved";
 import { type Access, type Role, type Session, accessLabel, initials, loadSession, shell } from "./staff-shell";
-import { adminTabs } from "./admin-frame";
+import { adminTabs, placeMarker } from "./admin-frame";
 import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatQuantity, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
 
 /*
@@ -133,6 +133,7 @@ export async function staffDirectory(): Promise<void> {
         </ul></nav>
         <div class="dir-results"><div data-derive></div><p class="dir-summary" role="status" data-summary></p><div data-results>${people ? "" : html`<ul class="card-wall" aria-hidden="true">${Array.from({ length: 8 }, () => html`<li><span class="skeleton dir-card__skeleton"></span></li>`)}</ul>`}</div></div>
       </div>`);
+    placeMarker();
     const search = root.querySelector<HTMLInputElement>("#dir-search")!;
     // On narrow screens the departments are one scrolling row: keep the chosen one in sight.
     root.querySelector(".dir-index [aria-current]")?.scrollIntoView({ block: "nearest", inline: "center" });
