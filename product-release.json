@@ -1,12 +1,9 @@
 {
-  "version": "V1.16.4",
-  "sourceCommit": "e9f6a85889c1fe12d35c71eadc7c9169a390cdb2",
-  "record": "docs/road-to-v2/releases/v1.16.4.md",
+  "version": "V1.16.5",
+  "sourceCommit": "156edab92f17e678bcdeebad02c4512af16271d4",
+  "record": "docs/road-to-v2/releases/v1.16.5.md",
   "changes": [
-    "Moving between staff pages is instant, and Items now holds All items, Low & out of stock, Stock & movements, Pantry, Locations and Kits.",
-    "Home shows what needs doing now or soon and what can wait; Insights loads only when opened.",
-    "An item's sheet holds its stock settings, Add to restock and Add to kit, older history on request and a sharper picture.",
-    "The desk and phones ask a borrower for the same details, an 8-digit Student ID included, and numbers are read exactly as typed.",
-    "Forms ask before unsaved changes are lost, and only while something really changed."
+    "Moving between Administration's sections no longer shows \"Something went wrong\".",
+    "Pages switch without the rail, title or section tabs flashing; only the page's own content reloads."
   ]
 }
