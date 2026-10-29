@@ -273,6 +273,36 @@ describe("one check after an offline capture syncs", () => {
     expect((await as(staff, `/api/staff/attention/possible-duplicate/${mine}`, "POST")).status).toBe(409);
   });
 
+  // Open pages keep Attention's tags and ask with them on every refresh (`live()` in ui.ts): a finding raised or settled must change them.
+  const held = (path: string, etag: string) => call(path, { headers: { origin, cookie: staff, "if-none-match": etag } });
+
+  it("Keep both changes the Attention and bell tags, so a page holding them sees the card go", async () => {
+    const mine = await capture("Black tool");
+    await upload(mine, true);
+    const [list, bell] = await Promise.all(["/api/staff/attention", "/api/staff/attention/summary"].map(async (path) => (await as(staff, path)).headers.get("etag")!));
+    expect((await held("/api/staff/attention", list!)).status).toBe(304);
+    expect((await as(staff, `/api/staff/attention/possible-duplicate/${mine}`, "POST")).status).toBe(200);
+    const after = await held("/api/staff/attention", list!);
+    expect(after.status).toBe(200);
+    expect(((await after.json()) as { entries: Array<{ reason: string }> }).entries.filter((entry) => entry.reason === "POSSIBLE_DUPLICATE")).toEqual([]);
+    expect((await held("/api/staff/attention/summary", bell!)).status).toBe(200);
+  });
+
+  it("a possible duplicate found after the photo was saved changes the Attention tag a page already holds", async () => {
+    // The page refreshes while the check is still waiting on the model, after the photo itself was saved.
+    let before = "";
+    answer = async () => {
+      before = (await as(staff, "/api/staff/attention")).headers.get("etag")!;
+      return chat('{"name":"hammer","brand":null,"model":null,"packaging":null}');
+    };
+    const mine = await capture("Black tool");
+    await upload(mine, true);
+    expect(before).not.toBe("");
+    const after = await held("/api/staff/attention", before);
+    expect(after.status).toBe(200);
+    expect(((await after.json()) as { entries: Array<{ reason: string; keepBoth?: { itemId: string } }> }).entries.filter((entry) => entry.reason === "POSSIBLE_DUPLICATE").map((entry) => entry.keepBoth?.itemId)).toEqual([mine]);
+  });
+
   it("settles by itself when either item is made inactive, the ordinary way to retire a duplicate", async () => {
     const mine = await capture("Black tool");
     await upload(mine, true);

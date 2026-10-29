@@ -2,7 +2,7 @@
 // local owner console both reach these through the same authenticated API, so
 // every rule below is enforced once, on the server.
 import { DEPARTMENT_CODES, type DepartmentCode } from "./directory-policy";
-import { InputError, audit } from "./inventory";
+import { BUMP_REVISION, InputError, audit } from "./inventory";
 import { hashPassword, verifyPassword } from "./session";
 
 export const ROLES = ["STAFF", "ADMIN", "OWNER"] as const;
@@ -247,6 +247,8 @@ export async function updateAccount(db: D1Database, actor: Account, id: string, 
   const sensitive = "username" in detail || "role" in detail || "access" in detail || detail.active !== undefined;
   await db.batch([
     db.prepare(`UPDATE staff_accounts SET ${[...changes.map(([column]) => `${column} = ?`), "updated_at = ?"].join(", ")} WHERE id = ?`).bind(...changes.map(([, value]) => value), new Date().toISOString(), id),
+    // Loans, stock and kits show staff by name, under the catalog revision's tag.
+    ...(detail.displayName ? [db.prepare(BUMP_REVISION)] : []),
     ...(groupChanged ? [setGroup(db, actor.accountId, id, next!.role === "STAFF" ? next!.group ?? "DoL" : null)] : []),
     ...(sensitive ? [revokeSessions(db, id)] : []),
     // A recovery key belongs to the owner role; losing the role ends it for good.
@@ -302,6 +304,8 @@ export async function updateSelf(db: D1Database, account: Account, input: unknow
   if (!changes.length) return { changed: 0 };
   await db.batch([
     db.prepare(`UPDATE staff_accounts SET ${changes.map(([column]) => `${column} = ?`).join(", ")}, updated_at = ? WHERE id = ?`).bind(...changes.map(([, value]) => value), new Date().toISOString(), account.accountId),
+    // A new name reaches the lists that show it, as in `updateAccount`.
+    ...(detail.displayName ? [db.prepare(BUMP_REVISION)] : []),
     // A new username ends every other session; this one stays signed in.
     ...(detail.username ? [revokeSessions(db, account.accountId, account.sessionId)] : []),
     audit(db, account.accountId, "ACCOUNT_UPDATED", "ACCOUNT", account.accountId, { self: true, ...detail })

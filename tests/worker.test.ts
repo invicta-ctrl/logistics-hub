@@ -522,4 +522,28 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
     await close(cookie, id, { outcome: "RETURNED" });
     expect((await call("/api/staff/loans", { headers: { cookie, "if-none-match": etag } })).status).toBe(200);
   });
+
+  it("a renamed account changes the loans tag, so a page holding it shows the new name", async () => {
+    const cookie = await signIn();
+    const itemId = await lendable(cookie, 2);
+    expect((await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "20000001" })).status).toBe(201);
+    const tag = async () => (await staff(cookie, "/api/staff/loans")).headers.get("etag")!;
+    const lentBy = async (etag: string) => {
+      const response = await call("/api/staff/loans", { headers: { cookie, "if-none-match": etag } });
+      return response.status === 304 ? 304 : (await response.json() as Overview).open.find((loan) => loan.itemId === itemId)?.createdBy;
+    };
+    // In My account.
+    let etag = await tag();
+    expect((await staff(cookie, "/api/staff/me", "PATCH", { displayName: "Staff Renamed" })).status).toBe(200);
+    expect(await lentBy(etag)).toBe("Staff Renamed");
+    // Saving the same name changes nothing, so the tag holds.
+    etag = await tag();
+    expect(await (await staff(cookie, "/api/staff/me", "PATCH", { displayName: "Staff Renamed" })).json()).toEqual({ changed: 0 });
+    expect(await lentBy(etag)).toBe(304);
+    // By an owner in Administration.
+    sqlite.prepare("INSERT INTO staff_accounts(id, username, display_name, password_hash, role) VALUES('ACC-O', 'owner.one', 'Owner One', ?, 'OWNER')").run(await hashPassword("correct horse battery"));
+    const owner = (await call("/api/staff/login", { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ username: "owner.one", password: "correct horse battery" }) })).headers.get("set-cookie")!.split(";")[0]!;
+    expect((await staff(owner, "/api/staff/admin/accounts/ACC-1", "PATCH", { displayName: "Staff Renamed Again" })).status).toBe(200);
+    expect(await lentBy(etag)).toBe("Staff Renamed Again");
+  });
 });

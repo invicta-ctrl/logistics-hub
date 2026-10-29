@@ -1,7 +1,7 @@
 import { formatItemName } from "./catalog-policy";
 import type { Account } from "./accounts";
 import { possibleDuplicates, type Known as DuplicateKnown } from "./duplicates";
-import { type Actor, InputError, audit } from "./inventory";
+import { type Actor, BUMP_REVISION, InputError, audit } from "./inventory";
 import type { PhotoReading, PhotoOutcome } from "./catalog-draft";
 import { key } from "./item-media";
 
@@ -290,8 +290,12 @@ export async function recheckCapturedPhoto(db: D1Database, ai: AiRunner | undefi
   if (!current || current.status === "INACTIVE") return "SILENT";
   const match = possibleDuplicates({ name, photoName: name }, others).find((each) => !seen.has(each.id));
   if (!match) return "SILENT";
-  await db.prepare("INSERT OR IGNORE INTO system_settings(key, value, updated_at) VALUES(?1, ?2, ?3)")
-    .bind(FINDING_PREFIX + itemId, JSON.stringify({ with: match.id, seen: name }), new Date(now).toISOString()).run();
+  // A new finding is a new Attention card: the revision moves with it, so pages holding Attention's tag refetch.
+  await db.batch([
+    db.prepare("INSERT OR IGNORE INTO system_settings(key, value, updated_at) VALUES(?1, ?2, ?3)")
+      .bind(FINDING_PREFIX + itemId, JSON.stringify({ with: match.id, seen: name }), new Date(now).toISOString()),
+    db.prepare(`${BUMP_REVISION} AND changes() > 0`)
+  ]);
   return "FOUND";
 }
 
@@ -324,7 +328,9 @@ export async function keepBoth(db: D1Database, actor: Actor, itemId: string): Pr
   const other = (JSON.parse(finding) as { with?: string }).with ?? null;
   await db.batch([
     db.prepare("DELETE FROM system_settings WHERE key = ?").bind(FINDING_PREFIX + itemId),
-    audit(db, actor.accountId, "POSSIBLE_DUPLICATE_KEPT", "ITEM", itemId, { other }, true)
+    audit(db, actor.accountId, "POSSIBLE_DUPLICATE_KEPT", "ITEM", itemId, { other }, true),
+    // The card leaves Attention, so its tag must change too.
+    db.prepare(`${BUMP_REVISION} AND changes() > 0`)
   ]);
   return { ok: true };
 }
