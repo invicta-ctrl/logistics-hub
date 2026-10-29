@@ -1,9 +1,10 @@
 {
-  "version": "V1.16.5",
-  "sourceCommit": "156edab92f17e678bcdeebad02c4512af16271d4",
-  "record": "docs/road-to-v2/releases/v1.16.5.md",
+  "version": "V1.16.6",
+  "sourceCommit": "8254a53e673481bdd84d8e3c03b71eb8f88557eb",
+  "record": "docs/road-to-v2/releases/v1.16.6.md",
   "changes": [
-    "Moving between Administration's sections no longer shows \"Something went wrong\".",
-    "Pages switch without the rail, title or section tabs flashing; only the page's own content reloads."
+    "After Keep both, the possible-duplicate card and its count leave Attention and the bell at once.",
+    "A possible duplicate found after a photo is saved shows on Attention's next refresh.",
+    "A staff member's new name shows straight away on loans, restock entries and kits."
   ]
 }
