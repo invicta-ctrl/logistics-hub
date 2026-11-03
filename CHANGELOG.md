@@ -4,7 +4,7 @@ A concise index of what changed in each product version/revision and accepted sp
 
 ## Unreleased — documentation and governance
 
-- **2026-11-04 · Governance · Changed:** Added a common changelog obligation for Codex, Claude and other agents in [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md). The changelog must enumerate shipped changes per verified version/revision and record accepted specification amendments separately. **Why:** make change history easier to audit across agents. **Impact:** documentation/process only; no application change, deployment or product version increment. **Status:** pending integration on `docs/changelog-governance-20261104`.
+- **2026-11-04 · Governance · Changed:** Added a common changelog obligation for Codex, Claude and other agents in [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md). The changelog must enumerate shipped changes per verified version/revision and record accepted specification amendments separately. **Why:** make change history easier to audit across agents. **Impact:** documentation/process only; no application change, deployment or product version increment. **Status:** documentation only; it creates no product release.
 
 ## Specification changes
 
