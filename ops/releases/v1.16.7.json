@@ -1,0 +1,65 @@
+{
+  "release": "v1.16.7",
+  "title": "Item and place sheets; durable loan-thumbnail retention",
+  "branch": "slice/v1.16.7-item-and-place-sheets",
+  "record": "docs/road-to-v2/releases/v1.16.7.md",
+  "target": {
+    "worker": "logistics-hub",
+    "d1": {
+      "binding": "DB",
+      "name": "logistics-hub",
+      "id": "3ffd8edf-a176-4f63-8b7c-5215d11c98d8"
+    },
+    "r2": {
+      "existing": [
+        {
+          "binding": "EVIDENCE",
+          "name": "logistics-hub-evidence"
+        },
+        {
+          "binding": "CATALOG_MEDIA",
+          "name": "logistics-hub-catalog-media"
+        },
+        {
+          "binding": "STAFF_IDS",
+          "name": "logistics-hub-staff-ids"
+        }
+      ],
+      "create": []
+    },
+    "forbidden": [
+      "hau-usc-logistics-production",
+      "hau-usc-logistics-staging"
+    ]
+  },
+  "migrations": {
+    "pending": [
+      {
+        "name": "0031_retention_photo_cleanup.sql",
+        "sha256": "fdbb5493d2aa83d0b3832e551f2b3b08a88fad00d43214261cd54922012f492f"
+      }
+    ]
+  },
+  "expect": {
+    "schemaAdded": [
+      "index:idx_retention_photo_cleanup_pending",
+      "index:sqlite_autoindex_retention_photo_cleanup_1",
+      "table:retention_photo_cleanup",
+      "trigger:retention_loan_photo_no_reuse_insert",
+      "trigger:retention_loan_photo_no_reuse_update",
+      "trigger:retention_phone_photo_no_reuse_insert",
+      "trigger:retention_phone_photo_no_reuse_update"
+    ],
+    "schemaChanged": [],
+    "tableRowsAfter": {
+      "retention_photo_cleanup": 0
+    },
+    "unchanged": [
+      "items",
+      "movements",
+      "onHand",
+      "loans",
+      "phoneEvents"
+    ]
+  }
+}
