@@ -57,6 +57,12 @@ When replacing code, remove the obsolete path after verification. Do not leave t
 
 Keep modules cohesive and readable. Optimize for a future agent understanding the change quickly, not for theoretical extensibility.
 
+## Scoped engineering and web-quality reference (documentation proposal, 2026-11-03)
+
+- Before qualifying an approved user-facing slice, consult `docs/WEB_QUALITY_RELEASE_GATES.md` for the 15 UX + 20 prelaunch observations. Record relevant PASS/FAIL/N/A/NOT RUN evidence in the **existing** active release/handoff; do not assume every marketing item applies to private app routes.
+- `docs/ENGINEERING_KNOWLEDGE_MAP.md` maps the 140 Backend/DSA/HLD/LLD/AI/DevOps/Security concepts. It is a study/review reference, **not** permission to add unused infrastructure, frameworks, architecture or work outside the accepted slice.
+- Active V1.16.7 custody, dirty worktree, owner-approved amendment and production gates remain untouched. The integration steward alone reconciles this documentation proposal into current `main` and any open writer lane; a GitHub branch does not automatically update a local worktree.
+
 ## Working rhythm
 
 - One bounded atomic change.
