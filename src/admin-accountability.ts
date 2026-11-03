@@ -54,7 +54,7 @@ export async function accountability(): Promise<void> {
     try {
       const due = await api<Due>("/api/staff/admin/retention");
       if (!onPage()) return false;
-      const none = !due.loans && !due.phoneRecords;
+      const none = !due.loans && !due.phoneRecords && !due.photos;
       status.textContent = none ? "Nothing is old enough to remove yet." : `Ready to remove: ${dueText(due)}.`;
       mount(document.querySelector("#ret-state")!, none ? stateTag("ok", "Nothing yet") : stateTag("warn", "Ready"));
       mount(document.querySelector("#ret-verdict")!, none
@@ -82,11 +82,12 @@ export async function accountability(): Promise<void> {
       danger: true,
       run: async () => {
         // One request erases a bounded number of rows; ask again while more are due.
-        for (let more = true; more;) {
+        for (let tries = 0, more = true; more; tries++) {
+          if (tries >= 40) throw new Error("Retention still has pending batches. Please run it again.");
           const batch = await api<{ loans: number; phoneRecords: number; more: boolean }>("/api/staff/admin/retention", { method: "POST" });
           total.loans += batch.loans;
           total.phoneRecords += batch.phoneRecords;
-          more = batch.more && batch.loans + batch.phoneRecords > 0;
+          more = batch.more;
         }
       }
     });

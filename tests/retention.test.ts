@@ -101,7 +101,17 @@ describe("retention: erasing who a settled record was", () => {
     expect(row("loans", "LN-NEW")).toMatchObject({ borrower_name: "Borrower LN-NEW", photo_key: "loans/LN-NEW" });
     expect(row("loans", "LN-OUT")).toMatchObject({ borrower_name: "Borrower LN-OUT", photo_key: "loans/LN-OUT" });
     for (const id of ["E-HELD", "E-OUTLOAN", "E-RECENT"]) expect(row("self_service_events", id).person_name).toBe(`Person ${id}`);
-    expect([...photos.keys()].sort()).toEqual(["held/E-HELD", "loans/LN-NEW", "loans/LN-OUT"]);
+    const erasedPhotoKeys = ["held/E-DISMISSED", "loans/LN-OLD", "loans/LN-USC"];
+    expect([...photos.keys()].sort()).toEqual([
+      ...erasedPhotoKeys.map((key) => `${key}.thumb`), "held/E-HELD", "loans/LN-NEW", "loans/LN-OUT"
+    ].sort());
+    for (const key of erasedPhotoKeys) {
+      expect(photos.get(`${key}.thumb`)).toEqual({
+        bytes: new Uint8Array(),
+        contentType: "application/octet-stream",
+        customMetadata: { retentionErased: "1" }
+      });
+    }
     // Stock, movements and loans are untouched; a second run finds nothing and writes nothing more.
     expect({ onHand: onHand(), movements: sqlite.prepare("SELECT COUNT(*) AS n FROM inventory_movements").get(), loans: sqlite.prepare("SELECT COUNT(*) AS n FROM loans").get() }).toEqual(stock);
     expect(await run()).toEqual({ loans: 0, phoneRecords: 0, photos: 0, more: false });

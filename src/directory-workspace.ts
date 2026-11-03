@@ -1,3 +1,4 @@
+import "./admin.css";
 import { ACCESS_HINT, type AccountEvent, accessChoices, accessTag, bindCopy, eventText, oneTime } from "./account-ui";
 import { DEPARTMENTS, DEPARTMENT_CODES, type DepartmentCode } from "./directory-policy";
 import { type Loan, loanRow, openReturn } from "./loan-form";

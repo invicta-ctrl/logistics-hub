@@ -61,7 +61,7 @@ function render(status: Status, owner: boolean): Html {
   const answering = (ok: boolean) => ok ? stateTag("ok", "Answering", true) : stateTag("bad", "Not answering");
   // What is waiting for someone: a check that failed (look, then check again) and Self-Service closed (reopened in its section).
   const waiting = [
-    ...issues.map((issue) => ({ what: issue, detail: "Checked just now. Check again once it has been looked at.", action: html`<button type="button" class="button button--secondary button--sm" data-check-again>Check again</button>` })),
+    ...issues.map((issue) => ({ what: issue, detail: "Checked just now. Check again once it has been looked at.", action: html`<button type="button" class="button button--secondary button--sm" data-check-again aria-label="Check again: ${issue}">Check again</button>` })),
     ...(status.selfService === "paused" ? [{ what: "Self-Service is closed for maintenance.", detail: "Phones show the maintenance screen and record nothing.", action: html`<a class="button button--secondary button--sm" href="/staff/admin/self-service" data-route>Reopen in Self-Service</a>` }] : [])
   ];
   const failed = !status.database.ok || status.storage.some((bucket) => !bucket.ok);

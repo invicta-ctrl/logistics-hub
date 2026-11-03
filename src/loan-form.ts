@@ -76,7 +76,7 @@ export function loanRow(loan: Loan, withItem = false, openable = false): Html {
   const days = daysOut(loan);
   const who = html`<strong>${loan.borrowerName}</strong>`;
   return html`<li class="loan-row ${isOverdue(loan) ? "is-overdue" : ""} ${openable ? "loan-row--open" : ""}" data-key="${loan.id}">
-    ${openable ? html`<span class="loan-thumb ${loan.hasPhoto === 0 ? "loan-thumb--none" : ""}" aria-hidden="true">${loan.hasPhoto === 0 ? "" : html`${icon("camera")}<img src="/api/staff/loans/${loan.id}/thumb" alt="" loading="lazy" decoding="async" data-loan-thumb="${loan.id}" />`}</span>` : ""}
+    ${openable ? html`<span class="loan-thumb ${loan.hasPhoto === 0 ? "loan-thumb--none" : ""}" aria-hidden="true">${loan.hasPhoto === 0 ? "" : html`${icon("camera")}<img src="/api/staff/loans/${loan.id}/thumb?v=2" alt="" loading="lazy" decoding="async" data-loan-thumb="${loan.id}" />`}</span>` : ""}
     <div class="loan-row__main">
       <p class="loan-row__who">${openable ? html`<button type="button" class="loan-row__open" data-open-loan="${loan.id}"><span class="visually-hidden">Open the loan to </span>${who}</button>` : who}${loan.studentId ? html` <span class="mono muted">${loan.studentId}</span>` : ""} ${purposeTag(loan.purpose)}</p>
       <p class="loan-row__what">${withItem ? html`<a class="row-link" href="/staff/items?item=${loan.itemId}" data-route>${loan.itemName}</a> · ` : ""}${loan.quantity} ${units(loan.quantity, loan.unit)}

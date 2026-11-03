@@ -5,7 +5,7 @@ import { memoryR2, migratedD1 } from "./d1-sqlite";
 
 /*
  * V1.16.7, workspace depth slice 2 (spec §4): a loan photo's thumbnail (saved once by a staff browser, kept beside the photo and
- * deleted with it), one loan's trail in Activity, and every Self-Service record page by page.
+ * erased with it), one loan's trail in Activity, and every Self-Service record page by page.
  */
 
 const origin = "https://hub.example.test";
@@ -60,7 +60,7 @@ describe("a loan photo's thumbnail", () => {
     const served = await call("staff", "/api/staff/loans/LN-A/thumb");
     expect(served.status).toBe(200);
     expect(served.headers.get("content-type")).toBe("image/jpeg");
-    expect(served.headers.get("cache-control")).toBe("private, max-age=86400");
+    expect(served.headers.get("cache-control")).toBe("private, no-store");
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(JPEG);
     // The full photo stays uncached, as before.
     expect((await call("staff", "/api/staff/loans/LN-A/photo")).headers.get("cache-control")).toBe("private, no-store");
@@ -85,14 +85,17 @@ describe("a loan photo's thumbnail", () => {
     expect(objects.has("loans/LN-A.thumb")).toBe(false);
   });
 
-  it("is deleted with its photo when the borrower's details are removed", async () => {
+  it("loses its image with its photo when the borrower's details are removed", async () => {
     loan("LN-OLD", { closedDaysAgo: 800 });
     expect((await putThumb("LN-OLD")).status).toBe(204);
     expect(objects.has("loans/LN-OLD.thumb")).toBe(true);
     const erased = await (await call("owner", "/api/staff/admin/retention", { method: "POST" })).json() as { loans: number; photos: number };
     expect(erased).toMatchObject({ loans: 1, photos: 1 });
     expect(objects.has("loans/LN-OLD")).toBe(false);
-    expect(objects.has("loans/LN-OLD.thumb")).toBe(false);
+    // The thumbnail key keeps a permanent zero-byte, non-image erasure marker (2026-11-03 durable-thumbnail amendment §3–4).
+    const marker = objects.get("loans/LN-OLD.thumb");
+    expect(marker?.bytes.byteLength).toBe(0);
+    expect(marker?.contentType).not.toMatch(/^image\//);
     expect((await call("staff", "/api/staff/loans/LN-OLD/thumb")).status).toBe(404);
     expect((await putThumb("LN-OLD")).status).toBe(409);
   });

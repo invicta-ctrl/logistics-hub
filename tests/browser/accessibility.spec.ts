@@ -246,6 +246,7 @@ test.describe("Administration", () => {
     await page.route("**/api/staff/admin/system", (route) => route.fulfill(json(current)));
     await page.goto("/staff/admin");
     await expect(page.locator(".product-version strong")).toHaveText("V1.15");
+    await expect(page.getByRole("button", { name: "Check again: Catalog pictures storage is not answering.", exact: true })).toBeVisible();
     const notes = ["Photo edits & thumbnails stay together.", "A second verified change."];
     current = { ...status, build: { ...status.build, commit: "c".repeat(40), product: { ...status.build.product, version: "V1.15.1", changes: notes } } };
     let release!: () => void;
@@ -258,9 +259,9 @@ test.describe("Administration", () => {
       else await route.fulfill(json(current));
     });
     try {
-      await page.getByRole("button", { name: "Check again" }).click();
+      await page.getByRole("button", { name: "Check again", exact: true }).click();
       await began;
-      await page.getByRole("button", { name: "Check again" }).click();
+      await page.getByRole("button", { name: "Check again", exact: true }).click();
       await expect(page.locator(".product-version strong")).toHaveText("V1.15.1");
       release();
       await page.waitForLoadState("networkidle");
@@ -269,15 +270,15 @@ test.describe("Administration", () => {
     await expect(page.locator(".release-notes li")).toHaveText(notes);
     const { product: _product, ...older } = status.build;
     current = { ...status, build: older };
-    await page.getByRole("button", { name: "Check again" }).click();
+    await page.getByRole("button", { name: "Check again", exact: true }).click();
     await expect(page.locator(".product-version strong")).toHaveText("Unknown");
     await expect(page.locator(".version-facts")).toContainText("0123456789ab");
     current = { ...status, build: null };
-    await page.getByRole("button", { name: "Check again" }).click();
+    await page.getByRole("button", { name: "Check again", exact: true }).click();
     await expect(page.locator(".product-version strong")).toHaveText("Unknown");
     await expect(page.locator(".release-notes li")).toHaveCount(0);
     current = status;
-    await page.getByRole("button", { name: "Check again" }).click();
+    await page.getByRole("button", { name: "Check again", exact: true }).click();
     await expect(page.locator(".product-version strong")).toHaveText("V1.15");
   });
 
@@ -298,7 +299,9 @@ test.describe("Administration", () => {
   test("the sections are one navigation with the current one marked, and a confirmation sheet names its title and focuses the safe choice", async ({ page }) => {
     await page.goto("/staff/admin/self-service");
     const nav = page.getByRole("navigation", { name: "Administration" });
-    await expect(nav.getByRole("link")).toHaveText(["System", "Self-Service", "Catalog", "Staff", "Accountability"]);
+    const sectionNames = ["System", "Self-Service", "Catalog", "Staff", "Accountability"];
+    await expect(nav.getByRole("link")).toHaveCount(sectionNames.length);
+    for (const [index, name] of sectionNames.entries()) await expect(nav.getByRole("link").nth(index)).toHaveAccessibleName(name);
     await expect(nav.locator("[aria-current]")).toHaveText("Self-Service");
     await page.getByRole("button", { name: "Change Self-Service on phones" }).click();
     const dialog = page.getByRole("dialog", { name: "Close Self-Service for maintenance?" });

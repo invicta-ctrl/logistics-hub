@@ -141,6 +141,16 @@ describe("R3 and R4: retention erases each record once and never deletes evidenc
     .reduce((sum, row) => ({ loans: sum.loans + row.loans, phoneRecords: sum.phoneRecords + row.phoneRecords, photos: sum.photos + row.photos }), { loans: 0, phoneRecords: 0, photos: 0 });
   const actor = { accountId: "ACC-owner", sessionId: "S", username: "owner", displayName: "Owner", role: "OWNER" as const, mustChangePassword: false };
   async function runUntilDone(d1: D1Database, bucket: R2Bucket) { for (let guard = 0; guard < 20; guard++) if (!(await eraseOldDetails(d1, bucket, actor)).more) return; throw new Error("did not finish"); }
+  function expectOnlyErasedMarkers(objects: ReturnType<typeof memoryR2>["objects"], originalKeys: string[]) {
+    expect([...objects.keys()].sort()).toEqual(originalKeys.map((key) => `${key}.thumb`).sort());
+    for (const key of originalKeys) {
+      expect(objects.get(`${key}.thumb`)).toEqual({
+        bytes: new Uint8Array(),
+        contentType: "application/octet-stream",
+        customMetadata: { retentionErased: "1" }
+      });
+    }
+  }
 
   // [the loan's state, closed days ago, is the phone record due, is the loan due]. A phone record tied to a loan still out is
   // never due (the accepted rule); the shared photo goes only when neither record keeps it.
@@ -161,6 +171,8 @@ describe("R3 and R4: retention erases each record once and never deletes evidenc
       expect(preview).toEqual({ loans: loanDue ? 1 : 0, phoneRecords: phoneDue ? 1 : 0, photos: kept ? 0 : 1 });
       await runUntilDone(d1, bucket);
       expect(objects.has(key)).toBe(kept);
+      if (kept) expect(objects.has(`${key}.thumb`)).toBe(false);
+      else expectOnlyErasedMarkers(objects, [key]);
       expect((sqlite.prepare("SELECT photo_key AS k FROM loans WHERE id = 'LN-SS-E1'").get() as { k: string }).k).toBe(loanDue ? "" : key);
       expect(sqlite.prepare("SELECT photo_key AS k, person_name AS n FROM self_service_events WHERE id = 'E1'").get()).toEqual(phoneDue ? { k: null, n: "[removed]" } : { k: key, n: "Juan" });
       expect(audited(sqlite)).toEqual({ loans: loanDue ? 1 : 0, phoneRecords: phoneDue ? 1 : 0, photos: preview.photos });
@@ -173,6 +185,7 @@ describe("R3 and R4: retention erases each record once and never deletes evidenc
     loan(sqlite, objects, "LN-1");
     objects.delete("loans/LN-1");
     await runUntilDone(d1, bucket);
+    expectOnlyErasedMarkers(objects, ["loans/LN-1"]);
     expect((sqlite.prepare("SELECT photo_key AS k FROM loans WHERE id = 'LN-1'").get() as { k: string }).k).toBe("");
   });
 
@@ -182,7 +195,7 @@ describe("R3 and R4: retention erases each record once and never deletes evidenc
     for (let index = 0; index < 100; index++) loan(sqlite, objects, `LN-${String(index).padStart(3, "0")}`);
     await Promise.all([runUntilDone(d1, bucket), runUntilDone(d1, bucket)]);
     expect(count(sqlite, "SELECT COUNT(*) AS n FROM loans WHERE photo_key <> '' OR borrower_name <> '[removed]'")).toBe(0);
-    expect(objects.size).toBe(0);
+    expectOnlyErasedMarkers(objects, Array.from({ length: 100 }, (_, index) => `loans/LN-${String(index).padStart(3, "0")}`));
     expect(audited(sqlite)).toEqual({ loans: 100, phoneRecords: 0, photos: 100 });
   });
 
@@ -196,7 +209,7 @@ describe("R3 and R4: retention erases each record once and never deletes evidenc
     await expect(eraseOldDetails(d1, bucket, actor)).rejects.toThrow(/R2 unavailable/);
     expect(count(sqlite, "SELECT COUNT(*) AS n FROM loans WHERE borrower_name = '[removed]'")).toBe(0);
     await runUntilDone(d1, bucket);
-    expect(objects.size).toBe(0);
+    expectOnlyErasedMarkers(objects, ["loans/LN-1", "loans/LN-2", "loans/LN-3"]);
     expect(audited(sqlite)).toEqual({ loans: 3, phoneRecords: 0, photos: 3 });
   });
 
@@ -206,11 +219,16 @@ describe("R3 and R4: retention erases each record once and never deletes evidenc
     for (const id of ["LN-1", "LN-2"]) loan(sqlite, objects, id);
     const real = d1.batch.bind(d1);
     let calls = 0;
-    (d1 as unknown as { batch: D1Database["batch"] }).batch = (async (statements: D1PreparedStatement[]) => { calls += 1; if (calls === 2) throw new Error("D1 unavailable"); return real(statements); }) as D1Database["batch"];
+    // The journal batch now precedes R2; the third batch is the final identity and audit transaction.
+    (d1 as unknown as { batch: D1Database["batch"] }).batch = (async (statements: D1PreparedStatement[]) => { calls += 1; if (calls === 3) throw new Error("D1 unavailable"); return real(statements); }) as D1Database["batch"];
     await expect(eraseOldDetails(d1, bucket, actor)).rejects.toThrow(/D1 unavailable/);
-    expect(objects.size).toBe(0);
+    expectOnlyErasedMarkers(objects, ["loans/LN-1", "loans/LN-2"]);
     expect(count(sqlite, "SELECT COUNT(*) AS n FROM loans WHERE photo_key <> ''")).toBe(2);
+    expect(count(sqlite, "SELECT COUNT(*) AS n FROM retention_photo_cleanup WHERE completed_at IS NULL")).toBe(2);
+    expect(audited(sqlite)).toEqual({ loans: 0, phoneRecords: 0, photos: 0 });
     await runUntilDone(d1, bucket);
+    expectOnlyErasedMarkers(objects, ["loans/LN-1", "loans/LN-2"]);
+    expect(count(sqlite, "SELECT COUNT(*) AS n FROM retention_photo_cleanup WHERE completed_at IS NOT NULL")).toBe(2);
     expect(count(sqlite, "SELECT COUNT(*) AS n FROM loans WHERE photo_key <> '' OR borrower_name <> '[removed]'")).toBe(0);
     expect(audited(sqlite)).toEqual({ loans: 2, phoneRecords: 0, photos: 2 });
   });

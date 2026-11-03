@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
+import { pathToFileURL } from "node:url";
 import { migratedD1 } from "./d1-sqlite";
 import { PHOTO_MODEL, PHOTO_RESERVE, photoName, resetBreaker } from "../src/ambient-assist";
 import { aiReplyText } from "../src/catalog-ai";
@@ -89,7 +90,7 @@ describe("role evaluation helpers", () => {
 describe("bounded fresh provider evaluation", () => {
   const flags = ["--fixtures", "tests/fixtures/v116-role-heldout.json", "--challenger", "qwen", "--granite", "10", "--qwen", "0", "--glm", "0"];
   const run = (args: string[], preload?: string, scenario = "") => spawnSync(process.execPath,
-    [...(preload ? ["--import", preload] : []), "scripts/evaluate-roles.mjs", ...args], { encoding: "utf8", timeout: 15_000,
+    [...(preload ? ["--import", pathToFileURL(preload).href] : []), "scripts/evaluate-roles.mjs", ...args], { encoding: "utf8", timeout: 15_000,
       env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: preload ? "a".repeat(32) : "", CLOUDFLARE_API_TOKEN: preload ? "test-only" : "", QUALIFICATION_SCENARIO: scenario } });
   const metrics = (output: string) => output.split("\n").filter((line) => line.startsWith("provider metrics ")).map((line) => JSON.parse(line.slice(17)));
 

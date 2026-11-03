@@ -45,16 +45,20 @@ export function migratedD1(): { d1: D1Database; sqlite: DatabaseSync } {
   return { d1: d1 as unknown as D1Database, sqlite };
 }
 
-/** Minimal in-memory R2 stand-in: put, get and delete are all the Worker uses. */
-export function memoryR2(): { bucket: R2Bucket; objects: Map<string, { bytes: Uint8Array; contentType?: string }> } {
-  const objects = new Map<string, { bytes: Uint8Array; contentType?: string }>();
+/** Minimal R2 stand-in: atomic create-if-absent is evaluated when PUT commits, as on R2. */
+export function memoryR2(): { bucket: R2Bucket; objects: Map<string, { bytes: Uint8Array; contentType?: string; customMetadata?: Record<string, string> }> } {
+  const objects = new Map<string, { bytes: Uint8Array; contentType?: string; customMetadata?: Record<string, string> }>();
   const bucket = {
-    put: async (key: string, bytes: Uint8Array, options?: { httpMetadata?: { contentType?: string } }) => { objects.set(key, { bytes, contentType: options?.httpMetadata?.contentType }); },
+    put: async (key: string, bytes: Uint8Array, options?: { onlyIf?: Headers; httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> }) => {
+      if (options?.onlyIf?.get("If-None-Match") === "*" && objects.has(key)) return null;
+      objects.set(key, { bytes, contentType: options?.httpMetadata?.contentType, customMetadata: options?.customMetadata });
+      return { key, size: bytes.byteLength };
+    },
     get: async (key: string) => {
       const object = objects.get(key);
-      return object ? { body: new Blob([object.bytes as BlobPart]).stream(), httpMetadata: { contentType: object.contentType } } : null;
+      return object ? { body: new Blob([object.bytes as BlobPart]).stream(), httpMetadata: { contentType: object.contentType }, customMetadata: object.customMetadata, size: object.bytes.byteLength } : null;
     },
-    head: async (key: string) => (objects.has(key) ? { key, size: objects.get(key)!.bytes.length } : null),
+    head: async (key: string) => { const object = objects.get(key); return object ? { key, size: object.bytes.length, httpMetadata: { contentType: object.contentType }, customMetadata: object.customMetadata } : null; },
     delete: async (key: string) => { objects.delete(key); },
     list: async (options?: { prefix?: string }) => ({ objects: [...objects.keys()].filter((key) => key.startsWith(options?.prefix ?? "")).map((key) => ({ key })), truncated: false })
   };

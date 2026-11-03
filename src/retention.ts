@@ -5,7 +5,7 @@ import { BUMP_REVISION, audit } from "./inventory";
 import type { Account } from "./accounts";
 
 export const ERASED = "[removed]";
-/** A loan photo's thumbnail sits beside it under this key (loans.ts loanThumb), so whatever deletes the photo deletes it too. */
+/** Private thumbnail key; retention replaces its JPEG with an inert, permanent marker. */
 export const thumbKey = (photoKey: string) => `${photoKey}.thumb`;
 /** A loan's identity goes two years after it closed; a settled phone record's after one year. */
 export const LOAN_DAYS = 730;
@@ -34,7 +34,8 @@ export async function retentionPreview(db: D1Database) {
       kept AS (SELECT photo_key AS k FROM loans WHERE photo_key <> '' AND id NOT IN (SELECT id FROM due_loans)
         UNION SELECT photo_key FROM self_service_events WHERE photo_key IS NOT NULL AND id NOT IN (SELECT id FROM due_phone))
     SELECT (SELECT COUNT(*) FROM due_loans) AS loans, (SELECT COUNT(*) FROM due_phone) AS phoneRecords,
-      (SELECT COUNT(*) FROM due_keys WHERE k NOT IN (SELECT k FROM kept)) AS photos`).bind(cutoff(LOAN_DAYS), cutoff(PHONE_DAYS))]);
+      (SELECT COUNT(*) FROM (SELECT k FROM due_keys WHERE k NOT IN (SELECT k FROM kept)
+        UNION SELECT photo_key FROM retention_photo_cleanup WHERE completed_at IS NULL)) AS photos`).bind(cutoff(LOAN_DAYS), cutoff(PHONE_DAYS))]);
   const { loans, phoneRecords, photos } = counts!.results[0] as { loans: number; phoneRecords: number; photos: number };
   return { loans, phoneRecords, photos };
 }
@@ -55,7 +56,9 @@ export async function eraseOldDetails(db: D1Database, bucket: R2Bucket, actor: A
   ]);
   const loanRows = loans!.results as Array<{ id: string; photoKey: string }>;
   const phoneRows = phone!.results as Array<{ id: string; photoKey: string | null }>;
-  if (!loanRows.length && !phoneRows.length) return { loans: 0, phoneRecords: 0, photos: 0, more: false };
+  // Pending jobs are durable even if a prior request lost its answer after an R2 operation.
+  const pending = (await db.prepare(`SELECT photo_key AS photoKey FROM retention_photo_cleanup WHERE completed_at IS NULL ORDER BY queued_at LIMIT ${BATCH * 2}`).all<{ photoKey: string }>()).results;
+  if (!loanRows.length && !phoneRows.length && !pending.length) return { loans: 0, phoneRecords: 0, photos: 0, more: false };
   const loanIds = JSON.stringify(loanRows.map((row) => row.id));
   const phoneIds = JSON.stringify(phoneRows.map((row) => row.id));
   const keys = [...new Set([...loanRows, ...phoneRows].map((row) => row.photoKey).filter((key): key is string => Boolean(key)))];
@@ -63,8 +66,24 @@ export async function eraseOldDetails(db: D1Database, bucket: R2Bucket, actor: A
       UNION SELECT photo_key FROM self_service_events WHERE photo_key IN ${inList("?1")} AND id NOT IN ${inList("?3")}`)
     .bind(JSON.stringify(keys), loanIds, phoneIds).all<{ k: string }>()).results.map((row) => row.k)) : []);
   const doomed = keys.filter((key) => !kept.has(key));
-  // A loan photo's thumbnail goes with it.
-  for (const key of doomed) { await bucket.delete(key); await bucket.delete(thumbKey(key)); }
+  // Journal the decision before touching R2. The INSERT rechecks retained references in D1;
+  // its unique key and the migration triggers prevent later reuse of a queued photo.
+  const queuedAt = new Date().toISOString();
+  if (doomed.length) await db.batch(doomed.map((key) => db.prepare(`INSERT OR IGNORE INTO retention_photo_cleanup(photo_key, queued_at)
+    SELECT ?1, ?2 WHERE NOT EXISTS (SELECT 1 FROM loans WHERE photo_key = ?1 AND id NOT IN ${inList("?3")})
+      AND NOT EXISTS (SELECT 1 FROM self_service_events WHERE photo_key = ?1 AND id NOT IN ${inList("?4")})`).bind(key, queuedAt, loanIds, phoneIds)));
+  const queued = doomed.length ? (await db.prepare(`SELECT photo_key AS photoKey FROM retention_photo_cleanup WHERE photo_key IN ${inList("?1")} AND completed_at IS NULL`)
+    .bind(JSON.stringify(doomed)).all<{ photoKey: string }>()).results : [];
+  const process = [...new Set([...pending, ...queued].map((row) => row.photoKey))];
+  // Same-key R2 marker is the lasting fence: if JPEG commits first it is overwritten;
+  // if the marker commits first every delayed create-if-absent JPEG fails atomically.
+  // Marker must never be deleted or expired by bucket lifecycle.
+  for (const key of process) {
+    await bucket.put(thumbKey(key), new Uint8Array(), {
+      httpMetadata: { contentType: "application/octet-stream" }, customMetadata: { retentionErased: "1" }
+    });
+    await bucket.delete(key);
+  }
 
   const auditId = crypto.randomUUID();
   // ?1/?2 cutoffs, ?3/?4 pinned ids, ?5 deleted keys. The first statement counts exactly the rows the next two change.
@@ -74,15 +93,18 @@ export async function eraseOldDetails(db: D1Database, bucket: R2Bucket, actor: A
     db.prepare(`INSERT INTO audit_log(id, created_at, actor_user_id, action, entity_type, entity_id, details_json)
       ${changing} SELECT ?6, ?7, ?8, 'RETENTION_ERASED', 'RETENTION', 'details', json_object('loans', (SELECT COUNT(*) FROM l), 'phoneRecords', (SELECT COUNT(*) FROM p),
         'photos', (SELECT COUNT(*) FROM ${inList("?5")} WHERE value IN (SELECT k FROM l UNION SELECT k FROM p)))
-      WHERE (SELECT COUNT(*) FROM l) + (SELECT COUNT(*) FROM p) > 0`).bind(loanBefore, phoneBefore, loanIds, phoneIds, JSON.stringify(doomed), auditId, new Date().toISOString(), actor.accountId),
+      WHERE (SELECT COUNT(*) FROM l) + (SELECT COUNT(*) FROM p) > 0`).bind(loanBefore, phoneBefore, loanIds, phoneIds, JSON.stringify(queued.map((row) => row.photoKey)), auditId, new Date().toISOString(), actor.accountId),
     db.prepare(`UPDATE loans SET borrower_name = '${ERASED}', student_id = CASE WHEN student_id IS NULL THEN NULL ELSE '${ERASED}' END, photo_key = ''
       WHERE id IN ${inList("?2")} AND ${loansDue("?1")}`).bind(loanBefore, loanIds),
     db.prepare(`UPDATE self_service_events SET person_name = '${ERASED}', student_id = NULL, photo_key = NULL
       WHERE id IN ${inList("?2")} AND ${phoneDue("?1")}`).bind(phoneBefore, phoneIds),
-    db.prepare(`${BUMP_REVISION} AND EXISTS (SELECT 1 FROM audit_log WHERE id = ?)`).bind(auditId)
+    db.prepare(`${BUMP_REVISION} AND EXISTS (SELECT 1 FROM audit_log WHERE id = ?)`).bind(auditId),
+    db.prepare(`UPDATE retention_photo_cleanup SET completed_at = ?2 WHERE completed_at IS NULL AND photo_key IN ${inList("?1")}`)
+      .bind(JSON.stringify(process), new Date().toISOString())
   ]);
   const row = await db.prepare("SELECT details_json AS details FROM audit_log WHERE id = ?").bind(auditId).first<string>("details");
   const counts = row ? JSON.parse(row) as { loans: number; phoneRecords: number; photos: number } : { loans: 0, phoneRecords: 0, photos: 0 };
   const left = await retentionPreview(db);
-  return { ...counts, more: left.loans + left.phoneRecords > 0 };
+  const remaining = await db.prepare("SELECT 1 AS pending FROM retention_photo_cleanup WHERE completed_at IS NULL LIMIT 1").first();
+  return { ...counts, more: left.loans + left.phoneRecords > 0 || Boolean(remaining) };
 }
