@@ -18,6 +18,9 @@
 
 ## Permanent engineering and release rules
 
+- **Changelog is mandatory:** Apply the single rule in `AGENTS.md` and update the root `CHANGELOG.md` for every qualified version/revision and accepted specification amendment. Each entry identifies what changed, why, its release/spec authority and relevant verification; an accepted spec update is recorded separately from a deployed product version. In a parallel lane, include the proposed entry in Claude's PR/handoff and let the integration steward update the shared file. Never invent a released version or treat an intermediate checkpoint as one.
+
+
 - Default is one implementation writer and one slice. The owner-approved two-lane exception allows Codex on V1.16 and Claude on an independently accepted UI slice, in separate writable worktrees with disjoint files and per-worktree locks (maximum two writers account-wide). Checkpoint to each assigned branch; never edit the other lane's paths or the shared `.codex` pointers. Only the steward merges complete qualified PRs, one at a time, after current-base checks and production preflight. Incomplete work stays off main.
 - Never deliver or describe an incomplete version as a finished product. Required correctness/security/denial/performance/browser checks, production preflight, backups, rollback and owner gates are not waived by the words `start`, `finish` or `continue`.
 - D1 structured business truth, R2 governed media, movement-derived stock, server-enforced permissions, append-only audit, safe offline recovery and deterministic-first intelligent features are invariant. Ambient AI is optional and must not block core work or receive forbidden private data.
