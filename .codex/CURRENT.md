@@ -20,8 +20,10 @@ Local evidence on the final tree:
 - Worker E2E: 90 passed (on the tree before the CSS change);
 - accessibility spec: 29/29.
 
+Pushed as `50e0c2a`. CI `41679571173`: `checks` passed (all units, perf, privacy, 372 browser); `worker-e2e` FAILED with 89 passed / 1 failed. The failure was "Self-Service take form: nothing scrolls sideways inside" at 320 px with 200% text, off by 5 px. Cause: the large-text rule made `.sheet__body` `overflow: visible`, so the help button's invisible enlarged touch target (`.help__trigger::before`, `inset: -.625rem`) widened the sheet. Under the old layout, the body scrolled 5 px sideways internally and the test never saw it. Fix: the body clips sideways (`overflow-x: clip`). Locally: phone spec 5/5, full Worker E2E 90/90, full browser 372/372.
+
 Still open:
-- push and exact-head CI/CodeQL/Worker E2E;
+- commit and push of the clip fix, then exact-head CI/CodeQL/Worker E2E;
 - an independent review of these changes;
 - release metadata (needs the green application SHA);
 - an R2 lifecycle read on `logistics-hub-evidence` (owner dashboard or Cloud Operations; agents do not sign into production);

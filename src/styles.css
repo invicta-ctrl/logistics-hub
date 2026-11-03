@@ -861,7 +861,8 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
   .sheet .sheet__header { flex-wrap: wrap; justify-content: flex-end; }
   .sheet .sheet__header > :first-child { flex: 1 0 100%; order: 1; }
   .sheet .sheet__header h2 { overflow-wrap: break-word; }
-  .sheet .sheet__body { flex: none; overflow: visible; }
+  /* Clip, not visible, sideways: invisible enlarged touch targets (e.g. .help__trigger::before) must not widen the sheet. */
+  .sheet .sheet__body { flex: none; overflow-x: clip; overflow-y: visible; }
 }
 .sheet__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: var(--space-5) var(--space-6); border-top: 0; border-bottom: 1px solid var(--line); }
 dialog.sheet:focus:not(:focus-visible) { outline: none; }
