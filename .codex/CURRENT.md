@@ -1,5 +1,29 @@
 # Current Work Pointer — Logistics Hub
 
+## 2026-11-04 Claude release metadata — V1.16.7 QUALIFICATION_PENDING
+
+Earl asked that every V1.16.7 requirement be finished, committed, pushed to `main` and reconciled before the merge. Claude ran the axe sweep and a partial performance run. Earl then said "stop checking, i approve them now. let us worryt about speed later". The record lists each gate he approved without it being run; none is recorded as passed.
+
+- **Axe:** 0 violations over 18 V1.16.7 states, light and dark, at 1280 and 390 px. Every phone touch control is at least 44 px.
+- **Input acknowledgement at 4× CPU:**
+  - every interaction under 100 ms except opening an item (median 112 ms);
+  - V1.16.4 already recorded that miss, at 104 ms;
+  - the V1.16.6 comparison was stopped before it finished.
+- **Release metadata:**
+  - the release record is rewritten for slices 1–3 and the thumbnail amendment, with SOURCE `f291816b4e00692299fc12b38b6b5e88cd19d2fe`;
+  - `product-release.json` is V1.16.7;
+  - the `tests/admin-control.test.ts` pin is V1.16.7.
+- **Checks on this tree:** build, the admin-control tests (14/14), `git diff --check` and the privacy scan pass.
+
+Next, Earl's approved sequence ("Yes, run all three"):
+1. Push this metadata commit and open the PR, so exact-head CI and CodeQL run.
+2. Put the manifest `ops/releases/v1.16.7.json` alone on `main`.
+3. Run Cloud Operations preflight, then prepare, for v1.16.7.
+4. Merge the PR only if all of these pass.
+5. Check the deploy byte for byte; Earl then does the System check.
+
+After that: merge docs PRs #66, #72 and #73 as records, close #60, and remove merged branches.
+
 ## 2026-11-04 Claude blocker pass — V1.16.7 HOLD
 
 Earl asked Claude to fix the blockers. Claude claimed the free lock on top of `9f1b75a`. Exact-head CI `41660004915` on `9f1b75a` FAILED for two test defects, both fixed here:
@@ -22,8 +46,10 @@ Local evidence on the final tree:
 
 Pushed as `50e0c2a`. CI `41679571173`: `checks` passed (all units, perf, privacy, 372 browser); `worker-e2e` FAILED with 89 passed / 1 failed. The failure was "Self-Service take form: nothing scrolls sideways inside" at 320 px with 200% text, off by 5 px. Cause: the large-text rule made `.sheet__body` `overflow: visible`, so the help button's invisible enlarged touch target (`.help__trigger::before`, `inset: -.625rem`) widened the sheet. Under the old layout, the body scrolled 5 px sideways internally and the test never saw it. Fix: the body clips sideways (`overflow-x: clip`). Locally: phone spec 5/5, full Worker E2E 90/90, full browser 372/372.
 
+Clip fix pushed as `f291816b4e00692299fc12b38b6b5e88cd19d2fe`. Exact-head CI `41685683424` SUCCESS (`checks` and `worker-e2e`; role-qualification skipped, as expected). This paragraph is an uncommitted local record written after that CI. No CodeQL run exists for a branch push without a PR.
+
 Still open:
-- commit and push of the clip fix, then exact-head CI/CodeQL/Worker E2E;
+- CodeQL on the exact head (needs a PR or a manual run);
 - an independent review of these changes;
 - release metadata (needs the green application SHA);
 - an R2 lifecycle read on `logistics-hub-evidence` (owner dashboard or Cloud Operations; agents do not sign into production);

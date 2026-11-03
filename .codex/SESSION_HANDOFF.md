@@ -1,5 +1,16 @@
 # Session Handoff — Logistics Hub
 
+## 2026-11-04 Claude release metadata
+
+See `.codex/CURRENT.md` (2026-11-04, release metadata).
+
+Earl approved the remaining verification gates without them being run: the V1.16.6 timing comparison, the ambient frame cost, the visual matrix, the Impeccable pass, the UI quality gate and a separate review. Speed is deferred to a later update.
+
+Scratch scripts and results are in the worktree's gitignored `test-results/v1167-gate/`:
+- `axe-v1167.mjs` and `axe.json`;
+- `ack-v1167.mjs` and `ack-f291816*.json`;
+- `ambient.mjs`, written but not run.
+
 ## 2026-11-04 Claude blocker pass
 
 See `.codex/CURRENT.md` (2026-11-04) for the fixes and evidence.
