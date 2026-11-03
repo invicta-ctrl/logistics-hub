@@ -42,7 +42,7 @@ export async function adminScenes(browser, url, dir, { SIZES, signIn, resume, me
 
   const degraded = {
     ...real,
-    database: { ...real.database, migrations: { ...real.database.migrations, pending: ["0031_example_pending.sql"], latest: real.database.migrations?.latest ?? "0030_item_relationships.sql" } },
+    database: { ...real.database, migrations: { ...real.database.migrations, pending: ["0032_example_pending.sql"], latest: real.database.migrations?.latest ?? "0031_retention_photo_cleanup.sql" } },
     storage: real.storage.map((bucket, index) => index === 1 ? { ...bucket, ok: false, ms: 2000 } : bucket),
     selfService: "paused"
   };

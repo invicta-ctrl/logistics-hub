@@ -99,6 +99,21 @@ describe("activity read model", () => {
     expect(events.every((event) => /^(mov|audit|phone|resolve):/.test(event.id))).toBe(true);
   });
 
+  it("one loan's trail keeps its movements, its damaged closing and its phone return, and nothing of another loan", async () => {
+    movement("ITM-T", "STOCK_IN", 10, "2026-09-30T01:00:00.000Z");
+    await lend("LN-A", "ITM-T", 2, "2026-09-30T02:00:00.000Z");
+    await close("LN-A", "ITM-T", 2, "RETURNED", "2026-09-30T03:00:00.000Z");
+    await lend("LN-B", "ITM-T", 1, "2026-09-30T04:00:00.000Z");
+    phone("PH-B", "ITM-T", "RETURN", "2026-09-30T04:30:00.000Z", { applied: 0, review: "RETURN_CHECK", loan_id: "LN-B" });
+    await close("LN-B", "ITM-T", 1, "DAMAGED", "2026-09-30T05:00:00.000Z");
+    phone("PH-OTHER", "ITM-T", "RETURN", "2026-09-30T06:00:00.000Z");
+
+    const trail = await feed("item=ITM-T&loan=LN-B");
+    expect(trail.events.map((event) => [event.type, event.source])).toEqual([["LOAN_DAMAGED", "LOAN"], ["PHONE_RETURN", "PHONE"], ["LOAN_OUT", "LOAN"]]);
+    expect(trail.events.every((event) => event.correlationId === "LN-B")).toBe(true);
+    expect(types(await feed("loan=LN-A"))).toEqual(["LOAN_RETURN", "LOAN_OUT"]);
+  });
+
   it("counts only POSTED movements and keeps a superseded one as evidence with no change", async () => {
     movement("ITM-R", "STOCK_IN", 5, "2026-09-30T01:00:00.000Z");
     movement("ITM-R", "STOCK_OUT", -3, "2026-09-30T02:00:00.000Z", { status: "SUPERSEDED", actor: "SELF_SERVICE" });

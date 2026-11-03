@@ -241,6 +241,32 @@ test.describe("Administration", () => {
     });
   }
 
+  test("200% text: System's settings keep a readable description column at 1440px, and a confirmation opens at its title at 320px", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/staff/admin");
+    await expect(page.locator(".setting-row").first()).toBeVisible();
+    await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
+    const narrowest = await page.locator(".setting-row__does").evaluateAll((all) => Math.min(...all.map((el) => el.getBoundingClientRect().width / parseFloat(getComputedStyle(el).fontSize))));
+    expect(narrowest, "description width in ems").toBeGreaterThan(12);
+
+    await page.route("**/api/staff/admin/retention", (route) => route.fulfill(json({ loans: 3, phoneRecords: 2, photos: 4 })));
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto("/staff/admin/accountability");
+    await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
+    await page.locator("#ret-run").click();
+    const sheet = page.locator("dialog[open]");
+    await expect(sheet.getByRole("button", { name: "Cancel" })).toBeFocused();
+    const layout = await sheet.evaluate((dialog) => {
+      const title = dialog.querySelector("h2")!;
+      const em = parseFloat(getComputedStyle(title).fontSize);
+      return { scrollTop: dialog.scrollTop, titleTop: title.getBoundingClientRect().top, titleEms: title.getBoundingClientRect().width / em, sideways: dialog.scrollWidth - dialog.clientWidth };
+    });
+    expect(layout.scrollTop).toBe(0);
+    expect(layout.titleTop).toBeLessThan(800);
+    expect(layout.titleEms, "title width in ems").toBeGreaterThan(4.5);
+    expect(layout.sideways).toBe(0);
+  });
+
   test("System refresh uses the running artifact and preserves unknown and rollback identities", async ({ page }) => {
     let current: unknown = status;
     await page.route("**/api/staff/admin/system", (route) => route.fulfill(json(current)));

@@ -121,7 +121,7 @@
 .settings-group.activity .history { max-width: 48rem; }
 .settings-group > .admin-block__head { padding-top: var(--space-4); border-top: 1px solid var(--line-strong); }
 .settings-group > .admin-block__head .section-title { font-family: var(--sans); font-size: var(--text-md); font-weight: 600; letter-spacing: 0; }
-.setting-list { margin: 0; padding: 0; list-style: none; }
+.setting-list { margin: 0; padding: 0; list-style: none; container-type: inline-size; }
 .setting-row { display: grid; grid-template-columns: minmax(8rem, 13rem) minmax(8rem, 13rem) minmax(0, 1fr) auto; grid-template-areas: "name value does action"; align-items: baseline; gap: var(--space-1) var(--space-4); padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
 .setting-row:first-child { border-top: 1px solid var(--line); }
 .admin-block .setting-row p { margin: 0; max-width: none; }
@@ -130,6 +130,10 @@
 .setting-row__does { grid-area: does; color: var(--text-2); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .setting-row__action { grid-area: action; align-self: center; }
 @media (max-width: 960px) {
+  .setting-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name action" "value action" "does does"; }
+}
+/* The four columns need about 52rem. A container query in rem follows enlarged text (200% at 1440 px); a media query does not. */
+@container (max-width: 52rem) {
   .setting-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name action" "value action" "does does"; }
 }
 @media (max-width: 760px) {

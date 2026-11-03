@@ -20,14 +20,17 @@ async function common(page: Page): Promise<void> {
   await page.route("**/api/staff/attention", (route) => route.fulfill({ headers: { etag: '"a"' }, json: { revision: 1, entries: [], groups: [], needsAction: 0, bySource: {} } }));
 }
 
-async function loansPage(page: Page): Promise<{ saved: string[]; trailAsked: string[] }> {
+async function loansPage(page: Page): Promise<{ saved: string[]; trailAsked: string[]; thumbAsked: string[] }> {
   await common(page);
   const saved: string[] = [];
   const trailAsked: string[] = [];
   await page.route("**/api/staff/loans", (route) => route.fulfill({ headers: { etag: '"l1"' }, json: { revision: 1, today: TODAY, open: [withPhoto, noThumb], closed: [removed], borrowers: [], items: [], totals: [], known: [] } }));
-  await page.route("**/api/staff/loans/*/thumb", (route) => {
+  const thumbAsked: string[] = [];
+  // The list asks for /thumb?v=2 (durable-thumbnail amendment §6), so a 24-hour copy cached by an older build is never reused.
+  await page.route(/\/api\/staff\/loans\/[^/]+\/thumb(\?.*)?$/, (route) => {
     const id = new URL(route.request().url()).pathname.split("/")[4]!;
     if (route.request().method() === "PUT") { saved.push(id); return route.fulfill({ status: 204 }); }
+    thumbAsked.push(new URL(route.request().url()).search);
     return id === "LN-PHOTO" ? route.fulfill({ contentType: "image/png", body: IMAGE }) : route.fulfill({ status: 404, json: { error: "Thumbnail not found." } });
   });
   await page.route("**/api/staff/loans/*/photo", (route) => route.fulfill({ contentType: "image/png", body: IMAGE }));
@@ -36,15 +39,17 @@ async function loansPage(page: Page): Promise<{ saved: string[]; trailAsked: str
     return route.fulfill({ json: { events: [{ id: "mov:M-1", correlationId: "LN-NOTHUMB", at: "2026-10-27T01:00:00.000Z", source: "LOAN", type: "LOAN_OUT", title: "Lent", summary: "Staff One lent 1 piece of Sample stapler to Ben Cruz.",
       actor: "Staff One", actorId: "ACC-1", itemId: "ITM-0002", itemName: "Sample stapler", unit: "piece", quantity: 1, change: -1, stockChanged: true, before: 1, after: 0, reason: null, note: null, fields: [], attention: false }], nextCursor: null } });
   });
-  return { saved, trailAsked };
+  return { saved, trailAsked, thumbAsked };
 }
 
 test("a loan shows its photo's thumbnail, opens to all its details, and a loan without one saves it from the photo", async ({ page }) => {
-  const { saved, trailAsked } = await loansPage(page);
+  const { saved, trailAsked, thumbAsked } = await loansPage(page);
   await page.goto("/staff/loans");
   const shown = page.locator("[data-key=LN-PHOTO] .loan-thumb img");
   await expect(shown).toBeVisible();
   expect(await shown.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+  expect(thumbAsked.length).toBeGreaterThan(0);
+  expect(thumbAsked.every((search) => search === "?v=2")).toBe(true);
   // No thumbnail yet: the camera stands in, and no "Photo" link is left on the row.
   const missing = page.locator("[data-key=LN-NOTHUMB]");
   await expect(missing.locator(".loan-thumb .icon")).toBeVisible();

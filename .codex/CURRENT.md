@@ -1,5 +1,34 @@
 # Current Work Pointer — Logistics Hub
 
+## 2026-11-04 Claude blocker pass — V1.16.7 HOLD
+
+Earl asked Claude to fix the blockers. Claude claimed the free lock on top of `9f1b75a`. Exact-head CI `41660004915` on `9f1b75a` FAILED for two test defects, both fixed here:
+- the concurrent conditional-create test assumed the first create wins (on Linux, the second won); it now asserts exactly one whole payload, which no later save replaces;
+- the System Worker E2E still expected migration `0030`; it now expects `0031`.
+
+Also fixed:
+- **200% text (a V1.16.7 regression):** System's settings rows crushed their description to about 0 px at 1440. They now stack, via a `rem` container query on `.setting-list`.
+- **Large-text confirmation sheets:** at 320 px with 200% text, the title split mid-word and the header hid the body. Under 16rem the title gets its own row, the whole sheet scrolls, and Cancel takes focus without scrolling.
+- **Loans browser test:** it never matched the `?v=2` thumbnail URL; it now does, and asserts it.
+- **Tests added:** Activity loan-trail coverage of a damaged closing and a phone return.
+- **Records and tooling:** `ops/releases/v1.16.7.json` (0031 pinned, validated with the real `loadManifest`); a proposed rollback procedure in the release record; the `admin-evidence` fake pending migration renamed to `0032`.
+
+Local evidence on the final tree:
+- typecheck and build pass;
+- full Vitest: 916 passed, 1 failed (the Windows symlink EPERM), 10 skipped;
+- full browser suite: 371 passed, then the one loans-thumbnail failure, fixed and 25/25 on 5 repeats;
+- Worker E2E: 90 passed (on the tree before the CSS change);
+- accessibility spec: 29/29.
+
+Still open:
+- push and exact-head CI/CodeQL/Worker E2E;
+- an independent review of these changes;
+- release metadata (needs the green application SHA);
+- an R2 lifecycle read on `logistics-hub-evidence` (owner dashboard or Cloud Operations; agents do not sign into production);
+- Earl's approval of the rollback procedure (he chose "procedure only" for the bucket sweep on 2026-11-04, so none is built);
+- touch, 4x-CPU performance and the bounded Impeccable pass;
+- Earl's merge go-ahead and Cloud Operations migration/backup.
+
 ## 2026-11-03 Claude continuation — V1.16.7 HOLD, checkpoint pushed
 
 Claude found the lock with `owner: null`, claimed it (`npm run agent:claim -- claude`), and verified the branch `slice/v1.16.7-item-and-place-sheets` at local and remote `1daf291`, with 21 dirty paths matching the recorded candidate. B-001 is resolved by Earl's explicit instruction in chat: Claude Code's editor is the authorized mechanism for the two guarded test files, and Claude may commit and push this HOLD checkpoint to the slice branch with git. No PR, merge, migration or deploy. The checkpoint commit on top of `1daf291` is this one; read its SHA from `git log`/`git ls-remote`.

@@ -217,6 +217,7 @@ export function confirmImpact(options: Impact): Promise<boolean> {
       }
     });
     panel.open();
-    dialog.querySelector<HTMLElement>("[data-close]:not(.icon-button)")!.focus();
+    // Cancel takes focus; with large text the sheet scrolls as one, so it opens at its title rather than jumping to the buttons.
+    dialog.querySelector<HTMLElement>("[data-close]:not(.icon-button)")!.focus({ preventScroll: true });
   });
 }

@@ -1,5 +1,24 @@
 # Session Handoff — Logistics Hub
 
+## 2026-11-04 Claude blocker pass
+
+See `.codex/CURRENT.md` (2026-11-04) for the fixes and evidence.
+
+Root causes:
+- CI's unit failure came from an ordering assumption under real concurrency.
+- The E2E failure and the loans browser failure were tests that did not follow source changes (migration `0031`, and the `?v=2` thumbnail URL). In CI, the browser step never ran because the unit step failed first.
+- The 200% System defect came from fixed `13rem` grid columns. A media query cannot see root font scaling; a container query in `rem` can.
+
+Scratch reproductions are deleted; the evidence is the new regression test in `tests/browser/accessibility.spec.ts`. Its thresholds sit between the values measured before and after the fix: description ~0 → full width; title 3.2em → 5.3em.
+
+Not verified:
+- the app's dark theme (the `prefers-color-scheme` emulation does not switch the app theme; the fix is layout-only);
+- real touch devices;
+- 4x-CPU performance;
+- production R2 lifecycle.
+
+Earl chose "procedure only" for the bucket sweep (not built), and authorized commit and push of this pass.
+
 ## 2026-11-03 Claude continuation — B-001 resolved, HOLD checkpoint
 
 **Custody.** Lock found free, claimed by Claude, and yielded at the end of the session (check `npm run agent:status`). Base `1daf291529c10a3af43ac3e83e794b3b42e504a7`; the remote main was `812013f` at preflight.

@@ -158,7 +158,11 @@ describe("V1.16.7 durable thumbnail erasure", () => {
     const second = new Request("https://hub.test/thumb", { method: "PUT", headers: { "content-type": "image/jpeg" }, body: alternate });
     const results = await Promise.all([saveLoanThumb(f.d1, f.bucket, f.id, thumbRequest()), saveLoanThumb(f.d1, f.bucket, f.id, second)]);
     expect(results.map((result) => result.status)).toEqual([204, 204]);
-    expect(f.objects.get(`${f.key}.thumb`)?.bytes).toEqual(JPEG);
+    // Either create may commit first; exactly one whole payload survives, and a later save cannot replace it.
+    const kept = f.objects.get(`${f.key}.thumb`)?.bytes;
+    expect([JPEG, alternate].filter((payload) => kept?.length === payload.length && kept.every((byte, index) => byte === payload[index]))).toHaveLength(1);
+    expect((await saveLoanThumb(f.d1, f.bucket, f.id, thumbRequest())).status).toBe(204);
+    expect(f.objects.get(`${f.key}.thumb`)?.bytes).toEqual(kept);
   });
 
   it("unexpected thumbnail metadata fails closed", async () => {
