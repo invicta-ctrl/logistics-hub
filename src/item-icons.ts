@@ -159,8 +159,22 @@ export function itemIconKey(value: string | null | undefined): ItemIconKey | nul
   return key && keys.has(key) ? key as ItemIconKey : null;
 }
 
+/**
+ * The suggestion depends only on the name, aliases, category and type, so it is worked out once for each combination: a list drawn
+ * again (a page turn, a search) no longer checks every keyword against every row (V1.16.12). Bounded, so a long session cannot grow it.
+ */
+const suggested = new Map<string, IconResolution>();
 /** Computes the suggestion without using an override, for creation and the reset action. */
 export function suggestItemIcon(item: IconItem): IconResolution {
+  const memo = JSON.stringify([item.name, item.aliases ?? null, item.category ?? null, item.itemType ?? null]);
+  const known = suggested.get(memo);
+  if (known) return known;
+  if (suggested.size >= 5000) suggested.clear();
+  const found = suggestFresh(item);
+  suggested.set(memo, found);
+  return found;
+}
+function suggestFresh(item: IconItem): IconResolution {
   const aliases = typeof item.aliases === "string" ? item.aliases.split(/[;,\n]/) : item.aliases ?? [];
   // The current name wins over obsolete aliases; longer phrases win among the aliases too.
   for (const names of [[item.name], aliases]) {

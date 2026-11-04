@@ -293,13 +293,16 @@ export async function workspace(): Promise<void> {
     return html`<div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 8 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></div>`)}</div>`;
   }
 
+  // One collator for every comparison: localeCompare with options builds a new one per call, the most of a 6,000-item sort (V1.16.12).
+  const byText = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }).compare;
+  const byName = new Intl.Collator().compare;
   const compare = (a: Item, b: Item) => {
     const left = sortKey === "location" ? placeText(a) ?? "" : a[sortKey] ?? "";
     const right = sortKey === "location" ? placeText(b) ?? "" : b[sortKey] ?? "";
     // Items without a place sort last in either direction, so the known ones stay together.
     if (sortKey === "location" && (!left || !right) && left !== right) return left ? -1 : 1;
-    const order = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
-    return (order || a.name.localeCompare(b.name)) * sortDir;
+    const order = typeof left === "number" && typeof right === "number" ? left - right : byText(String(left), String(right));
+    return (order || byName(a.name, b.name)) * sortDir;
   };
 
   const sortHeader = (key: SortKey, title: string, className = "") => {
@@ -334,6 +337,8 @@ export async function workspace(): Promise<void> {
     select.classList.toggle("is-set", Boolean(value));
   };
 
+  /** The rows the last render matched, in order: a page turn draws from them without filtering and sorting the catalog again. */
+  let lastShown: Item[] | null = null;
   const render = () => {
     if (!inventory) return;
     results.removeAttribute("aria-busy");
@@ -363,6 +368,7 @@ export async function workspace(): Promise<void> {
       && (!filters.location || (filters.location === NO_LOCATION ? !item.locationId : inside?.has(item.locationId ?? "")))
       && (!filters.type || item.itemType === filters.type)
       && matches(item, query)).sort(compare);
+    lastShown = shown;
     shownIds = shown.map((item) => item.id);
     pager.ask(JSON.stringify([view, query, filters, sortKey, sortDir]));
     // The open item stays drawn, wherever it falls.
@@ -483,7 +489,16 @@ export async function workspace(): Promise<void> {
     }
     const turned = pager.handle(target);
     if (turned) {
-      render();
+      // Only the rows and the pager change: a page turn replaces the rows, and "Show 25 more" on a phone adds the new ones, so a press
+      // costs the same on the first page as on the last, and the filters, counts and table around them are not drawn again (V1.16.12).
+      const body = results.querySelector<HTMLElement>(".data-table--items tbody");
+      const bar = results.querySelector<HTMLElement>(turned.kind === "more" ? ".pager-more" : "nav.pager");
+      if (lastShown && body && bar) {
+        const { rows: drawn, footer } = pager.slice(lastShown);
+        const markup = (turned.kind === "more" ? drawn.slice(turned.from) : drawn).map((item) => row(item).value).join("");
+        if (turned.kind === "more") body.insertAdjacentHTML("beforeend", markup); else body.innerHTML = markup;
+        if (footer.value) bar.outerHTML = footer.value; else bar.remove();
+      } else render();
       landOn(results, turned, () => [...results.querySelectorAll<HTMLElement>("tbody .row-link")]);
       return;
     }

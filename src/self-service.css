@@ -70,8 +70,9 @@
 
 /*
  * V1.16.11 "Counter" (Earl, 2026-11-04: "Improve the design of the self service ui/ux drastically"; light by default; "keep the hau
- * campus as a subtle background"). An oxblood band holds the bar, the question and the search; the campus at dusk shows through it,
- * faintly. Below the band the page is warm paper: four doors (Borrow, Take, Return, My activity), then the items, pictures edge to edge.
+ * campus as a subtle background"). The campus at dusk is the background of the top of home, as before V1.16.11 (V1.16.12, Earl:
+ * "do not cut the campus photo, regress to the previous setup where the background is the campus photo"): an oxblood wash holds the
+ * bar, the question and the search, thins so the campus shows, and fades into the page under the four doors, with no edge.
  */
 .is-self-service {
   --band: var(--brand-dark);
@@ -80,14 +81,14 @@
   --band-ink-2: var(--on-dark-2);
   --band-line: rgb(251 246 238 / 22%);
   --band-field: rgb(251 246 238 / 10%);
-  --band-wash: linear-gradient(180deg, color-mix(in srgb, var(--band) 90%, transparent) 0%, color-mix(in srgb, var(--band-2) 84%, transparent) 100%);
+  --band-wash: linear-gradient(180deg, color-mix(in srgb, var(--band) 82%, transparent) 0%, color-mix(in srgb, var(--band) 66%, transparent) 14%, color-mix(in srgb, var(--band-2) 44%, transparent) 32%, color-mix(in srgb, var(--band-2) 52%, transparent) 46%, color-mix(in srgb, var(--band-2) 82%, transparent) 64%, var(--canvas) 100%);
 }
 /* The page never scrolls sideways under the full-width band. */
 .is-self-service #app { overflow-x: clip; }
 
-/* ---------- The band, behind the top of home ---------- */
-/* Full width, from the top of the page to the middle of the search field, so the field sits across its lower edge. */
-.ss-band { position: absolute; top: -12rem; bottom: 1.5625rem; left: calc(50% - 50vw); z-index: -1; width: 100vw; background: var(--band-wash), url("/brand/hau-campus-dusk.webp") center 42% / cover no-repeat; pointer-events: none; }
+/* ---------- The campus, behind the top of home ---------- */
+/* Full width, from the top of the page to well below the search, where it has faded into the page: no edge cuts the photograph. */
+.ss-band { position: absolute; top: -12rem; bottom: calc(-1 * min(42vh, 26rem)); left: calc(50% - 50vw); z-index: -1; width: 100vw; background: var(--band-wash), url("/brand/hau-campus-dusk.webp") center 42% / cover no-repeat; pointer-events: none; }
 
 /* ---------- App bar ---------- */
 .ss-bar { position: sticky; top: 0; z-index: 30; padding-top: env(safe-area-inset-top); background: var(--band); color: var(--band-ink); }
@@ -96,8 +97,8 @@
 .ss-bar__inner { display: flex; max-width: 36rem; min-height: 3.5rem; margin-inline: auto; align-items: center; justify-content: space-between; gap: .75rem; padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right)); }
 .ss-bar__brand { display: flex; min-width: 0; min-height: 2.75rem; align-items: center; gap: .625rem; border-radius: var(--radius); color: inherit; text-decoration: none; }
 .ss-bar__marks { display: flex; flex: none; align-items: center; gap: .375rem; }
-/* The mark's oxblood shield would sink into the band, so it sits on a small paper disc. */
-.ss-bar__marks .mark { width: 2.375rem; height: 2.375rem; padding: .25rem; border-radius: 50%; background: var(--on-dark); object-fit: contain; }
+/* The mark sits straight on the band, without a paper disc (V1.16.12, Earl: "remove the white background"). */
+.ss-bar__marks .mark { width: 2.375rem; height: 2.375rem; object-fit: contain; }
 .ss-bar__title { display: grid; min-width: 0; font-family: var(--serif); font-size: 1.0625rem; font-weight: 500; line-height: 1.1; white-space: nowrap; }
 .ss-bar__title > * { overflow: hidden; text-overflow: ellipsis; }
 .ss-bar__end { display: flex; flex: none; align-items: center; gap: .5rem; }
@@ -604,7 +605,8 @@
 /* ---------- V1.9 visual review fixes ---------- */
 /* Links on the dark theme use gold: the brand red is under 4.5:1 on the dark canvas. */
 .is-self-service[data-theme="dark"] .text-link { color: var(--gold); }
-.is-self-service[data-theme="dark"] .ss-hero h1, .is-self-service[data-theme="dark"] .ss-hero__hello { text-shadow: 0 1px 14px rgb(0 0 0 / 55%); }
+/* The words keep a soft shadow in both themes, so the campus behind them never lowers their contrast. */
+.is-self-service .ss-hero h1, .is-self-service .ss-hero__hello { text-shadow: 0 1px 14px rgb(0 0 0 / 55%); }
 /* A reference is one token: it never breaks at its hyphens. */
 .ss-ref, .ss-receipt__ref strong { white-space: nowrap; }
 /* Focus moves a field or the check's title to just under the sheet's header with its label still showing. */
