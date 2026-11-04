@@ -21,9 +21,11 @@ type Issue = { itemId: string; itemName: string; unit: string; lowest: number; s
 type Candidate = { id: string; itemId: string; quantity: number; purpose: string; borrowerName: string; studentId: string | null; createdAt: string };
 type LocationReport = { id: string; itemId: string; itemName: string; kind: ReportKind; reporterName: string | null; createdAt: string; location: string | null };
 type Review = { revision: number; open: Entry[]; stockIssues: Issue[]; recent: Entry[]; candidates: Candidate[]; locationReports: LocationReport[]; enabledItems: number };
-type View = "attention" | "activity" | "poster";
+type View = "overview" | "poster";
 
-const VIEWS: Record<View, string> = { attention: "Needs attention", activity: "Last 7 days", poster: "QR code & poster" };
+/** V1.16.7: Needs attention and the last 7 days are one Overview, attention first; older links (?view=attention, ?view=activity) land on it. */
+const VIEWS: Record<View, string> = { overview: "Overview", poster: "QR code & poster" };
+type RecordsPage = { records: Entry[]; nextCursor: string | null };
 const QR_URL = "logistics.hausc.org/self-service";
 
 function verb(entry: Entry): string {
@@ -154,11 +156,13 @@ export async function selfServiceReview(): Promise<void> {
       </div>
     </header>
     <div class="views" id="ss-views" role="group" aria-label="Self-Service views"></div>
-    <div class="ss-staff-find" id="ss-find" hidden><label class="visually-hidden" for="ss-find-input">Find a record</label><div class="search-field">${icon("search")}<input id="ss-find-input" type="search" placeholder="Find a reference, person or item" autocomplete="off" /></div></div>
     <div id="ss-results" aria-busy="true"><div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 4 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></div>`)}</div></div>`);
 
   const query = new URLSearchParams(window.location.search);
-  let view: View = (Object.keys(VIEWS) as View[]).find((value) => value === query.get("view")) ?? "attention";
+  let view: View = query.get("view") === "poster" ? "poster" : "overview";
+  /** Every record, page by page, once "Show all records" is pressed; until then the overview holds the last 7 days. */
+  let all: RecordsPage | null = null;
+  let loadingAll = false;
   let data: Review | null = null;
   let find = "";
   const results = document.querySelector<HTMLElement>("#ss-results")!;
@@ -186,14 +190,13 @@ export async function selfServiceReview(): Promise<void> {
   });
 
   function render(): void {
-    writeParams({ view: view === "attention" ? null : view });
-    document.querySelector<HTMLElement>("#ss-find")!.hidden = view !== "activity";
+    writeParams({ view: view === "overview" ? null : view });
     const attention = data ? data.open.length + data.stockIssues.length + data.locationReports.length : 0;
-    mount(document.querySelector("#ss-views")!, html`${(Object.keys(VIEWS) as View[]).map((key) => html`<button type="button" class="view-tab" data-view="${key}" aria-pressed="${key === view}">${VIEWS[key]}${key === "attention" && attention ? html`<span class="view-tab__count">${attention}</span>` : ""}</button>`)}`);
+    mount(document.querySelector("#ss-views")!, html`${(Object.keys(VIEWS) as View[]).map((key) => html`<button type="button" class="view-tab" data-view="${key}" aria-pressed="${key === view}">${VIEWS[key]}${key === "overview" && attention ? html`<span class="view-tab__count">${attention}</span>` : ""}</button>`)}`);
     if (!data) return;
     mount(document.querySelector("#ss-summary")!, html`${plural(data.enabledItems, "item")} offered on phones · ${attention ? `${attention} need${attention === 1 ? "s" : ""} attention` : "nothing needs attention"}`);
     results.removeAttribute("aria-busy");
-    const draw = () => { mount(results, view === "poster" ? poster() : view === "activity" ? activity(data!) : needsAttention(data!)); putBack(); };
+    const draw = () => { mount(results, view === "poster" ? poster() : overview(data!)); putBack(); };
     const typing = document.activeElement;
     if ((typing instanceof HTMLInputElement || typing instanceof HTMLSelectElement) && typing.id && results.contains(typing)) {
       const caret = typing instanceof HTMLInputElement ? [typing.selectionStart, typing.selectionEnd] as const : null;
@@ -206,15 +209,29 @@ export async function selfServiceReview(): Promise<void> {
     } else preservingFocus(results, draw);
   }
 
+  /** The one Overview (V1.16.7): what needs attention first, then the records, newest first, with their search. */
+  function overview(review: Review): Html {
+    return html`<section class="ss-overview__attention" aria-labelledby="ss-attention-title"><h2 class="subsection__title" id="ss-attention-title">Needs attention</h2>${needsAttention(review)}</section>
+      <section class="ss-overview__records" aria-labelledby="ss-records-title">
+        <header class="ss-overview__head"><h2 class="subsection__title" id="ss-records-title">${all ? "All records" : "Last 7 days"}</h2>
+          <a class="text-link" href="/staff/activity?source=PHONE" data-route>Self-Service in Activity ${icon("arrow")}</a></header>
+        <div class="ss-staff-find"><label class="visually-hidden" for="ss-find-input">Find a record</label><div class="search-field">${icon("search")}<input id="ss-find-input" type="search" placeholder="Find a reference, person or item in this list" autocomplete="off" value="${find}" /></div></div>
+        ${activity(all ? all.records : review.recent)}
+        <div class="ss-overview__more">${all
+          ? all.nextCursor ? html`<button type="button" class="button button--secondary" data-more-records ${loadingAll ? "disabled" : ""}>${loadingAll ? "Loading…" : "Load older records"}</button>` : html`<p class="muted">That is every record.</p>`
+          : html`<button type="button" class="button button--secondary" data-all-records ${loadingAll ? "disabled" : ""}>${loadingAll ? "Loading…" : "Show all records"}</button>`}</div>
+      </section>`;
+  }
+
   function needsAttention(review: Review): Html {
     if (!review.open.length && !review.stockIssues.length && !review.locationReports.length) {
-      return emptyState("Nothing needs attention", review.enabledItems
-        ? "Records from phones reconcile on their own. Anything ambiguous will appear here."
-        : "No item is offered on Self-Service yet. Active, reviewed Consumables are taken, and Loanables listed on the Lending Hub are borrowed.");
+      return html`<p class="hint-line">${icon("check")}<span>${review.enabledItems
+        ? "Nothing needs attention. Records from phones reconcile on their own; anything ambiguous appears here."
+        : "No item is offered on Self-Service yet. Active, reviewed Consumables are taken, and Loanables listed on the Lending Hub are borrowed."}</span></p>`;
     }
-    return html`${review.locationReports.length ? html`<h2 class="section-label">Reports from phones</h2><ul class="review-list">${review.locationReports.map(reportRow)}</ul>` : ""}
-      ${review.stockIssues.length ? html`<h2 class="section-label">Count needed</h2><ul class="review-list">${review.stockIssues.map(issueRow)}</ul>` : ""}
-      ${review.open.length ? html`<h2 class="section-label">Records to check</h2><ul class="review-list">${review.open.map((entry) => reviewCard(entry, review.candidates))}</ul>` : ""}`;
+    return html`${review.locationReports.length ? html`<h3 class="section-label">Reports from phones</h3><ul class="review-list">${review.locationReports.map(reportRow)}</ul>` : ""}
+      ${review.stockIssues.length ? html`<h3 class="section-label">Count needed</h3><ul class="review-list">${review.stockIssues.map(issueRow)}</ul>` : ""}
+      ${review.open.length ? html`<h3 class="section-label">Records to check</h3><ul class="review-list">${review.open.map((entry) => reviewCard(entry, review.candidates))}</ul>` : ""}`;
   }
 
   /** A person typing a reference (any case, with or without the dash), a name, a student ID or an item narrows the week. */
@@ -226,12 +243,12 @@ export async function selfServiceReview(): Promise<void> {
       || [entry.personName, entry.studentId ?? "", entry.itemName].some((text) => text.toLowerCase().includes(typed)));
   }
 
-  function activity(review: Review): Html {
-    if (!review.recent.length) return emptyState("No Self-Service activity this week", "Takes, borrows and returns recorded with phones appear here.");
-    const shown = found(review.recent);
-    if (!shown.length) return emptyState("No record matches", "Check the reference, or try a name or an item. This list covers the last 7 days.");
+  function activity(records: Entry[]): Html {
+    if (!records.length) return emptyState(all ? "No Self-Service records yet" : "No Self-Service activity this week", "Takes, borrows and returns recorded with phones appear here.", "", "", 3);
+    const shown = found(records);
+    if (!shown.length) return emptyState("No record matches", `Check the reference, or try a name or an item. This list covers ${all ? "the records loaded so far" : "the last 7 days"}.`, "", "", 3);
     return html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
-        <caption class="visually-hidden">Self-Service records this week</caption>
+        <caption class="visually-hidden">Self-Service records, newest first</caption>
         <thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Who</th><th scope="col">State</th></tr></thead>
         <tbody>${shown.map((entry) => html`<tr>
           <td>${timing(entry)}</td>
@@ -258,13 +275,33 @@ export async function selfServiceReview(): Promise<void> {
   });
   render();
 
-  document.querySelector<HTMLInputElement>("#ss-find-input")!.addEventListener("input", (event) => { find = (event.target as HTMLInputElement).value; render(); });
+  // The search is redrawn with the overview, so it is listened for on the results, and keeps its caret through the redraw (render).
+  results.addEventListener("input", (event) => {
+    const field = event.target as HTMLElement;
+    if (field.id === "ss-find-input") { find = (field as HTMLInputElement).value; render(); }
+  });
+  async function loadRecords(more: boolean): Promise<void> {
+    if (loadingAll) return;
+    loadingAll = true;
+    render();
+    try {
+      const page = await api<RecordsPage>(`/api/staff/self-service/records${more && all?.nextCursor ? `?${new URLSearchParams({ cursor: all.nextCursor })}` : ""}`);
+      all = more && all ? { records: [...all.records, ...page.records], nextCursor: page.nextCursor } : page;
+    } catch (error) {
+      toast(failure(error), "error");
+    } finally {
+      loadingAll = false;
+      render();
+    }
+  }
   document.querySelector("#ss-views")!.addEventListener("click", (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-view]");
     if (button) { view = button.dataset.view as View; render(); }
   });
   results.addEventListener("click", async (event) => {
     const target = event.target as HTMLElement;
+    if (target.closest("[data-all-records]")) { void loadRecords(false); return; }
+    if (target.closest("[data-more-records]")) { void loadRecords(true); return; }
     if (target.closest("[data-print]")) {
       document.body.classList.add("printing-poster");
       window.print();

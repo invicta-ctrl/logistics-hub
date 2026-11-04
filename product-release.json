@@ -1,10 +1,12 @@
 {
-  "version": "V1.16.6",
-  "sourceCommit": "8254a53e673481bdd84d8e3c03b71eb8f88557eb",
-  "record": "docs/road-to-v2/releases/v1.16.6.md",
+  "version": "V1.16.7",
+  "sourceCommit": "f291816b4e00692299fc12b38b6b5e88cd19d2fe",
+  "record": "docs/road-to-v2/releases/v1.16.7.md",
   "changes": [
-    "After Keep both, the possible-duplicate card and its count leave Attention and the bell at once.",
-    "A possible duplicate found after a photo is saved shows on Attention's next refresh.",
-    "A staff member's new name shows straight away on loans, restock entries and kits."
+    "An item's sheet opens on its picture, with Overview as its profile and Stock settings in Edit details. A place opens the same way, with the items kept there and its history.",
+    "Low & out of stock shows each item's picture, and every loan row shows its photo's thumbnail and opens the loan's sheet.",
+    "Self-Service is one Overview with Show all records, and each Activity entry opens in place to its full detail.",
+    "Administration's sections share one layout, and every change asks for confirmation in the same sheet.",
+    "The rail's groups fold away and are remembered on this device, and the current page is lit."
   ]
 }

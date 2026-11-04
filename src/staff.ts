@@ -729,19 +729,16 @@ export async function workspace(): Promise<void> {
   }
 
   /**
-   * Who and what the item is at a glance, beside its photo: the ledger's count (and what is out on loan, kept apart from it), status,
-   * type, category, the recorded place, and how fresh that is. The place is what the record says, never a live position: the line
-   * under it says when the item was last seen there.
+   * Who and what the item is, on the Overview under its count (V1.16.7): its next step, status, type, category, the recorded place,
+   * and how fresh that is. The count itself is the stock editor above it. The place is what the record says, never a live position:
+   * the line under it says when the item was last seen there.
    */
   function profileInfo(loaded: Detail): Html {
-    const { item, loans, freshness, kits } = loaded;
-    const out = onLoanOf(loans);
+    const { item, freshness, kits } = loaded;
     const next = nextAction(loaded);
-    return html`<div class="profile__stock"><p class="readout"><strong>${item.onHand}</strong> <span>${units(item.onHand, item.unit)} on hand</span></p>${out ? html`<p class="readout readout--loan"><strong>${out}</strong> <span>on loan</span></p>` : ""}</div>
-      ${next ? html`<p class="profile__next"><button type="button" class="button button--primary button--sm" data-next="${next.key}">${next.label}</button></p>` : ""}
+    return html`${next ? html`<p class="profile__next"><button type="button" class="button button--primary button--sm" data-next="${next.key}">${next.label}</button></p>` : ""}
       ${tags(profileFacts(loaded))}
       <p class="profile__meta">${label(item.itemType)} · ${categoryName(item.category)}</p>
-      ${item.model || item.serialNumber ? html`<p class="profile__meta">${[item.model && `Model ${item.model}`, item.serialNumber && `Serial ${item.serialNumber}`].filter(Boolean).join(" · ")}</p>` : ""}
       <p class="profile__meta profile__meta--place"><span class="profile__label">Recorded place</span>${icon("pin")}<span>${item.location ?? html`<span class="muted">No place set</span>`}${!item.location && item.legacyLocation ? html`<span class="muted"> · typed earlier: ${item.legacyLocation}</span>` : ""}</span></p>
       ${freshnessLine(item, freshness)}
       ${kits?.length ? html`<p class="profile__meta profile__meta--kits">${icon("stack")}<span>In ${kits.length === 1 ? "the kit" : "kits"}: ${kits.map((kit, index) => html`${index ? ", " : ""}<a class="text-link" href="/staff/kits?kit=${kit.id}" data-route>${kit.name}</a>${kit.active ? "" : " (inactive)"}`)}</span></p>` : ""}
@@ -788,7 +785,7 @@ export async function workspace(): Promise<void> {
     return html`
       <form id="stock-form" class="form quantity" novalidate aria-label="Update the quantity">${quantityEditor("stock")}<p class="quantity__context" id="quantity-context">${quantityContext(detail)}</p></form>
       ${tracksOpenUnits(item) || detail.openUnits.length ? html`<div id="open-units"></div>` : ""}
-      ${settingsMarkup(detail)}
+      <div class="item-profile" id="profile-info">${profileInfo(detail)}</div>
       ${delta !== 0 ? html`<div class="callout">${icon("info")}<p><strong>Migration evidence.</strong> At migration the legacy snapshot reported ${item.legacyReportedAvailable} ${units(item.legacyReportedAvailable ?? 0, item.unit)}, but the migrated movement ledger derives ${item.migratedOnHand}. The difference is preserved as recorded, not guessed. Once a physical count confirms the real figure, record it with a Count.</p></div>` : ""}
       ${item.verificationNote ? html`<div class="callout">${icon("alert")}<p><strong>Verify:</strong> ${item.verificationNote}</p></div>` : ""}
       ${item.needsReview ? html`<section class="card card--review" aria-labelledby="review-title">
@@ -797,8 +794,11 @@ export async function workspace(): Promise<void> {
           ${checklist(reviewChecklist(item))}
         </section>` : ""}
       <dl class="facts">
-        <div><dt>Unit</dt><dd>${item.unit}</dd></div>
         <div><dt>Status</dt><dd>${item.status === "INACTIVE" ? "Inactive" : "Active"}${item.itemType === "NEEDS_REVIEW" ? " · unclassified" : ""} · ${item.needsReview ? "needs a details check" : "details checked"}</dd></div>
+        <div><dt>Lending Hub</dt><dd>${gaps.length ? "Not listed" : label(item.lendingAudience)}</dd></div>
+        <div><dt>Unit</dt><dd>${item.unit}</dd></div>
+        ${item.model ? html`<div><dt>Model</dt><dd>${item.model}</dd></div>` : ""}
+        ${item.serialNumber ? html`<div><dt>Serial number</dt><dd>${item.serialNumber}</dd></div>` : ""}
         ${item.aliases ? html`<div><dt>Other names</dt><dd>${item.aliases}</dd></div>` : ""}
       </dl>
       <div id="reports-card">${reportsCard(detail)}</div>
@@ -814,7 +814,7 @@ export async function workspace(): Promise<void> {
 
   /**
    * Stock settings in the item's sheet (V1.16.4 §4.3): reorder level, stock area, expiry and status, saved on their own, with Add to
-   * restock and Add to kit beside them, so nobody leaves Items for these.
+   * restock and Add to kit beside them, so nobody leaves Items for these. Their own group in Edit details, after the item's fields (V1.16.7).
    */
   function settingsMarkup(loaded: Detail): Html {
     const { item } = loaded;
@@ -1107,16 +1107,16 @@ export async function workspace(): Promise<void> {
     const tabs: Array<[Tab, string]> = [["overview", "Overview"], ...(lendable ? [["loan", out ? `Loan · ${out} out` : "Loan"] as [Tab, string]] : []), ["details", item.needsReview ? "Review & edit" : "Edit details"], ["history", "History"]];
     if (tab === "loan" && !lendable) tab = "overview";
     sheetShell(html`<span class="mono">${item.id}</span>`, item.name, html`
-      <section class="profile theater drafting" id="photo-panel" aria-label="Item profile"><div class="profile__photo" data-tile></div><div class="profile__info"><div id="profile-info">${profileInfo(loaded)}</div></div><div class="profile__actions" data-actions></div></section>
+      <section class="profile theater drafting" id="photo-panel" aria-label="Item picture"><div class="profile__photo" data-tile></div><div class="profile__actions" data-actions></div></section>
       <div class="tabs" role="tablist" aria-label="Item sections">
         ${tabs.map(([key, text]) => html`<button type="button" role="tab" id="tab-${key}" aria-controls="panel-${key}" aria-selected="${key === tab}" tabindex="${key === tab ? 0 : -1}">${text}</button>`)}
       </div>
       <section id="panel-overview" class="panel-stack" role="tabpanel" aria-labelledby="tab-overview" tabindex="0" ${tab === "overview" ? "" : html`hidden`}>${overviewMarkup(loaded)}</section>
       ${lendable ? html`<section id="panel-loan" class="panel-stack" role="tabpanel" aria-labelledby="tab-loan" ${tab === "loan" ? "" : html`hidden`}>
-        ${item.status === "INACTIVE" ? html`<div class="callout">${icon("info")}<p>Inactive items cannot be lent. Reactivate it in Stock settings on the Overview first.</p></div>` : html`<form id="loan-form" class="form" novalidate aria-labelledby="lend-title"><h3 class="section-label" id="lend-title">Lend this item</h3>${loanFields("loan")}</form>`}
+        ${item.status === "INACTIVE" ? html`<div class="callout">${icon("info")}<p>Inactive items cannot be lent. Set its status to Active in <button type="button" class="text-link" data-goto="details" data-focus="#s-status">Stock settings</button>, under Edit details, first.</p></div>` : html`<form id="loan-form" class="form" novalidate aria-labelledby="lend-title"><h3 class="section-label" id="lend-title">Lend this item</h3>${loanFields("loan")}</form>`}
         <div id="item-loans" class="panel-stack">${itemLoansMarkup(loaded)}</div>
       </section>` : ""}
-      <section id="panel-details" role="tabpanel" aria-labelledby="tab-details" ${tab === "details" ? "" : html`hidden`}>${detailsFormMarkup(item)}</section>
+      <section id="panel-details" role="tabpanel" aria-labelledby="tab-details" ${tab === "details" ? "" : html`hidden`}>${detailsFormMarkup(item)}${settingsMarkup(loaded)}</section>
       <section id="panel-history" class="panel-stack" role="tabpanel" aria-labelledby="tab-history" tabindex="0" ${tab === "history" ? "" : html`hidden`}><ol class="history" id="history">${historyMarkup(loaded)}</ol>
         <div class="history__more" id="history-more">${historyMore()}</div>
         <p><a class="text-link" href="/staff/activity?item=${item.id}" data-route>All activity for this item ${icon("arrow")}</a></p></section>`);
@@ -1161,7 +1161,7 @@ export async function workspace(): Promise<void> {
       const goto = element.closest<HTMLElement>("[data-goto]");
       if (goto) {
         select(sheet.querySelector<HTMLButtonElement>(`#tab-${goto.dataset.goto}`)!);
-        (sheet.querySelector<HTMLElement>(goto.dataset.goto === "details" ? "#f-name" : "#loan-studentId") ?? sheet.querySelector<HTMLElement>(`#tab-${goto.dataset.goto}`))?.focus();
+        (sheet.querySelector<HTMLElement>(goto.dataset.focus ?? (goto.dataset.goto === "details" ? "#f-name" : "#loan-studentId")) ?? sheet.querySelector<HTMLElement>(`#tab-${goto.dataset.goto}`))?.focus();
       }
       const giveBack = element.closest<HTMLButtonElement>("[data-return]");
       const loan = giveBack && detail?.loans.find((entry) => entry.id === giveBack.dataset.return);
@@ -1226,7 +1226,7 @@ export async function workspace(): Promise<void> {
       hintAdd: "Everyone sees this photo on the Lending Hub and Self-Service. Show the item itself, not people or documents.",
       hintHas: "Everyone sees this photo on the Lending Hub and Self-Service. The large version stays staff-only.", removeNote: "The item keeps its stock and history.",
       chooseIcon: () => openPicture?.(),
-      view: (shown, edit) => void openViewer(shownUrl(shown, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLElement>("#photo-panel .photo-tile img"), item.name, resolveItemIcon(detail!.item).key, edit),
+      view: (shown, edit) => void openViewer(shownUrl(shown, "display"), `Photo of ${item.name}`, () => sheet.querySelector<HTMLElement>("#photo-panel .photo-tile img:not(.photo-tile__ambient)"), item.name, resolveItemIcon(detail!.item).key, edit),
       changed: async (next) => { if (detail?.item.id === item.id) detail = { ...detail, item: { ...detail.item, photo: next } }; await refreshStock(item.id); await poll.refresh(); },
       // Someone else changed the photo first: show theirs, and the list with it.
       refresh: async () => { await refreshStock(item.id); await poll.refresh(); }

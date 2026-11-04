@@ -1,5 +1,5 @@
 import "./activity.css";
-import { ACTIVITY_SOURCES, ACTIVITY_TITLES, ACTIVITY_TYPES, STOCK_AREAS, type ActivitySource } from "./catalog-policy";
+import { ACTIVITY_SOURCES, ACTIVITY_TITLES, ACTIVITY_TYPES, STOCK_AREAS, type ActivitySource, selfServiceReference } from "./catalog-policy";
 import { type Place, inOrder, pathOf, placesOf } from "./location-tree";
 import { signed } from "./movement-form";
 import { type Session, loadSession, shell } from "./staff-shell";
@@ -17,7 +17,7 @@ import { api, ApiError, emptyState, expired, failure, formatDate, formatDateTime
 type Entry = {
   id: string; correlationId: string; at: string | null; source: ActivitySource; type: string; summary: string; actor: string; actorId: string | null;
   itemId: string | null; itemName: string | null; unit: string | null; change: number; stockChanged: boolean; before: number | null; after: number | null;
-  reason: string | null; note: string | null; attention: boolean;
+  reason: string | null; note: string | null; attention: boolean; fields?: string[];
 };
 type Page = { events: Entry[]; nextCursor: string | null };
 type Picker = { items: Array<{ id: string; name: string }>; locations: string[] };
@@ -139,23 +139,65 @@ export async function activityWorkspace(): Promise<void> {
       <ol class="activity-list" aria-label="${dayLabel(day)}, newest first">${mine.map(row)}</ol></section>`)}`;
   }
 
+  /**
+   * One entry as one line (V1.16.7): when, what happened to what and by whom, and the stock change. It opens in place to its full
+   * detail; only one is open at a time, so the list stays light. The line is a button with aria-expanded, so it opens from the keyboard.
+   */
+  let openKey: string | null = null;
+  const detailId = (entry: Entry) => `activity-detail-${entry.id.replace(/[^A-Za-z0-9_-]/g, "-")}`;
   function row(entry: Entry): Html {
     const tone = entry.change > 0 ? "is-in" : entry.change < 0 ? "is-out" : "";
     // A catalog or account entry has nothing to do with stock; anything else says so when stock stayed put.
     const change = entry.stockChanged ? signed(entry.change) : ["CATALOG", "ACCOUNT", "DIRECTORY"].includes(entry.source) ? "" : "no change";
-    const reason = entry.reason && !entry.summary.toLowerCase().includes(entry.reason.toLowerCase()) ? entry.reason : null;
-    const balance = entry.before !== null && entry.after !== null ? ` · ${entry.before} → ${entry.after}${entry.unit ? ` ${units(entry.after, entry.unit)}` : ""}` : "";
-    return html`<li class="activity-row ${tone}" data-key="${entry.id}">
+    const open = entry.id === openKey;
+    return html`<li class="activity-row activity-row--fold ${tone} ${open ? "is-open" : ""}" data-key="${entry.id}">
         <p class="activity-row__time">${entry.at ? html`<time datetime="${entry.at}">${formatTime(entry.at)}</time>` : ""}</p>
         <span class="activity-row__icon" aria-hidden="true">${icon(SOURCE_ICONS[entry.source] ?? "history")}</span>
         <p class="activity-row__change ${entry.stockChanged ? "" : "activity-row__change--none"}">${change}</p>
         <div class="activity-row__main">
-          ${entry.itemId ? html`<a class="row-link activity-row__summary" href="/staff/items?item=${entry.itemId}" data-route>${entry.summary}</a>` : html`<p>${entry.summary}</p>`}
-          <p class="cell-sub"><span class="visually-hidden">${entry.at ? formatDateTime(entry.at) : "Time unknown"} · </span><span class="tag">${ACTIVITY_SOURCES[entry.source] ?? entry.source}</span>${entry.attention ? html` <span class="tag tag--warn">Needs attention</span>` : ""}${balance}${entry.itemId ? html` · <span class="mono">${entry.itemId}</span>` : ""}${entry.correlationId.startsWith("LN-")
-            ? html` · Loan <span class="mono">${entry.correlationId}</span>` : ""}${entry.source === "PHONE" && entry.attention ? html` · <a href="/staff/self-service" data-route>Review in Self-Service</a>` : ""}</p>
-          ${reason || entry.note ? html`<p class="activity-row__note">${reason ? html`<span class="muted">Reason:</span> ${reason}` : ""}${reason && entry.note ? " · " : ""}${entry.note ? html`<span class="muted">Note:</span> ${entry.note}` : ""}</p>` : ""}
+          <button type="button" class="activity-row__toggle" aria-expanded="${open}" aria-controls="${detailId(entry)}" data-fold="${entry.id}"><span class="activity-row__line">${entry.summary}</span>${entry.attention ? html`<span class="tag tag--warn">Needs attention</span>` : ""}</button>
         </div>
+        <div class="activity-row__detail" id="${detailId(entry)}" ${open ? "" : "hidden"}>${open ? detail(entry) : ""}</div>
       </li>`;
+  }
+
+  /** What an open entry shows: when and by whom, the source, the stock before and after, the item, loan and phone record it belongs to, and what was typed. */
+  function detail(entry: Entry): Html {
+    const fact = (term: string, value: Html | string) => html`<div><dt>${term}</dt><dd>${value}</dd></div>`;
+    const reason = entry.reason && !entry.summary.toLowerCase().includes(entry.reason.toLowerCase()) ? entry.reason : null;
+    const loan = entry.correlationId.startsWith("LN-") ? entry.correlationId : null;
+    const phone = entry.source === "PHONE" && !loan && /^[0-9a-f-]{36}$/.test(entry.correlationId) ? selfServiceReference(entry.correlationId) : null;
+    return html`<dl class="facts activity-detail">
+        ${fact("When", entry.at ? formatDateTime(entry.at) : "Time unknown")}
+        ${fact("By", entry.actor)}
+        ${fact("Source", html`<span class="tag">${ACTIVITY_SOURCES[entry.source] ?? entry.source}</span>`)}
+        ${entry.before !== null && entry.after !== null ? fact("Stock", `${entry.before} → ${entry.after}${entry.unit ? ` ${units(entry.after, entry.unit)}` : ""}`) : ""}
+        ${entry.itemId ? fact("Item", html`<a class="text-link" href="/staff/items?item=${entry.itemId}" data-route>${entry.itemName ?? entry.itemId}</a> <span class="mono muted">${entry.itemId}</span>`) : ""}
+        ${loan ? fact("Loan", html`<a class="text-link" href="/staff/loans?loan=${loan}" data-route><span class="mono">${loan}</span></a>`) : ""}
+        ${phone ? fact("Request", html`<span class="mono">${phone}</span>`) : ""}
+        ${entry.fields?.length ? fact("Changed", entry.fields.join(", ")) : ""}
+        ${reason ? fact("Reason", reason) : ""}
+        ${entry.note ? fact("Note", entry.note) : ""}
+      </dl>
+      ${entry.source === "PHONE" && entry.attention ? html`<p><a class="text-link" href="/staff/self-service" data-route>Review in Self-Service ${icon("arrow")}</a></p>` : ""}`;
+  }
+
+  /** Opens one entry (closing the one open before) or closes it, without redrawing the list. */
+  function fold(key: string): void {
+    const next = openKey === key ? null : key;
+    for (const id of [openKey, next]) {
+      if (!id) continue;
+      const item = results.querySelector<HTMLElement>(`[data-key="${CSS.escape(id)}"]`);
+      const entry = entries.find((each) => each.id === id);
+      if (!item || !entry) continue;
+      const opening = id === next;
+      item.classList.toggle("is-open", opening);
+      item.querySelector("[data-fold]")!.setAttribute("aria-expanded", String(opening));
+      const panel = item.querySelector<HTMLElement>(".activity-row__detail")!;
+      if (opening) mount(panel, detail(entry));
+      panel.hidden = !opening;
+    }
+    openKey = next;
   }
 
   function render(): void {
@@ -165,7 +207,7 @@ export async function activityWorkspace(): Promise<void> {
     if (count.textContent !== text) count.textContent = text;
     preservingFocus(results, () => mount(results, entries.length ? feed(entries) : filtered()
       ? emptyState("Nothing matches", "Try another search or filter, or clear them to see everything.", html`<button class="button button--secondary" type="button" data-remove="everything">Clear search and filters</button>`)
-      : emptyState("No activity yet", "Stock changes, loans, phone records and catalog edits appear here as they happen.")), "a");
+      : emptyState("No activity yet", "Stock changes, loans, phone records and catalog edits appear here as they happen.")), "[data-fold]");
     const capped = Boolean(nextCursor) && entries.length >= MAX_SHOWN;
     more.hidden = !entries.length;
     older.hidden = !nextCursor || capped;
@@ -393,6 +435,10 @@ export async function activityWorkspace(): Promise<void> {
   const exportButton = document.querySelector<HTMLButtonElement>("#activity-export")!;
   exportButton.addEventListener("click", () => void exportFile(exportButton));
   older.addEventListener("click", () => void loadOlder());
+  results.addEventListener("click", (event) => {
+    const toggle = (event.target as HTMLElement).closest<HTMLElement>("[data-fold]");
+    if (toggle) fold(toggle.dataset.fold!);
+  });
   let searchTimer = 0;
   onLeave(() => window.clearTimeout(searchTimer));
   search.addEventListener("input", () => {

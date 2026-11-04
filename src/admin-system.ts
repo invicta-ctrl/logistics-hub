@@ -1,5 +1,5 @@
 import "./admin.css";
-import { adminPage } from "./admin-frame";
+import { type Setting, adminPage, changeButton, confirmImpact, decisions, settingRows, settingsGroup, settle, stateTag, verdict } from "./admin-frame";
 import { type Html, api, emptyState, failure, formatDateTime, html, mount, onLeave } from "./ui";
 
 /** The answer of GET /api/staff/admin/system (src/system-status.ts). */
@@ -23,7 +23,6 @@ const PROTECTION: ReadonlyArray<{ what: string; by: string }> = [
   { what: "The application", by: "Git and a rollback to the previous Cloudflare version." }
 ];
 
-const tag = (tone: "ok" | "warn" | "bad", text: string) => html`<span class="tag tag--${tone}">${text}</span>`;
 const quick = (probe: Probe) => `${probe.ms} ms`;
 
 /** Everything in the answer that is wrong, in the words an owner would use. Empty means all that was checked is working. */
@@ -37,48 +36,54 @@ function problems(status: Status): string[] {
   return out;
 }
 
-function row(name: string, state: Html, detail: Html | string): Html {
-  return html`<li class="status-row"><span class="status-row__name">${name}</span><span class="status-row__state">${state}</span><span class="status-row__detail">${detail}</span></li>`;
-}
-
 const BAND_WORDS: Record<Status["assist"]["band"], string> = {
   NORMAL: "", CONSERVE: "Using less: checks after sync still run.", RESERVE: "Using the reserve.", CRITICAL: "Only while someone is cataloguing; checks after sync wait for tomorrow.", STOPPED: "Stopped for today. Cataloguing works with built-in suggestions; AI suggestions are unavailable."
 };
-function assistRow(assist: Status["assist"], owner: boolean): Html {
-  const state = !assist.available ? tag("warn", "Not available here") : !assist.on ? tag("warn", "Off") : assist.band === "STOPPED" ? tag("warn", "Paused for today") : tag("ok", "On");
+function assistRow(assist: Status["assist"], owner: boolean): Setting {
+  const value = !assist.available ? stateTag("warn", "Not available here") : !assist.on ? stateTag("warn", "Off") : assist.band === "STOPPED" ? stateTag("warn", "Paused for today") : stateTag("ok", "On", true);
   const used = html`${assist.neuronsToday.toLocaleString("en-PH")} of ${assist.stopAt.toLocaleString("en-PH")} Workers AI Neurons used today (UTC). ${BAND_WORDS[assist.band]}`;
   const detail = assist.available ? used : html`This copy of the application has no Workers AI. Cataloguing works with built-in suggestions; AI suggestions are unavailable.`;
-  return row("AI suggestions", state, html`${detail} Photo reading and review-only text suggestions share this switch and allowance.${owner ? html` <button type="button" class="text-link" id="assist-toggle" data-on="${String(!assist.on)}">${assist.on ? "Turn off" : "Turn on"}</button>` : ""}`);
+  return { key: "assist", name: "AI suggestions", value, does: html`${detail} Photo reading and review-only text suggestions share this switch and allowance.`, action: owner ? changeButton("AI suggestions", html`id="assist-toggle" data-on="${String(!assist.on)}"`) : undefined };
 }
 
-function cleanupRow(cleanup: Status["cleanup"], owner: boolean): Html {
-  const state = !cleanup.available ? tag("warn", "Not available here") : !cleanup.on ? tag("warn", "Off") : cleanup.sentThisMonth >= cleanup.monthlyCap ? tag("warn", "Paused for this month") : tag("ok", "On");
-  const detail = cleanup.available
+function cleanupRow(cleanup: Status["cleanup"], owner: boolean): Setting {
+  const value = !cleanup.available ? stateTag("warn", "Not available here") : !cleanup.on ? stateTag("warn", "Off") : cleanup.sentThisMonth >= cleanup.monthlyCap ? stateTag("warn", "Paused for this month") : stateTag("ok", "On", true);
+  const does = cleanup.available
     ? html`${cleanup.sentThisMonth.toLocaleString("en-PH")} of ${cleanup.monthlyCap.toLocaleString("en-PH")} photos cleaned this month (UTC). Staff choose "Remove background" on an item's photo; the original is always kept.`
     : html`This copy of the application has no Cloudflare Images. Photos are used as they are.`;
-  return row("Picture cleanup", state, html`${detail}${owner && cleanup.available ? html` <button type="button" class="text-link" id="cleanup-toggle" data-on="${String(!cleanup.on)}">${cleanup.on ? "Turn off" : "Turn on"}</button>` : ""}`);
+  return { key: "cleanup", name: "Picture cleanup", value, does, action: owner && cleanup.available ? changeButton("Picture cleanup", html`id="cleanup-toggle" data-on="${String(!cleanup.on)}"`) : undefined };
 }
 
 function render(status: Status, owner: boolean): Html {
   const issues = problems(status);
   const level = status.database.migrations;
   const { build } = status;
+  const answering = (ok: boolean) => ok ? stateTag("ok", "Answering", true) : stateTag("bad", "Not answering");
+  // What is waiting for someone: a check that failed (look, then check again) and Self-Service closed (reopened in its section).
+  const waiting = [
+    ...issues.map((issue) => ({ what: issue, detail: "Checked just now. Check again once it has been looked at.", action: html`<button type="button" class="button button--secondary button--sm" data-check-again aria-label="Check again: ${issue}">Check again</button>` })),
+    ...(status.selfService === "paused" ? [{ what: "Self-Service is closed for maintenance.", detail: "Phones show the maintenance screen and record nothing.", action: html`<a class="button button--secondary button--sm" href="/staff/admin/self-service" data-route>Reopen in Self-Service</a>` }] : [])
+  ];
+  const failed = !status.database.ok || status.storage.some((bucket) => !bucket.ok);
   return html`
-    <div class="banner ${issues.length ? "banner--warn" : "banner--ok"}" id="system-summary" role="status">${issues.length ? html`<div><p><strong>${issues.length === 1 ? "One thing needs attention." : `${issues.length} things need attention.`}</strong></p><ul>${issues.map((issue) => html`<li>${issue}</li>`)}</ul></div>` : html`<p><strong>Everything checked is working.</strong> The application, the database and storage answered just now.</p>`}</div>
-    <section class="admin-block" aria-labelledby="health-title">
-      <div class="admin-block__head"><h2 id="health-title" class="section-title">Right now</h2><p class="admin-source">Checked ${formatDateTime(status.checkedAt)}. Each check waits at most two seconds.</p></div>
-      <ul class="status-list">
-        ${row("Application", tag("ok", "Running"), build ? html`Build <code>${build.version}</code>` : "This page was served by the application.")}
-        ${row("Database", status.database.ok ? tag("ok", "Answering") : tag("bad", "Not answering"), status.database.ok ? quick(status.database) : "It did not answer within two seconds.")}
-        ${status.storage.map((bucket) => row(bucket.label, bucket.ok ? tag("ok", "Answering") : tag("bad", "Not answering"), bucket.ok ? html`${bucket.holds} <span class="muted">${quick(bucket)}</span>` : "It did not answer within two seconds."))}
-        ${row("Self-Service", status.selfService === "open" ? tag("ok", "Open") : status.selfService === "paused" ? tag("warn", "Closed for maintenance") : tag("warn", "Unknown"), html`<a class="text-link" href="/staff/admin/self-service" data-route>${status.selfService === null ? "Open the Self-Service settings" : "Change it in Self-Service"}</a>`)}
-        ${assistRow(status.assist, owner)}
-        ${cleanupRow(status.cleanup, owner)}
-      </ul>
-      <div class="form-actions form-actions--start admin-actions"><button type="button" class="button button--secondary" id="check-again">Check again</button></div>
-    </section>
-    <section class="admin-block" aria-labelledby="version-title">
-      <h2 id="version-title" class="section-title">This version</h2>
+    ${issues.length
+      ? verdict(failed ? "bad" : "warn", issues.length === 1 ? "One thing needs attention." : `${issues.length} things need attention.`, issues.join(" "), "system-summary")
+      // Working, but something is waiting for someone: gold, and the decision below says what.
+      : verdict(waiting.length ? "warn" : "ok", "Everything checked is working.", waiting.length ? "Self-Service is closed for maintenance; reopen it below when you are ready." : "The application, the database and storage answered just now.", "system-summary")}
+    ${decisions(waiting)}
+    ${settingsGroup("health-title", "Right now", html`${settingRows([
+      { name: "Application", value: stateTag("ok", "Running", true), does: build ? html`Build <code>${build.version}</code>` : "This page was served by the application." },
+      { name: "Database", value: answering(status.database.ok), does: status.database.ok ? quick(status.database) : "It did not answer within two seconds." },
+      ...status.storage.map((bucket) => ({ name: bucket.label, value: answering(bucket.ok), does: bucket.ok ? html`${bucket.holds} <span class="muted">${quick(bucket)}</span>` : "It did not answer within two seconds." })),
+      { key: "self-service", name: "Self-Service", value: status.selfService === "open" ? stateTag("ok", "Open", true) : status.selfService === "paused" ? stateTag("warn", "Closed for maintenance") : stateTag("warn", "Unknown"),
+        does: "Whether people can use their own phones. It is changed in the Self-Service section.",
+        action: html`<a class="button button--secondary button--sm" href="/staff/admin/self-service" data-route>${status.selfService === null ? "Open" : "Change"}<span class="visually-hidden"> in Self-Service</span></a>` }
+    ])}
+      <div class="form-actions form-actions--start admin-actions"><button type="button" class="button button--secondary" id="check-again">Check again</button></div>`,
+      html`Checked ${formatDateTime(status.checkedAt)}. Each check waits at most two seconds.`)}
+    ${settingsGroup("assist-title", "AI suggestions", settingRows([assistRow(status.assist, owner)]))}
+    ${settingsGroup("cleanup-title", "Picture cleanup", settingRows([cleanupRow(status.cleanup, owner)]))}
+    ${settingsGroup("version-title", "This version", html`
       <p class="product-version"><span>Product version</span><strong>${build?.product?.version ?? "Unknown"}</strong></p>
       <h3 class="section-title">What's new</h3>
       ${build?.product ? html`<ul class="release-notes">${build.product.changes.map((note) => html`<li>${note}</li>`)}</ul>` : html`<p class="muted">Not recorded.</p>`}
@@ -88,16 +93,29 @@ function render(status: Status, owner: boolean): Html {
         <div><dt>Built</dt><dd>${formatDateTime(build.builtAt)}</dd></div>
         <div><dt>Migrations</dt><dd>${level ? html`<code>${level.latest ?? "none"}</code> is the latest applied${level.latestAppliedAt ? html`, on ${formatDateTime(level.latestAppliedAt)}` : ""}. ${level.pending === null ? "" : level.pending.length ? html`<strong>${level.pending.length} of this version's migrations ${level.pending.length === 1 ? "is" : "are"} not applied yet.</strong>` : "Every migration in this version is applied."}` : html`<span class="muted">Could not be read from the database.</span>`}</dd></div>
       </dl>` : html`<p class="muted">Build details not recorded.</p>
-      ${level ? html`<p>Migrations: <code>${level.latest ?? "none"}</code> is the latest applied.</p>` : ""}`}
-    </section>
-    <section class="admin-block" aria-labelledby="backup-title">
-      <h2 id="backup-title" class="section-title">Backups and restore</h2>
+      ${level ? html`<p>Migrations: <code>${level.latest ?? "none"}</code> is the latest applied.</p>` : ""}`}`)}
+    ${settingsGroup("backup-title", "Backups and restore", html`
       <dl class="guide">${PROTECTION.map((entry) => html`<div><dt>${entry.what}</dt><dd>${entry.by}</dd></div>`)}</dl>
       <div class="note evidence-note" role="note">
         <p><strong>No backup or restore evidence is shown here.</strong> A release's backup and rollback point are kept with its Production operations run in GitHub, and the key that opens the backup is held offline by the owner. This application holds no Cloudflare or GitHub credentials, so it cannot read them and does not guess. The steps are in the Deployment runbook, “Backups and restore”.</p>
-      </div>
-    </section>`;
+      </div>`)}`;
 }
+
+/** What turning a switch on or off does, and for whom, before the owner confirms it. */
+const SWITCHES = {
+  assist: {
+    title: "AI suggestions", path: "/api/staff/admin/assist",
+    affects: ["Everyone cataloguing: photo reading and review-only text suggestions", "Checks after sync, which share the same allowance"],
+    off: "Cataloguing keeps working with the built-in suggestions; nothing already saved changes.",
+    on: "Cataloguing suggests from photos and text again, within today's allowance."
+  },
+  cleanup: {
+    title: "picture cleanup", path: "/api/staff/admin/cleanup",
+    affects: ["Staff choosing “Remove background” on an item's photo"],
+    off: "Photos are used as they are; pictures already cleaned and every original stay.",
+    on: "Staff can clean a photo's background again, within this month's cap."
+  }
+} as const;
 
 /** Administration > System: whether the application, the database, storage and Self-Service are working, and exactly what version is live. */
 export async function systemStatus(): Promise<void> {
@@ -120,18 +138,25 @@ export async function systemStatus(): Promise<void> {
       if (!active || current !== request) return;
       mount(target, render(status, session!.role === "OWNER"));
       document.querySelector("#check-again")!.addEventListener("click", () => { void check(); });
-      document.querySelector<HTMLButtonElement>("#assist-toggle")?.addEventListener("click", (event) => {
-        const button = event.currentTarget as HTMLButtonElement;
-        button.disabled = true;
-        api("/api/staff/admin/assist", { method: "PATCH", body: JSON.stringify({ on: button.dataset.on === "true" }) })
-          .then(() => check(), (error) => { if (!active) return; button.disabled = false; mount(target.querySelector("#system-summary")!, html`<p>${failure(error)}</p>`); });
-      });
-      document.querySelector<HTMLButtonElement>("#cleanup-toggle")?.addEventListener("click", (event) => {
-        const button = event.currentTarget as HTMLButtonElement;
-        button.disabled = true;
-        api("/api/staff/admin/cleanup", { method: "PATCH", body: JSON.stringify({ on: button.dataset.on === "true" }) })
-          .then(() => check(), (error) => { if (!active) return; button.disabled = false; mount(target.querySelector("#system-summary")!, html`<p>${failure(error)}</p>`); });
-      });
+      target.querySelectorAll("[data-check-again]").forEach((button) => button.addEventListener("click", () => { void check(); }));
+      for (const key of ["assist", "cleanup"] as const) {
+        document.querySelector<HTMLButtonElement>(`#${key}-toggle`)?.addEventListener("click", async (event) => {
+          const turnOn = (event.currentTarget as HTMLButtonElement).dataset.on === "true";
+          const what = SWITCHES[key];
+          const changed = await confirmImpact({
+            kicker: "System", title: `Turn ${turnOn ? "on" : "off"} ${what.title}?`,
+            now: turnOn ? "Off" : "On", after: turnOn ? "On" : "Off",
+            impact: html`<p>${turnOn ? what.on : what.off}</p>`,
+            affects: [...what.affects],
+            undo: `You can turn it ${turnOn ? "off" : "back on"} here at any time.`,
+            confirm: `Turn ${turnOn ? "on" : "off"}`,
+            run: () => api(what.path, { method: "PATCH", body: JSON.stringify({ on: turnOn }) }).then(() => undefined)
+          });
+          if (!changed || !active) return;
+          await check();
+          settle(key);
+        });
+      }
     } catch (error) {
       if (!active || current !== request) return;
       // Navigation and every other page stay available; only this report is missing.

@@ -536,6 +536,24 @@ export async function selfServiceReview(db: D1Database) {
   return { open: open.results, stockIssues: issues.results, recent: recent.results, candidates: candidates.results, locationReports: reports.results, enabledItems: (await selfServiceCatalog(db)).items.length };
 }
 
+const RECORDS_PAGE = 50;
+const RECORDS_CURSOR = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)\|([0-9a-f-]{36})$/;
+
+/**
+ * Every phone record, newest received first, a page at a time (V1.16.7, "Show all records" on the staff Self-Service page). The cursor
+ * is the last record's (received, id), walked on the received-time index, as Activity pages its feed.
+ */
+export async function selfServiceRecords(db: D1Database, cursor: string | null) {
+  const at = cursor === null ? null : RECORDS_CURSOR.exec(cursor);
+  if (cursor !== null && !at) throw new InputError(400, "That page marker is not valid. Reload the list.");
+  const { results } = await (at
+    ? db.prepare(`${EVENT_COLUMNS} WHERE (e.received_at < ?1 OR (e.received_at = ?1 AND e.id < ?2)) ORDER BY e.received_at DESC, e.id DESC LIMIT ${RECORDS_PAGE + 1}`).bind(at[1], at[2])
+    : db.prepare(`${EVENT_COLUMNS} ORDER BY e.received_at DESC, e.id DESC LIMIT ${RECORDS_PAGE + 1}`)).all<{ id: string; receivedAt: string }>();
+  const page = results.slice(0, RECORDS_PAGE);
+  const last = page.at(-1);
+  return { records: page, nextCursor: results.length > RECORDS_PAGE && last ? `${last.receivedAt}|${last.id}` : null };
+}
+
 type HeldEvent = {
   id: string; type: EventType; itemId: string; quantity: number; personName: string; studentId: string | null; purpose: LoanDetails["purpose"] | null;
   reason: string | null; returnBy: string | null; outcome: typeof LOAN_OUTCOMES[number] | null; note: string | null; occurredAt: string;

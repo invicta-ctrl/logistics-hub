@@ -1,6 +1,6 @@
 import { LOAN_FIELDS, type LoanField, WHOLE_DOMAINS, normalizeStudentId, parseWhole, validateLoanDraft } from "./catalog-policy";
 import { bindStudentId } from "./student-id-field";
-import { type Html, ApiError, api, dataUrl, failure, formatDate, formatDateTime, html, icon, label, mount, officeDay, onLeave, setMessage, shrinkPhoto, toast, units } from "./ui";
+import { type Html, ApiError, api, dataUrl, emptyState, failure, formatDate, formatDateTime, formatTime, html, icon, jpegOf, label, mount, officeDay, onLeave, setMessage, sheet as createSheet, sheetContent, shrinkPhoto, toast, units } from "./ui";
 import { confirmDiscard, formEdits, hasUnsaved, trackEdits } from "./unsaved";
 
 export type Loan = {
@@ -47,13 +47,38 @@ function loanTrack(loan: Pick<Loan, "status" | "returnBy" | "createdAt">, today 
   return html`<svg class="loan-track${late ? " loan-track--late" : ""}" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true" focusable="false"><line class="loan-track__rail" x1="0" y1="4" x2="100" y2="4"/><line class="loan-track__used" x1="0" y1="4" x2="${at(Math.min(now, due))}" y2="4"/>${late ? html`<line class="loan-track__late" x1="${at(due)}" y1="4" x2="100" y2="4"/>` : ""}<line class="loan-track__due" x1="${at(due)}" y1="0" x2="${at(due)}" y2="8"/></svg>`;
 }
 
-/** One loan as a row: who, what, since when, and the Return action while it is out. */
-export function loanRow(loan: Loan, withItem = false): Html {
+/**
+ * A loan photo's thumbnail (V1.16.7): drawn here from the photo itself and saved beside it once (loans.ts saveLoanThumb), so no
+ * other service ever sees the photo. A row shows it at 3 rem. It never holds anything up; when it fails the row keeps the icon.
+ */
+const THUMB_EDGE = 192;
+const thumbed = new Set<string>();
+export async function saveLoanThumb(loanId: string, source: Blob | HTMLImageElement): Promise<void> {
+  if (thumbed.has(loanId)) return;
+  thumbed.add(loanId);
+  try {
+    const bitmap = await createImageBitmap(source);
+    let thumb: Blob;
+    try { thumb = await jpegOf(bitmap, THUMB_EDGE, 0.78); } finally { bitmap.close(); }
+    const answer = await fetch(`/api/staff/loans/${encodeURIComponent(loanId)}/thumb`, { method: "PUT", credentials: "same-origin", headers: { "content-type": "image/jpeg" }, body: thumb });
+    if (!answer.ok) thumbed.delete(loanId);
+  } catch {
+    thumbed.delete(loanId);
+  }
+}
+
+/**
+ * One loan as a row: who, what, since when, and the Return action while it is out. On Loans (`openable`) the row leads with the
+ * photo's thumbnail (the camera icon until it has one) and opens the loan's sheet; elsewhere it links to the photo as before.
+ */
+export function loanRow(loan: Loan, withItem = false, openable = false): Html {
   const out = loan.status === "OUT";
   const days = daysOut(loan);
-  return html`<li class="loan-row ${isOverdue(loan) ? "is-overdue" : ""}" data-key="${loan.id}">
+  const who = html`<strong>${loan.borrowerName}</strong>`;
+  return html`<li class="loan-row ${isOverdue(loan) ? "is-overdue" : ""} ${openable ? "loan-row--open" : ""}" data-key="${loan.id}">
+    ${openable ? html`<span class="loan-thumb ${loan.hasPhoto === 0 ? "loan-thumb--none" : ""}" aria-hidden="true">${loan.hasPhoto === 0 ? "" : html`${icon("camera")}<img src="/api/staff/loans/${loan.id}/thumb?v=2" alt="" loading="lazy" decoding="async" data-loan-thumb="${loan.id}" />`}</span>` : ""}
     <div class="loan-row__main">
-      <p class="loan-row__who"><strong>${loan.borrowerName}</strong>${loan.studentId ? html` <span class="mono muted">${loan.studentId}</span>` : ""} ${purposeTag(loan.purpose)}</p>
+      <p class="loan-row__who">${openable ? html`<button type="button" class="loan-row__open" data-open-loan="${loan.id}"><span class="visually-hidden">Open the loan to </span>${who}</button>` : who}${loan.studentId ? html` <span class="mono muted">${loan.studentId}</span>` : ""} ${purposeTag(loan.purpose)}</p>
       <p class="loan-row__what">${withItem ? html`<a class="row-link" href="/staff/items?item=${loan.itemId}" data-route>${loan.itemName}</a> · ` : ""}${loan.quantity} ${units(loan.quantity, loan.unit)}
         · ${out ? html`out ${days === 0 ? "since today" : days === 1 ? "since yesterday" : `for ${days} days`}` : html`${formatDate(officeDay(loan.createdAt))} → ${formatDate(officeDay(loan.closedAt!))}`} ${out ? html`${dueTag(loan)}${loanTrack(loan)}` : outcomeTag(loan.status)}</p>
       ${loan.reason ? html`<p class="loan-row__note">${loan.reason}</p>` : ""}
@@ -62,8 +87,56 @@ export function loanRow(loan: Loan, withItem = false): Html {
     </div>
     <div class="loan-row__actions">
       ${out ? html`<button type="button" class="button button--secondary button--sm" data-return="${loan.id}">Return</button>` : ""}
-      ${loan.hasPhoto === 0 ? "" : html`<a class="text-link loan-row__photo" href="/api/staff/loans/${loan.id}/photo" target="_blank" rel="noopener">Photo<span class="visually-hidden"> of this loan (opens in a new tab)</span></a>`}
+      ${openable || loan.hasPhoto === 0 ? "" : html`<a class="text-link loan-row__photo" href="/api/staff/loans/${loan.id}/photo" target="_blank" rel="noopener">Photo<span class="visually-hidden"> of this loan (opens in a new tab)</span></a>`}
     </div></li>`;
+}
+
+type TrailEntry = { id: string; at: string | null; summary: string; actor: string };
+
+/**
+ * A loan's sheet (V1.16.7): who borrowed it and why, the item, how many and when, who lent and closed it, the photo large, its note,
+ * and its trail in Activity. Return is offered while it is out. A loan whose row has no thumbnail yet gets one from this photo.
+ */
+export function openLoan(loan: Loan, options: { onReturn: (loan: Loan) => void; needsThumb: boolean }): void {
+  const dialog = document.createElement("dialog");
+  dialog.className = "sheet sheet--loan";
+  dialog.setAttribute("aria-labelledby", "loan-title");
+  document.body.append(dialog);
+  const out = loan.status === "OUT";
+  const fact = (term: string, value: Html | string) => html`<div><dt>${term}</dt><dd>${value}</dd></div>`;
+  mount(dialog, sheetContent("Loan", loan.borrowerName, html`
+    ${loan.hasPhoto === 0 ? html`<p class="loan-sheet__nophoto muted">${icon("camera")}<span>The photo was removed with the borrower's details, under the record-keeping rules.</span></p>`
+      : html`<figure class="loan-sheet__photo"><img src="/api/staff/loans/${loan.id}/photo" alt="Photo taken when ${loan.itemName} was lent to ${loan.borrowerName}" /></figure>`}
+    <dl class="facts loan-sheet__facts">
+      ${fact("Borrower", html`${loan.borrowerName}${loan.studentId ? html` <span class="mono muted">${loan.studentId}</span>` : ""}`)}
+      ${fact("Use", html`${purposeTag(loan.purpose)}${loan.reason ? html` ${loan.reason}` : ""}`)}
+      ${fact("Item", html`<a class="text-link" href="/staff/items?item=${loan.itemId}" data-route>${loan.itemName}</a> <span class="mono muted">${loan.itemId}</span>`)}
+      ${fact("Quantity", `${loan.quantity} ${units(loan.quantity, loan.unit)}`)}
+      ${fact("Lent", `${formatDateTime(loan.createdAt)} · by ${loan.createdBy ?? "staff"}`)}
+      ${fact("Due", loan.returnBy ? html`${formatDate(loan.returnBy)} ${dueTag(loan)}` : html`<span class="muted">No return date</span>`)}
+      ${out ? fact("Status", outcomeTag(loan.status)) : fact("Closed", html`${formatDateTime(loan.closedAt!)}${loan.closedBy ? ` · by ${loan.closedBy}` : ""} ${outcomeTag(loan.status)}`)}
+      ${loan.returnNote ? fact("Note", loan.returnNote) : ""}
+    </dl>
+    ${out ? html`<div class="form-actions"><button type="button" class="button button--primary" data-loan-return>Return</button></div>` : ""}
+    <section class="loan-sheet__trail" aria-labelledby="loan-trail-title"><h3 id="loan-trail-title" class="subsection__title">History</h3><div id="loan-trail" aria-busy="true"><div class="skeleton skeleton--block"></div></div></section>`, "loan-title"));
+  const panel = createSheet(dialog);
+  dialog.addEventListener("close", () => dialog.remove());
+  dialog.querySelector("[data-loan-return]")?.addEventListener("click", () => { panel.close(true); options.onReturn(loan); });
+  const photo = dialog.querySelector<HTMLImageElement>(".loan-sheet__photo img");
+  if (photo && options.needsThumb) {
+    const draw = () => void saveLoanThumb(loan.id, photo);
+    if (photo.complete && photo.naturalWidth) draw(); else photo.addEventListener("load", draw, { once: true });
+  }
+  panel.open();
+  const trail = dialog.querySelector<HTMLElement>("#loan-trail")!;
+  api<{ events: TrailEntry[] }>(`/api/staff/activity?${new URLSearchParams({ item: loan.itemId, loan: loan.id, limit: "20" })}`).then(({ events }) => {
+    trail.removeAttribute("aria-busy");
+    mount(trail, events.length ? html`<ol class="loan-trail">${events.map((event) => html`<li><p>${event.summary}</p><p class="cell-sub">${event.at ? html`<time datetime="${event.at}">${formatDate(officeDay(event.at))}, ${formatTime(event.at)}</time>` : "Time unknown"} · ${event.actor}</p></li>`)}</ol>`
+      : html`<p class="muted">Nothing else has been recorded for this loan.</p>`);
+  }).catch((error) => {
+    trail.removeAttribute("aria-busy");
+    mount(trail, emptyState("History could not be loaded", failure(error), "", "error", 3));
+  });
 }
 
 /**
@@ -256,9 +329,11 @@ export function bindLoanForm(form: HTMLFormElement, options: {
     let replayed = false;
     let differs = false;
     try {
-      const answer = await api<{ replayed?: boolean; differs?: boolean }>(`/api/staff/items/${encodeURIComponent(target.id)}/loans`, { method: "POST", body });
+      const answer = await api<{ id?: string; replayed?: boolean; differs?: boolean }>(`/api/staff/items/${encodeURIComponent(target.id)}/loans`, { method: "POST", body });
       replayed = Boolean(answer.replayed);
       differs = Boolean(answer.differs);
+      // The new loan's thumbnail, from the photo just sent: Loans shows it without anyone opening the loan.
+      if (answer.id && !replayed) void saveLoanThumb(answer.id, body.get("photo") as Blob);
     } catch (error) {
       const unanswered = error instanceof ApiError && error.status === 0;
       // The server answered, so nothing was saved under this key: the next Lend is a new request. With no answer, it may have been.

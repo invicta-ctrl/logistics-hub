@@ -1,10 +1,22 @@
-import { openViewer, photoPanel } from "./item-photo";
+import { openViewer, photoPanel, rowThumb } from "./item-photo";
+import type { VisualItem } from "./item-icons";
 import { MAX_DEPTH, VISIBILITIES, VISIBILITY_LABELS, ancestry, inOrder, levelsBelow, lookAlikes, pathOf, placesOf, withinPlace } from "./location-tree";
 import type { PlaceRow } from "./staff";
 import { UP_TO_ITEMS, ageOf, loadSession, shell } from "./staff-shell";
 import type { Session } from "./staff-shell";
-import { ApiError, type Html, api, emptyState, expired, failure, html, icon, live, mount, navigate, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, writeParams } from "./ui";
+import { ApiError, type Html, api, emptyState, expired, failure, formatDateTime, formatQuantity, html, icon, live, mount, navigate, onLeave, plural, preservingFocus, readKept, setMessage, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 import { formEdits, warnOnUnload } from "./unsaved";
+
+/** A place sheet's tabs, as the item sheet's (V1.16.7). */
+type PlaceTab = "overview" | "details" | "history";
+const PLACE_TABS: Array<[PlaceTab, string]> = [["overview", "Overview"], ["details", "Edit details"], ["history", "History"]];
+/** An item kept in a place, from the item list All items reads (inventory.ts staffInventory). */
+type KeptItem = VisualItem & { id: string; locationId: string | null; onHand: number; unit: string; updatedAt?: string | null };
+/** What a History tab shows of Activity (activity.ts ActivityEvent). */
+type PlaceEvent = { id: string; at: string | null; summary: string; itemId: string | null; change: number; stockChanged: boolean };
+/** How many items kept here, and how many events, a place sheet lists before handing over to Items and Activity. */
+const KEPT_SHOWN = 12;
+const HISTORY_SHOWN = 15;
 
 /*
  * Locations (/staff/locations): the places items are kept, as the tree staff think in (Office → Storage Area → Cabinet 1 →
@@ -47,9 +59,12 @@ export async function locationsWorkspace(): Promise<void> {
   let paths = new Map<string, string>();
   let rows = new Map<string, PlaceRow>();
   let openId: string | null = null;
+  let placeTab: PlaceTab = "overview";
   /** The place form's edits, against how it was drawn (V1.16.4 §4.7): a form typed back to what it was is clean. */
   let edited: () => boolean = () => false;
   let pendingOpen = params.get("place");
+  /** A place just added opens on Edit details, where its directions go next; one opened by its address opens on its Overview. */
+  let pendingTab: PlaceTab = "overview";
   const sheetElement = document.querySelector<HTMLDialogElement>("#sheet")!;
   const results = document.querySelector<HTMLElement>("#place-results")!;
   const search = document.querySelector<HTMLInputElement>("#place-search")!;
@@ -118,7 +133,7 @@ export async function locationsWorkspace(): Promise<void> {
       rows = new Map(next.locations.map((row) => [row.id, row]));
       paths = new Map(next.locations.map((row) => [row.id, pathOf(places, row.id)!]));
       render();
-      if (pendingOpen) { if (rows.has(pendingOpen)) openPlace(pendingOpen); pendingOpen = null; }
+      if (pendingOpen) { if (rows.has(pendingOpen)) openPlace(pendingOpen, pendingTab); pendingOpen = null; pendingTab = "overview"; }
     },
     onError: (error) => {
       if (error.status === 401) expired();
@@ -155,30 +170,113 @@ export async function locationsWorkspace(): Promise<void> {
       html`<option value="${place.id}" ${place.id === current ? html`selected` : ""}>${paths.get(place.id)}${place.active ? "" : " (inactive)"}</option>`)}`;
   }
 
-  function openPlace(id: string | null): void {
-    if ((id ?? "") !== (openId ?? "") && panel.unsaved()) { void panel.discardOk().then((discard) => { if (discard) openPlace(id); }); return; }
+  function openPlace(id: string | null, tab: PlaceTab = "overview"): void {
+    if ((id ?? "") !== (openId ?? "") && panel.unsaved()) { void panel.discardOk().then((discard) => { if (discard) openPlace(id, tab); }); return; }
     edited = () => false;
     openId = id;
+    placeTab = tab;
     results.querySelectorAll(".is-open").forEach((row) => row.classList.remove("is-open"));
     if (id) results.querySelector(`[data-key="${CSS.escape(id)}"]`)?.classList.add("is-open");
     writeParams({ place: id });
     const row = id ? rows.get(id) : undefined;
-    mount(sheetElement, sheetContent(row ? html`<span class="mono">${row.id}</span>` : "New place", row ? row.name : "Add a place", form(row)));
+    mount(sheetElement, sheetContent(row ? html`<span class="mono">${row.id}</span>` : "New place", row ? row.name : "Add a place", row ? placeSheet(row) : form(undefined)));
     panel.open();
     bind(row);
+  }
+
+  /**
+   * A place's sheet takes the item sheet's layout (V1.16.7): a stage that holds only its picture, with the picture's own controls
+   * under it as an item's are; then Overview (where it is, its last check, Check this place, and the items kept here, each opening
+   * its own sheet in All items), Edit details (the form, Move items and Delete) and History (what happened to the items here).
+   */
+  function placeSheet(row: PlaceRow): Html {
+    const tabPanel = (key: PlaceTab, body: Html, stack = true) => html`<section id="place-panel-${key}" class="${stack ? "panel-stack" : ""}" role="tabpanel" aria-labelledby="place-tab-${key}" ${key === "details" ? "" : html`tabindex="0"`} ${key === placeTab ? "" : html`hidden`}>${body}</section>`;
+    return html`<section class="profile theater drafting" id="place-photo" aria-label="Place picture"><div class="profile__photo" data-tile></div><div class="profile__actions" data-actions></div></section>
+      <div class="tabs" role="tablist" aria-label="Place sections">
+        ${PLACE_TABS.map(([key, text]) => html`<button type="button" role="tab" id="place-tab-${key}" aria-controls="place-panel-${key}" aria-selected="${key === placeTab}" tabindex="${key === placeTab ? 0 : -1}">${text}</button>`)}
+      </div>
+      ${tabPanel("overview", html`<div class="place-profile">
+          <p class="profile__meta profile__meta--place">${icon("pin")}<span>${paths.get(row.id)}</span></p>
+          <p class="profile__meta profile__meta--fresh">${icon("clock")}<span>${row.lastCheckedAt ? `Last checked ${ageOf(row.lastCheckedAt)}` : "Not checked yet"}</span></p>
+          ${row.openReports ? html`<p class="profile__meta profile__meta--finding">${icon("alert")}<span>${plural(row.openReports, "open report")} about items here</span></p>` : ""}
+          ${row.active ? html`<p class="where__buttons"><button type="button" class="button button--secondary button--sm" data-check-place>${icon("check")}Check this place</button></p>
+            <div class="form-alert" id="check-alert" role="alert" hidden></div>` : html`<p class="profile__meta">Not in use. Turn on In use in Edit details to check it again.</p>`}
+        </div>
+        <section aria-labelledby="kept-title"><h3 class="section-label" id="kept-title">Kept here${row.itemCount ? ` · ${row.itemCount}` : ""}</h3>
+          <div id="kept-here">${row.itemCount ? html`<p class="muted" role="status">Loading the items kept here…</p>` : html`<p class="muted">No items are kept here. An item is put here from its own Edit details.</p>`}</div></section>`)}
+      ${tabPanel("details", form(row), false)}
+      ${tabPanel("history", html`<ol class="history" id="place-history"><li class="history__empty" role="status">Loading…</li></ol>
+        <p><a class="text-link" href="/staff/activity?location=${encodeURIComponent(paths.get(row.id) ?? row.name)}" data-route>All activity here ${icon("arrow")}</a></p>`)}`;
+  }
+
+  /** The items kept here, from the item list All items reads; each opens its own sheet in All items, the same sheet with the same tabs. */
+  async function showKept(row: PlaceRow): Promise<void> {
+    const host = sheetElement.querySelector<HTMLElement>("#kept-here");
+    if (!host || !row.itemCount) return;
+    try {
+      const { items } = await readKept<{ items: KeptItem[] }>("/api/staff/inventory");
+      if (openId !== row.id || !host.isConnected) return;
+      const here = items.filter((item) => item.locationId === row.id).sort((a, b) => a.name.localeCompare(b.name));
+      const shown = here.slice(0, KEPT_SHOWN);
+      mount(host, here.length ? html`<ul class="kept-list">${shown.map((item) => html`<li><a class="kept-row" href="/staff/items?item=${encodeURIComponent(item.id)}" data-route>${rowThumb(item)}
+          <span class="kept-row__name">${item.name}</span><span class="kept-row__sub"><span class="mono">${item.id}</span> · ${formatQuantity(item.onHand)} ${units(item.onHand, item.unit)}</span></a></li>`)}</ul>
+        ${here.length > shown.length ? html`<p><a class="text-link" href="/staff/items?location=${row.id}" data-route>All ${plural(here.length, "item")} kept here, in Items ${icon("arrow")}</a></p>` : ""}`
+        : html`<p class="muted">No items are kept here now.</p>`);
+    } catch (error) {
+      if (openId === row.id && host.isConnected) mount(host, html`<p class="form-alert" role="alert">${failure(error)} <a class="text-link" href="/staff/items?location=${row.id}" data-route>See them in Items</a></p>`);
+    }
+  }
+
+  /** What happened to the items kept here and in the places inside it: the newest entries of Activity, filtered to this place. */
+  async function showHistory(row: PlaceRow): Promise<void> {
+    const host = sheetElement.querySelector<HTMLElement>("#place-history");
+    if (!host || host.dataset.loaded) return;
+    host.dataset.loaded = "1";
+    try {
+      const { events } = await api<{ events: PlaceEvent[] }>(`/api/staff/activity?location=${encodeURIComponent(paths.get(row.id) ?? row.name)}&limit=${HISTORY_SHOWN}`);
+      if (openId !== row.id || !host.isConnected) return;
+      mount(host, events.length ? html`${events.map((event) => {
+        const tone = event.change > 0 ? "is-in" : event.change < 0 ? "is-out" : "";
+        return html`<li class="history__item ${tone}"><div>${event.itemId ? html`<a class="history__title text-link" href="/staff/items?item=${encodeURIComponent(event.itemId)}" data-route>${event.summary}</a>` : html`<p class="history__title">${event.summary}</p>`}
+          ${event.at ? html`<p class="history__meta"><time datetime="${event.at}">${formatDateTime(event.at)}</time></p>` : ""}</div>
+          ${event.stockChanged ? html`<p class="history__qty ${tone}">${event.change > 0 ? "+" : ""}${formatQuantity(event.change)}</p>` : ""}</li>`;
+      })}` : html`<li class="history__empty">Nothing has happened to the items here yet.</li>`);
+    } catch (error) {
+      delete host.dataset.loaded;
+      if (openId === row.id && host.isConnected) mount(host, html`<li class="history__empty"><span class="form-alert" role="alert">${failure(error)}</span></li>`);
+    }
+  }
+
+  /** The tabs, as the item sheet's: a click or the arrow keys choose one, and History loads the first time it is shown. */
+  function bindTabs(row: PlaceRow): void {
+    const buttons = [...sheetElement.querySelectorAll<HTMLButtonElement>("[role=tab]")];
+    const select = (target: HTMLButtonElement) => {
+      buttons.forEach((entry) => {
+        const selected = entry === target;
+        entry.setAttribute("aria-selected", String(selected));
+        entry.tabIndex = selected ? 0 : -1;
+        sheetElement.querySelector<HTMLElement>(`#${entry.getAttribute("aria-controls")}`)!.hidden = !selected;
+      });
+      placeTab = target.id.replace("place-tab-", "") as PlaceTab;
+      if (placeTab === "history") void showHistory(row);
+    };
+    buttons.forEach((button, index) => {
+      button.addEventListener("click", () => select(button));
+      button.addEventListener("keydown", (event) => {
+        const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+        if (!step) return;
+        const next = buttons[(index + step + buttons.length) % buttons.length]!;
+        select(next);
+        next.focus();
+      });
+    });
+    if (placeTab === "history") void showHistory(row);
   }
 
   function form(row: PlaceRow | undefined): Html {
     const creating = !row;
     const hint = (id: string, text: string) => html`<p class="field__hint" id="p-${id}-hint">${text}</p>`;
     return html`
-      ${row ? html`<section class="profile" id="place-photo" aria-label="Picture"><div class="profile__photo" data-tile></div>
-        <div class="profile__info"><p class="profile__meta profile__meta--place">${icon("pin")}<span>${paths.get(row.id)}</span></p>
-          <p class="profile__meta">${row.itemCount ? html`<a class="text-link" href="/staff/items?location=${row.id}" data-route>${countLabel(row)} kept here</a>` : "No items kept here"}${row.openReports ? ` · ${plural(row.openReports, "open report")}` : ""}</p>
-          <p class="profile__meta profile__meta--fresh">${icon("clock")}<span>${row.lastCheckedAt ? `Last checked ${ageOf(row.lastCheckedAt)}` : "Not checked yet"}</span></p>
-          ${row.active ? html`<div class="where__buttons"><button type="button" class="button button--secondary button--sm" data-check-place>${icon("check")}Check this place</button></div>
-            <div class="form-alert" id="check-alert" role="alert" hidden></div>` : ""}
-          <div class="profile__actions" data-actions></div></div></section>` : ""}
       <form id="place-form" class="form" novalidate>
         <div class="field"><label for="p-name">Name</label><input id="p-name" name="name" value="${row?.name ?? ""}" required maxlength="120" autocomplete="off" placeholder="Cabinet 1" aria-describedby="p-name-hint" />${hint("name", "What staff call it. Cabinet 1 inside Storage Area reads as Storage Area › Cabinet 1.")}</div>
         <div class="field"><label for="p-parent">Inside</label><select id="p-parent" name="parentId" aria-describedby="p-parent-hint">${parentChoices(row?.id ?? null, row?.parentId ?? null)}</select>${hint("parent", `Places nest up to ${MAX_DEPTH} levels, for example Office, Storage Area, Cabinet 1, Shelf 2, Box.`)}
@@ -308,6 +406,7 @@ export async function locationsWorkspace(): Promise<void> {
           const { id } = await api<{ id: string }>("/api/staff/locations", { method: "POST", body: JSON.stringify(body) });
           edited = () => false;
           pendingOpen = id;
+          pendingTab = "details";
           await poll.refresh();
           toast("Place added. Add directions or a picture next.");
           return;
@@ -315,25 +414,27 @@ export async function locationsWorkspace(): Promise<void> {
         const result = await api<{ changed: number }>(`/api/staff/locations/${row.id}`, { method: "PATCH", body: JSON.stringify(body) });
         edited = () => false;
         await poll.refresh();
-        openPlace(row.id);
+        openPlace(row.id, placeTab);
         toast(result.changed ? "Changes saved." : "No changes to save.");
       } catch (error) {
         const stale = error instanceof ApiError && error.status === 409 && /Someone else/.test(error.message);
         setMessage(alert, stale ? html`${failure(error)} <button type="button" class="text-link" data-reload>Load the latest details</button>` : failure(error));
-        alert.querySelector("[data-reload]")?.addEventListener("click", async () => { edited = () => false; await poll.refresh(); openPlace(row!.id); });
+        alert.querySelector("[data-reload]")?.addEventListener("click", async () => { edited = () => false; await poll.refresh(); openPlace(row!.id, placeTab); });
         button.disabled = false;
       }
     });
     bindInside(row);
     if (!row) { place.querySelector<HTMLInputElement>("#p-name")!.focus(); return; }
+    bindTabs(row);
+    void showKept(row);
     photoPanel(sheetElement.querySelector<HTMLElement>("#place-photo")!, {
       id: row.id, name: row.name, photo: row.photo, noun: "picture", endpoint: `/api/staff/locations/${row.id}/photo`, thumbUrl: (id) => `/api/staff/location-media/${id}/thumb`,
       hintAdd: "One picture shows where to look; every item kept here shares it. Show the cabinet or shelf, not people or documents.",
       hintHas: "Every item kept here shares this picture. Self-Service shows it only if this place is shared.",
       removeNote: "Items keep their place.",
-      view: (shown) => void openViewer(`/api/staff/location-media/${shown.id}/display`, `Picture of ${row.name}`, () => sheetElement.querySelector<HTMLElement>("#place-photo [data-view] img"), row.name),
+      view: (shown) => void openViewer(`/api/staff/location-media/${shown.id}/display`, `Picture of ${row.name}`, () => sheetElement.querySelector<HTMLElement>("#place-photo [data-view] img:not(.photo-tile__ambient)"), row.name),
       changed: async () => { await poll.refresh(); },
-      refresh: async () => { await poll.refresh(); openPlace(row.id); }
+      refresh: async () => { await poll.refresh(); openPlace(row.id, placeTab); }
     });
     const remove = sheetElement.querySelector<HTMLButtonElement>("#delete-go");
     remove?.addEventListener("click", async () => {
@@ -362,7 +463,7 @@ export async function locationsWorkspace(): Promise<void> {
       try {
         const { moved } = await api<{ moved: number }>(`/api/staff/locations/${row.id}/move-items`, { method: "POST", body: JSON.stringify({ toLocationId: target.value }) });
         await poll.refresh();
-        openPlace(row.id);
+        openPlace(row.id, placeTab);
         toast(`Moved ${plural(moved, "item")}.`);
       } catch (error) {
         setMessage(problem, failure(error));

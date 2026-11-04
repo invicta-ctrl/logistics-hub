@@ -241,11 +241,38 @@ test.describe("Administration", () => {
     });
   }
 
+  test("200% text: System's settings keep a readable description column at 1440px, and a confirmation opens at its title at 320px", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/staff/admin");
+    await expect(page.locator(".setting-row").first()).toBeVisible();
+    await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
+    const narrowest = await page.locator(".setting-row__does").evaluateAll((all) => Math.min(...all.map((el) => el.getBoundingClientRect().width / parseFloat(getComputedStyle(el).fontSize))));
+    expect(narrowest, "description width in ems").toBeGreaterThan(12);
+
+    await page.route("**/api/staff/admin/retention", (route) => route.fulfill(json({ loans: 3, phoneRecords: 2, photos: 4 })));
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.goto("/staff/admin/accountability");
+    await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
+    await page.locator("#ret-run").click();
+    const sheet = page.locator("dialog[open]");
+    await expect(sheet.getByRole("button", { name: "Cancel" })).toBeFocused();
+    const layout = await sheet.evaluate((dialog) => {
+      const title = dialog.querySelector("h2")!;
+      const em = parseFloat(getComputedStyle(title).fontSize);
+      return { scrollTop: dialog.scrollTop, titleTop: title.getBoundingClientRect().top, titleEms: title.getBoundingClientRect().width / em, sideways: dialog.scrollWidth - dialog.clientWidth };
+    });
+    expect(layout.scrollTop).toBe(0);
+    expect(layout.titleTop).toBeLessThan(800);
+    expect(layout.titleEms, "title width in ems").toBeGreaterThan(4.5);
+    expect(layout.sideways).toBe(0);
+  });
+
   test("System refresh uses the running artifact and preserves unknown and rollback identities", async ({ page }) => {
     let current: unknown = status;
     await page.route("**/api/staff/admin/system", (route) => route.fulfill(json(current)));
     await page.goto("/staff/admin");
     await expect(page.locator(".product-version strong")).toHaveText("V1.15");
+    await expect(page.getByRole("button", { name: "Check again: Catalog pictures storage is not answering.", exact: true })).toBeVisible();
     const notes = ["Photo edits & thumbnails stay together.", "A second verified change."];
     current = { ...status, build: { ...status.build, commit: "c".repeat(40), product: { ...status.build.product, version: "V1.15.1", changes: notes } } };
     let release!: () => void;
@@ -258,9 +285,9 @@ test.describe("Administration", () => {
       else await route.fulfill(json(current));
     });
     try {
-      await page.getByRole("button", { name: "Check again" }).click();
+      await page.getByRole("button", { name: "Check again", exact: true }).click();
       await began;
-      await page.getByRole("button", { name: "Check again" }).click();
+      await page.getByRole("button", { name: "Check again", exact: true }).click();
       await expect(page.locator(".product-version strong")).toHaveText("V1.15.1");
       release();
       await page.waitForLoadState("networkidle");
@@ -269,15 +296,15 @@ test.describe("Administration", () => {
     await expect(page.locator(".release-notes li")).toHaveText(notes);
     const { product: _product, ...older } = status.build;
     current = { ...status, build: older };
-    await page.getByRole("button", { name: "Check again" }).click();
+    await page.getByRole("button", { name: "Check again", exact: true }).click();
     await expect(page.locator(".product-version strong")).toHaveText("Unknown");
     await expect(page.locator(".version-facts")).toContainText("0123456789ab");
     current = { ...status, build: null };
-    await page.getByRole("button", { name: "Check again" }).click();
+    await page.getByRole("button", { name: "Check again", exact: true }).click();
     await expect(page.locator(".product-version strong")).toHaveText("Unknown");
     await expect(page.locator(".release-notes li")).toHaveCount(0);
     current = status;
-    await page.getByRole("button", { name: "Check again" }).click();
+    await page.getByRole("button", { name: "Check again", exact: true }).click();
     await expect(page.locator(".product-version strong")).toHaveText("V1.15");
   });
 
@@ -298,9 +325,11 @@ test.describe("Administration", () => {
   test("the sections are one navigation with the current one marked, and a confirmation sheet names its title and focuses the safe choice", async ({ page }) => {
     await page.goto("/staff/admin/self-service");
     const nav = page.getByRole("navigation", { name: "Administration" });
-    await expect(nav.getByRole("link")).toHaveText(["System", "Self-Service", "Catalog", "Staff", "Accountability"]);
+    const sectionNames = ["System", "Self-Service", "Catalog", "Staff", "Accountability"];
+    await expect(nav.getByRole("link")).toHaveCount(sectionNames.length);
+    for (const [index, name] of sectionNames.entries()) await expect(nav.getByRole("link").nth(index)).toHaveAccessibleName(name);
     await expect(nav.locator("[aria-current]")).toHaveText("Self-Service");
-    await page.getByRole("button", { name: "Close for maintenance" }).click();
+    await page.getByRole("button", { name: "Change Self-Service on phones" }).click();
     const dialog = page.getByRole("dialog", { name: "Close Self-Service for maintenance?" });
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();

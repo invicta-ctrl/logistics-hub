@@ -84,3 +84,103 @@
 .admin-cataloguing__go p { margin: 0; }
 .admin-cataloguing__app { display: flex; align-items: flex-start; gap: var(--space-2); max-width: 40rem; margin-top: var(--space-4); color: var(--text-2); font-size: var(--text-sm); }
 .admin-cataloguing__app > .icon { flex: none; margin-top: .125rem; color: var(--text-3); }
+
+/* ==========================================================================
+   V1.16.7 · Workspace depth slice 3 (its accepted direction): every section in four bands, one confirmation sheet, a section bar that
+   stays put on a phone. Tokens only; every motion is transform or opacity, and reduced motion keeps none of the travel.
+   ========================================================================== */
+.admin-bands > :first-child { margin-top: 0; }
+
+/* Band 1 · the verdict: one line in words, on a coloured rule. */
+.verdict { display: flex; gap: var(--space-3); margin-bottom: var(--space-8); padding: var(--space-4) var(--space-5); border: 1px solid var(--line); border-left: 4px solid var(--ok-dot); border-radius: var(--radius-lg); background: var(--surface); }
+.verdict > .icon { flex: none; margin-top: calc((1lh - var(--icon-size, var(--icon-md))) / 2); color: var(--ok); }
+.verdict p { margin: 0; max-width: 70ch; color: var(--text-2); overflow-wrap: anywhere; }
+.verdict strong { color: var(--text); font-weight: 600; }
+.verdict--warn { border-color: var(--line-warn); border-left-color: var(--warn-dot); background: var(--warn-tint); }
+.verdict--warn > .icon { color: var(--warn); }
+.verdict--warn p, .verdict--warn strong { color: var(--warn-ink); }
+.verdict--bad { border-left-color: var(--bad-dot); }
+.verdict--bad > .icon { color: var(--bad); }
+
+/* Bands 2 and 3 · a plain Plex heading, and their rows on rules. */
+.admin-band { margin-bottom: var(--space-10); }
+.band-title { margin: 0 0 var(--space-3); color: var(--text-2); font-family: var(--sans); font-size: var(--text-sm); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.decision-list { margin: 0; padding: 0; list-style: none; border-top: 2px solid var(--gold); }
+.decision-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.decision-row__main { flex: 1 1 18rem; min-width: 0; }
+.decision-row__main p { margin: 0; overflow-wrap: anywhere; }
+.decision-row__what { font-weight: 600; }
+.decision-row__detail { color: var(--text-2); font-size: var(--text-sm); }
+.decision-row__action { flex: none; max-width: 100%; }
+.decision-row__action .button { white-space: normal; }
+.admin-band--glance .stat-strip { margin-bottom: 0; }
+
+/* Band 4 · settings in titled groups: the title in Plex on a rule; each setting one row (name, value, what it does, Change). */
+.settings-group { margin-top: var(--space-10); }
+.settings-group.activity { max-width: none; }
+.settings-group.activity .history { max-width: 48rem; }
+.settings-group > .admin-block__head { padding-top: var(--space-4); border-top: 1px solid var(--line-strong); }
+.settings-group > .admin-block__head .section-title { font-family: var(--sans); font-size: var(--text-md); font-weight: 600; letter-spacing: 0; }
+.setting-list { margin: 0; padding: 0; list-style: none; container-type: inline-size; }
+.setting-row { display: grid; grid-template-columns: minmax(8rem, 13rem) minmax(8rem, 13rem) minmax(0, 1fr) auto; grid-template-areas: "name value does action"; align-items: baseline; gap: var(--space-1) var(--space-4); padding: var(--space-4) 0; border-bottom: 1px solid var(--line); }
+.setting-row:first-child { border-top: 1px solid var(--line); }
+.admin-block .setting-row p { margin: 0; max-width: none; }
+.setting-row__name { grid-area: name; font-weight: 600; overflow-wrap: anywhere; }
+.setting-row__value { grid-area: value; justify-self: start; margin-inline: calc(-1 * var(--space-1)); padding: 0 var(--space-1); border-radius: var(--radius); }
+.setting-row__does { grid-area: does; color: var(--text-2); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.setting-row__action { grid-area: action; align-self: center; }
+@media (max-width: 960px) {
+  .setting-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name action" "value action" "does does"; }
+}
+/* The four columns need about 52rem. A container query in rem follows enlarged text (200% at 1440 px); a media query does not. */
+@container (max-width: 52rem) {
+  .setting-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name action" "value action" "does does"; }
+}
+@media (max-width: 760px) {
+  .setting-row .tag, .setting-row__action .button { white-space: normal; }
+  .setting-row__action { max-width: 100%; }
+}
+
+/* A state checked just now that holds: its dot breathes, once every 3 seconds (paused while the tab is hidden; none with reduced motion). */
+@media (prefers-reduced-motion: no-preference) {
+  .tag--live::before { animation: dot-breathe 3s ease-in-out infinite; }
+  :root.is-hidden-tab .tag--live::before { animation-play-state: paused; }
+  @keyframes dot-breathe { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(.72); } }
+}
+
+/* The section bar. On a desktop the underlined row it was, its underline one marker that slides between sections. */
+.admin-tabs { position: relative; }
+.admin-tabs__marker { position: absolute; top: 0; left: 0; z-index: 0; border-bottom: 2px solid var(--brand); pointer-events: none; }
+.admin-tabs__marker[hidden] { display: none; }
+.admin-tabs .subnav__link { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: var(--space-2); }
+.admin-tabs .subnav__link[aria-current] { border-bottom-color: transparent; }
+.admin-tabs .subnav__link > .icon { display: none; }
+.admin-tabs__short { display: none; }
+/* On a phone: five equal cells fixed under the bar, an icon over one word; nothing scrolls sideways. At large text the cells wrap to a
+   second row rather than cut a label, and the marker is the raised cell behind the current one. */
+@media (max-width: 760px) {
+  .admin-tabs { position: sticky; top: var(--app-bar); z-index: 6; flex-wrap: wrap; gap: 2px; margin-inline: calc(-1 * var(--space-1)); padding: 3px; overflow: visible; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--subtle); box-shadow: 0 6px 12px -10px rgb(43 10 12 / 40%); mask-image: none; animation: none; }
+  .admin-tabs .subnav__link { flex: 1 1 0; min-width: min-content; min-height: 3.25rem; flex-direction: column; justify-content: center; gap: 2px; margin: 0; padding: var(--space-1) 2px; border: 0; border-radius: var(--radius); font-size: .75rem; line-height: 1.2; text-align: center; white-space: normal; }
+  .admin-tabs .subnav__link > .icon { --icon-size: 1.125rem; display: block; }
+  .admin-tabs .subnav__link:hover { background: transparent; }
+  .admin-tabs .subnav__link[aria-current] { color: var(--brand); }
+  .admin-tabs__short { display: inline; }
+  .admin-tabs__long { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .admin-tabs__marker { border: 0; border-radius: var(--radius); background: var(--surface); box-shadow: 0 1px 3px rgb(43 10 12 / 18%); }
+  .admin-tabs.is-wrapped { position: relative; top: auto; }
+}
+@media (max-width: 760px) and (forced-colors: active) { .admin-tabs__marker { border: 2px solid CanvasText; } }
+
+/* The one confirmation sheet: the value now struck to the value after, who it reaches, and whether it can be undone. */
+.impact .impact-change { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); max-width: none; margin: 0 0 var(--space-5); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--subtle); }
+.impact-change__label { color: var(--text-3); font-size: var(--text-sm); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.impact-change__now { color: var(--text-2); text-decoration-thickness: 1.5px; }
+.impact-change__after { color: var(--text); }
+.impact-change > .icon { color: var(--text-3); }
+.impact-who { margin: var(--space-4) 0; }
+.impact-who__title { margin: 0 0 var(--space-2); color: var(--text-2); font-family: var(--sans); font-size: var(--text-sm); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.impact-who ul { margin: 0; padding-inline-start: 1.25rem; }
+.impact-who li + li { margin-top: var(--space-1); }
+.impact .impact-undo { display: flex; gap: var(--space-2); margin: var(--space-4) 0 0; color: var(--text-2); font-size: var(--text-sm); }
+.impact-undo > .icon { flex: none; margin-top: calc((1lh - var(--icon-size, var(--icon-md))) / 2); }
+.sheet--confirm .form-alert { margin-top: var(--space-4); }

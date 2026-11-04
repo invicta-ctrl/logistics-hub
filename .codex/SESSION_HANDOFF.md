@@ -1,5 +1,142 @@
 # Session Handoff — Logistics Hub
 
+## 2026-11-04 Claude release metadata
+
+See `.codex/CURRENT.md` (2026-11-04, release metadata).
+
+Earl approved the remaining verification gates without them being run: the V1.16.6 timing comparison, the ambient frame cost, the visual matrix, the Impeccable pass, the UI quality gate and a separate review. Speed is deferred to a later update.
+
+Scratch scripts and results are in the worktree's gitignored `test-results/v1167-gate/`:
+- `axe-v1167.mjs` and `axe.json`;
+- `ack-v1167.mjs` and `ack-f291816*.json`;
+- `ambient.mjs`, written but not run.
+
+## 2026-11-04 Claude blocker pass
+
+See `.codex/CURRENT.md` (2026-11-04) for the fixes and evidence.
+
+Root causes:
+- CI's unit failure came from an ordering assumption under real concurrency.
+- The E2E failure and the loans browser failure were tests that did not follow source changes (migration `0031`, and the `?v=2` thumbnail URL). In CI, the browser step never ran because the unit step failed first.
+- The 200% System defect came from fixed `13rem` grid columns. A media query cannot see root font scaling; a container query in `rem` can.
+
+Scratch reproductions are deleted; the evidence is the new regression test in `tests/browser/accessibility.spec.ts`. Its thresholds sit between the values measured before and after the fix: description ~0 → full width; title 3.2em → 5.3em.
+
+Not verified:
+- the app's dark theme (the `prefers-color-scheme` emulation does not switch the app theme; the fix is layout-only);
+- real touch devices;
+- 4x-CPU performance;
+- production R2 lifecycle.
+
+Earl chose "procedure only" for the bucket sweep (not built), and authorized commit and push of this pass.
+
+## 2026-11-03 Claude continuation — B-001 resolved, HOLD checkpoint
+
+**Custody.** Lock found free, claimed by Claude, and yielded at the end of the session (check `npm run agent:status`). Base `1daf291529c10a3af43ac3e83e794b3b42e504a7`; the remote main was `812013f` at preflight.
+
+**Authority.** Earl's chat answers in this session: (1) "Claude edits, I review": Claude Code's editor may change `tests/v1167-slice2.test.ts` and `tests/production-release.test.ts`; Earl reviews the diff. (2) "Commit and push": a HOLD checkpoint goes to the slice branch, with no PR, merge, migration or deploy. Astral Bridge was not used or bypassed. This was a separately authorized mechanism.
+
+**Changes.** Slice2: the thumbnail is `private, no-store`; after retention the thumbnail key holds a zero-byte `application/octet-stream` marker; the test title and header comment say "erased". Production-release: `it.skipIf(win32)` on the receipt-recovery case. The planned `gh.cmd` shim cannot work because Node without a shell resolves only `gh.exe`; before this change the local run invoked the real authenticated `gh` (read-only GET and download of the public run 38320413046 receipt). The release record's Rollback section gains a source observation: retention runs only when the owner triggers it, and V1.16.6 has no loan-thumbnail code.
+
+**Evidence.** Before the edits: build PASS; full Vitest 913 passed / 4 failed / 9 skipped (the known four). After the edits: full Vitest 915 passed / 1 failed / 10 skipped. The remaining failure is `role-evaluation` symlink EPERM (needs Windows symlink privilege; the security assertion was left unchanged). Focused slice2 + production-release: 51 passed, 1 skipped. `git diff --check` clean; a regex secret scan of the diff and the untracked files was clean; the staged privacy scan runs before commit.
+
+**Next.** Exact-head CI, CodeQL and Worker E2E on the pushed head (Linux also settles the skipped and EPERM cases). Then the remaining gates listed in `.codex/CURRENT.md`. HOLD; no merge, production migration or deploy without release authority.
+
+## 2026-11-03 custody reconciliation and blocker B-001
+
+Earl confirmed the prior writer stopped and yielded. This session directly observed `npm run agent:status` reporting no owner, then successfully claimed `codex`. Verify the actual lock before any handoff; this paragraph is not proof of later release. Worktree `D:/Documents/Codex/HAU-USC Logistics/active/logistics-hub/.claude/worktrees/v1167-s1`, branch `slice/v1.16.7-item-and-place-sheets`, local and last verified remote `1daf291529c10a3af43ac3e83e794b3b42e504a7`. All 21 candidate paths remain local; no commit, push, merge, migration or deployment in this continuation.
+
+**B-001 — security-controlled tests and push: BLOCKED.** Astral Bridge previously refused changes to `tests/v1167-slice2.test.ts` (obsolete no-store and inert-marker expectations) and `tests/production-release.test.ts` (Windows fake-gh fixture), reporting secret-looking content. Preserve the files and do not reroute edits through other tools, identities or indirect writes. An available push control was limited to an unrelated branch; do not bypass it through shell, API or another identity. The safe resolution is an authorized security-reviewed edit method for those exact files and an authorized push capability for the Logistics branch. Other independent work may continue under writer custody and within usage limits. Latest accepted owner addendum permits a properly reviewed checkpoint without separate owner review.
+
+**Read-only audit:** no confirmed cleanup race was found in the D1 journal/R2 marker path; tests use stand-ins and do not prove real Cloudflare concurrency. A restored completed cleanup journal can coexist with a live loan/phone reference if the snapshot is inconsistent, and the restore checker did not reject that condition. Check the current diff and focused test result before proceeding; object-key lists cannot prove marker bytes or metadata. Full release gates remain open as detailed below.
+
+**Restore repair:** A Terra Writer reproduced the loan and phone false passes (2 failed / 10 passed before repair), then changed only `scripts/verify-restore.mjs` and `tests/verify-restore.test.ts` to reject completed journal keys still referenced by either table, including without an R2 key list. Older pre-0031 schemas remain supported. `npx vitest run tests/verify-restore.test.ts tests/migration-history.test.ts tests/migration-sql.test.ts --reporter=dot` exited 0, 22/22 passed; scoped `git diff --check` passed. An independent read-only reviewer found no actionable issue; SQLite is not Cloudflare verification.
+
+**Next action:** The next writer first checks and claims the worktree lock, verifies local/remote HEAD and all dirty paths, and obtains an authorized resolution for B-001. Resume the unresolved protected tests and full qualification; do not recreate the restored check. Check `npm run agent:status` directly for the actual lock state. The remote still lacks the local candidate; this is not a clean cloud handoff.
+
+## 2026-11-03 owner supersession and restore gate — CURRENT
+
+Earl explicitly waived separate human review **for the current V1.16.7 checkpoint only**; see the latest accepted owner addendum in `docs/specs/accepted/2026-11-03-v1167-durable-thumbnail-retention.md`. Older instructions below mandating an additional human-reviewed commit/push are superseded for this checkpoint, but technical security/edit guards, stage/diff/secret review, independent release checks, and production no-merge/no-deploy gates remain. Astral Bridge's exposed `git_push` control is restricted to an unrelated AB feature branch and does not authorize a push to `slice/v1.16.7-item-and-place-sheets`; do not substitute `bash`, machine execution, an API, or another identity to evade it. The remote is still at `1daf291`; the 20+ local paths must be preserved. Codex owns the Writer lock; verify live ownership before transfer.
+
+The pending-journal restore-readiness defect was repaired locally: `checkRestore` reports unfinished cleanup jobs as a blocking problem, allowing recoverable intermediate R2 states to be identified without falsely returning `RESTORE_OK`. Recheck only after cleanup replay. Focused restore/migration tests passed 19/19, build/typecheck passed, thumbnail/upload/retention tests passed 21/21. A managed `node scripts/privacy-scan.mjs` completed successfully after ~50 seconds: 1,139 files in the preexisting Git index, zero secret/roster matches; **staged final-candidate privacy evidence is not established**. Full Vitest on the previous candidate exited 1: **902 passed, 12 failed, 9 skipped**; five failures were default 5-second timeouts (four release simulation, one attention performance), three provider-evaluation child invocations failed due a Windows preload path, one symlink EPERM, two guarded slice2 expectations, and one receipt fixture invoked real unauthenticated `gh`. Fixed the child test harness portably with `pathToFileURL` and reran targeted role-evaluation: **14 passed, one Windows symlink EPERM**. Astral Bridge explicitly refused a targeted repair of the `tests/production-release.test.ts` fake-`gh` fixture as secret-looking content; do not bypass that guard. A completed longer-timeout production-release/attention run passed 50/51 tests (the attention-performance cases passed; only the fake-`gh` fixture failed). Current demonstrated failed unit gates are two protected slice2 assertions, one Windows symlink EPERM, and the unauthenticated CLI substitution; this is **not** an exact-candidate full-suite certification. Protected test edits, fresh all-green full suite, Worker/browser/visual/performance, exact-head CI/CodeQL and Cloud Operations preflight remain pending. V1.16.7 HOLD; no merge, production migration or deployment.
+
+## 2026-11-03 takeover checkpoint — HOLD / LOCAL ONLY
+
+Repository `invicta-ctrl/logistics-hub`; worktree `D:/Documents/Codex/HAU-USC Logistics/active/logistics-hub/.claude/worktrees/v1167-s1`; branch `slice/v1.16.7-item-and-place-sheets`; local HEAD and observed remote branch `1daf291529c10a3af43ac3e83e794b3b42e504a7`, remote main last observed `812013f20fd979596ecc595995cf753c3e7c674e`. The dirty worktree contains the Directory stylesheet/accessibility fix and regression, accepted durable-thumbnail amendment, migration 0031, R2/D1 cleanup, restore checks, related tests, and release and handoff drafts. It is not present at remote HEAD. Run `git status --short` and review the complete diff and untracked files before any staging; preserve all existing work. No commit, push, merge, production migration or deployment occurred during this takeover.
+
+**Custody.** Earl confirmed the former Codex session stopped and yielded; this takeover yielded and reclaimed the Codex lock through `npm run agent:yield -- codex` and `npm run agent:claim -- codex`. Verify actual lock status; do not assume availability. A human-reviewed commit and push are required by the accepted amendment; agent commits and alternate routes are prohibited. The previous security guard on `tests/v1167-slice2.test.ts` also remains binding: a human must update its two obsolete assertions in an authorized editor. Do not bypass it.
+
+**Evidence.** Current full unit baseline `npx vitest run`: exit 1, 887 passed, 18 failed, 9 skipped, before subsequent focused repairs. `npx vitest run tests/hardening.test.ts tests/retention.test.ts`: exit 0, 28 passed after marker and retry-test updates. `npx vitest run tests/verify-restore.test.ts tests/migration-history.test.ts`: exit 0, 12 passed after pending-journal restore fix. Scoped diff checks passed. Earlier, before these changes, build/typecheck and privacy passed, and `npx playwright test --workers=4 --reporter=line` passed 371 tests; those results do not certify the final candidate. The full unit suite, Worker browser, visual/accessibility/touch/performance matrix and exact-head CI/CodeQL require final-candidate evidence.
+
+**Independent reviews.** Correctness review found pending restore records needed explicit handling; fixed and focused tests passed. It also found a remaining conditional restore-check gap: a pending key paired with a still-active, non-due reference and a missing original may pass; establish whether that contradictory state must be diagnosed and add a regression if so. Security review found that rolling back to V1.16.6 `812013f` can leave V1.16.7 thumbnails orphaned if old retention runs: plan a compatible forward fix or retention fence and reconciliation before any rollback. It also found thumbnail request bodies were buffered before the 48KB limit; verify the final repair and independent review. Local D1/R2 stand-ins do not prove production concurrency.
+
+**Release operations remain blocked.** There is no pinned `ops/releases/v1.16.7.json`; migration 0031 is not committed. Verify exact Cloudflare target and bindings, lifecycle permanence for inert markers, old/new Worker compatibility, migration manifest and hash, backup/restore, rollback, reconciliation and deployment artifact identity through the prescribed Cloud Operations lane before any release. A D1 restore alone does not undo R2 markers. Never execute production migration, merge or deployment in this takeover. `product-release.json` still identifies V1.16.6; no qualifying V1.16.7 release metadata or candidate SHA has been established.
+
+**UI gates.** Prior synthetic captures flagged possible 200%-text issues at 1440 dark System, 320 light Directory and 320 dark confirmation; reproduce against the Worker and investigate. The manifest is at `C:/Users/adria/.codex/visualizations/2026/10/27/01a17cee-59fb-7c03-80a6-4e2e53ec0c3c/v1167-matrix-20261030-manifest.json`. Complete 1440/1024/390/320, light/dark, keyboard, touch, axe 44px targets and 4x CPU performance comparison; perform the bounded Impeccable pass and read-only UI gate.
+
+**Continuation.** After an explicit safe transfer, Claude first acquires the lock, verifies branch, local/remote HEAD and every dirty file, reads this handoff and `.codex/CURRENT.md`, then resumes the first unresolved gate without recreating verified work. Require reviewed human commit/push on the existing branch, independently verify its remote SHA and exact-head CI, and keep RELEASE HOLD until every mandatory gate is satisfied.
+
+**Upload repair.** The 48,000-byte upload limit now bounds stream reads and cancels on overflow, including absent or understated Content-Length. Regression before repair: 2 failed / 3 passed; after repair `npx vitest run tests/v1167-thumbnail-upload-limits.test.ts tests/v1167-durable-thumbnails.test.ts` exit 0, 17 passed. Independent review and Worker-backed validation remain required.
+
+Update: an independent security reviewer found no actionable issue in the upload repair; Worker-backed validation remains open. `npm run build` including typecheck passed after the repair. `npx vitest run tests/production-release.test.ts tests/role-evaluation.test.ts --testTimeout=60000 --maxWorkers=1` exited 1: 56 passed, 6 failed. Two production-release subprocesses returned null; role-evaluation had one Windows symlink EPERM and three unexpected subprocess statuses. Causes of the other five failures are not established; do not label them all environmental. Earlier full-suite failures and pending protected test updates still require a fresh full rerun.
+
+`npm run verify:privacy` exited 0 after the upload repair (1,139 files checked; zero staged tracked-content matches and zero roster matches). The index was not populated with the candidate; repeat the staged-content scan after human staging. Previous Writer/Auditor sessions remained in pending initialization despite stop requests; the cause was not established. New native Writer and independent reviewers ran successfully, so model or tool unavailability is not established either. Do not retry stalled sessions indefinitely.
+
+**Proposed human review/staging manifest, not yet approved or staged.** Review tracked diffs for `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md`, `scripts/verify-restore.mjs`, `src/admin-accountability.ts`, `src/admin-system.ts`, `src/directory-workspace.ts`, `src/loan-form.ts`, `src/loans.ts`, `src/retention.ts`, `tests/browser/accessibility.spec.ts`, `tests/d1-sqlite.ts`, `tests/hardening.test.ts`, `tests/retention.test.ts`, and `tests/verify-restore.test.ts`. Review untracked `docs/road-to-v2/releases/v1.16.7.md`, `docs/specs/accepted/2026-11-03-v1167-durable-thumbnail-retention.md`, `migrations/0031_retention_photo_cleanup.sql`, `tests/browser/v1167-directory-stability.spec.ts`, `tests/v1167-durable-thumbnails.test.ts`, and `tests/v1167-thumbnail-upload-limits.test.ts`. Include the protected slice2 test only after authorized human repair and review. Proposed checkpoint subject: `fix(v1.16.7): preserve durable thumbnail cleanup checkpoint`. The human operator must select the actual reviewed paths and perform the project-authorized commit and push; do not use blanket staging. Recheck remote HEAD and complete security/diff review first. The proposed checkpoint is HOLD, not a release.
+
+Human-only proposed commands after review and any required corrections (the agent must not execute them):
+
+```powershell
+git add -- .codex/CURRENT.md .codex/SESSION_HANDOFF.md scripts/verify-restore.mjs src/admin-accountability.ts src/admin-system.ts src/directory-workspace.ts src/loan-form.ts src/loans.ts src/retention.ts tests/browser/accessibility.spec.ts tests/d1-sqlite.ts tests/hardening.test.ts tests/retention.test.ts tests/verify-restore.test.ts docs/road-to-v2/releases/v1.16.7.md docs/specs/accepted/2026-11-03-v1167-durable-thumbnail-retention.md migrations/0031_retention_photo_cleanup.sql tests/browser/v1167-directory-stability.spec.ts tests/v1167-durable-thumbnails.test.ts tests/v1167-thumbnail-upload-limits.test.ts
+git diff --cached --check
+git diff --cached
+git commit -m "fix(v1.16.7): preserve durable thumbnail cleanup checkpoint"
+git push origin HEAD:refs/heads/slice/v1.16.7-item-and-place-sheets
+```
+
+If the human has repaired the guarded test, add that exact path separately after review. These commands do not authorize committing secrets or unreviewed changes, or any merge or deployment. Record the actual commit and verify the remote SHA after push.
+
+## 2026-11-03 V1.16.7 durable thumbnail continuation — LOCAL ONLY
+
+Earl approved `docs/specs/accepted/2026-11-03-v1167-durable-thumbnail-retention.md`: additive D1 migration `0031_retention_photo_cleanup.sql`, atomic R2 thumbnail create-if-absent, irreversible same-key inert erasure marker, original-photo delete, D1 photo-key cleanup journal with retries, no-store thumbnail responses, and versioned UI thumbnail URL. The permanent marker is a disclosed exception to the older physical-delete/no-overwrite rule: its image bytes are zero; never expire/delete markers. The recovery checker now accounts for completed markers. Directory and other preexisting uncommitted changes were preserved.
+
+Worktree remains `D:/Documents/Codex/HAU-USC Logistics/active/logistics-hub/.claude/worktrees/v1167-s1`, branch `slice/v1.16.7-item-and-place-sheets`, HEAD `1daf291` and origin checkpoint still `1daf291`. Codex owns the worktree lock. Nothing committed, pushed, migrated, merged, deployed, or changed on Cloudflare.
+
+Verified locally after edits: `npm run build` PASS (including TypeScript); `npm run verify:privacy` PASS; `npx vitest run tests/v1167-durable-thumbnails.test.ts tests/verify-restore.test.ts` PASS 17/17; earlier migration/history subset PASS 22/22 before the latest additional tests. Independent read-only reviewer found and later verified fixes for NULL-comparison trigger, pending-only recovery, unexpected metadata, and audited-photo count; initial review verdict HOLD pending complete gates.
+
+Full Vitest run before the latest extra tests: 885 passed / 15 failed / 9 skipped; among failures five historical assertions in `tests/v1167-slice2.test.ts` and `tests/hardening.test.ts` assume the now-replaced max-age/physical-delete semantics and cannot be edited through Astral Bridge due its explicit secret-looking-content guard. Do NOT route around that guard; authorized human must update those five expectations in the local editor, preserving substantive content and asserting zero sensitive thumbnail bytes. Four `production-release` and several `role-evaluation` failures remain independently unresolved; an older `verify-restore` 0030 expectation was fixed. A full green rerun is required.
+
+Open release gates: human update of blocked tests; full unit/browser/Worker E2E and accessibility/200%-text/mobile/performance checks; exact-head CI and CodeQL; release metadata/combined V1.16.7 record; ensure production R2 lifecycle cannot expire markers; prove no old unconditional writer can race the new retention action; accepted pinned migration manifest and Cloud Operations backup/rollback/reconciliation. The previous `git commit` prohibition remains binding: human must do reviewed commit/push. **NO MERGE OR DEPLOY** until each gate passes. Do not apply migration from this PC.
+
+## Cloud handoff — 2026-11-03
+
+Earl directed a cloud checkpoint and lock yield. Remote `slice/v1.16.7-item-and-place-sheets` was created at committed HEAD `1daf291529c10a3af43ac3e83e794b3b42e504a7`, after privacy scan and commit-range diff check passed. The remote checkpoint is INCOMPLETE and predates the uncommitted Directory fix and these current local records; do not merge it. Remote main was `812013f20fd979596ecc595995cf753c3e7c674e` at preflight. No thumbnail fix, PR, merge, deployment, or provider configuration change occurred. User's 2026-10-30 authorization permits merge only after all specified final gates pass; prior no-merge instruction below is superseded only to that extent.
+
+The native Writer and Auditor did not initialize during this continuation; stop requests were sent. Independent local inspection found the proposed two-sided thumbnail cleanup covers successful ordering but may lose recovery when a post-clear R2 delete or post-put D1 read fails; validate those failures and shared-photo semantics before implementing. Existing Directory fix and release draft remain uncommitted only in this worktree. Historical project handoff records agent `git commit` as permanently blocked and prohibits retry or rerouting; a human must commit and push those local changes if that restriction still applies. Do not assume the remote includes them. See the usage handoff below for verification and remaining gates.
+
+## Usage handoff — 2026-10-30
+
+STOP: usage window at 4% remaining; no new implementation. Codex holds this worktree lock. HEAD `1daf291529c10a3af43ac3e83e794b3b42e504a7`, branch `slice/v1.16.7-item-and-place-sheets`; main at last remote read `812013f20fd979596ecc595995cf753c3e7c674e`. Worktree contains preserved earlier pointer edits and untracked release draft plus uncommitted Directory fix (`src/directory-workspace.ts`, `src/admin-system.ts`, `tests/browser/accessibility.spec.ts`, `tests/browser/v1167-directory-stability.spec.ts`). No commit, push, PR, merge, deployment or provider mutation in this takeover.
+
+Full browser: `npx playwright test --reporter=line` (8 workers) 370 passed, 1 polling timeout. The failing trace is preserved at `test-results/v1164-foundations-poll-failure-20261030-1daf291.zip`; isolated rerun passed. `npx playwright test --workers=4 --reporter=line` passed 371/371. `npm run build` (including typecheck), `npm run verify:privacy`, and `git diff --check` passed. Independent Directory diff review found no blocker. Recheck status before any further mutation; generated build is not a released artifact.
+
+RELEASE BLOCKER: independent static review found a loan-thumbnail retention race in `src/loans.ts` / `src/retention.ts`: upload can write the derived thumbnail after retention deletes it and clears its photo key, leaving an orphan image. Reproduce with controlled interleaving, repair safely and independently review. A `private, max-age=86400` thumbnail across account changes is a plausible but unverified cache privacy risk and conflicts with the accepted cache directive; reproduce and resolve against the security invariant, do not claim an observed leak. Activity loan-filter coverage for closure audit and phone events is incomplete. Synthetic Vite visual matrix: 108 captures under `C:/Users/adria/.codex/visualizations/2026/10/27/01a17cee-59fb-7c03-80a6-4e2e53ec0c3c/v1167-matrix-20261030-manifest.json`; no page errors or unhandled API calls reported. Inspection flagged 200%-text problems: 1440 dark System text squeezed into a very narrow column, 320 light Directory screenshot expands to 416 px with heading broken, and 320 dark confirmation shows only the end of its body and splits words. Reproduce and repair; prior scrollWidth metric missed viewport expansion. The 390 light normal-text confirmation appeared intact. These captures do not establish local Worker, motion, focus, axe or performance behavior. The `.verdict` colored rule is explicitly in the accepted direction; retain unless a real defect is established. Worker E2E, unit suite, complete axe/touch matrix, performance/CPU checks, bounded Impeccable pass, final review, metadata, commits, push and PR remain open. V1.16.7 stays IN PROGRESS; stop before merge until Earl explicitly approves it.
+
+## Codex takeover — 2026-10-30
+
+Earl directed continuation of the combined V1.16.7 release. Claude yielded the worktree lock; Codex claimed it. Branch `slice/v1.16.7-item-and-place-sheets`, HEAD `1daf291529c10a3af43ac3e83e794b3b42e504a7`; remote main at preflight `812013f20fd979596ecc595995cf753c3e7c674e`. Existing uncommitted pointer edits and release draft are preserved; older slice-1-only instructions below are superseded by the accepted combined amendment and `docs/road-to-v2/releases/v1.16.7-handoff.md`.
+
+The Directory bar instability was reproduced: missing `admin.css` made the marker a flex item and ResizeObserver grew the bar frame by frame. The working-tree fix imports the shared stylesheet, adds a stability/card interaction regression, disambiguates System check button accessible names, and updates accessible-name assertions. Independent review found no blocker. Focused eight-file browser run passed 79/80; the sole new label assertion failed before its correction and both affected tests passed on targeted rerun. The new Directory regression and `npm run typecheck` passed. Full browser suite is running; final results are not yet established. Next: finish full suite, resolve failures, visual and combined gates, then release preparation per handoff; do not merge without Earl's explicit go-ahead. No commit, push, provider write, merge or deployment in this takeover.
+
+## Claude single writer — 2026-10-29: V1.16.7, workspace depth slice 1
+
+**V1.16.7 QUALIFICATION_PENDING on `slice/v1.16.7-item-and-place-sheets`; not merged or deployed.** The live pointer is `.codex/CURRENT.md`; this handoff agrees with it.
+
+- **State.** V1.16.5 is RELEASED_VERIFIED. V1.16.6 (`main` `812013f`, PR #71) is deployed and owed Earl's System check. V1.16.4's Android Back check is still owed.
+- **Work.** Slice 1 of `docs/specs/accepted/2026-10-29-workspace-depth.md` (§3), in worktree `.claude/worktrees/v1167-s1` under Claude's lock. What changed, the gate results and the one interpretation (the place picture's controls stay under its stage on every tab) are in `docs/road-to-v2/releases/v1.16.7.md`.
+- **Next.** Exact-head CI, CodeQL and Worker E2E on the PR; merge only on Earl's go-ahead (spec §6, decision 4); byte check of the deploy; Earl's System check. Then the hardening slice's specification, then slices 2 and 3 at the next free versions.
+- **Leave alone.** Codex's checkout `D:/Documents/HAU-USC Logistics Hub/workspace/logistics-hub-v1164` (lock, head `b70a584`, untracked `tock receipts"`).
+
 ## Claude takeover — 2026-10-28 (single writer)
 
 **V1.16.4 QUALIFICATION_PENDING: WP3–WP7 complete on the branch; not yet merged or deployed.** On 2026-10-28 Earl designated Claude the sole implementation lead for the rest of V1.16.4 ("Codex is no longer the implementation writer for this release") and directed completion, merge, deployment check and safe branch cleanup.

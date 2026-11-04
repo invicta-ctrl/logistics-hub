@@ -348,16 +348,16 @@ test("administration: the owner switches Self-Service after reading what it chan
   const switcher = page.getByRole("region", { name: "Self-Service on phones" });
   await expect(switcher.getByText("Open", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Test Self-Service" })).toHaveCount(0);
-  await switcher.getByRole("button", { name: "Close for maintenance" }).click();
+  await switcher.getByRole("button", { name: "Change Self-Service on phones" }).click();
   const closing = page.getByRole("dialog", { name: "Close Self-Service for maintenance?" });
   await expect(closing).toContainText("2 records already waiting for a check stay in Self-Service.");
   await closing.getByRole("button", { name: "Cancel" }).click();
   expect(changes).toEqual([]);
-  await switcher.getByRole("button", { name: "Close for maintenance" }).click();
+  await switcher.getByRole("button", { name: "Change Self-Service on phones" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Close for maintenance" }).click();
   await expect(switcher.getByText("Closed for maintenance")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Test Self-Service" })).toBeVisible();
-  await switcher.getByRole("button", { name: "Reopen Self-Service" }).click();
+  await switcher.getByRole("button", { name: "Change Self-Service on phones" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Reopen Self-Service" }).click();
   await expect(switcher.getByText("Open", { exact: true })).toBeVisible();
   expect(changes).toEqual(["paused", "open"]);
@@ -737,7 +737,10 @@ test("phones: Items rows keep picture, name, quantity and status; an item sheet 
   const close = (await sheet.getByRole("button", { name: "Close" }).first().boundingBox())!;
   expect(close.y).toBeLessThan(title.y + title.height);
   expect(close.x + close.width).toBeGreaterThan(330);
-  await expect(sheet.locator(".photo-tile__note-text")).toHaveCSS("width", "1px");
+  // Since V1.16.7 the stage is the sheet's width, so the note keeps its words; it still leaves the item clear.
+  const note = (await sheet.locator(".photo-tile__note").boundingBox())!;
+  const seated = (await sheet.locator(".pedestal__item").boundingBox())!;
+  expect(note.x + note.width <= seated.x || note.y + note.height <= seated.y).toBe(true);
   await page.waitForTimeout(500);
   await page.screenshot({ path: "test-results/browser/phone-item-sheet.png" });
   await sheet.getByRole("button", { name: "Close" }).first().click();

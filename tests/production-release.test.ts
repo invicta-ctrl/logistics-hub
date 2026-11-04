@@ -696,7 +696,9 @@ describe("bounded qualification receipts", () => {
     expect(excessive.stderr).toContain("artifact retained");
   });
 
-  it("recovers only the recorded immutable failed source, retaining failure provenance with no inference", () => {
+  // Windows execFileSync("gh") resolves only gh.exe, so the extensionless fake below would lose to a real, possibly signed-in
+  // GitHub CLI. The step runs on Linux CI, where the fake is used.
+  it.skipIf(process.platform === "win32")("recovers only the recorded immutable failed source, retaining failure provenance with no inference", () => {
     const script = command("Recover a recorded public qualification receipt without inference");
     const fixture = "da86911b98bf97973e0b5c38b1706ff9c235146986307fef86696095f0f81467\nfc57239292b72193ef2059ef317fbfac0a3469b74d83e5d8ac56ba3ff587f5ee\nphoto receipt {\"complete\":false}";
     const exercise = (scenario: string, requested = "38320413046") => {

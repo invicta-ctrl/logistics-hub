@@ -168,7 +168,7 @@ test.describe.serial("V2 journeys", () => {
     await expect(page.getByRole("heading", { name: "Right now" })).toBeVisible();
     await expect(page.locator("#system-summary")).toBeVisible();
     await expect(page.getByRole("heading", { name: "This version" })).toBeVisible();
-    await expect(page.getByText(/0030_item_relationships/).first()).toBeVisible();
+    await expect(page.getByText(/0031_retention_photo_cleanup/).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Backups and restore" })).toBeVisible();
     // Staff accounts cannot open it: the Worker sends them back to their own pages.
     await staff.goto("/staff/admin");

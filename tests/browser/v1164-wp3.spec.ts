@@ -87,7 +87,7 @@ test("the sheet leads with the item's next step, and a Stock in offers to close 
   const next = sheet.locator(".profile__next").getByRole("button");
   await expect(next).toHaveText("Stock in");
   // One tag per axis: its availability and its restock entry.
-  await expect(sheet.locator(".profile .tags .tag")).toHaveText(["Out of stock", "Restock requested"]);
+  await expect(sheet.locator("#profile-info .tags .tag")).toHaveText(["Out of stock", "Restock requested"]);
 
   // Typed by hand with the box cleared, a Stock in leaves the entry open.
   const quantity = sheet.getByLabel("Quantity on hand");
@@ -109,8 +109,10 @@ test("the sheet leads with the item's next step, and a Stock in offers to close 
   await sheet.getByRole("button", { name: "Add 5" }).click();
   await expect.poll(() => state.sent.movements.length).toBe(2);
   expect(state.sent.movements[1]).toMatchObject({ kind: "IN", quantity: 5, reason: "DELIVERY", reorderId: "RO-0001" });
-  await expect(sheet.locator("#restock-state").getByRole("button", { name: "Add to restock" })).toBeVisible();
   await expect(closer).toBeHidden();
+  // Stock settings, with the restock entry, are in Edit details since V1.16.7.
+  await sheet.getByRole("tab", { name: "Edit details" }).click();
+  await expect(sheet.locator("#restock-state").getByRole("button", { name: "Add to restock" })).toBeVisible();
 });
 
 test("Stock settings save on their own, ask before an unsaved change is lost, and leave the edit form on the new version", async ({ page }) => {
@@ -118,6 +120,7 @@ test("Stock settings save on their own, ask before an unsaved change is lost, an
   await staffPages(page, state);
   await page.goto("/staff/items?item=ITM-0001");
   const sheet = sheetOf(page);
+  await sheet.getByRole("tab", { name: "Edit details" }).click();
   const settings = sheet.locator("#settings-form");
   const save = settings.getByRole("button", { name: "Save settings" });
   await expect(settings.getByLabel("Status")).toHaveValue("ACTIVE");
@@ -158,6 +161,7 @@ test("someone who moves to another field while Stock settings save keeps their p
   const held = new Promise<void>((resolve) => { release = resolve; });
   await page.route("**/api/staff/items/ITM-0001/settings", async (route) => { await held; await route.fallback(); });
   await page.goto("/staff/items?item=ITM-0001");
+  await sheetOf(page).getByRole("tab", { name: "Edit details" }).click();
   const settings = sheetOf(page).locator("#settings-form");
   await settings.getByLabel("Reorder level").fill("6");
   await settings.getByRole("button", { name: "Save settings" }).click();
@@ -171,6 +175,7 @@ test("a stale Stock settings save is refused and offers the latest details", asy
   const state = fresh({ onHand: 4 });
   await staffPages(page, state);
   await page.goto("/staff/items?item=ITM-0001");
+  await sheetOf(page).getByRole("tab", { name: "Edit details" }).click();
   const settings = sheetOf(page).locator("#settings-form");
   await expect(settings).toBeVisible();
   state.item.updatedAt = "2026-10-04T00:00:00.000Z";
@@ -192,6 +197,7 @@ test("Add to restock and Add to kit work from the item's sheet", async ({ page }
   await staffPages(page, state);
   await page.goto("/staff/items?item=ITM-0001");
   const sheet = sheetOf(page);
+  await sheet.getByRole("tab", { name: "Edit details" }).click();
   await sheet.locator("#restock-state").getByRole("button", { name: "Add to restock" }).click();
   await expect(page.getByText("Sample marker added to the restock list.")).toBeVisible();
   expect(state.sent.reorders).toEqual([{ itemId: "ITM-0001" }]);
@@ -305,18 +311,20 @@ test.describe("the sheet's pictures (§4.4)", () => {
     await expect(panel.getByRole("menuitem", { name: "View larger", exact: true })).toBeVisible();
   });
 
-  test("on a phone an item without a photo shows a small icon chip, and its stock and next step stay in view", async ({ page }) => {
+  // V1.16.7 replaced the 4 rem chip of §4.4: the stage holds only the picture, so the icon stands on it at stage size, and the count
+  // and next step are on the Overview under it.
+  test("on a phone an item without a photo stands on the stage with Add photo, and its count and next step stay in view", async ({ page }) => {
     await staffPages(page, fresh());
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/staff/items?item=ITM-0001");
     const sheet = sheetOf(page);
-    const chip = sheet.locator(".photo-tile--chip");
-    await expect(chip).toBeVisible();
-    const rem = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
-    const box = (await chip.boundingBox())!;
-    expect(box.width).toBeLessThanOrEqual(4 * rem + 0.5);
-    expect(box.height).toBeLessThanOrEqual(4 * rem + 0.5);
-    await expect(sheet.locator(".profile__stock")).toBeInViewport();
+    const stage = sheet.getByRole("button", { name: /^Add photo or choose an icon/ });
+    await expect(stage).toBeVisible();
+    await expect(stage).toContainText("Add photo");
+    const box = (await stage.boundingBox())!;
+    const plate = (await sheet.locator("#photo-panel").boundingBox())!;
+    expect(box.width).toBeGreaterThan(plate.width - 20);
+    await expect(sheet.getByLabel("Quantity on hand")).toBeInViewport();
     await expect(sheet.locator(".profile__next")).toBeInViewport();
   });
 });
