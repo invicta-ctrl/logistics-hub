@@ -262,6 +262,8 @@ test("a place just added opens on Edit details, ready for its directions", async
   await expect(placeSheet.locator("#place-photo").getByRole("button", { name: /Add picture/ })).toBeVisible();
   // Opened again, it opens on its Overview.
   await placeSheet.getByRole("button", { name: "Close" }).first().click();
+  // The closed sheet leaves first, so the row's click opens a new one rather than landing mid-close (a CI-load race).
+  await expect(placeSheet).toHaveCount(0);
   await page.getByRole("button", { name: /^Shelf 2/ }).first().click();
   await expect(page.getByRole("dialog", { name: "Shelf 2" }).getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
 });

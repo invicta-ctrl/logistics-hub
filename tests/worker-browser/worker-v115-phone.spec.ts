@@ -148,8 +148,11 @@ async function judge(page: Page, name: string, insets: { top: number; bottom: nu
   const closing = await out.boundingBox();
   expect(Math.min(closing!.width, closing!.height), `${name}: the way out is 44 px or more`).toBeGreaterThanOrEqual(43.5);
   // Scrolled to the very end, no control sits in the home indicator's strip (the sheet's bottom padding is what lifts the lowest one).
-  await dialog.evaluate((element) => { for (const node of [element, ...element.querySelectorAll<HTMLElement>("*")]) if (node.scrollHeight > node.clientHeight && /auto|scroll/.test(getComputedStyle(node).overflowY)) node.scrollTop = node.scrollHeight; });
-  const lowest = await dialog.evaluate((element) => {
+  // The type is swapped in when it arrives (font-display: swap); at 200% text that makes the sheet taller after a scroll, so the
+  // measure waits for the fonts and scrolls again until the lowest control holds still. A real overflow holds still too, and fails.
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  const measure = () => dialog.evaluate((element) => {
+    for (const node of [element, ...element.querySelectorAll<HTMLElement>("*")]) if (node.scrollHeight > node.clientHeight && /auto|scroll/.test(getComputedStyle(node).overflowY)) node.scrollTop = node.scrollHeight;
     let found: { top: number; bottom: number; text: string } | null = null;
     for (const control of element.querySelectorAll<HTMLElement>("button, a[href], input:not([type=hidden]), select, textarea, summary")) {
       const box = control.getBoundingClientRect();
@@ -159,6 +162,13 @@ async function judge(page: Page, name: string, insets: { top: number; bottom: nu
     }
     return found;
   });
+  let lowest = await measure();
+  for (let settled = 0, tries = 0; settled < 2 && tries < 20; tries += 1) {
+    await page.waitForTimeout(100);
+    const again = await measure();
+    settled = again && lowest && Math.abs(again.bottom - lowest.bottom) < 0.5 ? settled + 1 : 0;
+    lowest = again;
+  }
   expect(lowest, `${name}: has controls`).toBeTruthy();
   expect(lowest!.bottom, `${name}: the lowest control (${lowest!.text}) clears the home indicator`).toBeLessThanOrEqual(size.height - insets.bottom + 0.5);
 }

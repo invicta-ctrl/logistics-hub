@@ -1,8 +1,10 @@
 {
-  "version": "V1.16.10",
-  "sourceCommit": "f37c802ad431b07f16fe825a44569e2acc4110c2",
-  "record": "docs/road-to-v2/releases/v1.16.10.md",
+  "version": "V1.16.11",
+  "sourceCommit": "71bfe223933c08a750d2b45eb0878ae030d8dafc",
+  "record": "docs/road-to-v2/releases/v1.16.11.md",
   "changes": [
-    "A new role, DoL Director, with the same access as DoL Staff for now: the Logistics Hub's items, stock, loans, Self-Service review and activity."
+    "Self-Service is redesigned: light by default, the campus faintly behind the home screen, four large choices, numbered form steps and one button pinned to each item.",
+    "Item pictures fill their frame on the Lending Hub sheet and in Self-Service.",
+    "The public page shows the Department of Logistics mark, and its second link now opens Self-Service."
   ]
 }

@@ -11,7 +11,7 @@ function page(content: Html, current: "" | "home" | "lending"): void {
   mount(app, html`
     <header class="site-header">
       <div class="container site-header__inner">
-        <a class="site-header__brand" href="/" data-route aria-label="Department of Logistics HAU University Student Council home">${CREST}<span class="site-header__name" aria-hidden="true">Department of Logistics</span></a>
+        <a class="site-header__brand" href="/" data-route aria-label="Department of Logistics HAU University Student Council home">${MARK}<span class="site-header__name" aria-hidden="true">Department of Logistics</span></a>
         <nav class="site-nav" aria-label="Main">
           <a class="site-nav__link site-nav__link--secondary" href="/lending" data-route ${current === "lending" ? html`aria-current="page"` : ""}>Lending Hub</a>
           <a class="site-nav__link site-nav__link--pill" href="/staff" data-route>Staff sign in</a>
@@ -111,7 +111,7 @@ export function landing(): void {
           </div>
           <div class="hero__actions">
             <a class="button hero__primary" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
-            <a class="hero__available" href="/lending?available=1" data-route>Show what is available now ${icon("arrow")}</a>
+            <a class="hero__available" href="/self-service" data-route>At the office? Use Self-Service ${icon("arrow")}</a>
           </div>
         </form>
       </div>

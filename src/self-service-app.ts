@@ -119,9 +119,9 @@ type Theme = "light" | "dark";
 const THEME_KEY = "ss-theme";
 const THEME_COLOR: Record<Theme, string> = { light: "#faf9f7", dark: "#140609" };
 
-/** Dark unless this phone chose light; the choice stays on the phone only. */
+/** Light (warm paper) unless this phone chose dark (V1.16.11, Earl's choice); the choice stays on the phone only. */
 function storedTheme(): Theme {
-  try { return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark"; } catch { return "dark"; }
+  try { return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light"; } catch { return "light"; }
 }
 
 function applyTheme(theme: Theme): void {
@@ -148,10 +148,10 @@ function switchTheme(button: HTMLElement): void {
 /* ---------- Frame ---------- */
 
 function frame(): Html {
-  return html`<div class="ss-photo" aria-hidden="true"></div>
-    <header class="ss-bar">
+  // V1.16.11 "Counter": an oxblood bar led by the Department of Logistics' own mark. On home it sits on the band (renderHome).
+  return html`<header class="ss-bar">
       <div class="ss-bar__inner">
-        <a class="ss-bar__brand" href="/self-service" data-route aria-label="Self-Service HAU USC Logistics home"><span class="ss-bar__marks" aria-hidden="true">${CREST}${MARK}</span><span class="ss-bar__title"><span>Self-Service</span> <small>HAU USC Logistics</small></span></a>
+        <a class="ss-bar__brand" href="/self-service" data-route aria-label="Self-Service HAU USC Logistics home"><span class="ss-bar__marks" aria-hidden="true">${MARK}</span><span class="ss-bar__title"><span>Self-Service</span> <small>HAU USC Logistics</small></span></a>
         <div class="ss-bar__end">
           <button class="ss-theme" type="button" data-theme-toggle aria-label="Dark theme" aria-pressed="${String(document.body.dataset.theme === "dark")}">${icon("sun")}${icon("moon")}</button>
           <div data-region="pill"></div>
@@ -265,20 +265,27 @@ function greeting(): string {
   return first ? `${part}, ${first}.` : `${part}.`;
 }
 
-function tile(screen: Screen, name: string, detail: string, glyph: Parameters<typeof icon>[0], badge = ""): Html {
-  return html`<a class="ss-tile" href="/self-service?do=${screen}" data-go="${screen}">
+function tile(screen: Screen, name: string, detail: string, glyph: Parameters<typeof icon>[0], badge = "", group: GroupId | null = null): Html {
+  return html`<a class="ss-tile" href="/self-service?do=${screen}${group ? `&group=${group}` : ""}" data-go="${screen}" ${group ? html`data-group="${group}"` : ""}>
       <span class="ss-tile__icon" aria-hidden="true">${icon(glyph)}</span>
       <span class="ss-tile__text"><span class="ss-tile__name">${name}</span><span class="ss-tile__detail">${detail}</span></span>
       ${badge ? html`<span class="ss-tile__badge" aria-hidden="true">${badge}</span>` : ""}
     </a>`;
 }
 
+/**
+ * The counter's four doors (V1.16.11): Borrow and Take open their group's list, Return the loans on this phone, My activity the history.
+ * Borrow and Take appear only while that group offers something, so no door opens on an empty list.
+ */
 function homeTiles(): Html {
   const loans = openLoans(events).length;
   const counts = summary(events);
   const reviews = recentReviews();
   const activityBadge = counts.pending ? `${counts.pending} waiting` : reviews ? `${reviews} with staff` : "";
-  return html`${tile("return", "Return", loans ? `${loans} on loan` : "Bring something back", "giveBack", loans ? String(loans) : "")}
+  const offered = new Set(snapshot ? grouped(snapshot.items).map((group) => group.id) : ["equipment", "supplies"]);
+  return html`${offered.has("equipment") ? tile("get", "Borrow", "Use it and bring it back", "swap", "", "equipment") : ""}
+    ${offered.has("supplies") ? tile("get", "Take", "Supplies to keep", "basket", "", "supplies") : ""}
+    ${tile("return", "Return", loans ? `${loans} on loan` : "Bring something back", "giveBack", loans ? String(loans) : "")}
     ${tile("activity", "My activity", "Loans and history", "history", activityBadge)}`;
 }
 
@@ -303,6 +310,7 @@ function renderHome(): void {
   if (!screen) return;
   mount(screen, html`<div class="ss-home">
       <section class="ss-hero" aria-labelledby="ss-question">
+        <div class="ss-band" aria-hidden="true"></div>
         <h1 id="ss-question">What do you need?</h1>
         <p class="ss-hero__hello">${greeting()}</p>
         <form class="ss-find" role="search" data-find>
@@ -312,7 +320,7 @@ function renderHome(): void {
       </section>
       <ul class="ss-results" data-region="results" hidden></ul>
       <div class="ss-home__body" data-region="body">
-        <nav class="ss-tiles" aria-label="Return and activity" data-region="tiles">${homeTiles()}</nav>
+        <nav class="ss-tiles" aria-label="Borrow, take, return and activity" data-region="tiles">${homeTiles()}</nav>
         <div class="ss-groups" data-region="groups">${groupsSection()}</div>
         <div class="ss-status" data-region="status">${readinessCard()}${installCard()}</div>
       </div>
@@ -420,13 +428,16 @@ function itemPage(): Html {
   if (!item) {
     return html`${back("Item")}${snapshot ? html`<p class="ss-empty">This item isn't offered in Self-Service right now.</p><a class="button button--secondary button--block" href="/self-service?do=get" data-go="get">Browse all items</a>` : offline ? emptyNote("The catalog hasn't been downloaded to this phone yet. Connect to the internet once, then try again.") : skeleton()}`;
   }
+  // V1.16.11: the picture fills the width, the facts read as one card, and the one action stays at thumb reach while it scrolls.
   return html`${back(item.name)}
     ${visual(item, "ss-item__visual", true)}
-    <p class="ss-item__type">${categoryName(item.category)} · ${ACTION_WORD[item.action]}</p>
-    ${estimateLine(item)}
-    <p class="ss-item__how">${behaviourLine(item.action, item.audience)}</p>
-    ${whereLine(item)}
-    <a class="button button--primary button--lg button--block ss-item__action" href="/self-service?do=${SCREEN_FOR[item.action]}&item=${item.id}" data-open-item="${item.id}" data-screen="${SCREEN_FOR[item.action]}">${ACTION_WORD[item.action]}</a>`;
+    <div class="ss-item__facts">
+      <p class="ss-item__type">${categoryName(item.category)} · ${ACTION_WORD[item.action]}</p>
+      ${estimateLine(item)}
+      <p class="ss-item__how">${behaviourLine(item.action, item.audience)}</p>
+      ${whereLine(item)}
+    </div>
+    <div class="ss-item__bar"><a class="button button--primary button--lg button--block ss-item__action" href="/self-service?do=${SCREEN_FOR[item.action]}&item=${item.id}" data-open-item="${item.id}" data-screen="${SCREEN_FOR[item.action]}">${ACTION_WORD[item.action]} ${icon("arrow")}</a></div>`;
 }
 
 function renderItem(): void {
@@ -595,12 +606,21 @@ const photoField = (tip: string, hint: string, capture: "user" | "environment", 
 const HOLD_TIP = "Only Logistics staff can see it. It shows what left and who has it. It is deleted from this phone once it is sent, and Logistics keeps it for about a year after the record is settled.";
 const holdingPhoto = () => photoField(HOLD_TIP, "Hold the item so your face and the item are both in view.", "user", "Take a photo holding it");
 
+/**
+ * A form's numbered step (V1.16.11 "Counter"): a short heading over its fields. The number is drawn by CSS counters; a step whose
+ * fields are complete shows a check (CSS :has()), a cue only: the form's own checks still decide, at Review.
+ */
+const step = (kind: "what" | "who" | "photo", title: string, body: Html) =>
+  html`<section class="ss-step ss-step--${kind}"><h3 class="ss-step__title"><span class="ss-step__n" aria-hidden="true"></span>${title}</h3>${body}</section>`;
+const whoStep = (nameLabel: string, borrower?: LocalEvent["person"]) => step("who", "Who you are", identityBlock(nameLabel, borrower));
+const photoStep = (field: Html) => step("photo", "A photo", field);
+
 function takeSheet(item: CatalogItem): Html {
   return sheetFrame(`Take · ${categoryName(item.category)}`, item.name, html`
     <form class="form ss-form" data-form="TAKE" novalidate>
-      ${quantityField()}
-      ${identityBlock("Your full name")}
-      ${holdingPhoto()}
+      ${step("what", "Amount", quantityField())}
+      ${whoStep("Your full name")}
+      ${photoStep(holdingPhoto())}
       ${privacyBlock()}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and take")}
@@ -611,8 +631,8 @@ function takeSheet(item: CatalogItem): Html {
 function useSheet(item: CatalogItem): Html {
   return sheetFrame(`Use · ${categoryName(item.category)}`, item.name, html`
     <form class="form ss-form" data-form="USE" novalidate>
-      ${identityBlock("Your full name")}
-      ${holdingPhoto()}
+      ${whoStep("Your full name")}
+      ${photoStep(holdingPhoto())}
       ${privacyBlock()}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and use")}
@@ -627,18 +647,18 @@ function borrowSheet(item: CatalogItem): Html {
   const day = (date: Date) => DAY.format(date);
   return sheetFrame(`Borrow · ${categoryName(item.category)}`, item.name, html`
     <form class="form ss-form" data-form="BORROW" novalidate>
-      ${uscOnly ? html`<input type="hidden" name="purpose" value="USC" /><p class="callout">${icon("info")}<span>Lent for USC use only. Say what it's for.</span></p>`
+      ${step("what", "About the loan", html`${uscOnly ? html`<input type="hidden" name="purpose" value="USC" /><p class="callout">${icon("info")}<span>Lent for USC use only. Say what it's for.</span></p>`
         : html`<fieldset class="ss-question"><legend class="ss-legend">What is it for?</legend><div class="segmented segmented--2">
           <label><input type="radio" name="purpose" value="INDIVIDUAL" checked /><span>Individual use</span></label><label><input type="radio" name="purpose" value="USC" /><span>USC use</span></label></div></fieldset>`}
-      ${identityBlock(uscOnly ? "Full name of the person using it" : "Your full name")}
       <div class="field" data-reason><label for="ss-reason">Specific reason</label><textarea id="ss-reason" name="reason" rows="2" maxlength="300" placeholder="${uscOnly ? "e.g. stage setup for the general assembly" : "e.g. a class report"}"></textarea></div>
       ${quantityField()}
       <fieldset class="ss-choices"><legend>Return by <span class="field__optional">optional</span></legend>
         <label><input type="radio" name="returnBy" value="${day(today)}" /><span>Today</span></label>
         <label><input type="radio" name="returnBy" value="${day(tomorrow)}" /><span>Tomorrow</span></label>
         <label><input type="radio" name="returnBy" value="" checked /><span>No date</span></label>
-      </fieldset>
-      ${holdingPhoto()}
+      </fieldset>`)}
+      ${whoStep(uscOnly ? "Full name of the person using it" : "Your full name")}
+      ${photoStep(holdingPhoto())}
       ${privacyBlock()}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and borrow")}
@@ -651,12 +671,12 @@ const loanKnown = (loan: LocalEvent) => Boolean(loan.person.name) && SELF_SERVIC
 function returnSheet(loan: LocalEvent): Html {
   return sheetFrame(`Borrowed ${when(loan.occurredAt)}`, `Return ${loan.itemName}${loan.quantity > 1 ? ` ×${loan.quantity}` : ""}`, html`
     <form class="form ss-form" data-form="RETURN" novalidate>
-      <fieldset class="ss-question"><legend class="ss-legend">How is it?</legend><div class="segmented ss-condition">
+      ${step("what", "Condition", html`<fieldset class="ss-question"><legend class="ss-legend">How is it?</legend><div class="segmented ss-condition">
         <label><input type="radio" name="outcome" value="RETURNED" checked /><span>Good</span></label><label><input type="radio" name="outcome" value="DAMAGED" /><span>Damaged</span></label><label><input type="radio" name="outcome" value="LOST" /><span>Lost</span></label>
       </div></fieldset>
-      <div class="field" data-note hidden><label for="ss-note" data-note-label>What's damaged?</label><textarea id="ss-note" name="note" rows="2" maxlength="300"></textarea></div>
-      ${identityBlock("Your full name", loanKnown(loan) ? loan.person : undefined)}
-      ${photoField("Logistics staff check it before the stock is updated. Only staff can see it, and it is deleted from this phone once it is sent.", "Show the item as you hand it back.", "environment", "Take a photo of the item")}
+      <div class="field" data-note hidden><label for="ss-note" data-note-label>What's damaged?</label><textarea id="ss-note" name="note" rows="2" maxlength="300"></textarea></div>`)}
+      ${whoStep("Your full name", loanKnown(loan) ? loan.person : undefined)}
+      ${photoStep(photoField("Logistics staff check it before the stock is updated. Only staff can see it, and it is deleted from this phone once it is sent.", "Show the item as you hand it back.", "environment", "Take a photo of the item"))}
       ${privacyBlock()}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and return")}
