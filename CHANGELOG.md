@@ -4,6 +4,9 @@ A concise index of what changed in each product version/revision and accepted sp
 
 ## Unreleased — documentation and governance
 
+- **2026-11-04 · Governance · Changed:** Claude is the sole writer on all projects until further notice; ChatGPT audits, reviews and manages ([AGENTS.md](AGENTS.md), "Sole writer"). The two-lane writer exception is suspended. **Why:** Earl's instruction, ending writer handoffs between agents. **Impact:** process only; no application change. **Status:** documentation only.
+- **2026-11-04 · Repository · Changed:** Open PRs #66, #72, #73, #74 and #77 were reconciled into one change and #60 was closed. Issue #35 became `docs/road-to-v3/10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md` (direction only). Dependencies: undici 7.30.1 (security) and wrangler 4.157.0. **Impact:** no application source change. **Status:** documentation and tooling.
+
 - **2026-11-04 · Governance · Changed:** Added a common changelog obligation for Codex, Claude and other agents in [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md). The changelog must enumerate shipped changes per verified version/revision and record accepted specification amendments separately. **Why:** make change history easier to audit across agents. **Impact:** documentation/process only; no application change, deployment or product version increment. **Status:** documentation only; it creates no product release.
 
 ## Specification changes

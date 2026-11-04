@@ -9,6 +9,16 @@ Read, in order:
 
 Authority: Earl current instruction -> accepted spec/amendment -> verified repository state -> Context Vault.
 
+## Sole writer (owner rule, 2026-11-04)
+
+Earl, 2026-11-04: "for all current, past, and future projects. claude will be the sole writer until further notice. chatgpt will remain auditor, reviewer, and manager."
+
+- **Claude:** the only writer, until Earl says otherwise. It holds the writer lock and makes every change, branch, commit and PR, and it is the integration steward.
+- **ChatGPT:** audits, reviews and manages, and does not write to the repository.
+- **Codex and Forge:** no longer write. Where this file or another record names them as a writer, steward or writer lane, that is superseded.
+- **The two-lane exception:** suspended. There is one writer and one work branch.
+- **Unchanged:** the authority chain above, the per-action owner authorization for pushes, merges, deploys and migrations, and every release gate.
+
 Documentation map: `docs/DOCUMENTATION_STATUS.md`. `.codex/CURRENT.md` and `.codex/SESSION_HANDOFF.md` are the **only live task pointers**; historical Part briefs, older `proposed` drafts, and old release plans must never restart a closed task. Preserve accepted specs, release/migration evidence and rollback provenance. The retired Road-to-V2 multi-branch runner is not active.
 
 ## Road-to-V3 command routing
