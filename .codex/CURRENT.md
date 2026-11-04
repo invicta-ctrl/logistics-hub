@@ -4,7 +4,7 @@
 
 V1.16.9 is merged and deployed (PR #84, `main` `4e407ce`). The deploy is byte-checked and the timings re-measured; its record has the evidence.
 
-V1.16.10 is on branch `slice/v1.16.10-dol-director` in worktree `.claude/worktrees/v11610-role`, application source `0a7c15f`.
+V1.16.10 is on branch `slice/v1.16.10-dol-director` in worktree `.claude/worktrees/v11610-role`, application source `f37c802`.
 - Spec: `docs/specs/accepted/2026-11-04-v11610-dol-director.md`.
 - Record: `docs/road-to-v2/releases/v1.16.10.md`. No migration.
 - The change: a new access group, `DOL_DIRECTOR`, with DoL Staff's access.

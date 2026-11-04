@@ -1,6 +1,6 @@
 {
   "version": "V1.16.10",
-  "sourceCommit": "0a7c15f56a26e40d344b934c495f834619afdd4b",
+  "sourceCommit": "f37c802ad431b07f16fe825a44569e2acc4110c2",
   "record": "docs/road-to-v2/releases/v1.16.10.md",
   "changes": [
     "A new role, DoL Director, with the same access as DoL Staff for now: the Logistics Hub's items, stock, loans, Self-Service review and activity."
