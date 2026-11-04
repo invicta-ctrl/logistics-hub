@@ -3,8 +3,11 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /** Item photos keep their controls in a menu that opens from the photo itself (owner, 24 October 2026). */
 async function openMenu(panel: Locator): Promise<void> {
-  if (!(await panel.getByRole("menu").isVisible())) await panel.locator("[data-photo-menu]").click();
-  await expect(panel.getByRole("menu")).toBeVisible();
+  // A menu left open under the viewer can close a moment after the viewer does (Back), so check again if it went.
+  await expect(async () => {
+    if (!(await panel.getByRole("menu").isVisible())) await panel.locator("[data-photo-menu]").click();
+    await expect(panel.getByRole("menu")).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 10_000 });
 }
 async function choose(panel: Locator, name: string): Promise<void> {
   await openMenu(panel);
@@ -1006,7 +1009,8 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await page.keyboard.press("Escape");
   await expect(viewer).toBeHidden();
   await settled();
-  await expect(page.locator("tr[data-key] .thumb .item-icon").first()).toBeVisible();
+  // The open item's page (V1.16.12) starts with Scissors itself, whose icon is the photo's hidden fallback, so look at another row.
+  await expect(page.locator('tr[data-key]:not([data-key="ITM-0262"]) .thumb .item-icon').first()).toBeVisible();
   expect(await page.locator("tr[data-key] .thumb [data-item-photo]").count()).toBe(1);
 
   // Replace: a new photo takes the place, and the old address stops working.
