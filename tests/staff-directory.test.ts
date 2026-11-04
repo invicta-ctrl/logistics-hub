@@ -389,7 +389,7 @@ describe("roles by department (Earl, 2026-10-03)", () => {
   };
 
   it("lets only DoL Staff (and staff from before, as DoL) into the Logistics Hub; other departments and officers reach their account only", async () => {
-    for (const [group, hub] of [["DoL", true], [null, true], ["DEM", false], ["OFFICER", false]] as const) {
+    for (const [group, hub] of [["DoL", true], ["DOL_DIRECTOR", true], [null, true], ["DEM", false], ["OFFICER", false]] as const) {
       const cookie = await seedWith(`ACC-${group ?? "legacy"}`, `user.${(group ?? "legacy").toLowerCase()}`, group);
       const session = await json(await as(cookie, "/api/staff/session"));
       expect(session).toMatchObject({ access: group ?? "DoL", hub });
@@ -420,6 +420,11 @@ describe("roles by department (Earl, 2026-10-03)", () => {
     expect(sqlite.prepare("SELECT count(*) AS n FROM system_settings WHERE key = ?").get(`account_access:${dem.id}`)).toEqual({ n: 0 });
     const changes = sqlite.prepare("SELECT details_json AS details FROM audit_log WHERE action = 'ACCOUNT_UPDATED' AND entity_id = ? ORDER BY rowid").all(dem.id).map((row) => JSON.parse(String(row.details)).access);
     expect(changes).toEqual([{ from: "DEM", to: "DoL" }, { from: "DoL", to: "OWNER" }]);
+    // V1.16.10: an administrator may make someone the DoL Director, a staff group like DoL Staff; it is recorded and audited the same way.
+    const director = await json(await make("ADMIN", "DOL_DIRECTOR", "the.director"));
+    expect(sqlite.prepare("SELECT role FROM staff_accounts WHERE id = ?").get(director.id)).toEqual({ role: "STAFF" });
+    expect(sqlite.prepare("SELECT value FROM system_settings WHERE key = ?").get(`account_access:${director.id}`)).toEqual({ value: "DOL_DIRECTOR" });
+    expect(await json(await call("ADMIN", `/api/staff/admin/accounts/${director.id}`, "PATCH", { access: "DoL" }))).toMatchObject({ changed: 1, sessionsRevoked: true });
     // The older form, a role alone, keeps a staff member's department.
     const officer = await json(await make("OWNER", "OFFICER", "an.officer"));
     expect(await json(await call("OWNER", `/api/staff/admin/accounts/${officer.id}`, "PATCH", { role: "STAFF", displayName: "An Officer" }))).toMatchObject({ changed: 1 });

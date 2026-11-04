@@ -14,10 +14,11 @@ export const canManage = (actor: Pick<Session, "role">, target: { role: Role }) 
 /**
  * The roles an administrator chooses from (Earl, 2026-10-03): DoL Staff first (the only staff who use the Logistics Hub), the
  * other departments' staff in the council's order, Officer, and, for an owner, Owner. Administrator is no longer offered.
+ * V1.16.10: DoL Director follows DoL Staff, with the same access for now.
  */
-export const accessChoices = (actor: Pick<Session, "role">): Access[] => ["DoL", ...DEPARTMENT_CODES.filter((code) => code !== "DoL"), "OFFICER", ...(actor.role === "OWNER" ? ["OWNER" as const] : [])];
-export const ACCESS_HINT = "DoL Staff use the Logistics Hub. Staff of other departments and officers can sign in to their own account only, for now. The owner has full access.";
-export const accessTag = (access: Access) => html`<span class="tag ${access === "OWNER" ? "tag--brand" : access === "ADMIN" ? "tag--gold" : access === "DoL" ? "tag--ok" : ""}">${accessLabel(access)}</span>`;
+export const accessChoices = (actor: Pick<Session, "role">): Access[] => ["DoL", "DOL_DIRECTOR", ...DEPARTMENT_CODES.filter((code) => code !== "DoL"), "OFFICER", ...(actor.role === "OWNER" ? ["OWNER" as const] : [])];
+export const ACCESS_HINT = "DoL Staff and the DoL Director use the Logistics Hub. Staff of other departments and officers can sign in to their own account only, for now. The owner has full access.";
+export const accessTag = (access: Access) => html`<span class="tag ${access === "OWNER" ? "tag--brand" : access === "ADMIN" ? "tag--gold" : access === "DoL" || access === "DOL_DIRECTOR" ? "tag--ok" : ""}">${accessLabel(access)}</span>`;
 /** Whether an actor may give an account this role: an owner any; an administrator staff and officer roles only. */
 export type { Role };
 

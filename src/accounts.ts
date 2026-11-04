@@ -16,14 +16,20 @@ type Target = { id: string; username: string; displayName: string; role: Role; a
  * for now. A STAFF account keeps its group as a setting (`account_access:<id>`, no schema change); one without a recorded
  * group is Logistics staff, as every staff account was before.
  */
-export const ACCESS_GROUPS = [...DEPARTMENT_CODES, "OFFICER"] as const satisfies ReadonlyArray<DepartmentCode | "OFFICER">;
-export type AccessGroup = DepartmentCode | "OFFICER";
+export const ACCESS_GROUPS = [...DEPARTMENT_CODES, "DOL_DIRECTOR", "OFFICER"] as const satisfies ReadonlyArray<DepartmentCode | "DOL_DIRECTOR" | "OFFICER">;
+export type AccessGroup = DepartmentCode | "DOL_DIRECTOR" | "OFFICER";
 export type Access = AccessGroup | "ADMIN" | "OWNER";
+/**
+ * The groups that use the Logistics Hub: DoL Staff and, since V1.16.10, the DoL Director (Earl, 2026-11-04: "a new role 'DoL
+ * Director' that has the same permissions as DoL Staff for now"). A Director is a STAFF account like DoL Staff, so every rule that
+ * reads the role (who may manage whom, what an administrator may change) treats the two alike.
+ */
+export const HUB_GROUPS: ReadonlyArray<AccessGroup> = ["DoL", "DOL_DIRECTOR"];
 export const groupKey = (accountId: string) => `account_access:${accountId}`;
 const isGroup = (value: unknown): value is AccessGroup => typeof value === "string" && (ACCESS_GROUPS as readonly string[]).includes(value);
 export const accessOf = (role: Role, group: string | null | undefined): Access => role === "STAFF" ? (isGroup(group) ? group : "DoL") : role;
 /** Whether an account may use the Logistics Hub itself (items, stock, loans, Self-Service review, activity, administration). */
-export const hubAccess = (account: Pick<Account, "role" | "group">): boolean => account.role !== "STAFF" || accessOf(account.role, account.group) === "DoL";
+export const hubAccess = (account: Pick<Account, "role" | "group">): boolean => account.role !== "STAFF" || (HUB_GROUPS as readonly string[]).includes(accessOf(account.role, account.group));
 
 /** The role and group an administrator chose: `access` (a group, ADMIN or OWNER), or the older `role` alone. */
 function accessChoice(data: Record<string, unknown>): { role: Role; group: AccessGroup | null } {
