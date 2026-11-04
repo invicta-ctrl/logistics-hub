@@ -729,6 +729,35 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .data-table-wrap--responsive { container-type: inline-size; }
 .table-more { display: flex; justify-content: center; margin: var(--space-3) 0 0; }
 .table-more .button { height: auto; min-height: 2.75rem; max-width: 100%; white-space: normal; text-align: center; }
+
+/* V1.16.12 pager (src/pager.ts): numbered pages under a long list on desktop. The current page is filled, the rest are quiet. */
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-4); margin: var(--space-4) 0 0; }
+.pager__range { margin: 0; color: var(--text); font-size: var(--text-sm); font-variant-numeric: tabular-nums; font-weight: 600; }
+.pager__range span { color: var(--text-3); font-weight: 400; }
+.pager__pages { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.pager__n, .pager__step { display: inline-flex; min-width: 2.5rem; min-height: 2.5rem; align-items: center; justify-content: center; gap: var(--space-1); padding: 0 var(--space-3); border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--text-2); font: inherit; font-size: var(--text-sm); font-variant-numeric: tabular-nums; font-weight: 500; cursor: pointer; transition: background-color var(--dur-1), border-color var(--dur-1), color var(--dur-1); }
+.pager__step { border-color: var(--line); color: var(--text); }
+.pager__step .icon { --icon-size: var(--icon-sm); }
+.pager__n:hover, .pager__step:hover:not(:disabled) { background: var(--hover); color: var(--text); }
+.pager__n[aria-current="page"] { border-color: var(--brand); background: var(--brand); color: var(--on-brand); cursor: default; }
+.pager__step:disabled { cursor: default; opacity: .45; }
+.pager__n:focus-visible, .pager__step:focus-visible { outline: none; box-shadow: var(--focus); }
+.pager__gap { min-width: 1.5rem; color: var(--text-3); text-align: center; }
+
+/* Phone groups that fold (foldMarkup): the title is the toggle and stays in view while its rows scroll beneath it. */
+.fold { scroll-margin-top: var(--fold-top, 0px); }
+.fold + .fold { margin-top: var(--space-2); }
+.fold__title { position: sticky; top: var(--fold-top, 0px); z-index: 2; margin: 0; background: var(--bg); font: inherit; }
+.fold__toggle { display: flex; width: 100%; min-height: 3rem; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-1); border: 0; border-bottom: 1px solid var(--line); background: transparent; color: var(--text); font: inherit; font-size: var(--text-md); font-weight: 600; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.fold__toggle:focus-visible { outline: none; box-shadow: var(--focus); }
+.fold__count { margin-left: auto; padding: .125rem .5rem; border-radius: var(--radius-pill); background: var(--subtle); color: var(--text-2); font-size: var(--text-sm); font-variant-numeric: tabular-nums; font-weight: 600; }
+.fold__toggle > .icon { --icon-size: var(--icon-sm); flex: none; color: var(--text-3); transform: rotate(-90deg); transition: transform var(--dur-2) var(--ease); }
+.fold.is-open .fold__toggle > .icon { transform: none; }
+.fold__body { padding-top: var(--space-2); }
+.fold__more { display: flex; justify-content: center; margin: var(--space-3) 0 var(--space-2); }
+@media (prefers-reduced-motion: reduce) { .fold__toggle > .icon { transition: none; } }
+/* On a phone the activity feed can grow to 300 entries as it scrolls: rows out of sight skip layout and paint until they come near (V1.16.12). */
+@media (max-width: 47.99rem) { .activity-row { content-visibility: auto; contain-intrinsic-size: auto 4.5rem; } }
 .data-table { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
 .data-table th { position: sticky; top: var(--app-bar); z-index: 1; height: 2.75rem; padding: 0 var(--space-4); border-bottom: 1px solid var(--line); background: var(--bg); color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-align: left; text-transform: uppercase; white-space: nowrap; }
 .data-table td { height: 4rem; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); vertical-align: middle; }

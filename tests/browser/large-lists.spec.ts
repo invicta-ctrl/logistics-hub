@@ -103,43 +103,66 @@ test.describe("Items table", () => {
     await page.goto("/staff/items");
     await expect(page.locator("#inventory-count")).toContainText("6,000");
     const large = await rows(page);
-    expect(small).toBe(100);
-    expect(large).toBe(100);
+    expect(small).toBe(25);
+    expect(large).toBe(25);
     const nodes = await page.evaluate(() => document.querySelectorAll("*").length);
     expect(nodes).toBeLessThan(3000);
   });
 
-  test("shows more on request, puts focus on the first new row, and starts over when the question changes", async ({ page }) => {
+  // V1.16.12: numbered pages of 25 on desktop, kept in the address; a new question starts at the first page.
+  test("turns numbered pages, keeps the page in the address, and starts over when the question changes", async ({ page }) => {
     await open(page, 450);
     await page.goto("/staff/items");
-    const more = page.getByRole("button", { name: /Show 100 more/ });
-    await expect(more).toContainText("100 of 450 shown");
-    await more.click();
-    expect(await rows(page)).toBe(200);
-    await expect(page.locator(".data-table--items tbody tr:nth-child(101) .row-link")).toBeFocused();
-    await page.getByRole("button", { name: /Show 100 more/ }).click();
-    await page.getByRole("button", { name: /Show 100 more/ }).click();
-    await expect(page.getByRole("button", { name: /Show 50 more/ })).toBeVisible();
-    await page.getByRole("button", { name: /Show 50 more/ }).click();
-    expect(await rows(page)).toBe(450);
-    await expect(page.locator("[data-more]")).toHaveCount(0);
-    // Searching searches everything, not only what is drawn, and a new question starts at the first page again.
+    const pager = page.getByRole("navigation", { name: "Items pages" });
+    await expect(pager.locator(".pager__range")).toHaveText(/1–25 of 450/);
+    await expect(pager.getByRole("button", { name: "Previous" })).toBeDisabled();
+    await expect(pager.getByRole("button", { name: "Page 1", exact: true })).toHaveAttribute("aria-current", "page");
+    await pager.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(page).toHaveURL(/[?&]page=2/);
+    expect(await rows(page)).toBe(25);
+    await expect(page.locator(".data-table--items tbody tr").first()).toHaveAttribute("data-key", "ITM-00026");
+    await expect(page.locator(".data-table--items tbody tr:first-child .row-link")).toBeFocused();
+    await pager.getByRole("button", { name: "Page 18" }).click();
+    await expect(pager.locator(".pager__range")).toHaveText(/426–450 of 450/);
+    await expect(pager.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
+    // An addressed page opens where it was left.
+    await page.goto("/staff/items?page=3");
+    await expect(page.locator(".data-table--items tbody tr").first()).toHaveAttribute("data-key", "ITM-00051");
+    // Searching searches everything, not only the page drawn, and a new question starts at the first page again.
     await page.getByRole("searchbox").first().fill("Sample item 449");
     await expect(page.locator(".data-table--items tbody tr")).toHaveCount(1);
+    await expect(pager).toHaveCount(0);
+    await expect(page).not.toHaveURL(/[?&]page=/);
     await page.getByRole("searchbox").first().fill("");
-    await expect(page.locator(".data-table--items tbody tr")).toHaveCount(100);
+    await expect(page.locator(".data-table--items tbody tr")).toHaveCount(25);
+    await expect(page.locator(".data-table--items tbody tr").first()).toHaveAttribute("data-key", "ITM-00001");
   });
 
-  test("keeps a deep-linked item drawn even when it falls beyond the first page", async ({ page }) => {
+  test("on a phone, grows by 25 on request and puts focus on the first new row", async ({ page }) => {
+    await open(page, 60);
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto("/staff/items");
+    const more = page.getByRole("button", { name: /Show 25 more/ });
+    await expect(more).toContainText("25 of 60 shown");
+    await expect(page.locator("nav.pager")).toHaveCount(0);
+    await more.click();
+    expect(await rows(page)).toBe(50);
+    await expect(page.locator(".data-table--items tbody tr:nth-child(26) .row-link")).toBeFocused();
+    await page.getByRole("button", { name: /Show 10 more/ }).click();
+    expect(await rows(page)).toBe(60);
+    await expect(page.locator("[data-more-rows]")).toHaveCount(0);
+  });
+
+  test("opens a deep-linked item on the page that holds it", async ({ page }) => {
     await open(page, 450);
     const target = item(420);
     await page.route("**/api/staff/items/ITM-00420", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ item: { ...target, notes: null, listingGaps: [], photo: null, location: null, legacyReportedAvailable: null, migratedOnHand: 0, migrationDelta: null, legacySourceSheet: null, legacySourceRow: null, verificationNote: null, importedFrom: null }, movements: [], loans: [], openUnits: [], reports: [], events: [], usesRecorded: 0, unitsEmptied: 0 }) }));
     await page.goto("/staff/items?item=ITM-00420");
     await expect(page.locator('tr[data-key="ITM-00420"]')).toHaveCount(1);
-    expect(await rows(page)).toBeGreaterThanOrEqual(100);
+    expect(await rows(page)).toBe(25);
+    await expect(page.locator('nav[data-pager="page"] [aria-current="page"]')).toHaveText("17");
   });
 });
-
 
 test("formats stock quantities and keeps Items sorting calm", async ({ page }) => {
   const formatted = { ...item(1), onHand: 1_500 };

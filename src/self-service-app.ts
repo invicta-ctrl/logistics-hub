@@ -8,6 +8,7 @@ import { type Draft, checkDecisions, clearHistory, nextAttemptAt, onSyncMessage,
 import { type Readiness, applyUpdate, canPromptInstall, hasUpdate, isStandalone, onPwaChange, platform, promptInstall, readiness, requestBackgroundSync, requestPersistence, whenIdle } from "./pwa";
 import { ancestry, placesOf, type ReportKind } from "./location-tree";
 import { type GroupId, GROUPS, behaviourLine, conciseLocation, frequentItems, groupName, groupOf, grouped, isGroup, matching } from "./self-service-browse";
+import { Folds, ListPager, foldMarkup, landOn, landOnFold, onLayoutChange, onPhone, stickBelow } from "./pager";
 import { bindStudentId, studentIdProblem } from "./student-id-field";
 import { formEdits } from "./unsaved";
 import { type Step, openWhereIsIt } from "./where-is-it";
@@ -387,6 +388,7 @@ function renderBrowse(): void {
   const main = region("screen");
   if (!main) return;
   listQuery = "";
+  browsePager = new ListPager("page", "Item pages");
   const { group } = params();
   const filters = [{ id: null, name: "All" }, ...GROUPS];
   mount(main, html`<div class="ss-screen">
@@ -395,6 +397,9 @@ function renderBrowse(): void {
       <div class="search-field ss-search">${icon("search")}<input type="search" data-search placeholder="Search items" aria-label="Search" autocomplete="off" enterkeyhint="search" /></div>
       <div data-region="rows">${listRows()}</div>
     </div>`);
+  // Folded groups' titles stay in view just under the app's bar.
+  stopSticking();
+  stopSticking = stickBelow(region("rows")!, document.querySelector<HTMLElement>(".ss-bar"));
 }
 
 function listRows(): Html {
@@ -406,11 +411,45 @@ function listRows(): Html {
   if (!offered.length) return emptyNote(group ? "Nothing is offered in this group right now." : "Nothing is set up for self-service yet. Ask Logistics staff.");
   const found = matching(offered, listQuery);
   if (!found.length) return emptyNote(`Nothing matches “${listQuery}”.`);
-  const byCategory = new Map<string, CatalogItem[]>();
-  for (const item of found) byCategory.set(item.category, [...byCategory.get(item.category) ?? [], item]);
+  const byCategory = (items: CatalogItem[]) => {
+    const groups = new Map<string, CatalogItem[]>();
+    for (const item of items) groups.set(item.category, [...groups.get(item.category) ?? [], item]);
+    return [...groups];
+  };
   // Every item has the same reserved icon/photo frame, keeping names aligned.
-  return html`${[...byCategory].map(([category, items]) => html`<h2 class="ss-section">${categoryName(category)}</h2><ul class="ss-list ss-list--photos">${items.map((item) => row(item, available.get(item.id) ?? 0, waiting.get(item.id)))}</ul>`)}
-    ${stamp()}`;
+  const list = (items: CatalogItem[]) => html`<ul class="ss-list ss-list--photos">${items.map((item) => row(item, available.get(item.id) ?? 0, waiting.get(item.id)))}</ul>`;
+  if (browsePager.ask(JSON.stringify([group, listQuery]))) browseFolds.reset();
+  // A phone folds the categories, each opening on its first rows (a search shows every match); a desktop turns pages of 25.
+  if (onPhone()) {
+    return html`${byCategory(found).map(([category, items]) => foldMarkup(category, html`${categoryName(category)}`, items.length, (limit) => list(items.slice(0, limit)), listQuery ? { open: true, all: true } : browseFolds.state(category)))}
+      ${stamp()}`;
+  }
+  const { rows, footer } = browsePager.slice(found);
+  return html`${byCategory(rows).map(([category, items]) => html`<h2 class="ss-section">${categoryName(category)}</h2>${list(items)}`)}
+    ${footer}${stamp()}`;
+}
+
+/** The browse list's place: a page on desktop, folded groups on a phone (V1.16.12). Made again each time the list is opened. */
+let browsePager = new ListPager("page", "Item pages");
+const browseFolds = new Folds();
+let stopSticking = () => undefined as void;
+
+/** Handles the browse list's pager and folds; true when the click was one of theirs. */
+function browseClick(target: HTMLElement): boolean {
+  const rows = region("rows");
+  if (!rows) return false;
+  const turned = browsePager.handle(target);
+  if (turned) {
+    mount(rows, listRows());
+    landOn(rows, turned, () => [...rows.querySelectorAll<HTMLElement>(".ss-row")]);
+    return true;
+  }
+  const fold = browseFolds.handle(target);
+  if (!fold) return false;
+  mount(rows, listRows());
+  const group = rows.querySelector<HTMLElement>(`[data-fold-group="${CSS.escape(fold.key)}"]`);
+  landOnFold(group, fold, ".ss-row");
+  return true;
 }
 
 /** When the numbers were last confirmed, and that other phones may not be counted yet. */
@@ -1088,6 +1127,9 @@ export async function selfService(): Promise<void> {
   });
   mount(app, frame());
   onLeave(bindHelp(app));
+  // Crossing the phone width swaps pages for folded groups, and back.
+  onLeave(onLayoutChange(() => { const rows = region("rows"); if (rows && viewOf(params()) === "get") mount(rows, listRows()); }));
+  onLeave(() => { stopSticking(); });
   const dialog = document.querySelector<HTMLDialogElement>("#ss-sheet")!;
   let receiptFor: string | null = null;
   /** Set when code closes the sheet and moves the address itself. */
@@ -1168,6 +1210,7 @@ export async function selfService(): Promise<void> {
   app.addEventListener("click", clickHandler);
   function clickHandler(event: MouseEvent): void {
     const target = event.target as HTMLElement;
+    if (browseClick(target)) return;
     const goTo = target.closest<HTMLAnchorElement>("[data-go]");
     if (goTo) { event.preventDefault(); go({ screen: goTo.dataset.go as Screen, item: null, loan: null, group: (goTo.dataset.group || null) as GroupId | null }, goTo.hasAttribute("aria-current")); return; }
     const open = target.closest<HTMLAnchorElement>("[data-open-item]");

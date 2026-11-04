@@ -1,3 +1,4 @@
+import { Folds, ListPager, foldMarkup, landOn, landOnFold, onLayoutChange, onPhone, stickBelow } from "./pager";
 import { CREST, MARK, type Html, animateNumber, app, categoryName, emptyState, html, icon, itemThumbnailUrl, itemVisual, label, live, mount, navigate, onLeave, ownQuery, plural, preservingFocus, sheet, sheetContent, thumbImg, units, writeParams } from "./ui";
 
 type LendingItem = { id: string; name: string; category: string; unit: string; itemType: string; available: number; audience: string; photo: string | null; iconKey?: string | null };
@@ -192,6 +193,9 @@ export function lending(): void {
   let catalog: Catalog | null = null;
   let before = new Map<string, number>();
   const changed = new Set<string>();
+  const pager = new ListPager("page", "Lending Hub pages");
+  const folds = new Folds();
+  onLeave(stickBelow(results, document.querySelector<HTMLElement>(".filterbar")));
 
   // Each row is one button, named by the item, whose target covers the row (V1.16.8): pressing it opens the item's sheet.
   const row = (item: LendingItem) => html`<li class="catalogue__row catalogue__row--open ${changed.has(item.id) ? "is-changed" : ""}" data-key="${item.id}">${thumbImg(item)}
@@ -271,14 +275,24 @@ export function lending(): void {
     count.textContent = `${plural(shown.length, "item")}, ${ready} available`;
     // Every item has the same reserved icon/photo frame, keeping names aligned.
     const photos = catalog.items.length > 0;
-    const groups = sort === "name" ? [...new Set(shown.map((item) => item.category))] : [null];
+    const list = (members: LendingItem[]) => html`<ul class="catalogue ${photos ? "catalogue--photos" : ""}">${members.map(row)}</ul>`;
+    const groupOf = (members: LendingItem[]) => sort === "name" ? [...new Set(members.map((item) => item.category))] : [null];
+    const inGroup = (members: LendingItem[], group: string | null) => group === null ? members : members.filter((item) => item.category === group);
+    if (pager.ask(JSON.stringify([category, availableOnly.checked, query, sort]))) folds.reset();
+    if (openId) pager.reveal(shown.findIndex((item) => item.id === openId));
+    // A phone folds the categories, each opening on its first rows; a desktop turns pages of 25, its categories as headings.
+    const folding = onPhone() && sort === "name";
+    const paged = folding ? null : pager.slice(shown);
+    const drawn = paged ? paged.rows : shown;
     preservingFocus(results, () => mount(results, shown.length
-      ? html`${groups.map((group, index) => {
-          const members = group === null ? shown : shown.filter((item) => item.category === group);
-          return html`<section class="catalogue-group" aria-labelledby="group-${index}">
-            <h2 class="catalogue-group__title" id="group-${index}">${group === null ? "By availability" : categoryName(group)} <span>${members.length}</span></h2>
-            <ul class="catalogue ${photos ? "catalogue--photos" : ""}">${members.map(row)}</ul></section>`;
-        })}`
+      ? folding
+        ? html`${groupOf(shown).map((group) => { const members = inGroup(shown, group); return foldMarkup(group ?? "all", html`${categoryName(group ?? "")}`, members.length, (limit) => list(members.slice(0, limit)), folds.state(group ?? "all")); })}`
+        : html`${groupOf(drawn).map((group, index) => {
+            const members = inGroup(drawn, group);
+            return html`<section class="catalogue-group" aria-labelledby="group-${index}">
+              <h2 class="catalogue-group__title" id="group-${index}">${group === null ? "By availability" : categoryName(group)} <span>${inGroup(shown, group).length}</span></h2>
+              ${list(members)}</section>`;
+          })}${paged!.footer}`
       : emptyState("Nothing matches those filters", "Try a shorter search, another category, or include items that are currently out.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
     if (reason === "data") rollCounts(results, before, changed);
     changed.clear();
@@ -286,6 +300,7 @@ export function lending(): void {
 
   let timer = 0;
   onLeave(() => window.clearTimeout(timer));
+  onLeave(onLayoutChange(() => render("filter")));
   search.addEventListener("input", () => { clear.hidden = !search.value; window.clearTimeout(timer); timer = window.setTimeout(() => render("filter"), 140); });
   search.addEventListener("keydown", (event) => { if (event.key === "Escape" && search.value) { search.value = ""; render("filter"); } });
   clear.addEventListener("click", () => { search.value = ""; render("filter"); search.focus(); });
@@ -310,7 +325,21 @@ export function lending(): void {
       navigate(`/lending?${params}`);
       return;
     }
-    if (!(event.target as HTMLElement).closest("#clear-filters")) return;
+    const target = event.target as HTMLElement;
+    const turned = pager.handle(target);
+    if (turned) {
+      render("filter");
+      landOn(results, turned, () => [...results.querySelectorAll<HTMLElement>(".catalogue__open")]);
+      return;
+    }
+    const fold = folds.handle(target);
+    if (fold) {
+      render("filter");
+      const group = results.querySelector<HTMLElement>(`[data-fold-group="${CSS.escape(fold.key)}"]`);
+      landOnFold(group, fold, ".catalogue__open");
+      return;
+    }
+    if (!target.closest("#clear-filters")) return;
     search.value = "";
     category = "";
     availableOnly.checked = false;

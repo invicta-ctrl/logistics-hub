@@ -4,6 +4,7 @@ import { type Place, inOrder, pathOf, placesOf } from "./location-tree";
 import { signed } from "./movement-form";
 import { type Session, loadSession, shell } from "./staff-shell";
 import { api, ApiError, emptyState, expired, failure, formatDate, formatDateTime, formatTime, type Html, html, icon, type IconName, label, live, mount, officeDay, onLeave, preservingFocus, readKept, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { PAGE_SIZE, landOn, onLayoutChange, onPhone, stepOf, stepsMarkup } from "./pager";
 
 /*
  * Activity (/staff/activity): one newest-first list of who did what, read from GET /api/staff/activity.
@@ -200,20 +201,32 @@ export async function activityWorkspace(): Promise<void> {
     openKey = next;
   }
 
+  /**
+   * On a desktop the feed is read 25 at a time, newest first, with Newer and Older (V1.16.12); Older past what is loaded fetches
+   * the next batch. A phone keeps the one scrolling feed that loads as it nears its end.
+   */
+  let deskPage = 1;
+  const capped = () => Boolean(nextCursor) && entries.length >= MAX_SHOWN;
   function render(): void {
     results.removeAttribute("aria-busy");
     for (const entry of entries) if (entry.actorId && entry.actorId !== "SELF_SERVICE") actors.set(entry.actorId, entry.actor);
-    const text = entries.length ? `${entryCount(entries.length)}${nextCursor ? " shown, older ones below" : ""}` : "No entries";
+    const desk = !onPhone();
+    deskPage = Math.max(1, Math.min(deskPage, Math.ceil(entries.length / PAGE_SIZE)));
+    const first = desk ? (deskPage - 1) * PAGE_SIZE : 0;
+    const drawn = desk ? entries.slice(first, first + PAGE_SIZE) : entries;
+    const olderThere = first + PAGE_SIZE < entries.length || (Boolean(nextCursor) && !capped());
+    const lastPage = !desk || !olderThere;
+    const text = entries.length ? `${entryCount(entries.length)}${nextCursor ? desk ? " loaded, older ones on later pages" : " shown, older ones below" : ""}` : "No entries";
     if (count.textContent !== text) count.textContent = text;
-    preservingFocus(results, () => mount(results, entries.length ? feed(entries) : filtered()
+    preservingFocus(results, () => mount(results, entries.length ? html`${feed(drawn)}${desk ? stepsMarkup(first, drawn.length, olderThere, "Activity pages") : ""}` : filtered()
       ? emptyState("Nothing matches", "Try another search or filter, or clear them to see everything.", html`<button class="button button--secondary" type="button" data-remove="everything">Clear search and filters</button>`)
       : emptyState("No activity yet", "Stock changes, loans, phone records and catalog edits appear here as they happen.")), "[data-fold]");
-    const capped = Boolean(nextCursor) && entries.length >= MAX_SHOWN;
-    more.hidden = !entries.length;
-    older.hidden = !nextCursor || capped;
-    if (nextCursor && !capped) watchEnd();
-    end.hidden = Boolean(nextCursor) && !capped;
-    end.textContent = capped ? `Showing the newest ${entryCount(MAX_SHOWN)}. Narrow the filters or export the list to see more.` : filtered() ? "No older entries match." : "That is the beginning of the records.";
+    const atCap = capped();
+    more.hidden = !entries.length || !lastPage || (desk && Boolean(nextCursor) && !atCap);
+    older.hidden = desk || !nextCursor || atCap;
+    if (!desk && nextCursor && !atCap) watchEnd(); else watcher?.unobserve(more);
+    end.hidden = Boolean(nextCursor) && !atCap;
+    end.textContent = atCap ? `Showing the newest ${entryCount(MAX_SHOWN)}. Narrow the filters or export the list to see more.` : filtered() ? "No older entries match." : "That is the beginning of the records.";
     renderControls();
   }
 
@@ -236,6 +249,7 @@ export async function activityWorkspace(): Promise<void> {
     entries = [];
     nextCursor = null;
     olderLoaded = false;
+    deskPage = 1;
     loaded = false;
     count.textContent = "";
     writeParams(Object.fromEntries(KEYS.map((key) => [key, filters[key]])));
@@ -292,7 +306,7 @@ export async function activityWorkspace(): Promise<void> {
   }
 
   async function loadOlder(): Promise<void> {
-    if (!nextCursor || fetchingOlder || entries.length >= MAX_SHOWN) return;
+    if (!nextCursor || fetchingOlder || capped()) return;
     const current = run;
     // Not disabled: the button keeps keyboard focus while the next page loads.
     fetchingOlder = true;
@@ -319,6 +333,7 @@ export async function activityWorkspace(): Promise<void> {
   /** Observing again reports the end afresh, so a page that did not fill the feed still asks for the next one. A failed request is not retried this way: the button stays. */
   const watchEnd = () => { watcher?.unobserve(more); watcher?.observe(more); };
   onLeave(() => watcher?.disconnect());
+  onLeave(onLayoutChange(() => { if (loaded) render(); }));
 
   let exporting = false;
   /** The Worker builds the file from the same filters (and audits it); the browser only saves it. */
@@ -435,7 +450,17 @@ export async function activityWorkspace(): Promise<void> {
   const exportButton = document.querySelector<HTMLButtonElement>("#activity-export")!;
   exportButton.addEventListener("click", () => void exportFile(exportButton));
   older.addEventListener("click", () => void loadOlder());
-  results.addEventListener("click", (event) => {
+  results.addEventListener("click", async (event) => {
+    const step = stepOf(event.target as HTMLElement);
+    if (step) {
+      const button = (event.target as HTMLElement).closest<HTMLElement>("[data-page]")!;
+      deskPage += step === "older" ? 1 : -1;
+      // Older past what is loaded reads the next batch first; the step shows it is working until the batch is drawn.
+      if (step === "older" && deskPage * PAGE_SIZE > entries.length && nextCursor) { button.setAttribute("aria-busy", "true"); await loadOlder(); }
+      render();
+      landOn(results, { kind: "page", from: (deskPage - 1) * PAGE_SIZE }, () => [...results.querySelectorAll<HTMLElement>("[data-fold]")]);
+      return;
+    }
     const toggle = (event.target as HTMLElement).closest<HTMLElement>("[data-fold]");
     if (toggle) fold(toggle.dataset.fold!);
   });

@@ -1,5 +1,6 @@
 import { PUBLIC_LENDING_ITEM_TYPE } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, isOverdue, loanFields, loanRow, openLoan, openReturn } from "./loan-form";
+import { ListPager, landOn, onLayoutChange } from "./pager";
 import { loadSession, shell } from "./staff-shell";
 import { api, emptyState, expired, type Html, html, icon, label, live, mount, onLeave, plural, preservingFocus, readKept, reducedMotion, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
@@ -49,6 +50,8 @@ export async function loansWorkspace(): Promise<void> {
   search.value = params.get("q") ?? "";
   /** A link from Attention names one loan: it is scrolled to and marked once the list first draws. */
   let focusLoan = params.get("loan");
+  /** Out now and Returned: pages of 25 on desktop, a list growing by 25 on a phone (V1.16.12). */
+  const pager = new ListPager("page", "Loan pages");
 
   const matches = (loan: Loan) => {
     const query = search.value.trim().toLowerCase();
@@ -59,13 +62,17 @@ export async function loansWorkspace(): Promise<void> {
     // Overdue first, then the longest out.
     const open = overview.open.filter(matches).sort((a, b) => Number(isOverdue(b, overview.today)) - Number(isOverdue(a, overview.today)) || a.createdAt.localeCompare(b.createdAt));
     if (!open.length) return search.value.trim() ? emptyState("No loans match", "Try another name, student ID or item.") : emptyState("Nothing is out on loan", "Lend from an item's Loan tab in Items, or with Lend an item above.");
-    return html`<ul class="loan-list">${open.map((loan) => loanRow(loan, true, true))}</ul>`;
+    if (focusLoan) pager.reveal(open.findIndex((loan) => loan.id === focusLoan));
+    const page = pager.slice(open);
+    return html`<ul class="loan-list">${page.rows.map((loan) => loanRow(loan, true, true))}</ul>${page.footer}`;
   }
 
   function historyMarkup(overview: Overview): Html {
     const closed = overview.closed.filter(matches);
     if (!closed.length) return search.value.trim() ? emptyState("No returns match", "Try another name, student ID or item.") : emptyState("No returns yet", "Returned, damaged and lost loans appear here.");
-    return html`<ul class="loan-list loan-list--closed">${closed.map((loan) => loanRow(loan, true, true))}</ul>
+    if (focusLoan) pager.reveal(closed.findIndex((loan) => loan.id === focusLoan));
+    const page = pager.slice(closed);
+    return html`<ul class="loan-list loan-list--closed">${page.rows.map((loan) => loanRow(loan, true, true))}</ul>${page.footer}
       ${overview.closed.length === 100 ? html`<p class="hint-line">${icon("info")}<span>Showing the 100 most recent returns.</span></p>` : ""}`;
   }
 
@@ -121,6 +128,7 @@ export async function loansWorkspace(): Promise<void> {
     if (focusLoan && view === "out" && !data.open.some((loan) => loan.id === focusLoan) && data.closed.some((loan) => loan.id === focusLoan)) view = "history";
     results.removeAttribute("aria-busy");
     writeParams({ view: view === "out" ? null : view, period: view === "people" && period !== "30d" ? period : null, q: search.value.trim() });
+    pager.ask(JSON.stringify([view, search.value.trim().toLowerCase()]));
     const overdue = data.open.filter((loan) => isOverdue(loan, data!.today)).length;
     const outUnits = data.open.reduce((total, loan) => total + loan.quantity, 0);
     mount(document.querySelector("#loan-views")!, html`${([["out", "Out now", data.open.length], ["people", "Borrowers", ""], ["history", "Returned", data.closed.length]] as Array<[View, string, number | string]>).map(([key, text, count]) =>
@@ -158,6 +166,7 @@ export async function loansWorkspace(): Promise<void> {
   });
   let searchTimer = 0;
   onLeave(() => window.clearTimeout(searchTimer));
+  onLeave(onLayoutChange(() => render()));
   search.addEventListener("input", () => { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(render, 120); });
   /** Loans whose thumbnail is not saved yet: their row keeps the camera icon, and opening one saves it from the photo (loan-form.ts). */
   const unthumbed = new Set<string>();
@@ -169,6 +178,8 @@ export async function loansWorkspace(): Promise<void> {
   }, true);
   results.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
+    const turned = pager.handle(target);
+    if (turned) { render(); landOn(results, turned, () => [...results.querySelectorAll<HTMLElement>("[data-open-loan]")]); return; }
     const periodButton = target.closest<HTMLButtonElement>("[data-period]");
     if (periodButton) { period = periodButton.dataset.period as Period; render(); results.querySelector<HTMLElement>(`[data-period="${period}"]`)?.focus(); return; }
     const opening = target.closest<HTMLButtonElement>("[data-open-loan]");

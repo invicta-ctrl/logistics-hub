@@ -1,6 +1,7 @@
 import "./attention.css";
 import { ageOf, supplyAttention } from "./staff-shell";
 import { ApiError, type Html, api, emptyState, expired, failure, formatDate, formatDateTime, html, icon, live, mount, navigate, onLeave, ownQuery, preservingFocus, sheet, toast, writeParams } from "./ui";
+import { ListPager, PAGE_SIZE, landOn, onLayoutChange } from "./pager";
 
 /*
  * The Attention queue: the records that need a person, gathered from Items, Stock, Loans, Locations, Kits, Catalog and
@@ -89,6 +90,13 @@ export function startQueue(): void {
   let selected = params.get("entry");
   let data: Answer | null = null;
   const expanded = new Set<string>();
+  /** An opened group of more than 25: pages of 25 on desktop, growing by 25 on a phone (V1.16.12). Kept out of the address. */
+  const groupPagers = new Map<string, ListPager>();
+  const pagerOf = (group: Group) => {
+    let pager = groupPagers.get(group.reason);
+    if (!pager) { pager = new ListPager(`attn-${group.reason}`, `${group.label} pages`, false); groupPagers.set(group.reason, pager); }
+    return pager;
+  };
 
   const old = (entry: Entry, days: number) => entry.since !== null && Date.now() - Date.parse(sinceIso(entry.since)) >= days * 86_400_000;
   const narrowed = () => Boolean(source.value || urgency.value || age.value);
@@ -106,12 +114,16 @@ export function startQueue(): void {
 
   function groupMarkup(group: Group, entries: Entry[], level: Urgency): Html {
     const open = expanded.has(group.reason);
-    const shown = open ? entries : entries.slice(0, SHOWN);
+    const pager = pagerOf(group);
+    pager.ask(JSON.stringify([source.value, urgency.value, age.value, only, open]));
+    const page = open ? pager.slice(entries) : null;
+    const shown = page ? page.rows : entries.slice(0, SHOWN);
     const bounded = !narrowed() && group.total > entries.length;
     const id = `attn-${group.reason}`;
     return html`<section class="attn-group" aria-labelledby="${id}">
       <div class="attn-group__head"><h4 id="${id}">${group.label}</h4><span class="tag ${URGENCY_TAG[level]}">${group.source} · ${narrowed() ? entries.length : group.total}</span></div>
       <ul class="attn-list" aria-labelledby="${id}">${shown.map(rowMarkup)}</ul>
+      ${page && entries.length > PAGE_SIZE ? page.footer : ""}
       ${entries.length > SHOWN ? html`<button class="button button--ghost button--sm attn-more" type="button" data-more="${group.reason}" aria-expanded="${open}">${open ? "Show fewer" : bounded ? `Show the first ${entries.length}` : `Show all ${entries.length}`}</button>` : ""}
       ${bounded && open ? html`<p class="muted attn-note">Showing the first ${entries.length} of ${group.total}. The rest appear as these are cleared.</p>` : ""}
     </section>`;
@@ -317,6 +329,7 @@ export function startQueue(): void {
   /* ---------- Controls ---------- */
 
   for (const select of [source, urgency, age]) select.addEventListener("change", render);
+  onLeave(onLayoutChange(() => render()));
   // The three filters fold behind one button, so the queue starts right under its heading.
   const toggle = document.querySelector<HTMLButtonElement>("#filters-toggle")!;
   const setFilters = (open: boolean) => {
@@ -373,6 +386,16 @@ export function startQueue(): void {
   results.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
     if (target.closest("#clear-all")) return clearFilters();
+    for (const pager of groupPagers.values()) {
+      const turned = pager.handle(target);
+      if (!turned) continue;
+      render();
+      // The group section is labelled by its heading, whose id is the pager's key.
+      const section = results.querySelector<HTMLElement>(`section[aria-labelledby="${pager.key}"]`);
+      landOn(section, turned, () => [...(section?.querySelectorAll<HTMLElement>(".attn-row__main") ?? [])]);
+      rove(section?.contains(document.activeElement) ? document.activeElement?.closest<HTMLButtonElement>(".attn-row__main") : null);
+      return;
+    }
     const more = target.closest<HTMLElement>("[data-more]");
     if (more) { const id = more.dataset.more!; if (expanded.has(id)) expanded.delete(id); else expanded.add(id); render(); return; }
     if (act(target)) return;
