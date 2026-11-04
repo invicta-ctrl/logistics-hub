@@ -40,8 +40,7 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true,
-    "esbuild@0.28.1": true,
-    "workerd@1.20261001.1": true
+    "workerd@1.20261103.1": true
   },
   "overrides": {
     "sharp": "0.35.5"
