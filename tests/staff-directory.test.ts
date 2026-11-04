@@ -403,6 +403,20 @@ describe("roles by department (Earl, 2026-10-03)", () => {
     }
   });
 
+  it("keeps the DoL Director to DoL Staff's access: no Administration, no account changes, and no raising their own role (V1.16.10)", async () => {
+    const director = await seedWith("ACC-DIR", "the.director", "DOL_DIRECTOR");
+    const staff = await seedWith("ACC-PEER", "a.peer", "DoL");
+    for (const path of ["/api/staff/admin/accounts", "/api/staff/admin/system", "/api/staff/admin/directory"]) expect((await as(director, path)).status, path).toBe(403);
+    expect((await as(director, "/api/staff/admin/accounts", "POST", { displayName: "X", username: "made.by.director", access: "OWNER", generate: true })).status).toBe(403);
+    expect((await as(director, "/api/staff/admin/accounts/ACC-PEER", "PATCH", { access: "OWNER" })).status).toBe(403);
+    // Their own account: a role or group in the request is ignored; only the name changes.
+    expect((await as(director, "/api/staff/me", "PATCH", { displayName: "The Director", access: "OWNER", role: "OWNER" })).status).toBe(200);
+    expect(sqlite.prepare("SELECT role FROM staff_accounts WHERE id = 'ACC-DIR'").get()).toEqual({ role: "STAFF" });
+    expect(sqlite.prepare("SELECT value FROM system_settings WHERE key = 'account_access:ACC-DIR'").get()).toEqual({ value: "DOL_DIRECTOR" });
+    expect(await json(await as(director, "/api/staff/session"))).toMatchObject({ access: "DOL_DIRECTOR", hub: true, role: "STAFF" });
+    expect((await as(staff, "/api/staff/session")).status).toBe(200);
+  });
+
   it("gives roles within each administrator's authority, records the department, and changes it with every session ended", async () => {
     const make = (role: keyof typeof cookies, access: string, username: string) => call(role, "/api/staff/admin/accounts", "POST", { displayName: username, username, access, generate: true });
     expect((await make("ADMIN", "OWNER", "would.own")).status).toBe(403);
