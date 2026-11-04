@@ -1,8 +1,23 @@
 # Current Work Pointer — Logistics Hub
 
-## 2026-11-04 Claude — V1.16.11 Self-Service "Counter" redesign, QUALIFICATION_PENDING
+## 2026-11-05 Claude — V1.16.12 pagination, QUALIFICATION_PENDING
 
-V1.16.11 is on branch `slice/v1.16.11-self-service` in worktree `.claude/worktrees/v11610`, application source `71bfe22`, based on `main` `4e407ce`.
+V1.16.12 is on branch `slice/v1.16.12-pagination` in worktree `.claude/worktrees/v11612`, application source `c0ea764`, based on `main` `72eae19`. PR #87.
+- Spec: `docs/specs/accepted/2026-11-04-v11612-pagination.md`.
+- Record: `docs/road-to-v2/releases/v1.16.12.md`. No migration.
+- Changes:
+  - numbered pages of 25 on desktop for every long list (`src/pager.ts`);
+  - "Show 25 more" on phones, and group folds with sticky titles on the Lending Hub, Self-Service browse and Staff Directory;
+  - Newer and Older for Activity on desktop;
+  - Earl's 2026-11-05 requests: the DoL mark without its disc, the campus as Self-Service home's background again, and every press under 10 ms at 600 items (measured, in the record).
+- Security tier: STANDARD (client only).
+- Merging needs Earl's go-ahead.
+
+## 2026-11-04 Claude — V1.16.11 Self-Service "Counter" redesign, merged
+
+V1.16.11 is merged (PR #86, `main` `72eae19`, merge commit) from the tested head `878bae1`, with every check green. Deployed: 121 of 122 byte for byte, with `build.json` not served. Pending: Earl's System check.
+
+V1.16.11 was on branch `slice/v1.16.11-self-service` in worktree `.claude/worktrees/v11610`, application source `71bfe22`, based on `main` `4e407ce`.
 - Spec: `docs/specs/accepted/2026-11-04-v11611-self-service-counter.md`.
 - Record: `docs/road-to-v2/releases/v1.16.11.md`. No migration.
 - Changes:

@@ -6,6 +6,7 @@ import { tiltTile } from "./card-motion";
 import { type Card, type View, cardForm, cardSource, fillTiles, forgetScans, importArchive, makeMissingImages, openCard } from "./staff-ids";
 import { bindStudentId, studentIdProblem } from "./student-id-field";
 import { formEdits } from "./unsaved";
+import { Folds, ListPager, foldMarkup, landOn, landOnFold, onLayoutChange, onPhone } from "./pager";
 import { type Access, type Role, type Session, accessLabel, initials, loadSession, shell } from "./staff-shell";
 import { adminTabs, placeMarker } from "./admin-frame";
 import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatQuantity, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
@@ -51,7 +52,6 @@ const matchable = (person: Pick<Person, "name" | "studentId">) => Boolean(person
 const cardInitials = (name: string) => { const words = name.split(/\s+/).filter(Boolean); return words.length > 1 ? `${words[0]![0]}${words.at(-1)![0]}`.toUpperCase() : initials(name); };
 const toElement = (markup: Html): HTMLElement => { const host = document.createElement("div"); mount(host, markup); return host.firstElementChild as HTMLElement; };
 /** Usage rows drawn at first, and added by each "Show more". */
-const USAGE_PAGE = 100;
 const picture = (person: Pick<Person, "id">, kind: "thumb" | "face") => `/api/staff/admin/directory/${person.id}/id/${kind}`;
 // A card imported before thumbnails were made has none yet: its picture is dropped and the drawn card or the initials show.
 document.addEventListener("error", (event) => {
@@ -138,6 +138,21 @@ export async function staffDirectory(): Promise<void> {
     const search = root.querySelector<HTMLInputElement>("#dir-search")!;
     // On narrow screens the departments are one scrolling row: keep the chosen one in sight.
     root.querySelector(".dir-index [aria-current]")?.scrollIntoView({ block: "nearest", inline: "center" });
+    // Pages of 25 people on desktop; on a phone each department folds (V1.16.12).
+    const results = root.querySelector<HTMLElement>("[data-results]")!;
+    const pager = new ListPager("page", "Directory pages");
+    const folds = new Folds();
+    results.addEventListener("click", (event) => {
+      const target = event.target as HTMLElement;
+      const turned = pager.handle(target);
+      if (turned) { draw(); landOn(results, turned, () => [...results.querySelectorAll<HTMLElement>(".dir-card a, .dir-card button")]); return; }
+      const fold = folds.handle(target);
+      if (!fold) return;
+      draw();
+      const group = results.querySelector<HTMLElement>(`[data-fold-group="${CSS.escape(fold.key)}"]`);
+      landOnFold(group, fold, ".dir-card a, .dir-card button");
+    });
+    onLeave(onLayoutChange(() => draw()));
     const draw = () => {
       if (!people) return;
       const words = fold(search.value).split(/\s+/).filter(Boolean);
@@ -154,15 +169,26 @@ export async function staffDirectory(): Promise<void> {
       const withId = visible.filter((person) => person.hasId).length;
       const officers = visible.filter((person) => person.officer).length;
       root.querySelector("[data-summary]")!.textContent = `${visible.length === 1 ? "1 person" : `${visible.length} people`} · ${withId} with a USC ID on file · ${plural(officers, "officer")}`;
-      const groups = DEPARTMENT_CODES.map((code) => [code, visible.filter((person) => person.department === code)] as const).filter(([, members]) => members.length);
-      const unknown = visible.filter((person) => !(person.department in DEPARTMENTS));
-      mount(root.querySelector("[data-results]")!, people.length === 0
+      // People in department order, "Other" last: one list to page through (desktop) or to fold by department (phone).
+      const groupsOf = (list: Person[]) => [
+        ...DEPARTMENT_CODES.map((code) => ({ key: code as string, title: html`<span class="dept-dot dept-${code}" aria-hidden="true"></span><span>${DEPARTMENTS[code]}</span>`, members: list.filter((person) => person.department === code) })),
+        { key: "other", title: html`<span>Other</span>`, members: list.filter((person) => !(person.department in DEPARTMENTS)) }
+      ].filter((group) => group.members.length);
+      const ordered = groupsOf(visible).flatMap((group) => group.members);
+      if (pager.ask(JSON.stringify([show, department, words]))) folds.reset();
+      const peopleCount = (n: number) => n === 1 ? "1 person" : `${n} people`;
+      const wall = () => {
+        if (onPhone()) return html`<div class="dept-groups">${groupsOf(ordered).map((group) => foldMarkup(group.key, group.title, group.members.length, (limit) => html`<ul class="card-wall">${group.members.slice(0, limit).map(personCard)}</ul>`, folds.state(group.key)))}</div>`;
+        const page = pager.slice(ordered);
+        const whole = new Map(groupsOf(ordered).map((group) => [group.key, group.members.length]));
+        return html`<div class="dept-groups">${groupsOf(page.rows).map((group) => html`<section class="dept-group" aria-labelledby="dept-${group.key}">
+            <h2 class="dept-group__title" id="dept-${group.key}">${group.title}<span class="dept-group__meta">${peopleCount(whole.get(group.key) ?? group.members.length)}</span></h2>
+            <ul class="card-wall">${group.members.map(personCard)}</ul></section>`)}</div>${page.footer}`;
+      };
+      mount(results, people.length === 0
         ? emptyState("The directory is empty", owner ? "Import the official ID archive, or add people one at a time." : "Add people one at a time; the owner imports the official ID archive.", html`<button class="button button--primary" type="button" data-add>${icon("plus")}Add person</button>`)
         : visible.length === 0 ? emptyState("No one matches", "Try another name, or show everyone.", html`<a class="button button--secondary" href="${DIRECTORY}" data-route>Show everyone</a>`)
-        : html`<div class="dept-groups">${groups.map(([code, members]) => html`<section class="dept-group" aria-labelledby="dept-${code}">
-            <h2 class="dept-group__title" id="dept-${code}"><span class="dept-dot dept-${code}" aria-hidden="true"></span><span>${DEPARTMENTS[code]}</span><span class="dept-group__meta">${members.length === 1 ? "1 person" : `${members.length} people`}</span></h2>
-            <ul class="card-wall">${members.map(personCard)}</ul></section>`)}
-          ${unknown.length ? html`<section class="dept-group"><h2 class="dept-group__title">Other</h2><ul class="card-wall">${unknown.map(personCard)}</ul></section>` : ""}</div>`);
+        : wall());
       root.querySelectorAll<HTMLElement>(".dir-card").forEach(tiltTile);
     };
     let timer = 0;
@@ -617,8 +643,8 @@ export async function staffDirectory(): Promise<void> {
     const form = host.querySelector<HTMLFormElement>(".usage-filters")!;
     let rows: Usage[] = [];
     let truncated = false;
-    /** Rows drawn: the table grows by a page on request, so the profile does not grow with a year of history (amendment J). */
-    let limit = USAGE_PAGE;
+    /** Rows drawn: pages of 25 on desktop, growing by 25 on a phone (V1.16.12), so the profile does not grow with a year of history (amendment J). Kept out of the address. */
+    const usagePager = new ListPager("usage", "Usage pages", false);
     const draw = () => {
       const values = new FormData(form);
       const term = fold(String(values.get("item") ?? "").trim());
@@ -626,6 +652,8 @@ export async function staffDirectory(): Promise<void> {
       const taken = shown.filter((row) => row.kind === "TAKE");
       const used = shown.filter((row) => row.kind === "USE");
       const loans = shown.filter((row) => row.kind === "LOAN");
+      usagePager.ask(JSON.stringify([...values.entries()].map(([key, value]) => [key, String(value)])));
+      const page = usagePager.slice(shown);
       const byCategory = [...shown.reduce((map, row) => map.set(row.category, (map.get(row.category) ?? 0) + row.quantity), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
       mount(host.querySelector("[data-usage]")!, rows.length === 0 ? emptyState("Nothing found in these dates", "No loan, phone take or phone use in these dates has this person's student ID.", "", "", 3) : html`
         <dl class="stat-strip">
@@ -637,9 +665,9 @@ export async function staffDirectory(): Promise<void> {
         ${shown.length ? html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
           <caption class="visually-hidden">What left stock for ${person.name}</caption>
           <thead><tr><th scope="col">Item</th><th scope="col" class="col-qty">Qty</th><th scope="col">Date</th><th scope="col">How</th><th scope="col" class="col-category col-hide-phone">Category</th></tr></thead>
-          <tbody>${shown.slice(0, limit).map((row) => html`<tr><td><a class="row-link" href="/staff/items?item=${row.itemId}" data-route>${row.itemName}</a></td><td class="col-qty"><span class="qty">${formatQuantity(row.quantity)}</span> <span class="muted">${units(row.quantity, row.unit)}</span></td>
+          <tbody>${page.rows.map((row) => html`<tr><td><a class="row-link" href="/staff/items?item=${row.itemId}" data-route>${row.itemName}</a></td><td class="col-qty"><span class="qty">${formatQuantity(row.quantity)}</span> <span class="muted">${units(row.quantity, row.unit)}</span></td>
             <td>${formatDate(officeDay(row.at))}</td><td>${row.kind === "LOAN" ? html`Borrowed${row.purpose ? ` · ${label(row.purpose)}` : ""}` : row.kind === "USE" ? "Used" : "Taken"}${row.phone ? html` <span class="muted">(phone)</span>` : ""}</td><td class="col-category col-hide-phone">${categoryName(row.category)}</td></tr>`)}</tbody></table></div>
-        ${shown.length > limit ? html`<p class="table-more"><button type="button" class="button button--secondary" data-usage-more>Show ${Math.min(USAGE_PAGE, shown.length - limit)} more <span class="muted">(${limit} of ${shown.length.toLocaleString()} shown)</span></button></p>` : ""}` : html`<p class="muted">Nothing matches these filters.</p>`}
+        ${page.footer}` : html`<p class="muted">Nothing matches these filters.</p>`}
         ${truncated ? html`<p class="field__hint">Only the newest 1,000 entries are shown; narrow the dates to see older ones.</p>` : ""}`);
     };
     const fetchRows = async () => {
@@ -652,14 +680,13 @@ export async function staffDirectory(): Promise<void> {
         draw();
       } catch (error) { mount(host.querySelector("[data-usage]")!, emptyState("Usage could not be loaded", failure(error), "", "error", 3)); }
     };
-    form.addEventListener("change", (event) => { limit = USAGE_PAGE; if ((event.target as HTMLElement).matches("[type=date]")) void fetchRows(); else draw(); });
-    form.addEventListener("input", (event) => { if ((event.target as HTMLElement).id === "u-item") { limit = USAGE_PAGE; draw(); } });
+    form.addEventListener("change", (event) => { if ((event.target as HTMLElement).matches("[type=date]")) void fetchRows(); else draw(); });
+    form.addEventListener("input", (event) => { if ((event.target as HTMLElement).id === "u-item") draw(); });
     host.addEventListener("click", (event) => {
-      if (!(event.target as HTMLElement).closest("[data-usage-more]")) return;
-      const first = limit;
-      limit += USAGE_PAGE;
+      const turned = usagePager.handle(event.target as HTMLElement);
+      if (!turned) return;
       draw();
-      host.querySelectorAll<HTMLElement>("tbody .row-link")[first]?.focus({ preventScroll: true });
+      landOn(host.querySelector<HTMLElement>("[data-usage]"), turned, () => [...host.querySelectorAll<HTMLElement>("tbody .row-link")]);
     });
     await fetchRows();
   }

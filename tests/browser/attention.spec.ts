@@ -130,7 +130,7 @@ test.describe("Attention inbox", () => {
     await expect(page.locator("#attn-count")).toHaveText("3 to act on · 1 when there is time");
   });
 
-  test("a long group shows five, opens to all, and says when only the oldest are listed", async ({ page }) => {
+  test("a long group shows five, opens in pages of 25 (a phone grows by 25), and says when only the oldest are listed", async ({ page }) => {
     await mock(page, Array.from({ length: 100 }, (_, index) => overdue(index)));
     await page.goto("/staff/attention");
     const list = page.locator(".attn-list").first();
@@ -138,9 +138,23 @@ test.describe("Attention inbox", () => {
     const more = page.getByRole("button", { name: "Show the first 100" });
     await expect(more).toHaveAttribute("aria-expanded", "false");
     await more.click();
-    await expect(list.locator(".attn-row")).toHaveCount(100);
+    // V1.16.12: an opened group of more than 25 pages on desktop, kept out of the address.
+    await expect(list.locator(".attn-row")).toHaveCount(25);
+    const group = page.locator(".attn-group").first();
+    await expect(group.locator(".pager__range")).toHaveText(/1–25 of 100/);
+    await group.getByRole("button", { name: "Page 4", exact: true }).click();
+    await expect(list.locator(".attn-row")).toHaveCount(25);
+    await expect(list.locator(".attn-row__main").first()).toBeFocused();
+    await expect(page).not.toHaveURL(/page=/);
     await expect(page.getByRole("button", { name: "Show fewer" })).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByText("Showing the first 100 of 140.")).toBeVisible();
+    // A phone grows the opened group by 25 instead.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(group.locator("nav.pager")).toHaveCount(0);
+    await expect(list.locator(".attn-row")).toHaveCount(25);
+    await group.getByRole("button", { name: /Show 25 more/ }).click();
+    await expect(list.locator(".attn-row")).toHaveCount(50);
+    await expect(list.locator(".attn-row__main").nth(25)).toBeFocused();
   });
 
   test("the record document offers the same guarded action as the row, sent once, and closes when the entry clears", async ({ page }) => {

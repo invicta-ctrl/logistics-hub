@@ -62,15 +62,19 @@ test("a catalog of 600 items draws the same small home, and a group opens as a l
   await expect(page.getByRole("link", { name: "See all 200 in Equipment" })).toBeVisible();
   await page.getByRole("link", { name: "See all 200 in Equipment" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Equipment" })).toBeVisible();
-  await expect(page.locator(".ss-row")).toHaveCount(200);
+  // V1.16.12: a desktop reads a group 25 at a time, with numbered pages.
+  await expect(page.locator(".ss-row")).toHaveCount(25);
+  await expect(page.locator("nav.pager .pager__range")).toHaveText(/1–25 of 200/);
   // Read it in one step from whatever row is there now: the list can redraw between finding a row and asking it.
   await expect.poll(() => page.evaluate(() => { const row = document.querySelector(".ss-list--photos li"); return row ? getComputedStyle(row).contentVisibility : null; })).toBe("auto");
   // The group's chips move between groups without leaving the list.
   await page.getByRole("link", { name: "Pantry", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Pantry" })).toBeFocused();
-  await expect(page.locator(".ss-row")).toHaveCount(200);
+  await expect(page.locator(".ss-row")).toHaveCount(25);
+  await expect(page.locator("nav.pager .pager__range")).toHaveText(/1–25 of 200/);
   await page.getByRole("link", { name: "All", exact: true }).click();
-  await expect(page.locator(".ss-row")).toHaveCount(600);
+  await expect(page.locator(".ss-row")).toHaveCount(25);
+  await expect(page.locator("nav.pager .pager__range")).toHaveText(/1–25 of 600/);
   // Finding one among 600 is immediate.
   await page.getByRole("searchbox", { name: "Search" }).fill("chair 301");
   await expect(page.locator(".ss-row")).toHaveCount(1);

@@ -29,7 +29,19 @@ A concise index of what changed in each product version/revision and accepted sp
   - four tiles (Borrow, Take, Return, My activity), photo cards, and an item page with one details card and a pinned action;
   - the forms are numbered steps that check off when complete.
 
-  **Migration:** none. **Rollback:** the Worker. **Record:** [v1.16.11.md](docs/road-to-v2/releases/v1.16.11.md). Application source `71bfe22`. **Security tier:** STANDARD (client presentation only).
+  **Migration:** none. **Rollback:** the Worker. **Record:** [v1.16.11.md](docs/road-to-v2/releases/v1.16.11.md). Application source `71bfe22`. **Security tier:** STANDARD (client presentation only). **Merged 2026-11-04** (PR #86, `main` `72eae19`, merge commit), with every check green on the tested head `878bae1`. **Deployed:** the live assets match a local build, 121 of 122 byte for byte, with `build.json` not served. It moves under "Released product versions and revisions" once Earl checks System.
+- **V1.16.12 candidate · QUALIFICATION_PENDING (not released):** pagination on desktop, easier long lists on phones. **Added:**
+  - numbered pages of 25 under every long list on desktop ("‹ Previous 1 2 3 … 9 Next ›", "26–50 of 214"), with a page's main list kept in the address;
+  - on phones, lists grow by 25 ("Show 25 more"), and the Lending Hub, Self-Service browse and Staff Directory fold by group under sticky titles;
+  - Activity reads 25 at a time with Newer and Older on desktop, and its phone feed skips drawing rows out of sight.
+
+  **Changed:**
+  - lists that grew by 100 (Items, a person's Usage) or showed everything at once now page, and a new search, filter, sort or view starts at page 1;
+  - the Department of Logistics mark has no white disc;
+  - Self-Service home has the campus as its background again, fading into the page;
+  - a press is quicker: an Items page turn takes 8.8 ms instead of 56.7 ms at 600 items, and every press measured is under 10 ms there.
+
+  **Migration:** none. **Rollback:** the Worker. **Record:** [v1.16.12.md](docs/road-to-v2/releases/v1.16.12.md). Application source `c0ea764`. **Security tier:** STANDARD (client presentation only).
 
 ## Specification changes
 

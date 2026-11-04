@@ -7,6 +7,7 @@ import type { PlaceRow } from "./staff";
 import { UP_TO_ITEMS, ageOf, loadSession, shell } from "./staff-shell";
 import { api, ApiError, emptyState, expired, failure, type Html, html, icon, live, mount, onLeave, plural, preservingFocus, readKept, setMessage, sheet as createSheet, sheetContent, toast, working, writeParams, stillShown } from "./ui";
 import { formEdits, warnOnUnload } from "./unsaved";
+import { ListPager, landOn, onLayoutChange } from "./pager";
 
 /*
  * Kits (/staff/kits): groupings such as a Sewing Kit, made of items that already exist. A kit holds no stock. Each component keeps its
@@ -114,6 +115,10 @@ export async function kitsWorkspace(): Promise<void> {
       </span></li>`;
   }
 
+  /** Kits and templates: pages of 25 on desktop, lists growing by 25 on a phone (V1.16.12). */
+  const kitPager = new ListPager("page", "Kit pages");
+  const templatePager = new ListPager("templates", "Template pages");
+  onLeave(onLayoutChange(() => render()));
   const render = () => {
     if (!data) return;
     results.removeAttribute("aria-busy");
@@ -122,17 +127,21 @@ export async function kitsWorkspace(): Promise<void> {
     const shown = data.kits.filter((row) => (inactive.checked || row.active) && (!query || `${row.name} ${row.place ?? ""} ${row.description ?? ""} ${row.templateName ?? ""}`.toLowerCase().includes(query)));
     document.querySelector("#kit-count")!.textContent = plural(shown.length, "kit");
     (document.querySelector("#clear-search") as HTMLElement).hidden = !search.value;
+    kitPager.ask(JSON.stringify([query, inactive.checked]));
+    if (openId) kitPager.reveal(shown.findIndex((row) => row.id === openId));
+    const page = kitPager.slice(shown);
     preservingFocus(results, () => mount(results, shown.length
-      ? html`<ul class="kit-list" aria-label="Kits">${shown.map(rowMarkup)}</ul>`
+      ? html`<ul class="kit-list" aria-label="Kits">${page.rows.map(rowMarkup)}</ul>${page.footer}`
       : data!.kits.length
         ? emptyState("No kits match", "Try another search, or show inactive kits.", html`<button class="button button--secondary" type="button" id="clear-all">Clear search</button>`)
         : emptyState("No kits yet", "Make a kit for a group of items that is kept and checked together, such as a Sewing Kit. Start from a template to avoid listing everything again.", html`<button class="button button--primary" type="button" data-new>${icon("plus")}New kit</button>`)));
     const templates = data.templates;
+    const templatePage = templatePager.slice(templates);
     mount(document.querySelector("#template-results")!, templates.length
-      ? html`<ul class="kit-list kit-list--templates" aria-label="Kit templates">${templates.map((template) => html`<li class="kit-row ${template.active ? "" : "is-inactive"}">
+      ? html`<ul class="kit-list kit-list--templates" aria-label="Kit templates">${templatePage.rows.map((template) => html`<li class="kit-row ${template.active ? "" : "is-inactive"}">
           <button type="button" class="kit-row__main" data-template="${template.id}"><span class="kit-row__text"><span class="kit-row__name">${template.name}</span>
             <span class="kit-row__sub">${plural(template.components, "component")} · ${template.kits ? `${plural(template.kits, "kit")} made` : "no kits made yet"}</span></span></button>
-          <span class="kit-row__meta">${template.active ? "" : html`<span class="tag">Turned off</span>`}</span></li>`)}</ul>`
+          <span class="kit-row__meta">${template.active ? "" : html`<span class="tag">Turned off</span>`}</span></li>`)}</ul>${templatePage.footer}`
       : html`<p class="muted">No templates yet. Save a kit as a template from its page, or make one here.</p>`);
   };
 
@@ -160,6 +169,10 @@ export async function kitsWorkspace(): Promise<void> {
   document.querySelector("#new-template")!.addEventListener("click", () => void openTemplate(null));
   const onClick = (event: Event) => {
     const target = event.target as HTMLElement;
+    for (const [pager, list, rows] of [[kitPager, results, ".kit-row__main[data-open]"], [templatePager, document.querySelector<HTMLElement>("#template-results"), "[data-template]"]] as const) {
+      const turned = pager.handle(target);
+      if (turned) { render(); landOn(list, turned, () => [...(list?.querySelectorAll<HTMLElement>(rows) ?? [])]); return; }
+    }
     if (target.closest("[data-new]")) void newKit();
     else if (target.closest("#clear-all")) { search.value = ""; inactive.checked = true; render(); }
     else {

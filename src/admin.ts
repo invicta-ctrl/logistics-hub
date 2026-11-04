@@ -5,6 +5,7 @@ import { adminPage, confirmImpact, verdict } from "./admin-frame";
 import { type Access, type Role, accessLabel, forgetSession, loadSession, sessionAccess, shell } from "./staff-shell";
 import { type Html, api, emptyState, failure, formatDateTime, html, icon, mount, navigate, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast, working, stillShown } from "./ui";
 import { formEdits, trackEdits } from "./unsaved";
+import { ListPager, landOn, onLayoutChange } from "./pager";
 
 type Row = { id: string; username: string; displayName: string; role: Role; access: Access; active: boolean; mustChangePassword: boolean; createdAt: string; lastLoginAt: string | null; openSessions: number };
 
@@ -76,22 +77,29 @@ export async function staffAccounts(): Promise<void> {
       mount(document.querySelector("#staff-verdict")!, verdict(pending ? "warn" : "ok",
         `${plural(accounts.length, "account")}, ${enabled === accounts.length ? "all active" : `${enabled} active`}.`,
         pending ? `${pending === 1 ? "One person" : `${pending} people`} must still set a password at first sign-in.` : "Everyone who can sign in has set their own password."));
-      mount(document.querySelector("#accounts")!, html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
+      drawAccounts();
+    } catch (error) {
+      if (!onPage()) return;
+      mount(document.querySelector("#staff-verdict")!, verdict("warn", "The accounts could not be read.", failure(error)));
+      mount(document.querySelector("#accounts")!, emptyState("Accounts could not be loaded", failure(error), "", "error", 3));
+    }
+  }
+
+  /** The accounts, 25 to a page on desktop and growing by 25 on a phone (V1.16.12). */
+  const pager = new ListPager("page", "Account pages");
+  function drawAccounts(): void {
+    const page = pager.slice(rows);
+    mount(document.querySelector("#accounts")!, html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Accounts that can sign in to the staff workspace</caption>
         <thead><tr><th scope="col">Account</th><th scope="col">Role</th><th scope="col">Status</th><th scope="col">Last sign-in</th><th scope="col" class="col-qty">Sessions</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
-        <tbody>${accounts.map((row) => html`<tr>
+        <tbody>${page.rows.map((row) => html`<tr>
           <td><span class="cell-strong">${row.displayName}${row.id === session!.id ? html` <span class="muted">(you)</span>` : ""}</span><span class="cell-sub mono">${row.username}</span></td>
           <td>${accessTag(row.access)}</td>
           <td><span class="tags">${row.active ? html`<span class="tag tag--ok">Active</span>` : html`<span class="tag tag--bad">Disabled</span>`}${row.mustChangePassword ? html`<span class="tag tag--warn">Must set password</span>` : ""}</span></td>
           <td>${row.lastLoginAt ? formatDateTime(row.lastLoginAt) : html`<span class="muted">Never</span>`}</td>
           <td class="col-qty">${row.openSessions}</td>
           <td class="col-actions">${canManage(session!, row) && row.id !== session!.id ? html`<button type="button" class="button button--secondary button--sm" data-manage="${row.id}">Manage</button>` : row.id === session!.id ? html`<a class="button button--secondary button--sm" href="/staff/account" data-route>My account</a>` : html`<span class="muted">Owner only</span>`}</td>
-        </tr>`)}</tbody></table></div>`);
-    } catch (error) {
-      if (!onPage()) return;
-      mount(document.querySelector("#staff-verdict")!, verdict("warn", "The accounts could not be read.", failure(error)));
-      mount(document.querySelector("#accounts")!, emptyState("Accounts could not be loaded", failure(error), "", "error", 3));
-    }
+        </tr>`)}</tbody></table></div>${page.footer}`);
   }
 
   function sheetShell(kicker: string, title: string, body: Html): void {
@@ -233,7 +241,11 @@ export async function staffAccounts(): Promise<void> {
   }
 
   document.querySelector("#new-account")!.addEventListener("click", openCreate);
-  document.querySelector("#accounts")!.addEventListener("click", (event) => {
+  const accountsList = document.querySelector<HTMLElement>("#accounts")!;
+  onLeave(onLayoutChange(() => { if (rows.length) drawAccounts(); }));
+  accountsList.addEventListener("click", (event) => {
+    const turned = pager.handle(event.target as HTMLElement);
+    if (turned) { drawAccounts(); landOn(accountsList, turned, () => [...accountsList.querySelectorAll<HTMLElement>("tbody [data-manage], tbody a.button")]); return; }
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-manage]");
     const row = rows.find((entry) => entry.id === button?.dataset.manage);
     if (row) openManage(row);

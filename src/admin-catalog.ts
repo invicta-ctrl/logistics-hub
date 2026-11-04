@@ -5,6 +5,7 @@ import { BEHAVIOUR_LABELS } from "./catalog-policy";
 import { KNOWLEDGE, KNOWLEDGE_VERSION } from "./item-knowledge";
 import type { SessionInfo } from "./catalogue-store";
 import { ApiError, type Html, api, categoryName, emptyState, expired, failure, html, icon, mount, onLeave, plural, setMessage, sheet as createSheet, sheetContent, toast, working } from "./ui";
+import { ListPager, landOn, onLayoutChange } from "./pager";
 import { formEdits } from "./unsaved";
 
 type Coverage = { active: number; unclassified: number; captured: number; capturedClassified: number };
@@ -138,6 +139,14 @@ export async function catalogSettings(): Promise<void> {
   // "Try again", and the summary's "Start another session", start afresh in the same sheet.
   catalogSheet.addEventListener("click", (event) => { if ((event.target as HTMLElement).closest("[data-catalog-again]")) void runSession(null); });
   void loadOpenSession();
+  /** Proposals and other names, 25 to a page on desktop and growing by 25 on a phone (V1.16.12). */
+  const proposalPager = new ListPager("proposals", "Proposal pages");
+  let proposalRows: KnowledgeProposal[] = [];
+  const drawProposals = () => {
+    const host = document.querySelector<HTMLElement>("#ai-proposals")!;
+    const page = proposalPager.slice(proposalRows);
+    mount(host, proposalRows.length ? html`<ul class="hint-list">${page.rows.map((proposal) => html`<li class="hint-row"><p><strong>${proposal.observed}</strong> → ${proposal.target.name} · ${categoryName(proposal.target.category)} · ${proposal.target.unit} · ${BEHAVIOUR_LABELS[proposal.target.behaviour as keyof typeof BEHAVIOUR_LABELS]}</p><p>${proposal.support} reviewed corrections from ${proposal.actors} staff; ${proposal.conflicts} conflicts.</p>${proposal.decision ? html`<p>${proposal.decision === "APPROVE" ? "Approved — awaiting code review" : "Rejected"}</p>` : proposal.support >= 3 && proposal.actors >= 2 && !proposal.conflicts ? html`<div class="photo-actions"><button class="button button--secondary" data-proposal="${proposal.id}" data-decision="APPROVE">Approve for code review</button><button class="button button--ghost" data-proposal="${proposal.id}" data-decision="REJECT">Reject</button></div>` : html`<p class="muted">More independent evidence is needed.</p>`}</li>`)}</ul>${page.footer}` : html`<p>No reviewed correction proposals yet.</p>`);
+  };
   const loadProposals = async () => {
     const host = document.querySelector<HTMLElement>("#ai-proposals")!;
     try {
@@ -151,10 +160,14 @@ export async function catalogSettings(): Promise<void> {
           <p>${entry.answered} answered · ${entry.abstained} no answer · ${entry.unavailable} unavailable · ${entry.dropped} dropped</p>
           <p>${entry.kept} kept · ${entry.rejected} rejected · ${plural(entry.corrected, "correction choice")}</p>
           ${entry.timed ? html`<p class="muted">${Math.round(entry.totalMs / entry.timed)} ms average request · ${entry.neurons.toFixed(2)} accounted Neurons</p>` : ""}</li>`)}</ul></details>` : html``);
-      mount(host, proposals.length ? html`<ul class="hint-list">${proposals.map((proposal) => html`<li class="hint-row"><p><strong>${proposal.observed}</strong> → ${proposal.target.name} · ${categoryName(proposal.target.category)} · ${proposal.target.unit} · ${BEHAVIOUR_LABELS[proposal.target.behaviour as keyof typeof BEHAVIOUR_LABELS]}</p><p>${proposal.support} reviewed corrections from ${proposal.actors} staff; ${proposal.conflicts} conflicts.</p>${proposal.decision ? html`<p>${proposal.decision === "APPROVE" ? "Approved — awaiting code review" : "Rejected"}</p>` : proposal.support >= 3 && proposal.actors >= 2 && !proposal.conflicts ? html`<div class="photo-actions"><button class="button button--secondary" data-proposal="${proposal.id}" data-decision="APPROVE">Approve for code review</button><button class="button button--ghost" data-proposal="${proposal.id}" data-decision="REJECT">Reject</button></div>` : html`<p class="muted">More independent evidence is needed.</p>`}</li>`)}</ul>` : html`<p>No reviewed correction proposals yet.</p>`);
+      proposalRows = proposals;
+      drawProposals();
     } catch (error) { if (active) mount(host, html`<p role="alert">${failure(error)}</p>`); }
   };
   document.querySelector("#ai-proposals")!.addEventListener("click", async (event) => {
+    const list = event.currentTarget as HTMLElement;
+    const turned = proposalPager.handle(event.target as HTMLElement);
+    if (turned) { drawProposals(); landOn(list, turned, () => [...list.querySelectorAll<HTMLElement>(".hint-row")]); return; }
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-proposal]");
     if (!button) return;
     button.disabled = true;
@@ -207,6 +220,7 @@ export async function catalogSettings(): Promise<void> {
   let items: AliasItem[] = [];
   let more = false;
   let searchedFor = "";
+  const namesPager = new ListPager("names", "Other-name pages");
 
   function renderNames(): void {
     const target = document.querySelector<HTMLElement>("#names")!;
@@ -214,11 +228,12 @@ export async function catalogSettings(): Promise<void> {
       mount(target, searchedFor ? emptyState("No item matches", "Try a different word, or the item's ID.", "", "", 3) : emptyState("No item has other names yet", "Search for an item above to add some.", "", "", 3));
       return;
     }
-    mount(target, html`<ul class="alias-list">${items.map((item) => html`<li class="alias-row">
+    const page = namesPager.slice(items);
+    mount(target, html`<ul class="alias-list">${page.rows.map((item) => html`<li class="alias-row">
         <div class="alias-row__item"><span class="cell-strong">${item.name}</span><span class="cell-sub"><span class="mono">${item.id}</span> · ${categoryName(item.category)}</span></div>
         <p class="alias-row__names">${item.aliases ?? html`<span class="muted">No other names</span>`}</p>
         <button type="button" class="button button--secondary button--sm" data-edit="${item.id}">Edit<span class="visually-hidden"> other names of ${item.name}</span></button>
-      </li>`)}</ul>
+      </li>`)}</ul>${page.footer}
       ${more ? html`<p class="admin-source">Showing the first ${items.length}. Search to narrow them.</p>` : ""}`);
   }
 
@@ -228,6 +243,7 @@ export async function catalogSettings(): Promise<void> {
       const result = await api<{ items: AliasItem[]; more: boolean }>(`/api/staff/admin/catalog/aliases?q=${encodeURIComponent(query)}`);
       // A slower answer to an earlier search must not replace a newer one, and nothing is drawn once the page is left.
       if (query !== searchedFor || !active) return;
+      namesPager.ask(query);
       items = result.items;
       more = result.more;
       renderNames();
@@ -262,11 +278,15 @@ export async function catalogSettings(): Promise<void> {
   }
 
   document.querySelector("#names")!.addEventListener("click", (event) => {
+    const list = event.currentTarget as HTMLElement;
+    const turned = namesPager.handle(event.target as HTMLElement);
+    if (turned) { renderNames(); landOn(list, turned, () => [...list.querySelectorAll<HTMLElement>("[data-edit]")]); return; }
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-edit]");
     const item = items.find((entry) => entry.id === button?.dataset.edit);
     if (item) openEdit(item);
   });
   let typing: number | undefined;
+  onLeave(onLayoutChange(() => { if (items.length) renderNames(); if (proposalRows.length) drawProposals(); }));
   onLeave(() => window.clearTimeout(typing));
   document.querySelector<HTMLInputElement>("#names-search")!.addEventListener("input", (event) => {
     window.clearTimeout(typing);

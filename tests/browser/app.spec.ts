@@ -488,6 +488,8 @@ test("activity: a live refresh also refreshes the older pages on screen, so an e
     const body = url.searchParams.get("cursor") ? { events: version === 1 ? [entry("C", 3), entry("D", 2)] : [entry("C", 3)], nextCursor: null } : { events: [entry("A", 5), entry("B", 4)], nextCursor: "2026-10-01T02:04:00.000Z|phone:B" };
     return route.fulfill({ contentType: "application/json", headers: { etag: `"v${version}"` }, body: JSON.stringify(body) });
   });
+  // On a phone the feed loads older pages as it scrolls (a desktop pages by Newer and Older, V1.16.12).
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/staff/activity?attention=1");
   // Two short rows leave the end of the feed in view, so the older page loads without a press.
   await expect(page.locator(".activity-row")).toHaveCount(4);
@@ -532,14 +534,21 @@ test("activity: the page keeps one viewport and only the feed scrolls, loading o
     cursorReads.length = 0;
     await page.setViewportSize(viewport);
     await page.goto("/staff/activity");
-    await expect(page.locator(".activity-row")).toHaveCount(PAGE);
+    // A desktop reads the feed 25 at a time with Newer and Older (V1.16.12); the page still keeps one viewport.
+    const desk = viewport.width >= 768;
+    await expect(page.locator(".activity-row")).toHaveCount(desk ? 25 : PAGE);
     const first = await measure();
     expect(first.pageGrows, `the page does not grow with history at ${viewport.width}`).toBeLessThanOrEqual(1);
     expect(first.sideways, `no sideways scroll at ${viewport.width}`).toBeLessThanOrEqual(0);
     expect(first.overflowY).toBe("auto");
     expect(first.feedHeight, `the feed has room at ${viewport.width}`).toBeGreaterThan(200);
-    expect(first.feedScrolls, `the feed scrolls on its own at ${viewport.width}`).toBe(true);
     expect(first.underBar).toBe(false);
+    if (desk) {
+      await expect(page.getByRole("navigation", { name: "Activity pages" })).toBeVisible();
+      expect(cursorReads.at(-1), "a desktop reads no older batch until Older asks for it").toEqual([]);
+      continue;
+    }
+    expect(first.feedScrolls, `the feed scrolls on its own at ${viewport.width}`).toBe(true);
     // Scroll the feed to its end: the next page loads without pressing anything, the page itself never moves.
     for (let step = 0; step < 12; step += 1) {
       const rows = await page.locator(".activity-row").count();
@@ -781,10 +790,13 @@ test("phones: Items rows keep picture, name, quantity and status; an item sheet 
   await expect(page.locator("tr[data-key=ITM-0473] .cell-place")).toBeHidden();
   // Select mode keeps each row's two lines: the checkbox sits beside the name, not under it.
   await page.getByRole("button", { name: "Select" }).click();
-  const box = (await page.locator("tr[data-key=ITM-0463] .col-select").boundingBox())!;
-  const name = (await page.locator("tr[data-key=ITM-0463] .row-link").boundingBox())!;
-  expect(box.y).toBeLessThan(name.y + name.height);
-  expect(box.x + box.width).toBeLessThanOrEqual(name.x);
+  // Rows skip layout until the browser's next frame finds them on screen (V1.16.12), so read the settled frame.
+  const beside = async () => {
+    const box = (await page.locator("tr[data-key=ITM-0463] .col-select").boundingBox())!;
+    const name = (await page.locator("tr[data-key=ITM-0463] .row-link").boundingBox())!;
+    return box.y < name.y + name.height && box.x + box.width <= name.x;
+  };
+  await expect.poll(beside).toBe(true);
   await page.getByRole("button", { name: "Select" }).click();
 
   // The cut-out's sheet: the close button keeps its corner beside a long title, and the pedestal's note is a badge that leaves the item clear.

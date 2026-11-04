@@ -4,6 +4,7 @@ import { REPORT_LABELS, type ReportKind } from "./location-tree";
 import { loadSession, shell } from "./staff-shell";
 import { type Html, CREST, MARK, api, emptyState, expired, failure, formatDateTime, html, icon, label, live, mount, onLeave, plural, preservingFocus, toast, units, writeParams } from "./ui";
 import { trackEdits } from "./unsaved";
+import { ListPager, landOn, onLayoutChange } from "./pager";
 
 /*
  * Staff view of phone self-service (/staff/self-service). Normal records reconcile on their own;
@@ -196,6 +197,10 @@ export async function selfServiceReview(): Promise<void> {
     held.get(cardId(card))?.forEach((value, name) => { const field = card.querySelector<HTMLInputElement | HTMLSelectElement>(`[name="${name}"]`); if (field) field.value = value; });
   });
 
+  /** The records loaded so far, 25 to a page on desktop and growing by 25 on a phone (V1.16.12); "Load older records" still fetches the next batch. */
+  const recordPager = new ListPager("page", "Record pages");
+  onLeave(onLayoutChange(() => render()));
+
   function render(): void {
     writeParams({ view: view === "overview" ? null : view });
     const attention = data ? data.open.length + data.stockIssues.length + data.locationReports.length : 0;
@@ -253,17 +258,19 @@ export async function selfServiceReview(): Promise<void> {
   function activity(records: Entry[]): Html {
     if (!records.length) return emptyState(all ? "No Self-Service records yet" : "No Self-Service activity this week", "Takes, borrows and returns recorded with phones appear here.", "", "", 3);
     const shown = found(records);
+    recordPager.ask(JSON.stringify([find.trim().toLowerCase(), Boolean(all)]));
+    const page = recordPager.slice(shown);
     if (!shown.length) return emptyState("No record matches", `Check the reference, or try a name or an item. This list covers ${all ? "the records loaded so far" : "the last 7 days"}.`, "", "", 3);
     return html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Self-Service records, newest first</caption>
         <thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Who</th><th scope="col">State</th></tr></thead>
-        <tbody>${shown.map((entry) => html`<tr>
+        <tbody>${page.rows.map((entry) => html`<tr>
           <td>${timing(entry)}</td>
           <td>${verb(entry)} · ${quantityText(entry)} · <a href="/staff/items?item=${entry.itemId}" data-route>${entry.itemName}</a>
             <span class="ss-staff-ref"><span class="mono muted">${selfServiceReference(entry.id)}</span>${photoLink(entry)}</span></td>
           <td>${entry.personName}${entry.studentId ? html` <span class="mono muted">${entry.studentId}</span>` : ""}</td>
           <td>${entry.resolvedAt ? html`<span class="tag">Checked${entry.resolvedBy ? ` by ${entry.resolvedBy}` : ""}</span>` : entry.review ? html`<span class="tag ${entry.applied ? "tag--gold" : "tag--warn"}">${entry.applied ? "Recorded · check" : "Waiting for you"}</span>` : html`<span class="tag tag--ok">Recorded</span>`}</td>
-        </tr>`)}</tbody></table></div>`;
+        </tr>`)}</tbody></table></div>${page.footer}`;
   }
 
   const poll = live<Review>("/api/staff/self-service", {
@@ -307,6 +314,8 @@ export async function selfServiceReview(): Promise<void> {
   });
   results.addEventListener("click", async (event) => {
     const target = event.target as HTMLElement;
+    const turned = recordPager.handle(target);
+    if (turned) { render(); landOn(results.querySelector<HTMLElement>(".ss-overview__records"), turned, () => [...results.querySelectorAll<HTMLElement>(".ss-overview__records tbody a")]); return; }
     if (target.closest("[data-all-records]")) { void loadRecords(false); return; }
     if (target.closest("[data-more-records]")) { void loadRecords(true); return; }
     if (target.closest("[data-print]")) {

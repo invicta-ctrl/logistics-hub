@@ -12,6 +12,7 @@ import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
 import { bulkBar } from "./bulk-select";
 import { placeList } from "./catalogue-places";
 import { ageOf, loadSession, shell } from "./staff-shell";
+import { ListPager, landOn, onLayoutChange } from "./pager";
 import { ApiError, type Html, animateNumber, api, categoryName, emptyState, expired, failure, formatDateTime, formatQuantity, html, icon, label, live, mount, onLeave, plural, preservingFocus, raw, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
 import { formEdits } from "./unsaved";
 
@@ -83,8 +84,6 @@ type View = keyof typeof VIEWS;
 const TODO: View[] = ["review", "ready", "unplaced", "reports", "gradual"];
 const SHOW: View[] = ["listed", "low", "out", "onloan", "inactive"];
 const NO_LOCATION = "__none";
-/** Rows drawn at first, and added by each "Show more". */
-const ROW_PAGE = 100;
 /** How staff see the type: their choice between lending an item out and using it up. */
 const TYPE_CHOICES: Record<string, string> = { Loanable: "Borrow (Loanable)", Consumable: "Take (Consumable)" };
 const FIELD_LABELS: Record<string, string> = {
@@ -271,9 +270,8 @@ export async function workspace(): Promise<void> {
   let pendingItem = params.get("add") === "1" ? null : params.get("item");
   const pendingTab = (["overview", "loan", "details", "history"] as const).find((value) => value === params.get("tab")) ?? "overview";
   let shownIds: string[] = [];
-  /** How many rows are drawn: the table grows by a page on request, so the page's size does not follow the catalog's (docs/PERFORMANCE_RELIABILITY_DOCTRINE.md). */
-  let rowLimit = ROW_PAGE;
-  let question = "";
+  /** Which rows are drawn: a page of 25 on desktop, a list that grows by 25 on a phone, so the page's size does not follow the catalog's (docs/PERFORMANCE_RELIABILITY_DOCTRINE.md). */
+  const pager = new ListPager("page", "Items pages");
   /** Select mode: a checkbox on every row, and one change applied to all the ticked items at once (src/bulk-select.ts). */
   let selecting = false;
   const selected = new Set<string>();
@@ -295,13 +293,16 @@ export async function workspace(): Promise<void> {
     return html`<div class="data-table-wrap" aria-hidden="true">${Array.from({ length: 8 }, () => html`<div class="skeleton-row"><span class="skeleton skeleton--text"></span><span class="skeleton skeleton--num"></span></div>`)}</div>`;
   }
 
+  // One collator for every comparison: localeCompare with options builds a new one per call, the most of a 6,000-item sort (V1.16.12).
+  const byText = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" }).compare;
+  const byName = new Intl.Collator().compare;
   const compare = (a: Item, b: Item) => {
     const left = sortKey === "location" ? placeText(a) ?? "" : a[sortKey] ?? "";
     const right = sortKey === "location" ? placeText(b) ?? "" : b[sortKey] ?? "";
     // Items without a place sort last in either direction, so the known ones stay together.
     if (sortKey === "location" && (!left || !right) && left !== right) return left ? -1 : 1;
-    const order = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
-    return (order || a.name.localeCompare(b.name)) * sortDir;
+    const order = typeof left === "number" && typeof right === "number" ? left - right : byText(String(left), String(right));
+    return (order || byName(a.name, b.name)) * sortDir;
   };
 
   const sortHeader = (key: SortKey, title: string, className = "") => {
@@ -336,6 +337,8 @@ export async function workspace(): Promise<void> {
     select.classList.toggle("is-set", Boolean(value));
   };
 
+  /** The rows the last render matched, in order: a page turn draws from them without filtering and sorting the catalog again. */
+  let lastShown: Item[] | null = null;
   const render = () => {
     if (!inventory) return;
     results.removeAttribute("aria-busy");
@@ -365,19 +368,19 @@ export async function workspace(): Promise<void> {
       && (!filters.location || (filters.location === NO_LOCATION ? !item.locationId : inside?.has(item.locationId ?? "")))
       && (!filters.type || item.itemType === filters.type)
       && matches(item, query)).sort(compare);
+    lastShown = shown;
     shownIds = shown.map((item) => item.id);
-    const asked = JSON.stringify([view, query, filters, sortKey, sortDir]);
-    if (asked !== question) { question = asked; rowLimit = ROW_PAGE; }
+    pager.ask(JSON.stringify([view, query, filters, sortKey, sortDir]));
     // The open item stays drawn, wherever it falls.
-    if (openId) rowLimit = Math.max(rowLimit, shownIds.indexOf(openId) + 1);
-    const drawn = shown.slice(0, rowLimit);
+    if (openId) pager.reveal(shownIds.indexOf(openId));
+    const { rows: drawn, footer } = pager.slice(shown);
     document.querySelector("#inventory-count")!.textContent = shown.length === items.length ? plural(items.length, "item") : `${shown.length.toLocaleString()} of ${plural(items.length, "item")}`;
     const hint = view === "gradual" ? html`<p class="hint-line">${icon("info")}<span>Consumables counted in reams, rolls, packs, bottles and similar units are often opened and used a little at a time. Nothing changes here: to track open units for one, choose “Open and use gradually” in its Edit details.</span></p>` : "";
     preservingFocus(results, () => mount(results, shown.length
       ? html`${hint}<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--items">
           <caption class="visually-hidden">Items. Select an item to see, review or edit it.</caption>
           <thead><tr>${selecting ? html`<th scope="col" class="col-select"><input type="checkbox" class="select-box" id="select-all" aria-label="Select all ${shown.length.toLocaleString()} shown items" ${shown.every((item) => selected.has(item.id)) ? html`checked` : ""} /></th>` : ""}${sortHeader("id", "ID", "col-id")}${sortHeader("name", "Item", "col-item")}${sortHeader("category", "Category", "col-category")}${sortHeader("location", "Place", "col-location")}${sortHeader("onHand", "On hand", "col-qty")}<th scope="col" class="col-status">Status</th></tr></thead>
-          <tbody>${drawn.map(row)}</tbody></table></div>${shown.length > drawn.length ? html`<p class="table-more"><button type="button" class="button button--secondary" data-more>Show ${Math.min(ROW_PAGE, shown.length - drawn.length).toLocaleString()} more <span class="muted">(${drawn.length.toLocaleString()} of ${shown.length.toLocaleString()} shown)</span></button></p>` : ""}`
+          <tbody>${drawn.map(row)}</tbody></table></div>${footer}`
       : view === "gradual" && !query && !Object.values(filters).some(Boolean) ? emptyState("No likely items left", "No active Consumable counted in reams, rolls, packs, bottles or similar units is still used as a whole unit.")
       : emptyState(view === "review" && !query ? "Every record is reviewed" : "No items match", view === "review" && !query ? "Nothing is waiting for review with these filters." : "Try another search, filter, or view.", html`<button class="button button--secondary" type="button" id="clear-filters">Clear filters</button>`)));
     for (const [id, was] of changed) {
@@ -435,6 +438,8 @@ export async function workspace(): Promise<void> {
 
   let searchTimer = 0;
   onLeave(() => window.clearTimeout(searchTimer));
+  // Crossing the phone width swaps pages for a growing list, and back.
+  onLeave(onLayoutChange(() => render()));
   search.addEventListener("input", () => { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(render, 120); });
   search.addEventListener("keydown", (event) => { if (event.key === "Escape" && search.value) { search.value = ""; render(); } });
   for (const [key, select] of Object.entries(selects)) select.addEventListener("change", () => { filters = { ...filters, [key]: select.value }; render(); });
@@ -482,11 +487,19 @@ export async function workspace(): Promise<void> {
       void openViewer(photoUrl(thumb.dataset.photo!, "display"), `Photo of ${name}`, () => results.querySelector<HTMLElement>(`tr[data-key="${CSS.escape(id)}"] img[data-photo]`), name, resolveItemIcon(item ?? { name }).key);
       return;
     }
-    if (target.closest("[data-more]")) {
-      const first = rowLimit;
-      rowLimit += ROW_PAGE;
-      render();
-      results.querySelectorAll<HTMLElement>("tbody .row-link")[first]?.focus({ preventScroll: true });
+    const turned = pager.handle(target);
+    if (turned) {
+      // Only the rows and the pager change: a page turn replaces the rows, and "Show 25 more" on a phone adds the new ones, so a press
+      // costs the same on the first page as on the last, and the filters, counts and table around them are not drawn again (V1.16.12).
+      const body = results.querySelector<HTMLElement>(".data-table--items tbody");
+      const bar = results.querySelector<HTMLElement>(turned.kind === "more" ? ".pager-more" : "nav.pager");
+      if (lastShown && body && bar) {
+        const { rows: drawn, footer } = pager.slice(lastShown);
+        const markup = (turned.kind === "more" ? drawn.slice(turned.from) : drawn).map((item) => row(item).value).join("");
+        if (turned.kind === "more") body.insertAdjacentHTML("beforeend", markup); else body.innerHTML = markup;
+        if (footer.value) bar.outerHTML = footer.value; else bar.remove();
+      } else render();
+      landOn(results, turned, () => [...results.querySelectorAll<HTMLElement>("tbody .row-link")]);
       return;
     }
     const sort = target.closest<HTMLButtonElement>("[data-sort]");
@@ -578,7 +591,7 @@ export async function workspace(): Promise<void> {
     openId = id;
     detail = null;
     // A link or the search can open an item the table has not drawn yet; render() draws it.
-    if (shownIds.indexOf(id) >= rowLimit) render();
+    if (!origin) render();
     writeParams({ item: id, add: null });
     const item = inventory?.items.find((entry) => entry.id === id);
     sheetShell(html`<span class="mono">${id}</span>`, item?.name ?? "Loading…", html`<div class="skeleton skeleton--block"></div>`);

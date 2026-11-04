@@ -3,6 +3,7 @@ import type { VisualItem } from "./item-icons";
 import { type Place, pathOf, placesOf } from "./location-tree";
 import { type Preset, bindQuantityEditor, movementTitle, quantityEditor, signed } from "./movement-form";
 import { type OpenUnit, bindOpenUnits, sealedLine } from "./open-unit-panel";
+import { ListPager, landOn, onLayoutChange } from "./pager";
 import { UP_TO_ITEMS, loadSession, markCurrent, shell } from "./staff-shell";
 import {
   type Html, api, categoryName, emptyState, expired, failure, formatDate, formatDateTime, formatTime, html, icon, label, live, mount,
@@ -211,6 +212,9 @@ export async function stockWorkspace(): Promise<void> {
 
   /* ---------- Lists ---------- */
 
+  /** The shown view's rows: pages of 25 on desktop, a list growing by 25 on a phone (V1.16.12). */
+  const pager = new ListPager("page", "Stock pages");
+
   const tab = (key: View, text: string, count: number | string) => html`<button type="button" class="view-tab" data-view="${key}" aria-pressed="${key === view}">${text}<span class="view-tab__count">${count}</span></button>`;
 
   function attentionMarkup(data: Stock): Html {
@@ -219,6 +223,7 @@ export async function stockWorkspace(): Promise<void> {
     const shown = needing.filter((item) => focus === "all" || reasons(item).includes(focus))
       .sort((a, b) => REASON_ORDER.indexOf(reasons(a)[0]!) - REASON_ORDER.indexOf(reasons(b)[0]!) || a.name.localeCompare(b.name));
     const unset = data.items.filter((item) => item.status !== "INACTIVE" && item.reorderThreshold <= 0).length;
+    const page = pager.slice(shown);
     return html`<div class="chips chips--flush" role="group" aria-label="Show">
         ${[["all", "Everything", needing.length], ...Object.entries(FOCUS).filter(([key]) => key !== "open" || counts.open || focus === "open").map(([key, text]) => [key, text, counts[key]])].map(([key, text, count]) =>
           html`<button type="button" class="chip" data-focus="${key}" aria-pressed="${key === focus}">${text}<span class="chip__count">${count}</span></button>`)}
@@ -227,12 +232,12 @@ export async function stockWorkspace(): Promise<void> {
       ${shown.length ? html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Items that need attention</caption>
         <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Reorder level</th><th scope="col">Why</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
-        <tbody>${shown.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit, item)}${levelCell(item)}<td>${whyTags(item)}</td>
+        <tbody>${page.rows.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit, item)}${levelCell(item)}<td>${whyTags(item)}</td>
           <td class="col-actions"><span class="row-actions">
             ${reasons(item)[0] === "open" ? html`<button type="button" class="button button--secondary button--sm" data-open-units="${item.id}">Open units</button>`
               : html`<button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="${reasons(item)[0] === "count" ? "COUNT" : "DELIVERY"}">${reasons(item)[0] === "count" ? "Count" : "Stock in"}</button>`}
             ${item.reorderStatus ? "" : rowActionMenu(`attention-actions-${item.id}`, item.name, html`<li><button type="button" class="menu__item" data-restock="${item.id}">Add to restock</button></li>`)}
-          </span></td></tr>`)}</tbody></table></div>`
+          </span></td></tr>`)}</tbody></table></div>${page.footer}`
         : emptyState(focus === "all" ? "Nothing needs attention" : `No items: ${FOCUS[focus as keyof typeof FOCUS]}`, focus === "all" ? "Every active item is in stock, above its reorder level, counted where needed, and not near expiry." : "Try another filter.")}`;
   }
 
@@ -242,11 +247,12 @@ export async function stockWorkspace(): Promise<void> {
     const byId = new Map(data.items.map((item) => [item.id, item]));
     // All on loan is not short: the units come back.
     const suggestions = data.items.filter((item) => item.status !== "INACTIVE" && item.reorderThreshold > 0 && ["OUT", "LOW"].includes(stockState(item)) && !item.reorderStatus);
+    const page = pager.slice(open);
     return html`
       ${open.length ? html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static">
         <caption class="visually-hidden">Restock list</caption>
         <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-desired">Restock qty</th><th scope="col">Status</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
-        <tbody>${open.map((reorder) => {
+        <tbody>${page.rows.map((reorder) => {
           const item = byId.get(reorder.itemId);
           return html`<tr data-key="${reorder.id}">${itemCell({ ...item, id: reorder.itemId, name: reorder.itemName, locationId: item?.locationId ?? null })}${qtyCell(item?.onHand ?? null, reorder.unit)}
             <td class="col-desired"><label class="visually-hidden" for="desired-${reorder.id}">Restock quantity for ${reorder.itemName}</label><input class="input-compact" id="desired-${reorder.id}" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="${reorder.desiredQuantity ?? ""}" placeholder="—" data-desired="${reorder.id}" /></td>
@@ -255,7 +261,7 @@ export async function stockWorkspace(): Promise<void> {
               <button type="button" class="button button--primary button--sm" data-receive="${reorder.id}">Receive</button>
               ${rowActionMenu(`restock-actions-${reorder.id}`, reorder.itemName, html`<li><button type="button" class="menu__item" data-status="${reorder.status === "PLANNED" ? "NEEDS_RESTOCK" : "PLANNED"}" data-reorder="${reorder.id}">${reorder.status === "PLANNED" ? "Not planned" : "Mark planned"}</button></li><li><button type="button" class="menu__item" data-status="DISMISSED" data-reorder="${reorder.id}">Dismiss</button></li>`)}
             </span></td></tr>`;
-        })}</tbody></table></div>`
+        })}</tbody></table></div>${page.footer}`
         : emptyState("The restock list is empty", "Add items from Needs attention, or from the suggestions below when stock drops to its reorder level.")}
       ${suggestions.length ? html`<section class="subsection" aria-labelledby="suggested-title"><h2 class="subsection__title" id="suggested-title">Suggested from reorder levels</h2>
         <ul class="plain-list">${suggestions.map((item) => html`<li><span><strong>${item.name}</strong> <span class="muted">· ${formatQuantity(item.onHand)} on hand, level ${formatQuantity(item.reorderThreshold)}</span></span><button type="button" class="button button--secondary button--sm" data-restock="${item.id}">Add</button></li>`)}</ul></section>` : ""}
@@ -273,30 +279,32 @@ export async function stockWorkspace(): Promise<void> {
       .sort((a, b) => Number(expiring(b)) - Number(expiring(a)) || a.name.localeCompare(b.name));
     if (!pantry.length) return emptyState("No pantry items", "Set an item's stock area to Pantry in its Stock settings, under Edit details in Items, to track it here.");
     const shortage = (item: StockItem) => item.reorderThreshold > 0 ? item.reorderThreshold - item.onHand : 0;
+    const page = pager.slice(pantry);
     return html`<div class="data-table-wrap data-table-wrap--responsive"><table class="data-table data-table--static data-table--pantry">
       <caption class="visually-hidden">Pantry items</caption>
       <thead><tr><th scope="col" class="col-item">Item</th><th scope="col" class="col-qty">On hand</th><th scope="col" class="col-level">Minimum</th><th scope="col" class="col-short">Shortage</th><th scope="col" class="col-used">Used, 30 days</th><th scope="col">Expiry</th><th scope="col" class="col-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
-      <tbody>${pantry.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit, item)}${levelCell(item, "Minimum")}
+      <tbody>${page.rows.map((item) => html`<tr data-key="${item.id}">${itemCell(item)}${qtyCell(item.onHand, item.unit, item)}${levelCell(item, "Minimum")}
         <td class="col-short"><span class="cell-label">Shortage: </span>${shortage(item) > 0 ? html`<span class="tag tag--warn">${formatQuantity(shortage(item))} short</span>` : html`<span class="muted">${item.reorderThreshold > 0 && item.onHand === item.reorderThreshold ? "At the minimum" : "None"}</span>`}</td>
         <td class="col-used"><span class="cell-label">Used, last 30 days: </span>${data.used ? formatQuantity(data.used[item.id] ?? 0) : html`<span class="muted">—</span>`}</td>
         <td>${expiryTag(item)}</td>
         <td class="col-actions"><span class="row-actions">${tracked(item)
           ? html`<button type="button" class="button button--secondary button--sm" data-open-units="${item.id}">Open units</button>`
-          : html`<button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="CONSUMED" data-delta="-1">Use</button>`}${rowActionMenu(`pantry-actions-${item.id}`, item.name, html`<li><button type="button" class="menu__item" data-record-item="${item.id}" data-reason="DELIVERY">Restock</button></li><li><button type="button" class="menu__item" data-record-item="${item.id}" data-reason="COUNT">Count</button></li>`)}</span></td></tr>`)}</tbody></table></div>`;
+          : html`<button type="button" class="button button--secondary button--sm" data-record-item="${item.id}" data-reason="CONSUMED" data-delta="-1">Use</button>`}${rowActionMenu(`pantry-actions-${item.id}`, item.name, html`<li><button type="button" class="menu__item" data-record-item="${item.id}" data-reason="DELIVERY">Restock</button></li><li><button type="button" class="menu__item" data-record-item="${item.id}" data-reason="COUNT">Count</button></li>`)}</span></td></tr>`)}</tbody></table></div>${page.footer}`;
   }
 
   function activityMarkup(data: Stock): Html {
     const today = officeDay();
     const entries = data.activity.filter((entry) => !todayOnly || officeDay(entry.createdAt) === today);
+    const page = pager.slice(entries);
     return html`<div class="sort-toggle activity-range" role="group" aria-label="Period">
         <button type="button" data-range="today" aria-pressed="${todayOnly}">Today</button><button type="button" data-range="recent" aria-pressed="${!todayOnly}">Recent</button>
       </div>
-      ${entries.length ? html`<ol class="activity-list">${entries.map((entry) => html`<li class="activity-row activity-row--plain ${entry.change > 0 ? "is-in" : entry.change < 0 ? "is-out" : ""}">
+      ${entries.length ? html`<ol class="activity-list">${page.rows.map((entry) => html`<li class="activity-row activity-row--plain ${entry.change > 0 ? "is-in" : entry.change < 0 ? "is-out" : ""}">
           <p class="activity-row__change">${signed(entry.change)}</p>
           <div class="activity-row__main">
             <p><a class="row-link" href="/staff/items?item=${entry.itemId}" data-route>${entry.itemName}</a> <span class="muted">· ${movementTitle(entry.related === "OPEN_UNIT" ? "UNIT_EMPTIED" : entry.movementType, entry.change, entry.reason)}</span></p>
             <p class="cell-sub">${entry.afterQuantity - entry.change} → ${entry.afterQuantity} ${units(entry.afterQuantity, entry.unit)} · ${entry.actor ?? "Unknown"} · <time datetime="${entry.createdAt}">${todayOnly ? formatTime(entry.createdAt) : formatDateTime(entry.createdAt)}</time>${entry.notes ? ` · ${entry.notes}` : ""}</p>
-          </div></li>`)}</ol>`
+          </div></li>`)}</ol>${page.footer}`
         : emptyState(todayOnly ? "No stock changes today" : "No stock activity yet", todayOnly ? "Movements recorded today appear here as they happen." : "Stock in, stock out and counts appear here.")}`;
   }
 
@@ -306,6 +314,7 @@ export async function stockWorkspace(): Promise<void> {
     writeParams({ view: view === "attention" ? null : view, show: view === "attention" && focus !== "all" ? focus : null, range: view === "activity" && !todayOnly ? "recent" : null });
     // The address changed in place, which the router never sees: the rail follows the view here.
     markCurrent();
+    pager.ask(JSON.stringify([view, focus, todayOnly]));
     const needing = stock.items.filter((item) => reasons(item).length).length;
     const today = stock.activity.filter((entry) => officeDay(entry.createdAt) === officeDay());
     const pantry = stock.items.filter((item) => item.stockArea === "Pantry" && item.status !== "INACTIVE");
@@ -368,6 +377,8 @@ export async function stockWorkspace(): Promise<void> {
   document.querySelector("[data-record]")!.addEventListener("click", showRecord);
   results.addEventListener("click", (event) => {
     const target = event.target as HTMLElement;
+    const turned = pager.handle(target);
+    if (turned) { render(); landOn(results, turned, () => [...results.querySelectorAll<HTMLElement>("tbody tr .row-link, tbody tr button, .activity-row .row-link")]); return; }
     const menuAction = target.closest<HTMLButtonElement>(".menu--row .menu__item");
     if (menuAction) {
       const menu = menuAction.closest<HTMLElement>(".menu--row")!;
@@ -412,4 +423,5 @@ export async function stockWorkspace(): Promise<void> {
     void patchReorder(reorder, { desiredQuantity: read.value });
   });
   onLeave(() => { receipts.length = 0; });
+  onLeave(onLayoutChange(() => render()));
 }
