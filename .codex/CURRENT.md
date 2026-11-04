@@ -20,9 +20,8 @@ V1.16.10 is merged (PR #85, `main` `3d8aa87`, merge commit) from the tested head
 - Record: `docs/road-to-v2/releases/v1.16.10.md`. No migration.
 - The change: a new access group, `DOL_DIRECTOR`, with DoL Staff's access.
 - Security tier: HIGH (authorization). The independent review was not run. Earl accepted the exception: "i accept merging because the DoL director and DoL staff has the same permission so it changes nothing". The receipt is on the PR.
-- Pending:
-  - check the deploy byte for byte;
-  - Earl's System check.
+- Deployed: the live assets match a local build, 121 of 122 byte for byte, with `build.json` not served. Scratch script: `.claude/worktrees/v11610-role/test-results/v11610/bytecheck.mjs`.
+- Pending: Earl's System check.
 
 ## 2026-11-04 Claude — V1.16.9 no crescents, and speed, merged and deployed
 
