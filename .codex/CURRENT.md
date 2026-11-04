@@ -1,5 +1,23 @@
 # Current Work Pointer — Logistics Hub
 
+## 2026-11-04 Claude — V1.16.9 no crescents, and speed, QUALIFICATION_PENDING
+
+PRs #81 (V1.16.8 records) and #83 (ChatGPT's agent security-review rule in `AGENTS.md` and `CLAUDE.md`) were merged one after the other, each with a steward receipt on the PR. `main` is `83572a2`.
+
+V1.16.9 is on branch `slice/v1.16.9-rail-and-speed` in worktree `.claude/worktrees/v1169`, application source `90caba1`.
+- Spec: `docs/specs/accepted/2026-11-04-v1169-crescents-and-speed.md`.
+- Record: `docs/road-to-v2/releases/v1.16.9.md`. No migration.
+- Changes:
+  - no coloured edge on any rounded box;
+  - Smart Placement;
+  - two pairs of catalog queries run together;
+  - the rail glint and the breathing dot are removed.
+- Security tier: HIGH (deployment configuration). An independent review (ChatGPT) is needed before the merge, as is Earl's go-ahead.
+- After the deploy:
+  - check the `cf-placement` header and re-measure (scratch scripts `test-results/v1169/d1-hops.mjs` and `ttfb.mjs`);
+  - byte-check the deploy;
+  - Earl's System checks for V1.16.7, V1.16.8 and V1.16.9.
+
 ## 2026-11-04 Claude — V1.16.8 merged and deployed
 
 V1.16.8 is merged (PR #80, `main` `bf5d682`, merge commit) and deployed by Workers Builds.

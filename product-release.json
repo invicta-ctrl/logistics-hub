@@ -1,12 +1,11 @@
 {
-  "version": "V1.16.8",
-  "sourceCommit": "9e60ce79c7df6bdcac81510029325ac0c96ae6b2",
-  "record": "docs/road-to-v2/releases/v1.16.8.md",
+  "version": "V1.16.9",
+  "sourceCommit": "90caba134d33ec923e35ed194e3bb0587aee3183",
+  "record": "docs/road-to-v2/releases/v1.16.9.md",
   "changes": [
-    "Every Lending Hub item opens its own sheet with how to borrow it, and hands off to Self-Service while it is open.",
-    "Every Self-Service form shows the Data Privacy Waiver Statement and asks for consent before it can be sent.",
-    "Individual use asks what the item is for, at the desk and on the phone, like USC use.",
-    "A Self-Service return whose loan was already closed in Loans can now be cleared, and the list refreshes itself.",
-    "The home page is centred, the quantity editor is centred, and the rail's fold chevron sits inside Items with no gold edge."
+    "No coloured edge on rounded boxes: Administration's status lines, banners, kit parts and the chosen search result show their tone by icon and tint.",
+    "Pages load faster: the Worker now runs beside its database, so each page's data no longer waits on several long round trips.",
+    "The Lending Hub and Self-Service catalogs read their data in one step instead of two.",
+    "Staff pages no longer animate while idle: the rail's glint and the breathing status dot are gone, so scrolling and page changes stay smooth."
   ]
 }
