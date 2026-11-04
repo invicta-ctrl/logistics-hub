@@ -43,3 +43,9 @@ No full-history fan-out on routine interaction.
 
 ## Independence
 Mission execution works without RTV3-05 procurement.
+
+## Adaptive Operations UI note (direction only)
+
+See [`10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md`](../10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md). It is not accepted scope: adopting it needs this milestone's own prospective amendment.
+- **Integration:** One bounded server-composed goal workspace with next permitted action, mission blockers, responsibilities and safe human handovers.
+- **Boundary:** Role checked on server; no GPS, attendance/productivity scoring, AI staffing decisions; works without V2.5.

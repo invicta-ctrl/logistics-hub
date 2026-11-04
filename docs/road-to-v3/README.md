@@ -63,6 +63,7 @@ Specialist threads receive only the active task packet, relevant release card, r
 - `06_ROAD_TO_V3_RELEASE_MAP.md` — compact program map.
 - `07_PRODUCT_DIRECTION_AMENDMENT_DRAFT.md` — pre-drafted owner decision required before RTV3-02.
 - `08_RECONCILIATION_REGISTER.md` — live review-findings tracker and old↔new identifier mapping.
+- `10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md` — cross-release Adaptive Operations UI direction (direction only, not accepted scope; from issue #35).
 - `releases/` — one card per Road-to-V3 milestone.
 - `templates/` — accepted-spec, task-packet, handoff, release-record templates.
 - `decisions/` — owner decisions that need explicit acceptance.
