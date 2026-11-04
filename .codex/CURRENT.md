@@ -1,5 +1,23 @@
 # Current Work Pointer — Logistics Hub
 
+## 2026-11-04 Claude reconciliation — one branch, one PR
+
+**Owner rule (Earl, 2026-11-04):** Claude is the sole writer on all projects until further notice. ChatGPT audits, reviews and manages. The rule is recorded in `AGENTS.md` ("Sole writer") and supersedes the Codex/Forge writer and two-lane passages.
+
+Earl asked for one work branch, one `main` and one PR, with every open issue closed and fixed.
+- PR #76 (the V1.16.7 manifest only) is merged.
+- PR #78 merged #66, #72, #73, #74 and #77 unchanged, plus three changes of its own:
+  - the `allowScripts` fix that #77's CI needed;
+  - issue #35's docs, `docs/road-to-v3/10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md`, which closed the issue;
+  - the sole-writer rule.
+- PR #60 is closed without merging.
+- `main` is merged into this branch, which adds the `CHANGELOG.md` entries for the V1.16.7 candidate and its three accepted specs.
+
+Next:
+1. Exact-head CI on #75.
+2. Cloud Operations preflight, then prepare, for v1.16.7 on #75's head.
+3. #75 goes to Earl for review and merge.
+
 ## 2026-11-04 Claude release metadata — V1.16.7 QUALIFICATION_PENDING
 
 Earl asked that every V1.16.7 requirement be finished, committed, pushed to `main` and reconciled before the merge. Claude ran the axe sweep and a partial performance run. Earl then said "stop checking, i approve them now. let us worryt about speed later". The record lists each gate he approved without it being run; none is recorded as passed.
