@@ -250,6 +250,8 @@ test.describe("Administration", () => {
     expect(narrowest, "description width in ems").toBeGreaterThan(12);
 
     await page.route("**/api/staff/admin/retention", (route) => route.fulfill(json({ loans: 3, phoneRecords: 2, photos: 4 })));
+    // Reduced motion, so the sheet is measured where it comes to rest, not part-way through sliding up (seen once on CI).
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.setViewportSize({ width: 320, height: 800 });
     await page.goto("/staff/admin/accountability");
     await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
