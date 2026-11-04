@@ -15,7 +15,7 @@ A concise index of what changed in each product version/revision and accepted sp
   - Items' fold chevron sits inside its plate, points down or up, and folds more smoothly;
   - the rail's current page has no gold edge or ring.
 
-  **Removed:** the "Background removed" note on cleaned pictures. **Migration:** none. **Record:** [v1.16.8.md](docs/road-to-v2/releases/v1.16.8.md).
+  **Removed:** the "Background removed" note on cleaned pictures. **Migration:** none. **Record:** [v1.16.8.md](docs/road-to-v2/releases/v1.16.8.md). Application source `9e60ce7`.
 
 ## Specification changes
 

@@ -15,10 +15,11 @@ Checks on the working tree:
 - unit tests: all pass except the known Windows-only cases;
 - the browser suite: 371 of 373 passed. Both failures are outside this change, and the place-sheet race also fails 1 in 20 on V1.16.7.
 
-Next:
-1. Earl's go-ahead to commit, push and open the PR. At commit time, set `product-release.json` to V1.16.8 with the source commit, record it in the release record, and change the `tests/admin-control.test.ts` pin to V1.16.8.
-2. Exact-head CI, CodeQL and Worker E2E.
-3. Earl's merge, a byte check of the deploy, then his System check.
+Revision 2 adds the Data Privacy Waiver Statement on every Self-Service form, in Earl's words exactly.
+
+Earl's go-ahead (2026-11-04): "add this, after then proceed to merge and committ to main. prune addiotional branches."
+- Application source `9e60ce7`; `product-release.json` is V1.16.8.
+- Next: exact-head CI, CodeQL and Worker E2E on the PR, then the merge, a byte check of the deploy, pruning the merged branches, and Earl's System check.
 
 Follow-up (not in V1.16.8): reopening a place while its sheet is still closing can leave an empty dialog (`tests/browser/v1167-sheets.spec.ts:243`, flaky on V1.16.7 too).
 
