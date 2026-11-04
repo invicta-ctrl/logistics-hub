@@ -68,35 +68,51 @@
 .is-self-service input:not([type=checkbox], [type=radio]), .is-self-service select, .is-self-service textarea { border-color: var(--line-field); background: var(--field); color: var(--text); }
 .is-self-service input:focus-visible, .is-self-service textarea:focus-visible { border-color: var(--accent-line); box-shadow: var(--focus); }
 
-/* ---------- The campus at dusk, behind the top of home ---------- */
-/* The wash fades the photograph into the canvas and dims it under the words, so they stay readable in either theme. */
-.ss-photo { display: none; }
-[data-ss-screen="home"] .ss-photo { position: absolute; inset: 0 0 auto; z-index: -1; display: block; height: min(68vh, 44rem); background: var(--photo-wash), url("/brand/hau-campus-dusk.webp") center 38% / cover no-repeat; pointer-events: none; }
+/*
+ * V1.16.11 "Counter" (Earl, 2026-11-04: "Improve the design of the self service ui/ux drastically"; light by default; "keep the hau
+ * campus as a subtle background"). An oxblood band holds the bar, the question and the search; the campus at dusk shows through it,
+ * faintly. Below the band the page is warm paper: four doors (Borrow, Take, Return, My activity), then the items, pictures edge to edge.
+ */
+.is-self-service {
+  --band: var(--brand-dark);
+  --band-2: var(--brand-deep);
+  --band-ink: var(--on-dark);
+  --band-ink-2: var(--on-dark-2);
+  --band-line: rgb(251 246 238 / 22%);
+  --band-field: rgb(251 246 238 / 10%);
+  --band-wash: linear-gradient(180deg, color-mix(in srgb, var(--band) 90%, transparent) 0%, color-mix(in srgb, var(--band-2) 84%, transparent) 100%);
+}
+/* The page never scrolls sideways under the full-width band. */
+.is-self-service #app { overflow-x: clip; }
+
+/* ---------- The band, behind the top of home ---------- */
+/* Full width, from the top of the page to the middle of the search field, so the field sits across its lower edge. */
+.ss-band { position: absolute; top: -12rem; bottom: 1.5625rem; left: calc(50% - 50vw); z-index: -1; width: 100vw; background: var(--band-wash), url("/brand/hau-campus-dusk.webp") center 42% / cover no-repeat; pointer-events: none; }
 
 /* ---------- App bar ---------- */
-.ss-bar { position: sticky; top: 0; z-index: 30; padding-top: env(safe-area-inset-top); border-bottom: 1px solid var(--line); background: var(--canvas); color: var(--text); }
-/* On home the bar sits on the photograph and scrolls away with it. */
-[data-ss-screen="home"] .ss-bar { position: relative; border-bottom-color: transparent; background: transparent; }
+.ss-bar { position: sticky; top: 0; z-index: 30; padding-top: env(safe-area-inset-top); background: var(--band); color: var(--band-ink); }
+/* On home the bar sits on the band and scrolls away with it. */
+[data-ss-screen="home"] .ss-bar { position: relative; background: transparent; }
 .ss-bar__inner { display: flex; max-width: 36rem; min-height: 3.5rem; margin-inline: auto; align-items: center; justify-content: space-between; gap: .75rem; padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right)); }
 .ss-bar__brand { display: flex; min-width: 0; min-height: 2.75rem; align-items: center; gap: .625rem; border-radius: var(--radius); color: inherit; text-decoration: none; }
 .ss-bar__marks { display: flex; flex: none; align-items: center; gap: .375rem; }
-.ss-bar__marks .crest { height: 1.9rem; }
-.ss-bar__marks .mark { height: 1.75rem; }
+/* The mark's oxblood shield would sink into the band, so it sits on a small paper disc. */
+.ss-bar__marks .mark { width: 2.375rem; height: 2.375rem; padding: .25rem; border-radius: 50%; background: var(--on-dark); object-fit: contain; }
 .ss-bar__title { display: grid; min-width: 0; font-family: var(--serif); font-size: 1.0625rem; font-weight: 500; line-height: 1.1; white-space: nowrap; }
 .ss-bar__title > * { overflow: hidden; text-overflow: ellipsis; }
 .ss-bar__end { display: flex; flex: none; align-items: center; gap: .5rem; }
 /* The switch shows the current theme (the sun turns away as the moon turns in) and matches the sync pill beside it. */
-.ss-theme { position: relative; display: grid; width: 2.125rem; height: 2.125rem; flex: none; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface); color: var(--text); -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2); }
+.ss-theme { position: relative; display: grid; width: 2.125rem; height: 2.125rem; flex: none; place-items: center; border: 1px solid var(--band-line); border-radius: 50%; background: var(--band-field); color: var(--band-ink); -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2); }
 .ss-theme::before { position: absolute; inset: -.375rem; content: ""; }
 .ss-theme .icon { grid-area: 1 / 1; transition: transform var(--dur-3) var(--ease), opacity var(--dur-2); }
 .ss-theme[aria-pressed="true"] .icon:first-child, .ss-theme[aria-pressed="false"] .icon:last-child { opacity: 0; transform: rotate(-90deg) scale(.5); }
 .ss-theme:focus-visible { outline: none; box-shadow: var(--focus); }
 /* The theme change supplies its own circular reveal, so the default cross-fade is switched off. */
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
-.ss-bar__title small { color: var(--accent-line); font-family: var(--sans); font-size: .625rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+.ss-bar__title small { color: var(--gold-action); font-family: var(--sans); font-size: .625rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
 
 /* The sync pill: a small light. Quiet when all is well, specific when something waits. */
-.ss-pill { position: relative; display: inline-flex; flex: none; min-height: 2.125rem; align-items: center; gap: .5rem; padding: .25rem .8rem; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--text); font-size: var(--text-sm); font-weight: 500; text-decoration: none; white-space: nowrap; transition: background-color var(--dur-2), border-color var(--dur-2); }
+.ss-pill { position: relative; display: inline-flex; flex: none; min-height: 2.125rem; align-items: center; gap: .5rem; padding: .25rem .8rem; border: 1px solid var(--band-line); border-radius: 999px; background: var(--band-field); color: var(--band-ink); font-size: var(--text-sm); font-weight: 500; text-decoration: none; white-space: nowrap; transition: background-color var(--dur-2), border-color var(--dur-2); }
 /* A finger-sized target around the small pill. */
 .ss-pill::before { position: absolute; inset: -.375rem 0; content: ""; }
 .ss-pill__dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--ok-dot); }
@@ -106,6 +122,9 @@
 .ss-pill--review .ss-pill__dot { background: var(--accent); }
 .ss-pill--busy .ss-pill__dot { width: .8rem; height: .8rem; border: 2px solid var(--line-strong); border-top-color: var(--accent); background: none; animation: ss-spin .8s linear infinite; }
 
+/* The update and test notes keep the paper's colours under the band's bar. */
+.ss-update, .ss-test { color: var(--text); }
+.ss-update { background: var(--canvas); }
 .ss-update { display: flex; max-width: 36rem; margin-inline: auto; align-items: center; justify-content: space-between; gap: .75rem; padding: .5rem 1rem .625rem; border-top: 1px solid var(--line); font-size: var(--text-sm); }
 .ss-update p { display: flex; align-items: center; gap: .5rem; color: var(--text-2); }
 .ss-test { display: flex; max-width: 36rem; margin-inline: auto; gap: .5rem; padding: .5rem 1rem .625rem; border-top: 1px solid var(--line); background: linear-gradient(var(--warn-tint), var(--warn-tint)), var(--canvas); font-size: var(--text-sm); }
@@ -116,24 +135,26 @@
 .ss-screen, .ss-home { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
 
 /* ---------- Home ---------- */
-.ss-hero { position: relative; display: grid; min-height: clamp(11rem, 30vh, 15rem); align-content: end; gap: .375rem; padding: 1rem .125rem .25rem; }
+.ss-hero { position: relative; display: grid; min-height: clamp(10rem, 26vh, 13rem); align-content: end; gap: .375rem; padding: .75rem .125rem 0; color: var(--band-ink); }
 /* At 200% text a long word ("maintenance") is wider than a 320 px phone: it breaks rather than widening the column and being cut off. */
-.ss-hero h1 { font-family: var(--serif); font-size: clamp(2.25rem, 10vw, 3rem); font-weight: 500; letter-spacing: -.03em; line-height: 1; overflow-wrap: anywhere; }
-.ss-hero__hello { color: var(--text-2); font-size: var(--text-base); }
+.ss-hero h1 { font-family: var(--serif); font-size: clamp(2.25rem, 10vw, 3.25rem); font-weight: 500; letter-spacing: -.03em; line-height: 1; overflow-wrap: anywhere; }
+.ss-hero__hello { color: var(--band-ink-2); font-size: var(--text-base); }
 
-/* Return and My activity: two compact tiles, side by side where they fit and stacked for large text. */
-.ss-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .75rem; }
-.ss-tile { position: relative; display: flex; min-height: 4.5rem; align-items: center; gap: .875rem; padding: .875rem 1rem; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2); }
+/* The four doors: two by two on a phone, one row where there is room; each a tall, plain target with its icon on a tinted disc. */
+.ss-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .625rem; margin-top: .5rem; }
+.ss-tile { position: relative; display: grid; min-height: 6.25rem; align-content: space-between; gap: .75rem; padding: .875rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2), transform var(--dur-1) var(--ease); }
 .ss-tile:focus-visible { outline: none; box-shadow: var(--focus); }
-.ss-tile__icon { display: grid; width: 2.75rem; height: 2.75rem; flex: none; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--accent); }
-.ss-tile__icon .icon { --icon-size: var(--icon-lg); }
+.ss-tile__icon { display: grid; width: 2.5rem; height: 2.5rem; flex: none; place-items: center; border-radius: 50%; background: var(--brand-tint); color: var(--accent); }
+.ss-tile__icon .icon { --icon-size: var(--icon-md); }
 .ss-tile__text { display: grid; min-width: 0; }
 .ss-tile__name { overflow-wrap: break-word; font-size: var(--text-lg); font-weight: 600; line-height: 1.2; }
 .ss-tile__detail { color: var(--text-2); font-size: var(--text-sm); line-height: 1.35; }
-.ss-tile__badge { position: absolute; top: .625rem; right: .75rem; min-width: 1.5rem; padding: .0625rem .5rem; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: var(--text-sm); font-weight: 700; text-align: center; }
+.ss-tile__badge { position: absolute; top: .75rem; right: .75rem; min-width: 1.5rem; padding: .0625rem .5rem; border-radius: 999px; background: var(--primary); color: var(--on-primary); font-size: var(--text-sm); font-weight: 700; text-align: center; }
+/* At 200% text the doors stack, one per row, so a name never breaks mid-word. */
+@media (max-width: 20rem) { .ss-tiles { grid-template-columns: minmax(0, 1fr); } }
 
-.ss-find { margin-top: .75rem; scroll-margin-top: 4.5rem; }
-.ss-find .search-field input { min-height: 3.125rem; border-radius: var(--radius-lg); background: var(--surface); font-size: var(--text-md); }
+.ss-find { margin-top: 1rem; scroll-margin-top: 4.5rem; }
+.ss-find .search-field input { min-height: 3.125rem; border-color: transparent; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-md); font-size: var(--text-md); }
 .ss-find .search-field > .icon, .ss-search > .icon { color: var(--accent-line); }
 .ss-results { display: grid; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); }
 .ss-results li + li { border-top: 1px solid var(--line); }
@@ -258,6 +279,23 @@
 .is-self-service .field__hint--warn, .is-self-service [data-over] { color: var(--warn); }
 .ss-form .button--lg { min-height: 3.5rem; border-radius: var(--radius-lg); font-size: var(--text-md); white-space: normal; }
 
+/*
+ * V1.16.11 · A form reads as short numbered steps: what, who, a photo, then consent. The numbers are counters; a step whose fields
+ * are complete shows a check instead (a cue only, never a promise: Review still checks everything).
+ */
+.ss-form { counter-reset: ss-step; }
+.ss-step, .ss-privacy { counter-increment: ss-step; }
+.ss-step { display: grid; gap: 1rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--line); }
+.ss-step__title { display: flex; align-items: center; gap: .625rem; font-size: var(--text-md); font-weight: 600; line-height: 1.3; }
+.ss-step__n, .ss-privacy__title::before { display: inline-grid; width: 1.75rem; height: 1.75rem; flex: none; place-items: center; border: 1.5px solid var(--accent-line); border-radius: 50%; color: var(--accent); font-size: var(--text-sm); font-weight: 700; font-variant-numeric: tabular-nums; transition: background-color var(--dur-2), color var(--dur-2), border-color var(--dur-2); }
+.ss-step__n::before { content: counter(ss-step); }
+.ss-privacy__title::before { content: counter(ss-step); }
+/* The waiver's own shield gives way to its step number, so the four steps read alike. */
+.ss-privacy__title > svg { display: none; }
+.ss-step--who:not(:has(:invalid)) .ss-step__n, .ss-step--photo:has(.photo-field__preview) .ss-step__n, .ss-privacy:has(#ss-consent:checked) .ss-privacy__title::before { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
+.ss-step--who:not(:has(:invalid)) .ss-step__n::before, .ss-step--photo:has(.photo-field__preview) .ss-step__n::before { content: "✓"; }
+.ss-privacy:has(#ss-consent:checked) .ss-privacy__title::before { content: "✓"; }
+
 /* The receipt: a check, what was recorded, then the sync state as it happens. */
 .ss-receipt { display: grid; justify-items: center; gap: .5rem; padding: 2.5rem 1.5rem calc(1.5rem + env(safe-area-inset-bottom)); text-align: center; }
 .ss-receipt__mark { width: 4rem; height: 4rem; margin-bottom: .75rem; }
@@ -314,11 +352,18 @@
 .ss-group__all { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--accent); font-size: var(--text-sm); font-weight: 600; }
 /* Two across: four per group make two tidy rows, and nothing scrolls sideways. */
 .ss-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .625rem; }
-.ss-card { display: grid; height: 100%; align-content: start; gap: .25rem; padding: .625rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2); }
+/* The picture fills the card's top edge to edge (V1.16.11); the words sit under it with their own margin. */
+.ss-card { display: grid; height: 100%; align-content: start; gap: .25rem; overflow: hidden; padding: 0 0 .75rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); text-decoration: none; -webkit-tap-highlight-color: transparent; transition: border-color var(--dur-2), transform var(--dur-1) var(--ease); }
 .ss-card:focus-visible { outline: none; box-shadow: var(--focus); }
-.ss-card__visual { display: grid; width: 100%; aspect-ratio: 4 / 3; margin-bottom: .25rem; }
-.ss-card__name { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; font-weight: 500; line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.ss-card__visual { display: grid; width: 100%; aspect-ratio: 4 / 3; margin-bottom: .5rem; border-radius: 0; }
+.ss-card > :not(.ss-card__visual) { margin-inline: .75rem; }
+.ss-card__name { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; font-weight: 600; line-height: 1.25; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
 .ss-card__cue { overflow: hidden; color: var(--text-3); font-size: var(--text-sm); text-overflow: ellipsis; white-space: nowrap; }
+/* Availability leads with a small light: green when there are some, amber when few, none when out. */
+.ss-card .ss-count { display: inline-flex; align-items: center; gap: .375rem; }
+.ss-card .ss-count::before { width: .5rem; height: .5rem; flex: none; border-radius: 50%; background: var(--ok-dot); content: ""; }
+.ss-card .ss-count--low::before { background: var(--warn-dot); }
+.ss-card .ss-count--out::before { background: var(--line-strong); }
 .ss-card--out .ss-card__name { color: var(--text-2); }
 .ss-card .ss-count strong { font-size: var(--text-base); }
 .ss-chips { display: flex; flex-wrap: wrap; gap: .5rem; }
@@ -329,11 +374,25 @@
 .ss-list--photos li { content-visibility: auto; contain-intrinsic-size: auto 3.875rem; }
 
 /* ---------- The item's page ---------- */
-.ss-item__visual { display: grid; width: min(100%, 15rem, var(--item-photo-edge, 15rem)); aspect-ratio: 1; margin-inline: auto; border-radius: var(--radius-lg); view-transition-name: ss-visual; }
-.ss-item__type { color: var(--accent-line); font-size: .6875rem; font-weight: 600; letter-spacing: .14em; text-align: center; text-transform: uppercase; }
+/*
+ * V1.16.11: the picture fills the column (the frame takes the photo's own background, photo-frame.ts), and the photo inside is never
+ * drawn larger than it was taken (--item-photo-edge), so a small photo stays sharp in a wide frame.
+ */
+.ss-item__visual { display: grid; width: 100%; aspect-ratio: 4 / 3; max-height: 26rem; border-radius: var(--radius-lg); view-transition-name: ss-visual; }
+.ss-item__visual > .item-visual__photo { max-width: var(--item-photo-edge, 100%); max-height: var(--item-photo-edge, 100%); justify-self: center; align-self: center; }
+.ss-item__visual.photo-pedestal > .item-visual__photo { align-self: start; }
+.ss-item__visual > .item-icon { max-width: 6rem; max-height: 6rem; }
+.ss-item__visual.photo-pedestal::before, .ss-item__visual.photo-pedestal::after { left: 27%; right: 27%; }
+.ss-item__facts { display: grid; gap: .75rem; padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+/* Inside the facts card the count is a plain, larger line: no box within the box. */
+.ss-item__facts .ss-estimate { padding: 0; border: 0; background: none; font-size: var(--text-lg); font-weight: 600; }
+.ss-item__facts .ss-estimate--out { color: var(--warn); }
+.ss-item__type { color: var(--accent-line); font-size: .6875rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
 .ss-item__how { color: var(--text-2); font-size: var(--text-base); line-height: 1.5; }
 .ss-item .ss-where { margin: 0; }
-.ss-item__action { margin-top: .5rem; }
+/* The one action stays at thumb reach while the page scrolls, on the paper so nothing shows through it. */
+.ss-item__bar { position: sticky; bottom: 0; z-index: 5; margin: 0 -1rem calc(-3rem - env(safe-area-inset-bottom)); padding: .75rem 1rem calc(.75rem + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--canvas); }
+.ss-item__action .icon { transition: transform var(--dur-2) var(--ease); }
 
 /* ---------- Who this is for ---------- */
 .ss-identity { display: grid; gap: 1.125rem; }
@@ -551,9 +610,9 @@
 /* Focus moves a field or the check's title to just under the sheet's header with its label still showing. */
 .ss-sheet .sheet__body :is(input, textarea, select, button) { scroll-margin-top: 3.5rem; }
 .ss-confirm__title { scroll-margin-top: 1.5rem; }
-/* The sync pill can say "Offline · 3 waiting"; on a phone the second crest steps aside so the name still fits. */
+/* The sync pill can say "Offline · 3 waiting": on a phone the bar tightens so the name still fits beside it. */
 @media (max-width: 26rem) {
-  .ss-bar__marks .mark { display: none; }
+  .ss-bar__marks .mark { width: 2.125rem; height: 2.125rem; }
   .ss-bar__inner { gap: .5rem; }
   .ss-pill { gap: .375rem; padding-inline: .625rem; }
 }
@@ -562,5 +621,6 @@
   [data-ss-screen="home"] .ss, [data-ss-screen="home"] .ss-bar__inner { max-width: 62rem; }
   [data-ss-screen="home"] .ss-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   [data-ss-screen="home"] .ss-hero { min-height: 12rem; }
-  [data-ss-screen="home"] :is(.ss-find, .ss-tiles, .ss-status) { max-width: 36rem; }
+  [data-ss-screen="home"] .ss-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  [data-ss-screen="home"] :is(.ss-find, .ss-status) { max-width: 36rem; }
 }

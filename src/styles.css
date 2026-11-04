@@ -370,7 +370,8 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .site-header { position: relative; z-index: 30; border-bottom: 1px solid rgb(255 255 255 / 14%); background: var(--brand); color: var(--on-dark); }
 .site-header__inner { display: flex; min-height: 4.5rem; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); }
 .site-header__brand { display: flex; min-width: 0; align-items: center; gap: var(--space-3); padding-block: var(--space-2); border-radius: var(--radius); color: var(--on-dark); text-decoration: none; }
-.site-header__brand .crest { width: auto; height: 2.5rem; }
+/* V1.16.11: the Department of Logistics' mark leads the header. Its oxblood shield would sink into the oxblood bar, so it sits on a small paper disc. */
+.site-header__brand .mark { width: 2.75rem; height: 2.75rem; flex: none; padding: .3125rem; border-radius: 50%; background: var(--on-dark); object-fit: contain; }
 .site-header__name { font-size: var(--text-md); font-weight: 600; letter-spacing: -.005em; line-height: 1.25; }
 .site-header__brand:focus-visible { outline-color: var(--gold-action); }
 .site-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
@@ -527,8 +528,11 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 
 /* The item's sheet: its picture, how many and what it is, then the way to borrow it. */
 .lend-sheet { display: grid; gap: var(--space-6); }
-.lend-sheet__stage { display: grid; place-items: center; padding: var(--space-6); border-radius: var(--radius-lg); background: var(--subtle); }
-.lend-sheet__visual { display: grid; width: min(100%, 14rem); aspect-ratio: 1; border-radius: var(--radius-lg); }
+/* V1.16.10: the picture is the stage, edge to edge (Earl: "the photo is not filling all the way"); no tile inside a second frame. */
+.lend-sheet__stage { display: grid; }
+.lend-sheet__visual { display: grid; width: 100%; aspect-ratio: 4 / 3; max-height: 24rem; border-radius: var(--radius-lg); }
+.lend-sheet__visual > .item-icon { max-width: 6rem; max-height: 6rem; }
+.lend-sheet__visual.photo-pedestal::before, .lend-sheet__visual.photo-pedestal::after { left: 27%; right: 27%; }
 .lend-sheet__facts { display: grid; gap: var(--space-2); }
 .lend-sheet__facts .avail { justify-content: flex-start; text-align: start; }
 .lend-sheet__facts .avail__count { font-size: var(--text-lg); }

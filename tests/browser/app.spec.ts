@@ -16,9 +16,10 @@ test("landing shows the institutional identity and current Logistics services", 
   page.on("request", (request) => { if (request.url().includes("/api/public/catalog")) catalogRequests += 1; });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Borrow equipment from the USC Department of Logistics" })).toBeVisible();
-  // LH-IP02-S02: the crest leads the header; the DOL mark sits beside it in the footer, its proportions kept.
-  await expect(page.locator(".site-header__brand .crest")).toBeVisible();
-  await expect(page.locator(".site-header__brand .mark")).toHaveCount(0);
+  // V1.16.10 (Earl, 2026-11-04, replacing LH-IP02-S02's header crest): "Department of Logistics" is led by the department's own mark;
+  // the crest stays beside it in the footer, proportions kept.
+  await expect(page.locator(".site-header__brand .mark")).toBeVisible();
+  await expect(page.locator(".site-header__brand .crest")).toHaveCount(0);
   const box = (await page.locator(".site-footer__marks .mark").boundingBox())!;
   expect(box.height).toBeGreaterThanOrEqual(32);
   await expect(page.getByRole("complementary", { name: "Logistics services" })).toBeVisible();
@@ -33,10 +34,11 @@ test("landing shows the institutional identity and current Logistics services", 
   await expect(page.locator(".shelf")).toHaveCount(0);
   expect(catalogRequests).toBe(0);
   await expect(page.getByRole("link", { name: /Browse the Lending Hub/ })).toHaveAttribute("href", "/lending");
-  // The entry card is a data-free search into the Lending Hub: a GET form to /lending and an "available now" link.
+  // The entry card is a data-free search into the Lending Hub: a GET form to /lending. Its second link goes somewhere else, Self-Service
+  // (V1.16.10, Earl: the old "available now" link "points to the same place" when nearly everything is in).
   const find = page.getByRole("search", { name: "Find equipment" });
   await expect(find).toHaveAttribute("action", "/lending");
-  await expect(find.getByRole("link", { name: /Show what is available now/ })).toHaveAttribute("href", "/lending?available=1");
+  await expect(find.getByRole("link", { name: /Use Self-Service/ })).toHaveAttribute("href", "/self-service");
   expect(catalogRequests).toBe(0);
   await find.getByRole("searchbox", { name: "Equipment name" }).fill("folding table");
   await find.getByRole("button", { name: "Search the Lending Hub" }).click();
@@ -423,21 +425,23 @@ test("administration: the owner switches Self-Service after reading what it chan
   await expect(page.getByRole("button", { name: "Remove old personal details" })).toHaveCount(0);
 });
 
-test("self-service starts dark over the campus photo, switches to light, and remembers the choice on this phone", async ({ page }) => {
+test("self-service starts light under the campus band, switches to dark, and remembers the choice on this phone", async ({ page }) => {
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r3"' }, body: JSON.stringify(selfServiceCatalog) }));
   await page.goto("/self-service");
-  await expect(page.locator(".ss-photo")).toBeVisible();
+  // V1.16.11 (Earl, 2026-11-04): light by default; the campus at dusk shows faintly through the oxblood band.
+  await expect(page.locator(".ss-band")).toBeVisible();
+  expect(await page.locator(".ss-band").evaluate((node) => getComputedStyle(node).backgroundImage)).toContain("hau-campus-dusk");
   const toggle = page.getByRole("button", { name: "Dark theme" });
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
-  await expect(page.locator("body")).toHaveAttribute("data-theme", "dark");
-  await toggle.click();
-  await expect(page.locator("body")).toHaveAttribute("data-theme", "light");
   await expect(toggle).toHaveAttribute("aria-pressed", "false");
-  await page.reload();
   await expect(page.locator("body")).toHaveAttribute("data-theme", "light");
-  // The photograph belongs to home only.
+  await toggle.click();
+  await expect(page.locator("body")).toHaveAttribute("data-theme", "dark");
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await page.reload();
+  await expect(page.locator("body")).toHaveAttribute("data-theme", "dark");
+  // The band belongs to home only.
   await page.goto("/self-service?do=take");
-  await expect(page.locator(".ss-photo")).toBeHidden();
+  await expect(page.locator(".ss-band")).toHaveCount(0);
   await page.goto("/lending");
   await expect(page.locator("body")).not.toHaveAttribute("data-theme");
 });
@@ -667,13 +671,16 @@ test("self-service shows an item's photo in the list and on its page, and the ho
     await page.goto("/self-service?do=get");
     await expect(page.locator(".ss-list--photos .item-thumb [data-item-photo]")).toHaveCount(2);
     expect(new Set(await nameLeft(page, ".ss-row__name")).size, `names line up at ${width}`).toBe(1);
-    // The decorative campus picture belongs to the home screen only (a class this feature once collided with).
-    expect(await page.locator(".ss-photo").evaluate((node) => getComputedStyle(node).display), `campus picture hidden at ${width}`).toBe("none");
+    // The decorative campus band belongs to the home screen only.
+    await expect(page.locator(".ss-band"), `campus band absent at ${width}`).toHaveCount(0);
     await page.goto("/self-service?do=item&item=ITM-0043");
     await expect(page.getByRole("heading", { level: 1, name: "Bottled Water" })).toBeVisible();
     await expect(page.locator(".ss-item__visual")).toBeVisible();
     await expect(page.locator(".ss-item__visual")).toHaveCSS("display", "grid");
-    expect(await page.locator(".ss-photo").evaluate((node) => getComputedStyle(node).display)).toBe("none");
+    // V1.16.11: the picture fills the column.
+    const [frame, column] = await Promise.all([page.locator(".ss-item__visual").boundingBox(), page.locator(".ss-item__facts").boundingBox()]);
+    expect(Math.abs(frame!.width - column!.width), `picture fills the column at ${width}`).toBeLessThan(1);
+    await expect(page.locator(".ss-band")).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `no sideways scroll at ${width}`).toBeTruthy();
     // An item without a photo shows the icon in the same frame.
     await page.goto("/self-service?do=item&item=ITM-0262");
