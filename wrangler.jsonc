@@ -6,6 +6,10 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-28",
   "observability": { "enabled": true },
+  // V1.16.9: run the Worker beside its database. Every staff answer makes two to five D1 calls in a row, and from a distant edge
+  // each one cost about 150 ms (measured 2026-11-04). Placed near D1 they are nearly free, and the visitor pays one long hop instead.
+  // Rollback: remove this block.
+  "placement": { "mode": "smart" },
   // Workers AI for ambient assist (accepted amendment 2026-10-08, src/ambient-assist.ts). Not available in local development.
   "ai": { "binding": "AI" },
   // Cloudflare Images for picture cleanup on item photos (Final Pass FP-E, src/item-cutout.ts). Cleans nothing until the owner turns

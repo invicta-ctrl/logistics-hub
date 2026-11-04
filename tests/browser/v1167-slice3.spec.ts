@@ -186,24 +186,18 @@ test("the rail: plates, one lit plate that travels to the new page, and groups t
   await expect(page.locator(".app-nav a[data-child='0']")).toBeVisible();
 });
 
-test("the two continuous lights rest while the tab is hidden, and reduced motion keeps none of them", async ({ page }) => {
+// V1.16.9 (Earl: "it stutters so bad"): the rail's glint and the live dot's breathing ran forever and cost a style pass on every
+// frame. Nothing on an idle staff page animates now; the lit plate and the live dot stay, still.
+test("an idle staff page runs no endless animation, and the lit plate and live dot stay", async ({ page }) => {
   await admin(page);
   await page.route("**/api/staff/admin/system", (route) => route.fulfill(reply(status(true))));
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/staff/admin");
   await expect(page.locator(".tag--live").first()).toBeVisible();
-  const glint = () => page.evaluate(() => {
-    const live = document.querySelector(".tag--live")!;
-    return { light: getComputedStyle(document.querySelector(".rail-lit")!, "::after").animationName, lightState: getComputedStyle(document.querySelector(".rail-lit")!, "::after").animationPlayState, dot: getComputedStyle(live, "::before").animationName, dotState: getComputedStyle(live, "::before").animationPlayState };
-  });
-  expect(await glint()).toEqual({ light: "rail-glint", lightState: "running", dot: "dot-breathe", dotState: "running" });
-  await page.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, get: () => true }); document.dispatchEvent(new Event("visibilitychange")); });
-  expect(await glint()).toEqual({ light: "rail-glint", lightState: "paused", dot: "dot-breathe", dotState: "paused" });
-
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.reload();
-  await expect(page.locator(".tag--live").first()).toBeVisible();
-  const still = await glint();
-  expect(still.light).toBe("none");
-  expect(still.dot).toBe("none");
+  await expect(page.locator(".rail-lit")).toBeVisible();
+  await page.waitForTimeout(1500);
+  const endless = await page.evaluate(() => document.getAnimations()
+    .filter((animation) => animation.playState === "running" && animation.effect?.getComputedTiming().iterations === Infinity)
+    .map((animation) => (animation as CSSAnimation).animationName ?? "unnamed"));
+  expect(endless).toEqual([]);
 });

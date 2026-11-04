@@ -32,8 +32,8 @@
 .banner { display: flex; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .banner p { margin: 0; }
 .banner ul { margin: var(--space-2) 0 0; padding-left: var(--space-5); }
-.banner--ok { border-left: 4px solid var(--ok-dot); }
-.banner--warn { border-color: var(--line-warn); border-left: 4px solid var(--warn-dot); background: var(--warn-tint); color: var(--warn-ink); }
+/* V1.16.9 (Earl): no coloured edge on a rounded box. The tone is its icon and, when it needs attention, its tint. */
+.banner--warn { border-color: var(--line-warn); background: var(--warn-tint); color: var(--warn-ink); }
 .note { padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); background: var(--subtle); color: var(--text-2); font-size: var(--text-sm); }
 .admin-actions { margin-top: var(--space-4); }
 
@@ -91,15 +91,15 @@
    ========================================================================== */
 .admin-bands > :first-child { margin-top: 0; }
 
-/* Band 1 · the verdict: one line in words, on a coloured rule. */
-.verdict { display: flex; gap: var(--space-3); margin-bottom: var(--space-8); padding: var(--space-4) var(--space-5); border: 1px solid var(--line); border-left: 4px solid var(--ok-dot); border-radius: var(--radius-lg); background: var(--surface); }
+/* Band 1 · the verdict: one line in words, led by its coloured icon. No coloured edge (V1.16.9, Earl). */
+.verdict { display: flex; gap: var(--space-3); margin-bottom: var(--space-8); padding: var(--space-4) var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 .verdict > .icon { flex: none; margin-top: calc((1lh - var(--icon-size, var(--icon-md))) / 2); color: var(--ok); }
 .verdict p { margin: 0; max-width: 70ch; color: var(--text-2); overflow-wrap: anywhere; }
 .verdict strong { color: var(--text); font-weight: 600; }
-.verdict--warn { border-color: var(--line-warn); border-left-color: var(--warn-dot); background: var(--warn-tint); }
+.verdict--warn { border-color: var(--line-warn); background: var(--warn-tint); }
 .verdict--warn > .icon { color: var(--warn); }
 .verdict--warn p, .verdict--warn strong { color: var(--warn-ink); }
-.verdict--bad { border-left-color: var(--bad-dot); }
+.verdict--bad { border-color: var(--line-bad); background: var(--bad-tint); }
 .verdict--bad > .icon { color: var(--bad); }
 
 /* Bands 2 and 3 · a plain Plex heading, and their rows on rules. */
@@ -141,12 +141,7 @@
   .setting-row__action { max-width: 100%; }
 }
 
-/* A state checked just now that holds: its dot breathes, once every 3 seconds (paused while the tab is hidden; none with reduced motion). */
-@media (prefers-reduced-motion: no-preference) {
-  .tag--live::before { animation: dot-breathe 3s ease-in-out infinite; }
-  :root.is-hidden-tab .tag--live::before { animation-play-state: paused; }
-  @keyframes dot-breathe { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(.72); } }
-}
+/* A state checked just now that holds keeps its plain dot. V1.16.9: it no longer breathes; nothing on a staff page animates while idle. */
 
 /* The section bar. On a desktop the underlined row it was, its underline one marker that slides between sections. */
 .admin-tabs { position: relative; }

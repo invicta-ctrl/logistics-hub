@@ -686,7 +686,11 @@ async function route(request: Request, env: Env, url: URL, ctx?: ExecutionContex
   const path = url.pathname;
   if (path === "/api/public/catalog") {
     // It says whether Self-Service is open (V1.16.8), so an item's sheet on the Lending Hub can offer to record it there.
-    return request.method === "GET" ? revisioned(request, env.DB, async () => ({ ...(await publicCatalog(env.DB)), selfService: await selfServiceState(env.DB) })) : json({ error: "Method not allowed." }, 405, { allow: "GET" });
+    // The catalog and the setting are read together, not one after the other (V1.16.9): each D1 call is a round trip.
+    return request.method === "GET" ? revisioned(request, env.DB, async () => {
+      const [catalog, selfService] = await Promise.all([publicCatalog(env.DB), selfServiceState(env.DB)]);
+      return { ...catalog, selfService };
+    }) : json({ error: "Method not allowed." }, 405, { allow: "GET" });
   }
   const thumb = PUBLIC_THUMB_PATH.exec(path);
   if (thumb) {
