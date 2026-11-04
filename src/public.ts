@@ -1,7 +1,8 @@
-import { CREST, MARK, type Html, animateNumber, app, categoryName, emptyState, html, icon, label, live, mount, navigate, onLeave, plural, preservingFocus, thumbImg, units, writeParams } from "./ui";
+import { CREST, MARK, type Html, animateNumber, app, categoryName, emptyState, html, icon, itemThumbnailUrl, itemVisual, label, live, mount, navigate, onLeave, ownQuery, plural, preservingFocus, sheet, sheetContent, thumbImg, units, writeParams } from "./ui";
 
 type LendingItem = { id: string; name: string; category: string; unit: string; itemType: string; available: number; audience: string; photo: string | null; iconKey?: string | null };
-type Catalog = { revision: number; items: LendingItem[]; categories: string[] };
+/** `selfService` is missing from a Worker older than V1.16.8; the sheet then offers no Self-Service link (fails closed). */
+type Catalog = { revision: number; items: LendingItem[]; categories: string[]; selfService?: "open" | "paused" };
 type Sort = "name" | "available";
 
 const USC_FACEBOOK = "https://www.facebook.com/holyangeluniversitysc";
@@ -41,10 +42,39 @@ function page(content: Html, current: "" | "home" | "lending"): void {
 
 
 /** Availability reads at a glance: plenty, the last one, or all out. */
-function availability(item: LendingItem): Html {
-  if (item.available <= 0) return html`<p class="avail avail--out"><span class="avail__label">All out</span></p>`;
-  if (item.available === 1) return html`<p class="avail avail--low"><span class="avail__count" data-count="${item.id}">1</span> <span class="avail__label">left</span></p>`;
-  return html`<p class="avail"><span class="avail__count" data-count="${item.id}">${item.available}</span> <span class="avail__label">${units(item.available, item.unit)}<span class="avail__word"> available</span></span></p>`;
+function availability(item: LendingItem, id = ""): Html {
+  const named = id ? html`id="${id}"` : "";
+  if (item.available <= 0) return html`<p class="avail avail--out" ${named}><span class="avail__label">All out</span></p>`;
+  if (item.available === 1) return html`<p class="avail avail--low" ${named}><span class="avail__count" data-count="${item.id}">1</span> <span class="avail__label">left</span></p>`;
+  return html`<p class="avail" ${named}><span class="avail__count" data-count="${item.id}">${item.available}</span> <span class="avail__label">${units(item.available, item.unit)}<span class="avail__word"> available</span></span></p>`;
+}
+
+/**
+ * An item's sheet on the Lending Hub (LH-LEND-01, accepted 2026-11-04 for V1.16.8): its picture, how many are in the office, what it
+ * is, and how to borrow or take it. While Self-Service is open and the item is not all out, it also offers to record it there, on the
+ * visitor's phone. It shows only what the public catalog already publishes: no place, borrower or return date.
+ */
+function lendingSheetBody(item: LendingItem | undefined, selfService: Catalog["selfService"]): Html {
+  if (!item) return html`<p class="lend-sheet__gone">This item is no longer on the Lending Hub.</p>`;
+  const consumable = item.itemType === "Consumable";
+  const usc = item.audience === "USC_STAFF_ONLY";
+  const recordable = selfService === "open" && item.available > 0;
+  return html`<div class="lend-sheet">
+    <div class="lend-sheet__stage">${itemVisual({ ...item, photoId: item.photo }, (id) => itemThumbnailUrl(id, "public", "detail"), "lend-sheet__visual", true)}</div>
+    <div class="lend-sheet__facts">${availability(item)}<p class="lend-sheet__what">${consumable ? "Taken and not returned." : "Borrow it and bring it back."}${usc ? " For USC use only." : ""}</p></div>
+    ${recordable ? html`<section class="lend-sheet__self" aria-labelledby="lend-self-title">
+      <h3 id="lend-self-title">At the office? Record it yourself.</h3>
+      <p>${consumable ? "Self-Service on your phone asks only for your name." : "Self-Service on your phone asks for your name, your student ID number, what it is for, and a photo of you holding the item."}</p>
+      <a class="button button--primary lend-sheet__go" href="/self-service?do=item&item=${encodeURIComponent(item.id)}" data-route>${consumable ? "Take it with Self-Service" : "Borrow it with Self-Service"} ${icon("arrow")}</a>
+    </section>` : ""}
+    <section aria-labelledby="lend-how-title">
+      <h3 class="lend-sheet__heading" id="lend-how-title">${consumable ? "How to get it" : "How to borrow it"}</h3>
+      <ol class="lend-sheet__steps">
+        <li>Come to the Logistics office.</li>
+        <li>${consumable ? "Staff record what you take." : "Staff record the loan and its return date with you."}</li>
+      </ol>
+    </section>
+  </div>`;
 }
 
 /** Only the exceptions: most items are open to students and USC staff, and are returned. */
@@ -68,24 +98,21 @@ export function landing(): void {
   page(html`<main id="main-content">
     <section class="hero" aria-labelledby="hero-title">
       <div class="container hero__inner">
-        <div class="hero__copy">
-          <h1 id="hero-title">Borrow equipment from the USC Department of Logistics</h1>
-          <p class="hero__lede">Check what is on the shelf, then borrow it in person at the Logistics office.</p>
-          <div class="hero__actions">
-            <a class="button hero__primary" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
-            <a class="text-link text-link--light hero__secondary" href="#steps-title">How borrowing works</a>
-          </div>
-        </div>
+        <p class="hero__eyebrow">University Student Council · Holy Angel University</p>
+        <h1 id="hero-title">Borrow equipment from the USC Department of Logistics</h1>
+        <p class="hero__lede">Find what you need, see how many are in the office now, and choose an item to see how to borrow it.</p>
         <form class="hero__find" action="/lending" method="get" role="search" aria-labelledby="find-title">
-          <h2 id="find-title">Find equipment</h2>
-          <p>Search the Lending Hub for what you need and see how many are in the office now.</p>
+          <h2 id="find-title" class="visually-hidden">Find equipment</h2>
           <div class="hero__field">
             ${icon("search")}
             <label class="visually-hidden" for="find-q">Equipment name</label>
             <input id="find-q" name="q" type="search" placeholder="Projector, table, extension cord…" autocomplete="off" enterkeyhint="search" data-search />
             <button type="submit" aria-label="Search the Lending Hub">${icon("arrow")}</button>
           </div>
-          <a class="hero__available" href="/lending?available=1" data-route>Show what is available now ${icon("arrow")}</a>
+          <div class="hero__actions">
+            <a class="button hero__primary" href="/lending" data-route>Browse the Lending Hub ${icon("arrow")}</a>
+            <a class="hero__available" href="/lending?available=1" data-route>Show what is available now ${icon("arrow")}</a>
+          </div>
         </form>
       </div>
     </section>
@@ -96,9 +123,9 @@ export function landing(): void {
       <div class="container">
         <h2 id="steps-title" class="section__title">How borrowing works</h2>
         <ol class="steps">
-          <li><span class="steps__n">1</span><h3>Find it here</h3><p>Search the Lending Hub and check that the item is on the shelf. Counts update as staff record stock.</p></li>
-          <li><span class="steps__n">2</span><h3>Visit the Department</h3><p>Speak with Department of Logistics staff. Loans are arranged in person; online requests are not open yet.</p></li>
-          <li><span class="steps__n">3</span><h3>Borrow and return</h3><p>Staff record the loan and its return date with you, so the next person sees accurate availability.</p></li>
+          <li><span class="steps__n">1</span><h3>Find it here</h3><p>Search the Lending Hub and choose an item to see how many are on the shelf and how to borrow it.</p></li>
+          <li><span class="steps__n">2</span><h3>Visit the Department</h3><p>Come to the Logistics office. While Self-Service is open, you can record it yourself on your phone there; online requests are not open yet.</p></li>
+          <li><span class="steps__n">3</span><h3>Borrow and return</h3><p>The loan and its return date are recorded with you, so the next person sees accurate availability.</p></li>
         </ol>
       </div>
     </section>
@@ -124,7 +151,7 @@ export function lending(): void {
         <div class="page-intro__row">
           <div>
             <h1>Lending Hub</h1>
-            <p class="page-intro__lede">What you can borrow or take, and how many are in the office now.</p>
+            <p class="page-intro__lede">What you can borrow or take, and how many are in the office now. Choose an item to see how to borrow it.</p>
           </div>
           <p class="live-status" id="live-status">Connecting…</p>
         </div>
@@ -147,6 +174,7 @@ export function lending(): void {
       <div id="lending-results" aria-busy="true">${skeletonRows(8)}</div>
       <p class="lending-note">Borrow in person at the Logistics office. Staff record the loan and return date.</p>
     </div>
+    <dialog class="sheet" id="lend-sheet" aria-labelledby="lend-sheet-title"></dialog>
   </main>`, "lending");
 
   const params = new URLSearchParams(window.location.search);
@@ -165,8 +193,51 @@ export function lending(): void {
   let before = new Map<string, number>();
   const changed = new Set<string>();
 
-  const row = (item: LendingItem) => html`<li class="catalogue__row ${changed.has(item.id) ? "is-changed" : ""}" data-key="${item.id}">${thumbImg(item)}
-    <div class="catalogue__main"><h3 class="catalogue__name">${item.name}</h3>${terms(item) ? html`<p class="catalogue__meta">${terms(item)}</p>` : ""}</div>${availability(item)}</li>`;
+  // Each row is one button, named by the item, whose target covers the row (V1.16.8): pressing it opens the item's sheet.
+  const row = (item: LendingItem) => html`<li class="catalogue__row catalogue__row--open ${changed.has(item.id) ? "is-changed" : ""}" data-key="${item.id}">${thumbImg(item)}
+    <div class="catalogue__main"><h3 class="catalogue__name"><button type="button" class="catalogue__open" data-open-item="${item.id}" aria-haspopup="dialog" aria-describedby="avail-${item.id}">${item.name}</button></h3>${terms(item) ? html`<p class="catalogue__meta">${terms(item)}</p>` : ""}</div>${availability(item, `avail-${item.id}`)}<span class="catalogue__chevron" aria-hidden="true">${icon("next")}</span></li>`;
+
+  // The open item lives in the address (?item=), so a link restores it and a phone's Back closes it. Opening adds a history entry;
+  // closing goes back over it, or drops the key when the page was loaded with it.
+  const dialog = document.querySelector<HTMLDialogElement>("#lend-sheet")!;
+  let openId: string | null = null;
+  let pushed = false;
+  let closingFromAddress = false;
+  const itemSheet = sheet(dialog, {
+    onClose: () => {
+      openId = null;
+      if (closingFromAddress) { closingFromAddress = false; return; }
+      // Leaving the page (Borrow it with Self-Service) closes the sheet too; the address is then the next page's.
+      if (window.location.pathname !== "/lending" || !new URLSearchParams(window.location.search).has("item")) return;
+      if (pushed) { pushed = false; window.history.back(); } else writeParams({ item: null });
+    }
+  });
+  const drawSheet = () => {
+    if (!openId || !catalog) return;
+    const item = catalog.items.find((entry) => entry.id === openId);
+    const body = dialog.querySelector(".sheet__body");
+    if (body) mount(body, lendingSheetBody(item, catalog.selfService));
+    else mount(dialog, sheetContent(item ? categoryName(item.category) : "Lending Hub", item?.name ?? "Item", lendingSheetBody(item, catalog.selfService), "lend-sheet-title"));
+  };
+  const showItem = (id: string, origin: Element | null) => {
+    if (!catalog) return;
+    if (!catalog.items.some((entry) => entry.id === id)) { writeParams({ item: null }); return; }
+    openId = id;
+    drawSheet();
+    if (!dialog.open) itemSheet.open(origin);
+  };
+  const fromAddress = () => {
+    const id = new URLSearchParams(window.location.search).get("item");
+    if (id && id !== openId) {
+      // Already open on another item (Forward or Back between two): the sheet stays and shows this one.
+      if (dialog.open) dialog.innerHTML = "";
+      showItem(id, results.querySelector(`[data-open-item="${CSS.escape(id)}"]`));
+    } else if (!id && dialog.open) {
+      closingFromAddress = true;
+      itemSheet.close(true);
+    }
+  };
+  ownQuery(fromAddress);
 
   const render = (reason: "filter" | "data") => {
     if (!catalog) return;
@@ -231,6 +302,14 @@ export function lending(): void {
     chips.querySelector<HTMLButtonElement>(`[data-category="${CSS.escape(category)}"]`)?.focus();
   });
   results.addEventListener("click", (event) => {
+    const open = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-open-item]");
+    if (open) {
+      const params = new URLSearchParams(window.location.search);
+      params.set("item", open.dataset.openItem!);
+      pushed = true;
+      navigate(`/lending?${params}`);
+      return;
+    }
     if (!(event.target as HTMLElement).closest("#clear-filters")) return;
     search.value = "";
     category = "";
@@ -249,6 +328,9 @@ export function lending(): void {
       if (category && !data.categories.includes(category)) category = "";
       catalog = data;
       render(first ? "filter" : "data");
+      // A link with ?item= opens its sheet once the catalog is here; an open sheet follows each poll (count, Self-Service, unlisted).
+      if (first) fromAddress();
+      else if (dialog.open) drawSheet();
     },
     onError: () => {
       if (catalog) return;

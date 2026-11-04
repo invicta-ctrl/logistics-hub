@@ -74,6 +74,7 @@ test("with every photo and optional panel failing, staff and students still do t
   const form = page.locator("#loan-form");
   await form.getByLabel("Borrower's full name").fill("Optional Borrower");
   await form.getByLabel(/Student ID number/).fill("12345678");
+  await form.getByLabel("Specific reason").fill("Class report");
   await form.locator("input[type=file]").setInputFiles("public/brand/ydd-2026-banner.jpg");
   await expect(form.getByRole("img", { name: "Photo to attach" })).toBeVisible();
   await form.locator("button[type=submit]").click();
@@ -102,6 +103,8 @@ test("with every photo and optional panel failing, staff and students still do t
   await expect.poll(() => brokenPictures(student), { message: "Self-Service shows no broken picture" }).toEqual([]);
   await identify(borrow, "Optional Student");
   await borrow.getByLabel("Tomorrow").check();
+  await borrow.getByLabel("Specific reason").fill("Class report");
+  await borrow.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await borrow.getByRole("button", { name: "Review and borrow" }).click();
   await borrow.getByRole("button", { name: "Confirm borrow" }).click();
   await expect(student.getByRole("dialog", { name: /Saved on this phone|Borrowed/ })).toBeVisible();

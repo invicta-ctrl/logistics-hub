@@ -601,6 +601,10 @@ test("lend for individual and USC use with a photo, return one damaged, and read
   await form.getByRole("button", { name: "Lend 1 piece" }).click();
   await expect(form.getByRole("alert")).toHaveText("A Student ID has digits only.");
   await form.getByLabel(/Student ID number/).fill("20000001");
+  // Individual use says what it is for too (V1.16.8).
+  await form.getByRole("button", { name: "Lend 1 piece" }).click();
+  await expect(form.getByRole("alert")).toHaveText("Enter what it will be used for.");
+  await form.getByLabel("Specific reason").fill("Class report");
   await form.getByRole("button", { name: "Lend 1 piece" }).click();
   await expect(form.getByRole("alert")).toHaveText("Add a photo of the hand-over.");
   await form.locator("input[type=file]").setInputFiles(photo);

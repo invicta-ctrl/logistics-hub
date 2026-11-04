@@ -62,6 +62,8 @@ test.describe.serial("V2 journeys", () => {
     await page.getByRole("link", { name: new RegExp(PROJECTOR) }).first().click();
     await page.getByRole("link", { name: "Borrow", exact: true }).click();
     await identify(page, "Maria Santos", "21000115");
+    await page.getByLabel("Specific reason").fill("Class report");
+    await page.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
     await page.getByRole("button", { name: "Review and borrow" }).click();
     await page.getByRole("button", { name: "Confirm borrow" }).click();
     await expect(page.locator(".ss-receipt__ref strong")).toHaveText(/^SS-/);
@@ -76,6 +78,7 @@ test.describe.serial("V2 journeys", () => {
     await page.getByRole("link", { name: /^Return/ }).click();
     await page.getByRole("link", { name: new RegExp(PROJECTOR) }).first().click();
     await attachPhoto(page);
+    await page.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
     await page.getByRole("button", { name: "Review and return" }).click();
     await page.getByRole("button", { name: "Confirm return" }).click();
     await expect(page.getByRole("heading", { name: "Return sent" })).toBeVisible();

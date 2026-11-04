@@ -91,6 +91,7 @@ test("a quantity that is not a whole number is named and never sent; the stepper
   const form = page.locator("#loan-form");
   await form.getByLabel("Borrower's full name").fill("Juan Dela Cruz");
   await form.getByLabel("Student ID number").fill("21000115");
+  await form.getByLabel("Specific reason").fill("Class report");
   await form.locator("input[type=file]").setInputFiles(PHOTO);
   await expect(form.getByRole("img", { name: "Photo to attach" })).toBeVisible();
   const quantity = form.getByLabel("Quantity");
@@ -111,19 +112,24 @@ test("a quantity that is not a whole number is named and never sent; the stepper
   await form.getByRole("button", { name: "Lend 5 pieces" }).click();
   await expect(page.getByText("Lent 5 pieces of Sample tripod to Juan Dela Cruz.")).toBeVisible();
   expect(sent).toHaveLength(1);
-  expect(sent[0]).toMatchObject({ purpose: "INDIVIDUAL", studentId: "21000115", quantity: "5" });
+  expect(sent[0]).toMatchObject({ purpose: "INDIVIDUAL", studentId: "21000115", reason: "Class report", quantity: "5" });
 });
 
 /** The fields a person can see and fill in `form`, by name, in order: the form's snapshot. */
 const shownFields = (form: Locator) => form.locator("input[name], textarea[name], select[name]").evaluateAll((fields) =>
   [...new Set(fields.filter((field) => (field as HTMLInputElement).type !== "hidden" && !field.closest("[hidden]")).map((field) => (field as HTMLInputElement).name))]);
 
-test("Individual and USC use differ only by the reason, at the desk and on the phone (§7 criterion 5)", async ({ page }) => {
+test("Individual and USC use ask the same fields, the reason included, at the desk and on the phone (§7 criterion 5, V1.16.8)", async ({ page }) => {
   await desk(page, {}, saved);
   const form = page.locator("#loan-form");
   const individual = await shownFields(form);
+  expect(individual.slice(individual.indexOf("studentId"), individual.indexOf("studentId") + 2)).toEqual(["studentId", "reason"]);
+  await form.getByLabel("Borrower's full name").fill("Juan Dela Cruz");
+  await form.getByLabel("Student ID number").fill("21000115");
+  await form.getByRole("button", { name: /^Lend/ }).click();
+  await expect(form.getByRole("alert")).toHaveText("Enter what it will be used for.");
   await form.getByRole("radio", { name: "USC use" }).check();
-  expect(await shownFields(form)).toEqual([...individual.slice(0, individual.indexOf("studentId") + 1), "reason", ...individual.slice(individual.indexOf("studentId") + 1)]);
+  expect(await shownFields(form)).toEqual(individual);
 
   await page.route("**/api/self-service/catalog", (route) => route.fulfill({ headers: { etag: '"r7"' }, json: { revision: 7, places: [], items: [{ id: "ITM-0001", name: "Sample tripod", aliases: null,
     category: "EQUIPMENT", unit: "piece", area: "Inventory", action: "BORROW", available: 5, location: null, locationId: null, audience: "STUDENTS_AND_USC_STAFF" }] } }));
@@ -134,10 +140,9 @@ test("Individual and USC use differ only by the reason, at the desk and on the p
   await expect(phone.locator("#ss-name")).toBeVisible();
   const phoneIndividual = await shownFields(phone);
   expect(phoneIndividual.slice(0, 3)).toEqual(["purpose", "name", "studentId"]);
+  expect(phoneIndividual).toContain("reason");
   await phone.getByRole("radio", { name: "USC use" }).check();
-  const phoneUsc = await shownFields(phone);
-  expect(phoneUsc.filter((name) => !phoneIndividual.includes(name))).toEqual(["reason"]);
-  expect(phoneIndividual.filter((name) => !phoneUsc.includes(name))).toEqual([]);
+  expect(await shownFields(phone)).toEqual(phoneIndividual);
 });
 
 test("a USC-only item is held to USC use at the desk (D3)", async ({ page }) => {
@@ -156,6 +161,7 @@ test("one request key lives until the server answers: a lost answer re-sends it,
   const fill = async (name: string) => {
     await form.getByLabel("Borrower's full name").fill(name);
     await form.getByLabel("Student ID number").fill("21000115");
+    await form.getByLabel("Specific reason").fill("Class report");
     await form.locator("input[type=file]").setInputFiles(PHOTO);
     await expect(form.getByRole("img", { name: "Photo to attach" })).toBeVisible();
   };
@@ -183,6 +189,7 @@ test("a retry the server answers with the details first sent is a warning, not a
   const form = page.locator("#loan-form");
   await form.getByLabel("Borrower's full name").fill("Juan Dela Cruz");
   await form.getByLabel("Student ID number").fill("21000115");
+  await form.getByLabel("Specific reason").fill("Class report");
   await form.locator("input[type=file]").setInputFiles(PHOTO);
   await form.getByRole("button", { name: "Lend 1 piece" }).click();
   await expect(form.getByRole("alert")).toContainText("you appear to be offline");

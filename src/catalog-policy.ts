@@ -405,14 +405,16 @@ export const USC_ONLY_MESSAGE = "This item is lent for USC use only.";
 /** SQLite's test for a Student ID that meets the rule above, for lists that offer only IDs a new loan would accept. */
 export const STUDENT_ID_SQL_GLOB = "[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]";
 
-export type LoanDraft = { purpose: unknown; borrowerName: unknown; studentId: unknown; reason: unknown; quantity: unknown; uscOnly?: boolean };
+/** `individualReasonOptional`: a phone record saved before V1.16.8, which could not have asked Individual use for its reason. */
+export type LoanDraft = { purpose: unknown; borrowerName: unknown; studentId: unknown; reason: unknown; quantity: unknown; uscOnly?: boolean; individualReasonOptional?: boolean };
 export type LoanField = "purpose" | "borrowerName" | "studentId" | "reason" | "quantity";
 /** The loan form's fields in the order both surfaces show them, so the first problem is the first field to fix. */
 export const LOAN_FIELDS: readonly LoanField[] = ["purpose", "borrowerName", "studentId", "reason", "quantity"];
 
 /**
  * One loan policy for the desk and the phone (V1.16.4 §4.5, D1 and D3): Individual and USC use both need a full name, an 8-digit
- * Student ID and a whole quantity; USC use adds its specific reason, and an item lent for USC use only refuses Individual use.
+ * Student ID, a whole quantity and their specific reason (Individual use too since V1.16.8, Earl), and an item lent for USC use only
+ * refuses Individual use.
  * Answers each field's problem in the words both surfaces show; an empty answer means the draft is complete. `asSent` checks the ID
  * as the Worker does (`studentIdAsSent`); a form checks what the person typed, which it normalises as they type.
  */
@@ -425,6 +427,7 @@ export function validateLoanDraft(draft: LoanDraft, quantity: WholeDomain = WHOL
   const id = (asSent ? studentIdAsSent : validateStudentId)(text(draft.studentId));
   if (id) problems.studentId = STUDENT_ID_MESSAGES[id];
   if (draft.purpose === "USC" && !text(draft.reason)) problems.reason = "Enter the specific USC reason.";
+  else if (draft.purpose === "INDIVIDUAL" && !draft.individualReasonOptional && !text(draft.reason)) problems.reason = "Enter what it will be used for.";
   const count = wholeJson(draft.quantity, quantity);
   if (!count.ok) problems.quantity = wholeMessage(count.error, "quantity", quantity);
   return problems;

@@ -380,27 +380,24 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .site-nav__link--pill { color: var(--on-dark); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 24%); }
 .site-nav :focus-visible { outline-color: var(--gold-action); }
 
-.hero { background: var(--brand); color: var(--on-dark); }
-.hero__inner { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(20rem, .85fr); align-items: center; gap: var(--space-16); padding-block: var(--space-16) 6rem; }
-.hero__copy { min-width: 0; }
-.hero h1 { max-width: 14ch; font-family: var(--serif); font-size: 4rem; font-weight: 500; letter-spacing: -.025em; line-height: 4.5rem; text-wrap: balance; overflow-wrap: anywhere; }
-.hero__lede { max-width: 44ch; margin-top: var(--space-6); color: var(--on-dark-2); font-size: 1.125rem; line-height: 1.75rem; }
-.hero__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-8); margin-top: var(--space-10); }
+/* The home page is one centred column (Earl, V1.16.8): who it is for, the promise, then the search itself, with the way into the
+   Lending Hub right under it. A faint crest-gold glow sits behind the heading; nothing moves after it settles. */
+.hero { position: relative; overflow: hidden; background: radial-gradient(60rem 28rem at 50% -6rem, rgb(232 185 60 / 14%), transparent 70%), var(--brand); color: var(--on-dark); }
+.hero__inner { display: grid; justify-items: center; gap: 0; padding-block: clamp(4rem, 9vw, 6.5rem) 7rem; text-align: center; }
+.hero__eyebrow { color: var(--gold-action); font-size: var(--text-sm); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.hero h1 { max-width: 18ch; margin-top: var(--space-4); font-family: var(--serif); font-size: 4rem; font-weight: 500; letter-spacing: -.025em; line-height: 4.5rem; text-wrap: balance; overflow-wrap: anywhere; }
+.hero__lede { max-width: 46ch; margin-top: var(--space-6); color: var(--on-dark-2); font-size: 1.125rem; line-height: 1.75rem; text-wrap: pretty; }
+.hero__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-4) var(--space-8); margin-top: var(--space-6); }
 .hero__actions .button { white-space: normal; }
 .hero .hero__primary { min-height: 3.5rem; padding-inline: var(--space-6); border-radius: 12px; background: var(--on-dark); color: var(--brand); font-size: var(--text-md); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 20%); }
 .hero .hero__primary:hover { background: #fff; box-shadow: 0 12px 28px -12px rgb(0 0 0 / 60%); transform: translateY(-1px); }
 .hero__primary .icon, .hero__available .icon { transition: transform var(--dur-2) var(--ease-settle); }
 .hero__primary:hover .icon, .hero__available:hover .icon { transform: translateX(4px); }
-.hero__secondary { min-height: 2.75rem; text-decoration-color: rgb(251 246 238 / 35%); text-underline-offset: 6px; }
-.hero__secondary:hover { text-decoration-color: var(--gold-action); }
 .hero :focus-visible { outline-color: var(--gold-action); }
 
-/* Lending Hub entry: the page's one glass surface. Data-free: it searches the Lending Hub and shows no counts. */
-.hero__find { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: var(--space-4); padding: var(--space-8); border: 1px solid rgb(255 255 255 / 16%); border-radius: var(--radius-xl); background: rgb(43 10 12 / 28%); box-shadow: 0 32px 64px -24px rgb(0 0 0 / 60%); backdrop-filter: blur(24px) saturate(1.4); transition: border-color var(--dur-2); }
-.hero__find:focus-within { border-color: rgb(232 185 60 / 45%); }
-.hero__find h2 { font-family: var(--serif); font-size: 1.75rem; font-weight: 500; letter-spacing: -.015em; line-height: 2.25rem; }
-.hero__find p { color: var(--on-dark-2); font-size: var(--text-base); line-height: 1.5rem; }
-.hero__field { display: flex; min-width: 0; height: 3.5rem; align-items: center; gap: var(--space-3); margin-top: var(--space-2); padding: 0 var(--space-1) 0 var(--space-4); border-radius: 12px; background: rgb(43 10 12 / 35%); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 10%); color: var(--on-dark-2); transition: background-color var(--dur-1), box-shadow var(--dur-2); }
+/* Lending Hub entry: the search, centred under the promise. Data-free: it searches the Lending Hub and shows no counts. */
+.hero__find { display: grid; width: min(100%, 40rem); min-width: 0; justify-items: center; margin-top: var(--space-10); }
+.hero__field { display: flex; width: 100%; min-width: 0; height: 3.75rem; align-items: center; gap: var(--space-3); padding: 0 var(--space-1) 0 var(--space-5, 1.25rem); border-radius: 14px; background: rgb(43 10 12 / 35%); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 14%), 0 24px 48px -24px rgb(0 0 0 / 55%); color: var(--on-dark-2); text-align: left; transition: background-color var(--dur-1), box-shadow var(--dur-2); }
 .hero__field:hover { background: rgb(43 10 12 / 45%); }
 .hero__field:focus-within { box-shadow: inset 0 0 0 2px var(--gold-action); }
 .hero__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; color: var(--on-dark); font-size: var(--text-md); outline: none; }
@@ -410,7 +407,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .hero__field button:hover { background: #fff; transform: translateX(2px); }
 .hero__field button:active { transform: scale(.94); }
 .hero__field button:focus-visible { outline: 2px solid var(--gold-action); outline-offset: 2px; }
-.hero__available { display: inline-flex; align-items: center; gap: var(--space-2); justify-self: start; color: var(--on-dark); font-weight: 500; text-decoration: underline; text-decoration-color: rgb(251 246 238 / 35%); text-underline-offset: 6px; transition: text-decoration-color var(--dur-1); }
+.hero__available { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--on-dark); font-weight: 500; text-decoration: underline; text-decoration-color: rgb(251 246 238 / 35%); text-underline-offset: 6px; transition: text-decoration-color var(--dur-1); }
 .hero__available:hover { text-decoration-color: var(--gold-action); }
 .hero__available .icon { --icon-size: var(--icon-sm); }
 /* A finger gets the full target on the landing's standalone link too. */
@@ -428,21 +425,22 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .hero__services a:hover { background: var(--subtle); }
 .hero__services a:hover .icon { transform: translateX(2px); }
 @media (prefers-reduced-motion: no-preference) {
-  .hero__copy > *, .hero__find { animation: hero-rise 600ms var(--ease-settle) backwards; }
-  .hero__lede { animation-delay: 80ms; }
-  .hero__actions { animation-delay: 160ms; }
-  .hero__find { animation-delay: 240ms; }
+  .hero__inner > * { animation: hero-rise 600ms var(--ease-settle) backwards; }
+  .hero h1 { animation-delay: 60ms; }
+  .hero__lede { animation-delay: 120ms; }
+  .hero__find { animation-delay: 200ms; }
 }
 @keyframes hero-rise { from { opacity: 0; transform: translateY(16px); } }
 
 
+/* How borrowing works, centred like the hero: three numbered steps, each number in a quiet ring. */
 .section { padding-block: clamp(4rem, 8vw, 6rem); }
-.section__title { font-family: var(--serif); font-size: 2.5rem; font-weight: 500; letter-spacing: -.02em; line-height: 3rem; }
-.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-12); margin-top: var(--space-12); }
-.steps li { display: grid; align-content: start; gap: var(--space-2); }
-.steps__n { margin-bottom: var(--space-2); color: var(--brand); font-family: var(--serif); font-size: 2rem; font-weight: 500; line-height: 2.5rem; }
+.section__title { font-family: var(--serif); font-size: 2.5rem; font-weight: 500; letter-spacing: -.02em; line-height: 3rem; text-align: center; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-12); max-width: 64rem; margin: var(--space-12) auto 0; }
+.steps li { display: grid; align-content: start; justify-items: center; gap: var(--space-2); text-align: center; }
+.steps__n { display: grid; width: 3rem; height: 3rem; place-items: center; margin-bottom: var(--space-2); border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface); color: var(--brand); font-family: var(--serif); font-size: 1.5rem; font-weight: 500; line-height: 1; }
 .steps h3 { font-size: 1.125rem; font-weight: 600; line-height: 1.75rem; }
-.steps p { max-width: 36ch; color: var(--text-2); font-size: var(--text-base); line-height: 1.5rem; }
+.steps p { max-width: 34ch; color: var(--text-2); font-size: var(--text-base); line-height: 1.5rem; text-wrap: pretty; }
 
 .site-footer { border-top: 1px solid var(--line); background: var(--subtle); color: var(--text-3); font-size: .875rem; }
 .site-footer__inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-6); padding-block: var(--space-10); }
@@ -513,6 +511,36 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .catalogue__meta { margin-top: .125rem; color: var(--text-3); font-size: var(--text-sm); }
 .catalogue__row.is-changed { animation: highlight 2.4s var(--ease); }
 @keyframes highlight { 0%, 20% { background: var(--highlight); } }
+/* A Lending Hub row is pressable (V1.16.8, LH-LEND-01): the item's name is the one button, and its target covers the row. A chevron
+   always shows it opens; the row lifts its fill on hover and darkens a little while pressed. */
+.catalogue__row--open { cursor: pointer; }
+.catalogue__row--open .catalogue__main { flex: 1; }
+.catalogue__open { display: inline; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.catalogue__open::after { position: absolute; inset: 0; z-index: 1; content: ""; }
+.catalogue__open:focus-visible { outline: none; }
+.catalogue__row--open:has(.catalogue__open:focus-visible) { outline: 2px solid var(--gold); outline-offset: -2px; background: var(--surface); }
+.catalogue__row--open:hover .catalogue__name { color: var(--brand); }
+.catalogue__row--open:active { background: var(--subtle); }
+.catalogue__chevron { display: grid; flex: none; place-items: center; margin-inline-start: calc(-1 * var(--space-3)); color: var(--text-3); transition: transform var(--dur-2) var(--ease), color var(--dur-2); }
+.catalogue__chevron .icon { --icon-size: 1rem; }
+.catalogue__row--open:hover .catalogue__chevron { color: var(--brand); transform: translateX(2px); }
+
+/* The item's sheet: its picture, how many and what it is, then the way to borrow it. */
+.lend-sheet { display: grid; gap: var(--space-6); }
+.lend-sheet__stage { display: grid; place-items: center; padding: var(--space-6); border-radius: var(--radius-lg); background: var(--subtle); }
+.lend-sheet__visual { display: grid; width: min(100%, 14rem); aspect-ratio: 1; border-radius: var(--radius-lg); }
+.lend-sheet__facts { display: grid; gap: var(--space-2); }
+.lend-sheet__facts .avail { justify-content: flex-start; text-align: start; }
+.lend-sheet__facts .avail__count { font-size: var(--text-lg); }
+.lend-sheet__what { color: var(--text-2); }
+.lend-sheet__self { display: grid; gap: var(--space-3); padding: var(--space-5, 1.25rem); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.lend-sheet__self h3, .lend-sheet__heading { font-size: var(--text-md); font-weight: 600; }
+.lend-sheet__self p { color: var(--text-2); }
+.lend-sheet__go { justify-self: start; min-height: var(--target); white-space: normal; }
+.lend-sheet__go .icon { transition: transform var(--dur-2) var(--ease); }
+.lend-sheet__go:hover .icon { transform: translateX(3px); }
+.lend-sheet__steps { display: grid; gap: var(--space-2); margin-top: var(--space-3); padding-inline-start: 1.25rem; color: var(--text-2); list-style: decimal; }
+.lend-sheet__gone { color: var(--text-2); }
 .avail { display: flex; flex: none; align-items: baseline; gap: var(--space-2); text-align: right; }
 .avail::before { width: .5rem; height: .5rem; flex: none; align-self: center; border-radius: 50%; background: var(--ok-dot); content: ""; }
 .avail__count { min-width: 1ch; font-size: var(--text-md); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
@@ -1091,8 +1119,9 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 /* ==========================================================================
    Quantity editor — the on-hand figure is the input
    ========================================================================== */
-.qty-editor { display: grid; gap: var(--space-2); }
-.qty-editor__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* The editor sits centred (Earl, V1.16.8): the figure between its two steps, its unit and the change it makes on lines of their own under it. */
+.qty-editor { display: grid; justify-items: center; gap: var(--space-2); text-align: center; }
+.qty-editor__row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-2) var(--space-3); }
 /* Two classes: the editor must outrank the global full-width input rule. */
 .qty-editor__row .qty-editor__input { width: 6.5ch; flex: none; min-width: 0; padding: .125rem var(--space-2); border: 1px solid transparent; border-bottom-color: var(--line-strong); border-radius: var(--radius) var(--radius) 0 0; background: transparent; color: var(--text); font-family: var(--serif); font-size: var(--text-display); font-variant-numeric: tabular-nums; line-height: 1.1; text-align: center; transition: border-color var(--dur-2), background-color var(--dur-2), box-shadow var(--dur-2); }
 .qty-editor__row .qty-editor__input:hover:not(:disabled, :focus) { border-color: var(--line-strong); background: var(--surface); }
@@ -1101,7 +1130,8 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .qty-editor__row .qty-editor__input.is-saved { border-color: var(--ok-dot); border-radius: var(--radius); background: var(--ok-tint); }
 .qty-editor__step { display: grid; width: 2.75rem; height: 2.75rem; flex: none; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface); color: var(--text-2); transition: background-color var(--dur-1), color var(--dur-1); }
 .qty-editor__step:hover:not(:disabled) { background: var(--subtle); color: var(--text); }
-.qty-editor__unit { color: var(--text-2); font-size: var(--text-base); }
+.qty-editor__unit { flex-basis: 100%; color: var(--text-2); font-size: var(--text-base); text-align: center; }
+.qty-editor__unit:empty { display: none; }
 .qty-editor__change { min-height: 1.375rem; color: var(--text-2); font-size: var(--text-base); font-variant-numeric: tabular-nums; }
 .qty-editor__change:empty { display: none; }
 .qty-editor__change strong { color: var(--text); font-weight: 600; }
@@ -1111,7 +1141,7 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .qty-editor__stale { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--warn); font-size: var(--text-sm); }
 .qty-editor__stale .icon { --icon-size: var(--icon-sm); }
 .qty-editor__details { display: grid; gap: var(--space-4); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--subtle); }
-.qty-editor__count { justify-self: start; display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+.qty-editor__count { justify-self: center; display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
 .qty-editor__count .icon { --icon-size: var(--icon-sm); }
 .qty-editor__details .form-actions { justify-content: flex-start; }
 .quantity .quantity__context { margin-top: var(--space-1); }
@@ -1306,7 +1336,7 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   .stock-layout { grid-template-columns: minmax(0, 1fr); }
   .record-home { display: none; }
   .steps { grid-template-columns: 1fr; gap: var(--space-8); }
-  .hero__inner { grid-template-columns: minmax(0, 1fr); gap: var(--space-12); padding-block: var(--space-12) 6rem; }
+  .hero__inner { padding-block: var(--space-12) 6rem; }
   .hero h1 { font-size: 3rem; line-height: 3.5rem; }
   .hero__services { grid-template-columns: minmax(0, 1fr); }
   .hero__services a + a { border-top: 1px solid var(--line); border-left: 0; }
@@ -2248,35 +2278,38 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
   .app-nav__link:not(.app-nav__child) { background: rgb(255 255 255 / 5%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 9%), 0 1px 2px rgb(20 4 6 / 38%); transition: transform 90ms var(--ease), box-shadow var(--dur-1), background-color var(--dur-1), color var(--dur-1); }
   .app-nav__link:not(.app-nav__child):hover { background: rgb(255 255 255 / 9%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 12%), 0 3px 6px rgb(20 4 6 / 42%); transform: translateY(-1px); }
   .app-nav__link:not(.app-nav__child):active { box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 0 1px rgb(20 4 6 / 50%); transform: translateY(1px); }
-  /* The current destination is lit: raised further, a shade lighter, a gold edge on its left and a warm top highlight. The light is one
-     element that travels between plates (staff-shell.ts), so the plate itself only lifts. */
+  /* The current destination is lit: raised further, a shade lighter, with a warm top highlight. The light is one element that travels
+     between plates (staff-shell.ts), so the plate itself only lifts. No gold edge or ring on a rail (Earl, 2026-11-04: it read as a
+     crescent on the rounded plate; keep it out of every rail from here on). */
   .app-nav__link[aria-current]:not(.app-nav__child) { background: transparent; box-shadow: none; color: var(--on-dark); transform: translateY(-1px); }
-  .rail-lit { position: absolute; inset: 0; z-index: -1; display: block; overflow: hidden; border-radius: inherit; background: linear-gradient(180deg, rgb(255 233 196 / 17%), rgb(255 255 255 / 10%)); box-shadow: inset 3px 0 0 var(--gold-action), inset 0 1px 0 rgb(255 226 168 / 34%), 0 5px 12px -3px rgb(20 4 6 / 58%); pointer-events: none; }
+  .rail-lit { position: absolute; inset: 0; z-index: -1; display: block; overflow: hidden; border-radius: inherit; background: linear-gradient(180deg, rgb(255 233 196 / 17%), rgb(255 255 255 / 10%)); box-shadow: inset 0 1px 0 rgb(255 226 168 / 34%), 0 5px 12px -3px rgb(20 4 6 / 58%); pointer-events: none; }
   .rail-lit::after { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgb(255 232 186 / 24%) 50%, transparent 70%); content: ""; transform: translateX(-110%); }
   .app-nav__fold:focus-visible { outline: 2px solid var(--gold-action); outline-offset: 1px; }
 }
-/* The icon rail's plates are its 40 px circles; the lit circle keeps a gold ring rather than an edge. */
-@media (min-width: 761px) and (max-width: 1180px) {
-  .rail-lit { box-shadow: inset 0 0 0 1.5px rgb(232 185 60 / 75%), inset 0 1px 0 rgb(255 226 168 / 34%), 0 5px 12px -3px rgb(20 4 6 / 58%); }
-}
-/* The wide rail folds: Circulation, Records and Manage by a chevron on their label, Items by one beside it (Items stays a link). Folded,
-   Items keeps the Low & out of stock count on itself. */
+/* The wide rail folds: Circulation, Records and Manage by a chevron on their label, Items by one inside its own plate, at its end (Items
+   stays a link; the chevron is its own button over it). The chevron points down while folded and up while open. Folded, Items keeps the
+   Low & out of stock count on itself. Folding eases out without overshoot and the rows fade as they go (V1.16.8). */
 @media (min-width: 1181px) {
   .app-nav__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
   .app-nav__head .app-nav__label { margin: 0; }
   .app-nav__head > .app-nav__fold, .app-nav__items > .app-nav__fold { display: grid; }
   .app-nav__fold { width: 1.75rem; height: 1.75rem; flex: none; place-items: center; margin-right: var(--space-1); padding: 0; border: 0; border-radius: var(--radius); background: none; color: var(--on-dark-2); cursor: pointer; transition: background-color var(--dur-1), color var(--dur-1); }
   .app-nav__fold:hover { background: rgb(255 255 255 / 9%); color: var(--on-dark); }
-  .app-nav__fold > .icon { --icon-size: 1rem; transform: rotate(90deg); transition: transform 380ms var(--spring); }
-  .app-nav__fold[aria-expanded="false"] > .icon { transform: none; }
-  .app-nav__items { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px var(--space-1); }
-  .app-nav__items > .app-nav__members { grid-column: 1 / -1; }
-  .app-nav__members { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 380ms var(--spring); }
+  .app-nav__fold > .icon { --icon-size: 1rem; transform: rotate(-90deg); transition: transform 300ms var(--ease); }
+  .app-nav__fold[aria-expanded="false"] > .icon { transform: rotate(90deg); }
+  .app-nav__items { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .app-nav__items > .app-nav__link, .app-nav__items > .app-nav__fold { grid-row: 1; grid-column: 1; }
+  .app-nav__items > .app-nav__link { padding-right: 2.75rem; }
+  .app-nav__items > .app-nav__fold { z-index: 1; align-self: center; justify-self: end; margin-right: 6px; }
+  .app-nav__items > .app-nav__fold:hover { background: rgb(255 255 255 / 12%); }
+  .app-nav__items:has(> .app-nav__link[aria-current]) > .app-nav__fold { margin-top: -2px; }
+  .app-nav__items > .app-nav__members { grid-row: 2; }
+  .app-nav__members { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 320ms var(--ease); }
   /* Room around the plates for their shadow and lift, inside the clip that folds them. */
-  .app-nav__fold-inner { display: grid; min-height: 0; gap: 4px; margin: -3px -4px; padding: 3px 4px; overflow: hidden; }
+  .app-nav__fold-inner { display: grid; min-height: 0; gap: 4px; margin: -3px -4px; padding: 3px 4px; overflow: hidden; transition: opacity 220ms var(--ease), transform 320ms var(--ease); }
   .app-nav__items .app-nav__fold-inner { margin-top: -4px; }
   .is-folded > .app-nav__members { grid-template-rows: 0fr; }
-  .is-folded > .app-nav__members > .app-nav__fold-inner { visibility: hidden; transition: visibility 0s 380ms; }
+  .is-folded > .app-nav__members > .app-nav__fold-inner { opacity: 0; transform: translateY(-6px); visibility: hidden; transition: opacity 180ms var(--ease), transform 320ms var(--ease), visibility 0s 320ms; }
   .app-nav .app-nav__items.is-folded [data-parent] .attn-slot { display: contents; }
   .app-nav .app-nav__items.is-folded [data-parent] .attn-slot:empty { display: none; }
 }

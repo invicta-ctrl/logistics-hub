@@ -97,6 +97,7 @@ test.describe("a durable write is acknowledged at once and confirmed only after 
     const form = page.locator("#loan-form");
     await form.getByLabel("Borrower's full name").fill("Held Borrower");
     await form.getByLabel(/Student ID number/).fill("12345678");
+    await form.getByLabel("Specific reason").fill("Class report");
     await form.locator("input[type=file]").setInputFiles(PHOTO);
     await expect(form.getByRole("img", { name: "Photo to attach" })).toBeVisible();
     const hold = await holdWrites(page, (url) => url.pathname.endsWith("/loans"));

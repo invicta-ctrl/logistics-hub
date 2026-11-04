@@ -1,12 +1,12 @@
 {
-  "version": "V1.16.7",
-  "sourceCommit": "f291816b4e00692299fc12b38b6b5e88cd19d2fe",
-  "record": "docs/road-to-v2/releases/v1.16.7.md",
+  "version": "V1.16.8",
+  "sourceCommit": "9e60ce79c7df6bdcac81510029325ac0c96ae6b2",
+  "record": "docs/road-to-v2/releases/v1.16.8.md",
   "changes": [
-    "An item's sheet opens on its picture, with Overview as its profile and Stock settings in Edit details. A place opens the same way, with the items kept there and its history.",
-    "Low & out of stock shows each item's picture, and every loan row shows its photo's thumbnail and opens the loan's sheet.",
-    "Self-Service is one Overview with Show all records, and each Activity entry opens in place to its full detail.",
-    "Administration's sections share one layout, and every change asks for confirmation in the same sheet.",
-    "The rail's groups fold away and are remembered on this device, and the current page is lit."
+    "Every Lending Hub item opens its own sheet with how to borrow it, and hands off to Self-Service while it is open.",
+    "Every Self-Service form shows the Data Privacy Waiver Statement and asks for consent before it can be sent.",
+    "Individual use asks what the item is for, at the desk and on the phone, like USC use.",
+    "A Self-Service return whose loan was already closed in Loans can now be cleared, and the list refreshes itself.",
+    "The home page is centred, the quantity editor is centred, and the rail's fold chevron sits inside Items with no gold edge."
   ]
 }

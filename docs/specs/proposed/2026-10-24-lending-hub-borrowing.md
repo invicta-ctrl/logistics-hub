@@ -1,6 +1,6 @@
 # Lending Hub: a way to start a borrow — proposed specification
 ID: LH-LEND-01 · revision 1
-STATUS: PROPOSED FOR OWNER ACCEPTANCE / NOT ACCEPTED / NO IMPLEMENTATION GO
+STATUS: ACCEPTED 2026-11-04 at rank 1 (A with B) and implemented in V1.16.8. The decisions and deviations are recorded in `docs/specs/accepted/2026-11-04-v1168-owner-fixes.md` §7. This file stays here as the detailed design.
 Prepared 2026-10-24 against `main` `7b4e736` (production V1.16.1, application source `03019a9`). Documentation only: this file changes no product code and does not consume a product revision (`docs/PRODUCT_VERSION_GOVERNANCE.md` §2).
 
 INTENT: Give the owner a ranked choice for letting a visitor act on an item from the public Lending Hub, and spell out the recommended slice exactly enough to build once accepted.
@@ -211,4 +211,4 @@ If online requests or reservations are pursued, their specification must decide:
 
 ## Acceptance record
 
-Not accepted. Earl accepts, amends or rejects this document on its pull request.
+Accepted by Earl on 2026-11-04, in chat with Claude: "fix the issue where i still cant select and borrow things from the landing section to the browse lending hub". It was implemented as rank 1 (A with B) in V1.16.8, with the defaults for O1–O5 and the deviations recorded in `docs/specs/accepted/2026-11-04-v1168-owner-fixes.md` §7.

@@ -1,5 +1,14 @@
 # Session Handoff — Logistics Hub
 
+## 2026-11-04 Claude — V1.16.8 owner fixes
+
+See `.codex/CURRENT.md` (2026-11-04, V1.16.8).
+
+- The contextual-help test "only one note is open at a time" became flaky once the borrow form grew its reason field.
+  - **Cause:** a locator click scrolls its target into view, and the sheet body's `scroll-padding` counts. The scroll event then reaches the page after the click and closes the note it opened (on purpose).
+  - **Fix:** the test brings both help buttons inside the padded area, then presses them by their position: 40 of 40 runs pass.
+- Scratch logs are in the worktree's gitignored `test-results/v1168/`.
+
 ## 2026-11-04 Claude release metadata
 
 See `.codex/CURRENT.md` (2026-11-04, release metadata).

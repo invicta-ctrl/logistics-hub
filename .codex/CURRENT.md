@@ -1,5 +1,28 @@
 # Current Work Pointer — Logistics Hub
 
+## 2026-11-04 Claude — V1.16.8 owner fixes, QUALIFICATION_PENDING
+
+V1.16.7 is merged and deployed (`main` `948d62c`, PR #75). The deploy was checked byte for byte; Earl's System check is still owed.
+
+Earl's eight fixes after reviewing V1.16.7 are in the worktree `.claude/worktrees/v1168`, branch `slice/v1.16.8-owner-fixes`, based on `948d62c`:
+- Spec: `docs/specs/accepted/2026-11-04-v1168-owner-fixes.md`. LH-LEND-01 (Lending Hub borrowing) is accepted at rank 1 there.
+- Record: `docs/road-to-v2/releases/v1.16.8.md`. No migration.
+- Bug fixed: a Self-Service return whose own loan was already closed now clears on confirm, without touching stock.
+- Rule: no gold edge or ring on any rail, now or later.
+
+Checks on the working tree:
+- the build and `git diff --check` pass;
+- unit tests: all pass except the known Windows-only cases;
+- the browser suite: 371 of 373 passed. Both failures are outside this change, and the place-sheet race also fails 1 in 20 on V1.16.7.
+
+Revision 2 adds the Data Privacy Waiver Statement on every Self-Service form, in Earl's words exactly.
+
+Earl's go-ahead (2026-11-04): "add this, after then proceed to merge and committ to main. prune addiotional branches."
+- Application source `9e60ce7`; `product-release.json` is V1.16.8.
+- Next: exact-head CI, CodeQL and Worker E2E on the PR, then the merge, a byte check of the deploy, pruning the merged branches, and Earl's System check.
+
+Follow-up (not in V1.16.8): reopening a place while its sheet is still closing can leave an empty dialog (`tests/browser/v1167-sheets.spec.ts:243`, flaky on V1.16.7 too).
+
 ## 2026-11-04 Claude reconciliation — one branch, one PR
 
 **Owner rule (Earl, 2026-11-04):** Claude is the sole writer on all projects until further notice. ChatGPT audits, reviews and manages. The rule is recorded in `AGENTS.md` ("Sole writer") and supersedes the Codex/Forge writer and two-lane passages.

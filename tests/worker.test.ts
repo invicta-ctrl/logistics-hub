@@ -368,7 +368,7 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
   }
   function lend(cookie: string, itemId: string, fields: Record<string, string>, photo: Uint8Array | null = JPEG) {
     const form = new FormData();
-    for (const [key, value] of Object.entries({ purpose: "INDIVIDUAL", quantity: "1", key: crypto.randomUUID(), ...fields })) form.set(key, value);
+    for (const [key, value] of Object.entries({ purpose: "INDIVIDUAL", reason: "Class report", quantity: "1", key: crypto.randomUUID(), ...fields })) form.set(key, value);
     if (photo) form.set("photo", new File([photo as BlobPart], "borrower.jpg", { type: "text/plain" }));
     return call(`/api/staff/items/${itemId}/loans`, { method: "POST", headers: { origin, cookie }, body: form });
   }
@@ -442,10 +442,18 @@ describe("Part 4 — two item types, quantity edits and internal lending", () =>
     expect(run).not.toHaveBeenCalled();
   });
 
+  it("asks Individual use for its reason at the desk too (V1.16.8)", async () => {
+    const cookie = await signIn();
+    const itemId = await lendable(cookie, 2);
+    const missing = await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "20000001", reason: "" });
+    expect([missing.status, (await missing.json() as { error: string }).error]).toEqual([400, "Enter what it will be used for."]);
+    expect((await lend(cookie, itemId, { borrowerName: "Test Borrower", studentId: "20000001", reason: "Class report" })).status).toBe(201);
+  });
+
   it("lends for USC use with a reason, and lends only active Loanable items", async () => {
     const cookie = await signIn();
     const itemId = await lendable(cookie, 2);
-    expect((await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer", studentId: "20000009" })).status).toBe(400);
+    expect((await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer", studentId: "20000009", reason: "" })).status).toBe(400);
     // USC use needs the Student ID as Individual use does (V1.16.4 D1).
     const noId = await lend(cookie, itemId, { purpose: "USC", borrowerName: "Test Officer", reason: "General assembly stage setup" });
     expect([noId.status, (await noId.json() as { error: string }).error]).toEqual([400, "Enter the Student ID number."]);

@@ -140,8 +140,9 @@ export function openLoan(loan: Loan, options: { onReturn: (loan: Loan) => void; 
 }
 
 /**
- * Form fields; `prefix` keeps IDs unique. The item comes from the caller, not the form. Individual and USC use differ only in the USC
- * reason, and the fields come in the phone's order (V1.16.4 §4.5): purpose, name, Student ID, reason, quantity, return date, photo.
+ * Form fields; `prefix` keeps IDs unique. The item comes from the caller, not the form. Both purposes ask for the specific reason
+ * (Individual use too since V1.16.8); only its example changes. The fields come in the phone's order (V1.16.4 §4.5): purpose, name,
+ * Student ID, reason, quantity, return date, photo.
  */
 export function loanFields(prefix: string): Html {
   return html`<fieldset class="segmented segmented--2"><legend class="visually-hidden">Purpose</legend>
@@ -154,7 +155,7 @@ export function loanFields(prefix: string): Html {
         <p class="field__hint" id="${prefix}-studentId-hint" aria-live="polite">8 digits</p></div>
     </div>
     <datalist id="${prefix}-known"></datalist>
-    <div class="field" data-reason hidden><label for="${prefix}-reason">Specific reason</label><textarea id="${prefix}-reason" name="reason" rows="2" maxlength="300" placeholder="What it is for, e.g. stage setup for the general assembly"></textarea></div>
+    <div class="field" data-reason><label for="${prefix}-reason">Specific reason</label><textarea id="${prefix}-reason" name="reason" rows="2" maxlength="300" placeholder="What it is for, e.g. a class report"></textarea></div>
     <div class="field-grid">
       <div class="field"><label for="${prefix}-quantity">Quantity</label>
         <div class="stepper"><button type="button" class="stepper__button" data-step="-1" aria-label="One less">${icon("minus")}</button><input id="${prefix}-quantity" name="quantity" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="1" aria-describedby="${prefix}-available" /><button type="button" class="stepper__button" data-step="1" aria-label="One more">${icon("plus")}</button></div>
@@ -221,7 +222,7 @@ export function bindLoanForm(form: HTMLFormElement, options: {
     individual.disabled = uscOnly;
     if (uscOnly && !usc.checked) { const clean = !edits?.dirty(); usc.checked = true; if (clean) edits?.reset(); }
     form.querySelector<HTMLElement>("[data-usc-only]")!.hidden = !uscOnly;
-    form.querySelector<HTMLElement>("[data-reason]")!.hidden = purpose() !== "USC";
+    reason.placeholder = purpose() === "USC" ? "What it is for, e.g. stage setup for the general assembly" : "What it is for, e.g. a class report";
     returnBy.min = officeDay();
     const available = target?.onHand ?? 0;
     const typed = parseWhole(quantity.value, WHOLE_DOMAINS.loanQuantity);
@@ -316,7 +317,7 @@ export function bindLoanForm(form: HTMLFormElement, options: {
     body.set("purpose", purpose());
     body.set("borrowerName", name.value);
     body.set("studentId", normalizeStudentId(studentId.value));
-    body.set("reason", forUsc ? reason.value : "");
+    body.set("reason", reason.value);
     body.set("quantity", String(count));
     body.set("returnBy", returnBy.value);
     if (keyItem !== null && keyItem !== target.id) key = crypto.randomUUID();

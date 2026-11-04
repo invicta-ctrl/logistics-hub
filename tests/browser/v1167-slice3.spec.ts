@@ -166,6 +166,24 @@ test("the rail: plates, one lit plate that travels to the new page, and groups t
   await expect(page.getByRole("button", { name: "Manage" })).toHaveAttribute("aria-expanded", "true");
   await page.getByRole("button", { name: "Circulation" }).click();
   await expect(page.locator(".app-nav a[href='/staff/loans']")).toBeVisible();
+
+  // V1.16.8: no gold edge or ring on the lit plate, on any rail.
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector(".rail-lit")!).boxShadow)).not.toMatch(/inset 3px 0px 0px|1\.5px/);
+  // Items' chevron sits inside the Items plate, at its end, and each press folds or opens Items.
+  const items = page.locator(".app-nav [data-parent]");
+  const chevron = page.getByRole("button", { name: "Items pages" });
+  const [plate, button] = [(await items.boundingBox())!, (await chevron.boundingBox())!];
+  expect(button.x).toBeGreaterThan(plate.x + plate.width / 2);
+  expect(button.x + button.width).toBeLessThanOrEqual(plate.x + plate.width + 1);
+  expect(button.y).toBeGreaterThanOrEqual(plate.y - 2);
+  expect(button.y + button.height).toBeLessThanOrEqual(plate.y + plate.height + 2);
+  await expect(chevron).toHaveAttribute("aria-expanded", "true");
+  await chevron.click();
+  await expect(chevron).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator(".app-nav a[data-child='0']")).toBeHidden();
+  await chevron.click();
+  await expect(chevron).toHaveAttribute("aria-expanded", "true");
+  await expect(page.locator(".app-nav a[data-child='0']")).toBeVisible();
 });
 
 test("the two continuous lights rest while the tab is hidden, and reduced motion keeps none of them", async ({ page }) => {

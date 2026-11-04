@@ -50,7 +50,7 @@ const move = (id: string, body: Record<string, unknown>) => as(one, `/api/staff/
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0]);
 function lend(itemId: string, quantity = 1) {
   const form = new FormData();
-  for (const [name, value] of Object.entries({ purpose: "INDIVIDUAL", quantity: String(quantity), key: crypto.randomUUID(), studentId: "20231234", borrowerName: "Ana Cruz", returnBy: officeDay(new Date(Date.now() + 86_400_000)) })) form.set(name, value);
+  for (const [name, value] of Object.entries({ purpose: "INDIVIDUAL", reason: "Class report", quantity: String(quantity), key: crypto.randomUUID(), studentId: "20231234", borrowerName: "Ana Cruz", returnBy: officeDay(new Date(Date.now() + 86_400_000)) })) form.set(name, value);
   form.set("photo", new File([JPEG as BlobPart], "borrower.jpg", { type: "image/jpeg" }));
   return call(`/api/staff/items/${itemId}/loans`, { method: "POST", headers: { origin, cookie: one }, body: form });
 }
