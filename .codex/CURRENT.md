@@ -1,6 +1,23 @@
 # Current Work Pointer — Logistics Hub
 
-## 2026-11-04 Claude — V1.16.9 no crescents, and speed, QUALIFICATION_PENDING
+## 2026-11-04 Claude — V1.16.10 DoL Director role, QUALIFICATION_PENDING; V1.16.11 Self-Service redesign in progress
+
+V1.16.9 is merged and deployed (PR #84, `main` `4e407ce`). The deploy is byte-checked and the timings re-measured; its record has the evidence.
+
+V1.16.10 is on branch `slice/v1.16.10-dol-director` in worktree `.claude/worktrees/v11610-role`, application source `f37c802`.
+- Spec: `docs/specs/accepted/2026-11-04-v11610-dol-director.md`.
+- Record: `docs/road-to-v2/releases/v1.16.10.md`. No migration.
+- The change: a new access group, `DOL_DIRECTOR`, with DoL Staff's access.
+- Security tier: HIGH (authorization). It needs an independent review, or Earl's accepted exception, before the merge.
+
+V1.16.11 (the Self-Service redesign) is being built on branch `slice/v1.16.11-self-service` in worktree `.claude/worktrees/v11610`, and lands after V1.16.10.
+- Earl chose: the "Counter" direction; light by default; the campus photo kept as a subtle background.
+- Also in it:
+  - the public header's logo becomes the DoL mark;
+  - the Lending Hub sheet's photo fills its stage;
+  - the hero's second link goes to Self-Service.
+
+## 2026-11-04 Claude — V1.16.9 no crescents, and speed, merged and deployed
 
 PRs #81 (V1.16.8 records) and #83 (ChatGPT's agent security-review rule in `AGENTS.md` and `CLAUDE.md`) were merged one after the other, each with a steward receipt on the PR. `main` is `83572a2`.
 

@@ -13,6 +13,7 @@ type Row = { id: string; username: string; displayName: string; role: Role; acce
 /** What each choice of role lets a person do, in the order the role menu offers them (the server decides; this only explains). */
 const ROLE_GUIDE: ReadonlyArray<{ role: string; can: string }> = [
   { role: "DoL Staff", can: "Use the Logistics Hub: items, stock, loans, Self-Service review and activity." },
+  { role: "DoL Director", can: "The same as DoL Staff, for now." },
   { role: "Other department staff and officers", can: "Sign in to their own account only. The Logistics Hub stays closed to them." },
   { role: "Owner", can: "Everything, including Administration, other owners' accounts, recovery and removing old personal details." }
 ];
@@ -20,7 +21,7 @@ const ROLE_GUIDE: ReadonlyArray<{ role: string; can: string }> = [
 /** What changing an account's role does to that person, before it is saved. */
 function roleImpact(from: Access, to: Access): string {
   if (from === to) return "";
-  const hub = (access: Access) => access === "DoL" || access === "ADMIN" || access === "OWNER";
+  const hub = (access: Access) => access === "DoL" || access === "DOL_DIRECTOR" || access === "ADMIN" || access === "OWNER";
   const admin = (access: Access) => access === "ADMIN" || access === "OWNER";
   const effects = [
     hub(from) && !hub(to) ? "They lose access to the Logistics Hub's items, stock and loans." : "",

@@ -398,6 +398,8 @@ describe("who may open the regrouped pages (§7 criterion 8, R1)", () => {
     const administration = ["/api/staff/admin/accounts", "/api/staff/admin/system", "/api/staff/admin/activity"];
     const kinds: Array<[string, string, number, number, string | undefined]> = [
       ["STAFF", one, 200, 403, undefined],
+      // V1.16.10: the DoL Director has exactly DoL Staff's access, the pages without Administration.
+      ["DoL Director", await account("ACC-DIRECTOR", "STAFF", { group: "DOL_DIRECTOR" }), 200, 403, undefined],
       ["ADMIN", await account("ACC-ADMIN", "ADMIN"), 200, 200, undefined],
       ["OWNER", await account("ACC-OWNER", "OWNER"), 200, 200, undefined],
       ["other department", await account("ACC-DEM", "STAFF", { group: "DEM" }), 403, 403, "NO_HUB_ACCESS"],
