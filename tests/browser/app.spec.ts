@@ -790,10 +790,13 @@ test("phones: Items rows keep picture, name, quantity and status; an item sheet 
   await expect(page.locator("tr[data-key=ITM-0473] .cell-place")).toBeHidden();
   // Select mode keeps each row's two lines: the checkbox sits beside the name, not under it.
   await page.getByRole("button", { name: "Select" }).click();
-  const box = (await page.locator("tr[data-key=ITM-0463] .col-select").boundingBox())!;
-  const name = (await page.locator("tr[data-key=ITM-0463] .row-link").boundingBox())!;
-  expect(box.y).toBeLessThan(name.y + name.height);
-  expect(box.x + box.width).toBeLessThanOrEqual(name.x);
+  // Rows skip layout until the browser's next frame finds them on screen (V1.16.12), so read the settled frame.
+  const beside = async () => {
+    const box = (await page.locator("tr[data-key=ITM-0463] .col-select").boundingBox())!;
+    const name = (await page.locator("tr[data-key=ITM-0463] .row-link").boundingBox())!;
+    return box.y < name.y + name.height && box.x + box.width <= name.x;
+  };
+  await expect.poll(beside).toBe(true);
   await page.getByRole("button", { name: "Select" }).click();
 
   // The cut-out's sheet: the close button keeps its corner beside a long title, and the pedestal's note is a badge that leaves the item clear.
