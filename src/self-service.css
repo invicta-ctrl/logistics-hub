@@ -349,6 +349,29 @@
 .ss-remember label { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .625rem; color: var(--text); font-size: var(--text-base); font-weight: 500; }
 .ss-remember input { width: 1.375rem; height: 1.375rem; flex: none; accent-color: var(--accent); }
 
+/* ---------- Data Privacy Waiver Statement (V1.16.8) ---------- */
+.ss-privacy { display: grid; gap: .75rem; padding: 1rem; border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--field); }
+.ss-privacy__title { display: flex; align-items: center; gap: .5rem; font-size: var(--text-base); font-weight: 600; line-height: 1.3; }
+.ss-privacy__title svg { flex: none; color: var(--accent); }
+.ss-privacy__lede { color: var(--text-2); font-size: var(--text-sm); line-height: 1.6; }
+.ss-privacy__read { min-height: 2.75rem; border-radius: 999px; }
+.ss-privacy__choice { display: grid; gap: .25rem; padding-top: .75rem; border-top: 1px solid var(--line); }
+.ss-privacy__consent { display: flex; min-height: 2.75rem; align-items: center; gap: .75rem; color: var(--text); font-weight: 500; line-height: 1.4; cursor: pointer; }
+/* A round mark, as in Earl's design, that is still a checkbox: one consent, given or not. */
+.ss-privacy__consent input { display: grid; width: 1.375rem; height: 1.375rem; flex: none; margin: 0; place-items: center; border: 2px solid var(--line-strong); border-radius: 50%; background: transparent; appearance: none; cursor: pointer; transition: border-color var(--dur-1), background-color var(--dur-1); }
+.ss-privacy__consent input::after { width: .5rem; height: .5rem; border-radius: 50%; background: var(--on-accent, var(--surface)); content: ""; transform: scale(0); transition: transform var(--dur-1) var(--ease); }
+.ss-privacy__consent input:checked { border-color: var(--accent); background: var(--accent); }
+.ss-privacy__consent input:checked::after { transform: scale(1); }
+.ss-privacy__consent input:focus-visible { outline: 2px solid var(--focus, var(--accent)); outline-offset: 3px; }
+.ss-privacy__consent input[aria-invalid="true"] { border-color: var(--danger, var(--line-strong)); }
+.ss-privacy .ss-privacy__decline { justify-self: start; min-height: 2.75rem; color: var(--text-2); font-size: var(--text-sm); font-weight: 400; text-align: left; }
+/* Waiting for consent: the button looks it, and pressing it still says what is missing (it is never truly disabled). */
+.ss-form [data-submit][data-waiting] { opacity: .55; }
+.ss-waiver__body { line-height: 1.65; }
+.ss-waiver__body section { display: grid; gap: .25rem; }
+.ss-waiver__body h3 { font-size: var(--text-base); font-weight: 600; }
+.ss-waiver__body p { color: var(--text-2); }
+
 /* ---------- Check before you send ---------- */
 .ss-confirm { display: grid; gap: 1rem; }
 .ss-confirm__title { font-family: var(--serif); font-size: var(--text-2xl); font-weight: 500; letter-spacing: -.01em; }

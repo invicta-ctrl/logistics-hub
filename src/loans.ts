@@ -48,9 +48,10 @@ export type LoanDetails = {
  * need a full name, an 8-digit Student ID and a whole quantity; USC use adds its specific reason. A refusal is the first problem in
  * the form's order, in the words both forms show (`validateLoanDraft`); the ID is checked as sent, which both forms normalise as it
  * is typed. `legacy` is a phone record made before the identity rule: it keeps the rules it was made under, so a phone that saved
- * it offline is never refused for a rule it could not have known.
+ * it offline is never refused for a rule it could not have known. For the same reason `phone` lets a phone's Individual use arrive
+ * without its reason: phones ask for it since V1.16.8, but one may still hold a borrow saved offline before that.
  */
-export function loanDetails(get: (key: string) => unknown, today: string, legacy = false): LoanDetails {
+export function loanDetails(get: (key: string) => unknown, today: string, legacy = false, phone = false): LoanDetails {
   const purposeValue = get("purpose");
   if (typeof purposeValue !== "string" || !(LOAN_PURPOSES as readonly string[]).includes(purposeValue)) throw new InputError(400, "Choose Individual use or USC use.");
   const purpose = purposeValue as LoanDetails["purpose"];
@@ -66,7 +67,7 @@ export function loanDetails(get: (key: string) => unknown, today: string, legacy
     borrowerName = cleanText(get("borrowerName"), "Borrower's full name", 120, false) ?? "";
     const typedId = cleanText(get("studentId"), "Student ID number", 30, false);
     reason = cleanText(get("reason"), "Specific reason", 300, false);
-    const problems = validateLoanDraft({ purpose, borrowerName, studentId: typedId, reason, quantity: get("quantity") }, WHOLE_DOMAINS.loanQuantity, true);
+    const problems = validateLoanDraft({ purpose, borrowerName, studentId: typedId, reason, quantity: get("quantity"), individualReasonOptional: phone }, WHOLE_DOMAINS.loanQuantity, true);
     const first = LOAN_FIELDS.find((field) => problems[field]);
     if (first) throw new InputError(400, problems[first]!);
     studentId = typedId;

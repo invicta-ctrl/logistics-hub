@@ -15,7 +15,8 @@ const STAFF = ["/staff/home", "/staff/items", "/staff/stock", "/staff/loans", "/
 /** Acronyms and file types that are written in capitals on purpose. */
 const ACRONYMS = new Set(["USC", "PWA", "CSV", "JPEG", "JPG", "PNG", "HEIC", "WEBP", "PDF", "QR", "OK", "ID", "IDS", "URL", "SKU", "AM", "PM", "HTML", "NFC", "PIN", "GPS", "UTC", "ISO", "HTTP", "HTTPS", "JSON", "HAU", "ITM", "DOL"]);
 /** Names of things that are capitalised wherever they appear. */
-const PROPER = /\b(Logistics (Hub|Catalog|Catalogue)|Lending Hub|Staff Directory|Holy Angel University|Angeles City|Student Council|Department of Logistics|DoL Staff|Open Attention|Self-Service|Angelite|Cloudflare)\b/g;
+// "Data Privacy Waiver Statement" is the title of HAU-USC's own document, kept word for word (V1.16.8, Earl, 2026-11-04).
+const PROPER = /\b(Logistics (Hub|Catalog|Catalogue)|Lending Hub|Staff Directory|Holy Angel University|Angeles City|Student Council|Department of Logistics|DoL Staff|Open Attention|Self-Service|Angelite|Cloudflare|Data Privacy Waiver Statement)\b/g;
 
 type Seen = { where: string; text: string };
 

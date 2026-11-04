@@ -685,7 +685,8 @@ async function recovery(request: Request, env: Env, url: URL): Promise<Response>
 async function route(request: Request, env: Env, url: URL, ctx?: ExecutionContext): Promise<Response> {
   const path = url.pathname;
   if (path === "/api/public/catalog") {
-    return request.method === "GET" ? revisioned(request, env.DB, () => publicCatalog(env.DB)) : json({ error: "Method not allowed." }, 405, { allow: "GET" });
+    // It says whether Self-Service is open (V1.16.8), so an item's sheet on the Lending Hub can offer to record it there.
+    return request.method === "GET" ? revisioned(request, env.DB, async () => ({ ...(await publicCatalog(env.DB)), selfService: await selfServiceState(env.DB) })) : json({ error: "Method not allowed." }, 405, { allow: "GET" });
   }
   const thumb = PUBLIC_THUMB_PATH.exec(path);
   if (thumb) {

@@ -105,6 +105,7 @@ async function take(page: Page, name: string, count: number, person: string): Pr
   await openItem(page, name, "Take");
   for (let step = 1; step < count; step += 1) await page.getByRole("button", { name: "One more" }).click();
   await asSomeone(page, person);
+  await page.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await page.getByRole("button", { name: "Review and take" }).click();
   await page.getByRole("button", { name: "Confirm take" }).click();
   // Offline it is "saved"; online it becomes "Taken" once Logistics has it. Either way the receipt is up.
@@ -173,6 +174,9 @@ test.describe.serial("offline self-service", () => {
     await expect(page.locator(".ss-who")).toContainText("Juan Dela Cruz");
     await expect(page.locator(".ss-who")).toContainText("ID 21000115");
     await attachPhoto(page);
+    // Individual use says what it is for (V1.16.8).
+    await page.getByLabel("Specific reason").fill("Class report");
+    await page.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
     await page.getByRole("button", { name: "Review and borrow" }).click();
     await expect(page.locator(".ss-summary")).toContainText("21000115");
     await expect(page.locator(".ss-summary img")).toBeVisible();
@@ -189,9 +193,11 @@ test.describe.serial("offline self-service", () => {
 
     await page.getByRole("link", { name: /^Return/ }).click();
     await page.getByRole("link", { name: /Cotton - Roll/ }).first().click();
+    await page.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
     await page.getByRole("button", { name: "Review and return" }).click();
     await expect(page.getByText("Take a photo of the item you are returning.")).toBeVisible();
     await attachPhoto(page);
+    await page.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
     await page.getByRole("button", { name: "Review and return" }).click();
     await page.getByRole("button", { name: "Confirm return" }).click();
     // Offline, nothing has been sent: the receipt says the return is saved on the phone.
@@ -279,6 +285,7 @@ test.describe.serial("offline self-service", () => {
     await openItem(page, "E2E Printer Paper", "Use");
     await expect(page.getByLabel("How many?")).toHaveCount(0);
     await asSomeone(page, "Ana Reyes");
+    await page.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
     await page.getByRole("button", { name: "Review and use" }).click();
     await page.getByRole("button", { name: "Confirm use" }).dblclick();
     await expect(page.getByRole("heading", { name: "Saved on this phone" })).toBeVisible();

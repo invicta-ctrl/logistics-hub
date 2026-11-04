@@ -539,7 +539,49 @@ function sheetFrame(kicker: string, title: string, body: Html): Html {
     <div class="sheet__body">${body}</div>`;
 }
 
-const submitButton = (text: string) => html`<button class="button button--primary button--lg button--block" type="submit" data-submit>${text}</button>`;
+/*
+ * The Data Privacy Waiver Statement (V1.16.8, Earl, 2026-11-04). Its words are Earl's document, word for word: do not edit them here
+ * without a new instruction from him. Every Self-Service record carries a name, a student ID and a photo, so every form asks for consent.
+ */
+const WAIVER_TITLE = "Data Privacy Waiver Statement";
+const WAIVER_LEDE = "By proceeding with this survey/form, you consent to the collection, processing, and use of your personal information in accordance with the Data Privacy Act of the Philippines (Republic Act No. 10173) and related regulations.";
+const WAIVER_SECTIONS: ReadonlyArray<readonly [string, string]> = [
+  ["Purpose and Scope:", "The information you provide will be collected, used, and processed only for the purpose of improving the experience of the participants, organizers, beneficiaries, partners, and concerned individuals on activities and services organized in Holy Angel University. Your data may be shared with relevant personnel or third-party service providers solely for these purposes and in line with applicable confidentiality and security measures."],
+  ["Data Collection and Use:", "The personal data we collect includes your name, contact details, and other identifiable information necessary. We are committed to using this information responsibly, and it will only be accessed by authorized personnel as necessary to fulfill the stated purpose."],
+  ["Data Protection:", "All personal data you provide will be treated with the utmost confidentiality and will be stored securely in compliance with data protection standards to prevent unauthorized access, use, or disclosure."],
+  ["Data Retention and Disposal:", "Your personal data will be retained only for as long as necessary to fulfill the purposes stated in this waiver and to comply with legal obligations. Once these purposes are met, we will securely delete or anonymize your data."]
+];
+const CONSENT_YES = "Yes. I hereby grant consent to the HAU-USC.";
+const CONSENT_NO = "No, I would not give my consent to the HAU-USC.";
+
+/** The waiver's opening words, the full statement a press away, and the consent the record needs before it can be checked. */
+const privacyBlock = () => html`<section class="ss-privacy" aria-labelledby="ss-privacy-title">
+        <h3 class="ss-privacy__title" id="ss-privacy-title">${icon("shield")}<span>${WAIVER_TITLE}</span></h3>
+        <p class="ss-privacy__lede">${WAIVER_LEDE}</p>
+        <button type="button" class="button button--secondary button--block ss-privacy__read" aria-haspopup="dialog" data-privacy-read>${icon("document")}Read full statement</button>
+        <div class="ss-privacy__choice">
+          <label class="ss-privacy__consent"><input type="checkbox" id="ss-consent" name="consent" /><span>${CONSENT_YES}</span></label>
+          <button type="button" class="text-link ss-privacy__decline" data-privacy-decline>${CONSENT_NO}</button>
+        </div>
+      </section>`;
+
+/** The whole statement in its own sheet, over the form; closing it returns to the button that opened it. */
+function openWaiver(): void {
+  if (document.querySelector("dialog.ss-waiver")) return;
+  const dialog = document.createElement("dialog");
+  dialog.className = "sheet ss-sheet ss-waiver";
+  dialog.setAttribute("aria-labelledby", "ss-waiver-title");
+  document.body.append(dialog);
+  mount(dialog, html`<header class="sheet__header"><div><p class="sheet__kicker">HAU-USC · Logistics Hub</p><h2 id="ss-waiver-title">${WAIVER_TITLE}</h2></div><button class="icon-button" type="button" aria-label="Close" data-close>${icon("close")}</button></header>
+    <div class="sheet__body ss-waiver__body">
+      <p>${WAIVER_LEDE}</p>
+      ${WAIVER_SECTIONS.map(([heading, text]) => html`<section><h3>${heading}</h3><p>${text}</p></section>`)}
+      <button type="button" class="button button--primary button--lg button--block" data-close>Close statement</button>
+    </div>`);
+  sheet(dialog, { onClose: () => queueMicrotask(() => dialog.remove()) }).open();
+}
+
+const submitButton = (text: string) => html`<button class="button button--primary button--lg button--block" type="submit" data-submit aria-describedby="ss-consent-needed" data-waiting>${text}</button><p class="visually-hidden" id="ss-consent-needed">Needs your consent to the Data Privacy Waiver Statement.</p>`;
 
 const photoPick = (text: string) => html`<button type="button" class="photo-field__pick" data-pick aria-describedby="ss-photo-label ss-photo-hint">${icon("camera")}<span>${text}</span></button>`;
 
@@ -559,6 +601,7 @@ function takeSheet(item: CatalogItem): Html {
       ${quantityField()}
       ${identityBlock("Your full name")}
       ${holdingPhoto()}
+      ${privacyBlock()}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and take")}
     </form>`);
@@ -570,6 +613,7 @@ function useSheet(item: CatalogItem): Html {
     <form class="form ss-form" data-form="USE" novalidate>
       ${identityBlock("Your full name")}
       ${holdingPhoto()}
+      ${privacyBlock()}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and use")}
     </form>`);
@@ -587,7 +631,7 @@ function borrowSheet(item: CatalogItem): Html {
         : html`<fieldset class="ss-question"><legend class="ss-legend">What is it for?</legend><div class="segmented segmented--2">
           <label><input type="radio" name="purpose" value="INDIVIDUAL" checked /><span>Individual use</span></label><label><input type="radio" name="purpose" value="USC" /><span>USC use</span></label></div></fieldset>`}
       ${identityBlock(uscOnly ? "Full name of the person using it" : "Your full name")}
-      <div class="field" data-reason ${uscOnly ? "" : "hidden"}><label for="ss-reason">Specific reason</label><textarea id="ss-reason" name="reason" rows="2" maxlength="300" placeholder="e.g. stage setup for the general assembly"></textarea></div>
+      <div class="field" data-reason><label for="ss-reason">Specific reason</label><textarea id="ss-reason" name="reason" rows="2" maxlength="300" placeholder="${uscOnly ? "e.g. stage setup for the general assembly" : "e.g. a class report"}"></textarea></div>
       ${quantityField()}
       <fieldset class="ss-choices"><legend>Return by <span class="field__optional">optional</span></legend>
         <label><input type="radio" name="returnBy" value="${day(today)}" /><span>Today</span></label>
@@ -595,6 +639,7 @@ function borrowSheet(item: CatalogItem): Html {
         <label><input type="radio" name="returnBy" value="" checked /><span>No date</span></label>
       </fieldset>
       ${holdingPhoto()}
+      ${privacyBlock()}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and borrow")}
     </form>`);
@@ -612,6 +657,7 @@ function returnSheet(loan: LocalEvent): Html {
       <div class="field" data-note hidden><label for="ss-note" data-note-label>What's damaged?</label><textarea id="ss-note" name="note" rows="2" maxlength="300"></textarea></div>
       ${identityBlock("Your full name", loanKnown(loan) ? loan.person : undefined)}
       ${photoField("Logistics staff check it before the stock is updated. Only staff can see it, and it is deleted from this phone once it is sent.", "Show the item as you hand it back.", "environment", "Take a photo of the item")}
+      ${privacyBlock()}
       <div class="form-alert" role="alert" hidden data-alert></div>
       ${submitButton("Review and return")}
     </form>`);
@@ -628,11 +674,12 @@ function summaryRows(draft: Draft, photoUrl: string | null, loan: LocalEvent | u
   if (draft.type === "TAKE") rows.push(["After this", "Nothing to return."]);
   else if (draft.type === "USE") rows.push(["After this", "Nothing is counted or returned."]);
   else if (draft.type === "BORROW") {
-    rows.push(["For", draft.purpose === "USC" ? `USC use: ${draft.reason}` : "Individual use"],
+    rows.push(["For", `${draft.purpose === "USC" ? "USC use" : "Individual use"}${draft.reason ? `: ${draft.reason}` : ""}`],
       ["Return by", draft.returnBy ? dayLabel(draft.returnBy) : "No date set. Return it from Return on this phone."]);
   } else {
     rows.push(["Borrowed", loan ? when(loan.occurredAt) : ""], ["Condition", draft.outcome === "RETURNED" ? "Good" : `${OUTCOME_WORD[draft.outcome!]}: ${draft.note}`]);
   }
+  rows.push(["Data privacy", "Consent given"]);
   return html`<dl class="ss-summary">${rows.filter(([, value]) => value !== "").map(([term, value]) => html`<div><dt>${term}</dt><dd>${value}</dd></div>`)}
       ${photoUrl ? html`<div class="ss-summary__photo"><dt>Photo proof</dt><dd><img src="${photoUrl}" alt="The photo you are sending" /></dd></div>` : ""}</dl>`;
 }
@@ -811,7 +858,15 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
   let preparing: Promise<void> | null = null;
 
   /** Keeps the form's dependent parts (labels, hints, optional fields) in step with its input. */
+  const consent = form.querySelector<HTMLInputElement>("#ss-consent")!;
+  const updateConsent = () => {
+    // Only how it looks: the button stays pressable, and pressing it names what is missing (aria-disabled would say it cannot be pressed).
+    submit.toggleAttribute("data-waiting", !consent.checked);
+    if (consent.checked) submit.removeAttribute("aria-describedby");
+    else submit.setAttribute("aria-describedby", "ss-consent-needed");
+  };
   const updateFields = () => {
+    updateConsent();
     // A figure that cannot be read yet says nothing here; Check names what is wrong with it.
     const typed = quantity ? parseWhole(quantity.value, WHOLE_DOMAINS.selfServiceQuantity) : { ok: true as const, value: 1 };
     const over = form.querySelector<HTMLElement>("[data-over]");
@@ -820,8 +875,9 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
       over.textContent = available <= 0 ? "The records show none left. If you have it in hand, record it anyway; staff will recount." : `That's more than the ${available} the records show. Staff will be asked to recount.`;
     }
     const purpose = form.querySelector<HTMLInputElement>("input[name=purpose]:checked, input[type=hidden][name=purpose]")?.value;
-    const reason = form.querySelector<HTMLElement>("[data-reason]");
-    if (reason) reason.hidden = purpose !== "USC";
+    // Both purposes ask for the reason since V1.16.8; only the example follows the purpose.
+    const reason = form.querySelector<HTMLTextAreaElement>("#ss-reason");
+    if (reason) reason.placeholder = purpose === "USC" ? "e.g. stage setup for the general assembly" : "e.g. a class report";
     const outcome = form.querySelector<HTMLInputElement>("input[name=outcome]:checked")?.value;
     const note = form.querySelector<HTMLElement>("[data-note]");
     if (note) {
@@ -854,7 +910,14 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
       navigator.vibrate?.(8);
       updateFields();
     }
-    if (target.closest("[data-change-identity]")) { revealIdentity(); form.querySelector<HTMLInputElement>("#ss-name")?.focus(); }
+    // Consent is given by a person: someone else taking over the form gives their own (Earl's prototype, 2026-11-04).
+    if (target.closest("[data-change-identity]")) { revealIdentity(); consent.checked = false; updateConsent(); form.querySelector<HTMLInputElement>("#ss-name")?.focus(); }
+    if (target.closest("[data-privacy-read]")) openWaiver();
+    if (target.closest("[data-privacy-decline]")) {
+      consent.checked = false;
+      updateConsent();
+      setMessage(alert, "Consent not given, so this can't be sent. Logistics staff can help you at the office.");
+    }
     if (target.closest("[data-pick]")) form.querySelector<HTMLInputElement>("#ss-photo")?.click();
     if (target.closest("[data-clear-photo]")) { photo = null; photoUrl = null; showPhoto(null); }
   });
@@ -901,7 +964,8 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
       // As typed: read at Check, never rounded (§4.6). A return carries the loan's own quantity.
       quantity: String(data.get("quantity") ?? loan?.quantity ?? 1),
       returnBy: String(data.get("returnBy") || "") || null,
-      remember: data.get("remember") !== null
+      remember: data.get("remember") !== null,
+      consent: data.get("consent") !== null
     };
   };
 
@@ -915,10 +979,11 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     const problem = needsIdentity && !name ? ["Please enter your full name.", "#ss-name"]
       : needsIdentity && name.split(" ").length < 2 ? ["Please enter your full name, first and last.", "#ss-name"]
       : idProblem ? [idProblem, "#ss-student"]
-      : type === "BORROW" && purpose === "USC" && !reason ? ["Say what it's for.", "#ss-reason"]
+      : type === "BORROW" && !reason ? ["Say what it's for.", "#ss-reason"]
       : !photo ? [type === "RETURN" ? "Take a photo of the item you are returning." : "Take a photo holding the item.", "[data-pick]"]
       : type === "RETURN" && outcome !== "RETURNED" && !note ? [outcome === "LOST" ? "Say what happened." : "Say what's damaged.", "#ss-note"]
-      : !counted.ok ? [counted.message, "#ss-qty"] : null;
+      : !counted.ok ? [counted.message, "#ss-qty"]
+      : !values.consent ? ["Tick “Yes” to give your consent to the Data Privacy Waiver Statement.", "#ss-consent"] : null;
     return problem as [string, string] | null;
   };
   /** Swaps the form for a summary of what will be sent, with one clear way to send it and one to edit it. */
@@ -983,7 +1048,7 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
     const target = loan ? { itemId: loan.itemId, itemName: loan.itemName, unit: loan.unit } : { itemId: item!.id, itemName: item!.name, unit: item!.unit };
     const person = loan && loanKnown(loan) && form.querySelector<HTMLElement>("[data-identity-fields]")?.hidden ? loan.person : { name, studentId };
     const draft: Draft = type === "TAKE" || type === "USE" ? { type, ...target, quantity: type === "USE" ? 1 : count, person }
-      : type === "BORROW" ? { type, ...target, quantity: count, person, purpose, ...(purpose === "USC" ? { reason } : {}), returnBy }
+      : type === "BORROW" ? { type, ...target, quantity: count, person, purpose, reason, returnBy }
       : { type, ...target, quantity: loan?.quantity ?? count, person, loanEventId: loan?.id ?? null, outcome, ...(outcome === "RETURNED" ? {} : { note }) };
     check(draft, remember);
   });

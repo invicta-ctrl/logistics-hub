@@ -98,14 +98,17 @@ describe("numbers and Student IDs (V1.16.4 §4.6)", () => {
     expect(STUDENT_ID_MESSAGES.LENGTH).toBe("A Student ID has exactly 8 digits.");
   });
 
-  it("asks the same of Individual and USC loans, apart from USC's reason", () => {
+  it("asks the same of Individual and USC loans, each with its own reason (V1.16.8)", () => {
     const base = { borrowerName: "Ana Cruz", studentId: "21000115", reason: "", quantity: "1" };
-    expect(validateLoanDraft({ ...base, purpose: "INDIVIDUAL" })).toEqual({});
+    expect(validateLoanDraft({ ...base, purpose: "INDIVIDUAL" })).toEqual({ reason: "Enter what it will be used for." });
+    expect(validateLoanDraft({ ...base, purpose: "INDIVIDUAL", reason: "Class report" })).toEqual({});
+    // A phone's borrow saved offline before V1.16.8 could not have asked for it, so the Worker still takes it without one.
+    expect(validateLoanDraft({ ...base, purpose: "INDIVIDUAL", individualReasonOptional: true })).toEqual({});
     expect(validateLoanDraft({ ...base, purpose: "USC" })).toEqual({ reason: "Enter the specific USC reason." });
     expect(validateLoanDraft({ ...base, purpose: "USC", reason: "Org fair booth" })).toEqual({});
     expect(validateLoanDraft({ ...base, purpose: "USC", reason: "Org fair booth", studentId: "" })).toEqual({ studentId: "Enter the Student ID number." });
-    expect(validateLoanDraft({ ...base, purpose: "INDIVIDUAL", uscOnly: true })).toEqual({ purpose: "This item is lent for USC use only." });
-    expect(validateLoanDraft({ ...base, purpose: "INDIVIDUAL", quantity: "1e3" })).toEqual({ quantity: "Write the quantity out in full, like 1000." });
+    expect(validateLoanDraft({ ...base, purpose: "INDIVIDUAL", reason: "Class report", uscOnly: true })).toEqual({ purpose: "This item is lent for USC use only." });
+    expect(validateLoanDraft({ ...base, purpose: "INDIVIDUAL", reason: "Class report", quantity: "1e3" })).toEqual({ quantity: "Write the quantity out in full, like 1000." });
     expect(Object.keys(validateLoanDraft({ purpose: "X", borrowerName: "", studentId: "1", reason: "", quantity: "" }))).toEqual(["purpose", "borrowerName", "studentId", "quantity"]);
     expect(LOAN_FIELDS).toEqual(["purpose", "borrowerName", "studentId", "reason", "quantity"]);
   });

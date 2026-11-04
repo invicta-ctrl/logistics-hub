@@ -185,7 +185,7 @@ export function parseEvent(raw: unknown, batch: Pick<Batch, "sentAt" | "offsetMs
     // The staff form's rules, with "today" being the day the borrow happened (for an untrusted
     // clock, the earliest day it could have happened, so the borrow is held rather than refused).
     const fields: Record<string, unknown> = { purpose: record.purpose, borrowerName: person.name, studentId: person.studentId, reason: record.reason, quantity, returnBy: record.returnBy ?? null };
-    event.loan = loanDetails((key) => fields[key], officeDay(new Date(clockIssue ? Math.min(deviceMs, receivedMs) : occurred)), !current);
+    event.loan = loanDetails((key) => fields[key], officeDay(new Date(clockIssue ? Math.min(deviceMs, receivedMs) : occurred)), !current, true);
   }
   if (type === "RETURN") {
     if (typeof record.outcome !== "string" || !(LOAN_OUTCOMES as readonly string[]).includes(record.outcome)) throw bad("Choose Good condition, Damaged or Lost.");
@@ -557,7 +557,7 @@ export async function selfServiceRecords(db: D1Database, cursor: string | null) 
 type HeldEvent = {
   id: string; type: EventType; itemId: string; quantity: number; personName: string; studentId: string | null; purpose: LoanDetails["purpose"] | null;
   reason: string | null; returnBy: string | null; outcome: typeof LOAN_OUTCOMES[number] | null; note: string | null; occurredAt: string;
-  photoKey: string | null; applied: number; review: ReviewReason | null; resolvedAt: string | null;
+  photoKey: string | null; applied: number; review: ReviewReason | null; resolvedAt: string | null; loanId: string | null;
 };
 
 /**
@@ -574,7 +574,7 @@ export async function resolveReview(db: D1Database, bucket: R2Bucket, actor: Act
   if (action !== "apply" && action !== "match" && action !== "dismiss") throw new InputError(400, "Choose Apply, Match or Dismiss.");
   const note = cleanText(record.note, "Note", 300, false);
   const event = await db.prepare(`SELECT id, event_type AS type, item_id AS itemId, quantity, person_name AS personName, student_id AS studentId, purpose, reason,
-      return_by AS returnBy, return_outcome AS outcome, note, occurred_at AS occurredAt, photo_key AS photoKey, applied, review, resolved_at AS resolvedAt
+      return_by AS returnBy, return_outcome AS outcome, note, occurred_at AS occurredAt, photo_key AS photoKey, applied, review, resolved_at AS resolvedAt, loan_id AS loanId
     FROM self_service_events WHERE id = ?`).bind(id).first<HeldEvent>();
   if (!event?.review) throw new InputError(404, "Nothing to review.");
   if (event.resolvedAt) return { resolved: true };
@@ -623,6 +623,13 @@ export async function resolveReview(db: D1Database, bucket: R2Bucket, actor: Act
   const loan = await db.prepare("SELECT item_id AS itemId, quantity, status, created_at AS createdAt FROM loans WHERE id = ?").bind(record.loanId)
     .first<{ itemId: string; quantity: number; status: string; createdAt: string }>();
   if (!loan || loan.itemId !== event.itemId) throw new InputError(400, "Choose an open loan of the same item.");
+  // The return's own loan was closed at the desk before anyone checked it (V1.16.8). Stock was settled there, so the record is only
+  // cleared, never applied again. Before this it answered 409 every time and the record could not leave the list. A loan closed while
+  // staff were deciding still answers 409 (below): the list then refreshes and shows the closed loan before anything is cleared.
+  if (loan.status !== "OUT" && event.loanId === record.loanId) {
+    await run([resolve()]);
+    return { resolved: true, alreadyClosed: true };
+  }
   if (loan.status !== "OUT") throw new InputError(409, "That loan was already closed. Refresh to see the latest.");
   if (loan.quantity !== event.quantity) throw new InputError(400, `That loan is for ${loan.quantity}, but ${event.quantity} came back. Return it from Loans and record a count instead.`);
   const at = event.occurredAt < loan.createdAt ? loan.createdAt : event.occurredAt;

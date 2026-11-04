@@ -50,7 +50,7 @@ async function loanable(name: string, quantity: number, lendingAudience = "STUDE
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16, 74, 70, 73, 70, 0]);
 function lend(itemId: string, fields: Record<string, string> = {}) {
   const form = new FormData();
-  const base = { purpose: "INDIVIDUAL", quantity: "1", key: crypto.randomUUID(), studentId: "20231234", borrowerName: "Ana Cruz", returnBy: officeDay(new Date(Date.now() + 86_400_000)) };
+  const base = { purpose: "INDIVIDUAL", reason: "Class report", quantity: "1", key: crypto.randomUUID(), studentId: "20231234", borrowerName: "Ana Cruz", returnBy: officeDay(new Date(Date.now() + 86_400_000)) };
   for (const [name, value] of Object.entries({ ...base, ...fields })) form.set(name, value);
   form.set("photo", new File([JPEG as BlobPart], "borrower.jpg", { type: "image/jpeg" }));
   return call(`/api/staff/items/${itemId}/loans`, { method: "POST", headers: { origin, cookie: cookies.STAFF! }, body: form });

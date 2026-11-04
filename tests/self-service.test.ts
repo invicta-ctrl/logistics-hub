@@ -191,11 +191,17 @@ describe("self-service catalog", () => {
     expect((await change(admin, { state: "paused" }, { origin: "https://evil.example" })).status).toBe(403);
     expect((await change(admin, { state: "maybe" })).status).toBe(400);
     expect((await call("/api/self-service/catalog")).status).toBe(200);
+    // The public catalog says whether it is open (V1.16.8), and a real change moves its tag, so the Lending Hub hears of it.
+    const open = await call("/api/public/catalog");
+    expect((await open.json() as { selfService: string }).selfService).toBe("open");
     expect(await (await change(admin, { state: "paused" })).json()).toEqual({ state: "paused" });
+    const paused = await call("/api/public/catalog", { headers: { "if-none-match": open.headers.get("etag")! } });
+    expect([paused.status, (await paused.json() as { selfService: string }).selfService]).toEqual([200, "paused"]);
     expect((await call("/api/self-service/catalog")).status).toBe(503);
     expect((await (await staff("/api/staff/session")).json() as { selfServiceClosed: boolean }).selfServiceClosed).toBe(true);
-    // The same value again changes nothing and writes no second entry.
+    // The same value again changes nothing and writes no second entry, and the public tag holds.
     await change(admin, { state: "paused" });
+    expect((await call("/api/public/catalog", { headers: { "if-none-match": paused.headers.get("etag")! } })).status).toBe(304);
     expect(await (await change(admin, { state: "open" })).json()).toEqual({ state: "open" });
     expect((await call("/api/self-service/catalog")).status).toBe(200);
     const entries = sqlite.prepare("SELECT actor_user_id AS actor, entity_type AS entity, details_json AS details FROM audit_log WHERE action = 'SETTING_CHANGED' ORDER BY created_at, rowid").all() as Array<{ actor: string; entity: string; details: string }>;
@@ -609,6 +615,22 @@ describe("staff review", () => {
     expect((await resolve(unmatched, { action: "match", loanId: first })).status).toBe(409);
     expect(loanStatus(first)).toBe("LOST");
     expect(stored(unmatched)).toMatchObject({ applied: 0, resolved_at: null });
+  });
+
+  it("clears a return whose own loan was already closed at the desk, changing no stock (V1.16.8)", async () => {
+    const { scissors, first, unmatched } = await unmatchedReturn();
+    expect((await staff(`/api/staff/loans/${first}/return`, "POST", { outcome: "RETURNED" })).status).toBe(200);
+    const shelf = onHand(scissors);
+    const cleared = await resolve(unmatched, { action: "match", loanId: first });
+    // Before V1.16.8 this answered 409 every time, so the record could never leave the list.
+    expect([cleared.status, await cleared.json()]).toEqual([200, { resolved: true, alreadyClosed: true }]);
+    expect(stored(unmatched)).toMatchObject({ applied: 0 });
+    expect(stored(unmatched)?.resolved_at).not.toBeNull();
+    expect([loanStatus(first), onHand(scissors)]).toEqual(["RETURNED", shelf]);
+    // Another closed loan is still refused: only the return's own loan is cleared this way.
+    const { first: other, unmatched: second } = await unmatchedReturn();
+    expect((await staff(`/api/staff/loans/${other}/return`, "POST", { outcome: "RETURNED" })).status).toBe(200);
+    expect((await resolve(second, { action: "match", loanId: first })).status).toBeGreaterThanOrEqual(400);
   });
 
   it("never applies a dismissed borrow, and never deletes an applied borrow's photo", async () => {

@@ -11,6 +11,7 @@ test("a full phone says it is out of space, keeps what was typed, and saves it o
   await page.goto("/self-service?do=take&item=ITM-0002");
   const sheet = page.getByRole("dialog", { name: "Bottled Water" });
   await identify(sheet, "Maria Santos");
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: /^Review/ }).click();
   const confirm = sheet.getByRole("button", { name: /^Confirm/ });
   await expect(confirm).toBeVisible();

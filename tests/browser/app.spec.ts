@@ -66,6 +66,54 @@ test("Lending Hub groups by category, filters, and keeps filters in the URL", as
   await expect(page.getByText("Cork Board")).toBeVisible();
 });
 
+test("a Lending Hub row opens the item's sheet, which says how to borrow it and hands off to Self-Service while open (V1.16.8)", async ({ page }) => {
+  let selfService: string | undefined = "open";
+  await page.route("**/api/public/catalog", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...catalog, ...(selfService ? { selfService } : {}) }) }));
+  const apiCalls: string[] = [];
+  page.on("request", (request) => { if (request.url().includes("/api/")) apiCalls.push(request.url()); });
+  await page.goto("/lending");
+  const open = page.getByRole("button", { name: "Folding Table" });
+  await expect(open).toHaveAttribute("aria-describedby", "avail-ITM-0005");
+  const before = apiCalls.length;
+  await open.click();
+  const sheet = page.getByRole("dialog", { name: "Folding Table" });
+  await expect(sheet).toBeVisible();
+  await expect(page).toHaveURL(/[?&]item=ITM-0005/);
+  await expect(sheet.getByText("3 pieces available")).toBeVisible();
+  await expect(sheet.getByRole("heading", { name: "How to borrow it" })).toBeVisible();
+  const handOff = sheet.getByRole("link", { name: /Borrow it with Self-Service/ });
+  await expect(handOff).toHaveAttribute("href", "/self-service?do=item&item=ITM-0005");
+  // It names what Self-Service will ask, including the reason every borrow now needs.
+  await expect(sheet.getByText("asks for your name, your student ID number, what it is for, and a photo", { exact: false })).toBeVisible();
+  // Opening the sheet asks the API for nothing; the picture is the only extra request.
+  expect(apiCalls.slice(before).filter((url) => !url.includes("/media/"))).toEqual([]);
+  // A phone's Back closes it and stays on the Lending Hub, and focus returns to the row.
+  await page.goBack();
+  await expect(sheet).toBeHidden();
+  await expect(page).toHaveURL(/\/lending$/);
+  await expect(open).toBeFocused();
+  // Escape closes it too; an item all out, or Self-Service paused or unknown, offers no hand-off.
+  await page.getByRole("button", { name: "Cork Board" }).click();
+  const cork = page.getByRole("dialog", { name: "Cork Board" });
+  await expect(cork.getByText("For USC use only.", { exact: false })).toBeVisible();
+  await expect(cork.getByRole("link", { name: /with Self-Service/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(cork).toBeHidden();
+  await expect(page).toHaveURL(/\/lending$/);
+  selfService = undefined;
+  await page.goto("/lending?item=ITM-0262");
+  const scissors = page.getByRole("dialog", { name: "Scissors" });
+  await expect(scissors).toBeVisible();
+  await expect(scissors.getByRole("link", { name: /with Self-Service/ })).toHaveCount(0);
+  await scissors.getByRole("button", { name: "Close" }).click();
+  await expect(page).toHaveURL(/\/lending$/);
+  // An unknown item shows the list and drops the key.
+  await page.goto("/lending?item=ITM-9999");
+  await expect(page.getByRole("button", { name: "Folding Table" })).toBeVisible();
+  await expect(page).toHaveURL(/\/lending$/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
 test("Lending Hub reserves its loading geometry until the catalog arrives", async ({ page }) => {
   let releaseCatalog: () => void = () => {};
   const delayedCatalog = new Promise<void>((resolve) => { releaseCatalog = resolve; });
@@ -190,6 +238,7 @@ test("self-service: the item decides Borrow, Take or Use, and a use asks no amou
   await expect(sheet.getByLabel("How many?")).toHaveCount(0);
   await expect(sheet.getByRole("radio")).toHaveCount(0);
   await identify(sheet, "Ana Reyes");
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: "Review and use" }).click();
   // Nothing is saved until the person has seen what will be sent and confirmed it.
   await expect(sheet.getByRole("heading", { name: "Check before you send" })).toBeFocused();
@@ -197,6 +246,7 @@ test("self-service: the item decides Borrow, Take or Use, and a use asks no amou
   await expect(sheet.locator(".ss-summary")).toContainText("21000115");
   await sheet.getByRole("button", { name: "Edit" }).click();
   await expect(sheet.getByRole("button", { name: "Review and use" })).toBeVisible();
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: "Review and use" }).click();
   await sheet.getByRole("button", { name: "Confirm use" }).click();
   const receipt = page.getByRole("dialog", { name: "Saved on this phone" });
@@ -237,6 +287,7 @@ test("self-service closed for maintenance: every address sends people to DoL sta
   // A use recorded before the office closed Self-Service waits on the phone.
   await page.goto("/self-service?do=use&item=ITM-0300");
   await identify(page.getByRole("dialog", { name: "A4 Bond Paper" }), "Ana Reyes");
+  await page.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await page.getByRole("button", { name: "Review and use" }).click();
   await page.getByRole("button", { name: "Confirm use" }).click();
   await page.getByRole("dialog", { name: "Saved on this phone" }).getByRole("button", { name: "Done" }).click();
@@ -283,6 +334,7 @@ test("administration tests a closed Self-Service in its own panel: records are t
   await panel.getByRole("link", { name: "Take", exact: true }).click();
   const sheet = panel.getByRole("dialog", { name: "Bottled Water" });
   await identify(sheet, "Owner One");
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: "Review and take" }).click();
   await sheet.getByRole("button", { name: "Confirm take" }).click();
   await expect.poll(() => sent.length).toBe(1);
@@ -737,10 +789,9 @@ test("phones: Items rows keep picture, name, quantity and status; an item sheet 
   const close = (await sheet.getByRole("button", { name: "Close" }).first().boundingBox())!;
   expect(close.y).toBeLessThan(title.y + title.height);
   expect(close.x + close.width).toBeGreaterThan(330);
-  // Since V1.16.7 the stage is the sheet's width, so the note keeps its words; it still leaves the item clear.
-  const note = (await sheet.locator(".photo-tile__note").boundingBox())!;
-  const seated = (await sheet.locator(".pedestal__item").boundingBox())!;
-  expect(note.x + note.width <= seated.x || note.y + note.height <= seated.y).toBe(true);
+  // Since V1.16.8 the pedestal shows no "Background removed" note (Earl: no need to show it); the picture says so on its own.
+  await expect(sheet.locator(".pedestal__item")).toBeVisible();
+  await expect(sheet.getByText("Background removed", { exact: true })).toHaveCount(0);
   await page.waitForTimeout(500);
   await page.screenshot({ path: "test-results/browser/phone-item-sheet.png" });
   await sheet.getByRole("button", { name: "Close" }).first().click();

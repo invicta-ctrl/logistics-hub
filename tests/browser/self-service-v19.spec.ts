@@ -99,6 +99,8 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   // Nobody is remembered yet: the fields show, and remembering is a visible choice.
   await expect(sheet.getByLabel("Remember me on this phone")).toBeChecked();
   // The first problem is said in words and the field to fix it is focused. Nothing is sent or saved.
+  // Consent is given once, first, so each problem below is the form's own (consent is checked last).
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Please enter your full name.");
   await expect(sheet.getByLabel("Your full name")).toBeFocused();
@@ -129,6 +131,10 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.getByRole("alert")).toContainText("A Student ID has exactly 8 digits.");
   await sheet.getByLabel("Student ID number").fill("21000115");
+  // Individual use asks for its reason too (V1.16.8).
+  await sheet.getByRole("button", { name: "Review and borrow" }).click();
+  await expect(sheet.getByRole("alert")).toContainText("Say what it's for.");
+  await sheet.getByLabel("Specific reason").fill("Class report");
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Take a photo holding the item.");
   await attachPhoto(page);
@@ -140,7 +146,7 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   await expect(summary).toContainText("1 × Folding Table");
   await expect(summary).toContainText("Maria Santos");
   await expect(summary).toContainText("21000115");
-  await expect(summary).toContainText("Individual use");
+  await expect(summary).toContainText("Individual use: Class report");
   await expect(summary).toContainText("Tomorrow");
   await expect(summary.getByRole("img", { name: "The photo you are sending" })).toBeVisible();
   expect(await page.evaluate(() => new Promise<number>((resolve) => { const open = indexedDB.open("logistics-hub"); open.onsuccess = () => { const count = open.result.transaction("events").objectStore("events").count(); count.onsuccess = () => resolve(count.result); }; }))).toBe(0);
@@ -167,10 +173,12 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   // Returning it: the loan is known, a photo is needed, and the check comes before the record is saved.
   await loan.getByRole("link", { name: /^Return/ }).click();
   const back = page.getByRole("dialog", { name: /Return Folding Table/ });
+  await back.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await back.getByRole("button", { name: "Review and return" }).click();
   await expect(back.getByRole("alert")).toContainText("Take a photo of the item you are returning.");
   await attachPhoto(page);
   await back.getByRole("radio", { name: "Damaged" }).check();
+  await back.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await back.getByRole("button", { name: "Review and return" }).click();
   await expect(back.getByRole("alert")).toContainText("Say what's damaged.");
   await back.getByLabel("What's damaged?").fill("Leg is loose");
@@ -181,6 +189,7 @@ test("a first borrow: the item's page, who you are, a photo, the check, then a r
   await expect(back.getByLabel("Your full name")).toHaveValue("Maria Santos");
   await expect(back.getByLabel("Remember me on this phone")).not.toBeChecked();
   await identify(back, "Pedro Reyes", "22000222");
+  await back.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await back.getByRole("button", { name: "Review and return" }).click();
   await expect(back.locator(".ss-summary")).toContainText("Damaged: Leg is loose");
   await expect(back.locator(".ss-summary")).toContainText("Pedro Reyes");
@@ -194,6 +203,7 @@ test("a remembered person shows as a card with Not you? Change, a different pers
   await page.goto("/self-service?do=take&item=ITM-0002");
   let sheet = page.getByRole("dialog", { name: "Bottled Water" });
   await identify(sheet, "Maria Santos", "21000115");
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: "Review and take" }).click();
   await sheet.getByRole("button", { name: "Confirm take" }).click();
   await page.getByRole("button", { name: "Done" }).click();
@@ -206,6 +216,7 @@ test("a remembered person shows as a card with Not you? Change, a different pers
   await expect(sheet.locator(".ss-who")).toContainText("ID 21000115");
   await expect(sheet.getByLabel("Your full name")).toBeHidden();
   // A remembered person still shows a photo every time: the card is who, the photo is the proof.
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: "Review and take" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Take a photo holding the item.");
   // Not you? The fields come back; this person is not remembered when they say so.
@@ -213,6 +224,7 @@ test("a remembered person shows as a card with Not you? Change, a different pers
   await expect(sheet.getByLabel("Your full name")).toBeFocused();
   await identify(sheet, "Pedro Reyes", "22000222");
   await sheet.getByLabel("Remember me on this phone").uncheck();
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: "Review and take" }).click();
   await expect(sheet.locator(".ss-summary")).toContainText("Pedro Reyes");
   await expect(sheet.locator(".ss-summary")).toContainText("22000222");
@@ -232,7 +244,7 @@ test("a remembered person shows as a card with Not you? Change, a different pers
 });
 
 for (const [action, item, title] of [["take", "ITM-0002", "Bottled Water"], ["use", "ITM-0003", "A4 Bond Paper"]] as const) {
-  test(`${action}: a full name, an eight-digit student ID number and a photo are each asked for, in that order, before the check`, async ({ page }) => {
+  test(`${action}: a full name, an eight-digit student ID number, a photo and consent are each asked for, in that order, before the check`, async ({ page }) => {
     await serve(page, small);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`/self-service?do=${action}&item=${item}`);
@@ -259,6 +271,10 @@ for (const [action, item, title] of [["take", "ITM-0002", "Bottled Water"], ["us
     // Nothing is saved until the check is confirmed.
     expect(await page.evaluate(() => new Promise<number>((resolve) => { const open = indexedDB.open("logistics-hub"); open.onsuccess = () => { const count = open.result.transaction("events").objectStore("events").count(); count.onsuccess = () => resolve(count.result); }; }))).toBe(0);
     await attachPhoto(sheet);
+    // Then consent to the Data Privacy Waiver Statement, last (V1.16.8).
+    await review.click();
+    await expect(sheet.getByRole("alert")).toContainText("Tick “Yes” to give your consent");
+    await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
     await review.click();
     await expect(sheet.locator(".ss-summary")).toContainText("Maria Santos");
     await expect(sheet.locator(".ss-summary")).toContainText("21000115");
@@ -281,6 +297,7 @@ test("a phone that remembers an ID that is not eight digits asks again instead o
   await expect(sheet.getByLabel("Student ID number")).toHaveValue("");
   await expect(sheet.getByLabel("Your full name")).toHaveValue("Maria Santos");
   await attachPhoto(sheet);
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: "Review and take" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Enter the Student ID number.");
 });
@@ -291,15 +308,19 @@ test("a USC-only item asks for a reason and the same identity and photo as every
   const sheet = page.getByRole("dialog", { name: "Folding Table" });
   await expect(sheet.getByLabel("Student ID number")).toHaveAttribute("required", "");
   await sheet.getByLabel("Full name of the person using it").fill("Jose Ramos");
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Enter the Student ID number.");
   await sheet.getByLabel("Student ID number").fill("21000115");
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Say what it's for.");
   await sheet.getByLabel("Specific reason").fill("Stage setup");
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.getByRole("alert")).toContainText("Take a photo holding the item.");
   await attachPhoto(sheet);
+  await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
   await sheet.getByRole("button", { name: "Review and borrow" }).click();
   await expect(sheet.locator(".ss-summary")).toContainText("USC use: Stage setup");
   await expect(sheet.locator(".ss-summary")).toContainText("21000115");
@@ -318,6 +339,76 @@ test("closing a form opened from a direct link shows the item's page and stays i
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/\/self-service\?do=item&item=ITM-0001$/);
   await expect(page.getByRole("heading", { name: "Folding Table", level: 1 })).toBeVisible();
+});
+
+/*
+ * V1.16.8 (Earl, 2026-11-04): the Data Privacy Waiver Statement, in Earl's words exactly. These are typed here from his document, not
+ * read from the source, so any change to a word fails this test.
+ */
+const WAIVER = {
+  lede: "By proceeding with this survey/form, you consent to the collection, processing, and use of your personal information in accordance with the Data Privacy Act of the Philippines (Republic Act No. 10173) and related regulations.",
+  sections: [
+    ["Purpose and Scope:", "The information you provide will be collected, used, and processed only for the purpose of improving the experience of the participants, organizers, beneficiaries, partners, and concerned individuals on activities and services organized in Holy Angel University. Your data may be shared with relevant personnel or third-party service providers solely for these purposes and in line with applicable confidentiality and security measures."],
+    ["Data Collection and Use:", "The personal data we collect includes your name, contact details, and other identifiable information necessary. We are committed to using this information responsibly, and it will only be accessed by authorized personnel as necessary to fulfill the stated purpose."],
+    ["Data Protection:", "All personal data you provide will be treated with the utmost confidentiality and will be stored securely in compliance with data protection standards to prevent unauthorized access, use, or disclosure."],
+    ["Data Retention and Disposal:", "Your personal data will be retained only for as long as necessary to fulfill the purposes stated in this waiver and to comply with legal obligations. Once these purposes are met, we will securely delete or anonymize your data."]
+  ]
+};
+
+test("the form carries the Data Privacy Waiver Statement word for word, and nothing is checked before consent is given (V1.16.8)", async ({ page }) => {
+  await serve(page, small);
+  await page.goto("/self-service?do=borrow&item=ITM-0001");
+  const sheet = page.getByRole("dialog", { name: "Folding Table" });
+  const privacy = sheet.getByRole("region", { name: "Data Privacy Waiver Statement" });
+  await expect(privacy.locator(".ss-privacy__lede")).toHaveText(WAIVER.lede);
+  const consent = privacy.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." });
+  const review = sheet.getByRole("button", { name: "Review and borrow" });
+  await expect(consent).not.toBeChecked();
+  // The button looks as if it is waiting, and says so to a screen reader, but pressing it still says what is missing.
+  await expect(review).toHaveAttribute("data-waiting", "");
+  await expect(review).toHaveAccessibleDescription("Needs your consent to the Data Privacy Waiver Statement.");
+  await sheet.getByLabel("Your full name").fill("Maria Santos");
+  await sheet.getByLabel("Student ID number").fill("21000115");
+  await sheet.getByLabel("Specific reason").fill("Class report");
+  await attachPhoto(page);
+  await review.click();
+  await expect(sheet.getByRole("alert")).toContainText("Tick “Yes” to give your consent to the Data Privacy Waiver Statement.");
+  await expect(consent).toBeFocused();
+  await expect(sheet.getByRole("heading", { name: "Check before you send" })).toHaveCount(0);
+
+  // The full statement opens over the form, word for word, and closing it leaves the form as it was.
+  const read = privacy.getByRole("button", { name: "Read full statement" });
+  await read.click();
+  const statement = page.getByRole("dialog", { name: "Data Privacy Waiver Statement" });
+  await expect(statement).toBeVisible();
+  const paragraphs = statement.locator(".sheet__body p");
+  await expect(paragraphs).toHaveText([WAIVER.lede, ...WAIVER.sections.map(([, text]) => text)]);
+  await expect(statement.locator(".sheet__body h3")).toHaveText(WAIVER.sections.map(([heading]) => heading));
+  await statement.getByRole("button", { name: "Close statement" }).click();
+  await expect(statement).toHaveCount(0);
+  await expect(read).toBeFocused();
+  await expect(sheet.getByLabel("Specific reason")).toHaveValue("Class report");
+  // Escape closes the statement only, never the form under it.
+  await read.click();
+  await expect(statement).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(statement).toHaveCount(0);
+  await expect(sheet).toBeVisible();
+
+  // No takes consent back.
+  await consent.check();
+  await expect(review).not.toHaveAttribute("data-waiting");
+  await expect(review).toHaveAccessibleDescription("");
+  await privacy.getByRole("button", { name: "No, I would not give my consent to the HAU-USC." }).click();
+  await expect(consent).not.toBeChecked();
+  await expect(review).toHaveAttribute("data-waiting", "");
+  await expect(sheet.getByRole("alert")).toContainText("Consent not given, so this can't be sent.");
+
+  // With consent, the check says it was given.
+  await consent.check();
+  await review.click();
+  await expect(sheet.getByRole("heading", { name: "Check before you send" })).toBeFocused();
+  await expect(sheet.locator(".ss-summary")).toContainText("Data privacyConsent given");
 });
 
 test.describe("contextual help", () => {
@@ -400,15 +491,29 @@ test.describe("contextual help", () => {
     const sheet = await open(page);
     // A tall screen keeps both in view: scrolling a sheet closes an open note on purpose.
     await page.setViewportSize({ width: 820, height: 1600 });
-    // The resize and any scroll reach the page on its next frames; a note opened before them would close again.
-    const settled = () => page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
     const student = sheet.getByRole("button", { name: "About the student ID" });
     const photo = sheet.getByRole("button", { name: "About the photo" });
-    await student.scrollIntoViewIfNeeded();
-    await settled();
-    await student.click();
+    // Since V1.16.8 Individual use shows its reason field, so the form is taller than the sheet. Both buttons must be inside the
+    // sheet body before the first press, so neither press has to scroll the body: scrolling closes an open note on purpose.
+    // The sheet can still settle its own scroll while it draws, so this waits until both stay in view across two frames.
+    const bothInView = () => sheet.evaluate(async (dialog) => {
+      const body = dialog.querySelector<HTMLElement>(".sheet__body")!;
+      const rect = (label: string) => dialog.querySelector<HTMLElement>(`[aria-label="${label}"]`)!.getBoundingClientRect();
+      // In view means inside the body's scroll padding too: a press or a focus scrolls anything that sits in that band.
+      const pad = getComputedStyle(body), above = parseFloat(pad.scrollPaddingTop) + 8, below = parseFloat(pad.scrollPaddingBottom) + 8;
+      const fits = () => { const frame = body.getBoundingClientRect(), top = rect("About the student ID"), end = rect("About the photo");
+        return top.top >= frame.top + above && end.bottom <= frame.bottom - below; };
+      if (!fits()) body.scrollTop += rect("About the student ID").top - body.getBoundingClientRect().top - above - 8;
+      await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+      return fits();
+    });
+    await expect.poll(bothInView).toBe(true);
+    await expect.poll(bothInView).toBe(true);
+    // Pressed where they are, like a person would: a locator click may scroll its target first, and that scroll closes the note.
+    const press = async (button: typeof student) => { const box = (await button.boundingBox())!; await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); };
+    await press(student);
     await expect(sheet.locator(".help__note")).toContainText("Logistics keeps a record");
-    await photo.click();
+    await press(photo);
     await expect(sheet.locator(".help__note")).toHaveCount(1);
     await expect(sheet.locator(".help__note")).toContainText("Only Logistics staff can see it");
   });
@@ -454,6 +559,7 @@ for (const { result, heading, mark, line } of RECEIPTS) {
     await page.goto("/self-service?do=take&item=ITM-0002");
     const sheet = page.getByRole("dialog", { name: "Bottled Water" });
     await identify(sheet, "Maria Santos");
+    await sheet.getByRole("checkbox", { name: "Yes. I hereby grant consent to the HAU-USC." }).check();
     await sheet.getByRole("button", { name: "Review and take" }).click();
     await sheet.getByRole("button", { name: "Confirm take" }).click();
 

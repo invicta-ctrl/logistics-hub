@@ -71,6 +71,13 @@ function actions(entry: Entry, candidates: Candidate[]): Html {
   }
   if (entry.review === "RETURN_CHECK" && entry.loanId) {
     const loan = candidates.find((candidate) => candidate.id === entry.loanId);
+    // Candidates hold every open loan of the item, so a missing one was closed in Loans already (V1.16.8): stock is settled there, and
+    // the record is only cleared. Confirming it used to be refused every time, so it could never leave this list.
+    if (!loan) {
+      return html`<p class="review-card__why">This loan was already closed in Loans, so its stock is already up to date. Mark this checked to clear it; nothing else changes.</p>
+        <input type="hidden" name="loanId" value="${entry.loanId}" />
+        ${note}<div class="review-card__buttons"><button type="button" class="button button--primary button--sm" data-act="match">Mark checked</button>${photo}</div>`;
+    }
     return html`${entry.hasPhoto ? html`<img class="review-card__photo" loading="lazy" src="/api/staff/self-service/${entry.id}/photo" alt="Photo sent with the return of ${entry.itemName}" />` : ""}
       ${loan ? html`<p class="field__hint">Borrowed by ${loan.borrowerName}${loan.studentId ? ` (${loan.studentId})` : ""}, ${formatDateTime(loan.createdAt)}.</p>` : ""}
       <input type="hidden" name="loanId" value="${entry.loanId}" />
@@ -330,13 +337,15 @@ export async function selfServiceReview(): Promise<void> {
     if (action === "match" && !values.get("loanId")) { toast("Choose the loan it belongs to first.", "error"); form.querySelector<HTMLSelectElement>("select")?.focus(); return; }
     button.disabled = true;
     try {
-      await api(`/api/staff/self-service/${form.dataset.entry}/resolve`, { method: "POST", body: JSON.stringify({ action, note: values.get("note") || null, ...(action === "match" ? { loanId: values.get("loanId") } : {}) }) });
+      const done = await api<{ alreadyClosed?: boolean }>(`/api/staff/self-service/${form.dataset.entry}/resolve`, { method: "POST", body: JSON.stringify({ action, note: values.get("note") || null, ...(action === "match" ? { loanId: values.get("loanId") } : {}) }) });
       held.delete(form.dataset.entry!);
-      toast(action === "apply" ? "Applied." : action === "match" ? "Confirmed: the loan is closed." : "Marked as checked.");
+      toast(done?.alreadyClosed ? "Checked. The loan was already closed in Loans, so stock was not changed again." : action === "apply" ? "Applied." : action === "match" ? "Confirmed: the loan is closed." : "Marked as checked.");
       await poll.refresh();
     } catch (error) {
       button.disabled = false;
       toast(failure(error), "error");
+      // Someone else changed it (409): show the list as it is now instead of leaving the old card in place.
+      if ((error as { status?: number }).status === 409) await poll.refresh().catch(() => undefined);
     }
   });
   const afterPrint = () => document.body.classList.remove("printing-poster");
