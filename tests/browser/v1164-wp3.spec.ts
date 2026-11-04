@@ -321,9 +321,9 @@ test.describe("the sheet's pictures (§4.4)", () => {
     const stage = sheet.getByRole("button", { name: /^Add photo or choose an icon/ });
     await expect(stage).toBeVisible();
     await expect(stage).toContainText("Add photo");
-    const box = (await stage.boundingBox())!;
-    const plate = (await sheet.locator("#photo-panel").boundingBox())!;
-    expect(box.width).toBeGreaterThan(plate.width - 20);
+    // Measured once the sheet has finished opening: a slow machine can catch the stage mid-way through the sheet's entrance.
+    const plate = sheet.locator("#photo-panel");
+    await expect.poll(async () => (await stage.boundingBox())!.width - (await plate.boundingBox())!.width).toBeGreaterThan(-20);
     await expect(sheet.getByLabel("Quantity on hand")).toBeInViewport();
     await expect(sheet.locator(".profile__next")).toBeInViewport();
   });
