@@ -13,10 +13,11 @@ Authority: Earl current instruction -> accepted spec/amendment -> verified repos
 
 Earl, 2026-11-04: "for all current, past, and future projects. claude will be the sole writer until further notice. chatgpt will remain auditor, reviewer, and manager."
 
-- **Claude:** the only writer, until Earl says otherwise. It holds the writer lock and makes every change, branch, commit and PR, and it is the integration steward.
-- **ChatGPT:** audits, reviews and manages, and does not write to the repository.
-- **Codex and Forge:** no longer write. Where this file or another record names them as a writer, steward or writer lane, that is superseded.
-- **The two-lane exception:** suspended. There is one writer and one work branch.
+**Earl's clarification, 2026-11-04:** Claude retains the sole *standing* implementation-writer role and is the integration steward. ChatGPT may make expressly owner-authorized, scoped repository edits; this does not give ChatGPT an independent feature lane or grant Codex/Forge write authority.
+- **Claude:** default implementation writer and integration steward; owns the active feature branch/lock and serial integration.
+- **ChatGPT:** auditor, reviewer and manager; may write only when Earl expressly authorizes the scope, after verifying the writer lock, branch and file ownership. Coordinate shared paths; an owner-authorized policy-only PR may use a temporary separate branch but must integrate serially.
+- **Codex and Forge:** read-only; historical writer/lane assignments are superseded.
+- **The two-lane implementation exception:** suspended. One active implementation writer and work branch; no overlapping writes.
 - **Unchanged:** the authority chain above, the per-action owner authorization for pushes, merges, deploys and migrations, and every release gate.
 
 Documentation map: `docs/DOCUMENTATION_STATUS.md`. `.codex/CURRENT.md` and `.codex/SESSION_HANDOFF.md` are the **only live task pointers**; historical Part briefs, older `proposed` drafts, and old release plans must never restart a closed task. Preserve accepted specs, release/migration evidence and rollback provenance. The retired Road-to-V2 multi-branch runner is not active.
@@ -44,6 +45,8 @@ Maintain the repository-root `CHANGELOG.md` as a concise, chronological index of
 
 ## Non-negotiables
 
+**Historical two-lane and Codex-writer bullets below are superseded by the current sole-standing-writer rule above; do not reactivate them.**
+
 - Codex's existing writable/local-preview worktree remains `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`. A second isolated writable Claude UI worktree is permitted **only** under `docs/specs/accepted/2026-10-14-isolated-agent-worktrees.md` and an accepted bounded UI slice.
 - Approved MausBot Scout, Oracle, Sentinel, and Harbor worktrees are detached/read-only specialist worktrees under the accepted MausBot amendment.
 - Default: one project writer. **Accepted two-lane exception:** Codex and Claude may write concurrently on distinct Git worktrees/short-lived branches **only** with disjoint file-level ownership, accepted separate tasks, per-worktree locks and one serial integration steward; at most two writers account-wide. Unproven isolation falls back to one writer. Read-only review can always run. See the isolated-agent-worktrees amendment.
@@ -60,6 +63,18 @@ Maintain the repository-root `CHANGELOG.md` as a concise, chronological index of
 - HTML5/CSS/TypeScript-first. No SPA framework without accepted amendment.
 - Production/provider writes require explicit target/authority and rollback controls.
 - Production preparation for a release (an R2 bucket, a D1 migration) runs only through the Cloud Operations lane: the GitHub `production` environment, `.github/workflows/production-ops.yml` and `ops/releases/<release>.json` (`docs/specs/accepted/2026-10-02-cloud-operations-amendment.md`). Never from a PC, never on a push.
+
+## Mandatory agent-operated security review before main (owner rule, 2026-11-04)
+
+Every agent that writes, reviews, audits, qualifies or recommends changes must complete an applicable security review of the **entire final diff at the exact proposed HEAD** before calling a PR merge-ready or merging it. This is an **agent obligation**, independent of GitHub branch-protection settings. Reuse the baseline slice gates in `.agents/PROJECT_POLICY.md` and record evidence in the existing PR, release record or handoff; do not create a duplicate checklist.
+
+1. **Classify the highest applicable risk:** LOW = documentation-only; STANDARD = ordinary application/config/dependency changes; HIGH = changes to authentication, roles, sessions, privacy/consent, secrets, stock/borrowing mutations, D1/R2 data, migrations, deployment, or security/release controls. Mixed changes use the highest tier.
+2. **Inspect the changed trust boundaries:** credentials/PII in code, API responses, logs and artifacts; authorization/object ownership and cross-user access; session, CSRF/CORS and input validation; dependency and CI supply-chain changes; transaction/audit integrity and failure recovery. Mark genuinely irrelevant items N/A.
+3. **Verify applicable checks on the final candidate:** build/typecheck, focused tests, privacy/secret scan, CI and CodeQL, Worker E2E/browser checks where affected. For HIGH changes, add focused negative/abuse regressions: permission denials, duplicate and concurrent mutations, immutable stock/audit records, borrowing consent, R2 ownership/cleanup, and D1 fresh/upgrade migration, backup and rollback where relevant. Never describe an unrun check as passed.
+4. **Record a compact security receipt:** base and final HEAD SHA, risk tier, affected boundaries, each applicable check as PASS/FAIL/N/A/NOT RUN with test/run reference, reviewer and exact-head review evidence (independent of the writer for HIGH changes), unresolved findings and explicit owner-accepted exceptions. Update the receipt after any substantive head change.
+5. **Block a merge recommendation or integration** for failed or unrun required security gates, an unreviewed final diff, or unresolved HIGH/CRITICAL findings, unless Earl explicitly accepts a narrowly scoped, documented exception. Documentation-only changes receive lightweight diff/privacy sanity checks; unrelated tests may be N/A.
+
+The integration steward verifies this receipt before serial integration to `main`. Security findings, exceptions and incomplete checks remain visible in the handoff, never silently waived.
 
 ## Anti-bloat
 
