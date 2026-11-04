@@ -9,6 +9,16 @@ Read, in order:
 
 Authority: Earl current instruction -> accepted spec/amendment -> verified repository state -> Context Vault.
 
+## Sole writer (owner rule, 2026-11-04)
+
+Earl, 2026-11-04: "for all current, past, and future projects. claude will be the sole writer until further notice. chatgpt will remain auditor, reviewer, and manager."
+
+- **Claude:** the only writer, until Earl says otherwise. It holds the writer lock and makes every change, branch, commit and PR, and it is the integration steward.
+- **ChatGPT:** audits, reviews and manages, and does not write to the repository.
+- **Codex and Forge:** no longer write. Where this file or another record names them as a writer, steward or writer lane, that is superseded.
+- **The two-lane exception:** suspended. There is one writer and one work branch.
+- **Unchanged:** the authority chain above, the per-action owner authorization for pushes, merges, deploys and migrations, and every release gate.
+
 Documentation map: `docs/DOCUMENTATION_STATUS.md`. `.codex/CURRENT.md` and `.codex/SESSION_HANDOFF.md` are the **only live task pointers**; historical Part briefs, older `proposed` drafts, and old release plans must never restart a closed task. Preserve accepted specs, release/migration evidence and rollback provenance. The retired Road-to-V2 multi-branch runner is not active.
 
 ## Road-to-V3 command routing
@@ -22,6 +32,15 @@ Product versions for Road to V3 remain **V2.1–V2.9** (RTV3-01–RTV3-09) then 
 **All agents must follow `docs/PRODUCT_VERSION_GOVERNANCE.md` without being reminded.** Base releases are `V<major>.<minor>` (example `V1.15`); each separately completed, verified, product-affecting revision **after that version was merged into main** automatically receives the next `V<major>.<minor>.<revision>`: `V1.15.1`, `V1.15.2`, `V1.15.3`, etc. Count **one per independently merged release**, not one per edit/commit/checkpoint; include all fixes in that revision's changelog. Do not increment for documentation-only work, failed/rejected work, or unreleased main-version slices. Verify the last actual release/current main, avoid collisions, preserve history; never backfill invented revision numbers.
 
 Every qualifying main merge must have a verified version identity, concise changelog/release record, tests, deployment evidence and truthful Administration > System display **once the accepted V1.16 version feature is actually deployed**. Until then record the revision in repository evidence without pretending the UI exists. Incomplete slices never merge or count as released. This is permanent, not V1.16-only; see detailed governing contract.
+
+## Mandatory changelog (owner rule, 2026-11-04)
+
+Maintain the repository-root `CHANGELOG.md` as a concise, chronological index of **every verified product version/revision** and **every accepted specification or amendment revision**. All agents (Codex, Claude, Forge and successors) follow this without prompting. The existing per-version release records and accepted specifications remain authoritative for detailed evidence; the changelog links to them and is not a second version registry.
+
+- **Product changes:** Prepare the entry with the qualifying slice/PR. At release qualification, place it under the exact verified `V<major>.<minor>[.<revision>]` and release date, listing each shipped fix/improvement. One independently released change-set gets one version entry, regardless of commits; preserve the existing numbering and release gates in `docs/PRODUCT_VERSION_GOVERNANCE.md`.
+- **Specification changes:** When a specification or amendment is accepted or an accepted one is revised, record a separate dated entry under `Specification changes` with its identifier, changed requirements, reason and affected scope, acceptance reference, and status. It is **not** a product release or version increment. Proposals and work in progress stay explicitly marked pending in their proposal/PR/handoff; never present them as accepted or shipped.
+- **Entry minimum:** date; version or amendment ID; what changed and why (prefer Added/Changed/Fixed/Removed); material user, contract, migration or rollback impact; the authoritative spec/release link; and relevant PR/commit and verification reference. Link detailed records instead of duplicating long evidence tables.
+- **Ownership and gate:** During parallel work, the integration steward owns this shared file; other writers supply proposed entries in their assigned PR/handoff. The steward reconciles the final changelog as part of each qualified integration/accepted amendment. Missing or misleading entries block that integration. Never overwrite prior history, fabricate old entries or count documentation-only changes as product revisions.
 
 ## Non-negotiables
 
@@ -56,6 +75,12 @@ Avoid speculative architecture, generic frameworks, duplicate helpers/configs/do
 When replacing code, remove the obsolete path after verification. Do not leave two ways to do the same thing.
 
 Keep modules cohesive and readable. Optimize for a future agent understanding the change quickly, not for theoretical extensibility.
+
+## Scoped engineering and web-quality reference (documentation proposal, 2026-11-03)
+
+- Before qualifying an approved user-facing slice, consult `docs/WEB_QUALITY_RELEASE_GATES.md` for the 15 UX + 20 prelaunch observations. Record relevant PASS/FAIL/N/A/NOT RUN evidence in the **existing** active release/handoff; do not assume every marketing item applies to private app routes.
+- `docs/ENGINEERING_KNOWLEDGE_MAP.md` maps the 140 Backend/DSA/HLD/LLD/AI/DevOps/Security concepts. It is a study/review reference, **not** permission to add unused infrastructure, frameworks, architecture or work outside the accepted slice.
+- Active V1.16.7 custody, dirty worktree, owner-approved amendment and production gates remain untouched. The integration steward alone reconciles this documentation proposal into current `main` and any open writer lane; a GitHub branch does not automatically update a local worktree.
 
 ## Working rhythm
 

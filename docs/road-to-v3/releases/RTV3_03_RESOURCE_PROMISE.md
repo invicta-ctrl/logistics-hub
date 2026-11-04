@@ -37,3 +37,9 @@ May not create/approve a Promise without normal domain rules and human authority
 
 ## Independence
 If RTV3-04 never exists, RTV3-03 still provides a complete fulfillment-planning workflow.
+
+## Adaptive Operations UI note (direction only)
+
+See [`10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md`](../10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md). It is not accepted scope: adopting it needs this milestone's own prospective amendment.
+- **Integration:** Time-aware owned/future/reallocation/internal source/substitute/rental/procurement candidate ladder; split-source coverage, conflicts and human Promise review.
+- **Boundary:** Promise ≠ physical stock; protect expected-current/concurrency/idempotency; no unilateral AI reservation/release.

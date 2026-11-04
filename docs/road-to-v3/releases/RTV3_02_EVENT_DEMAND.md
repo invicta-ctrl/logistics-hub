@@ -56,3 +56,9 @@ The spec must state what existing V2 submission surface is superseded, coexisten
 
 ## Independence test
 RTV3-02 must remain useful without RTV3-03 Promise.
+
+## Adaptive Operations UI note (direction only)
+
+See [`10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md`](../10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md). It is not accepted scope: adopting it needs this milestone's own prospective amendment.
+- **Integration:** New goal-oriented event-demand workspace; reveal category/time/venue/context-dependent requirement fields; bounded clarification history and owner/requester role-specific copy.
+- **Boundary:** Not the retired Request Center; demand capture works without V2.3; no invented demand or automatic approval.

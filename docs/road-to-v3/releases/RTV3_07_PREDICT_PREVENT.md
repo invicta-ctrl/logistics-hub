@@ -34,3 +34,9 @@ AI already exists in V2.0.
 
 ## Independence
 V2.0–RTV3-06 operation remains correct when every predictive capability is disabled.
+
+## Adaptive Operations UI note (direction only)
+
+See [`10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md`](../10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md). It is not accepted scope: adopting it needs this milestone's own prospective amendment.
+- **Integration:** Explicit what-if controls; later evidence-backed bounded forecasts with source, uncertainty, freshness and measured error.
+- **Boundary:** Scenario arithmetic is not a historical forecast; no autonomous procurement/stock changes; switch-off leaves core working.
