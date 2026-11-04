@@ -77,6 +77,9 @@ test("staff pages and every staff write reject anonymous and cross-site callers"
   await signIn(page);
   const crossSite = await page.request.post("/api/staff/items/ITM-0072/movements", { data: { kind: "IN", quantity: 50, key: "cross-site-attempt" }, headers: { origin: "https://evil.example" } });
   expect(crossSite.status()).toBe(403);
+  // Items open on page 1 of 25 (V1.16.12); the microphone is found by search.
+  await expect(page.getByRole("navigation", { name: "Items pages" })).toBeVisible();
+  await page.getByRole("searchbox", { name: "Search items" }).fill("Bluetooth Microphone");
   await expect(page.getByRole("button", { name: "Bluetooth Microphone" })).toBeVisible();
 });
 
@@ -669,10 +672,17 @@ test("activity: one list of who did what, filters kept in the URL, older pages, 
   await expect(page.getByRole("link", { name: "Activity" })).toHaveAttribute("aria-current", "page");
   // Staff never get account and security entries; that source is not even offered.
   await expect(page.getByRole("button", { name: "Accounts & exports" })).toHaveCount(0);
-  await expect(page.locator("#activity-count")).toHaveText("50 entries shown, older ones below");
-  await page.getByRole("button", { name: "Load older" }).click();
-  await expect(page.locator("#activity-count")).toHaveText("100 entries shown, older ones below");
-  await expect(page.getByRole("button", { name: "Load older" })).toBeFocused();
+  // A desktop reads 25 at a time with Newer and Older (V1.16.12); Older past the first 50 reads the next batch.
+  await expect(page.locator("#activity-count")).toHaveText("50 entries loaded, older ones on later pages");
+  const steps = page.getByRole("navigation", { name: "Activity pages" });
+  await expect(steps.getByRole("button", { name: "Newer" })).toBeDisabled();
+  await steps.getByRole("button", { name: "Older" }).click();
+  await expect(steps.locator(".pager__range")).toContainText("26–50");
+  await steps.getByRole("button", { name: "Older" }).click();
+  await expect(steps.locator(".pager__range")).toContainText("51–75");
+  await expect(page.locator("#activity-count")).toHaveText("100 entries loaded, older ones on later pages");
+  await expect(page.locator(".activity-row").first().locator("[data-fold]")).toBeFocused();
+  await expect(page.getByRole("button", { name: "Load older" })).toBeHidden();
 
   // The lending test's damaged return shows with its typed note, and its USC reason is searchable.
   const search = page.getByRole("searchbox", { name: "Search activity" });
@@ -964,7 +974,8 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await page.goBack();
   await expect(viewer).toBeHidden();
   // Back closed only the viewer: the same page, with the same item open and not reloaded.
-  await expect(page).toHaveURL(/\/staff\/items\?item=ITM-0262$/);
+  // The address also holds the page of 25 that the linked item is on (V1.16.12).
+  await expect(page).toHaveURL(/\/staff\/items\?item=ITM-0262&page=\d+$/);
   await expect(sheet).toBeVisible();
   await expect(panel.locator("[data-photo-menu]")).toBeFocused();
   await choose(panel, "View larger");
