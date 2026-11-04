@@ -1,5 +1,13 @@
 # Current Work Pointer — Logistics Hub
 
+## 2026-11-04 Claude — V1.16.8 merged and deployed
+
+V1.16.8 is merged (PR #80, `main` `bf5d682`, merge commit) and deployed by Workers Builds.
+- The live assets match a local build: 121 of 122 byte for byte, and `build.json` not served.
+- Earl's System checks for V1.16.7 and V1.16.8 are still owed (Administration > System > This version).
+- Branch `chore/v1.16.8-merged-records` records the merge and makes `tests/browser/v1164-wp3.spec.ts:316` wait for the item sheet to finish opening. It failed once in CI on a slow machine.
+- Follow-up: the place-sheet race (`tests/browser/v1167-sheets.spec.ts:243`).
+
 ## 2026-11-04 Claude — V1.16.8 owner fixes, QUALIFICATION_PENDING
 
 V1.16.7 is merged and deployed (`main` `948d62c`, PR #75). The deploy was checked byte for byte; Earl's System check is still owed.
