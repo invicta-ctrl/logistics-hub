@@ -35,10 +35,8 @@
 .kit-heading { margin: var(--space-5) 0 var(--space-2); font-size: var(--text-md); }
 .kit-parts, .kit-history, .kit-edit-rows, .kit-pick, .kit-check-rows { margin: 0; padding: 0; list-style: none; }
 .kit-parts { display: grid; gap: var(--space-2); }
-.kit-part { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-left-width: 4px; border-radius: var(--radius-lg); background: var(--surface); }
-.kit-part--ok { border-left-color: var(--ok); }
-.kit-part--short, .kit-part--low, .kit-part--expiring { border-left-color: var(--warn-ink); }
-.kit-part--review { border-left-color: var(--bad); }
+.kit-part { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+/* V1.16.9 (Earl): no coloured edge on a rounded box; a part's state is its badge. */
 .kit-part__text { display: grid; gap: .125rem; min-width: 0; }
 .kit-part__name { font-weight: 600; overflow-wrap: anywhere; }
 .kit-part__facts { color: var(--text-2); font-size: var(--text-sm); }

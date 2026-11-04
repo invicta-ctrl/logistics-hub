@@ -16,11 +16,18 @@ A concise index of what changed in each product version/revision and accepted sp
   - the rail's current page has no gold edge or ring.
 
   **Removed:** the "Background removed" note on cleaned pictures. **Migration:** none. **Record:** [v1.16.8.md](docs/road-to-v2/releases/v1.16.8.md). **PR:** #80; application source `9e60ce7`. **Merged and deployed 2026-11-04** (`main` `bf5d682`, merge commit). The live assets match a local build: 121 of 122 byte for byte, and `build.json` not served. It moves under "Released product versions and revisions" once Earl checks System.
+- **V1.16.9 candidate · QUALIFICATION_PENDING (not released):** no crescents, and speed. **Changed:**
+  - no coloured edge on any rounded box: Administration's verdicts, banners, kit parts and the chosen search result now show their tone by icon, badge and tint;
+  - the Worker runs beside its database (Smart Placement), so a staff answer's two to five D1 calls no longer each cross the network;
+  - the public and Self-Service catalogs read their two queries together.
+
+  **Removed:** the rail's glint and Administration's breathing dot, which animated forever and cost a style pass on every frame. **Migration:** none. **Rollback:** the Worker (with `placement` removed for the speed change alone). **Record:** [v1.16.9.md](docs/road-to-v2/releases/v1.16.9.md). Application source `90caba1`. **Security tier:** HIGH (deployment configuration); an independent review is required before the merge.
 
 ## Specification changes
 
 Accepted specification changes made after adoption appear here with date, spec/amendment ID, the exact requirements changed and why, affected scope, acceptance reference and implementation status. An accepted specification change is **not** automatically a deployed product version. Draft proposals are not accepted entries.
 
+- **2026-11-04 · [V1.16.9 No crescents, and speed](docs/specs/accepted/2026-11-04-v1169-crescents-and-speed.md) · Accepted:** no coloured edge on any rounded box, anywhere, from now on; Smart Placement for the Worker; independent D1 reads run together; no endless decorative animation on staff pages. **Why:** Earl, 2026-11-04: "other tabs still have this, please clean. the website is slow too … it stutters so bad and slow." **Status:** implemented in the V1.16.9 candidate.
 - **2026-11-04 · [V1.16.8 owner fixes](docs/specs/accepted/2026-11-04-v1168-owner-fixes.md) · Accepted:** Earl's eight fixes after V1.16.7 and, in revision 2, the Data Privacy Waiver Statement on every Self-Service form, including LH-LEND-01 ([Lending Hub borrowing](docs/specs/proposed/2026-10-24-lending-hub-borrowing.md)), now accepted at rank 1 (A with B). Individual use now needs its reason, like USC use; a phone borrow saved before this may still arrive without one. No gold edge or ring on any rail, now or later. **Why:** Earl's review of V1.16.7 in production. **Status:** implemented in the V1.16.8 candidate.
 - **2026-10-29 · [Workspace depth](docs/specs/accepted/2026-10-29-workspace-depth.md) · Accepted:** item and place sheets (slice 1); loans, Self-Service and Activity (slice 2); Administration and the rail (slice 3). Earl: "Use your defaults". It was amended the same day to ship all three slices as one update, V1.16.7. **Status:** implemented in the V1.16.7 candidate.
 - **2026-10-29 · [Slice 3 direction](docs/specs/accepted/2026-10-29-workspace-depth-slice3-direction.md) · Accepted:** the Hallmark direction for Administration and the rail. Earl: "Approve direction". **Status:** implemented in the V1.16.7 candidate. The recorded deviations are in its release record.
