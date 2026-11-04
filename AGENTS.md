@@ -45,6 +45,8 @@ Maintain the repository-root `CHANGELOG.md` as a concise, chronological index of
 
 ## Non-negotiables
 
+**Historical two-lane and Codex-writer bullets below are superseded by the current sole-standing-writer rule above; do not reactivate them.**
+
 - Codex's existing writable/local-preview worktree remains `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`. A second isolated writable Claude UI worktree is permitted **only** under `docs/specs/accepted/2026-10-14-isolated-agent-worktrees.md` and an accepted bounded UI slice.
 - Approved MausBot Scout, Oracle, Sentinel, and Harbor worktrees are detached/read-only specialist worktrees under the accepted MausBot amendment.
 - Default: one project writer. **Accepted two-lane exception:** Codex and Claude may write concurrently on distinct Git worktrees/short-lived branches **only** with disjoint file-level ownership, accepted separate tasks, per-worktree locks and one serial integration steward; at most two writers account-wide. Unproven isolation falls back to one writer. Read-only review can always run. See the isolated-agent-worktrees amendment.
@@ -69,7 +71,7 @@ Every agent that writes, reviews, audits, qualifies or recommends changes must c
 1. **Classify the highest applicable risk:** LOW = documentation-only; STANDARD = ordinary application/config/dependency changes; HIGH = changes to authentication, roles, sessions, privacy/consent, secrets, stock/borrowing mutations, D1/R2 data, migrations, deployment, or security/release controls. Mixed changes use the highest tier.
 2. **Inspect the changed trust boundaries:** credentials/PII in code, API responses, logs and artifacts; authorization/object ownership and cross-user access; session, CSRF/CORS and input validation; dependency and CI supply-chain changes; transaction/audit integrity and failure recovery. Mark genuinely irrelevant items N/A.
 3. **Verify applicable checks on the final candidate:** build/typecheck, focused tests, privacy/secret scan, CI and CodeQL, Worker E2E/browser checks where affected. For HIGH changes, add focused negative/abuse regressions: permission denials, duplicate and concurrent mutations, immutable stock/audit records, borrowing consent, R2 ownership/cleanup, and D1 fresh/upgrade migration, backup and rollback where relevant. Never describe an unrun check as passed.
-4. **Record a compact security receipt:** base and final HEAD SHA, risk tier, affected boundaries, each applicable check as PASS/FAIL/N/A/NOT RUN with test/run reference, reviewer and exact-head review evidence, unresolved findings and explicit owner-accepted exceptions. Update the receipt after any substantive head change.
+4. **Record a compact security receipt:** base and final HEAD SHA, risk tier, affected boundaries, each applicable check as PASS/FAIL/N/A/NOT RUN with test/run reference, reviewer and exact-head review evidence (independent of the writer for HIGH changes), unresolved findings and explicit owner-accepted exceptions. Update the receipt after any substantive head change.
 5. **Block a merge recommendation or integration** for failed or unrun required security gates, an unreviewed final diff, or unresolved HIGH/CRITICAL findings, unless Earl explicitly accepts a narrowly scoped, documented exception. Documentation-only changes receive lightweight diff/privacy sanity checks; unrelated tests may be N/A.
 
 The integration steward verifies this receipt before serial integration to `main`. Security findings, exceptions and incomplete checks remain visible in the handoff, never silently waived.
