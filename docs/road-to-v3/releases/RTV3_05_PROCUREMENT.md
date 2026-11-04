@@ -28,3 +28,9 @@ May not originate a purchase need, approve spending, choose a supplier autonomou
 
 ## Independence
 A procurement case can complete even if RTV3-06 is never built.
+
+## Adaptive Operations UI note (direction only)
+
+See [`10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md`](../10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md). It is not accepted scope: adopting it needs this milestone's own prospective amendment.
+- **Integration:** Existing *authorized* gap becomes a sourcing review; show actual quotes, evidence, expiry and discrepancies only as present; separate proposal, approval, receiving.
+- **Boundary:** No automatically originated procurement need, guessed vendor/price or autonomous purchase; R2 private evidence protected.

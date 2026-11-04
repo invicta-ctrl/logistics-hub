@@ -196,3 +196,9 @@ The release record must state:
 - accepted gaps;
 - accessibility checks run;
 - any real-device checks still requiring owner action.
+
+## Adaptive Operations UI note (direction only)
+
+See [`10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md`](10_ADAPTIVE_OPERATIONS_UI_DIRECTION.md). It is not accepted scope: adopting it needs this milestone's own prospective amendment.
+- **Integration:** Qualify/reuse existing interaction primitives, semantic labels, input/focus/a11y, responsive density and measured budgets during F5/F4/F7; only touch existing scoped surfaces.
+- **Boundary:** **No new Event, Promise or Procurement capability; no extra shared UI engine.** V1.16 readiness gate remains.
