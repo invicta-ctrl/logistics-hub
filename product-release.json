@@ -1,10 +1,12 @@
 {
   "version": "V1.16.12",
-  "sourceCommit": "45701a52a56daccd4a3cac324a1a5a326ea9487f",
+  "sourceCommit": "c0ea764644fb5bb297aa498adbb72776a3e07ea6",
   "record": "docs/road-to-v2/releases/v1.16.12.md",
   "changes": [
     "Long lists now come in numbered pages of 25 on desktop, with the page kept in the address.",
     "On phones, long lists grow by 25 at a time, and the Lending Hub, Self-Service and Staff Directory fold by group under titles that stay in view.",
-    "Activity reads 25 entries at a time with Newer and Older on desktop."
+    "Activity reads 25 entries at a time with Newer and Older on desktop.",
+    "The Department of Logistics mark no longer sits on a white disc, and Self-Service home has the campus as its background again.",
+    "Turning a page or searching is quicker: each press measured takes under 10 ms on a catalog of 600 items."
   ]
 }

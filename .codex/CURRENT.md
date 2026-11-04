@@ -2,13 +2,14 @@
 
 ## 2026-11-05 Claude — V1.16.12 pagination, QUALIFICATION_PENDING
 
-V1.16.12 is on branch `slice/v1.16.12-pagination` in worktree `.claude/worktrees/v11612`, application source `45701a5`, based on `main` `72eae19`.
+V1.16.12 is on branch `slice/v1.16.12-pagination` in worktree `.claude/worktrees/v11612`, application source `c0ea764`, based on `main` `72eae19`. PR #87.
 - Spec: `docs/specs/accepted/2026-11-04-v11612-pagination.md`.
 - Record: `docs/road-to-v2/releases/v1.16.12.md`. No migration.
 - Changes:
   - numbered pages of 25 on desktop for every long list (`src/pager.ts`);
   - "Show 25 more" on phones, and group folds with sticky titles on the Lending Hub, Self-Service browse and Staff Directory;
-  - Newer and Older for Activity on desktop.
+  - Newer and Older for Activity on desktop;
+  - Earl's 2026-11-05 requests: the DoL mark without its disc, the campus as Self-Service home's background again, and every press under 10 ms at 600 items (measured, in the record).
 - Security tier: STANDARD (client only).
 - Merging needs Earl's go-ahead.
 

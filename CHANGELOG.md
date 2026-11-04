@@ -35,7 +35,13 @@ A concise index of what changed in each product version/revision and accepted sp
   - on phones, lists grow by 25 ("Show 25 more"), and the Lending Hub, Self-Service browse and Staff Directory fold by group under sticky titles;
   - Activity reads 25 at a time with Newer and Older on desktop, and its phone feed skips drawing rows out of sight.
 
-  **Changed:** lists that grew by 100 (Items, a person's Usage) or showed everything at once now page. A new search, filter, sort or view starts at page 1. **Migration:** none. **Rollback:** the Worker. **Record:** [v1.16.12.md](docs/road-to-v2/releases/v1.16.12.md). Application source `45701a5`. **Security tier:** STANDARD (client presentation only).
+  **Changed:**
+  - lists that grew by 100 (Items, a person's Usage) or showed everything at once now page, and a new search, filter, sort or view starts at page 1;
+  - the Department of Logistics mark has no white disc;
+  - Self-Service home has the campus as its background again, fading into the page;
+  - a press is quicker: an Items page turn takes 8.8 ms instead of 56.7 ms at 600 items, and every press measured is under 10 ms there.
+
+  **Migration:** none. **Rollback:** the Worker. **Record:** [v1.16.12.md](docs/road-to-v2/releases/v1.16.12.md). Application source `c0ea764`. **Security tier:** STANDARD (client presentation only).
 
 ## Specification changes
 
