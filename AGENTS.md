@@ -23,6 +23,15 @@ Product versions for Road to V3 remain **V2.1–V2.9** (RTV3-01–RTV3-09) then 
 
 Every qualifying main merge must have a verified version identity, concise changelog/release record, tests, deployment evidence and truthful Administration > System display **once the accepted V1.16 version feature is actually deployed**. Until then record the revision in repository evidence without pretending the UI exists. Incomplete slices never merge or count as released. This is permanent, not V1.16-only; see detailed governing contract.
 
+## Mandatory changelog (owner rule, 2026-11-04)
+
+Maintain the repository-root `CHANGELOG.md` as a concise, chronological index of **every verified product version/revision** and **every accepted specification or amendment revision**. All agents (Codex, Claude, Forge and successors) follow this without prompting. The existing per-version release records and accepted specifications remain authoritative for detailed evidence; the changelog links to them and is not a second version registry.
+
+- **Product changes:** Prepare the entry with the qualifying slice/PR. At release qualification, place it under the exact verified `V<major>.<minor>[.<revision>]` and release date, listing each shipped fix/improvement. One independently released change-set gets one version entry, regardless of commits; preserve the existing numbering and release gates in `docs/PRODUCT_VERSION_GOVERNANCE.md`.
+- **Specification changes:** When a specification or amendment is accepted or an accepted one is revised, record a separate dated entry under `Specification changes` with its identifier, changed requirements, reason and affected scope, acceptance reference, and status. It is **not** a product release or version increment. Proposals and work in progress stay explicitly marked pending in their proposal/PR/handoff; never present them as accepted or shipped.
+- **Entry minimum:** date; version or amendment ID; what changed and why (prefer Added/Changed/Fixed/Removed); material user, contract, migration or rollback impact; the authoritative spec/release link; and relevant PR/commit and verification reference. Link detailed records instead of duplicating long evidence tables.
+- **Ownership and gate:** During parallel work, the integration steward owns this shared file; other writers supply proposed entries in their assigned PR/handoff. The steward reconciles the final changelog as part of each qualified integration/accepted amendment. Missing or misleading entries block that integration. Never overwrite prior history, fabricate old entries or count documentation-only changes as product revisions.
+
 ## Non-negotiables
 
 - Codex's existing writable/local-preview worktree remains `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`. A second isolated writable Claude UI worktree is permitted **only** under `docs/specs/accepted/2026-10-14-isolated-agent-worktrees.md` and an accepted bounded UI slice.
