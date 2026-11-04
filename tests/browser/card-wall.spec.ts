@@ -197,8 +197,8 @@ test("a profile without a sign-in makes one in a step and shows its password onc
   await page.goto(`/staff/admin/directory?person=${id(2)}`);
   const access = page.getByRole("region", { name: "Sign-in and access" });
   await expect(access.getByLabel("Username")).toHaveValue("bea.reyes");
-  // Roles by department: DoL Staff (the Logistics Hub) first, then every other department's staff, Officer and, for an owner, Owner.
-  await expect(access.getByLabel("Role").locator("option")).toHaveText(["DoL Staff", "OfP Staff", "OVP Staff", "SEC Staff", "DoF Staff", "DEM Staff", "DCES Staff", "DPC Staff", "DHR Staff", "DBR Staff", "Officer", "Owner"]);
+  // Roles by department: DoL Staff and DoL Director (the Logistics Hub) first, then every other department's staff, Officer and, for an owner, Owner.
+  await expect(access.getByLabel("Role").locator("option")).toHaveText(["DoL Staff", "DoL Director", "OfP Staff", "OVP Staff", "SEC Staff", "DoF Staff", "DEM Staff", "DCES Staff", "DPC Staff", "DHR Staff", "DBR Staff", "Officer", "Owner"]);
   // Bea is in the Department of Logistics, so DoL Staff is chosen for her.
   await expect(access.getByLabel("Role")).toHaveValue("DoL");
   await access.getByRole("button", { name: "Create sign-in" }).click();

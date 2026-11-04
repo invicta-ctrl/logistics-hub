@@ -11,10 +11,10 @@ import { ApiError, CREST, MARK, SPRING, type Html, type IconName, api, app, empt
 
 export type Role = "STAFF" | "ADMIN" | "OWNER";
 /** Who a sign-in is for: the staff of a USC department (DoL, DEM, …), an officer, or an administrator or owner (accounts.ts). */
-export type Access = DepartmentCode | "OFFICER" | "ADMIN" | "OWNER";
+export type Access = DepartmentCode | "DOL_DIRECTOR" | "OFFICER" | "ADMIN" | "OWNER";
 /** A session's access; one from a server before access groups is what the role alone meant (STAFF: Logistics staff). */
 export const sessionAccess = (session: Pick<Session, "role"> & { access?: Access }): Access => session.access ?? (session.role === "STAFF" ? "DoL" : session.role);
-export const accessLabel = (access: Access | string): string => access === "OFFICER" ? "Officer" : access === "ADMIN" ? "Administrator" : access === "OWNER" ? "Owner" : `${access} Staff`;
+export const accessLabel = (access: Access | string): string => access === "OFFICER" ? "Officer" : access === "ADMIN" ? "Administrator" : access === "OWNER" ? "Owner" : access === "DOL_DIRECTOR" ? "DoL Director" : `${access} Staff`;
 export type Session = {
   /** `build`: the release the Worker is running (V1.16.4), so a tab on an older one reloads at its next page move. */
   build?: string | null;

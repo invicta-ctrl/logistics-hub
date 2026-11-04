@@ -11,9 +11,22 @@ V1.16.11 is on branch `slice/v1.16.11-self-service` in worktree `.claude/worktre
   - the DoL mark replaces the crest;
   - Self-Service is light by default, with a faint campus band on home, tiles, a pinned item action and numbered form steps.
 - Security tier: STANDARD (client only).
-- Merge order: V1.16.10 (PR #85, DoL Director, HIGH) first. This branch then takes `main` and resolves the shared metadata (`product-release.json`, `CHANGELOG.md`, this file, the `admin-control` pin).
+- PR #86. This branch took `main` `3d8aa87` (after V1.16.10) and resolved the shared metadata: `product-release.json`, `CHANGELOG.md`, this file and the `admin-control` pin.
 
-## 2026-11-04 Claude — V1.16.9 no crescents, and speed, QUALIFICATION_PENDING
+## 2026-11-04 Claude — V1.16.10 DoL Director role, merged
+
+V1.16.10 is merged (PR #85, `main` `3d8aa87`, merge commit) from the tested head `bf2e3fb`, with every check green. The application source is `f37c802`.
+- Spec: `docs/specs/accepted/2026-11-04-v11610-dol-director.md`.
+- Record: `docs/road-to-v2/releases/v1.16.10.md`. No migration.
+- The change: a new access group, `DOL_DIRECTOR`, with DoL Staff's access.
+- Security tier: HIGH (authorization). The independent review was not run. Earl accepted the exception: "i accept merging because the DoL director and DoL staff has the same permission so it changes nothing". The receipt is on the PR.
+- Pending:
+  - check the deploy byte for byte;
+  - Earl's System check.
+
+## 2026-11-04 Claude — V1.16.9 no crescents, and speed, merged and deployed
+
+V1.16.9 is merged and deployed (PR #84, `main` `4e407ce`). The deploy is byte-checked and the timings re-measured; its record has the evidence.
 
 PRs #81 (V1.16.8 records) and #83 (ChatGPT's agent security-review rule in `AGENTS.md` and `CLAUDE.md`) were merged one after the other, each with a steward receipt on the PR. `main` is `83572a2`.
 
