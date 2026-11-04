@@ -1,10 +1,10 @@
 {
-  "version": "V1.16.11",
-  "sourceCommit": "71bfe223933c08a750d2b45eb0878ae030d8dafc",
-  "record": "docs/road-to-v2/releases/v1.16.11.md",
+  "version": "V1.16.12",
+  "sourceCommit": "45701a52a56daccd4a3cac324a1a5a326ea9487f",
+  "record": "docs/road-to-v2/releases/v1.16.12.md",
   "changes": [
-    "Self-Service is redesigned: light by default, the campus faintly behind the home screen, four large choices, numbered form steps and one button pinned to each item.",
-    "Item pictures fill their frame on the Lending Hub sheet and in Self-Service.",
-    "The public page shows the Department of Logistics mark, and its second link now opens Self-Service."
+    "Long lists now come in numbered pages of 25 on desktop, with the page kept in the address.",
+    "On phones, long lists grow by 25 at a time, and the Lending Hub, Self-Service and Staff Directory fold by group under titles that stay in view.",
+    "Activity reads 25 entries at a time with Newer and Older on desktop."
   ]
 }
