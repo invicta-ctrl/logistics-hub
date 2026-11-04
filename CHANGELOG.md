@@ -22,10 +22,19 @@ A concise index of what changed in each product version/revision and accepted sp
   - the public and Self-Service catalogs read their two queries together.
 
   **Removed:** the rail's glint and Administration's breathing dot, which animated forever and cost a style pass on every frame. **Migration:** none. **Rollback:** the Worker (with `placement` removed for the speed change alone). **Record:** [v1.16.9.md](docs/road-to-v2/releases/v1.16.9.md). Application source `90caba1`. **Security tier:** HIGH (deployment configuration); an independent review is required before the merge.
+- **V1.16.11 candidate · QUALIFICATION_PENDING (not released):** Self-Service "Counter" redesign. **Fixed:** item pictures fill their frame on the Lending Hub sheet and in Self-Service. The public hero's second link opens Self-Service instead of the same list a second time. **Changed:**
+  - the public header and the Self-Service bar show the Department of Logistics mark;
+  - Self-Service is light by default, with the campus faintly behind the home heading only;
+  - four tiles (Borrow, Take, Return, My activity), photo cards, and an item page with one details card and a pinned action;
+  - the forms are numbered steps that check off when complete.
+
+  **Migration:** none. **Rollback:** the Worker. **Record:** [v1.16.11.md](docs/road-to-v2/releases/v1.16.11.md). Application source `71bfe22`. **Security tier:** STANDARD (client presentation only).
 
 ## Specification changes
 
 Accepted specification changes made after adoption appear here with date, spec/amendment ID, the exact requirements changed and why, affected scope, acceptance reference and implementation status. An accepted specification change is **not** automatically a deployed product version. Draft proposals are not accepted entries.
+
+- **2026-11-04 · [V1.16.11 Self-Service "Counter" redesign](docs/specs/accepted/2026-11-04-v11611-self-service-counter.md) · Accepted:** pictures fill their frame; the hero's second link opens Self-Service; the DoL mark replaces the crest in the public header (superseding LH-IP02-S02 there); and Self-Service is light by default, with the campus as a faint home band, four tiles, a pinned item action and numbered form steps. **Why:** Earl, 2026-11-04: "Improve the design of the self service ui/ux drastically", "change this logo to the proper department of logistics logo", "keep the hau campus as a subtle background"; Counter and light default chosen. **Status:** implemented in the V1.16.11 candidate.
 
 - **2026-11-04 · [V1.16.9 No crescents, and speed](docs/specs/accepted/2026-11-04-v1169-crescents-and-speed.md) · Accepted:** no coloured edge on any rounded box, anywhere, from now on; Smart Placement for the Worker; independent D1 reads run together; no endless decorative animation on staff pages. **Why:** Earl, 2026-11-04: "other tabs still have this, please clean. the website is slow too … it stutters so bad and slow." **Status:** implemented in the V1.16.9 candidate.
 - **2026-11-04 · [V1.16.8 owner fixes](docs/specs/accepted/2026-11-04-v1168-owner-fixes.md) · Accepted:** Earl's eight fixes after V1.16.7 and, in revision 2, the Data Privacy Waiver Statement on every Self-Service form, including LH-LEND-01 ([Lending Hub borrowing](docs/specs/proposed/2026-10-24-lending-hub-borrowing.md)), now accepted at rank 1 (A with B). Individual use now needs its reason, like USC use; a phone borrow saved before this may still arrive without one. No gold edge or ring on any rail, now or later. **Why:** Earl's review of V1.16.7 in production. **Status:** implemented in the V1.16.8 candidate.

@@ -139,8 +139,10 @@ test("Individual and USC use ask the same fields, the reason included, at the de
   const phone = page.getByRole("dialog", { name: "Sample tripod" }).locator("form");
   await expect(phone.locator("#ss-name")).toBeVisible();
   const phoneIndividual = await shownFields(phone);
-  expect(phoneIndividual.slice(0, 3)).toEqual(["purpose", "name", "studentId"]);
-  expect(phoneIndividual).toContain("reason");
+  // V1.16.11: the phone asks about the loan first (step 1), then who you are (step 2).
+  expect(phoneIndividual.slice(0, 3)).toEqual(["purpose", "reason", "quantity"]);
+  expect(phoneIndividual.indexOf("name")).toBeGreaterThan(phoneIndividual.indexOf("reason"));
+  expect(phoneIndividual).toContain("studentId");
   await phone.getByRole("radio", { name: "USC use" }).check();
   expect(await shownFields(phone)).toEqual(phoneIndividual);
 });

@@ -1,5 +1,18 @@
 # Current Work Pointer — Logistics Hub
 
+## 2026-11-04 Claude — V1.16.11 Self-Service "Counter" redesign, QUALIFICATION_PENDING
+
+V1.16.11 is on branch `slice/v1.16.11-self-service` in worktree `.claude/worktrees/v11610`, application source `71bfe22`, based on `main` `4e407ce`.
+- Spec: `docs/specs/accepted/2026-11-04-v11611-self-service-counter.md`.
+- Record: `docs/road-to-v2/releases/v1.16.11.md`. No migration.
+- Changes:
+  - pictures fill their frame;
+  - the hero's second link opens Self-Service;
+  - the DoL mark replaces the crest;
+  - Self-Service is light by default, with a faint campus band on home, tiles, a pinned item action and numbered form steps.
+- Security tier: STANDARD (client only).
+- Merge order: V1.16.10 (PR #85, DoL Director, HIGH) first. This branch then takes `main` and resolves the shared metadata (`product-release.json`, `CHANGELOG.md`, this file, the `admin-control` pin).
+
 ## 2026-11-04 Claude — V1.16.9 no crescents, and speed, QUALIFICATION_PENDING
 
 PRs #81 (V1.16.8 records) and #83 (ChatGPT's agent security-review rule in `AGENTS.md` and `CLAUDE.md`) were merged one after the other, each with a steward receipt on the PR. `main` is `83572a2`.
