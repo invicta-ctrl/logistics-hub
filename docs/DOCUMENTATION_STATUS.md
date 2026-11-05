@@ -4,6 +4,13 @@
 
 **2026-11-05 reconciliation (PR #89):** a fresh-clone audit found contradictory agent instructions, a stale continuation pointer, a merge described as pending, a README that sent readers to the wrong Owner Console option, and a red `Deploy` run read as a production failure. Fixed below: one writer policy ([HAU-AGENT-LANES-003](specs/accepted/2026-11-05-claude-parallel-writer-lanes.md)), one live pointer pair, the superseded text archived, the README corrected, the deploy run explained (`.codex/CURRENT.md`). Releases now carry one of `QUALIFICATION_PENDING`, `MERGED_DEPLOYMENT_UNVERIFIED`, `DEPLOYED_OWNER_CHECK_PENDING` or `RELEASED_VERIFIED`.
 
+## Known stale passages (2026-11-05): trust the live pointer, not these
+
+A release record's `STATUS` and `INTEGRATION` lines were true when written. The live state of every release is `.codex/CURRENT.md`, "Release states". Passages that PR #89 found stale and did not edit because they are outside its task; a follow-up should fix them:
+- `docs/road-to-v2/releases/v1.16.12.md` still says `STATUS: QUALIFICATION_PENDING` and `INTEGRATION: pending`. PR #87 merged as `1e9a468`; production is unverified.
+- `docs/DEPLOYMENT.md` "First launch" step 3 and its Cloud-Operations paragraph (the "Console 13" instructions) present Owner Console option 13 as the deploy and migration route. That path deploys from a PC and applies migrations, against `AGENTS.md`. Migrations go through the Cloud Operations lane; production deploys come from Workers Builds until the V1.17 switch. Option 13 stays blocked pending an accepted amendment (`.codex/CURRENT.md`).
+- Older per-release "merged and deployed" wording in `CHANGELOG.md` and the release records is the vocabulary before the three release states; read it with `.codex/CURRENT.md`.
+
 ## Which documentation is authoritative NOW?
 
 Read the current documents in the following priority order, then verify Git/head and lock:

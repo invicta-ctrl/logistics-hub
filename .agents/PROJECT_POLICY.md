@@ -64,7 +64,7 @@ No permanent `dev`, `staging`, `backup`, model-specific, agent-specific, or dupl
 2. Work in small coherent increments.
 3. Commit each completed/working atomic increment on the active slice branch.
 4. Do not commit broken states to `main`.
-5. When the slice acceptance criteria and required gates are green:
+5. When the slice acceptance criteria and required gates are green, the slice is **ready to merge**. Merging needs Earl's explicit go-ahead for that PR (`AGENTS.md`); then, serially, by the steward:
    - update current/handoff docs;
    - rebase/fast-forward safely onto latest `main` if needed;
    - merge/fast-forward the finished slice into `main`;
@@ -116,13 +116,13 @@ Baseline:
 - browser/E2E for user-visible flows;
 - final diff review.
 
-A green slice is merged to `main` immediately. A partially working slice stays off `main`.
+A green slice is merged to `main` as soon as Earl gives that PR's go-ahead; a PR prepared or updated is not that go-ahead. A partially working slice stays off `main`.
 
 ### Owner's explicit completion and checkpoint contract (2026-10-11)
 
 - Under **no circumstance** claim or present an unfinished version, broken workflow, or incomplete product as finished. State unresolved work accurately in the active-branch handoff, not in a false release claim.
 - Push each coherent, reviewed, working checkpoint to **the assigned lane's own slice branch**, after focused verification; preserve exact commits and next action. During parallel mode, do not switch the primary V1.16 worktree or cloud-preview watcher to Claude's UI branch.
-- Merge **every independently complete and verified slice** into updated `main` as soon as it meets its own accepted acceptance criteria and exact-head checks, verify production/build and prune only confirmed-integrated slice branches. Subsequent slices branch from verified new `main`; the accepted parallel exception allows the other active UI slice to remain isolated until a steward-led pause/rebase/retest and serialized merge.
+- Merge **every independently complete and verified slice** into updated `main`, once Earl has given that PR's explicit go-ahead and it meets its own accepted acceptance criteria and exact-head checks, verify production/build and prune only confirmed-integrated slice branches. Subsequent slices branch from verified new `main`; the accepted parallel exception allows the other active UI slice to remain isolated until a steward-led pause/rebase/retest and serialized merge.
 - Never merge a partial feature, future-required button or incomplete release into `main`. The release version/changelog must describe the **verified running artifact**, not the intended future work.
 - Owner-accepted V1.16 Ambient Assist + Intelligent Core work is pre-Road-to-V3; its implementation follows the accepted V1.16 specification and all remaining writer/security/production gates. Its release identity will be implemented in the existing Administration > System view and carried into V2.1 rather than duplicated.
 

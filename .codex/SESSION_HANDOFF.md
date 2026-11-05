@@ -20,11 +20,11 @@ PR #89 (<https://github.com/invicta-ctrl/logistics-hub/pull/89>), branch `slice/
 
 **Triage of the four failures in the full Windows `npm test` run** (the same four pass on Linux CI)
 - `tests/role-evaluation.test.ts` "refuses altered or symlinked photo manifests": `EPERM` creating a symlink. Windows needs Developer Mode or an elevated shell for symlinks. Environment, not code; CI covers it.
-- `tests/production-release.test.ts`, three tests: each spawns many child processes and takes 7 to 10 s on this PC against vitest's 5 s limit. Run alone they still time out; with `--testTimeout=60000` all 46 pass. Timing on Windows, not a defect.
+- `tests/production-release.test.ts`, three tests: each spawns many child processes and takes 7 to 10 s on this PC against vitest's 5 s limit. Run alone they still time out; with `--testTimeout=60000` all 46 pass (`npx vitest run tests/production-release.test.ts --testTimeout=60000`). Timing on Windows, not a defect.
 
 ## Pending / not done
 
-- **Independent review by ChatGPT of the exact final diff: PENDING.** The review packet is saved in the PR (comment titled "Independent review packet") and in the session notes folder. ChatGPT was not reachable from this session. A pending review is not a passed one.
+- **Independent review by ChatGPT of the exact final diff: PENDING.** The review packet is on the PR (`gh pr view 89 --comments`, the comment titled "Independent review packet"). ChatGPT was not reachable from this session. A pending review is not a passed one.
 - **Merge: needs Earl's explicit go-ahead.** Preparing the PR is not one.
 - **Outside this task's allowed paths, so left for the steward or a follow-up amendment**
   - `docs/road-to-v2/releases/v1.16.12.md` still reads `INTEGRATION: pending`; PR #87 merged as `1e9a468`. CURRENT.md states the later fact.

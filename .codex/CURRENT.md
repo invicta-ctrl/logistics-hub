@@ -23,10 +23,20 @@ Other Logistics checkouts exist and are **not** mine: the shared `D:\Documents\H
 
 | ID | Task | Spec | Base → branch | Slot | State | Next |
 |---|---|---|---|---|---|---|
-| HAU-PR89-W1 | PR #89: the photo-menu fix (done) plus the 003 policy, truthful continuity files, archive, PR template, README fix, deploy-gate diagnosis; then qualification | [HAU-AGENT-LANES-003](../docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md) (accepted by Earl, 2026-11-05) | `main` `1e9a468` → `slice/v1.16.13-photo-menu-race` | 2 | active; L0 and L1 written, L2 qualification in progress (see the PR body for the gate table) | finish L2; independent review; Earl's merge go-ahead |
+| HAU-PR89-W1 | PR #89: the photo-menu fix (done) plus the 003 policy, truthful continuity files, archive, PR template, README fix, deploy-gate diagnosis; then qualification | [HAU-AGENT-LANES-003](../docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md) (accepted by Earl, 2026-11-05) | `main` `1e9a468` → `slice/v1.16.13-photo-menu-race` | 2 | active: policy and continuity files written; gates and the independent review in progress (the PR body holds the gate table) | finish L2; independent review; Earl's merge go-ahead |
 | (draft) | Issue #88: compact maroon/gold mobile and desktop UI baseline | none accepted | — | none | **DRAFT, design reference only**; linked here and in PR #89 | write a bounded UI spec and get it accepted; no UI change before that |
 
 Issue #88 (<https://github.com/invicta-ctrl/logistics-hub/issues/88>) states, kept separate: design reference linked — **yes**; UI spec proposed — no; UI spec accepted — no; mobile and desktop UI implemented — no; owner visually accepted — no. Current 3-tab navigation stays until a 4-tab architecture is accepted. PR #89 changes no UI beyond the closing-menu fix. `src/styles.css` is held by PR #89; do not start Issue #88 CSS work until it is released.
+
+### HAU-PR89-W1 manifest
+
+- **Find the exact head:** `git rev-parse HEAD` in the PR's checkout, or `gh pr view 89 --repo invicta-ctrl/logistics-hub --json headRefOid`. The product fix is `491c6cd`; later commits on the branch are documentation and policy only. The independent review packet and the gate table are on the PR (`gh pr view 89 --comments`, comment "Independent review packet").
+- **Writers in this repository right now:** exactly one (this session). HAU-AGENT-LANES-003 is accepted but not merged, so the second-lane mode is inactive here; slot 1 belongs to another repository (`qrmenu`) and the cap of two is account-wide.
+- **Base:** `main` `1e9a468`. **Isolation:** its own `.wrangler/e2e-<pid>` state and random port; no secrets read.
+- **Owned paths:** `AGENTS.md`, `CLAUDE.md`, `.agents/PROJECT_POLICY.md`, `docs/SHARED_AGENT_WORKFLOW.md`, `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md`, `docs/DOCUMENTATION_STATUS.md`, `README.md`, `CHANGELOG.md`, `.github/pull_request_template.md`, `docs/archive/**`, `docs/specs/**`, and the two files of the photo-menu fix (`src/styles.css`, `tests/worker-browser/worker-live.spec.ts`).
+- **Forbidden:** any other `src/**` change or move; migrations; `wrangler.jsonc`; `package.json` and the lockfile; CI and deploy workflows (no accepted amendment); `scripts/**`; the release records.
+- **Risk tier of the whole PR:** HIGH, conservatively, because it rewrites the writer-concurrency and merge-gate policy text (a release control, though no enforced control, workflow, authentication, data or deploy path changes). The product change inside it is STANDARD. HIGH needs the independent review, which is PENDING.
+- **Stop conditions:** overlap or unclear owner; a third writer; an unaccepted deploy/CI/product scope; a mandatory check that is unrun or failed; a HIGH finding; a merge without Earl's go-ahead.
 
 ## Release states (a merge is not a deployment)
 
