@@ -6,6 +6,7 @@ Superseded working documents, kept byte for byte so no history is lost. **Nothin
 |---|---|---|---|
 | [continuity/CURRENT_before_2026-11-05.md](continuity/CURRENT_before_2026-11-05.md) | `.codex/CURRENT.md` at `main` `1e9a468`: 336 lines of per-slice pointers from 2026-10-15 to V1.16.12 | 2026-11-05 (PR #89) | `.codex/CURRENT.md`: one truthful task board |
 | [continuity/SESSION_HANDOFF_before_2026-11-05.md](continuity/SESSION_HANDOFF_before_2026-11-05.md) | `.codex/SESSION_HANDOFF.md` at `main` `1e9a468`: handoffs from V1.16.7 and earlier | 2026-11-05 (PR #89) | `.codex/SESSION_HANDOFF.md`: the last and next step only |
+| [continuity/WRITER_ROSTER_2026-11-05.md](continuity/WRITER_ROSTER_2026-11-05.md) | the steward's live cross-repository writer roster (`handoffs\WRITER_ROSTER.md` on Earl's PC) as of the 2026-11-05 09:40 UTC handoff | 2026-11-05 (steward handoff) | the live roster on Earl's PC; `.codex/CURRENT.md` "Writer slots" |
 | [agent-workflows/SHARED_AGENT_WORKFLOW_before_2026-11-05.md](agent-workflows/SHARED_AGENT_WORKFLOW_before_2026-11-05.md) | `docs/SHARED_AGENT_WORKFLOW.md` at `main` `1e9a468`: the Codex + Claude two-lane and shared-worktree rhythm (HAU-AGENT-LANES-002) | 2026-11-05 (PR #89) | `docs/SHARED_AGENT_WORKFLOW.md` under [HAU-AGENT-LANES-003](../specs/accepted/2026-11-05-claude-parallel-writer-lanes.md) |
 
 Rules for this folder (also in `AGENTS.md`, "Repository self-sufficiency"):
