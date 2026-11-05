@@ -3,16 +3,15 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /** Item photos keep their controls in a menu that opens from the photo itself (owner, 24 October 2026). */
 async function openMenu(panel: Locator): Promise<void> {
-  if (!(await panel.getByRole("menu").isVisible())) await panel.locator("[data-photo-menu]").click();
-  await expect(panel.getByRole("menu")).toBeVisible();
+  // "Open" is the popover's state, not visibility: a menu that has just closed keeps fading out (display transitions), so for a moment
+  // it is still visible and no longer open.
+  const open = panel.locator(".photo-menu:popover-open");
+  if (!(await open.count())) await panel.locator("[data-photo-menu]").click();
+  await expect(open).toBeVisible();
 }
 async function choose(panel: Locator, name: string): Promise<void> {
-  // On a slow runner the menu can close just after it opened, right after Back closes the viewer; open it again and choose,
-  // rather than wait on a menu that is gone.
-  await expect(async () => {
-    await openMenu(panel);
-    await panel.getByRole("menuitem", { name, exact: true }).click({ timeout: 2_000 });
-  }).toPass({ timeout: 15_000 });
+  await openMenu(panel);
+  await panel.getByRole("menuitem", { name, exact: true }).click();
 }
 
 
@@ -977,6 +976,8 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await expect(viewer).toBeVisible();
   await page.goBack();
   await expect(viewer).toBeHidden();
+  // The menu that the choice closed may still be fading out; until it has, it takes no presses. (Chromium already skips a closing popover when hit-testing; this holds the same in any engine that does not.)
+  await expect(panel.locator(".photo-menu")).toHaveCSS("pointer-events", "none");
   // Back closed only the viewer: the same page, with the same item open and not reloaded.
   // The address also holds the page of 25 that the linked item is on (V1.16.12).
   await expect(page).toHaveURL(/\/staff\/items\?item=ITM-0262&page=\d+$/);

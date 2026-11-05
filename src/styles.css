@@ -1537,6 +1537,8 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   /* Written against :not(:popover-open) so a browser without popovers drops these rules and shows its fallback menu plainly. */
   .menu { transition: opacity var(--dur-2) var(--ease), transform var(--dur-2) var(--ease), overlay var(--dur-2) allow-discrete, display var(--dur-2) allow-discrete; }
   .menu:not(:popover-open) { opacity: 0; transform: translateY(-.25rem); }
+  /* A popover menu that is closing is still drawn while it fades or slides away, and takes no presses meanwhile. The no-Popover fallback menu has no popover attribute and is shown with `hidden`, so it is left alone. */
+  .menu[popover]:not(:popover-open) { pointer-events: none; }
   @starting-style { .menu:popover-open { opacity: 0; transform: translateY(-.25rem); } }
   @keyframes indicator-in { from { transform: scaleX(0); } }
   @keyframes sheet-in { from { transform: translateX(2rem); opacity: 0; } }

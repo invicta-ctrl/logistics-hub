@@ -27,7 +27,7 @@ npm ci
 npm run dev:live      # http://127.0.0.1:8791 — local Worker + D1, rebuilds on change
 ```
 
-`dev:live` applies local migrations. It generates `.dev.vars` (`SESSION_SECRET`) and, when none exists, a local preview staff account. The preview credentials go in the ignored `data/private/local-preview-credentials.txt`. Manage staff accounts and deployments with the local admin console: `npm run admin`, or double-click `LOGISTICS_ADMIN.cmd` on Windows. It targets PRODUCTION by default; press `E` to switch to the LOCAL preview database.
+`dev:live` applies local migrations. It generates `.dev.vars` (`SESSION_SECRET`) and, when none exists, a local preview staff account. The preview credentials go in the ignored `data/private/local-preview-credentials.txt`. Manage staff accounts with the local admin console (its deploy option is the legacy route, see Deploying below): `npm run admin`, or double-click `LOGISTICS_ADMIN.cmd` on Windows. It opens on the site it used last (a red PRODUCTION or a green PREVIEW banner says which); press `S` (Switch site) to choose production or the LOCAL preview database.
 
 ## Checks
 
@@ -44,8 +44,14 @@ If Playwright's bundled browser is missing, set `PLAYWRIGHT_CHROMIUM_PATH` to a 
 
 ## Deploying
 
-Run `npm run admin` and choose **8. Deploy latest verified main**. It preflights, records a D1 rollback point, applies pending migrations, deploys, then smoke-tests the live site. `docs/DEPLOYMENT.md` explains each step. Only the isolated `logistics-hub` Worker/D1 is ever targeted, never the old `hau-usc-logistics-*` resources.
+Merging is not deploying. A merge to `main` is `MERGED_DEPLOYMENT_UNVERIFIED` until the live artifact is checked against a build of that commit (then `DEPLOYED_OWNER_CHECK_PENDING`, and `RELEASED_VERIFIED` once Earl has checked it). The current truth for each release is in `.codex/CURRENT.md` and its record under `docs/road-to-v2/releases/`.
 
-## Shared Codex + Claude development
+- **How production is deployed today.** Cloudflare Workers Builds deploys each push to `main` by itself. The GitHub `Deploy` workflow runs after a green CI as a dry run (`DEPLOY_FROM_CI=dry-run`) and uploads nothing. A merge-button commit has no combined CodeQL check, so the gate refuses it by design: a red `Deploy` run on such a commit is expected, not a production failure. `docs/DEPLOYMENT.md` and `docs/road-to-v2/v1.17-ci-only-deploy-task.md` explain the gate and the switch to CI-only deploys (Earl's decision, not started).
+- **Migrations and release-scoped production preparation** go only through the Cloud Operations lane (`.github/workflows/production-ops.yml`, `ops/releases/<release>.json`), never from a PC.
+- **Owner Console (`npm run admin`).** Accounts are 1–7, owner password recovery is **8. Forgot owner password** (with 9 and 10 for the recovery key), status is 11 and 12, **13. Deploy verified main** is the legacy direct-Wrangler route (it needs the owner's Cloudflare sign-in and is not the accepted path for migrations), and 14 is first-time owner setup. Agents do not run options 12–14 and never create, read or store staff credentials. `docs/DEPLOYMENT.md` explains each step. Only the isolated `logistics-hub` Worker/D1 is ever targeted, never the old `hau-usc-logistics-*` resources.
 
-Both agents use one worktree, one active slice branch, and one writer lock (`npm run agent:status|claim|yield -- <agent>`). See `docs/SHARED_AGENT_WORKFLOW.md`. Before yielding, update `.codex/SESSION_HANDOFF.md`.
+## Agents and development workflow
+
+Claude writes the code: one writer by default, and up to two on separate accepted disjoint tasks in their own worktrees, with one serial integration steward (`docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md`, HAU-AGENT-LANES-003). ChatGPT audits and reviews; Codex and Forge are read-only. Each writer has a worktree, a `slice/*` branch and a writer lock (`npm run agent:status|claim|yield -- claude`). See `docs/SHARED_AGENT_WORKFLOW.md`.
+
+**Start here:** `AGENTS.md` (rules and reading order), then `.codex/CURRENT.md` (the live task board and writer slots) and `.codex/SESSION_HANDOFF.md` (last and next step). Superseded working documents are kept in `docs/archive/`. Every PR uses `.github/pull_request_template.md`.

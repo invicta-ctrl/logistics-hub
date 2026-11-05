@@ -52,11 +52,11 @@ Keep Git boring.
 
 Allowed normal branches:
 1. `main` — latest verified working product.
-2. Normally one active short-lived slice branch, named `slice/<part>-<scope>`. A specific accepted two-lane exception permits the existing V1.16 slice plus one UI slice in distinct writable Git worktrees.
+2. Normally one active short-lived slice branch, named `slice/<part>-<scope>`. When a second Claude writer's task is accepted under HAU-AGENT-LANES-003, one more slice branch for that writer, in its own worktree.
 
 No permanent `dev`, `staging`, `backup`, model-specific, agent-specific, or duplicate feature branches.
 
-**Owner-approved parallel development (2026-10-14):** Codex may continue backend/V1.16 while Claude implements a **separately accepted** frontend/UI slice simultaneously, on a second dedicated writable worktree and branch with explicit disjoint path ownership. One writer per worktree, at most two account-wide, and one serial integration steward. Shared code, contracts, release controls, data/providers and global files remain steward-exclusive unless an explicit temporary transfer is approved. This supersedes the previous one-writer-per-entire-project prohibition but not its default or safety gates. Normative local amendment: `docs/specs/accepted/2026-10-14-isolated-agent-worktrees.md`; global amendment: Context Vault `governance/agents/specs/PARALLEL-PROJECT-LANES-002.md`. The UI reference review is research, not a code spec.
+**Owner-approved parallel development (HAU-AGENT-LANES-003, 2026-11-05):** up to two Claude writers may work at once on two separately accepted, disjoint tasks, each on its own branch, in its own isolated worktree or cloud checkout, with its own writer lock, isolated ports and test state, and one serial integration steward. Codex and Forge are read-only; ChatGPT audits and reviews. A third writer is forbidden. Two-lane operation is inactive until that specification is merged and two task manifests exist. Shared and governance files are steward-exclusive (`docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md`). The 2026-10-14 Codex + Claude arrangement (HAU-AGENT-LANES-002) is history, superseded where it differs.
 
 ### Slice lifecycle
 
@@ -64,14 +64,14 @@ No permanent `dev`, `staging`, `backup`, model-specific, agent-specific, or dupl
 2. Work in small coherent increments.
 3. Commit each completed/working atomic increment on the active slice branch.
 4. Do not commit broken states to `main`.
-5. When the slice acceptance criteria and required gates are green:
+5. When the slice acceptance criteria and required gates are green, the slice is **ready to merge**. Merging needs Earl's explicit go-ahead for that PR (`AGENTS.md`); then, serially, by the steward:
    - update current/handoff docs;
    - rebase/fast-forward safely onto latest `main` if needed;
    - merge/fast-forward the finished slice into `main`;
    - push `main`;
    - delete the merged slice branch locally and remotely;
    - run `git fetch --prune`.
-6. In normal one-lane mode only then create the next slice. In the accepted two-lane exception the independent Claude UI branch may already exist; it must pause, refresh its main-base and retest before integration.
+6. In one-lane mode create the next slice only then. With two accepted lanes, the other lane's branch may already exist; it pauses, updates to the new `main` and retests before its own integration.
 
 Prefer linear history. Avoid merge bubbles when a safe fast-forward or rebase is possible.
 
@@ -87,15 +87,13 @@ Before integration determine the candidate from the highest **verified** patch o
 
 ## Shared-agent execution
 
-Authoritative local worktree:
+Writable checkouts: one worktree per writer, each on its own `slice/*` branch (the roster is `.codex/CURRENT.md`, "Writer slots"). The older shared checkout `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub` is historical and may hold dirty work of another session: preserve it and do not write there unless it is yours.
 
-`D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`
+Normal mode permits one active writer. Under HAU-AGENT-LANES-003 two Claude writers may write concurrently **only in separate worktrees on disjoint accepted file scopes**; each claims and yields its own worktree-local writer lock. The lock script is local to each checkout and is **not a project-wide scheduler**: the steward verifies the roster, the account-wide writer count, shared-resource isolation and exact ownership separately.
 
-Normal mode permits one active writer. Under the accepted isolated two-lane exception, Codex and Claude may write concurrently **only in separate worktrees on disjoint accepted file scopes**; each claims and yields its own worktree-local writer lock. The current lock script is local to each checkout and is **not a project-wide scheduler**: the steward must verify the other lane, account-wide writer count, shared-resource isolation and exact ownership separately.
+The accepted MausBot multi-worktree amendment permits detached, read-only specialist worktrees for Scout, Oracle, Sentinel, and Harbor. They do not create branches, do not change the branch budget and never count as writers. Harbor performs release/deploy operations only against an explicitly authorized exact commit and does not edit source. Forge is read-only.
 
-The accepted MausBot multi-worktree amendment permits detached, read-only specialist worktrees for Scout, Oracle, Sentinel, and Harbor. The existing Logistics Hub shared worktree remains the canonical V1.16/local-preview checkout; only the new approved Claude UI lane may add a second isolated writable worktree. These detached worktrees do not create branches and do not change the branch budget. Forge is the normal MausBot writer and must use the writable worktree and writer lock.
-
-Codex retains exclusive write ownership of `.codex/SESSION_HANDOFF.md` and `.codex/CURRENT.md` during V1.16. Claude records progress in its own UI PR/approved lane handoff, not in shared live pointers. The integration steward updates shared pointers only during serial integration.
+The steward alone writes `.codex/SESSION_HANDOFF.md`, `.codex/CURRENT.md` and the other shared governance files during parallel work. A second writer records its progress in its own PR body or lane handoff and proposes changelog entries there. The steward updates shared pointers only at serial integration.
 
 When usage is near its limit:
 - at ~25% or any imminent-limit warning: stop starting large work and enter handoff mode;
@@ -116,13 +114,13 @@ Baseline:
 - browser/E2E for user-visible flows;
 - final diff review.
 
-A green slice is merged to `main` immediately. A partially working slice stays off `main`.
+A green slice is merged to `main` as soon as Earl gives that PR's go-ahead; a PR prepared or updated is not that go-ahead. A partially working slice stays off `main`.
 
 ### Owner's explicit completion and checkpoint contract (2026-10-11)
 
 - Under **no circumstance** claim or present an unfinished version, broken workflow, or incomplete product as finished. State unresolved work accurately in the active-branch handoff, not in a false release claim.
 - Push each coherent, reviewed, working checkpoint to **the assigned lane's own slice branch**, after focused verification; preserve exact commits and next action. During parallel mode, do not switch the primary V1.16 worktree or cloud-preview watcher to Claude's UI branch.
-- Merge **every independently complete and verified slice** into updated `main` as soon as it meets its own accepted acceptance criteria and exact-head checks, verify production/build and prune only confirmed-integrated slice branches. Subsequent slices branch from verified new `main`; the accepted parallel exception allows the other active UI slice to remain isolated until a steward-led pause/rebase/retest and serialized merge.
+- Merge **every independently complete and verified slice** into updated `main`, once Earl has given that PR's explicit go-ahead and it meets its own accepted acceptance criteria and exact-head checks, verify production/build and prune only confirmed-integrated slice branches. Subsequent slices branch from verified new `main`; the accepted parallel exception allows the other active UI slice to remain isolated until a steward-led pause/rebase/retest and serialized merge.
 - Never merge a partial feature, future-required button or incomplete release into `main`. The release version/changelog must describe the **verified running artifact**, not the intended future work.
 - Owner-accepted V1.16 Ambient Assist + Intelligent Core work is pre-Road-to-V3; its implementation follows the accepted V1.16 specification and all remaining writer/security/production gates. Its release identity will be implemented in the existing Administration > System view and carried into V2.1 rather than duplicated.
 
