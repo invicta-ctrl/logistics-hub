@@ -148,7 +148,7 @@ describe("Administration > System", () => {
     const release = JSON.parse(fs.readFileSync("product-release.json", "utf8")) as { version: string; sourceCommit: string; record: string; changes: string[] };
     const artifact = JSON.parse(fs.readFileSync("dist/build.json", "utf8")) as { product: unknown };
     expect(artifact.product).toEqual(release);
-    expect(release.version).toBe("V1.16.13");
+    expect(release.version).toBe("V1.16.14");
     expect(fs.readFileSync(release.record, "utf8")).toContain(release.sourceCommit);
     expect(fs.existsSync("dist/product-release.json")).toBe(false);
   });

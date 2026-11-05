@@ -1,9 +1,11 @@
 {
-  "version": "V1.16.13",
-  "sourceCommit": "491c6cd4ede98cf791e79be02c99e6f5989a4a30",
-  "record": "docs/road-to-v2/releases/v1.16.13.md",
+  "version": "V1.16.14",
+  "sourceCommit": "00bd3954d0d082f6677647e48ecb0cdb4504f780",
+  "record": "docs/road-to-v2/releases/v1.16.14.md",
   "changes": [
-    "A menu that is closing no longer takes taps while it fades away.",
-    "The photo menu's automated check reads whether the menu is really open, so it no longer fails on slow test machines."
+    "Status labels are tinted pills with an icon and words. Buttons are flat: solid maroon for the main action, outlined maroon for the rest.",
+    "One family of corners (8, 12 and 16 px). Gradients, glows and bevels are gone, and nothing loops while a page loads.",
+    "A button shows a spinner while it saves, and messages arrive with a short motion.",
+    "Phones use one 760 px breakpoint for layout and lists, 48 px fields and 44 px touch targets."
   ]
 }
