@@ -422,7 +422,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .hero__field { display: flex; width: 100%; min-width: 0; height: 3.75rem; align-items: center; gap: var(--space-3); padding: 0 var(--space-1) 0 var(--space-5, 1.25rem); border-radius: var(--radius-xl); background: rgb(43 10 12 / 35%); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 14%); color: var(--on-dark-2); text-align: left; transition: background-color var(--dur-1), box-shadow var(--dur-2); }
 .hero__field:hover { background: rgb(43 10 12 / 45%); }
 .hero__field:focus-within { box-shadow: inset 0 0 0 2px var(--gold-action); }
-.hero__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; color: var(--on-dark); font-size: var(--text-md); outline: none; }
+.hero__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; caret-color: var(--on-dark); color: var(--on-dark); font-size: var(--text-md); outline: none; }
 .hero__field input::placeholder { color: var(--on-dark-2); opacity: 1; }
 .hero__field input::-webkit-search-cancel-button { display: none; }
 .hero__field button { display: grid; width: 3rem; height: 3rem; flex: none; place-items: center; border: 0; border-radius: var(--radius-lg); background: var(--on-dark); color: var(--brand); cursor: pointer; transition: background-color var(--dur-1), transform var(--dur-2) var(--ease-settle); }

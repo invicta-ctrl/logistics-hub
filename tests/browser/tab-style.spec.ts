@@ -112,3 +112,13 @@ test("on a touch screen the clear and reveal buttons stay laid over their field,
   expect(await page.locator("#ok").evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("1px");
   await context.close();
 });
+
+test("the caret is the brand colour on light fields and the light text colour in the public hero's search", async ({ page }) => {
+  await page.goto("/staff");
+  await page.setContent(`<!doctype html><html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="/src/styles.css?direct"></head><body>
+    <label><input id="plain" type="text"></label>
+    <section class="hero"><div class="hero__field"><input id="find-q" type="search"></div></section></body></html>`);
+  await page.waitForFunction(() => getComputedStyle(document.querySelector("#plain")!).caretColor === "rgb(122, 20, 25)");
+  // Brand maroon on the maroon band would be 1.2:1; the hero's field takes the light ink its text already uses.
+  expect(await page.locator("#find-q").evaluate((element) => getComputedStyle(element).caretColor)).toBe("rgb(251, 246, 238)");
+});
