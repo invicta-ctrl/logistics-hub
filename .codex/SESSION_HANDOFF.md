@@ -17,8 +17,9 @@ Rewritten 2026-11-05 by the integration steward: first in PR #89, then after tha
 ## Pending / not done
 
 - LH-RECORDS-01: gates, independent review of its exact head, Earl's merge approval, then the live roster and the `CURRENT.md` snapshot.
-- LH-UI-88 (Issue #88): spec accepted in chat with the boards; slices S1–S5 not started. S1 records the spec in Git under `docs/specs/accepted/`.
-- Earl: check V1.16.12 in Administration > System > This version, and pages on a long list.
+- LH-UI-88 (Issue #88): spec accepted and recorded with its boards (`docs/specs/accepted/2026-11-05-lh-ui-88-visual-refresh.md`); slices S1–S5 not started.
+- V1.16.13: numbered for PR #89's deployed CSS (`docs/road-to-v2/releases/v1.16.13.md`); Earl checks it in Administration > System > This version after PR #90 deploys.
+- Earl: check Administration > System > This version (V1.16.13 after PR #90 deploys), and pages on a long list (V1.16.12).
 
 ## Next exact action
 

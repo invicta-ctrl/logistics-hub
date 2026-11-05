@@ -45,13 +45,6 @@ function lastDeployment() {
   try { return JSON.parse(fs.readFileSync(recordFile, "utf8")).at(-1) ?? null; } catch { return null; }
 }
 
-function saveDeployment(record) {
-  fs.mkdirSync(path.dirname(recordFile), { recursive: true });
-  let history = [];
-  try { history = JSON.parse(fs.readFileSync(recordFile, "utf8")); } catch { /* first deployment */ }
-  fs.writeFileSync(recordFile, JSON.stringify([...history, record], null, 2) + "\n");
-}
-
 const pass = (label, detail = "") => { console.log(`  ${c.green("✓")} ${label}${detail ? c.dim(`  ${detail}`) : ""}`); return true; };
 const fail = (label, detail = "", fix = "") => { console.log(`  ${c.red("✗")} ${label}${detail ? c.dim(`  ${detail}`) : ""}`); if (fix) console.log(`      ${c.yellow("→")} ${fix}`); return false; };
 const note = (label, detail = "") => console.log(`  ${c.yellow("•")} ${label}${detail ? c.dim(`  ${detail}`) : ""}`);
@@ -142,100 +135,11 @@ async function status() {
   return true;
 }
 
-function gate(label, args) {
-  process.stdout.write(`  … ${label}`);
-  const result = run("npm", args);
-  readline.clearLine?.(process.stdout, 0);
-  readline.cursorTo?.(process.stdout, 0);
-  if (result.ok) return pass(label);
-  console.log(c.dim(result.out.trim().split("\n").slice(-15).join("\n")));
-  return fail(label, "failed", "Fix the failure above; nothing was deployed.");
-}
-
-// Retired 2026-11-05 (LH-RECORDS-01, Earl's approval): production deploys from main through Workers Builds, and
-// migrations go through the Cloud Operations lane, never from a PC (AGENTS.md). The old route stays below for history.
-const PC_DEPLOY_RETIRED = true;
-
-async function deploy(ask) {
-  if (PC_DEPLOY_RETIRED) {
-    return fail("Deploy from this PC is retired", "nothing was deployed",
-      "Production deploys from main through Workers Builds; migrations go through the Cloud Operations lane (docs/DEPLOYMENT.md).");
-  }
-  console.log(c.bold("\nDeploy latest verified main → production"));
-  console.log(c.bold("\n1. Preflight"));
-  if (!checkGit({ strict: true })) return false;
-  const d1 = checkConfig();
-  if (!d1 || !checkAuth() || !checkDatabase(d1)) return false;
-  for (const [label, args] of [
-    ["Typecheck", ["run", "-s", "typecheck"]], ["Unit and Worker tests", ["test", "--silent"]], ["Production build", ["run", "-s", "build"]],
-    ["Privacy and secret scan", ["run", "-s", "verify:privacy"]], ["Migration data verification", ["run", "-s", "verify:migration"]], ["Public catalog verification", ["run", "-s", "verify:catalog"]]
-  ]) if (!gate(label, args)) return false;
-
-  console.log(c.bold("\n2. Rollback point"));
-  const travel = wr(["d1", "time-travel", "info", EXPECTED.binding, "--json"]);
-  let bookmark = null;
-  try { bookmark = JSON.parse(travel.stdout).bookmark ?? null; } catch { /* reported below */ }
-  if (!bookmark) return fail("D1 Time Travel bookmark", "could not be read", "Retry; deployment stops without a rollback point.");
-  pass("D1 Time Travel bookmark", bookmark);
-  const pending = pendingMigrations();
-  if (pending === null) return fail("Migrations", "could not read the production migration list", "Nothing was changed. Check your connection and Cloudflare access, then retry.");
-  // Generate a session key only for a Worker that has never been deployed. If an existing
-  // Worker's secrets cannot be read, stop: replacing the key would sign every staff member out.
-  const deployments = wr(["deployments", "list", "--name", EXPECTED.worker, "--json"]);
-  const firstDeploy = !deployments.ok;
-  let previousVersion = null;
-  try { previousVersion = JSON.parse(deployments.stdout).at(-1)?.versions?.[0]?.version_id ?? null; } catch { /* first deploy */ }
-  if (previousVersion) pass("Current Worker version (rollback target)", previousVersion);
-  const secrets = wr(["secret", "list", "--name", EXPECTED.worker]);
-  if (!firstDeploy && !secrets.ok) return fail("Worker secrets", "could not be read", "Nothing was changed. Retry; if it persists, check that your Cloudflare token can read Worker secrets.");
-  const needsSecret = firstDeploy || !secrets.stdout.includes("SESSION_SECRET");
-  const commit = git("rev-parse", "--short", "HEAD");
-
-  console.log(c.bold("\n3. Plan"));
-  console.log(`  Worker        ${EXPECTED.worker}`);
-  console.log(`  D1            ${EXPECTED.database} (${d1.database_id})`);
-  console.log(`  Commit        ${commit}  ${c.dim(git("log", "-1", "--format=%s"))}`);
-  console.log(`  Migrations    ${pending.length ? pending.join(", ") : "none pending"}`);
-  console.log(`  Replaces      ${previousVersion ?? "nothing (first deploy)"}`);
-  console.log(`  Session key   ${needsSecret ? "will be generated and stored as a Worker secret" : "already configured (unchanged)"}`);
-  if (!await ask.confirm("deploy", "This changes PRODUCTION.")) {
-    note("Cancelled", "nothing was changed");
-    return false;
-  }
-
-  console.log(c.bold("\n4. Apply"));
-  if (pending.length) {
-    const migrate = wr(["d1", "migrations", "apply", EXPECTED.binding, "--remote"], { inherit: true });
-    if (!migrate.ok) return fail("Migrations", "failed", `Nothing was deployed. Restore if needed: npx wrangler d1 time-travel restore ${EXPECTED.binding} --bookmark=${bookmark}`);
-    pass("Migrations applied", pending.join(", "));
-  }
-  let secretsFile = null;
-  try {
-    if (needsSecret) {
-      secretsFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "lh-")), "secrets.json");
-      fs.writeFileSync(secretsFile, JSON.stringify({ SESSION_SECRET: randomBytes(48).toString("base64url") }), { mode: 0o600 });
-    }
-    const deployed = wr(["deploy", ...(secretsFile ? ["--secrets-file", secretsFile] : [])]);
-    if (!deployed.ok) {
-      console.log(c.dim(deployed.out.trim().split("\n").slice(-20).join("\n")));
-      return fail("Worker deploy", "failed", `The previous Worker version is still live. Database rollback if needed: npx wrangler d1 time-travel restore ${EXPECTED.binding} --bookmark=${bookmark}`);
-    }
-    const url = deployed.out.match(/https:\/\/logistics-hub\.[a-z0-9-]+\.workers\.dev/i)?.[0];
-    if (!url) return fail("Worker deploy", "succeeded but no workers.dev URL was reported", "Enable the workers.dev route for logistics-hub in the Cloudflare dashboard, then run verification.");
-    pass("Worker deployed", url);
-    const version = deployed.out.match(/Current Version ID:\s*([0-9a-f-]{36})/i)?.[1] ?? null;
-    if (version) pass("New Worker version", version);
-    saveDeployment({ url, commit, version, previousVersion, deployedAt: new Date().toISOString(), d1Bookmark: bookmark, migrations: pending });
-    saveConfig({ ...readUserConfig(), productionUrl: url });
-    console.log(c.bold("\n5. Verify"));
-    const verified = await verify(url, { database: "remote" });
-    console.log(verified
-      ? c.green(`\nLive and verified: ${url}  (commit ${commit})`)
-      : c.red(`\nDeployed but verification failed. Roll back with  npx wrangler rollback${previousVersion ? ` ${previousVersion}` : ""}  and, if data is affected,  npx wrangler d1 time-travel restore ${EXPECTED.binding} --bookmark=${bookmark}`));
-    return verified;
-  } finally {
-    if (secretsFile) fs.rmSync(path.dirname(secretsFile), { recursive: true, force: true });
-  }
+// Retired 2026-11-05 (LH-RECORDS-01, Earl's approval): production deploys from main through Workers Builds and migrations
+// go through the Cloud Operations lane, never from a PC (AGENTS.md). The old direct-Wrangler route is in Git history.
+function deploy() {
+  return fail("Deploy from this PC is retired", "nothing was deployed",
+    "Production deploys from main through Workers Builds; migrations go through the Cloud Operations lane (docs/DEPLOYMENT.md).");
 }
 
 async function verify(url, { database }) {
@@ -595,10 +499,7 @@ async function interactive() {
       } else note("Production site", "address not known yet; set it with S");
       await status();
     },
-    13: async () => {
-      const ok = await deploy(ask);
-      if (ok) Object.assign(config, readUserConfig());
-    },
+    13: () => deploy(),
     14: async () => {
       console.log(c.bold("\nFirst-time owner setup (production)"));
       console.log(c.dim("  Only for a database with no owner yet. Needs Cloudflare sign-in once; afterwards everything goes through the site."));
@@ -663,10 +564,8 @@ try {
   } else {
     if (!fs.existsSync(wrangler)) throw new Error("Dependencies are missing. Run  npm ci  first.");
     if (command === "status") process.exitCode = await status() ? 0 : 1;
-    else if (command === "deploy") {
-      const ask = prompter();
-      try { process.exitCode = await deploy(ask) ? 0 : 1; } finally { ask.close(); }
-    } else if (command === "verify") {
+    else if (command === "deploy") process.exitCode = deploy() ? 0 : 1;
+    else if (command === "verify") {
       const url = rest.find((value) => value.startsWith("http")) ?? readUserConfig().productionUrl ?? lastDeployment()?.url;
       if (!url) throw new Error("Usage: npm run admin -- verify <url> [--local]");
       process.exitCode = await verify(url, { database: rest.includes("--local") ? "local" : "remote" }) ? 0 : 1;

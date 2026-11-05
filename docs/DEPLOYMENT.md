@@ -50,19 +50,13 @@ Options 1–10 talk to the site over HTTPS as a signed-in user, exactly like the
 
 1. `npx wrangler login` once.
 2. Console **12. Production status:** checks sign-in, that D1 `logistics-hub` matches `wrangler.jsonc`, pending migrations, the Worker and `SESSION_SECRET`.
-3. **Deploy:** push or merge to `main`; Workers Builds deploys it. Console **13. Deploy verified main** is **retired** (2026-11-05, LH-RECORDS-01): it refuses and deploys nothing, because release preparation and migrations never run from a PC (`AGENTS.md`). Migrations go through the Cloud Operations lane (`.github/workflows/production-ops.yml`). The old route, kept below for history only, ran:
-   - **Preflight:** you must be on clean `main`, equal to `origin/main`. It runs typecheck, tests, build, privacy, migration and catalog checks.
-   - **Rollback point:** it records a D1 Time Travel bookmark and the Worker version currently live.
-   - **Plan:** it shows the plan and asks you to type `deploy`.
-   - **Apply:** pending migrations only. It generates `SESSION_SECRET` only if the Worker has none, and stops rather than replace an existing one.
-   - **Verify** the live site (next section).
-   - **Record:** each deploy goes in `.wrangler/admin/deployments.json` (Git-ignored), including the bookmark, old and new versions, and migrations.
+3. **Deploy:** push or merge to `main`; Workers Builds deploys it. Console **13. Deploy verified main** is **retired** (2026-11-05, LH-RECORDS-01): it refuses and deploys nothing, because release preparation and migrations never run from a PC (`AGENTS.md`). Migrations go through the Cloud Operations lane (`.github/workflows/production-ops.yml`). The old direct-Wrangler route is in Git history only.
 4. Console **14. First-time owner setup.** This works only while production has no Owner. Type your own username, display name and password; the console hashes the password locally. It signs you in and pairs this computer (step 9).
 5. Create Administrators and Staff from the website's **Administration** page or console option 3.
 
 ## Verification
 
-`npm run admin -- verify <url>` (also run automatically after a deploy) checks:
+`npm run admin -- verify <url>` checks:
 - landing and Lending Hub return 200 with the CSP and frame-blocking headers;
 - the public catalog has an `ETag`/`304`;
 - staff APIs and pages require sign-in, and anonymous stock writes are rejected;
@@ -71,8 +65,8 @@ Options 1–10 talk to the site over HTTPS as a signed-in user, exactly like the
 
 ## Rollback
 
-- **Worker:** `npx wrangler rollback <previous version id printed by the deploy>`.
-- **Data:** `npx wrangler d1 time-travel restore DB --bookmark=<bookmark printed by the deploy>`.
+- **Worker:** `npx wrangler rollback <previous version id>` (from `npx wrangler deployments list`), or redeploy the previous `main` through Workers Builds.
+- **Data:** `npx wrangler d1 time-travel restore DB --bookmark=<bookmark>` (the Cloud Operations lane records one before each migration).
 - **Access:** disable an account (Administration page or console 6); this ends its sessions immediately.
 
 Remote D1 rejects explicit `BEGIN TRANSACTION`/`COMMIT` and queries over 100 KB; `tests/migration.test.ts` enforces both. Migration `0011` rebuilds `staff_accounts` to add roles, which ends all existing sessions once. Migration `0012` (Part 2) only adds an index.
