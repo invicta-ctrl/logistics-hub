@@ -1,11 +1,11 @@
 {
   "version": "V1.16.14",
-  "sourceCommit": "f5ae589cdaa17f3bf16608394e1a3e4e331f7ab7",
+  "sourceCommit": "d434dca417f89a2290745beaf1fe15046cb2216e",
   "record": "docs/road-to-v2/releases/v1.16.14.md",
   "changes": [
     "Status labels are tinted pills with an icon and words. Buttons are flat: solid maroon for the main action, outlined maroon for the rest.",
-    "One family of corners (8, 12 and 16 px). Gradients, glows and bevels are gone, and nothing loops while a page loads.",
+    "One family of corners (8, 12 and 16 px). Buttons, the hero, panels and skeletons are flat, with no gradients, glows or bevels, and skeletons no longer shimmer.",
     "A button shows a spinner while it saves, and messages arrive with a short motion.",
-    "Phones use one 760 px breakpoint for layout and lists, 48 px fields and 44 px touch targets."
+    "The staff app and its lists share one 760 px phone breakpoint, with 48 px phone fields and 44 px touch targets."
   ]
 }
