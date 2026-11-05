@@ -323,9 +323,9 @@ Each Part must work end to end without depending on a later Part.
   - `verify:migration`, `verify:catalog`, `verify:privacy`.
 
 ## Git and deployment workflow
-- `main` is the latest verified product. There is at most one short-lived `slice/<part>-<scope>` branch, shared by Codex and Claude under one writer lock (`npm run agent:claim|yield`).
-- A green slice is merged to `main` immediately, and the slice branch is deleted.
-- **Production deploys only from `main`.** Cloudflare Workers Builds deploys each push to `main` automatically, but it does **not** apply D1 migrations. A `main` that adds a migration needs that migration applied to production first (it must be safe for the code already live), then the push. A `main` that adds a binding (such as the R2 bucket) needs the resource created first, or the deploy fails. The Owner Console's *Deploy verified main* (`docs/DEPLOYMENT.md`) remains the gated path with a Time Travel bookmark and a Worker rollback id.
+- `main` is the latest verified product. Writers, slices and locks follow HAU-AGENT-LANES-003 (`AGENTS.md`, "Writers"): one short-lived `slice/*` branch per writer, at most two Claude writers.
+- A green slice is merged to `main` once Earl gives that PR's go-ahead, and the slice branch is then deleted.
+- **Production deploys only from `main`.** Cloudflare Workers Builds deploys each push to `main` automatically, but it does **not** apply D1 migrations. A `main` that adds a migration needs that migration applied to production first (it must be safe for the code already live), then the push. A `main` that adds a binding (such as the R2 bucket) needs the resource created first, or the deploy fails. Migrations reach production only through the Cloud Operations lane; the Owner Console's *Deploy verified main* is retired (`docs/DEPLOYMENT.md`).
 - Production and provider writes need Earl's explicit authority.
 
 

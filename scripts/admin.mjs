@@ -152,7 +152,15 @@ function gate(label, args) {
   return fail(label, "failed", "Fix the failure above; nothing was deployed.");
 }
 
+// Retired 2026-11-05 (LH-RECORDS-01, Earl's approval): production deploys from main through Workers Builds, and
+// migrations go through the Cloud Operations lane, never from a PC (AGENTS.md). The old route stays below for history.
+const PC_DEPLOY_RETIRED = true;
+
 async function deploy(ask) {
+  if (PC_DEPLOY_RETIRED) {
+    return fail("Deploy from this PC is retired", "nothing was deployed",
+      "Production deploys from main through Workers Builds; migrations go through the Cloud Operations lane (docs/DEPLOYMENT.md).");
+  }
   console.log(c.bold("\nDeploy latest verified main → production"));
   console.log(c.bold("\n1. Preflight"));
   if (!checkGit({ strict: true })) return false;
@@ -598,7 +606,7 @@ async function interactive() {
       if (!d1 || !checkAuth()) return;
       let owners;
       try { [{ owners }] = runD1("SELECT COUNT(*) AS owners FROM staff_accounts WHERE role = 'OWNER'", { remote: true, json: true }); }
-      catch (error) { throw new Error(`${error.message} Deploy first (13) so the production database has owner support.`); }
+      catch (error) { throw new Error(`${error.message} Deploy main first (Workers Builds) so the production database has owner support.`); }
       if (owners > 0) return fail("An owner already exists", "", "Sign in as the owner (1), or use Forgot owner password (8).");
       const username = validUsername(await ask("  Owner username: "));
       const displayName = validDisplayName(await ask("  Owner display name: "));
@@ -631,7 +639,7 @@ async function interactive() {
     console.log(`${label()}  ${site.url}  ·  ${who}`);
     console.log(`\n${c.dim("Accounts")}\n   1. Sign in\n   2. List accounts\n   3. Create account\n   4. Reset a password\n   5. Edit account (name, username, role)\n   6. Enable or disable an account\n   7. Sign an account out everywhere`);
     console.log(`\n${c.dim("Owner recovery")}\n   8. Forgot owner password\n   9. Pair this computer (new recovery key)\n  10. Rotate or delete the recovery key`);
-    console.log(`\n${c.dim("Developer (Cloudflare sign-in)")}\n  11. Preview status\n  12. Production status\n  13. Deploy verified main\n  14. First-time owner setup`);
+    console.log(`\n${c.dim("Developer (Cloudflare sign-in)")}\n  11. Preview status\n  12. Production status\n  13. Deploy verified main (retired)\n  14. First-time owner setup`);
     console.log(`\n   S. Switch site (production / local preview)\n   0. Exit\n`);
     let choice;
     try { choice = (await ask("Choose: ")).toLowerCase(); } catch { break; }

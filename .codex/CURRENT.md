@@ -1,67 +1,61 @@
 # Current Work Pointer — Logistics Hub
 
-Rewritten 2026-11-05 by the integration steward in PR #89. The previous 336-line pointer (per-slice notes from 2026-10-15 to V1.16.12) is kept unchanged at [docs/archive/continuity/CURRENT_before_2026-11-05.md](../docs/archive/continuity/CURRENT_before_2026-11-05.md); the archive index is [docs/archive/README.md](../docs/archive/README.md). A file cannot name its own commit: the PR head is on the PR, and every dated fact below says where it was observed.
+Rewritten 2026-11-05 by the integration steward: first in PR #89, then after that merge in LH-RECORDS-01. The previous 336-line pointer (per-slice notes from 2026-10-15 to V1.16.12) is kept unchanged at [docs/archive/continuity/CURRENT_before_2026-11-05.md](../docs/archive/continuity/CURRENT_before_2026-11-05.md); the archive index is [docs/archive/README.md](../docs/archive/README.md). A file cannot name its own commit: the PR head is on the PR, and every dated fact below says where it was observed.
 
 ## Read first
 
 `AGENTS.md` (rules, writers, repository self-sufficiency, security review) → this file → [SESSION_HANDOFF.md](SESSION_HANDOFF.md) → [docs/SHARED_AGENT_WORKFLOW.md](../docs/SHARED_AGENT_WORKFLOW.md). The writer rules are [HAU-AGENT-LANES-003](../docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md). Authority: Earl's current instruction → accepted specification → verified repository state → Context Vault. This file is not evidence that a check passed: each row says where its fact was observed.
 
-## Writer slots (roster, observed 2026-11-05; re-check, do not assume)
+## Writer slots (dated snapshot of the steward's live roster, observed 2026-11-05; re-check, do not assume)
 
-Two-lane operation is **inactive in the repository** until HAU-AGENT-LANES-003 is merged and two task manifests exist. The coordinator recorded these holders for Earl's 2026-11-05 handoff; they are not verified from Git.
+- **Live roster:** `D:\Documents\HAU-USC Logistics Hub\handoffs\WRITER_ROSTER.md` on Earl's PC, kept by the integration steward. It covers every repository, because the cap of two Claude writers is account-wide. This table is a copy; if they disagree, no new writer is admitted until the steward reconciles them.
+- **Steward:** the Claude Code coordinator session `local_c6813149-65ea-41fc-ac29-130177305dde` (Claude desktop app on Earl's PC). A session that cannot read the roster file asks Earl to relay its admission request.
+- **Two-lane state:** HAU-AGENT-LANES-003 is merged (PR #89, `9a0cdfe`). A second lane still needs two accepted, disjoint task manifests.
 
 | Slot | Holder | Task | Repository / branch / worktree | State |
 |---|---|---|---|---|
-| 1 | "Kawing Studio & dual-scenario demo overhaul" Claude session | its own accepted task | `invicta-ctrl/qrmenu`, PR #1 | reported done (session idle) |
-| 2 | this Claude session, steward of Logistics' shared governance files | **HAU-PR89-W1** | `invicta-ctrl/logistics-hub`, `slice/v1.16.13-photo-menu-race`, worktree `D:\Documents\HAU-USC Logistics Hub\worktrees\photo-menu-race` | active |
-| (queued) | Kawing-Platform governance, "Writer B" | governance-only PR | `invicta-ctrl/Kawing-Platform` | waiting for a free slot and the technical department's approval; nothing started here |
-| none | the coordinator session | read-only preflight, roster | no worktree | read-only. If it edits files it takes a slot |
+| A | the steward | **LH-RECORDS-01**: roster amendment, post-merge records, deploy-gate message, Console 13 retired | `invicta-ctrl/logistics-hub`, `slice/records-roster-reconcile`, worktree `D:\Documents\HAU-USC Logistics Hub\worktrees\records-reconcile` | active |
+| B | none | — | — | free |
 
-Other Logistics checkouts exist and are **not** mine: the shared `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub` (branch `slice/v1.16-header-gridlines`, with modified `.codex` and release-record files and an untracked `NUL`), `workspace\logistics-hub-v1164*`, `repo\logistics-hub`, several detached Codex worktrees under `C:\Users\adria\.codex\worktrees` and detached MausBot worktrees. Preserve all of them; do not write there.
+Released on 2026-11-05: HAU-PR89-W1 (PR #89 merged, session `local_d015ec49…`), Kawing-Platform KAW-GOV-01 (Kawing PR #5 merged) and the qrmenu demo overhaul (qrmenu PRs #1 and #2 merged).
+
+Other Logistics checkouts exist and are **not** writable by a new writer: the shared `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub` (branch `slice/v1.16-header-gridlines`, with modified `.codex` and release-record files and an untracked `NUL`), `workspace\logistics-hub-v1164`, `repo\logistics-hub`, `worktrees\photo-menu-race` (merged PR #89, kept), several detached Codex worktrees under `C:\Users\adria\.codex\worktrees` and detached MausBot worktrees. Preserve all of them.
 
 ## Task board
 
 | ID | Task | Spec | Base → branch | Slot | State | Next |
 |---|---|---|---|---|---|---|
-| HAU-PR89-W1 | PR #89: the photo-menu fix (done) plus the 003 policy, truthful continuity files, archive, PR template, README fix, deploy-gate diagnosis; then qualification | [HAU-AGENT-LANES-003](../docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md) (accepted by Earl, 2026-11-05) | `main` `1e9a468` → `slice/v1.16.13-photo-menu-race` | 2 | active: policy and continuity files written; gates and the independent review in progress (the PR body holds the gate table) | finish the gates and the PR body; independent review; Earl's merge go-ahead |
-| (draft) | Issue #88: compact maroon/gold mobile and desktop UI baseline | none accepted | — | none | **DRAFT, design reference only**; linked here and in PR #89 | write a bounded UI spec and get it accepted; no UI change before that |
+| LH-RECORDS-01 | Apply the 003 roster amendment; reconcile `CURRENT.md`, the handoff, `CHANGELOG.md`, the V1.16.12 record and the stale passages; a clearer deploy-gate message for a merge-button commit (with a test); retire Console option 13 | 003 (amended); Earl, 2026-11-05: "i approve all … documents reconciled" | `main` `9a0cdfe` → `slice/records-roster-reconcile` | A | active | gates, independent review, merge |
+| LH-UI-88 | Issue #88 visual refresh, slices S1–S5 | proposed spec accepted by Earl in chat 2026-11-05, boards attached; to be recorded in Git by S1 | `main` → one `slice/*` per slice | none yet | **accepted, not started** | S1 Foundations after LH-RECORDS-01 merges; slices run one at a time because all share `src/styles.css` |
 
-Issue #88 (<https://github.com/invicta-ctrl/logistics-hub/issues/88>) states, kept separate: design reference linked — **yes**; UI spec proposed — no; UI spec accepted — no; mobile and desktop UI implemented — no; owner visually accepted — no. The current Home · Find · More navigation is retained until a separate accepted navigation amendment exists; the issue's Home · Items · Activity · More rail is an open design decision, not accepted. Issue #88 is linked as a DRAFT design reference; no redesign implementation is included (PR #89 does change the separate photo-menu CSS rule). `src/styles.css` is held by PR #89; do not start Issue #88 CSS work until it is released.
+Issue #88 (<https://github.com/invicta-ctrl/logistics-hub/issues/88>) states, kept separate: design reference linked — **yes**; UI spec proposed — yes; UI spec accepted — **yes, in chat** (recorded in Git by its first slice); mobile and desktop UI implemented — no; owner visually accepted — no. The current Home · Find · More navigation stays; the boards' Home · Items · Activity · More bar is out of scope until a separate navigation amendment is accepted.
 
-### HAU-PR89-W1 manifest
+### LH-RECORDS-01 manifest
 
-- **Find the exact head:** `git rev-parse HEAD` in the PR's checkout, or `gh pr view 89 --repo invicta-ctrl/logistics-hub --json headRefOid`. The product fix is `491c6cd`; later commits on the branch are documentation and policy only. The independent review packet and the gate table are on the PR (`gh pr view 89 --comments`, comment "Independent review packet").
-- **Writers in this repository right now:** exactly one (this session). HAU-AGENT-LANES-003 is accepted but not merged, so the second-lane mode is inactive here; slot 1 belongs to another repository (`qrmenu`) and the cap of two is account-wide.
-- **Base:** `main` `1e9a468`. **Isolation:** its own `.wrangler/e2e-<pid>` state and random port; no secrets read.
-- **Review remediation HAU-PR89-REVIEW-R1 (Earl, after the independent review of `4e17c3f`):** the one newly authorized path is `.claude/settings.json`, only to remove the three exact allowances `Bash(git push origin main)`, `Bash(git push origin HEAD:main)` and `Bash(gh workflow run production-ops.yml:*)`; the read-only `gh run view|list|watch` allowances stay. Nothing else in the owned-path list changes; the forbidden list is unchanged.
-- **Owned paths:** `AGENTS.md`, `CLAUDE.md`, `.agents/PROJECT_POLICY.md`, `docs/SHARED_AGENT_WORKFLOW.md`, `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md`, `docs/DOCUMENTATION_STATUS.md`, `README.md`, `CHANGELOG.md`, `.github/pull_request_template.md`, `docs/archive/**`, `docs/specs/**`, and the two files of the photo-menu fix (`src/styles.css`, `tests/worker-browser/worker-live.spec.ts`).
-- **Forbidden:** any other `src/**` change or move; migrations; `wrangler.jsonc`; `package.json` and the lockfile; CI and deploy workflows (no accepted amendment); `scripts/**`; the release records.
-- **Risk tier of the whole PR:** HIGH, conservatively, because it rewrites the writer-concurrency and merge-gate policy text (a release control, though no enforced control, workflow, authentication, data or deploy path changes). The product change inside it is STANDARD. HIGH needs the independent review, which is PENDING.
-- **HIGH-tier negative and abuse regressions:** N/A, with the reason: no authentication, authorization, session, stock, borrowing, R2, D1, migration or deploy behavior changes. The one behavior line (a closing menu takes no presses) has its own assertion.
-- **Unverified holders count as taken:** if a slot's holder cannot be confirmed idle from the app's session list, count the slot as occupied. Slot 1 is reported idle but not confirmed.
-- **Stop conditions:** overlap or unclear owner; a third writer; an unaccepted deploy/CI/product scope; a mandatory check that is unrun or failed; a HIGH finding; a merge without Earl's go-ahead.
+- **Writer:** the steward, slot A. **Base:** `main` `9a0cdfe`. **Isolation:** its own worktree; no secrets read; no provider writes.
+- **Owned paths:** `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md`, `CHANGELOG.md`, `CLAUDE.md`, `.agents/PROJECT_POLICY.md`, `README.md`, `docs/DOCUMENTATION_STATUS.md`, `docs/DEPLOYMENT.md`, `docs/PRODUCT_REFERENCE.md`, `docs/PRODUCT_VERSION_GOVERNANCE.md`, `docs/road-to-v2/releases/v1.16.12.md`, `docs/road-to-v2/v1.16-execution-card.md`, `docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md`, `docs/specs/accepted/v1.16-ambient-intelligent-core.md` (one clause), `scripts/ops/deploy-gate.mjs` (the timeout message only), `tests/deploy-gate.test.ts`, `scripts/admin.mjs` (option 13 refuses).
+- **Forbidden:** `src/**`, migrations, `wrangler.jsonc`, `package.json` and the lockfile, `.github/**`, `product-release.json`.
+- **Risk tier:** HIGH (deploy and release-control text and the deploy gate's message). The gate's decision is unchanged: `codeqlState` returns the same answers and the gate still fails closed; only the text after the wait names the cause. Console 13 now refuses; nothing new can deploy.
+- **Stop conditions:** a third writer; an overlap; a failed or unrun required check; a HIGH finding; a merge without Earl's go-ahead.
 
 ## Release states (a merge is not a deployment)
 
 | Release | State | Evidence and where observed |
 |---|---|---|
-| V1.16.12 (pagination, PR #87) | **MERGED_DEPLOYMENT_UNVERIFIED** | merged to `main` as merge commit `1e9a468` (2026-11-04 18:40 UTC; PR #87). CI run 41889453855 and CodeQL push run 41889453758 passed on it. Cloudflare's "Workers Builds: logistics-hub" check shows success for that commit, a provider signal and not a byte check. The GitHub `Deploy` run 41891241652 failed at its CodeQL gate, as designed (below). Not done: compare the live assets with a build of `1e9a468`; Earl's System check. Its release record still says `INTEGRATION: pending`, which predates the merge; this file is the later fact |
-| V1.16.7 – V1.16.11 | **DEPLOYED_OWNER_CHECK_PENDING**, as recorded | the archived pointer records each as merged, deployed by Workers Builds and byte-checked (121 of 122 assets, `build.json` not served), with Earl's Administration > System checks still owed. Not re-verified by this session |
+| PR #89 change (photo-menu test fix and closing-menu CSS) | **DEPLOYED_OWNER_CHECK_PENDING**, no version bump | merged 2026-11-05 07:45 UTC as `main` `9a0cdfe` from head `68a57ec` (Earl's go-ahead in chat). CI `checks` and `worker-e2e`, CodeQL and Workers Builds passed on `9a0cdfe`. The live stylesheet at `https://logistics.hausc.org` was observed to contain `.menu[popover]:not(:popover-open){pointer-events:none}` (a targeted check of the only product change, not a full byte check). `product-release.json` is unchanged, so the site still reports V1.16.12: the steward decided one defensive CSS property is not a new revision. `Deploy` run 41990736342 failed at the CodeQL gate as designed (below) |
+| V1.16.12 (pagination, PR #87) | **DEPLOYED_OWNER_CHECK_PENDING** | merged as `1e9a468`; Workers Builds deployed it; the live assets matched a local build of that tree, 121 of 122 byte for byte, `build.json` not served (observed by the steward on 2026-11-05). Owed: Earl's check of Administration > System > This version and pages on a long list. Record: `docs/road-to-v2/releases/v1.16.12.md` |
+| V1.16.7 – V1.16.11 | **DEPLOYED_OWNER_CHECK_PENDING**, as recorded | the archived pointer records each as merged, deployed by Workers Builds and byte-checked, with Earl's Administration > System checks still owed. Not re-verified here |
 | V1.16 (full release) | OPEN | `docs/specs/accepted/v1.16-ambient-intelligent-core.md`; the V1.16.x revisions are post-release follow-ups |
-| PR #89 fix (candidate V1.16.13) | **QUALIFICATION_PENDING**, not merged | the photo-menu Worker E2E reads the popover's state with no retry (the real cause: a fading menu counted as open); a closing menu also takes no presses, as defense in depth (Chromium already ignored it when hit-testing). Candidate number only: the steward decides whether one CSS property is a revision (`docs/PRODUCT_VERSION_GOVERNANCE.md`). Merge needs Earl's explicit go-ahead |
-
-Production's live state is **UNVERIFIED** from here: no Cloudflare read was made. Do not mark a release deployed from this table.
 
 ## Security qualification of the deploy (diagnosed 2026-11-05)
 
-`Deploy` run 41891241652 on `1e9a468` failed in `scripts/ops/deploy-gate.mjs` (`requireCodeql`) after its 120 s wait: the exact-main CodeQL **workflow** run passed, but no combined **`CodeQL` check from GitHub Advanced Security (app 57789)** exists on that commit. A commit created by GitHub's merge button never gets one; PR heads do (the PR #89 head has it). The gate is fail-closed on purpose (`tests/deploy-gate.test.ts` rejects the Actions `analyze (...)` jobs as a substitute) and must stay so. `DEPLOY_FROM_CI` is `dry-run`; production deploys come from Workers Builds until Earl approves the V1.17 switch (`docs/road-to-v2/v1.17-ci-only-deploy-task.md`), which says to merge only by fast-forwarding `main` to a checked head. So the red run is the documented behavior of a merge-button commit, not a defect in CI or in production.
-- **BLOCKED** (needs an accepted deploy/CI amendment; outside this task's allowed paths): a clearer gate message when the combined check is absent on a merge-button commit, with a negative test. Smallest amendment: allow `scripts/ops/deploy-gate.mjs` message text and one test in `tests/deploy-gate.test.ts`, no change to what is accepted.
-- **BLOCKED** (Earl's settings, not code): the V1.17 cutover and a fast-forward merge method.
-- **BLOCKED** (needs an accepted amendment; `scripts/admin.mjs` is outside this task): Owner Console option 13 still deploys directly with Wrangler and applies pending migrations from a PC, which `AGENTS.md` forbids for release preparation. The README now says so. A documentation note does not disable it. Smallest amendment: make option 13 refuse while the Cloud Operations lane exists, or remove it.
+`Deploy` runs 41891241652 (on `1e9a468`) and 41990736342 (on `9a0cdfe`) failed in `deploy-gate.mjs` (`requireCodeql`) after its 120 s wait: the exact-main CodeQL **workflow** run passed, but no combined **`CodeQL` check from GitHub Advanced Security (app 57789)** exists on a commit made by GitHub's merge button; PR heads get one. The gate is fail-closed on purpose (`tests/deploy-gate.test.ts` rejects the Actions `analyze (...)` jobs as a substitute) and stays so. `DEPLOY_FROM_CI` is `dry-run`; production deploys come from Workers Builds until Earl approves the V1.17 switch (`docs/road-to-v2/v1.17-ci-only-deploy-task.md`), which says to merge only by fast-forwarding `main` to a checked head. So a red `Deploy` run on a merge-button commit is documented behavior, not a production failure.
+- **Fixed in LH-RECORDS-01:** the gate now says so after its wait (`codeqlTimeoutMessage`), with a test; its decision is unchanged.
+- **Fixed in LH-RECORDS-01:** Owner Console option 13 (and `npm run admin -- deploy`) refuses and deploys nothing; the old code is kept behind `PC_DEPLOY_RETIRED` for history.
+- **Earl's decision, not code:** the V1.17 cutover and a fast-forward merge method.
 
 ## Next exact action
 
-1. Steward (this session): finish HAU-PR89-W1's qualification and update the PR body with PASS, FAIL, N/A and NOT RUN for the exact head.
-2. ChatGPT: independent review of the complete exact-head diff of PR #89. The saved packet names no SHA: the reviewer states the head reviewed, and any later push needs the receipt updated and the delta reviewed. The first independent review of `4e17c3f` led to HAU-PR89-REVIEW-R1 (the settings, checkout-wording and Issue #88-wording corrections); the new head needs a re-review of that delta, and it is **PENDING**. (If this file and `SESSION_HANDOFF.md` ever order the steps differently, this file wins.)
-3. Earl: decide whether to merge PR #89 (explicit go-ahead; not implied by this file), and later check Administration > System > This version for V1.16.7–V1.16.12.
-4. After any authorized merge: verify `main`, then check the live assets against a build of the merged commit to move V1.16.12 out of `MERGED_DEPLOYMENT_UNVERIFIED`, then repeat the fresh-clone drill on a clean `main` checkout.
+1. Steward: finish LH-RECORDS-01 (gates, PR, independent review of the exact head, merge on Earl's approval), then update the live roster and this snapshot.
+2. Steward: admit the LH-UI-88 S1 writer (slot B) and run S1 → S5 one at a time, each with its own PR, gates, review and merge.
+3. Earl: check Administration > System > This version (V1.16.12) and pages on a long list; then visually accept each LH-UI-88 slice. Issue #88 closes only after that.

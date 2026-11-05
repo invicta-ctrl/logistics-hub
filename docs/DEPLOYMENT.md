@@ -31,11 +31,11 @@ On Windows, double-click **`D:\Documents\Logi hub access\LOGISTICS_ADMIN.cmd`**.
 Accounts          1 Sign in · 2 List · 3 Create · 4 Reset password · 5 Edit (name, username, role)
                   6 Enable/disable · 7 Sign out everywhere
 Owner recovery    8 Forgot owner password · 9 Pair this computer · 10 Rotate or delete the key
-Developer         11 Preview status · 12 Production status · 13 Deploy verified main · 14 First-time owner setup
+Developer         11 Preview status · 12 Production status · 13 Deploy verified main (retired) · 14 First-time owner setup
 S                 Switch site (production / local preview)
 ```
 
-Options 1–10 talk to the site over HTTPS as a signed-in user, exactly like the browser. They need **no Cloudflare sign-in and no database access**, and the site enforces the same rules as the website. Only options 12–14 use Wrangler (`npx wrangler login` once, or a `CLOUDFLARE_API_TOKEN`). The console keeps per-user settings (production address, paired key) in `%LOCALAPPDATA%\LogisticsHub`, outside the repository. Production writes ask you to type `yes`.
+Options 1–10 talk to the site over HTTPS as a signed-in user, exactly like the browser. They need **no Cloudflare sign-in and no database access**, and the site enforces the same rules as the website. Only options 12 and 14 use Wrangler (13 is retired and refuses) (`npx wrangler login` once, or a `CLOUDFLARE_API_TOKEN`). The console keeps per-user settings (production address, paired key) in `%LOCALAPPDATA%\LogisticsHub`, outside the repository. Production writes ask you to type `yes`.
 
 ## Owner recovery key
 
@@ -50,7 +50,7 @@ Options 1–10 talk to the site over HTTPS as a signed-in user, exactly like the
 
 1. `npx wrangler login` once.
 2. Console **12. Production status:** checks sign-in, that D1 `logistics-hub` matches `wrangler.jsonc`, pending migrations, the Worker and `SESSION_SECRET`.
-3. Console **13. Deploy verified main.** It runs:
+3. **Deploy:** push or merge to `main`; Workers Builds deploys it. Console **13. Deploy verified main** is **retired** (2026-11-05, LH-RECORDS-01): it refuses and deploys nothing, because release preparation and migrations never run from a PC (`AGENTS.md`). Migrations go through the Cloud Operations lane (`.github/workflows/production-ops.yml`). The old route, kept below for history only, ran:
    - **Preflight:** you must be on clean `main`, equal to `origin/main`. It runs typecheck, tests, build, privacy, migration and catalog checks.
    - **Rollback point:** it records a D1 Time Travel bookmark and the Worker version currently live.
    - **Plan:** it shows the plan and asks you to type `deploy`.
@@ -77,7 +77,7 @@ Options 1–10 talk to the site over HTTPS as a signed-in user, exactly like the
 
 Remote D1 rejects explicit `BEGIN TRANSACTION`/`COMMIT` and queries over 100 KB; `tests/migration.test.ts` enforces both. Migration `0011` rebuilds `staff_accounts` to add roles, which ends all existing sessions once. Migration `0012` (Part 2) only adds an index.
 
-Workers Builds deploys every push to `main` automatically (until "Deploys from CI" below is switched on), but it does not apply D1 migrations. Before pushing a `main` that adds a migration, apply it to production (Console **13**, or `npx wrangler d1 migrations apply DB --remote` from that commit). Migrations must stay safe for the code already live, so it keeps working until the push lands. Migration `0013` (Part 3) is additive: a movement reason column, an optional expiry column and the `reorders` table. Migration `0014` (Part 4) reclassifies the 112 "Saleable" items as Consumable (audited per item), replaces the never-used, empty `loans` / `loan_items` / `evidence` placeholders with the new `loans` table, and bumps the revision; the Part 3 code references none of those tables and accepts Consumable, so it is safe to apply first.
+Workers Builds deploys every push to `main` automatically (until "Deploys from CI" below is switched on), but it does not apply D1 migrations. Before pushing a `main` that adds a migration, apply it to production through the Cloud Operations lane (`.github/workflows/production-ops.yml`, `ops/releases/<release>.json`), never from a PC; Console 13 is retired. Migrations must stay safe for the code already live, so it keeps working until the push lands. Migration `0013` (Part 3) is additive: a movement reason column, an optional expiry column and the `reorders` table. Migration `0014` (Part 4) reclassifies the 112 "Saleable" items as Consumable (audited per item), replaces the never-used, empty `loans` / `loan_items` / `evidence` placeholders with the new `loans` table, and bumps the revision; the Part 3 code references none of those tables and accepts Consumable, so it is safe to apply first.
 
 A deploy that adds a binding needs the resource first: Part 4 adds the R2 bucket above, and a push without it fails the Workers Builds deploy (the live version keeps serving). Order for Part 4: create the bucket, apply `0014`, then push `main`.
 

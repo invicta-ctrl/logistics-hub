@@ -47,7 +47,7 @@ Before starting a post-release change:
 
 - Use the **one active** short-lived `slice/<part>-<scope>` branch, one authorized writer, and existing handoff policy. Branch naming may include the candidate revision for clarity (e.g. `slice/v1.15.2-photo-fix`) but the branch name is **not** release evidence.
 - Each safe, coherent, working checkpoint is committed/pushed to this same branch. Do not label a checkpoint as its own subversion.
-- Independently functioning fixes/slices that pass accepted criteria and exact-head CI integrate into latest main promptly, verify configured Workers Build/deployment, then prune their proven-merged branch; the next independent fix uses a new slice from updated main.
+- Independently functioning fixes/slices that pass accepted criteria and exact-head CI integrate into latest main promptly once Earl gives that PR's merge go-ahead (`AGENTS.md`, "Writers"), verify configured Workers Build/deployment, then prune their proven-merged branch; the next independent fix uses a new slice from updated main.
 - An incomplete feature must not be merged or described as complete. If its next independent slice is required to make it work, it has not satisfied this policy.
 - If a larger main version is still underway, independently completed slices may reach main, but must not prematurely claim the unreleased main version or manufacture patch numbers on a not-yet-released line. Preserve the last **truthful running** product-version identity until the main release qualification gate is met.
 - Document-only governance commits can be integrated as verified documentation slices without consuming a revision of the product.

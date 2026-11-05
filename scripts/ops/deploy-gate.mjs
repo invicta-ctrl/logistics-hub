@@ -37,15 +37,32 @@ export function pendingMigrations(tree, applied) {
 }
 
 /** Both the latest main push analysis and the combined security result must qualify these exact bytes. */
-export function codeqlState(runs, checks, sha, repo) {
+function codeqlRows(runs, checks, sha, repo) {
   if (!Array.isArray(runs) || !Array.isArray(checks)) throw new Error("Unreadable CodeQL qualification answer.");
   const latest = (rows) => rows.filter((row) => Number.isSafeInteger(row.id) && row.id > 0).sort((a, b) => b.id - a.id)[0];
   const run = latest(runs.filter((row) => row?.head_sha === sha && row.event === "push" && row.head_branch === "main"
     && row.path === ".github/workflows/codeql.yml" && row.head_repository?.full_name === repo));
   const check = latest(checks.filter((row) => row?.head_sha === sha && row.name === "CodeQL"
     && row.app?.id === 57789 && row.app.slug === "github-advanced-security"));
+  return { run, check };
+}
+
+export function codeqlState(runs, checks, sha, repo) {
+  const { run, check } = codeqlRows(runs, checks, sha, repo);
   if ([run, check].some((row) => row?.status === "completed" && row.conclusion !== "success")) return "failed";
   return [run, check].every((row) => row?.status === "completed" && row.conclusion === "success") ? "success" : "pending";
+}
+
+// The message after the wait runs out. GitHub adds the combined CodeQL check only to pull-request heads, so a commit
+// made by the merge button never gets one even when its own CodeQL workflow passed: say so instead of "rerun".
+export function codeqlTimeoutMessage(runs, checks, sha, repo) {
+  const { run, check } = codeqlRows(runs, checks, sha, repo);
+  if (run?.status === "completed" && run.conclusion === "success" && !check) {
+    return "CodeQL passed on this exact source, but GitHub's combined CodeQL check is absent: GitHub adds it only to "
+      + "pull-request heads, so a merge-button commit never gets one and a rerun will not help. Nothing deployed. "
+      + "Production deploys from Workers Builds until the V1.17 switch (.codex/CURRENT.md).";
+  }
+  return "CodeQL qualification is missing or unfinished. Nothing deployed; rerun after it passes.";
 }
 
 async function requireCodeql(sha, repo) {
@@ -68,7 +85,7 @@ async function requireCodeql(sha, repo) {
     const state = codeqlState(runs, checks, sha, repo);
     if (state === "success") { console.log(`CodeQL analysis and combined security check passed on ${sha}.`); return; }
     if (state === "failed") throw new Error("CodeQL did not qualify this exact source. Nothing deployed.");
-    if (Date.now() >= deadline) throw new Error("CodeQL qualification is missing or unfinished. Nothing deployed; rerun after it passes.");
+    if (Date.now() >= deadline) throw new Error(codeqlTimeoutMessage(runs, checks, sha, repo));
     await setTimeout(5000);
   }
 }
