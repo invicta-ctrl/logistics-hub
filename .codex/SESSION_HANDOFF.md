@@ -1,50 +1,33 @@
 # Session Handoff — Logistics Hub
 
-Rewritten 2026-11-05 by the integration steward in PR #89. Everything this file held before (handoffs from V1.16.7 and earlier, the Codex-era takeovers and the historical executable continuations) is kept unchanged at [docs/archive/continuity/SESSION_HANDOFF_before_2026-11-05.md](../docs/archive/continuity/SESSION_HANDOFF_before_2026-11-05.md). The task board, the writer slots and the release states are in [CURRENT.md](CURRENT.md); this file is the last step, the next step and what a new session needs to resume without any chat history.
+Rewritten 2026-11-05 by the integration steward: first in PR #89, then after that merge in LH-RECORDS-01. Everything this file held before PR #89 (handoffs from V1.16.7 and earlier, the Codex-era takeovers and the historical executable continuations) is kept unchanged at [docs/archive/continuity/SESSION_HANDOFF_before_2026-11-05.md](../docs/archive/continuity/SESSION_HANDOFF_before_2026-11-05.md). The task board, the writer slots and the release states are in [CURRENT.md](CURRENT.md); this file is the last step, the next step and what a new session needs to resume without any chat history.
 
-## Last step (2026-11-05, HAU-PR89-W1, writer slot 2)
+## Last step (2026-11-05)
 
-PR #89 (<https://github.com/invicta-ctrl/logistics-hub/pull/89>), branch `slice/v1.16.13-photo-menu-race`, based on `main` `1e9a468`. Not merged. The head SHA is on the PR; this file cannot name its own commit.
+**PR #89 merged** (<https://github.com/invicta-ctrl/logistics-hub/pull/89>) at head `68a57ec` as `main` `9a0cdfe`, on Earl's chat go-ahead ("i approve merge for qrmenu, kawing platform, and logisticshub").
+- It held the photo-menu test fix (the helper reads `:popover-open`; no retry), a defensive closing-menu CSS rule (Chromium already ignored presses on a fading popover; measured with `elementFromPoint`), HAU-AGENT-LANES-003, the reconciled agent files, the archive, the PR template, the README's Owner Console corrections and the deploy-gate diagnosis.
+- Independent review: ChatGPT reviewed `4e17c3f` (round R1; its findings were fixed in `68a57ec`). The steward, who wrote none of PR #89, reviewed the R1 delta and posted the receipt on the PR.
+- After the merge: CI, CodeQL and Workers Builds passed on `9a0cdfe`; the live stylesheet carries the new rule. The `Deploy` run failed at the CodeQL gate as designed (CURRENT.md).
+- Its writer released slot A; its worktree `D:\Documents\HAU-USC Logistics Hub\worktrees\photo-menu-race` is kept, and its remote branch is gone.
 
-**What the PR holds**
-- The fix, unchanged since `491c6cd` apart from one comment: `tests/worker-browser/worker-live.spec.ts` (the photo-menu helper reads `:popover-open`; the retry is gone) and `src/styles.css` (a closing popover menu gets `pointer-events: none`). Root cause: a closed `.menu` stays drawn while it fades (`display … allow-discrete`), so the old test took "visible" for "open". **Correction to the PR's first description:** it said a fading menu could take presses. Measured 2026-11-05 with `elementFromPoint` and a real press, with and without the CSS change, on desktop width and a 390 px phone: the point under the fading "Remove photo" resolved to the form or the photo beneath in both cases, and no confirm opened. Chromium already skips a closing popover when hit-testing, so the CSS line is defense in depth for other engines, not a fix for an observed failure. The test-only change is the real fix; Earl may prefer to drop the CSS line.
-- Governance, steward-written: [HAU-AGENT-LANES-003](../docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md) (002 kept as history and marked superseded in part); `AGENTS.md`, `CLAUDE.md`, `.agents/PROJECT_POLICY.md` and `docs/SHARED_AGENT_WORKFLOW.md` reconciled to it; `docs/archive/` with an index and exact copies of the three superseded documents; new `CURRENT.md` and this file; `docs/DOCUMENTATION_STATUS.md`, `README.md` (Owner Console options and the deploy description corrected), `CHANGELOG.md` (a dated specification entry, not a version); `.github/pull_request_template.md`.
-- Issue #88 is linked as a **DRAFT design reference**; no redesign implementation is included. (The PR does change the separate photo-menu CSS rule.) The current Home · Find · More navigation is retained.
-- **Review remediation HAU-PR89-REVIEW-R1:** `.claude/settings.json` no longer pre-allows `git push origin main`, `git push origin HEAD:main` or `gh workflow run production-ops.yml:*`; the read-only `gh run view|list|watch` allowances remain. The checkout wording in `.agents/PROJECT_POLICY.md` has one clearly labelled historical-checkout warning. The first independent review is recorded on the PR; the re-review of the new head is **PENDING**.
+**In progress: LH-RECORDS-01** (steward, slot A, branch `slice/records-roster-reconcile`, worktree `D:\Documents\HAU-USC Logistics Hub\worktrees\records-reconcile`): the 003 roster amendment (the live roster is the steward's cross-repository roster; the `CURRENT.md` table is a snapshot), this file and `CURRENT.md`, `CHANGELOG.md`, the V1.16.12 record's integration and state, the stale passages in `docs/DOCUMENTATION_STATUS.md`, a clearer deploy-gate message for a merge-button commit (with a test), and Console option 13 retired.
 
-**README facts verified in `scripts/admin.mjs` (2026-11-05)**
-- Option **8** is "Forgot owner password"; the old README said to choose 8 to deploy.
-- Option **13** is "Deploy verified main", the legacy direct-Wrangler route.
-- The site switch is **S**, not E.
-
-**Deploy qualification failure** (`Deploy` run 41891241652): diagnosed as the documented fail-closed behavior for a merge-button commit; see CURRENT.md. Nothing was changed in CI, the deploy workflow or the gate.
-
-**Triage of the four failures in the full Windows `npm test` run** (the same four pass on Linux CI)
-- `tests/role-evaluation.test.ts` "refuses altered or symlinked photo manifests": `EPERM` creating a symlink. Windows needs Developer Mode or an elevated shell for symlinks. Environment, not code; CI covers it.
-- `tests/production-release.test.ts`, three tests: each spawns many child processes and takes 7 to 10 s on this PC against vitest's 5 s limit. Run alone they still time out; with `--testTimeout=60000` all 46 pass (`npx vitest run tests/production-release.test.ts --testTimeout=60000`). Timing on Windows, not a defect.
+**Other repositories, same day:** Kawing-Platform PR #5 (two-writer governance; AI review counts as technical approval there, not here) and qrmenu PRs #1 and #2 are merged.
 
 ## Pending / not done
 
-- **Independent review by ChatGPT of the exact final diff: PENDING.** The review packet is on the PR (`gh pr view 89 --comments`, the comment titled "Independent review packet"). ChatGPT was not reachable from this session. A pending review is not a passed one.
-- **Merge: needs Earl's explicit go-ahead.** Preparing the PR is not one.
-- **Outside this task's allowed paths, so left for the steward or a follow-up amendment**
-  - `docs/road-to-v2/releases/v1.16.12.md` still reads `INTEGRATION: pending`; PR #87 merged as `1e9a468`. CURRENT.md states the later fact.
-  - `docs/DEPLOYMENT.md` still describes console option 13 as the first deploy route; the README now warns.
-  - `scripts/admin.mjs` option 13 still deploys from a PC and applies migrations, against the Cloud Operations rule: needs an accepted amendment to disable or remove it.
-  - A clearer `deploy-gate.mjs` message for a missing combined CodeQL check: needs an accepted deploy/CI amendment.
-- V1.16.12 production state: **UNVERIFIED** (MERGED_DEPLOYMENT_UNVERIFIED). Nobody has compared the live assets with a build of `1e9a468` since the merge.
+- LH-RECORDS-01: gates, independent review of its exact head, Earl's merge approval, then the live roster and the `CURRENT.md` snapshot.
+- LH-UI-88 (Issue #88): spec accepted and recorded with its boards (`docs/specs/accepted/2026-11-05-lh-ui-88-visual-refresh.md`); slices S1–S5 not started.
+- V1.16.13: numbered for PR #89's deployed CSS (`docs/road-to-v2/releases/v1.16.13.md`); Earl checks it in Administration > System > This version after PR #90 deploys.
+- Earl: check Administration > System > This version (V1.16.13 after PR #90 deploys), and pages on a long list (V1.16.12).
 
 ## Next exact action
 
-Same order as `.codex/CURRENT.md`, which wins if they ever differ. The steward's own remaining step (finish the gates and the PR body) comes first; then:
-
-1. ChatGPT: independent review of the final PR #89 diff, using the saved packet. Record the result on the PR.
-2. Earl: decide on merging PR #89. After a merge: verify `main`; check the live assets against a build of the merged commit; repeat the fresh-clone drill on a clean `main` checkout and record its SHA.
-3. Steward: open the follow-up for the four items above, and the Issue #88 UI specification when Earl wants it.
+Same order as `.codex/CURRENT.md`, which wins if they ever differ.
 
 ## Resume without chat history
 
-1. `git fetch origin`; `git worktree list`; `git status`. Read `AGENTS.md`, then `CURRENT.md`, then this file.
-2. The PR's worktree is `D:\Documents\HAU-USC Logistics Hub\worktrees\photo-menu-race` (a clone of the branch works too). Install with `npm ci` (Node 22 as in CI).
+1. `git fetch origin`; `git worktree list`; `git status`. Read `AGENTS.md`, then `CURRENT.md`, then this file. Ask the steward (or Earl) for the live roster before writing.
+2. Install with `npm ci` (Node 22 as in CI).
 3. Checks: `npm run typecheck`, `npm test`, `npm run verify:privacy`, `npm run build`, `npm run test:browser`, `npm run test:browser:worker`. The worker runner needs `node_modules/wrangler` and uses its own `.wrangler/e2e-<pid>` state and a random port; on Windows it can leave the `.wrangler/e2e-*` folder behind (`EPERM` on cleanup), which is Git-ignored.
-4. The scratch evidence of this session is in the PR body and the review-packet comment; nothing else needs recovering.
+4. Windows-only test notes: `tests/role-evaluation.test.ts` "refuses altered or symlinked photo manifests" needs symlink rights (Developer Mode); `tests/production-release.test.ts` needs `--testTimeout=60000` on a slow PC. Linux CI covers both.

@@ -49,7 +49,7 @@ Unless the steward grants a serial, frozen ownership transfer first, only the st
 
 ## Writer-slot roster and isolation
 
-- The **roster** lives in `.codex/CURRENT.md` ("Writer slots"): slot, holder (session), task ID, repository, branch, worktree, base and head SHA, state. A worktree-local writer lock is not a global scheduler; the roster is checked, not assumed, whenever a slot changes hands.
+- The **live roster** is the integration steward's cross-repository roster (its location is recorded in `.codex/CURRENT.md`; currently `D:\Documents\HAU-USC Logistics Hub\handoffs\WRITER_ROSTER.md` on Earl's PC). The "Writer slots" table in `.codex/CURRENT.md` is a dated snapshot of it: slot, holder (session), task ID, repository, branch, worktree, base and head SHA, state. If they disagree, no new writer is admitted until the steward reconciles them. A worktree-local writer lock is not a global scheduler; the roster is checked, not assumed, whenever a slot changes hands.
 - Isolate everything two writers could trample: D1 and R2 state, the local preview and its watcher (`npm run dev:live` follows one `slice/*` branch), test databases, `.wrangler` e2e state, caches, ports, credentials and any cloud resource that can mutate. Use your own `.wrangler` state directory and port. Local and cloud clones cannot see each other's uncommitted work; commit and push to the assigned branch to share.
 - Read no secrets. A writer never touches production or provider state without its own exact-target authorization.
 
@@ -89,3 +89,5 @@ D1 and R2 truth and evidence contracts; inventory and audit invariants; privacy;
 - Owner decision: Earl, 2026-11-05, in chat (the saved owner handoff names this amendment HAU-AGENT-LANES-003 and says it is "real; ... not yet assumed recorded in Git"). Earl confirmed in the Claude session that executed PR #89's Wave 1 that this task is to be run as written (2026-11-05).
 - Recorded in Git by PR #89. Status: **accepted; two-lane operation inactive** until the activation conditions above are met.
 - Changelog: `CHANGELOG.md`, "Specification changes". Not a product version.
+- Merged to `main` by PR #89 as `9a0cdfe` (2026-11-05).
+- Amended 2026-11-05 (owner decision, Earl: "i approve all" after the amendment was put to him): the live roster moved to the steward's cross-repository roster; the repository table is a snapshot. Recorded by LH-RECORDS-01. The activation conditions, the steward-exclusive files, serial integration, Earl's per-PR merge go-ahead and the release states are unchanged. Kawing-Platform's AI-approval rule does not apply here.

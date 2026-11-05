@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { appliedMigrations, codeqlState, pendingMigrations, treeMigrations } from "../scripts/ops/deploy-gate.mjs";
+import { appliedMigrations, codeqlState, codeqlTimeoutMessage, pendingMigrations, treeMigrations } from "../scripts/ops/deploy-gate.mjs";
 import { QUERIES } from "../scripts/ops/production-release.mjs";
 
 /*
@@ -125,6 +125,17 @@ describe("V116-QH03: exact-source security qualification before provider access"
     expect(codeqlState([run()], [check(), check({ id: 2, status: "in_progress", conclusion: null })], sha, repo)).toBe("pending");
     expect(codeqlState([run(), run({ id: 2, status: "queued", conclusion: null })], [check()], sha, repo)).toBe("pending");
     expect(() => codeqlState(null, [], sha, repo)).toThrow("Unreadable");
+  });
+
+  it("names the absent combined check on a merge-button commit without weakening the gate", () => {
+    expect(codeqlState([run()], [], sha, repo)).toBe("pending");
+    expect(codeqlTimeoutMessage([run()], [], sha, repo)).toMatch(/combined CodeQL check is absent.*Nothing deployed/);
+    expect(codeqlTimeoutMessage([run()], [check({ name: "analyze (javascript-typescript)" })], sha, repo)).toMatch(/absent/);
+    for (const [runs, checks] of [[[], []], [[run({ status: "in_progress", conclusion: null })], []], [[], [check()]],
+      [[run()], [check({ status: "queued", conclusion: null })]]]) {
+      expect(codeqlTimeoutMessage(runs, checks, sha, repo)).toBe("CodeQL qualification is missing or unfinished. Nothing deployed; rerun after it passes.");
+    }
+    expect(() => codeqlTimeoutMessage(null, [], sha, repo)).toThrow("Unreadable");
   });
 
   it("keeps manual qualification's skipped jobs away from required regression-check names", () => {

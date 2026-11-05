@@ -87,7 +87,7 @@ Before integration determine the candidate from the highest **verified** patch o
 
 ## Shared-agent execution
 
-Writable checkouts: one worktree per writer, each on its own `slice/*` branch (the roster is `.codex/CURRENT.md`, "Writer slots"). The older shared checkout `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub` is historical and may hold dirty work of another session: preserve it and do not write there unless it is yours.
+Writable checkouts: one worktree per writer, each on its own `slice/*` branch (the live roster is the steward's cross-repository roster; `.codex/CURRENT.md` "Writer slots" is its dated snapshot, HAU-AGENT-LANES-003). The older shared checkout `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub` is historical and may hold dirty work of another session: preserve it and do not write there unless it is yours.
 
 Normal mode permits one active writer. Under HAU-AGENT-LANES-003 two Claude writers may write concurrently **only in separate worktrees on disjoint accepted file scopes**; each claims and yields its own worktree-local writer lock. The lock script is local to each checkout and is **not a project-wide scheduler**: the steward verifies the roster, the account-wide writer count, shared-resource isolation and exact ownership separately.
 

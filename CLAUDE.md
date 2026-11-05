@@ -9,7 +9,7 @@
 1. Read `AGENTS.md` and follow its authority order.
 2. Read `.agents/PROJECT_POLICY.md`, `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md` and `docs/SHARED_AGENT_WORKFLOW.md`.
 3. Read the **active accepted** specification/amendment, verified repository state, release record, and task-specific policies. If any source conflicts, resolve by the repository authority chain; don't use an older chat, stale plan or superseded proposal as permission.
-4. Before writing, verify the active accepted slice, exact branch/HEAD, your writer slot in the roster (`.codex/CURRENT.md`, "Writer slots"), your writer lock and your file ownership. Preserve every active branch and uncommitted work. Never become a third writer; a temporary ChatGPT policy-only branch requires Earl's scoped authorization and serial integration.
+4. Before writing, verify the active accepted slice, exact branch/HEAD, your writer slot in the steward's live roster (snapshot: `.codex/CURRENT.md`, "Writer slots"), your writer lock and your file ownership. Preserve every active branch and uncommitted work. Never become a third writer; a temporary ChatGPT policy-only branch requires Earl's scoped authorization and serial integration.
 
 ## Active release boundary — 2026-10-11
 
