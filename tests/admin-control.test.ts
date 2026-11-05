@@ -135,6 +135,15 @@ describe("Administration > System", () => {
     expect(await read()).toMatchObject({ commit: COMMIT, product: PRODUCT });
   });
 
+  it("the checked-in product-release.json passes the System page's own release contract", async () => {
+    recordMigrations(migrationFiles());
+    const admin = await cookieOf("admin");
+    const release = JSON.parse(fs.readFileSync("product-release.json", "utf8")) as { version: string; sourceCommit: string; record: string; changes: string[] };
+    buildRecord = { version: VERSION, commit: COMMIT, builtAt: "2026-10-07T08:00:00.000Z", migrations: migrationFiles(), product: release };
+    const status = await (await as(admin, "/api/staff/admin/system")).json() as Status;
+    expect(status.build?.product).toEqual({ version: release.version, sourceCommit: release.sourceCommit, changes: release.changes });
+  });
+
   it.runIf(fs.existsSync("dist/build.json"))("the normal build carries the governed release source without exposing a second metadata asset", () => {
     const release = JSON.parse(fs.readFileSync("product-release.json", "utf8")) as { version: string; sourceCommit: string; record: string; changes: string[] };
     const artifact = JSON.parse(fs.readFileSync("dist/build.json", "utf8")) as { product: unknown };

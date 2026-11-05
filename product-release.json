@@ -3,6 +3,7 @@
   "sourceCommit": "491c6cd4ede98cf791e79be02c99e6f5989a4a30",
   "record": "docs/road-to-v2/releases/v1.16.13.md",
   "changes": [
-    "A menu that is closing no longer takes taps while it fades away."
+    "A menu that is closing no longer takes taps while it fades away.",
+    "The photo menu's automated check reads whether the menu is really open, so it no longer fails on slow test machines."
   ]
 }
