@@ -56,12 +56,12 @@ test("the tab styles share one look: neutral when inactive, the accent only when
   expect(await page.locator("#v-on .view-tab__count").evaluate((count) => parseFloat(getComputedStyle(count).fontSize))).toBeLessThan(parseFloat(views.size));
 });
 
-test("the segmented controls show the accent on the chosen segment, whether they are made of radios or buttons", async ({ page }) => {
+test("the segmented controls show a solid accent fill on the chosen segment, whether they are made of radios or buttons", async ({ page }) => {
   await lay(page);
   const wash = (selector: string) => page.locator(selector).evaluate((element) => { const style = getComputedStyle(element); return { background: style.backgroundColor, color: style.color, ring: style.boxShadow }; });
   const chosen = await Promise.all(["#g-on", "#w-on", "#b-on"].map(wash));
   const others = await Promise.all(["#g-off", "#w-off", "#b-off"].map(wash));
-  for (const segment of chosen) { expect(segment).toEqual(chosen[0]); expect(segment.ring).toContain("inset"); }
+  for (const segment of chosen) { expect(segment).toEqual(chosen[0]); expect(segment.ring).toBe("none"); expect(segment.background).toBe("rgb(122, 20, 25)"); }
   for (const segment of others) { expect(segment.background).toBe("rgba(0, 0, 0, 0)"); expect(segment.ring).toBe("none"); expect(segment.color).not.toBe(chosen[0]!.color); }
 });
 
@@ -90,5 +90,5 @@ test("a keyboard ring shows inside a focused tab and around a focused segment", 
   await page.keyboard.press("Shift+Tab");
   await page.keyboard.press("Tab");
   await expect(page.locator("#b-on")).toBeFocused();
-  expect(await page.locator("#b-on").evaluate((element) => getComputedStyle(element).boxShadow)).toMatch(/rgba?\(201, 150, 42/);
+  expect(await page.locator("#b-on").evaluate((element) => getComputedStyle(element).boxShadow)).toMatch(/rgba?\(168, 122, 18/);
 });

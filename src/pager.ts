@@ -8,14 +8,14 @@ export { PAGE_SIZE, type Slice, pageNumbers, pageOf };
  *
  * - Desktop: numbered pages of PAGE_SIZE rows, "‹ Previous 1 2 3 … 9 Next ›" and "26–50 of 214". The page lives in the
  *   address (`?page=` or the list's own key), so Back, refresh and a shared link keep it.
- * - Phone (below 48rem): the same list grows by PAGE_SIZE ("Show 25 more") instead of turning pages, so a thumb keeps its place.
+ * - Phone (760px and narrower, the one phone breakpoint): the same list grows by PAGE_SIZE ("Show 25 more") instead of turning pages, so a thumb keeps its place.
  *   Lists drawn in groups fold instead, through `foldMarkup`.
  * A new question (search, filter, sort) starts again at the first page.
  */
 /** Rows a folded phone group shows before its "Show all N". */
 export const GROUP_PREVIEW = 5;
 
-const phoneQuery = typeof matchMedia === "function" ? matchMedia("(max-width: 47.99rem)") : null;
+const phoneQuery = typeof matchMedia === "function" ? matchMedia("(max-width: 760px)") : null;
 /** True on a phone-width screen, where lists grow and groups fold rather than page. */
 export const onPhone = (): boolean => Boolean(phoneQuery?.matches);
 /** Calls back when the screen crosses the phone width (a turned tablet, a resized window); returns the way to stop. */

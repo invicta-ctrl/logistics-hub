@@ -479,7 +479,7 @@ export function sheet(dialog: HTMLDialogElement, options: { dirty?: () => boolea
       if (dragging) dialog.style.transform = distance ? `translateY(${distance}px)` : "";
     };
     const settle = (to: string, then?: () => void) => {
-      const done = () => { window.clearTimeout(fallback); dialog.removeEventListener("transitionend", done); dialog.style.transition = ""; then?.(); };
+      const done = (event?: Event) => { if (event && event.target !== dialog) return; window.clearTimeout(fallback); dialog.removeEventListener("transitionend", done); dialog.style.transition = ""; then?.(); };
       const fallback = window.setTimeout(done, 400);
       if (reducedMotion()) { dialog.style.transform = to; done(); return; }
       dialog.style.transition = "transform var(--dur-2) var(--ease)";
