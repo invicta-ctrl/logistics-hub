@@ -89,8 +89,6 @@ Before integration determine the candidate from the highest **verified** patch o
 
 Writable checkouts: one worktree per writer, each on its own `slice/*` branch (the roster is `.codex/CURRENT.md`, "Writer slots"). The older shared checkout `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub` is historical and may hold dirty work of another session: preserve it and do not write there unless it is yours.
 
-`D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`
-
 Normal mode permits one active writer. Under HAU-AGENT-LANES-003 two Claude writers may write concurrently **only in separate worktrees on disjoint accepted file scopes**; each claims and yields its own worktree-local writer lock. The lock script is local to each checkout and is **not a project-wide scheduler**: the steward verifies the roster, the account-wide writer count, shared-resource isolation and exact ownership separately.
 
 The accepted MausBot multi-worktree amendment permits detached, read-only specialist worktrees for Scout, Oracle, Sentinel, and Harbor. They do not create branches, do not change the branch budget and never count as writers. Harbor performs release/deploy operations only against an explicitly authorized exact commit and does not edit source. Forge is read-only.
