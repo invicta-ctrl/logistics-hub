@@ -181,6 +181,9 @@
 /* ---------- Buttons ---------- */
 .is-self-service .button--primary { background: var(--primary); color: var(--on-primary); font-weight: 600; box-shadow: none; }
 .is-self-service .button--secondary { border-color: var(--line-strong); background: var(--field); color: var(--text); box-shadow: none; }
+/* A press in Self-Service uses Self-Service's own colours, not the staff pressed fills. */
+.is-self-service .button--primary:active:not(:disabled) { background: var(--primary-hover); }
+.is-self-service .button--secondary:active:not(:disabled) { border-color: var(--accent-line); background: var(--hover); color: var(--text); }
 .is-self-service .button--ghost { color: var(--text-2); }
 /* Focus is drawn as an outline, which no button background can hide. */
 .is-self-service .button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
