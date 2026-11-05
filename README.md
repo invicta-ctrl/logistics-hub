@@ -27,7 +27,7 @@ npm ci
 npm run dev:live      # http://127.0.0.1:8791 — local Worker + D1, rebuilds on change
 ```
 
-`dev:live` applies local migrations. It generates `.dev.vars` (`SESSION_SECRET`) and, when none exists, a local preview staff account. The preview credentials go in the ignored `data/private/local-preview-credentials.txt`. Manage staff accounts and deployments with the local admin console: `npm run admin`, or double-click `LOGISTICS_ADMIN.cmd` on Windows. It opens on the site it used last (a red PRODUCTION or a green PREVIEW banner says which); press `S` (Switch site) to choose production or the LOCAL preview database.
+`dev:live` applies local migrations. It generates `.dev.vars` (`SESSION_SECRET`) and, when none exists, a local preview staff account. The preview credentials go in the ignored `data/private/local-preview-credentials.txt`. Manage staff accounts with the local admin console (its deploy option is the legacy route, see Deploying below): `npm run admin`, or double-click `LOGISTICS_ADMIN.cmd` on Windows. It opens on the site it used last (a red PRODUCTION or a green PREVIEW banner says which); press `S` (Switch site) to choose production or the LOCAL preview database.
 
 ## Checks
 

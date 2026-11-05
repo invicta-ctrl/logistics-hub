@@ -9,6 +9,7 @@
 A release record's `STATUS` and `INTEGRATION` lines were true when written. The live state of every release is `.codex/CURRENT.md`, "Release states". Passages that PR #89 found stale and did not edit because they are outside its task; a follow-up should fix them:
 - `docs/road-to-v2/releases/v1.16.12.md` still says `STATUS: QUALIFICATION_PENDING` and `INTEGRATION: pending`. PR #87 merged as `1e9a468`; production is unverified.
 - `docs/DEPLOYMENT.md` "First launch" step 3 and its Cloud-Operations paragraph (the "Console 13" instructions) present Owner Console option 13 as the deploy and migration route. That path deploys from a PC and applies migrations, against `AGENTS.md`. Migrations go through the Cloud Operations lane; production deploys come from Workers Builds until the V1.17 switch. Option 13 stays blocked pending an accepted amendment (`.codex/CURRENT.md`).
+- `docs/PRODUCT_REFERENCE.md` (around the Owner Console paragraph) calls "Deploy verified main" the gated path, and `docs/DEPLOYMENT.md` keeps manual `wrangler d1 migrations apply` runbooks as an emergency fallback. Both predate the rule that migrations and release preparation never run from a PC; `AGENTS.md` and the Cloud Operations amendment win.
 - Older per-release "merged and deployed" wording in `CHANGELOG.md` and the release records is the vocabulary before the three release states; read it with `.codex/CURRENT.md`.
 
 ## Which documentation is authoritative NOW?

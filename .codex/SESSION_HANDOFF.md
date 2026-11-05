@@ -35,6 +35,8 @@ PR #89 (<https://github.com/invicta-ctrl/logistics-hub/pull/89>), branch `slice/
 
 ## Next exact action
 
+Same order as `.codex/CURRENT.md`, which wins if they ever differ. The steward's own remaining step (finish the gates and the PR body) comes first; then:
+
 1. ChatGPT: independent review of the final PR #89 diff, using the saved packet. Record the result on the PR.
 2. Earl: decide on merging PR #89. After a merge: verify `main`; check the live assets against a build of the merged commit; repeat the fresh-clone drill on a clean `main` checkout and record its SHA.
 3. Steward: open the follow-up for the four items above, and the Issue #88 UI specification when Earl wants it.
