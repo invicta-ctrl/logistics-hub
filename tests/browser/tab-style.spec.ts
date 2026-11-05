@@ -92,3 +92,23 @@ test("a keyboard ring shows inside a focused tab and around a focused segment", 
   await expect(page.locator("#b-on")).toBeFocused();
   expect(await page.locator("#b-on").evaluate((element) => getComputedStyle(element).boxShadow)).toMatch(/rgba?\(168, 122, 18/);
 });
+
+test("on a touch screen the clear and reveal buttons stay laid over their field, and a gold tag stays a quiet label", async ({ browser }) => {
+  const context = await browser.newContext({ hasTouch: true, viewport: { width: 390, height: 700 } });
+  const page = await context.newPage();
+  await page.goto("/staff");
+  await page.setContent(`<!doctype html><html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="/src/styles.css?direct"></head><body><main>
+    <label class="search-field"><input id="s" type="search" value="abc"><button class="search-field__clear" id="clear" aria-label="Clear">x</button></label>
+    <div class="input-group"><input id="p" type="password"><button class="input-group__button" id="reveal" aria-label="Show">o</button></div>
+    <span class="tag tag--gold" id="gold">Officer</span> <span class="tag tag--ok" id="ok">Saved</span></main></body></html>`);
+  await page.waitForFunction(() => getComputedStyle(document.querySelector("#clear")!).position !== "static");
+  expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
+  for (const id of ["#clear", "#reveal"]) expect(await page.locator(id).evaluate((element) => getComputedStyle(element).position), id).toBe("absolute");
+  // The control sits inside its field's box (it did not drop into the flow beside or under it).
+  const [field, clear] = await Promise.all([page.locator("#s").boundingBox(), page.locator("#clear").boundingBox()]);
+  expect(clear!.x + clear!.width).toBeLessThanOrEqual(field!.x + field!.width + 1);
+  // Gold marks identity and planning (Officer, Admin, Planned): no pill, no warning glyph. A toned status is a pill.
+  expect(await page.locator("#gold").evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("0px");
+  expect(await page.locator("#ok").evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("1px");
+  await context.close();
+});

@@ -317,19 +317,22 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .tag::before { width: .4375rem; height: .4375rem; border-radius: 50%; background: var(--line-strong); content: ""; }
 /* LH-UI-88 status pill: a toned tag is a tinted pill with a real glyph AND its words, so colour is never the only cue. An untoned .tag
    stays the quiet dotted label. A tag that already holds an <svg class="icon"> shows that icon instead of the generated glyph. */
-.tag--ok, .tag--warn, .tag--bad, .tag--brand, .tag--gold { padding: 0 var(--space-2) 0 .375rem; line-height: 1.25; border: 1px solid var(--tag-line); border-radius: var(--radius-pill); background: var(--tag-tint); color: var(--tag-ink); font-weight: 500; }
-.tag--ok::before, .tag--warn::before, .tag--bad::before, .tag--brand::before, .tag--gold::before { width: var(--icon-sm); height: var(--icon-sm); flex: none; border-radius: 0; background: currentColor; box-shadow: none; -webkit-mask: var(--tag-glyph) center / contain no-repeat; mask: var(--tag-glyph) center / contain no-repeat; }
+.tag--ok, .tag--warn, .tag--bad, .tag--brand { padding: 0 var(--space-2) 0 .375rem; line-height: 1.25; border: 1px solid var(--tag-line); border-radius: var(--radius-pill); background: var(--tag-tint); color: var(--tag-ink); font-weight: 500; }
+.tag--ok::before, .tag--warn::before, .tag--bad::before, .tag--brand::before { width: var(--icon-sm); height: var(--icon-sm); flex: none; border-radius: 0; background: currentColor; box-shadow: none; -webkit-mask: var(--tag-glyph) center / contain no-repeat; mask: var(--tag-glyph) center / contain no-repeat; }
 .tag:has(> .icon)::before { display: none; }
 .tag--ok { --tag-ink: var(--ok); --tag-tint: var(--ok-tint); --tag-line: var(--line-ok); --tag-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
-.tag--warn, .tag--gold { --tag-ink: var(--warn); --tag-tint: var(--warn-tint); --tag-line: var(--line-warn); --tag-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 9v4M12 17h.01'/%3E%3Cpath d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/%3E%3C/svg%3E"); }
+.tag--warn { --tag-ink: var(--warn); --tag-tint: var(--warn-tint); --tag-line: var(--line-warn); --tag-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 9v4M12 17h.01'/%3E%3Cpath d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/%3E%3C/svg%3E"); }
 .tag--bad { --tag-ink: var(--bad); --tag-tint: var(--bad-tint); --tag-line: var(--line-bad); --tag-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='m15 9-6 6M9 9l6 6'/%3E%3C/svg%3E"); }
 .tag--brand { --tag-ink: var(--brand); --tag-tint: var(--brand-tint); --tag-line: var(--line-brand); --tag-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 8v4M12 16h.01'/%3E%3C/svg%3E"); }
 .tag--pending { color: var(--text-2); }
 .tag--pending::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--gold); }
+/* Gold marks identity and planning labels (Officer, Admin, Planned), not a warning, so it stays the quiet dotted label. */
+.tag--gold { color: var(--text-2); }
+.tag--gold::before { background: var(--gold); }
 /* In a table row the status stays the compact dotted label until the slice that redesigns the row (S2) gives it one pill: a pill there
    narrows the name column and makes every phone row a line taller. */
-.data-table :is(.tag--ok, .tag--warn, .tag--bad, .tag--brand, .tag--gold) { padding: 0; border: 0; background: none; line-height: inherit; }
-.data-table :is(.tag--ok, .tag--warn, .tag--bad, .tag--brand, .tag--gold)::before { width: .4375rem; height: .4375rem; border-radius: 50%; -webkit-mask: none; mask: none; }
+.data-table :is(.tag--ok, .tag--warn, .tag--bad, .tag--brand) { padding: 0; border: 0; background: none; line-height: inherit; }
+.data-table :is(.tag--ok, .tag--warn, .tag--bad, .tag--brand)::before { width: .4375rem; height: .4375rem; border-radius: 50%; -webkit-mask: none; mask: none; }
 /* Wide enough for "Updated 12:59 PM" from the start, so "Connecting…" turning into a time never re-wraps the buttons beside it. */
 /* One line where it fits; a narrow header (a phone at large text) wraps it rather than pushing past the edge. */
 .live-status { display: inline-flex; min-width: min(8.75rem, 100%); max-width: 100%; align-items: center; gap: var(--space-2); color: var(--text-3); font-size: var(--text-sm); }
@@ -411,6 +414,8 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .hero__primary .icon, .hero__available .icon { transition: transform var(--dur-2) var(--ease-settle); }
 .hero__primary:hover .icon, .hero__available:hover .icon { transform: translateX(4px); }
 .hero :focus-visible { outline-color: var(--gold-action); }
+/* On the maroon band the focus ring is the gold fill (5.8:1); the darker gold mark is for light surfaces. */
+.hero .button:focus-visible { box-shadow: 0 0 0 3px var(--gold-action); }
 
 /* Lending Hub entry: the search, centred under the promise. Data-free: it searches the Lending Hub and shows no counts. */
 .hero__find { display: grid; width: min(100%, 40rem); min-width: 0; justify-items: center; margin-top: var(--space-10); }
@@ -2372,11 +2377,9 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
    ========================================================================== */
 /* Hit slop: a small control keeps its drawn size and gains a 44 px press area on touch. The area is invisible. */
 @media (pointer: coarse) {
-  .search-field__clear, .input-group__button { position: relative; }
   .search-field__clear::after, .input-group__button::after { position: absolute; top: 50%; left: 50%; width: max(100%, var(--target)); height: max(100%, var(--target)); transform: translate(-50%, -50%); content: ""; }
 }
-/* Safe areas: a notch, a rounded corner or a home indicator never covers the bar, a sheet's header or a toast. */
-.app-bar { padding-top: env(safe-area-inset-top, 0px); }
+/* Safe areas: a notch or a rounded corner never covers a sheet header or a toast (the bottom bar and the fields already respect the home indicator). */
 .sheet__header { padding-left: max(var(--space-6), env(safe-area-inset-left, 0px)); padding-right: max(var(--space-6), env(safe-area-inset-right, 0px)); }
 .toasts { left: max(1rem, env(safe-area-inset-left, 0px)); }
 @media (max-width: 760px) { .sheet__header { padding-left: max(var(--space-4), env(safe-area-inset-left, 0px)); padding-right: max(var(--space-4), env(safe-area-inset-right, 0px)); } }
