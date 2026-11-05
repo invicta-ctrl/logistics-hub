@@ -3,16 +3,17 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /** Item photos keep their controls in a menu that opens from the photo itself (owner, 24 October 2026). */
 async function openMenu(panel: Locator): Promise<void> {
-  // TEMPORARY DIAGNOSTIC (photo-menu race): say why the menu is already open when nobody opened it.
-  const already = await panel.getByRole("menu").isVisible();
-  if (already) console.log("PHOTOMENU-PROBE menu already open: " + JSON.stringify(await panel.page().evaluate(() => (window as any).__log ?? null)));
-  if (!already) await panel.locator("[data-photo-menu]").click();
-  await expect(panel.getByRole("menu")).toBeVisible();
+  // "Open" is the popover's state, not visibility: a menu that has just closed keeps fading out (display transitions), so for a moment
+  // it is still visible and no longer open.
+  const open = panel.locator(".photo-menu:popover-open");
+  if (!(await open.count())) await panel.locator("[data-photo-menu]").click();
+  await expect(open).toBeVisible();
 }
 async function choose(panel: Locator, name: string): Promise<void> {
   await openMenu(panel);
   await panel.getByRole("menuitem", { name, exact: true }).click();
 }
+
 
 const username = process.env.E2E_USERNAME!;
 const password = process.env.E2E_PASSWORD!;
@@ -898,22 +899,6 @@ function phonePhoto(orientation: number): Buffer {
 }
 
 test("item photos: add with a preview, view large, replace, remove, with the list and history following", async ({ page }) => {
-  await page.addInitScript(() => {
-    const w = window as any; w.__log = [];
-    const log = (what: string, extra: any = {}) => { w.__log.push({ t: Math.round(performance.now()), what, ...extra }); if (w.__log.length > 200) w.__log.shift(); };
-    const stack = () => (new Error().stack ?? "").split(String.fromCharCode(10)).slice(2, 7).map((l) => l.trim().replace(/https?:\/\/[^/]+/, "").replace(/\(.*\/assets\//, "(")).join(" | ");
-    const hide = HTMLElement.prototype.hidePopover;
-    HTMLElement.prototype.hidePopover = function () { log("hidePopover", { id: this.id, stack: stack() }); return hide.call(this); };
-    const show = HTMLElement.prototype.showPopover;
-    HTMLElement.prototype.showPopover = function () { log("showPopover", { id: this.id, stack: stack() }); return show.call(this); };
-    const click = HTMLElement.prototype.click;
-    HTMLElement.prototype.click = function () { log("el.click()", { on: this.tagName + "." + this.className, stack: stack() }); return click.call(this); };
-    const desc = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML")!;
-    Object.defineProperty(Element.prototype, "innerHTML", { ...desc, set(v) { if ((this as Element).closest?.("#photo-panel") || (this as Element).id === "photo-panel") log("innerHTML", { on: (this as Element).className, stack: stack() }); desc.set!.call(this, v); } });
-    for (const type of ["toggle", "beforetoggle"]) window.addEventListener(type, (e: any) => log(type, { id: e.target?.id, o: e.oldState, n: e.newState }), true);
-    for (const type of ["popstate", "pointerdown", "keydown", "click"]) window.addEventListener(type, (e) => log(type, { target: (e.target as any)?.tagName ?? "window", cls: String((e.target as any)?.className ?? "").slice(0, 40), trusted: e.isTrusted }), true);
-    for (const m of ["replaceState", "pushState"] as const) { const o = window.history[m].bind(window.history); (window.history as any)[m] = (st: any, t: string, u?: string) => { log(m, { url: u ?? null, stack: stack() }); return o(st, t, u); }; }
-  });
   // Counts how often the page asks the browser for a view transition (the thumbnail growing into the viewer).
   await page.addInitScript(() => {
     (window as unknown as { transitions: number }).transitions = 0;
@@ -991,6 +976,8 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await expect(viewer).toBeVisible();
   await page.goBack();
   await expect(viewer).toBeHidden();
+  // The menu that the choice closed may still be fading out; until it has, it takes no presses (it could be invisible and under a finger).
+  await expect(panel.locator(".photo-menu")).toHaveCSS("pointer-events", "none");
   // Back closed only the viewer: the same page, with the same item open and not reloaded.
   // The address also holds the page of 25 that the linked item is on (V1.16.12).
   await expect(page).toHaveURL(/\/staff\/items\?item=ITM-0262&page=\d+$/);
