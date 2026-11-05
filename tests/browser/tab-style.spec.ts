@@ -274,6 +274,7 @@ test("a pressed primary and secondary button keep a readable label in the light 
 test("Self-Service keeps its own secondary button colours when hovered or pressed", async ({ page }) => {
   await plain(page, `<div class="is-self-service" style="padding:16px"><button class="button button--secondary" id="r">Return</button></div>`);
   const read = () => page.locator("#r").evaluate((element) => { const style = getComputedStyle(element); return { color: style.color, background: style.backgroundColor }; });
+  await page.waitForTimeout(350); // a freshly drawn button is still settling into its colours
   const rest = await read();
   const box = (await page.locator("#r").boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -305,16 +306,36 @@ test("forced colours: the status glyph and the chosen segment stay visible", asy
   expect(fills[0]).not.toBe(fills[1]);
 });
 
-test("a saving button holds its width, so the buttons beside it do not move", async ({ page }) => {
+test("a saving button keeps its width and height, so the buttons beside it do not move", async ({ page }) => {
   await plain(page, `<form id="f" class="form-actions" style="width:420px"><button type="button" class="button button--secondary" id="cancel">Cancel</button><button type="submit" class="button button--primary" id="save">Save changes</button></form>`);
-  const measure = () => page.evaluate(() => ({ save: document.querySelector("#save")!.getBoundingClientRect().width, cancel: document.querySelector("#cancel")!.getBoundingClientRect().left }));
+  const measure = () => page.evaluate(() => { const save = document.querySelector("#save")!.getBoundingClientRect(); return { width: save.width, height: save.height, cancel: document.querySelector("#cancel")!.getBoundingClientRect().left }; });
   const before = await measure();
   await page.evaluate(async () => { const module = "/src/ui.ts"; const { working } = await import(/* @vite-ignore */ module); (window as unknown as { done: () => void }).done = working(document.querySelector("#f")!); });
   await expect(page.locator("#save")).toHaveAttribute("aria-busy", "true");
+  await page.waitForTimeout(350);
   const during = await measure();
-  expect(during.save).toBeCloseTo(before.save, 1);
-  expect(during.cancel).toBeCloseTo(before.cancel, 1);
+  expect(during.width).toBeCloseTo(before.width, 0);
+  expect(during.height).toBeCloseTo(before.height, 0);
+  expect(during.cancel).toBeCloseTo(before.cancel, 0);
   await page.evaluate(() => (window as unknown as { done: () => void }).done());
   await expect(page.locator("#save")).not.toHaveAttribute("aria-busy", "true");
-  expect(await page.locator("#save").evaluate((element) => (element as HTMLElement).style.width)).toBe("");
+  expect(await page.locator("#save").evaluate((element) => (element as HTMLElement).style.minWidth)).toBe("");
+});
+
+test("a status pill wraps inside a narrow row at large text, instead of running past the edge", async ({ page }) => {
+  await plain(page, `<link rel="stylesheet" href="/src/kits.css?direct"><div id="row" style="width:120px;overflow:hidden"><span class="kit-row__meta"><span class="tag tag--bad" id="pill">Needs replenishment</span></span></div>`);
+  await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
+  const fit = await page.evaluate(() => { const row = document.querySelector("#row")!.getBoundingClientRect(); const pill = document.querySelector("#pill")!; const range = document.createRange(); range.selectNodeContents(pill); const text = range.getBoundingClientRect(); return { rowRight: row.right, pillRight: pill.getBoundingClientRect().right, textRight: text.right }; });
+  expect(fit.pillRight).toBeLessThanOrEqual(fit.rowRight + 0.5);
+  expect(fit.textRight).toBeLessThanOrEqual(fit.rowRight + 0.5);
+});
+
+test("a toast stays inside the screen when a side inset narrows it", async ({ page }) => {
+  await plain(page, `<span class="tag" hidden>.</span><div class="toasts" id="toasts"><div class="toast">Saved</div></div>`);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: { top: 0, bottom: 0, left: 44, right: 44 } });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const box = await page.locator("#toasts").evaluate((element) => { const r = element.getBoundingClientRect(); return { left: r.left, right: r.right, width: window.innerWidth }; });
+  expect(box.left).toBeGreaterThanOrEqual(44 - 0.5);
+  expect(box.right).toBeLessThanOrEqual(box.width - 44 + 0.5);
 });

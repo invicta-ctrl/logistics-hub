@@ -716,10 +716,10 @@ export function failure(error: unknown): string {
 export function working(scope: ParentNode): () => void {
   const buttons = scope instanceof HTMLButtonElement ? (scope.disabled ? [] : [scope]) : [...scope.querySelectorAll<HTMLButtonElement>("button[type=submit]:not(:disabled)")];
   const focused = buttons.find((button) => button === document.activeElement);
-  // The spinner adds a little to the label, which the button's own padding absorbs: the width is held so the buttons beside it never move.
-  for (const button of buttons) { button.style.width = `${button.getBoundingClientRect().width}px`; button.disabled = true; button.setAttribute("aria-busy", "true"); }
+  // The spinner takes its room from the button's own padding (see `.button[aria-busy]`), and the width it had is held as a floor, so the buttons beside it never move.
+  for (const button of buttons) { button.style.minWidth = `${button.getBoundingClientRect().width}px`; button.disabled = true; button.setAttribute("aria-busy", "true"); }
   return () => {
-    for (const button of buttons) { button.disabled = false; button.removeAttribute("aria-busy"); button.style.removeProperty("width"); }
+    for (const button of buttons) { button.disabled = false; button.removeAttribute("aria-busy"); button.style.removeProperty("min-width"); }
     if (focused?.isConnected && (document.activeElement === document.body || !document.activeElement)) focused.focus({ preventScroll: true });
   };
 }
