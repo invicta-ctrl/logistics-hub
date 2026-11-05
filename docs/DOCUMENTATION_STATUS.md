@@ -1,6 +1,8 @@
 # Documentation Status and Authority Map
 
-**Audit date:** 2026-10-11. **Repository:** `invicta-ctrl/logistics-hub`. This status map is a documentation-only governance checkpoint, **not** an implemented V1.16 feature or a product subversion.
+**Audit dates:** 2026-10-11 (original map) and 2026-11-05 (reconciled in PR #89). **Repository:** `invicta-ctrl/logistics-hub`. This status map is a documentation-only governance checkpoint, **not** an implemented feature or a product subversion.
+
+**2026-11-05 reconciliation (PR #89):** a fresh-clone audit found contradictory agent instructions, a stale continuation pointer, a merge described as pending, a README that sent readers to the wrong Owner Console option, and a red `Deploy` run read as a production failure. Fixed below: one writer policy ([HAU-AGENT-LANES-003](specs/accepted/2026-11-05-claude-parallel-writer-lanes.md)), one live pointer pair, the superseded text archived, the README corrected, the deploy run explained (`.codex/CURRENT.md`). Releases now carry one of `QUALIFICATION_PENDING`, `MERGED_DEPLOYMENT_UNVERIFIED`, `DEPLOYED_OWNER_CHECK_PENDING` or `RELEASED_VERIFIED`.
 
 ## Which documentation is authoritative NOW?
 
@@ -8,10 +10,14 @@ Read the current documents in the following priority order, then verify Git/head
 
 | Responsibility | Single current source |
 |---|---|
-| Agent startup, owner precedence, one-writer and merge rules | `AGENTS.md` → `.agents/PROJECT_POLICY.md` |
-| Current specific task | `.codex/CURRENT.md` |
+| Agent startup, owner precedence, writers, repository self-sufficiency, security review, merge rules | `AGENTS.md` → `.agents/PROJECT_POLICY.md` |
+| Who may write, how many, and how work is integrated | `docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md` (HAU-AGENT-LANES-003; 002 is history) |
+| Current task board, writer slots, release states | `.codex/CURRENT.md` |
 | Last and next step / writer handoff | `.codex/SESSION_HANDOFF.md` |
-| Shared Codex/Claude/Forge working rhythm | `docs/SHARED_AGENT_WORKFLOW.md` |
+| Working rhythm, workspaces, handoff, integration | `docs/SHARED_AGENT_WORKFLOW.md` |
+| What every PR must show | `.github/pull_request_template.md`, pointing at `docs/WEB_QUALITY_RELEASE_GATES.md`, `docs/PERFORMANCE_RELIABILITY_DOCTRINE.md` and the security review in `AGENTS.md` |
+| Superseded working documents (kept, not current) | `docs/archive/README.md` |
+| Every accepted specification and product revision, in order | `CHANGELOG.md` |
 | Automatic product revisions `Vx.xx.N` | `docs/PRODUCT_VERSION_GOVERNANCE.md` |
 | Current product workflows / technical constraints | `docs/PRODUCT_REFERENCE.md`, `docs/DATA_ARCHITECTURE.md`, `docs/PERFORMANCE_RELIABILITY_DOCTRINE.md`, `docs/DEPLOYMENT.md` |
 | Accepted V1.16 scope | `docs/specs/accepted/v1.16-ambient-intelligent-core.md` |
@@ -40,6 +46,16 @@ The following files had ceased to be current authority or were duplicates of acc
 
 References to retired proposals in surviving accepted/historical documents point to their immutable earlier Git revision. Removing from the live tree is **not a declaration that past decisions never occurred**.
 
+### ARCHIVED 2026-11-05 — exact copies in `docs/archive/`
+
+| Archived | Replaced by |
+|---|---|
+| `docs/archive/continuity/CURRENT_before_2026-11-05.md` | `.codex/CURRENT.md` |
+| `docs/archive/continuity/SESSION_HANDOFF_before_2026-11-05.md` | `.codex/SESSION_HANDOFF.md` |
+| `docs/archive/agent-workflows/SHARED_AGENT_WORKFLOW_before_2026-11-05.md` | `docs/SHARED_AGENT_WORKFLOW.md` |
+
+HAU-AGENT-LANES-002 (`docs/specs/accepted/2026-10-14-isolated-agent-worktrees.md`) stays in place, marked superseded in part by 003. The historical Part briefs, release records and evidence were not touched.
+
 ### RETAIN as historical evidence — not active instructions
 
 - `docs/specs/accepted/road-to-v2/` and older `docs/specs/accepted/`: owner decisions, past constraints and release provenance. Their historic phrases “NOT STARTED” or branch-specific rules are **time-specific records**, not current work pointers.
@@ -54,7 +70,7 @@ References to retired proposals in surviving accepted/historical documents point
 ### COMPACTED without erasing history
 
 - `CLAUDE.md`: removed dead Road-to-V2 multi-branch runner/forward propagation, historical automatic-release instructions and duplicated operational policy. Historical [CLAUDE.md](https://github.com/invicta-ctrl/logistics-hub/blob/aa09900827a94e0931a33416f70c3ae4c7e6bcf9/CLAUDE.md) is recoverable.
-- `.codex/CURRENT.md`: trimmed stale V1.1–V1.15 per-version summaries to one current V1.16 pointer. [Historic content](https://github.com/invicta-ctrl/logistics-hub/blob/aa09900827a94e0931a33416f70c3ae4c7e6bcf9/.codex/CURRENT.md).
+- `.codex/CURRENT.md`: trimmed stale V1.1–V1.15 per-version summaries to one current V1.16 pointer (and, on 2026-11-05, to a task board; the earlier text is in `docs/archive/continuity/`). [Historic content](https://github.com/invicta-ctrl/logistics-hub/blob/aa09900827a94e0931a33416f70c3ae4c7e6bcf9/.codex/CURRENT.md).
 - `.codex/SESSION_HANDOFF.md`: trimmed accumulated historic Claude/Codex notes to current actionable handoff. [Historic content](https://github.com/invicta-ctrl/logistics-hub/blob/aa09900827a94e0931a33416f70c3ae4c7e6bcf9/.codex/SESSION_HANDOFF.md).
 
 ## Preservation and future documentation rule

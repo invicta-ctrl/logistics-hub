@@ -976,7 +976,7 @@ test("item photos: add with a preview, view large, replace, remove, with the lis
   await expect(viewer).toBeVisible();
   await page.goBack();
   await expect(viewer).toBeHidden();
-  // The menu that the choice closed may still be fading out; until it has, it takes no presses (it could be invisible and under a finger).
+  // The menu that the choice closed may still be fading out; until it has, it takes no presses. (Chromium already skips a closing popover when hit-testing; this holds the same in any engine that does not.)
   await expect(panel.locator(".photo-menu")).toHaveCSS("pointer-events", "none");
   // Back closed only the viewer: the same page, with the same item open and not reloaded.
   // The address also holds the page of 25 that the linked item is on (V1.16.12).

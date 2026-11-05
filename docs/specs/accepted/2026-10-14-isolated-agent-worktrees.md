@@ -6,9 +6,12 @@ accepted_date: 2026-10-14
 authority: owner instruction and Context Vault PARALLEL-PROJECT-LANES-002
 supersedes_in_part: 2026-10-14 one-writer-per-entire-project policy in the previous policy-only PR
 classification: development-workflow-amendment
+superseded_in_part_by: HAU-AGENT-LANES-003 (2026-11-05)
 ---
 
 # HAU-AGENT-LANES-002 — Parallel frontend and backend, serial integration
+
+> **Historical record, superseded in part (2026-11-05).** [HAU-AGENT-LANES-003](2026-11-05-claude-parallel-writer-lanes.md) replaces the writer identities and topology below: Codex is read-only, and the two permitted implementation writers are both Claude, on separate accepted disjoint tasks. The Codex V1.16 lane and the `logistics-hub-claude-ui` provisioning target no longer apply. The file-ownership idea, the steward-exclusive path list and the serial-integration rule are restated in 003. Read this text as what was accepted on 2026-10-14, not as current instruction.
 
 ## Explicit authorization and limits
 

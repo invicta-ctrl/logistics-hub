@@ -2,14 +2,14 @@
 
 **Current and authoritative.** This file intentionally contains no historical Road-to-V2 branch runner or forward-propagation instructions.
 
-**Current owner clarification (2026-11-04):** `AGENTS.md` controls writer custody and the mandatory **agent-operated pre-main security review**. Claude is the only standing implementation writer and integration steward; ChatGPT may make explicitly owner-authorized, scoped repository edits; Codex and Forge remain read-only. The former two-lane implementation arrangements below are superseded wherever they conflict.
+**Current owner rules (2026-11-04, 2026-11-05):** `AGENTS.md` controls writer custody, repository self-sufficiency and the mandatory **agent-operated pre-main security review**. Claude is the only implementation writer and the one integration steward: one writer by default, and **at most two** on separate accepted disjoint tasks in isolated worktrees under [HAU-AGENT-LANES-003](docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md) (inactive until that spec is merged and two task manifests exist). ChatGPT audits, reviews and may make explicitly owner-authorized, scoped repository edits; Codex and Forge remain read-only. HAU-AGENT-LANES-002 (Codex + Claude) is history.
 
 ## Required entry sequence
 
 1. Read `AGENTS.md` and follow its authority order.
 2. Read `.agents/PROJECT_POLICY.md`, `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md` and `docs/SHARED_AGENT_WORKFLOW.md`.
 3. Read the **active accepted** specification/amendment, verified repository state, release record, and task-specific policies. If any source conflicts, resolve by the repository authority chain; don't use an older chat, stale plan or superseded proposal as permission.
-4. Before writing, verify the active accepted slice, exact branch/HEAD, single implementation-writer lock and file ownership. Preserve Claude's active branch and uncommitted work. The historical two-lane exception is suspended by `AGENTS.md`; a temporary ChatGPT policy-only branch requires Earl's scoped authorization and serial integration.
+4. Before writing, verify the active accepted slice, exact branch/HEAD, your writer slot in the roster (`.codex/CURRENT.md`, "Writer slots"), your writer lock and your file ownership. Preserve every active branch and uncommitted work. Never become a third writer; a temporary ChatGPT policy-only branch requires Earl's scoped authorization and serial integration.
 
 ## Active release boundary — 2026-10-11
 
@@ -22,7 +22,9 @@
 
 - **Changelog is mandatory:** Apply the single rule in `AGENTS.md` and update the root `CHANGELOG.md` for every qualified version/revision and accepted specification amendment. Each entry identifies what changed, why, its release/spec authority and relevant verification; an accepted spec update is recorded separately from a deployed product version. In a parallel lane, include the proposed entry in Claude's PR/handoff and let the integration steward update the shared file. Never invent a released version or treat an intermediate checkpoint as one.
 
-- One standing implementation writer and one active implementation slice: Claude is writer and serial integration steward. ChatGPT may author only an expressly owner-authorized bounded change without overlapping the active writer. Codex/Forge are read-only. A separate owner-authorized policy-only PR does not revive the former two-lane implementation workflow. Keep incomplete work off `main`.
+- Writers: Claude only, one by default and at most two under HAU-AGENT-LANES-003, each with an accepted bounded slice, an owned-path allowlist, its own branch, worktree and lock, and isolated ports and test state; one serial integration steward. The steward alone edits the shared governance files listed in `AGENTS.md`. ChatGPT may author only an expressly owner-authorized bounded change that overlaps no writer. Codex/Forge are read-only. Keep incomplete work off `main`.
+- A merge is not a deployment: say `MERGED_DEPLOYMENT_UNVERIFIED`, `DEPLOYED_OWNER_CHECK_PENDING` or `RELEASED_VERIFIED`, and only on verified evidence. A request to prepare a PR is not a go-ahead to merge it; merging needs Earl's explicit word for that PR.
+- Open every PR from `.github/pull_request_template.md`, with each gate marked PASS, FAIL, N/A or NOT RUN. Keep the repository self-sufficient (`AGENTS.md`, "Repository self-sufficiency"): archive, do not delete, and leave a fresh clone able to find the task, the SHA, the writers, the gates and the next action.
 - Never deliver or describe an incomplete version as a finished product. Required correctness/security/denial/performance/browser checks, production preflight, backups, rollback and owner gates are not waived by the words `start`, `finish` or `continue`.
 - D1 structured business truth, R2 governed media, movement-derived stock, server-enforced permissions, append-only audit, safe offline recovery and deterministic-first intelligent features are invariant. Ambient AI is optional and must not block core work or receive forbidden private data.
 - Avoid new speculative dependencies, duplicate caches/registries, obsolete execution paths or a second source of truth. Design for one-person operations, usable phones, accessible interaction and concise staff-facing copy.

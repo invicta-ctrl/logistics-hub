@@ -2,23 +2,33 @@
 
 Read, in order:
 1. `.agents/PROJECT_POLICY.md`
-2. `.codex/CURRENT.md`
+2. `.codex/CURRENT.md` (the live task board, with the writer slots)
 3. `.codex/SESSION_HANDOFF.md`
 4. `docs/SHARED_AGENT_WORKFLOW.md`
-5. the active accepted spec/task
+5. the active accepted spec/task (the writer rules: `docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md`)
 
 Authority: Earl current instruction -> accepted spec/amendment -> verified repository state -> Context Vault.
 
-## Sole writer (owner rule, 2026-11-04)
+## Writers (owner rules 2026-11-04 and 2026-11-05; spec HAU-AGENT-LANES-003)
 
-Earl, 2026-11-04: "for all current, past, and future projects. claude will be the sole writer until further notice. chatgpt will remain auditor, reviewer, and manager."
+Earl, 2026-11-04: "for all current, past, and future projects. claude will be the sole writer until further notice. chatgpt will remain auditor, reviewer, and manager." Earl, 2026-11-05, accepted up to **two simultaneous Claude writers** on separate accepted disjoint tasks: [`docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md`](docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md) (HAU-AGENT-LANES-003). It partly supersedes the absolute one-writer rule of 2026-11-04 and the writer identities of HAU-AGENT-LANES-002 (kept as history).
+- **Claude:** the only implementation writer, and the integration steward (one, serial). **One writer and one active implementation slice by default.** A second Claude writer needs, before its first edit, a separately accepted bounded slice with task ID, base SHA, owned and forbidden paths, tests, its own branch and worktree, its own writer lock, isolated shared state and stop conditions. **Two slots maximum, account-wide, across every desktop, cloud and repository session.** Unused capacity is never a reason to invent a task. The slot roster is in `.codex/CURRENT.md` ("Writer slots"); check it, do not assume it.
+- **Two-lane operation is inactive** until HAU-AGENT-LANES-003 is merged to `main`, local and remote state and locks are reconciled, and two independent accepted task manifests exist.
+- **A third writer is forbidden.** A coordinator, tester or integrator that edits files occupies a slot.
+- **ChatGPT:** independent auditor, reviewer, prompt builder and manager; may write only when Earl expressly authorizes the scope, after verifying the roster, branch and file ownership. An owner-authorized policy-only PR may use a temporary separate branch but must integrate serially.
+- **Codex and Forge:** read-only. Historical writer and lane assignments, including Codex in HAU-AGENT-LANES-002, are superseded.
+- **Steward-exclusive** unless a serial, frozen transfer is granted first: this file, `CLAUDE.md`, `.agents/**`, accepted specs, `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md`, `CHANGELOG.md`, CI, release and ops files, `package.json` and the lockfile, migrations, Worker and API interfaces, schemas, authentication and roles, shared types, global CSS tokens and common design and state.
+- **Unchanged:** the authority chain above, the per-action owner authorization for pushes, merges, deploys and migrations, and every release gate. An instruction to prepare a PR is not a go-ahead to merge it.
 
-**Earl's clarification, 2026-11-04:** Claude retains the sole *standing* implementation-writer role and is the integration steward. ChatGPT may make expressly owner-authorized, scoped repository edits; this does not give ChatGPT an independent feature lane or grant Codex/Forge write authority.
-- **Claude:** default implementation writer and integration steward; owns the active feature branch/lock and serial integration.
-- **ChatGPT:** auditor, reviewer and manager; may write only when Earl expressly authorizes the scope, after verifying the writer lock, branch and file ownership. Coordinate shared paths; an owner-authorized policy-only PR may use a temporary separate branch but must integrate serially.
-- **Codex and Forge:** read-only; historical writer/lane assignments are superseded.
-- **The two-lane implementation exception:** suspended. One active implementation writer and work branch; no overlapping writes.
-- **Unchanged:** the authority chain above, the per-action owner authorization for pushes, merges, deploys and migrations, and every release gate.
+## Repository self-sufficiency (owner rule, 2026-11-05)
+
+A fresh clone and an agent with no conversation history must be able to find, from the repository alone: the accepted task and spec, the current branch, PR and SHA, the writer slots and who holds them, the commands that run the checks, the gates, the verified deployed state, the blocker and the next action. Keep that true.
+- **At session start verify, do not assume:** the repository root; local and remote branch and SHA; clean, dirty and untracked files; `git worktree list`; the writer roster and locks; the accepted scope; `.codex/CURRENT.md` and the handoff; current PRs, CI, release and deployment. Local dirty work is not in GitHub.
+- **While working:** one bounded accepted task per writer; exact file ownership; preserve unknown work; never rewrite another agent's work or broaden scope; checkpoint the evidence, the change, the blocker and the next action in the handoff.
+- **Documents:** keep current normative documents apart from historical evidence. Reconcile a stale or contradictory instruction when you find it; archive older records by copying them to `docs/archive/` (index: `docs/archive/README.md`) rather than deleting them; keep one discoverable live current pointer. No mass source moves without a separate accepted, reversible path migration with full tests.
+- **State words:** `MERGED_DEPLOYMENT_UNVERIFIED` (on `main`; production not checked), `DEPLOYED_OWNER_CHECK_PENDING` (production verified to serve it; Earl has not checked) and `RELEASED_VERIFIED`. A merge is not a deployment, and a green CI or CodeQL run is not a deployment. Only verified evidence advances a state.
+- **Every PR** uses `.github/pull_request_template.md`: exact base and head, accepted scope, writer, risk tier, PASS, FAIL, N/A or NOT RUN with a reason and a link for each gate, the independent review, and the docs and changelog reconciliation. The canonical checklists are `docs/WEB_QUALITY_RELEASE_GATES.md`, `docs/PERFORMANCE_RELIABILITY_DOCTRINE.md` and the security review below; the template points to them and does not copy them. GitHub branch protection does not enforce agent behavior unless it has been read back and verified.
+- **Cold-start proof** before an integration that changes policy or the handoff: a read-only agent with no history, given only a fresh clone, answers the questions above. Record the questions, the answers and the result in the PR; a failure is repaired and the drill rerun.
 
 Documentation map: `docs/DOCUMENTATION_STATUS.md`. `.codex/CURRENT.md` and `.codex/SESSION_HANDOFF.md` are the **only live task pointers**; historical Part briefs, older `proposed` drafts, and old release plans must never restart a closed task. Preserve accepted specs, release/migration evidence and rollback provenance. The retired Road-to-V2 multi-branch runner is not active.
 
@@ -45,17 +55,15 @@ Maintain the repository-root `CHANGELOG.md` as a concise, chronological index of
 
 ## Non-negotiables
 
-**Historical two-lane and Codex-writer bullets below are superseded by the current sole-standing-writer rule above; do not reactivate them.**
+Writer rules are in "Writers" above (HAU-AGENT-LANES-003); the bullets here only add the Git and branch consequences.
 
-- Codex's existing writable/local-preview worktree remains `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub`. A second isolated writable Claude UI worktree is permitted **only** under `docs/specs/accepted/2026-10-14-isolated-agent-worktrees.md` and an accepted bounded UI slice.
-- Approved MausBot Scout, Oracle, Sentinel, and Harbor worktrees are detached/read-only specialist worktrees under the accepted MausBot amendment.
-- Default: one project writer. **Accepted two-lane exception:** Codex and Claude may write concurrently on distinct Git worktrees/short-lived branches **only** with disjoint file-level ownership, accepted separate tasks, per-worktree locks and one serial integration steward; at most two writers account-wide. Unproven isolation falls back to one writer. Read-only review can always run. See the isolated-agent-worktrees amendment.
-- By default one writable slice; the accepted two-lane exception permits the existing Codex V1.16 slice plus **one** additional Claude UI slice, each in its own worktree. No long-lived agent/model branches.
-- Claude Cloud must checkpoint only to its **own authorized UI slice branch**. The original local-preview sync watcher is **not** a two-branch synchronizer and must not switch Codex's active V1.16 branch. Separate the UI preview and local state.
+- Canonical writable checkout: a worktree per writer under `D:\Documents\HAU-USC Logistics Hub\worktrees\` (or an independent cloud checkout), each on its own `slice/*` branch. The older shared checkout `D:\Documents\HAU-USC Logistics Hub\workspace\logistics-hub` and the Codex-era worktrees are historical: do not write in one that another session holds, and preserve any dirty work found there.
+- Approved MausBot Scout, Oracle, Sentinel, and Harbor worktrees are detached/read-only specialist worktrees under the accepted MausBot amendment. They never count as writers.
+- Default: one writable slice. A second slice exists only while a second writer's manifest is accepted (HAU-AGENT-LANES-003); then at most one active `slice/*` branch **per writer slot**, two in total. No long-lived agent or model branches. Unaccepted or unknown branch work is preserved.
+- Claude Cloud checkpoints only to its **own authorized slice branch**. The local-preview sync watcher (`npm run dev:live`) follows one `slice/*` branch and is not a two-branch synchronizer; give each writer its own preview port and test state.
 - `main` is always the latest verified working product.
-- At most one active `slice/*` branch **per writer lane**; two total only while the accepted isolated two-lane exception is active. Unaccepted/unknown branch work is preserved.
-- Complete green slices integrate to `main` **serially through the designated steward**, after exact-base CI and deployment preflight; the other writer pauses before any rebase or cross-lane integration. Prune only confirmed-integrated branches.
-- **Never present an incomplete version or product as completed or deployed.** Preserve incomplete work only on the active slice, label it accurately in handoffs, and never ship broken dependencies, fake working buttons or missing primary workflows. Every coherent working checkpoint must be tested, committed and pushed to **that writer's assigned slice branch**; do not hold progress only in a cloud session. As soon as a slice is independently usable and its gates are green, **the steward** serially integrates its PR into updated `main` after reconciling the other lane and deployment consequences, verifies main/CI/deployment and prunes only confirmed-integrated refs. An unmerged second lane remains independently preserved and must pause/rebase/retest before its own integration. The product release/version label changes only after the full version actually qualifies and is deployed. Incomplete checkpoints never go to `main`.
+- Complete green slices integrate to `main` **serially through the one steward**, after exact-base CI and deployment preflight and Earl's go-ahead for that PR; the other writer pauses before any rebase or cross-lane integration. Prune only confirmed-integrated branches.
+- **Never present an incomplete version or product as completed or deployed.** Preserve incomplete work only on the active slice, label it accurately in handoffs, and never ship broken dependencies, fake working buttons or missing primary workflows. Every coherent working checkpoint must be tested, committed and pushed to **that writer's assigned slice branch**; do not hold progress only in a cloud session. As soon as a slice is independently usable and its gates are green, **the steward** serially integrates its PR into updated `main` after reconciling the other lane and deployment consequences, verifies main/CI/deployment and prunes only confirmed-integrated refs. An unmerged second lane remains independently preserved and must pause, update and retest before its own integration. The product release/version label changes only after the full version actually qualifies and is deployed. Incomplete checkpoints never go to `main`.
 - Never put a knowingly broken/incomplete slice on `main`.
 - Preserve unknown work; no destructive reset/clean/history rewrite.
 - Public repo: no staff/borrower PII, credentials, provider IDs, private exports, or private evidence.
