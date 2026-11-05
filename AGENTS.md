@@ -18,7 +18,7 @@ Earl, 2026-11-04: "for all current, past, and future projects. claude will be th
 - **ChatGPT:** independent auditor, reviewer, prompt builder and manager; may write only when Earl expressly authorizes the scope, after verifying the roster, branch and file ownership. While it edits it occupies one of the two writer slots. An owner-authorized policy-only PR may use a temporary separate branch but must integrate serially.
 - **Codex and Forge:** read-only. Historical writer and lane assignments, including Codex in HAU-AGENT-LANES-002, are superseded.
 - **Steward-exclusive** unless a serial, frozen transfer is granted first: this file, `CLAUDE.md`, `.agents/**`, accepted specs, `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md`, `CHANGELOG.md`, CI, release and ops files, `package.json` and the lockfile, migrations, Worker and API interfaces, schemas, authentication and roles, shared types, global CSS tokens and common design and state.
-- **Unchanged:** the authority chain above, the per-action owner authorization for pushes, merges, deploys and migrations, and every release gate. An instruction to prepare a PR is not a go-ahead to merge it.
+- **Unchanged:** the authority chain above, the per-action owner authorization for pushes, merges, deploys and migrations, and every release gate. An instruction to prepare a PR is not a go-ahead to merge it. Older text that says to merge or integrate "immediately", "promptly" or "as soon as green", and tool allowances such as the `git push origin main` lines in `.claude/settings.json`, mean *ready to merge* and are not authority: the per-PR go-ahead decides (`docs/DOCUMENTATION_STATUS.md`, "Known stale passages").
 
 ## Repository self-sufficiency (owner rule, 2026-11-05)
 
