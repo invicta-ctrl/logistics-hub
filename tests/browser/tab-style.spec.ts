@@ -314,6 +314,7 @@ test("a saving button keeps its width and height, so the buttons beside it do no
   await expect(page.locator("#save")).toHaveAttribute("aria-busy", "true");
   await page.waitForTimeout(350);
   const during = await measure();
+  expect(await page.locator("#save").evaluate((element) => (element as HTMLElement).style.minWidth)).not.toBe("");
   expect(during.width).toBeCloseTo(before.width, 0);
   expect(during.height).toBeCloseTo(before.height, 0);
   expect(during.cancel).toBeCloseTo(before.cancel, 0);
@@ -322,12 +323,23 @@ test("a saving button keeps its width and height, so the buttons beside it do no
   expect(await page.locator("#save").evaluate((element) => (element as HTMLElement).style.minWidth)).toBe("");
 });
 
-test("a status pill wraps inside a narrow row at large text, instead of running past the edge", async ({ page }) => {
-  await plain(page, `<link rel="stylesheet" href="/src/kits.css?direct"><div id="row" style="width:120px;overflow:hidden"><span class="kit-row__meta"><span class="tag tag--bad" id="pill">Needs replenishment</span></span></div>`);
+test("a status pill wraps inside its own box at large text, anywhere it sits, but stays one line in a table", async ({ page }) => {
+  await plain(page, `<div id="row" style="width:120px;overflow:hidden"><span class="tag tag--bad" id="pill">Overdue · due 12 Mar 2026</span></div><table class="data-table"><tbody><tr><td><span class="tag tag--ok" id="cell">Needs replenishment</span></td></tr></tbody></table>`);
   await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));
-  const fit = await page.evaluate(() => { const row = document.querySelector("#row")!.getBoundingClientRect(); const pill = document.querySelector("#pill")!; const range = document.createRange(); range.selectNodeContents(pill); const text = range.getBoundingClientRect(); return { rowRight: row.right, pillRight: pill.getBoundingClientRect().right, textRight: text.right }; });
+  const fit = await page.evaluate(() => { const row = document.querySelector("#row")!.getBoundingClientRect(); const pill = document.querySelector("#pill")!; const range = document.createRange(); range.selectNodeContents(pill); return { rowRight: row.right, pillRight: pill.getBoundingClientRect().right, textRight: range.getBoundingClientRect().right }; });
   expect(fit.pillRight).toBeLessThanOrEqual(fit.rowRight + 0.5);
   expect(fit.textRight).toBeLessThanOrEqual(fit.rowRight + 0.5);
+  expect(await page.locator("#cell").evaluate((element) => getComputedStyle(element).whiteSpace)).toBe("nowrap");
+});
+
+test("a small saving button keeps its width too", async ({ page }) => {
+  await plain(page, `<form id="f" class="form-actions"><button type="submit" class="button button--sm button--secondary" id="save">Save</button></form>`);
+  const width = () => page.locator("#save").evaluate((element) => element.getBoundingClientRect().width);
+  const before = await width();
+  await page.evaluate(async () => { const module = "/src/ui.ts"; const { working } = await import(/* @vite-ignore */ module); working(document.querySelector("#f")!); });
+  await expect(page.locator("#save")).toHaveAttribute("aria-busy", "true");
+  await page.waitForTimeout(350);
+  expect(await width()).toBeCloseTo(before, 0);
 });
 
 test("a toast stays inside the screen when a side inset narrows it", async ({ page }) => {

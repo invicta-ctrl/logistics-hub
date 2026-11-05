@@ -235,7 +235,8 @@ kbd { display: inline-grid; min-width: 1.35rem; height: 1.35rem; place-items: ce
 .button--block { width: 100%; text-align: center; white-space: normal; }
 /* The spinner takes its room from the padding, so a button that is waiting keeps the size it had and the buttons beside it never move. */
 .button[aria-busy="true"] { padding-inline: calc(var(--space-4) - (var(--icon-sm) + var(--space-2)) / 2); }
-.button--sm[aria-busy="true"] { padding-inline: max(var(--space-1), calc(var(--space-3) - (var(--icon-sm) + var(--space-2)) / 2)); }
+.button--sm[aria-busy="true"] { padding-inline: calc(var(--space-3) - (.75rem + var(--space-2)) / 2); }
+.button--sm[aria-busy="true"]::before { width: .75rem; height: .75rem; }
 .button--lg[aria-busy="true"] { padding-inline: calc(var(--space-6) - (var(--icon-sm) + var(--space-2)) / 2); }
 /* LH-UI-88: one flat, solid maroon primary and an outlined maroon secondary. No gradient, no glow; a press darkens the fill. */
 .button--primary { background: var(--brand); color: var(--on-brand); }
@@ -326,7 +327,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .tag::before { width: .4375rem; height: .4375rem; border-radius: 50%; background: var(--line-strong); content: ""; }
 /* LH-UI-88 status pill: a toned tag is a tinted pill with a real glyph AND its words, so colour is never the only cue. An untoned .tag
    stays the quiet dotted label. A tag that already holds an <svg class="icon"> shows that icon instead of the generated glyph. */
-.tag--ok, .tag--warn, .tag--bad, .tag--brand { min-width: 0; max-width: 100%; padding: 0 var(--space-2) 0 .375rem; overflow-wrap: anywhere; line-height: 1.25; border: 1px solid var(--tag-line); border-radius: var(--radius-pill); background: var(--tag-tint); color: var(--tag-ink); font-weight: 500; }
+.tag--ok, .tag--warn, .tag--bad, .tag--brand { min-width: 0; max-width: 100%; padding: 0 var(--space-2) 0 .375rem; overflow-wrap: anywhere; white-space: normal; line-height: 1.25; border: 1px solid var(--tag-line); border-radius: var(--radius-pill); background: var(--tag-tint); color: var(--tag-ink); font-weight: 500; }
 .tag--ok::before, .tag--warn::before, .tag--bad::before, .tag--brand::before { width: var(--icon-sm); height: var(--icon-sm); flex: none; border-radius: 0; background: currentColor; box-shadow: none; -webkit-mask: var(--tag-glyph) center / contain no-repeat; mask: var(--tag-glyph) center / contain no-repeat; }
 .tag:has(> .icon)::before { display: none; }
 .tag--ok { --tag-ink: var(--ok); --tag-tint: var(--ok-tint); --tag-line: var(--line-ok); --tag-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
@@ -340,7 +341,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .tag--gold::before { background: var(--gold); }
 /* In a table row the status stays the compact dotted label until the slice that redesigns the row (S2) gives it one pill: a pill there
    narrows the name column and makes every phone row a line taller. */
-.data-table :is(.tag--ok, .tag--warn, .tag--bad, .tag--brand) { padding: 0; border: 0; background: none; line-height: inherit; }
+.data-table :is(.tag--ok, .tag--warn, .tag--bad, .tag--brand) { padding: 0; border: 0; background: none; line-height: inherit; white-space: nowrap; }
 .data-table :is(.tag--ok, .tag--warn, .tag--bad, .tag--brand)::before { width: .4375rem; height: .4375rem; border-radius: 50%; -webkit-mask: none; mask: none; }
 /* Wide enough for "Updated 12:59 PM" from the start, so "Connecting…" turning into a time never re-wraps the buttons beside it. */
 /* One line where it fits; a narrow header (a phone at large text) wraps it rather than pushing past the edge. */
