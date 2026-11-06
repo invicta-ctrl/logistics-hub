@@ -18,6 +18,13 @@ test.beforeEach(async ({ page }) => {
       if (kind === "webgl" || kind === "webgl2") spy.contexts += 1;
       return (getContext as (...args: unknown[]) => unknown).call(this, kind, ...rest) as never;
     } as typeof HTMLCanvasElement.prototype.getContext;
+    // The water refuses a software renderer (headless Chromium has only one). These tests present a GPU name, except the one about that
+    // refusal, which sets `softwareOnly` before the page loads.
+    const getParameter = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function (this: WebGLRenderingContext, parameter: number) {
+      if (parameter === 0x9246) return (window as unknown as { softwareOnly?: boolean }).softwareOnly ? "Google SwiftShader" : "Test GPU";
+      return getParameter.call(this, parameter);
+    } as typeof WebGLRenderingContext.prototype.getParameter;
     const add = window.addEventListener.bind(window);
     const remove = window.removeEventListener.bind(window);
     window.addEventListener = ((type: string, ...rest: unknown[]) => { if (type === "pointermove") spy.pointer += 1; return (add as (...args: unknown[]) => void)(type, ...rest); }) as typeof window.addEventListener;
@@ -94,6 +101,17 @@ test("the water pauses while the hero is scrolled away and starts again when it 
   await expect.poll(async () => (await spy(page)).pointer).toBe(0);
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect.poll(async () => (await spy(page)).pointer).toBe(1);
+});
+
+test("a browser that can only draw WebGL in software is refused: no drawing, no pointer tracking, the still image stays", async ({ page }) => {
+  await page.addInitScript(() => { (window as unknown as { softwareOnly: boolean }).softwareOnly = true; });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Borrow equipment from the USC Department of Logistics" })).toBeVisible();
+  await page.waitForTimeout(800);
+  expect((await spy(page)).contexts).toBe(1);
+  expect(await page.locator(".water-layer canvas").evaluate((canvas) => canvas.classList.contains("ready"))).toBe(false);
+  expect((await spy(page)).pointer).toBe(0);
+  expect(await page.locator(".water-layer").evaluate((layer) => getComputedStyle(layer).backgroundImage)).toContain("water-still.webp");
 });
 
 test("with forced colours the hidden water does no work, and it stops when forced colours are switched on", async ({ page }) => {

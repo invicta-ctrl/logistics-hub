@@ -111,8 +111,13 @@ export function startWater(canvas: HTMLCanvasElement, surface: HTMLElement): () 
 
   function init(): boolean {
     try {
-      const context = canvas.getContext("webgl", { alpha: false, antialias: false, depth: false, stencil: false, powerPreference: "low-power", preserveDrawingBuffer: false });
+      // A browser that can only draw WebGL in software (no GPU, a remote desktop, headless) keeps several cores busy with this shader,
+      // which a decoration is not worth: refuse it and the still image stays. `failIfMajorPerformanceCaveat` asks the browser to say no;
+      // the renderer name below catches the software drawers (SwiftShader, llvmpipe) that some browsers still hand out.
+      const context = canvas.getContext("webgl", { alpha: false, antialias: false, depth: false, stencil: false, powerPreference: "low-power", preserveDrawingBuffer: false, failIfMajorPerformanceCaveat: true });
       if (!context) throw new Error("WebGL unavailable");
+      const debugInfo = context.getExtension("WEBGL_debug_renderer_info");
+      if (debugInfo && /swiftshader|llvmpipe|softpipe|software/i.test(String(context.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)))) { context.getExtension("WEBGL_lose_context")?.loseContext(); throw new Error("WebGL is drawn in software"); }
       gl = context;
       const vert = compile(context, context.VERTEX_SHADER, VERTEX);
       const frag = compile(context, context.FRAGMENT_SHADER, FRAGMENT);
