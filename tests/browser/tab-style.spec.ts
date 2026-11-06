@@ -323,6 +323,18 @@ test("a saving button keeps its width and height, so the buttons beside it do no
   expect(await page.locator("#save").evaluate((element) => (element as HTMLElement).style.minWidth)).toBe("");
 });
 
+test("a saving button gets back the inline min-width its caller gave it, and a button with none gets none", async ({ page }) => {
+  await plain(page, `<form id="f" class="form-actions"><button type="submit" class="button button--secondary" id="own" style="min-width:9rem">Save</button><button type="submit" class="button button--primary" id="plain">Save all</button></form>`);
+  await page.evaluate(async () => { const module = "/src/ui.ts"; const { working } = await import(/* @vite-ignore */ module); (window as unknown as { done: () => void }).done = working(document.querySelector("#f")!); });
+  await expect(page.locator("#own")).toHaveAttribute("aria-busy", "true");
+  // While busy, the held width is at least the caller's own floor.
+  expect(await page.locator("#own").evaluate((element) => element.getBoundingClientRect().width)).toBeGreaterThanOrEqual(143.5);
+  await page.evaluate(() => (window as unknown as { done: () => void }).done());
+  await expect(page.locator("#own")).not.toHaveAttribute("aria-busy", "true");
+  expect(await page.locator("#own").evaluate((element) => (element as HTMLElement).style.minWidth)).toBe("9rem");
+  expect(await page.locator("#plain").evaluate((element) => (element as HTMLElement).style.minWidth)).toBe("");
+});
+
 test("a status pill wraps inside its own box at large text, anywhere it sits, but stays one line in a table", async ({ page }) => {
   await plain(page, `<div id="row" style="width:120px;overflow:hidden"><span class="tag tag--bad" id="pill">Overdue · due 12 Mar 2026</span></div><table class="data-table"><tbody><tr><td><span class="tag tag--ok" id="cell">Needs replenishment</span></td></tr></tbody></table>`);
   await page.evaluate(() => document.documentElement.style.setProperty("font-size", "200%", "important"));

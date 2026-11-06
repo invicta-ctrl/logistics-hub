@@ -717,9 +717,16 @@ export function working(scope: ParentNode): () => void {
   const buttons = scope instanceof HTMLButtonElement ? (scope.disabled ? [] : [scope]) : [...scope.querySelectorAll<HTMLButtonElement>("button[type=submit]:not(:disabled)")];
   const focused = buttons.find((button) => button === document.activeElement);
   // The spinner takes its room from the button's own padding (see `.button[aria-busy]`), and the width it had is held as a floor, so the buttons beside it never move.
+  // A caller's own inline min-width is put back exactly as it was, not dropped.
+  const own = new Map(buttons.map((button) => [button, { value: button.style.getPropertyValue("min-width"), priority: button.style.getPropertyPriority("min-width") }]));
   for (const button of buttons) { button.style.minWidth = `${button.getBoundingClientRect().width}px`; button.disabled = true; button.setAttribute("aria-busy", "true"); }
   return () => {
-    for (const button of buttons) { button.disabled = false; button.removeAttribute("aria-busy"); button.style.removeProperty("min-width"); }
+    for (const button of buttons) {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      const before = own.get(button);
+      if (before?.value) button.style.setProperty("min-width", before.value, before.priority); else button.style.removeProperty("min-width");
+    }
     if (focused?.isConnected && (document.activeElement === document.body || !document.activeElement)) focused.focus({ preventScroll: true });
   };
 }
