@@ -77,6 +77,7 @@ export function startWater(canvas: HTMLCanvasElement, surface: HTMLElement): () 
   let disposed = false;
   const reduce = matchMedia("(prefers-reduced-motion: reduce)");
   const coarse = matchMedia("(pointer: coarse)");
+  const forced = matchMedia("(forced-colors: active)");
   const connection = (navigator as Navigator & { connection?: Connection }).connection;
   let unavailable = false;
   let gl: WebGLRenderingContext | null = null;
@@ -95,7 +96,9 @@ export function startWater(canvas: HTMLCanvasElement, surface: HTMLElement): () 
   // to a list whose value it has not already handed out).
   let reduced = reduce.matches;
   let touch = coarse.matches;
-  const stopped = (): boolean => disposed || reduced || Boolean(connection?.saveData) || unavailable;
+  // Forced colours hide the water layer, so there is nothing to draw: stop, rather than animate something nobody can see.
+  let contrast = forced.matches;
+  const stopped = (): boolean => disposed || reduced || contrast || Boolean(connection?.saveData) || unavailable;
 
   function compile(context: WebGLRenderingContext, type: number, source: string): WebGLShader {
     const shader = context.createShader(type);
@@ -232,8 +235,10 @@ export function startWater(canvas: HTMLCanvasElement, surface: HTMLElement): () 
   const onContextRestored = (): void => { gl = null; locations = null; unavailable = false; reconcile(); };
   const onReduce = (): void => { reduced = reduce.matches; reconcile(); };
   const onCoarse = (): void => { touch = coarse.matches; reconcile(); };
+  const onForced = (): void => { contrast = forced.matches; reconcile(); };
   reduce.addEventListener("change", onReduce);
   coarse.addEventListener("change", onCoarse);
+  forced.addEventListener("change", onForced);
   connection?.addEventListener("change", reconcile);
   document.addEventListener("visibilitychange", reconcile);
   window.addEventListener("resize", resize, { passive: true });
@@ -253,6 +258,7 @@ export function startWater(canvas: HTMLCanvasElement, surface: HTMLElement): () 
     document.removeEventListener("visibilitychange", reconcile);
     reduce.removeEventListener("change", onReduce);
     coarse.removeEventListener("change", onCoarse);
+    forced.removeEventListener("change", onForced);
     connection?.removeEventListener("change", reconcile);
     canvas.removeEventListener("webglcontextlost", onContextLost);
     canvas.removeEventListener("webglcontextrestored", onContextRestored);

@@ -96,6 +96,26 @@ test("the water pauses while the hero is scrolled away and starts again when it 
   await expect.poll(async () => (await spy(page)).pointer).toBe(1);
 });
 
+test("with forced colours the hidden water does no work, and it stops when forced colours are switched on", async ({ page }) => {
+  await page.emulateMedia({ forcedColors: "active" });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Borrow equipment from the USC Department of Logistics" })).toBeVisible();
+  await page.waitForTimeout(800);
+  expect(await spy(page)).toEqual({ contexts: 0, pointer: 0 });
+  expect(await page.locator(".water-layer").evaluate((layer) => getComputedStyle(layer).display)).toBe("none");
+  // Switching forced colours on while the water is already running stops its pointer tracking too.
+  await page.emulateMedia({ forcedColors: "none" });
+  await expect.poll(async () => (await spy(page)).pointer).toBe(1);
+  await page.emulateMedia({ forcedColors: "active" });
+  await expect.poll(async () => (await spy(page)).pointer).toBe(0);
+});
+
+test("the hero eyebrow stays in the light text colour so it reads over the moving water", async ({ page }) => {
+  await page.goto("/");
+  const colours = await page.locator(".hero__eyebrow").evaluate((eyebrow) => ({ eyebrow: getComputedStyle(eyebrow).color, title: getComputedStyle(document.querySelector(".hero h1") as Element).color }));
+  expect(colours.eyebrow).toBe(colours.title);
+});
+
 test("if WebGL is unavailable the page is complete and the still image stays", async ({ page }) => {
   await page.addInitScript(() => {
     const getContext = HTMLCanvasElement.prototype.getContext;
