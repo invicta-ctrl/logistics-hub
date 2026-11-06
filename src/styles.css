@@ -457,6 +457,30 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .hero__services a:hover { background: var(--subtle); }
 .hero__services a:hover .icon { transform: translateX(2px); }
 
+/* Landing water (LH-UI-88 S1; Earl, 2026-11-06, put the landing page in this slice). These rules are scoped to the home page's own
+   elements: .water-layer and .landing-grain exist nowhere else. The water is decoration behind the hero; the still image is the
+   layer's own background, so the page reads the same without WebGL, under reduced motion and on Data Saver (src/water.ts). */
+.hero { isolation: isolate; }
+.hero__inner { position: relative; z-index: 1; }
+.water-layer { position: absolute; inset: 0; z-index: 0; overflow: clip; background: var(--brand) url("/brand/water-still.webp") center / cover no-repeat; pointer-events: none; }
+.water-layer canvas { display: block; width: 100%; height: 100%; opacity: 0; transition: opacity var(--dur-3) var(--ease); }
+.water-layer canvas.ready { opacity: 1; }
+.water-layer::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgb(43 10 12 / 18%), transparent 75%); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .water-layer canvas { opacity: 0 !important; } }
+/* A stationary, fine grain over the landing page only. */
+.landing-grain { position: fixed; inset: 0; z-index: 50; opacity: .065; mix-blend-mode: multiply; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 150 150' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath filter='url(%23g)' d='M0 0h150v150H0z'/%3E%3C/svg%3E"); background-size: 150px; pointer-events: none; }
+@media (forced-colors: active) { .water-layer, .landing-grain { display: none; } }
+/* The campus at dusk closes the page above the footer. */
+.campus { position: relative; height: 280px; overflow: clip; background: var(--brand-dark); }
+.campus img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 55%; }
+.campus::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgb(43 10 12 / 85%), transparent 60%); }
+.campus figcaption { position: absolute; bottom: 24px; left: max(24px, calc((100% - 72rem) / 2)); z-index: 1; color: var(--on-dark); font-size: 13px; }
+@media (max-width: 760px) { .campus { height: 230px; } .campus figcaption { font-size: 12px; } }
+/* Public pages sit under a notch and above a home bar. */
+.site-header { padding-top: env(safe-area-inset-top, 0px); }
+.site-footer__base { padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom, 0px)); }
+@media (pointer: coarse) { .site-footer__links a { display: inline-flex; min-height: var(--target); align-items: center; } }
+
 
 /* How borrowing works, centred like the hero: three numbered steps, each number in a quiet ring. */
 .section { padding-block: clamp(4rem, 8vw, 6rem); }

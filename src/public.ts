@@ -97,7 +97,9 @@ function rollCounts(container: Element, before: Map<string, number>, changed: Se
 export function landing(): void {
   document.title = "Department of Logistics · HAU University Student Council";
   page(html`<main id="main-content">
+    <div class="landing-grain" aria-hidden="true"></div>
     <section class="hero" aria-labelledby="hero-title">
+      <div class="water-layer" aria-hidden="true"><canvas></canvas></div>
       <div class="container hero__inner">
         <p class="hero__eyebrow">University Student Council · Holy Angel University</p>
         <h1 id="hero-title">Borrow equipment from the USC Department of Logistics</h1>
@@ -131,7 +133,17 @@ export function landing(): void {
       </div>
     </section>
 
+    <figure class="campus"><img src="/brand/hau-campus-dusk.webp" alt="Holy Angel University campus at dusk" width="1500" height="1000" loading="lazy" decoding="async" /><figcaption>Holy Angel University, Angeles City</figcaption></figure>
   </main>`, "home");
+
+  // The water is decoration: it loads after the page is complete, and the still image shows until (and unless) it runs. It stops on
+  // reduced motion and Data Saver by itself, and its cleanup runs when the router leaves this page.
+  const canvas = app.querySelector<HTMLCanvasElement>(".water-layer canvas");
+  const hero = app.querySelector<HTMLElement>(".hero");
+  let left = false;
+  let stopWater: (() => void) | undefined;
+  onLeave(() => { left = true; stopWater?.(); });
+  if (canvas && hero) void import("./water").then(({ startWater }) => { if (!left) stopWater = startWater(canvas, hero); }, () => { /* offline or blocked: the still image stays */ });
 
   // The entry card is a plain GET form to /lending; with the router running it navigates in place. It shows no counts and
   // makes no catalog request: availability lives only in the Lending Hub.
