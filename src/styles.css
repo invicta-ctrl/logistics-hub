@@ -5,8 +5,8 @@
   --surface: #ffffff;
   --subtle: #f4f2ee;
   --hover: #f7f5f1;
-  --line: #e7e3dc;
-  --line-strong: #d4cdc2;
+  --line: #e1dcd3; /* LH-UI-88: a slightly firmer hairline, so a tile's edge reads on the paper */
+  --line-strong: #cfc7ba;
   --line-field: #958d82;
   --text: #1c1917;
   --text-2: #57514a;
@@ -16,8 +16,8 @@
   --brand-tint: #f8eeee;
   --brand-dark: #2b0a0c;
   --brand-deep: #40070a;
-  --gold: #c9962a;
-  --gold-action: #e8b93c;
+  --gold: #a87a12; /* LH-UI-88 D5: a gold MARK on light surfaces (3.84:1 on white, 3.66 on paper). Never text. */
+  --gold-action: #e4b84f; /* D5: a fill with dark text, or on maroon (5.8:1). */
   --gold-action-hover: #f2c95a;
   --on-dark: #fbf6ee;
   --on-dark-2: rgb(251 246 238 / 78%);
@@ -27,6 +27,8 @@
   --ok-on-dark: #8fe0b3;
   --bad-on-dark: #ff9aa6;
   --line-brand: #e7c0c4;
+  --press-brand: #40070a; /* LH-UI-88: the fill of a pressed primary button, and of a pressed outlined one */
+  --press-tint: #e7c0c4;
   --line-ok: #b9dcc8;
   --line-warn: #efdcb1;
   --line-bad: #efc4ca;
@@ -46,7 +48,7 @@
   --bad-dot: #d23c4c;
   --bad-tint: #fcebed;
   --scrim-media: rgb(12 10 9 / 92%);
-  --focus: 0 0 0 3px rgb(201 150 42 / 45%);
+  --focus: 0 0 0 3px var(--gold);
   --focus-field: 0 0 0 3px rgb(122 20 25 / 14%);
   --focus-bad: 0 0 0 3px rgb(163 32 47 / 16%);
 
@@ -61,11 +63,12 @@
   --text-2xl: 1.75rem;
   --text-display: clamp(2rem, 5vw, 2.75rem);
 
-  /* Shape and elevation. Depth says what a surface is: sm for resting controls, md for raised panels you act on, lg for menus
-     over content, modal for sheets lifted furthest. Shadows are warm ink rather than grey, and never animated. A raised surface
-     also catches light on its top edge (--edge-light); ambient content sits flush on the paper with a hairline only. */
-  --radius: 6px;
-  --radius-lg: 10px;
+  /* Shape and elevation (LH-UI-88 D6): three radii, 8 for controls, 12 for cards and panels, 16 for sheets and dialogs. Depth says what
+     a surface is: sm for resting controls, md for raised panels you act on, lg for menus over content, modal for sheets lifted furthest.
+     Shadows are warm ink rather than grey, and never animated. There is no glow and no bevel: ambient content sits flush on the paper
+     with a hairline only. */
+  --radius: 8px;
+  --radius-lg: 12px;
   --radius-xl: 16px;
   --radius-pill: 999px;
   --shadow-sm: 0 1px 2px rgb(43 10 12 / 7%);
@@ -79,8 +82,8 @@
   /* Ink for what sits on the stone (a busy note, a fallback icon): fixed, because the stone is light in both themes. */
   --stage-ink: #44403c;
   --stage-brand: #7a1419;
-  --edge-light: inset 0 1px 0 rgb(255 255 255 / 75%);
-  --edge-light-brand: inset 0 1px 0 rgb(255 255 255 / 16%);
+  --edge-light: 0 0 0 0 transparent; /* no bevel: kept as a token so the rules that list it stay valid */
+  --edge-light-brand: 0 0 0 0 transparent;
   --container: 72rem;
   --gutter: clamp(1rem, 4vw, 2rem);
   --space-1: .25rem;
@@ -115,10 +118,10 @@
   --ease-in: cubic-bezier(.4, 0, 1, 1);
   /* --ease-settle: an object coming to rest (a panel growing from its row, an item settling on its stage). */
   --ease-settle: cubic-bezier(.16, 1, .3, 1);
-  --dur-1: 120ms;
+  --dur-1: 150ms;
   --dur-2: 200ms;
-  --dur-inspect: 260ms;
-  --dur-3: 320ms;
+  --dur-inspect: 200ms;
+  --dur-3: 200ms;
 
   color-scheme: light;
   font-family: var(--sans);
@@ -152,6 +155,8 @@
   --on-brand: #1f0a0d;
   --gold: #e7bd62;
   --line-brand: rgb(224 100 111 / 38%);
+  --press-brand: #d05a66; /* 4.9:1 under the dark label (--on-brand) */
+  --press-tint: rgb(224 100 111 / 22%);
   --line-ok: rgb(62 207 142 / 32%);
   --line-warn: rgb(240 180 60 / 34%);
   --line-bad: rgb(255 93 110 / 36%);
@@ -176,7 +181,7 @@
   --shadow-md: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 20px -10px rgb(0 0 0 / 55%);
   --shadow-lg: 0 18px 40px -14px rgb(0 0 0 / 65%), 0 2px 6px rgb(0 0 0 / 35%);
   --shadow-modal: 0 0 0 1px rgb(255 226 196 / 10%), -28px 0 60px -30px rgb(0 0 0 / 70%);
-  --edge-light: inset 0 1px 0 rgb(255 255 255 / 6%);
+  --edge-light: 0 0 0 0 transparent;
   color-scheme: dark;
 }
 
@@ -219,19 +224,31 @@ kbd { display: inline-grid; min-width: 1.35rem; height: 1.35rem; place-items: ce
 .button .icon { --icon-size: var(--icon-sm); }
 .button:focus-visible { outline: none; box-shadow: var(--focus); }
 .button:disabled { cursor: progress; opacity: .6; }
+/* Pressed and waiting for the server: a small spinner, the one thing that turns, and only while work is under way. It stops when the write settles. */
+.button[aria-busy="true"]:disabled { opacity: .85; }
+.button[aria-busy="true"]::before { width: var(--icon-sm); height: var(--icon-sm); flex: none; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; content: ""; }
+@media (prefers-reduced-motion: no-preference) { .button[aria-busy="true"]::before { animation: busy-spin .8s linear infinite; } }
+@keyframes busy-spin { to { transform: rotate(360deg); } }
 .button--sm { min-height: 2.25rem; padding: var(--space-2) var(--space-3); font-size: var(--text-sm); }
 .button--lg { min-height: 3rem; padding: var(--space-3) var(--space-6); font-size: var(--text-md); }
 /* As wide as its column already, so a label that is wider (large text, a phone) wraps instead of spilling out. */
 .button--block { width: 100%; text-align: center; white-space: normal; }
-.button--primary { background: var(--brand) linear-gradient(180deg, rgb(255 255 255 / 7%), transparent); color: var(--on-brand); box-shadow: var(--edge-light-brand), 0 1px 2px rgb(43 10 12 / 22%), 0 4px 10px -6px rgb(122 20 25 / 55%); }
+/* The spinner takes its room from the padding, so a button that is waiting keeps the size it had and the buttons beside it never move. */
+.button[aria-busy="true"] { padding-inline: calc(var(--space-4) - (var(--icon-sm) + var(--space-2)) / 2); }
+.button--sm[aria-busy="true"] { padding-inline: calc(var(--space-3) - (.75rem + var(--space-2)) / 2); }
+.button--sm[aria-busy="true"]::before { width: .75rem; height: .75rem; }
+.button--lg[aria-busy="true"] { padding-inline: calc(var(--space-6) - (var(--icon-sm) + var(--space-2)) / 2); }
+/* LH-UI-88: one flat, solid maroon primary and an outlined maroon secondary. No gradient, no glow; a press darkens the fill. */
+.button--primary { background: var(--brand); color: var(--on-brand); }
 .button--primary:hover:not(:disabled) { background-color: var(--brand-hover); }
-.button--primary:active:not(:disabled) { box-shadow: inset 0 1px 2px rgb(28 25 23 / 30%); }
-.button--secondary { border-color: var(--line-strong); background: var(--surface); color: var(--text); box-shadow: var(--edge-light), var(--shadow-sm); }
-.button--secondary:hover { border-color: var(--text-3); background: var(--hover); }
-.button--secondary:active:not(:disabled) { background: var(--subtle); box-shadow: inset 0 1px 2px rgb(28 25 23 / 10%); }
+.button--primary:active:not(:disabled) { background-color: var(--press-brand); }
+.button--secondary { border-color: var(--brand); background: transparent; color: var(--brand); }
+/* :where() keeps the hover as quiet as it was (0,2,0), so Self-Service's own secondary look still wins on a touch screen, where :hover sticks after a tap. */
+.button--secondary:hover:where(:not(:disabled)) { border-color: var(--brand-hover); background: var(--brand-tint); color: var(--brand-hover); }
+.button--secondary:active:not(:disabled) { background: var(--press-tint); color: var(--brand-hover); }
 .button--ghost { color: var(--text-2); }
 .button--ghost:hover { background: var(--subtle); color: var(--text); }
-.button--danger { background: var(--bad); color: var(--on-brand); box-shadow: var(--edge-light-brand), var(--shadow-sm); }
+.button--danger { background: var(--bad); color: var(--on-brand); }
 .button--danger:hover:not(:disabled) { background: var(--bad-hover); }
 .button--on-dark { background: var(--gold-action); color: var(--brand-deep); font-weight: 600; }
 .button--on-dark:hover:not(:disabled) { background: var(--gold-action-hover); }
@@ -256,6 +273,7 @@ input:not([type=checkbox], [type=radio]), select, textarea {
   background: var(--surface); font-size: var(--text-md); line-height: 1.4;
   transition: border-color var(--dur-1), box-shadow var(--dur-1);
 }
+input, textarea { caret-color: var(--brand); }
 input::placeholder, textarea::placeholder { color: var(--text-3); }
 input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) { border-color: var(--text-3); }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; border-color: var(--brand); box-shadow: var(--focus-field); }
@@ -271,7 +289,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .input-group__button:hover { color: var(--text); }
 .search-field { position: relative; display: flex; flex: 1 1 18rem; align-items: center; }
 .search-field > .icon { position: absolute; left: .75rem; color: var(--text-3); pointer-events: none; }
-.search-field input { padding-inline: var(--space-10) var(--space-10); }
+.search-field input { padding-inline: var(--space-10) var(--space-10); border-radius: var(--radius-pill); }
 .search-field input::-webkit-search-cancel-button { display: none; }
 .search-field kbd { position: absolute; right: .625rem; pointer-events: none; }
 .search-field input:focus ~ kbd, .search-field input:not(:placeholder-shown) ~ kbd { display: none; }
@@ -307,18 +325,24 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .tags { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); }
 .tag { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-2); font-size: var(--text-sm); white-space: nowrap; }
 .tag::before { width: .4375rem; height: .4375rem; border-radius: 50%; background: var(--line-strong); content: ""; }
-.tag--ok { color: var(--ok); }
-.tag--ok::before { background: var(--ok-dot); }
-.tag--warn { color: var(--warn); }
-.tag--warn::before { background: var(--warn-dot); }
-.tag--bad { color: var(--bad); }
-.tag--bad::before { background: var(--bad-dot); }
-.tag--brand { color: var(--brand); }
-.tag--brand::before { background: var(--brand); }
+/* LH-UI-88 status pill: a toned tag is a tinted pill with a real glyph AND its words, so colour is never the only cue. An untoned .tag
+   stays the quiet dotted label. A tag that already holds an <svg class="icon"> shows that icon instead of the generated glyph. */
+.tag--ok, .tag--warn, .tag--bad, .tag--brand { min-width: 0; max-width: 100%; padding: 0 var(--space-2) 0 .375rem; overflow-wrap: anywhere; white-space: normal; line-height: 1.25; border: 1px solid var(--tag-line); border-radius: var(--radius-pill); background: var(--tag-tint); color: var(--tag-ink); font-weight: 500; }
+.tag--ok::before, .tag--warn::before, .tag--bad::before, .tag--brand::before { width: var(--icon-sm); height: var(--icon-sm); flex: none; border-radius: 0; background: currentColor; box-shadow: none; -webkit-mask: var(--tag-glyph) center / contain no-repeat; mask: var(--tag-glyph) center / contain no-repeat; }
+.tag:has(> .icon)::before { display: none; }
+.tag--ok { --tag-ink: var(--ok); --tag-tint: var(--ok-tint); --tag-line: var(--line-ok); --tag-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
+.tag--warn { --tag-ink: var(--warn); --tag-tint: var(--warn-tint); --tag-line: var(--line-warn); --tag-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 9v4M12 17h.01'/%3E%3Cpath d='M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'/%3E%3C/svg%3E"); }
+.tag--bad { --tag-ink: var(--bad); --tag-tint: var(--bad-tint); --tag-line: var(--line-bad); --tag-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='m15 9-6 6M9 9l6 6'/%3E%3C/svg%3E"); }
+.tag--brand { --tag-ink: var(--brand); --tag-tint: var(--brand-tint); --tag-line: var(--line-brand); --tag-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 8v4M12 16h.01'/%3E%3C/svg%3E"); }
 .tag--pending { color: var(--text-2); }
 .tag--pending::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--gold); }
+/* Gold marks identity and planning labels (Officer, Admin, Planned), not a warning, so it stays the quiet dotted label. */
 .tag--gold { color: var(--text-2); }
 .tag--gold::before { background: var(--gold); }
+/* In a table row the status stays the compact dotted label until the slice that redesigns the row (S2) gives it one pill: a pill there
+   narrows the name column and makes every phone row a line taller. */
+.data-table :is(.tag--ok, .tag--warn, .tag--bad, .tag--brand) { padding: 0; border: 0; background: none; line-height: inherit; white-space: nowrap; }
+.data-table :is(.tag--ok, .tag--warn, .tag--bad, .tag--brand)::before { width: .4375rem; height: .4375rem; border-radius: 50%; -webkit-mask: none; mask: none; }
 /* Wide enough for "Updated 12:59 PM" from the start, so "Connecting…" turning into a time never re-wraps the buttons beside it. */
 /* One line where it fits; a narrow header (a phone at large text) wraps it rather than pushing past the edge. */
 .live-status { display: inline-flex; min-width: min(8.75rem, 100%); max-width: 100%; align-items: center; gap: var(--space-2); color: var(--text-3); font-size: var(--text-sm); }
@@ -343,13 +367,17 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 /* ---------- Empty, loading, toast ---------- */
 /* An empty list is a composed, quiet plate, its icon set down on it like an object, not a dashed hole. */
 .empty { position: relative; isolation: isolate; display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-16) var(--space-6); text-align: center; }
-.empty > .icon { --icon-size: var(--icon-lg); box-sizing: content-box; margin-bottom: var(--space-2); padding: var(--space-3); border-radius: var(--radius-pill); background: var(--surface); box-shadow: var(--edge-light), inset 0 0 0 1px var(--line), 0 10px 16px -10px rgb(43 10 12 / 35%); color: var(--text-3); }
+.empty > .icon { --icon-size: var(--icon-lg); box-sizing: content-box; margin-bottom: var(--space-2); padding: var(--space-3); border-radius: var(--radius-pill); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-3); }
 .empty :is(h1, h2, h3) { font-size: var(--text-lg); }
 .empty p { max-width: 30rem; color: var(--text-2); font-size: var(--text-base); }
 .empty .button { margin-top: var(--space-3); }
+.empty--error { border-radius: var(--radius-lg); background: var(--bad-tint); }
 .empty--error :is(h1, h2, h3) { color: var(--bad); }
 .empty--error > .icon { color: var(--bad); }
-.skeleton { display: block; border-radius: var(--radius); background: linear-gradient(90deg, var(--subtle) 30%, var(--hover) 50%, var(--subtle) 70%) 0 0 / 300% 100%; }
+/* Long words and long messages wrap inside their box (a phone at 200% text) instead of widening it. */
+:is(.form-alert, .callout, .toast) > span, .empty :is(h1, h2, h3, p) { min-width: 0; overflow-wrap: anywhere; }
+/* Loading is a flat tinted block that holds the layout. It does not move: motion is kept for things that change. */
+.skeleton { display: block; border-radius: var(--radius); background: var(--line); }
 .skeleton--text { width: min(60%, 18rem); height: .875rem; }
 .skeleton--num { width: 3rem; height: .875rem; margin-left: auto; }
 .skeleton--block { height: 12rem; border-radius: var(--radius-lg); }
@@ -361,6 +389,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .toast { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius); background: var(--text); color: var(--bg); font-size: var(--text-sm); box-shadow: var(--shadow-md); pointer-events: auto; transition: opacity var(--dur-2), transform var(--dur-2) var(--ease); }
 .toast .icon { color: var(--ok-on-dark); }
 .toast--error .icon { color: var(--bad-on-dark); }
+:root[data-theme="dark"] .toast { border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); }
 .toast--leaving { opacity: 0; transform: translateY(.5rem); }
 
 /* ==========================================================================
@@ -382,26 +411,28 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .site-nav :focus-visible { outline-color: var(--gold-action); }
 
 /* The home page is one centred column (Earl, V1.16.8): who it is for, the promise, then the search itself, with the way into the
-   Lending Hub right under it. A faint crest-gold glow sits behind the heading; nothing moves after it settles. */
-.hero { position: relative; overflow: hidden; background: radial-gradient(60rem 28rem at 50% -6rem, rgb(232 185 60 / 14%), transparent 70%), var(--brand); color: var(--on-dark); }
+   Lending Hub right under it. LH-UI-88: a flat maroon band, no glow, and nothing moves on load. */
+.hero { position: relative; overflow: hidden; background: var(--brand); color: var(--on-dark); }
 .hero__inner { display: grid; justify-items: center; gap: 0; padding-block: clamp(4rem, 9vw, 6.5rem) 7rem; text-align: center; }
-.hero__eyebrow { color: var(--gold-action); font-size: var(--text-sm); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.hero__eyebrow { color: var(--on-dark); font-size: var(--text-sm); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .hero h1 { max-width: 18ch; margin-top: var(--space-4); font-family: var(--serif); font-size: 4rem; font-weight: 500; letter-spacing: -.025em; line-height: 4.5rem; text-wrap: balance; overflow-wrap: anywhere; }
 .hero__lede { max-width: 46ch; margin-top: var(--space-6); color: var(--on-dark-2); font-size: 1.125rem; line-height: 1.75rem; text-wrap: pretty; }
 .hero__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-4) var(--space-8); margin-top: var(--space-6); }
 .hero__actions .button { white-space: normal; }
-.hero .hero__primary { min-height: 3.5rem; padding-inline: var(--space-6); border-radius: 12px; background: var(--on-dark); color: var(--brand); font-size: var(--text-md); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / 20%); }
-.hero .hero__primary:hover { background: #fff; box-shadow: 0 12px 28px -12px rgb(0 0 0 / 60%); transform: translateY(-1px); }
+.hero .hero__primary { min-height: 3.5rem; padding-inline: var(--space-6); border-radius: var(--radius-lg); background: var(--on-dark); color: var(--brand); font-size: var(--text-md); font-weight: 600; }
+.hero .hero__primary:hover { background: #fff; }
 .hero__primary .icon, .hero__available .icon { transition: transform var(--dur-2) var(--ease-settle); }
 .hero__primary:hover .icon, .hero__available:hover .icon { transform: translateX(4px); }
 .hero :focus-visible { outline-color: var(--gold-action); }
+/* On the maroon band the focus ring is the gold fill (5.8:1); the darker gold mark is for light surfaces. */
+.hero .button:focus-visible { box-shadow: 0 0 0 3px var(--gold-action); }
 
 /* Lending Hub entry: the search, centred under the promise. Data-free: it searches the Lending Hub and shows no counts. */
 .hero__find { display: grid; width: min(100%, 40rem); min-width: 0; justify-items: center; margin-top: var(--space-10); }
-.hero__field { display: flex; width: 100%; min-width: 0; height: 3.75rem; align-items: center; gap: var(--space-3); padding: 0 var(--space-1) 0 var(--space-5, 1.25rem); border-radius: 14px; background: rgb(43 10 12 / 35%); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 14%), 0 24px 48px -24px rgb(0 0 0 / 55%); color: var(--on-dark-2); text-align: left; transition: background-color var(--dur-1), box-shadow var(--dur-2); }
+.hero__field { display: flex; width: 100%; min-width: 0; height: 3.75rem; align-items: center; gap: var(--space-3); padding: 0 var(--space-1) 0 var(--space-5, 1.25rem); border-radius: var(--radius-xl); background: rgb(43 10 12 / 35%); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 14%); color: var(--on-dark-2); text-align: left; transition: background-color var(--dur-1), box-shadow var(--dur-2); }
 .hero__field:hover { background: rgb(43 10 12 / 45%); }
 .hero__field:focus-within { box-shadow: inset 0 0 0 2px var(--gold-action); }
-.hero__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; color: var(--on-dark); font-size: var(--text-md); outline: none; }
+.hero__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; caret-color: var(--on-dark); color: var(--on-dark); font-size: var(--text-md); outline: none; }
 .hero__field input::placeholder { color: var(--on-dark-2); opacity: 1; }
 .hero__field input::-webkit-search-cancel-button { display: none; }
 .hero__field button { display: grid; width: 3rem; height: 3rem; flex: none; place-items: center; border: 0; border-radius: var(--radius-lg); background: var(--on-dark); color: var(--brand); cursor: pointer; transition: background-color var(--dur-1), transform var(--dur-2) var(--ease-settle); }
@@ -415,7 +446,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 @media (pointer: coarse) { .hero__available { min-height: var(--target); } }
 
 /* Services strip overlaps the band edge, then the page returns to the neutral base. */
-.hero__services { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: -3rem; border-radius: var(--radius-xl); background: var(--surface); box-shadow: 0 1px 2px rgb(28 18 20 / 6%), 0 24px 48px -24px rgb(28 18 20 / 25%); color: var(--text); }
+.hero__services { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: -3rem; border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-md); color: var(--text); }
 .hero__services a { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr); gap: var(--space-1) var(--space-4); padding: var(--space-8); color: inherit; text-decoration: none; transition: background-color var(--dur-2); }
 .hero__services a + a { border-left: 1px solid var(--line); }
 .hero__services a:first-child { border-radius: var(--radius-xl) 0 0 var(--radius-xl); }
@@ -425,13 +456,30 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .hero__services span { color: var(--text-3); font-size: var(--text-base); line-height: 1.5rem; }
 .hero__services a:hover { background: var(--subtle); }
 .hero__services a:hover .icon { transform: translateX(2px); }
-@media (prefers-reduced-motion: no-preference) {
-  .hero__inner > * { animation: hero-rise 600ms var(--ease-settle) backwards; }
-  .hero h1 { animation-delay: 60ms; }
-  .hero__lede { animation-delay: 120ms; }
-  .hero__find { animation-delay: 200ms; }
-}
-@keyframes hero-rise { from { opacity: 0; transform: translateY(16px); } }
+
+/* Landing water (LH-UI-88 S1; Earl, 2026-11-06, put the landing page in this slice). These rules are scoped to the home page's own
+   elements: .water-layer and .landing-grain exist nowhere else. The water is decoration behind the hero; the still image is the
+   layer's own background, so the page reads the same without WebGL, under reduced motion and on Data Saver (src/water.ts). */
+.hero { isolation: isolate; }
+.hero__inner { position: relative; z-index: 1; }
+.water-layer { position: absolute; inset: 0; z-index: 0; overflow: clip; background: var(--brand) url("/brand/water-still.webp") center / cover no-repeat; pointer-events: none; }
+.water-layer canvas { display: block; width: 100%; height: 100%; opacity: 0; transition: opacity var(--dur-3) var(--ease); }
+.water-layer canvas.ready { opacity: 1; }
+.water-layer::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgb(43 10 12 / 18%), transparent 75%); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .water-layer canvas { opacity: 0 !important; } }
+/* A stationary, fine grain over the landing page only. */
+.landing-grain { position: fixed; inset: 0; z-index: 50; opacity: .065; mix-blend-mode: multiply; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 150 150' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath filter='url(%23g)' d='M0 0h150v150H0z'/%3E%3C/svg%3E"); background-size: 150px; pointer-events: none; }
+@media (forced-colors: active) { .water-layer, .landing-grain { display: none; } }
+/* The campus at dusk closes the page above the footer. */
+.campus { position: relative; height: 280px; overflow: clip; background: var(--brand-dark); }
+.campus img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 55%; }
+.campus::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgb(43 10 12 / 85%), transparent 60%); }
+.campus figcaption { position: absolute; bottom: 24px; left: max(24px, calc((100% - 72rem) / 2)); z-index: 1; color: var(--on-dark); font-size: 13px; }
+@media (max-width: 760px) { .campus { height: 230px; } .campus figcaption { font-size: 12px; } }
+/* Public pages sit under a notch and above a home bar. */
+.site-header { padding-top: env(safe-area-inset-top, 0px); }
+.site-footer__base { padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom, 0px)); }
+@media (pointer: coarse) { .site-footer__links a { display: inline-flex; min-height: var(--target); align-items: center; } }
 
 
 /* How borrowing works, centred like the hero: three numbered steps, each number in a quiet ring. */
@@ -471,13 +519,12 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .filterbar__inner { display: grid; gap: var(--space-3); padding-block: var(--space-4); }
 .filterbar__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 /* On a phone the search takes its own row; beside the switch it cut its placeholder short. */
-@media (max-width: 40rem) { .filterbar__row .search-field { flex-basis: 100%; } }
+@media (max-width: 760px) { .filterbar__row .search-field { flex-basis: 100%; } }
 .sort-toggle { display: inline-flex; padding: .1875rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--subtle); }
 .sort-toggle button { white-space: nowrap; min-height: 2rem; padding: var(--space-1) var(--space-3); border: 0; border-radius: var(--radius); background: none; color: var(--text-2); font-size: var(--text-sm); font-weight: 500; transition: background-color var(--dur-2), color var(--dur-2), box-shadow var(--dur-2); }
 .sort-toggle button:hover { color: var(--text); }
-.sort-toggle button[aria-pressed="true"] { background: var(--brand-tint); color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
-/* On the dark tint the brand red is 4.3:1; its lighter step reads at AA. */
-:root[data-theme="dark"] .sort-toggle button[aria-pressed="true"] { color: var(--brand-hover); }
+/* The chosen segment is a solid brand fill, so what is selected reads from across the room (white on #7a1419 is 10.8:1). */
+.sort-toggle button[aria-pressed="true"] { background: var(--brand); color: var(--on-brand); }
 .chips { display: flex; gap: var(--space-2); margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); overflow-x: auto; scrollbar-width: thin; }
 #lending-categories { min-height: 2.25rem; }
 #lending-categories .chip--skeleton { width: 5.5rem; pointer-events: none; }
@@ -657,7 +704,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
  * LH-IP02-S04 · One page frame for every staff page: the title is the page's (Newsreader 48/56, 36/44 on phones, as Home's), with one lede
  * line under it and the page's actions level with that line. A page header inside a sheet (the Catalog's summary) keeps its own size.
  */
-.app-main .page-header:not(.cat > .page-header) { align-items: flex-end; padding-block: var(--space-8) var(--space-6); }
+.app-main .page-header:not(.cat > .page-header) { align-items: flex-end; padding-block: var(--space-6) var(--space-4); }
 .app-main .page-header:not(.cat > .page-header) h1 { font: 500 3rem/3.5rem var(--serif); letter-spacing: -.022em; }
 .app-main .page-header:not(.cat > .page-header) p { font-size: var(--text-base); }
 /* A long lede wraps beside the actions rather than pushing them onto a line of their own. */
@@ -722,7 +769,6 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .filters-toggle { display: inline-flex; flex: none; border-radius: var(--radius-pill); }
 .table-filters { display: none; flex: 1 0 100%; flex-wrap: wrap; gap: var(--space-2); }
 .table-filters.is-open { display: flex; }
-@media (max-width: 600px) { .table-toolbar .search-field input { height: 3rem; } }
 .table-toolbar__count { margin-left: auto; color: var(--text-3); font-size: var(--text-sm); white-space: nowrap; }
 
 .data-table-wrap { overflow: clip; border-top: 1px solid var(--line); }
@@ -757,17 +803,17 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .fold__more { display: flex; justify-content: center; margin: var(--space-3) 0 var(--space-2); }
 @media (prefers-reduced-motion: reduce) { .fold__toggle > .icon { transition: none; } }
 /* On a phone the activity feed can grow to 300 entries as it scrolls: rows out of sight skip layout and paint until they come near (V1.16.12). */
-@media (max-width: 47.99rem) { .activity-row { content-visibility: auto; contain-intrinsic-size: auto 4.5rem; } }
+@media (max-width: 760px) { .activity-row { content-visibility: auto; contain-intrinsic-size: auto 4.5rem; } }
 .data-table { width: 100%; border-collapse: collapse; font-size: var(--text-base); }
 .data-table th { position: sticky; top: var(--app-bar); z-index: 1; height: 2.75rem; padding: 0 var(--space-4); border-bottom: 1px solid var(--line); background: var(--bg); color: var(--text-3); font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-align: left; text-transform: uppercase; white-space: nowrap; }
-.data-table td { height: 4rem; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); vertical-align: middle; }
+.data-table td { height: 3.5rem; padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); vertical-align: middle; }
 /* A row that opens something says so on hover with a chevron at its end; a static table has none. */
 .data-table:not(.data-table--static) tbody td:last-child { position: relative; padding-right: var(--space-10); }
 .data-table:not(.data-table--static) tbody td:last-child::after { position: absolute; top: 50%; right: var(--space-3); width: 1rem; height: 1rem; margin-top: -.5rem; background: currentColor; color: var(--text-3); content: ""; opacity: 0; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 6 6 6-6 6'/%3E%3C/svg%3E") center / contain no-repeat; transition: opacity var(--dur-1); }
 .data-table:not(.data-table--static) tbody tr:is(:hover, :focus-within) td:last-child::after { opacity: 1; }
 .data-table tbody tr { cursor: pointer; transition: background-color var(--dur-1); }
 .data-table tbody tr:hover { background: var(--hover); }
-.data-table tbody tr.is-open { background: var(--brand-tint); box-shadow: inset 3px 0 0 var(--brand); }
+.data-table tbody tr.is-open { background: var(--brand-tint); }
 .data-table tbody tr.is-inactive .row-link, .data-table tbody tr.is-inactive .qty { color: var(--text-3); }
 .data-table tbody tr:last-child td { border-bottom: 0; }
 /* A list on the page ends on a rule like every row; a table inside a boxed panel keeps the panel's edge. */
@@ -836,7 +882,7 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 
 /* Plate (2026-10-14): a lit surface for editorial areas (an item's profile, Home's stage). Its drafting grid and crop marks were
    removed 2026-10-14 (HAU-UI-MEDIA-THEME-001): they carried no information. */
-.drafting { position: relative; isolation: isolate; border-radius: var(--radius-xl); background: linear-gradient(180deg, var(--subtle), var(--surface) 78%); box-shadow: inset 0 0 0 1px var(--line); }
+.drafting { position: relative; isolation: isolate; border-radius: var(--radius-xl); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
 
 /* Dark: the icon needs no white highlight on a dark plate, and the add-photo hover lifts with the theme's own hover tone. */
 :root[data-theme="dark"] .theater .photo-tile .item-visual > .item-icon { filter: none; }
@@ -853,13 +899,10 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .theater > .profile__actions:has(> :not([popover])) { padding: var(--space-3) var(--space-2) var(--space-1); }
 .theater .photo-tile { isolation: isolate; aspect-ratio: 16 / 10; max-height: min(30rem, 60svh); border-radius: calc(var(--radius-xl) - var(--space-1)); background: var(--stage); box-shadow: var(--edge-light), inset 0 0 0 1px var(--stage-edge); }
 .theater .photo-tile .item-visual { position: relative; z-index: 1; background: transparent; }
-.theater .photo-tile .item-visual > .item-icon { width: 56%; height: 56%; max-width: none; max-height: none; stroke-width: 1.25; filter: drop-shadow(0 1px 0 rgb(255 255 255 / 90%)); }
+.theater .photo-tile .item-visual > .item-icon { width: 56%; height: 56%; max-width: none; max-height: none; stroke-width: 1.25; }
 .theater .photo-tile > img:not(.photo-tile__ambient) { position: relative; z-index: 1; }
-.theater .photo-tile .item-visual__photo, .theater .photo-tile > img:not(.photo-tile__ambient) { filter: drop-shadow(0 14px 22px rgb(28 18 20 / 26%)); }
-.theater .photo-tile__ambient { position: absolute; top: -12%; left: -12%; z-index: 0; width: 124%; max-width: none; height: 124%; object-fit: cover; opacity: 0; filter: blur(28px) saturate(1.2); pointer-events: none; transition: opacity var(--dur-3) var(--ease-settle); }
-.theater .photo-tile:has(.item-visual--loaded, > img:not(.photo-tile__ambient)) .photo-tile__ambient { opacity: .9; }
-.theater .photo-tile:has(.item-visual--loaded, > img:not(.photo-tile__ambient))::after { position: absolute; inset: 0; z-index: 0; background: linear-gradient(180deg, rgb(255 255 255 / 10%), rgb(28 18 20 / 10%)); content: ""; }
-.theater .photo-tile:is([data-view], [data-photo-menu]):hover { box-shadow: var(--edge-light), inset 0 0 0 1px var(--stage-edge), 0 10px 24px -14px rgb(43 10 12 / 40%); }
+/* LH-UI-88: the picture stands whole on the flat stone stage. The blurred halo, the tint wash and the lifted shadow are gone. */
+.theater .photo-tile__ambient { display: none; }
 /* A cleaned picture's pedestal is a square scene, centred in the wider stage. */
 .theater .photo-tile--pedestal .pedestal { right: auto; left: 50%; width: auto; height: 100%; aspect-ratio: 1; transform: translateX(-50%); }
 /* No photo yet: the icon stands centred on the stage over a soft contact shadow, with Add photo under it. */
@@ -868,7 +911,6 @@ th.col-qty .sort-button { margin-right: calc(-1 * var(--space-2)); margin-left: 
 .theater .photo-tile--icon .profile-visual { width: auto; height: 100%; aspect-ratio: 1; overflow: visible; }
 /* At stage size the icon's line is drawn finer, so it keeps the weight it has at list size instead of growing heavy with it. */
 .theater .photo-tile--icon .item-visual > .item-icon { width: 78%; height: 78%; stroke-width: 1; }
-.theater .photo-tile--icon .profile-visual::after { position: absolute; right: 20%; bottom: 1%; left: 20%; z-index: -1; height: 8%; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 10 12 / 24%), transparent); content: ""; }
 .theater .photo-tile--icon .photo-tile__cta { position: static; max-width: 100%; transform: none; }
 .theater .photo-tile--add:hover { background: color-mix(in srgb, var(--stage) 86%, var(--brand-tint)); }
 /* A place without a picture: the camera stands on the stage with Add picture under it, as an item's icon does. */
@@ -931,8 +973,7 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .sheet__kicker { color: var(--text-3); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .sheet__header h2 { margin-top: var(--space-1); font-family: var(--serif); font-size: 1.5rem; font-weight: 500; letter-spacing: -.01em; line-height: 1.15; overflow-wrap: anywhere; }
 /* A record's ID as the tag tied to the thing itself: a punched hole, a hairline edge, the code in mono. */
-.sheet__kicker > .mono:only-child { display: inline-flex; align-items: center; gap: .4375rem; padding: .0625rem .5rem .0625rem .375rem; border: 1px solid var(--line-strong); border-radius: var(--radius-pill) 3px 3px var(--radius-pill); background: var(--surface); box-shadow: var(--edge-light), var(--shadow-sm); color: var(--text-2); font-size: .8125rem; letter-spacing: .02em; }
-.sheet__kicker > .mono:only-child::before { width: .375rem; height: .375rem; flex: none; border-radius: 50%; background: var(--subtle); box-shadow: inset 0 0 0 1.5px var(--line-strong); content: ""; }
+.sheet__kicker > .mono:only-child { color: var(--text-2); font-size: .8125rem; letter-spacing: .02em; }
 /* On a wide screen the side panel is attached to the row that opened it: a notch on its edge points back at the row, and it
    grows from there (see the motion rules). Opened from a link or after the page scrolled, it simply has no notch. */
 @media (min-width: 761px) {
@@ -954,7 +995,9 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4) var(--space-5); }
 .facts dt { color: var(--text-3); font-size: var(--text-sm); font-weight: 500; }
 .facts dd { margin-top: .125rem; font-size: var(--text-sm); font-weight: 500; overflow-wrap: anywhere; }
-.card { display: grid; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--subtle); }
+.card { display: grid; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+/* One surface per idea: a plain card or panel inside another is a group, not a second box, so it loses its own edge, fill and padding. */
+:is(.card, .panel) > :is(.card, .panel):not([class*="--"]), .advanced-details__body .card:not([class*="--"]) { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
 .card--ok { border-color: var(--line-ok); background: var(--ok-tint); }
 .card--review { border-color: var(--line-brand); background: var(--brand-tint); }
 .card__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); }
@@ -982,14 +1025,14 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .segmented { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; padding: .1875rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--subtle); }
 .segmented label { position: relative; display: grid; min-height: 2.25rem; place-items: center; border-radius: var(--radius); color: var(--text-2); font-size: var(--text-base); font-weight: 500; cursor: pointer; transition: background-color var(--dur-1), color var(--dur-1); }
 .segmented input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-.segmented label:has(input:checked) { background: var(--brand-tint); color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+.segmented label:has(input:checked) { background: var(--brand); color: var(--on-brand); }
 .segmented label:hover { color: var(--text); }
 .segmented label:has(input:focus-visible) { box-shadow: inset 0 0 0 1px var(--brand), var(--focus); }
 .segmented--2 { grid-template-columns: repeat(2, 1fr); }
 /* A segmented control made of buttons (the audit filter) looks and reads the same as one made of radios. */
 .segmented > button { display: inline-flex; min-height: 2.25rem; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 var(--space-2); padding: var(--space-1) var(--space-2); line-height: 1.25; text-align: center; border: 0; border-radius: var(--radius); background: none; color: var(--text-2); font-size: var(--text-base); font-weight: 500; transition: background-color var(--dur-1), color var(--dur-1); }
 .segmented > button:hover { color: var(--text); }
-.segmented > button[aria-selected="true"], .segmented > button[aria-pressed="true"] { background: var(--brand-tint); color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
+.segmented > button[aria-selected="true"], .segmented > button[aria-pressed="true"] { background: var(--brand); color: var(--on-brand); }
 .segmented > button:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--brand), var(--focus); }
 .segmented > button[aria-selected="true"] .view-tab__count { background: var(--surface); color: var(--brand); }
 .listing-status { display: flex; align-items: flex-start; gap: var(--space-2); color: var(--text-2); font-size: var(--text-sm); }
@@ -1197,10 +1240,8 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .loan-list__empty { font-size: var(--text-sm); }
 .loan-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
 .loan-row:last-child { border-bottom: 1px solid var(--line); }
-/* Overdue is said once, quietly: a rule at the row's edge and the red due tag, not a pink box around every late loan. */
-.loan-row.is-overdue { box-shadow: inset 3px 0 0 var(--bad); background: linear-gradient(90deg, var(--bad-tint), transparent 45%); }
-.loan-row:last-child.is-overdue { border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
-.loan-row:only-child.is-overdue { border-radius: var(--radius-lg); }
+/* Overdue is said once, quietly: a flat red tint and the red due tag. No edge stripe and no gradient. */
+.loan-row.is-overdue { background: var(--bad-tint); }
 @media (forced-colors: active) { .loan-row.is-overdue { border-inline-start: 3px solid CanvasText; } }
 .loan-track { width: 4.5rem; height: .5rem; flex: none; overflow: visible; }
 .loan-track line { vector-effect: non-scaling-stroke; stroke-linecap: butt; }
@@ -1222,7 +1263,7 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .loan-row--open { position: relative; justify-content: flex-start; }
 .loan-row--open .loan-row__main { flex: 1; }
 .loan-row--open:hover { background: var(--hover); }
-.loan-row--open.is-overdue:hover { background: linear-gradient(90deg, var(--bad-tint), var(--hover) 45%); }
+.loan-row--open.is-overdue:hover { background: color-mix(in srgb, var(--bad-tint) 70%, var(--hover)); }
 .loan-row__open { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: start; cursor: pointer; }
 .loan-row__open::after { position: absolute; inset: 0; content: ""; }
 .loan-row__open:focus-visible { outline: none; }
@@ -1266,6 +1307,11 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   /* The Items link above a title: a finger's full height, with the negative margin keeping its line as it was. */
   .page-header__up a { min-height: var(--target); margin-block: calc((1.25rem - var(--target)) / 2); }
 }
+/* LH-UI-88 D7: a phone-width window gets the same finger sizing as a touch screen, and phone fields are 48px. It follows the coarse block, so 3rem wins. */
+@media (pointer: coarse), (max-width: 760px) {
+  input:not([type=checkbox], [type=radio]), select { min-height: 3rem; }
+  .segmented label, .segmented > button, .reason-chip, .pager__n, .pager__step { min-height: var(--target); }
+}
 
 .photo-field { display: grid; gap: var(--space-2); }
 .photo-field__pick { display: flex; min-height: 6rem; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); border: 1.5px dashed var(--line-strong); border-radius: var(--radius-lg); background: var(--surface); color: var(--text-2); font-size: var(--text-base); font-weight: 500; transition: border-color var(--dur-2), background-color var(--dur-2), color var(--dur-2); }
@@ -1276,7 +1322,7 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .photo-field__actions { display: flex; gap: var(--space-2); }
 .photo-field__busy { padding: var(--space-6); border-radius: var(--radius-lg); background: var(--subtle); color: var(--text-2); font-size: var(--text-sm); text-align: center; }
 
-.dialog { width: min(calc(100% - 2rem), 30rem); max-height: min(calc(100dvh - 2rem - env(safe-area-inset-top, 0px) - var(--safe-bottom)), 44rem); margin: auto; padding: 0; overflow-y: auto; border: 0; background: var(--surface); box-shadow: inset 0 3px 0 var(--brand), var(--shadow-md); color: var(--text); overscroll-behavior: contain; }
+.dialog { width: min(calc(100% - 2rem), 30rem); max-height: min(calc(100dvh - 2rem - env(safe-area-inset-top, 0px) - var(--safe-bottom)), 44rem); margin: auto; padding: 0; overflow-y: auto; border: 0; border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-md); color: var(--text); overscroll-behavior: contain; }
 .dialog::backdrop { background: var(--scrim); }
 .dialog__body { display: grid; gap: var(--space-4); padding: var(--space-5) var(--space-6) var(--space-6); }
 .dialog__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
@@ -1450,12 +1496,11 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
     .app-search { width: 44px; height: 44px; }
   }
   /* The active section gets a pill behind its icon instead of the desktop underline. */
-  .app-nav__link::after { top: .4375rem; right: max(var(--space-1), calc(50% - 1.75rem)); bottom: auto; left: max(var(--space-1), calc(50% - 1.75rem)); z-index: -1; height: 1.75rem; border-radius: var(--radius-pill); background: rgb(232 185 60 / 20%); }
-  .app-nav__link[aria-current="page"] > .icon, .app-nav__more.is-current > .icon { color: var(--gold-action); }
+  .app-nav__link::after { top: .4375rem; right: max(var(--space-1), calc(50% - 1.75rem)); bottom: auto; left: max(var(--space-1), calc(50% - 1.75rem)); z-index: -1; height: 1.75rem; border-radius: var(--radius-pill); }
   .app-nav__link .nav-badge { position: absolute; top: .25rem; left: calc(50% + .375rem); min-width: 1.125rem; height: 1.125rem; margin: 0; font-size: .6875rem; }
   .app-nav__link--more { display: none; }
   .app-nav__more { display: flex; }
-  #app:has(.app-nav) .app-main { padding-bottom: calc(var(--bottom-bar) + var(--safe-bottom) + var(--space-10)); }
+  #app:has(.app-nav) .app-main { padding-bottom: calc(var(--bottom-bar) + var(--safe-bottom) + var(--space-6)); }
   body:has(.app-nav) .toasts { bottom: calc(var(--bottom-bar) + var(--safe-bottom) + var(--space-3)); }
   .menu { inset: auto 0 0; width: 100%; max-height: 85dvh; padding: var(--space-3) var(--space-3) calc(var(--space-3) + var(--safe-bottom)); border-width: 1px 0 0; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
   .menu::backdrop { background: var(--scrim); }
@@ -1475,7 +1520,8 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   .sheet__header, .sheet__body { padding-inline: var(--space-4); }
   .profile { grid-template-columns: 6rem minmax(0, 1fr); gap: var(--space-4); }
   .form-actions--sticky { margin-inline: calc(-1 * var(--space-4)); padding-inline: var(--space-4); }
-  .sheet { width: 100%; height: auto; max-height: 92dvh; margin: auto 0 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  .sheet { width: 100%; height: auto; max-height: 92dvh; margin: auto 0 0; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+  .sheet__header .icon-button { width: var(--target); height: var(--target); margin: -.25rem -.25rem -.25rem 0; }
   .sheet__header { position: relative; padding-top: var(--space-6); touch-action: none; cursor: grab; }
   /* The photo's menu is an action sheet from the bottom on a phone, as the More menu is: it never depends on where the photo sits. */
   .menu.menu--row.photo-menu { inset: auto 0 0 !important; width: 100%; max-width: none; max-height: 85dvh; padding: var(--space-3) var(--space-3) calc(var(--space-3) + var(--safe-bottom)); border-width: 1px 0 0; border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
@@ -1507,11 +1553,16 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 
 /* ==========================================================================
    Motion only where it explains a change: sheets opening and closing, a toast
-   arriving, a changed count, a live-update highlight, and loading skeletons.
+   arriving, a changed count, a live-update highlight. Nothing loops: a skeleton is
+   a still block, and a spinner is the only thing that turns, while work is under way.
    ========================================================================== */
 @media (prefers-reduced-motion: no-preference) {
-  .skeleton { animation: shimmer 1.6s linear infinite; }
   .toast { animation: rise var(--dur-2) var(--ease); }
+  /* A message that appears (a failed save, a confirmation) arrives, it does not just switch on; and the clear button fades in once there is text to clear. */
+  .form-alert:not([hidden]) { animation: rise var(--dur-2) var(--ease); }
+  .search-field__clear:not([hidden]) { animation: fade-in var(--dur-1) ease-out; }
+  .data-table tbody tr.is-changed, .catalogue__row.is-changed { animation-duration: 1.2s; }
+  .data-table tbody tr.is-up .qty, .data-table tbody tr.is-down .qty { animation-duration: 1.2s; }
   .sheet[open] { animation: sheet-in var(--dur-3) var(--ease); }
   .sheet[open]::backdrop { animation: fade-in var(--dur-2) ease-out; }
   .viewer--fade[open], .viewer--fade[open]::backdrop { animation: fade-in var(--dur-2) ease-out; }
@@ -1527,7 +1578,7 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   @keyframes inspector-in { from { opacity: 0; transform: translateX(1rem) scale(.965); } }
   @keyframes inspector-out { to { opacity: 0; transform: translateX(.75rem) scale(.97); } }
   @keyframes object-settle { from { opacity: 0; transform: translateY(.375rem) scale(.96); } }
-  .sheet .skeleton--block { animation: fade-in var(--dur-2) 150ms both, shimmer 1.6s linear infinite; }
+  .sheet .skeleton--block { animation: fade-in var(--dur-2) 150ms both; }
   .delta { animation: delta-in .5s var(--ease) both; }
   /* A section change: the page settles in and the current-section marker grows from its centre. */
   .app-main { animation: fade-in 160ms ease-out backwards; }
@@ -1554,7 +1605,6 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   }
   @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
   @keyframes fade-out { to { opacity: 0; } }
-  @keyframes shimmer { to { background-position: -300% 0; } }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
@@ -1676,7 +1726,7 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 /* ---------- Print: the Lending Hub list prints as a clean sheet ---------- */
 @media print {
   /* Paper is white: a Dark Staff theme prints with the Light palette. */
-  :root[data-theme="dark"] { --bg: #fff; --surface: #fff; --subtle: #f4f2ee; --hover: #f7f5f1; --line: #e7e3dc; --line-strong: #d4cdc2; --line-field: #958d82; --text: #1c1917; --text-2: #57514a; --text-3: #6f675e; --brand: #7a1419; --brand-hover: #621015; --brand-tint: #f8eeee; --on-brand: #fff; --line-brand: #e7c0c4; --line-ok: #b9dcc8; --line-warn: #efdcb1; --line-bad: #efc4ca; --warn-ink: #5c4210; --ok: #17663f; --ok-tint: #e8f4ed; --warn: #8a5300; --warn-tint: #fdf7e8; --bad: #a3202f; --bad-tint: #fcebed; color-scheme: light; }
+  :root[data-theme="dark"] { --bg: #fff; --surface: #fff; --subtle: #f4f2ee; --hover: #f7f5f1; --line: #e7e3dc; --line-strong: #d4cdc2; --line-field: #958d82; --text: #1c1917; --text-2: #57514a; --text-3: #6f675e; --brand: #7a1419; --brand-hover: #621015; --brand-tint: #f8eeee; --on-brand: #fff; --line-brand: #e7c0c4; --line-ok: #b9dcc8; --line-warn: #efdcb1; --line-bad: #efc4ca; --warn-ink: #5c4210; --ok: #17663f; --ok-tint: #e8f4ed; --warn: #8a5300; --warn-tint: #fdf7e8; --bad: #a3202f; --bad-tint: #fcebed; --gold: #a87a12; color-scheme: light; }
   .site-header, .filterbar, .site-footer, .hero__actions, .skip-link, .toasts { display: none !important; }
   body, .page-intro { background: var(--surface); color: var(--text); }
   .lending-layout { display: block; padding: 0; }
@@ -1718,7 +1768,7 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .card-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 10.25rem), 1fr)); gap: var(--space-5) var(--space-4); margin: 0; padding: 0; list-style: none; }
 .dir-card { --holo-foil: repeating-linear-gradient(110deg, hsl(2 100% 73%) 0%, hsl(53 100% 69%) 5%, hsl(93 100% 69%) 10%, hsl(176 100% 76%) 15%, hsl(228 100% 74%) 20%, hsl(283 100% 76%) 25%, hsl(2 100% 73%) 30%);
   position: relative; display: block; width: 100%; aspect-ratio: 1545 / 2000; padding: 0; border: 0; border-radius: .75rem; background: var(--subtle); box-shadow: 0 0 0 1px rgb(28 25 23 / 9%), var(--shadow-sm); color: var(--text); text-decoration: none; cursor: pointer; container-type: inline-size; isolation: isolate;
-  transform: perspective(56rem) rotateX(var(--tile-x, 0deg)) rotateY(var(--tile-y, 0deg)) scale(var(--tile-press, 1)); transition: transform 700ms cubic-bezier(.2, .9, .3, 1.3), box-shadow var(--dur-2); }
+  transform: perspective(56rem) rotateX(var(--tile-x, 0deg)) rotateY(var(--tile-y, 0deg)) scale(var(--tile-press, 1)); transition: transform var(--dur-3) var(--ease-settle), box-shadow var(--dur-2); }
 .dir-card.is-tilting { transition: transform 90ms linear, box-shadow var(--dur-2); }
 .dir-card:hover { box-shadow: 0 0 0 1px rgb(28 25 23 / 14%), 0 14px 28px -12px rgb(28 25 23 / 35%); }
 .dir-card:focus-visible { outline: 3px solid var(--brand); outline-offset: 3px; }
@@ -1816,7 +1866,7 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .id-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
 .id-tile { display: grid; gap: var(--space-2); margin: 0; }
 .id-tile__button { position: relative; display: block; width: 100%; aspect-ratio: var(--ratio, 1.586); overflow: hidden; padding: 0; border: 0; border-radius: var(--radius-lg); background: var(--subtle); box-shadow: inset 0 0 0 1px var(--line), var(--shadow-sm); cursor: zoom-in; isolation: isolate;
-  transform: perspective(56rem) rotateX(var(--tile-x, 0deg)) rotateY(var(--tile-y, 0deg)) scale(var(--tile-press, 1)); transition: transform 700ms cubic-bezier(.2, .9, .3, 1.3), box-shadow var(--dur-2); }
+  transform: perspective(56rem) rotateX(var(--tile-x, 0deg)) rotateY(var(--tile-y, 0deg)) scale(var(--tile-press, 1)); transition: transform var(--dur-3) var(--ease-settle), box-shadow var(--dur-2); }
 .id-tile__button.is-tilting { transition: transform 90ms linear, box-shadow var(--dur-2); }
 .id-tile__button:hover { box-shadow: inset 0 0 0 1px var(--line-strong), var(--shadow-md); }
 .id-tile__button img { display: block; width: 100%; height: 100%; object-fit: contain; }
@@ -2311,16 +2361,14 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
 .rail-lit { display: none; }
 @media (min-width: 761px) {
   .app-nav__group { gap: 4px; }
-  /* Each destination is its own plate: a hairline lighter top edge, a soft shadow under it, 4 px from the next. Hovered it lifts 1 px;
-     pressed it sinks 1 px (90 ms). Items' children stay lighter rows inside Items. */
-  .app-nav__link:not(.app-nav__child) { background: rgb(255 255 255 / 5%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 9%), 0 1px 2px rgb(20 4 6 / 38%); transition: transform 90ms var(--ease), box-shadow var(--dur-1), background-color var(--dur-1), color var(--dur-1); }
-  .app-nav__link:not(.app-nav__child):hover { background: rgb(255 255 255 / 9%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 12%), 0 3px 6px rgb(20 4 6 / 42%); transform: translateY(-1px); }
-  .app-nav__link:not(.app-nav__child):active { box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 0 1px rgb(20 4 6 / 50%); transform: translateY(1px); }
-  /* The current destination is lit: raised further, a shade lighter, with a warm top highlight. The light is one element that travels
-     between plates (staff-shell.ts), so the plate itself only lifts. No gold edge or ring on a rail (Earl, 2026-11-04: it read as a
-     crescent on the rounded plate; keep it out of every rail from here on). */
-  .app-nav__link[aria-current]:not(.app-nav__child) { background: transparent; box-shadow: none; color: var(--on-dark); transform: translateY(-1px); }
-  .rail-lit { position: absolute; inset: 0; z-index: -1; display: block; overflow: hidden; border-radius: inherit; background: linear-gradient(180deg, rgb(255 233 196 / 17%), rgb(255 255 255 / 10%)); box-shadow: inset 0 1px 0 rgb(255 226 168 / 34%), 0 5px 12px -3px rgb(20 4 6 / 58%); pointer-events: none; }
+  /* LH-UI-88: each destination is a flat row, 4 px from the next: no bevel, no shadow, no lift. Hover and press only change its fill. */
+  .app-nav__link:not(.app-nav__child) { background: transparent; box-shadow: none; transition: background-color var(--dur-1), color var(--dur-1); }
+  .app-nav__link:not(.app-nav__child):hover { background: rgb(255 255 255 / 9%); }
+  .app-nav__link:not(.app-nav__child):active { background: rgb(255 255 255 / 14%); }
+  /* The current destination is marked by one flat lighter fill that travels between rows (staff-shell.ts). No gold edge or ring on a
+     rail (Earl, 2026-11-04: it read as a crescent on the rounded plate; keep it out of every rail from here on). */
+  .app-nav__link[aria-current]:not(.app-nav__child) { background: transparent; box-shadow: none; color: var(--on-dark); }
+  .rail-lit { position: absolute; inset: 0; z-index: -1; display: block; overflow: hidden; border-radius: inherit; background: rgb(255 255 255 / 14%); pointer-events: none; }
   .app-nav__fold:focus-visible { outline: 2px solid var(--gold-action); outline-offset: 1px; }
 }
 /* The wide rail folds: Circulation, Records and Manage by a chevron on their label, Items by one inside its own plate, at its end (Items
@@ -2332,7 +2380,7 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
   .app-nav__head > .app-nav__fold, .app-nav__items > .app-nav__fold { display: grid; }
   .app-nav__fold { width: 1.75rem; height: 1.75rem; flex: none; place-items: center; margin-right: var(--space-1); padding: 0; border: 0; border-radius: var(--radius); background: none; color: var(--on-dark-2); cursor: pointer; transition: background-color var(--dur-1), color var(--dur-1); }
   .app-nav__fold:hover { background: rgb(255 255 255 / 9%); color: var(--on-dark); }
-  .app-nav__fold > .icon { --icon-size: 1rem; transform: rotate(-90deg); transition: transform 300ms var(--ease); }
+  .app-nav__fold > .icon { --icon-size: 1rem; transform: rotate(-90deg); transition: transform var(--dur-2) var(--ease); }
   .app-nav__fold[aria-expanded="false"] > .icon { transform: rotate(90deg); }
   .app-nav__items { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .app-nav__items > .app-nav__link, .app-nav__items > .app-nav__fold { grid-row: 1; grid-column: 1; }
@@ -2341,23 +2389,49 @@ input.visually-hidden { width: 1px; min-height: 1px; padding: 0; border: 0; }
   .app-nav__items > .app-nav__fold:hover { background: rgb(255 255 255 / 12%); }
   .app-nav__items:has(> .app-nav__link[aria-current]) > .app-nav__fold { margin-top: -2px; }
   .app-nav__items > .app-nav__members { grid-row: 2; }
-  .app-nav__members { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 320ms var(--ease); }
-  /* Room around the plates for their shadow and lift, inside the clip that folds them. */
-  .app-nav__fold-inner { display: grid; min-height: 0; gap: 4px; margin: -3px -4px; padding: 3px 4px; overflow: hidden; transition: opacity 220ms var(--ease), transform 320ms var(--ease); }
+  .app-nav__members { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--dur-3) var(--ease); }
+  /* Room around the rows inside the clip that folds them. */
+  .app-nav__fold-inner { display: grid; min-height: 0; gap: 4px; margin: -3px -4px; padding: 3px 4px; overflow: hidden; transition: opacity var(--dur-2) var(--ease), transform var(--dur-3) var(--ease); }
   .app-nav__items .app-nav__fold-inner { margin-top: -4px; }
   .is-folded > .app-nav__members { grid-template-rows: 0fr; }
-  .is-folded > .app-nav__members > .app-nav__fold-inner { opacity: 0; transform: translateY(-6px); visibility: hidden; transition: opacity 180ms var(--ease), transform 320ms var(--ease), visibility 0s 320ms; }
+  .is-folded > .app-nav__members > .app-nav__fold-inner { opacity: 0; transform: translateY(-6px); visibility: hidden; transition: opacity var(--dur-1) var(--ease), transform var(--dur-3) var(--ease), visibility 0s var(--dur-3); }
   .app-nav .app-nav__items.is-folded [data-parent] .attn-slot { display: contents; }
   .app-nav .app-nav__items.is-folded [data-parent] .attn-slot:empty { display: none; }
 }
 @media (prefers-reduced-motion: no-preference) {
-  /* Sheets slide in on the spring and close faster than they open. */
-  .sheet[open] { animation-timing-function: var(--spring); animation-duration: 380ms; }
+  /* Sheets slide in on the spring in 200 ms (LH-UI-88) and close on their ease-in exit. */
+  .sheet[open]:not(.is-closing) { animation-timing-function: var(--spring); animation-duration: var(--dur-2); }
   /* V1.16.9: the lit plate's glint, which crossed it every 8 seconds, is gone. Nothing on a staff page animates while idle. */
 }
 @media (prefers-reduced-motion: no-preference) and (min-width: 761px) {
-  .sheet[open][data-origin] { animation-timing-function: var(--spring); }
+  .sheet[open][data-origin]:not(.is-closing) { animation-timing-function: var(--spring); }
 }
+/* ==========================================================================
+   LH-UI-88 S1 · Touch, type and feel. Each rule is small and none changes what a control does.
+   ========================================================================== */
+/* Hit slop: a small control keeps its drawn size and gains a 44 px press area on touch. The area is invisible. */
+@media (pointer: coarse) {
+  .search-field__clear::after, .input-group__button::after { position: absolute; top: 50%; left: 50%; width: max(100%, var(--target)); height: max(100%, var(--target)); transform: translate(-50%, -50%); content: ""; }
+}
+/* Safe areas: a notch or a rounded corner never covers a sheet header or a toast (the bottom bar and the fields already respect the home indicator). */
+.sheet__header { padding-left: max(var(--space-6), env(safe-area-inset-left, 0px)); padding-right: max(var(--space-6), env(safe-area-inset-right, 0px)); }
+.toasts { left: max(1rem, env(safe-area-inset-left, 0px)); width: min(24rem, calc(100vw - max(1rem, env(safe-area-inset-left, 0px)) - max(1rem, env(safe-area-inset-right, 0px)))); }
+@media (max-width: 760px) { .sheet__header { padding-left: max(var(--space-4), env(safe-area-inset-left, 0px)); padding-right: max(var(--space-4), env(safe-area-inset-right, 0px)); } }
+/* Numbers keep one width, so a changing count never shifts what is beside it; words wrap without a lonely last word. */
+td, th, time, output, .live-status, .toast, .nav-badge, .fold__count, .chip__count, .view-tab__count, .tag { font-variant-numeric: tabular-nums; }
+p, li, .field__hint, .card__text, .callout, .form-alert { text-wrap: pretty; }
+/* Continuous corners where the browser has them: the same 8, 12 and 16 px radii, drawn as a smooth curve rather than a circular arc. */
+@supports (corner-shape: squircle) {
+  :is(.card, .panel, .dialog, .sheet, .menu, .button, .chip, .photo-tile, .callout, .form-alert, .toast, .empty--error, input:not([type=checkbox], [type=radio]), select, textarea) { corner-shape: squircle; }
+}
+/* Press feedback: every pressable thing answers the moment it is pressed, by a fill or a one-pixel sink, never a bounce. */
+.chip, .reason-chip, .sort-toggle button, .segmented label, .segmented > button, .pager__n, .pager__step { transition-property: background-color, border-color, color, transform; }
+.chip:active, .reason-chip:active, .sort-toggle button:active, .segmented label:active, .segmented > button:active, .pager__n:active, .pager__step:active:not(:disabled) { transform: scale(.97); }
+.data-table:not(.data-table--static) tbody tr:active, .catalogue__row--open:active { background: var(--subtle); }
 @media (forced-colors: active) {
   .rail-lit { border: 2px solid CanvasText; }
+  /* The status glyph is a mask painted with a background, which forced colours would turn into Canvas on Canvas. */
+  .tag--ok::before, .tag--warn::before, .tag--bad::before, .tag--brand::before { forced-color-adjust: none; background: CanvasText; }
+  /* A chosen segment is a fill, which forced colours also removes, so it is drawn in the system highlight. */
+  .segmented label:has(input:checked), .segmented > button[aria-selected="true"], .segmented > button[aria-pressed="true"], .sort-toggle button[aria-pressed="true"] { forced-color-adjust: none; background: Highlight; color: HighlightText; }
 }

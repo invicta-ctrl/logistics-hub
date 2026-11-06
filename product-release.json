@@ -1,9 +1,12 @@
 {
-  "version": "V1.16.13",
-  "sourceCommit": "491c6cd4ede98cf791e79be02c99e6f5989a4a30",
-  "record": "docs/road-to-v2/releases/v1.16.13.md",
+  "version": "V1.16.14",
+  "sourceCommit": "db334d798a584939c2a872f01e225b59edca17ec",
+  "record": "docs/road-to-v2/releases/v1.16.14.md",
   "changes": [
-    "A menu that is closing no longer takes taps while it fades away.",
-    "The photo menu's automated check reads whether the menu is really open, so it no longer fails on slow test machines."
+    "Status labels are tinted pills with an icon and words. Buttons are flat: solid maroon for the main action, outlined maroon for the rest.",
+    "One family of corners (8, 12 and 16 px). Buttons, the hero, panels and skeletons are flat, with no gradients, glows or bevels, and skeletons no longer shimmer.",
+    "A button shows a spinner while it saves, and messages arrive with a short motion.",
+    "The staff app and its lists share one 760 px phone breakpoint, with 48 px phone fields and 44 px touch targets.",
+    "The public home page has slow moving water behind its heading, a fine grain and the campus photograph; it holds still on reduced motion or Data Saver."
   ]
 }

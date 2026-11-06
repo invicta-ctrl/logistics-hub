@@ -112,7 +112,8 @@ for (const width of [375, 1440]) {
     expect(Math.abs(image.height - box.height)).toBeLessThan(2);
     await expect(photo).toHaveCSS("object-fit", "contain");
     await expect(tile.locator(".photo-tile__ambient")).toHaveAttribute("src", new RegExp(`^/api/staff/media/${PHOTO}/detail`));
-    await expect(tile.locator(".photo-tile__ambient")).toHaveCSS("opacity", "0.9");
+    // LH-UI-88: the blurred halo is gone; the picture stands on the flat stage, so the ambient copy takes no room and paints nothing.
+    await expect(tile.locator(".photo-tile__ambient")).toHaveCSS("display", "none");
     await expect(tile.locator(".photo-tile__ambient")).toHaveAttribute("aria-hidden", "true");
     expect(asked.filter((path) => /\/display$/.test(path))).toEqual([]);
     // The photo's menu still opens from the stage.
