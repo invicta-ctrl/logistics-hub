@@ -2,7 +2,11 @@
 
 Rewritten 2026-11-05 by the integration steward: first in PR #89, then after that merge in LH-RECORDS-01. Everything this file held before PR #89 (handoffs from V1.16.7 and earlier, the Codex-era takeovers and the historical executable continuations) is kept unchanged at [docs/archive/continuity/SESSION_HANDOFF_before_2026-11-05.md](../docs/archive/continuity/SESSION_HANDOFF_before_2026-11-05.md). The task board, the writer slots and the release states are in [CURRENT.md](CURRENT.md); this file is the last step, the next step and what a new session needs to resume without any chat history.
 
-## Last step (2026-11-05)
+## Last step (2026-11-06)
+
+**PR #91 finalised, awaiting Earl.** On 2026-11-06 Earl (a) authorized the supplied landing page inside S1 ("apply the landing page now, I authorize it to be in this slice not on its own slice") and (b) named the S1 session steward for PR #91 only ("This session = steward for PR #91 only"). The landing page (slow WebGL water, grain, campus photograph; `src/water.ts`, `src/public.ts`, `public/brand/water-still.webp`) is in the candidate, and `working()` also gives a caller's own inline minimum width back. Application source is now `c0087a5b63bcf1577f126f1e41e3c01b267c4217` (see the release record, "Which commit holds what"); everything after it is records. The 200% text criterion is **FAIL / EXCEPTION PENDING**: S1 170 pass / 149 fail of 320 cells against base 168 / 151, mostly older failures (Items, Activity, Loans, Public Lending, Administration), tabulated with proposed owners in the record. No reviewer independent of the writer has reviewed the exact final head. Nothing is merged or deployed; S2–S5 are not started.
+
+## Earlier step (2026-11-05)
 
 **LH-UI-88 S1 Foundations is in review** (<https://github.com/invicta-ctrl/logistics-hub/pull/91>, branch `slice/lh-ui-88-s1-foundations`, candidate **V1.16.14**, QUALIFICATION_PENDING). Claude wrote it in worktree `D:\Documents\Projects\Logistics Hub\.claude\worktrees\lh-ui-88-redesign-c15339`, on Earl's chat instruction while the steward role was vacant.
 - It is a visual and interaction foundation in `src/styles.css`: flat surfaces (no gradient, glow or bevel), radii 8/12/16, status pills with icons, a spinner on a busy button, 48 px phone fields and 44 px targets, one 760 px phone breakpoint for the staff app and its lists, no purposeless looping animation. Small TypeScript changes: the phone breakpoint in `src/pager.ts`, a guard in the sheet drag settle and `working()` (it holds the button's width as a minimum while saving) in `src/ui.ts`. No server, API, data or privacy change.
@@ -25,9 +29,10 @@ Rewritten 2026-11-05 by the integration steward: first in PR #89, then after tha
 
 ## Pending / not done
 
-- **Integration steward: vacant.** The live roster (`D:\Documents\HAU-USC Logistics Hub\handoffs\WRITER_ROSTER.md`) does not yet record the S1 writer; the steward records it when Earl names one, adds the V1.16.14 `CHANGELOG.md` entry on release, and reconciles these two pointers.
+- **Integration steward: the S1 session for PR #91 only; vacant otherwise.** The live roster (`D:\Documents\HAU-USC Logistics Hub\handoffs\WRITER_ROSTER.md`) does not yet record the S1 writer: Earl relays the rows staged in the S1 session's git-ignored `data/private/review-packets/roster-rows.txt`. The `CHANGELOG.md` V1.16.14 candidate entry is added; the next steward moves it under released versions when verified and reconciles these two pointers. Branch `handoff/steward-2026-11-05` (`c2b1151`, no PR) rewrites the same pointers and predates S1: order it against PR #91 before either merges.
 - LH-UI-88 (Issue #88): spec accepted (`docs/specs/accepted/2026-11-05-lh-ui-88-visual-refresh.md`). **S1 is in review as PR #91** (above). S2 Inventory, S3 Operations, S4 Public and Self-Service (the iridescent public backdrop) and S5 Administration are **not started**; each needs Earl's feedback on the previous slice and a fresh admission.
-- PR #91: Earl's merge go-ahead and visual check are owed. Do not merge without his word for that PR.
+- PR #91: Earl's visual check, his decision on the 200% text exceptions, an independent exact-head review (Earl relays the packet; the writer has not contacted any reviewer) and his merge go-ahead are owed. Do not merge without his word for that PR. The merge method (fast-forward of the checked head, or the merge button, which makes `Deploy` fail its CodeQL gate by design) is his call.
+- Local preview for Earl: `http://127.0.0.1:8791`, a fixed build of the S1 worktree; restart with `data\private\preview\restart-preview.cmd` (git-ignored; it does not build, sync or switch branches). Sign-in details are in `data/private/local-preview-credentials.txt`.
 - V1.16.13: numbered for PR #89's deployed CSS (`docs/road-to-v2/releases/v1.16.13.md`); Earl checks it in Administration > System > This version.
 - Earl: check Administration > System > This version (V1.16.12, V1.16.13), and pages on a long list (V1.16.12).
 
