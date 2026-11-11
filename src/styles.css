@@ -323,6 +323,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 
 /* ---------- Status ---------- */
 .tags { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); }
+.tags__more { display: none; }
 .tag { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-2); font-size: var(--text-sm); white-space: nowrap; }
 .tag::before { width: .4375rem; height: .4375rem; border-radius: 50%; background: var(--line-strong); content: ""; }
 /* LH-UI-88 status pill: a toned tag is a tinted pill with a real glyph AND its words, so colour is never the only cue. An untoned .tag
@@ -817,6 +818,8 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .data-table tbody tr { cursor: pointer; transition: background-color var(--dur-1); }
 .data-table tbody tr:hover { background: var(--hover); }
 .data-table tbody tr.is-open { background: var(--brand-tint); }
+/* LH-UI-88 S2 · A pressed row shows the open tint at once, so the tap is answered before the sheet arrives. */
+.data-table:not(.data-table--static) tbody tr:active { background: var(--brand-tint); transition-duration: 0s; }
 .data-table tbody tr.is-inactive .row-link, .data-table tbody tr.is-inactive .qty { color: var(--text-3); }
 .data-table tbody tr:last-child td { border-bottom: 0; }
 /* A list on the page ends on a rule like every row; a table inside a boxed panel keeps the panel's edge. */
@@ -998,6 +1001,10 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4) var(--space-5); }
 .facts dt { color: var(--text-3); font-size: var(--text-sm); font-weight: 500; }
 .facts dd { margin-top: .125rem; font-size: var(--text-sm); font-weight: 500; overflow-wrap: anywhere; }
+/* LH-UI-88 S2 · The item sheet's facts read as a ruled key-value list (board 08): label left, value beside it, hairlines between. */
+.facts.facts--rows { grid-template-columns: minmax(0, 1fr); gap: 0; border-top: 1px solid var(--line); }
+.facts--rows > div { display: grid; grid-template-columns: minmax(6.5rem, 34%) minmax(0, 1fr); gap: var(--space-3); align-items: baseline; padding-block: var(--space-3); border-bottom: 1px solid var(--line); }
+.facts--rows dd { margin-top: 0; }
 .card { display: grid; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
 /* One surface per idea: a plain card or panel inside another is a group, not a second box, so it loses its own edge, fill and padding. */
 :is(.card, .panel) > :is(.card, .panel):not([class*="--"]), .advanced-details__body .card:not([class*="--"]) { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
@@ -1440,7 +1447,13 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   .data-table-wrap--responsive .data-table--items tbody tr { content-visibility: auto; contain-intrinsic-size: auto 5.5rem; }
   .data-table-wrap--responsive .data-table--items td.col-item { grid-row: 1 / span 2; }
   .data-table-wrap--responsive .data-table--items .col-qty .cell-sub { display: none; }
-  .data-table-wrap--responsive .data-table.data-table--items td.col-status { grid-row: 2; grid-column: 2; justify-self: end; text-align: right; }
+  .data-table-wrap--responsive .data-table.data-table--items td.col-status { grid-row: 2; grid-column: 2; justify-self: end; max-width: 8.5rem; text-align: right; }
+  /* LH-UI-88 S2 · One status per phone row, the most urgent, with "+N" for the rest; the others stay readable to screen readers. */
+  .data-table-wrap--responsive .data-table--items .col-status .tags { justify-content: flex-end; align-items: baseline; gap: var(--space-1) var(--space-2); }
+  .data-table-wrap--responsive .data-table--items .col-status .tag:not(.is-primary) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .data-table-wrap--responsive .data-table--items .col-status .tag { white-space: normal; text-align: left; }
+  .data-table-wrap--responsive .data-table--items .tags__more { display: inline; color: var(--text-3); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+  .data-table-wrap--responsive .data-table--items .cell-id { white-space: nowrap; }
   .data-table-wrap--responsive .data-table:not(.data-table--static) tbody td:last-child { padding-right: 0; }
   .data-table-wrap--responsive .data-table:not(.data-table--static) tbody td:last-child::after { display: none; }
   /* Select mode: the checkbox takes its own column beside the picture, so a row keeps its two lines. */
