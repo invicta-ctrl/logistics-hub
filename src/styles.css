@@ -396,7 +396,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
    Public site
    ========================================================================== */
 /* LH-IP02-S02: the public band is the HAU USC oxblood (--brand); the crest leads the header, the DOL mark sits in the footer. */
-.site-header { position: relative; z-index: 30; border-bottom: 1px solid rgb(255 255 255 / 14%); background: var(--brand); color: var(--on-dark); }
+.site-header { position: relative; z-index: 30; border-bottom: 1px solid color-mix(in srgb, var(--on-brand) 14%, transparent); background: var(--brand); color: var(--on-dark); }
 .site-header__inner { display: flex; min-height: 4.5rem; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); }
 .site-header__brand { display: flex; min-width: 0; align-items: center; gap: var(--space-3); padding-block: var(--space-2); border-radius: var(--radius); color: var(--on-dark); text-decoration: none; }
 /* V1.16.11: the Department of Logistics' mark leads the header. V1.16.12: it sits straight on the bar, without the paper disc (Earl: "remove the white background"). */
@@ -407,7 +407,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .site-nav__link { display: inline-flex; min-height: 2.5rem; align-items: center; padding-inline: var(--space-4); border-radius: var(--radius-pill); color: var(--on-dark-2); font-size: .875rem; font-weight: 500; text-decoration: none; white-space: nowrap; transition: background-color var(--dur-1), color var(--dur-1); }
 .site-nav__link:hover { background: var(--on-dark-hover); color: var(--on-dark); }
 .site-nav__link[aria-current="page"] { color: var(--gold-action); }
-.site-nav__link--pill { color: var(--on-dark); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 24%); }
+.site-nav__link--pill { color: var(--on-dark); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-brand) 24%, transparent); }
 .site-nav :focus-visible { outline-color: var(--gold-action); }
 
 /* The home page is one centred column (Earl, V1.16.8): who it is for, the promise, then the search itself, with the way into the
@@ -418,9 +418,9 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .hero h1 { max-width: 18ch; margin-top: var(--space-4); font-family: var(--serif); font-size: 4rem; font-weight: 500; letter-spacing: -.025em; line-height: 4.5rem; text-wrap: balance; overflow-wrap: anywhere; }
 .hero__lede { max-width: 46ch; margin-top: var(--space-6); color: var(--on-dark-2); font-size: 1.125rem; line-height: 1.75rem; text-wrap: pretty; }
 .hero__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: var(--space-4) var(--space-8); margin-top: var(--space-6); }
-.hero__actions .button { white-space: normal; }
+.hero__actions .button, .hero__available { white-space: nowrap; }
 .hero .hero__primary { min-height: 3.5rem; padding-inline: var(--space-6); border-radius: var(--radius-lg); background: var(--on-dark); color: var(--brand); font-size: var(--text-md); font-weight: 600; }
-.hero .hero__primary:hover { background: #fff; }
+.hero .hero__primary:hover { background: var(--on-brand); }
 .hero__primary .icon, .hero__available .icon { transition: transform var(--dur-2) var(--ease-settle); }
 .hero__primary:hover .icon, .hero__available:hover .icon { transform: translateX(4px); }
 .hero :focus-visible { outline-color: var(--gold-action); }
@@ -429,17 +429,17 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 
 /* Lending Hub entry: the search, centred under the promise. Data-free: it searches the Lending Hub and shows no counts. */
 .hero__find { display: grid; width: min(100%, 40rem); min-width: 0; justify-items: center; margin-top: var(--space-10); }
-.hero__field { display: flex; width: 100%; min-width: 0; height: 3.75rem; align-items: center; gap: var(--space-3); padding: 0 var(--space-1) 0 var(--space-5, 1.25rem); border-radius: var(--radius-xl); background: rgb(43 10 12 / 35%); box-shadow: inset 0 0 0 1px rgb(255 255 255 / 14%); color: var(--on-dark-2); text-align: left; transition: background-color var(--dur-1), box-shadow var(--dur-2); }
-.hero__field:hover { background: rgb(43 10 12 / 45%); }
+.hero__field { display: flex; width: 100%; min-width: 0; height: 3.75rem; align-items: center; gap: var(--space-3); padding: 0 var(--space-1) 0 var(--space-5, 1.25rem); border-radius: var(--radius-xl); background: color-mix(in srgb, var(--brand-dark) 35%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-brand) 14%, transparent); color: var(--on-dark-2); text-align: left; transition: background-color var(--dur-1), box-shadow var(--dur-2); }
+.hero__field:hover { background: color-mix(in srgb, var(--brand-dark) 45%, transparent); }
 .hero__field:focus-within { box-shadow: inset 0 0 0 2px var(--gold-action); }
 .hero__field input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; caret-color: var(--on-dark); color: var(--on-dark); font-size: var(--text-md); outline: none; }
 .hero__field input::placeholder { color: var(--on-dark-2); opacity: 1; }
 .hero__field input::-webkit-search-cancel-button { display: none; }
 .hero__field button { display: grid; width: 3rem; height: 3rem; flex: none; place-items: center; border: 0; border-radius: var(--radius-lg); background: var(--on-dark); color: var(--brand); cursor: pointer; transition: background-color var(--dur-1), transform var(--dur-2) var(--ease-settle); }
-.hero__field button:hover { background: #fff; transform: translateX(2px); }
+.hero__field button:hover { background: var(--on-brand); transform: translateX(2px); }
 .hero__field button:active { transform: scale(.94); }
 .hero__field button:focus-visible { outline: 2px solid var(--gold-action); outline-offset: 2px; }
-.hero__available { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--on-dark); font-weight: 500; text-decoration: underline; text-decoration-color: rgb(251 246 238 / 35%); text-underline-offset: 6px; transition: text-decoration-color var(--dur-1); }
+.hero__available { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--on-dark); font-weight: 500; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--on-dark) 35%, transparent); text-underline-offset: 6px; transition: text-decoration-color var(--dur-1); }
 .hero__available:hover { text-decoration-color: var(--gold-action); }
 .hero__available .icon { --icon-size: var(--icon-sm); }
 /* A finger gets the full target on the landing's standalone link too. */
@@ -465,7 +465,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 .water-layer { position: absolute; inset: 0; z-index: 0; overflow: clip; background: var(--brand) url("/brand/water-still.webp") center / cover no-repeat; pointer-events: none; }
 .water-layer canvas { display: block; width: 100%; height: 100%; opacity: 0; transition: opacity var(--dur-3) var(--ease); }
 .water-layer canvas.ready { opacity: 1; }
-.water-layer::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgb(43 10 12 / 18%), transparent 75%); pointer-events: none; }
+.water-layer::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, color-mix(in srgb, var(--brand-dark) 18%, transparent), transparent 75%); pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .water-layer canvas { opacity: 0 !important; } }
 /* A stationary, fine grain over the landing page only. */
 .landing-grain { position: fixed; inset: 0; z-index: 50; opacity: .065; mix-blend-mode: multiply; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 150 150' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Cpath filter='url(%23g)' d='M0 0h150v150H0z'/%3E%3C/svg%3E"); background-size: 150px; pointer-events: none; }
@@ -473,7 +473,7 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 /* The campus at dusk closes the page above the footer. */
 .campus { position: relative; height: 280px; overflow: clip; background: var(--brand-dark); }
 .campus img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 55%; }
-.campus::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgb(43 10 12 / 85%), transparent 60%); }
+.campus::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, color-mix(in srgb, var(--brand-dark) 85%, transparent), transparent 60%); }
 .campus figcaption { position: absolute; bottom: 24px; left: max(24px, calc((100% - 72rem) / 2)); z-index: 1; color: var(--on-dark); font-size: 13px; }
 @media (max-width: 760px) { .campus { height: 230px; } .campus figcaption { font-size: 12px; } }
 /* Public pages sit under a notch and above a home bar. */
@@ -482,14 +482,17 @@ input[type=checkbox], input[type=radio] { width: 1rem; height: 1rem; margin: 0; 
 @media (pointer: coarse) { .site-footer__links a { display: inline-flex; min-height: var(--target); align-items: center; } }
 
 
-/* How borrowing works, centred like the hero: three numbered steps, each number in a quiet ring. */
+/* How borrowing works (LH-UI-88 S4): the hero is the one centred block. Below it the page turns left: the title holds a narrow
+   column and the three steps read down a hairline-ruled list, numbers inline, so the services strip is the only row of three. */
 .section { padding-block: clamp(4rem, 8vw, 6rem); }
-.section__title { font-family: var(--serif); font-size: 2.5rem; font-weight: 500; letter-spacing: -.02em; line-height: 3rem; text-align: center; }
-.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-12); max-width: 64rem; margin: var(--space-12) auto 0; }
-.steps li { display: grid; align-content: start; justify-items: center; gap: var(--space-2); text-align: center; }
-.steps__n { display: grid; width: 3rem; height: 3rem; place-items: center; margin-bottom: var(--space-2); border: 1px solid var(--line-strong); border-radius: 50%; background: var(--surface); color: var(--brand); font-family: var(--serif); font-size: 1.5rem; font-weight: 500; line-height: 1; }
+.how { display: grid; grid-template-columns: minmax(0, 18rem) minmax(0, 1fr); gap: var(--space-12); align-items: start; }
+.section__title { min-width: 0; font-family: var(--serif); font-size: 2.5rem; font-weight: 500; letter-spacing: -.02em; line-height: 3rem; text-wrap: balance; overflow-wrap: anywhere; }
+.steps { display: grid; max-width: 44rem; }
+.steps li { display: grid; grid-template-columns: 2.5rem minmax(0, 1fr); gap: var(--space-4); padding-block: var(--space-6); border-top: 1px solid var(--line); }
+.steps li:last-child { border-bottom: 1px solid var(--line); }
+.steps__n { color: var(--brand); font-family: var(--serif); font-size: 1.75rem; font-weight: 500; line-height: 1.75rem; font-variant-numeric: tabular-nums; }
 .steps h3 { font-size: 1.125rem; font-weight: 600; line-height: 1.75rem; }
-.steps p { max-width: 34ch; color: var(--text-2); font-size: var(--text-base); line-height: 1.5rem; text-wrap: pretty; }
+.steps p { max-width: 52ch; margin-top: var(--space-1); color: var(--text-2); font-size: var(--text-base); line-height: 1.5rem; text-wrap: pretty; }
 
 .site-footer { border-top: 1px solid var(--line); background: var(--subtle); color: var(--text-3); font-size: .875rem; }
 .site-footer__inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-6); padding-block: var(--space-10); }
@@ -1414,7 +1417,7 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
 @media (max-width: 960px) {
   .stock-layout { grid-template-columns: minmax(0, 1fr); }
   .record-home { display: none; }
-  .steps { grid-template-columns: 1fr; gap: var(--space-8); }
+  .how { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
   .hero__inner { padding-block: var(--space-12) 6rem; }
   .hero h1 { font-size: 3rem; line-height: 3.5rem; }
   .hero__services { grid-template-columns: minmax(0, 1fr); }
@@ -1539,7 +1542,6 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   .hero h1 { font-size: 2.5rem; line-height: 3rem; }
   .hero__lede { font-size: var(--text-md); line-height: 1.5rem; }
   .hero__actions .button { flex: 1 1 auto; }
-  .hero__find { padding: var(--space-6); }
   .hero__field { gap: var(--space-2); }
   .hero__field > .icon { display: none; }
   .hero__services a { padding: var(--space-6); }

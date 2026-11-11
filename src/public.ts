@@ -1,5 +1,10 @@
 import { Folds, ListPager, foldMarkup, landOn, landOnFold, onLayoutChange, onPhone, stickBelow } from "./pager";
 import { CREST, MARK, type Html, animateNumber, app, categoryName, emptyState, html, icon, itemThumbnailUrl, itemVisual, label, live, mount, navigate, onLeave, ownQuery, plural, preservingFocus, sheet, sheetContent, thumbImg, units, writeParams } from "./ui";
+import { UNSORTED_CATEGORY } from "./catalog-policy";
+
+/** A–Z groups by category name, with the catch-all "Others" (and unsorted items) last rather than wherever its first item falls. */
+const catchAll = (value: string) => value === UNSORTED_CATEGORY || /^others?$/i.test(value.trim());
+const byCategory = (a: string, b: string): number => Number(catchAll(a)) - Number(catchAll(b)) || categoryName(a).localeCompare(categoryName(b));
 
 type LendingItem = { id: string; name: string; category: string; unit: string; itemType: string; available: number; audience: string; photo: string | null; iconKey?: string | null };
 /** `selfService` is missing from a Worker older than V1.16.8; the sheet then offers no Self-Service link (fails closed). */
@@ -109,7 +114,7 @@ export function landing(): void {
           <div class="hero__field">
             ${icon("search")}
             <label class="visually-hidden" for="find-q">Equipment name</label>
-            <input id="find-q" name="q" type="search" placeholder="Projector, table, extension cord…" autocomplete="off" enterkeyhint="search" data-search />
+            <input id="find-q" name="q" type="search" placeholder="Projector, table, cord…" autocomplete="off" enterkeyhint="search" data-search />
             <button type="submit" aria-label="Search the Lending Hub">${icon("arrow")}</button>
           </div>
           <div class="hero__actions">
@@ -123,12 +128,12 @@ export function landing(): void {
     <div class="container"><aside class="hero__services" aria-label="Logistics services"><a href="/lending" data-route>${icon("swap")}<strong>Lending Hub</strong><span>Browse equipment and current availability.</span></a><a href="/self-service" data-route>${icon("phone")}<strong>Self-Service</strong><span>Record an item you take, use or return, when the service is open.</span></a><a href="/staff" data-route>${icon("user")}<strong>Staff sign-in</strong><span>Manage stock, lending and item records.</span></a></aside></div>
 
     <section class="section" aria-labelledby="steps-title">
-      <div class="container">
+      <div class="container how">
         <h2 id="steps-title" class="section__title">How borrowing works</h2>
         <ol class="steps">
-          <li><span class="steps__n">1</span><h3>Find it here</h3><p>Search the Lending Hub and choose an item to see how many are on the shelf and how to borrow it.</p></li>
-          <li><span class="steps__n">2</span><h3>Visit the Department</h3><p>Come to the Logistics office. While Self-Service is open, you can record it yourself on your phone there; online requests are not open yet.</p></li>
-          <li><span class="steps__n">3</span><h3>Borrow and return</h3><p>The loan and its return date are recorded with you, so the next person sees accurate availability.</p></li>
+          <li><span class="steps__n">1</span><div><h3>Find it here</h3><p>Search the Lending Hub and choose an item to see how many are on the shelf and how to borrow it.</p></div></li>
+          <li><span class="steps__n">2</span><div><h3>Visit the Department</h3><p>Come to the Logistics office. While Self-Service is open, you can record it yourself on your phone there; online requests are not open yet.</p></div></li>
+          <li><span class="steps__n">3</span><div><h3>Borrow and return</h3><p>The loan and its return date are recorded with you, so the next person sees accurate availability.</p></div></li>
         </ol>
       </div>
     </section>
@@ -269,9 +274,10 @@ export function lending(): void {
       mount(results, emptyState("No items are open for borrowing yet", "Staff are reviewing the inventory. Approved items appear here automatically; there is no need to refresh."));
       return;
     }
+    const categories = [...catalog.categories].sort(byCategory);
     const inCategory = (value: string) => catalog!.items.filter((item) => !value || item.category === value).length;
     chips.hidden = catalog.categories.length < 2;
-    const chipMarkup = html`${["", ...catalog.categories].map((value) => html`<button type="button" class="chip" data-category="${value}" aria-pressed="${value === category}">${value ? categoryName(value) : "All"}<span class="chip__count">${inCategory(value)}</span></button>`)}`;
+    const chipMarkup = html`${["", ...categories].map((value) => html`<button type="button" class="chip" data-category="${value}" aria-pressed="${value === category}">${value ? categoryName(value) : "All"}<span class="chip__count">${inCategory(value)}</span></button>`)}`;
     // Rebuild chips only when they change, and keep keyboard focus on the same chip.
     if (chips.innerHTML !== chipMarkup.value) {
       const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>(".chip")?.dataset.category;
@@ -282,7 +288,7 @@ export function lending(): void {
     const shown = catalog.items.filter((item) => (!category || item.category === category)
       && (!availableOnly.checked || item.available > 0)
       && (!query || `${item.name} ${item.category}`.toLowerCase().includes(query)))
-      .sort((a, b) => sort === "available" ? b.available - a.available || a.name.localeCompare(b.name) : a.name.localeCompare(b.name));
+      .sort((a, b) => sort === "available" ? b.available - a.available || a.name.localeCompare(b.name) : byCategory(a.category, b.category) || a.name.localeCompare(b.name));
     const ready = shown.filter((item) => item.available > 0).length;
     count.textContent = `${plural(shown.length, "item")}, ${ready} available`;
     // Every item has the same reserved icon/photo frame, keeping names aligned.

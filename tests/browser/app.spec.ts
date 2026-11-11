@@ -47,6 +47,38 @@ test("landing shows the institutional identity and current Logistics services", 
   await expect(page.getByRole("searchbox").first()).toHaveValue("folding table");
 });
 
+test("on a 320px phone the landing's links stay on one line, and below the centred hero the page reads left (LH-UI-88 S4)", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/");
+  for (const link of [page.locator(".hero__primary"), page.locator(".hero__available")]) {
+    const lines = await link.evaluate((element) => { const text = [...element.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim())!; const range = document.createRange(); range.selectNodeContents(text); return range.getClientRects().length; });
+    expect(lines).toBe(1);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  const search = page.locator("#find-q");
+  // The hint fits whole: its drawn width against the field's inner width.
+  expect(await search.evaluate((input: HTMLInputElement) => { const style = getComputedStyle(input); const context = document.createElement("canvas").getContext("2d")!; context.font = style.font; return context.measureText(input.placeholder).width <= input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight); })).toBe(true);
+  await expect(page.getByRole("heading", { name: "How borrowing works" })).toHaveCSS("text-align", "start");
+  await expect(page.locator(".steps li").first()).toHaveCSS("text-align", "start");
+});
+
+test("A–Z groups follow category names, with Others last even when its first item sorts first (LH-UI-88 S4)", async ({ page }) => {
+  const mixed = { revision: 1, categories: ["FURNITURE", "OTHERS", "SCHOOL SUPPLIES"], items: [
+    { id: "ITM-0901", name: "1/8 Illustration Board", category: "OTHERS", unit: "piece", available: 7, audience: "STUDENTS_AND_USC_STAFF" },
+    ...catalog.items
+  ] };
+  await page.route("**/api/public/catalog", (route) => route.fulfill({ contentType: "application/json", body: JSON.stringify(mixed) }));
+  for (const width of [375, 1024]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/lending");
+    const heads = page.locator(width < 760 ? ".fold__title" : ".catalogue-group__title");
+    await expect(heads.first()).toBeVisible();
+    const names = (await heads.allInnerTexts()).map((text) => text.replace(/\s*\d+\s*$/, "").trim());
+    expect(names.filter(Boolean)).toEqual(["Furniture", "School Supplies", "Others"]);
+  }
+  await expect(page.locator(".chip")).toHaveText([/^All/, /^Furniture/, /^School Supplies/, /^Others/]);
+});
+
 test("Lending Hub groups by category, filters, and keeps filters in the URL", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 700 });
   await page.goto("/lending");
