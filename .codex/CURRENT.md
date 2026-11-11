@@ -6,7 +6,7 @@ Rewritten 2026-11-05 by the integration steward: first in PR #89, then after tha
 
 **Amended 2026-11-06 in PR #91:** Earl answered "This session = steward for PR #91 only" and, separately, "apply the landing page now, I authorize it to be in this slice not on its own slice". This amendment records both, for PR #91 only. It is still not a roster entry.
 
-**Amended 2026-11-11 with V1.16.15** by the LH-UI-88 S4 writer, on Earl's chat instructions "start S4 and fix the critical and major findings" and "push to main directly". Only the slot A row and the LH-UI-88 row changed; the steward role stays vacant and the roster file was not edited. A steward reconciles the rest (the V1.16.14 rows below still read as before the merge).
+**Amended 2026-11-11 with V1.16.15** by the LH-UI-88 S4 writer, on Earl's chat instructions "start S4 and fix the critical and major findings" and "push to main directly" (refused by branch protection; the slice is a PR). Only the slot A row and the LH-UI-88 row changed; the steward role stays vacant and the roster file was not edited. A steward reconciles the rest (the V1.16.14 rows below still read as before the merge).
 
 ## Read first
 
@@ -20,7 +20,7 @@ Rewritten 2026-11-05 by the integration steward: first in PR #89, then after tha
 
 | Slot | Holder | Task | Repository / branch / worktree | State |
 |---|---|---|---|---|
-| A | Claude (LH-UI-88 S4 writer, this session; admitted by Earl in chat 2026-11-11: "start S4 and fix the critical and major findings") | **LH-UI-88 S4 part 1**, V1.16.15, pushed straight to `main` (Earl: "push to main directly"); no PR | `invicta-ctrl/logistics-hub`, `slice/lh-ui-88-s4-public`, worktree `D:\Documents\Projects\Logistics Hub\.claude\worktrees\lh-ui-88-s4` | MERGED_DEPLOYMENT_UNVERIFIED; releases the slot once the deploy state is recorded |
+| A | Claude (LH-UI-88 S4 writer, this session; admitted by Earl in chat 2026-11-11: "start S4 and fix the critical and major findings") | **LH-UI-88 S4 part 1**, V1.16.15; Earl said "push to main directly", branch protection refused the push, so it is a PR | `invicta-ctrl/logistics-hub`, `slice/lh-ui-88-s4-public`, worktree `D:\Documents\Projects\Logistics Hub\.claude\worktrees\lh-ui-88-s4` | QUALIFICATION_PENDING; merge needs Earl's word for the PR |
 | B | none | — | — | free |
 
 Released: **LH-RECORDS-01** (the steward's slot A) merged 2026-11-05 09:18 UTC as `main` `35f230f` (PR #90).
@@ -34,7 +34,7 @@ Other Logistics checkouts exist and are **not** writable by a new writer: the sh
 | ID | Task | Spec | Base → branch | Slot | State | Next |
 |---|---|---|---|---|---|---|
 | LH-RECORDS-01 | Apply the 003 roster amendment; reconcile `CURRENT.md`, the handoff, `CHANGELOG.md`, the V1.16.12 record and the stale passages; a clearer deploy-gate message for a merge-button commit (with a test); retire Console option 13 | 003 (amended); Earl, 2026-11-05: "i approve all … documents reconciled" | `main` `9a0cdfe` → `slice/records-roster-reconcile` | — | **merged** (PR #90, `main` `35f230f`, 2026-11-05 09:18 UTC) | none |
-| LH-UI-88 | Issue #88 visual refresh, slices S1–S5 | [accepted spec](../docs/specs/accepted/2026-11-05-lh-ui-88-visual-refresh.md) with its boards | `main` → one `slice/*` per slice | A (S4) | **S1 merged** (PR #91, `main` `b3a36f3`; its automatic Deploy stopped at the CodeQL gate). **S4 part 1 on `main`** (V1.16.15, record [v1.16.15](../docs/road-to-v2/releases/v1.16.15.md)), started before S2 and S3 on Earl's word. **S2, S3, S5 and the rest of S4 not started** | Earl's `DEPLOY <sha>` dispatch for production and his visual check; his decision on the landing water; then the next slice with its own admission |
+| LH-UI-88 | Issue #88 visual refresh, slices S1–S5 | [accepted spec](../docs/specs/accepted/2026-11-05-lh-ui-88-visual-refresh.md) with its boards | `main` → one `slice/*` per slice | A (S4) | **S1 merged** (PR #91, `main` `b3a36f3`; its automatic Deploy stopped at the CodeQL gate). **S4 part 1 in review** (V1.16.15, branch `slice/lh-ui-88-s4-public`, record [v1.16.15](../docs/road-to-v2/releases/v1.16.15.md)), started before S2 and S3 on Earl's word. **S2, S3, S5 and the rest of S4 not started** | Earl's `DEPLOY <sha>` dispatch for production and his visual check; his decision on the landing water; then the next slice with its own admission |
 
 Issue #88 (<https://github.com/invicta-ctrl/logistics-hub/issues/88>) states, kept separate: design reference linked — **yes**; UI spec proposed — yes; UI spec accepted — **yes** (`docs/specs/accepted/2026-11-05-lh-ui-88-visual-refresh.md`); mobile and desktop UI implemented — no; owner visually accepted — no. The current Home · Find · More navigation stays; the boards' Home · Items · Activity · More bar is out of scope until a separate navigation amendment is accepted.
 
