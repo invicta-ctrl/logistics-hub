@@ -1,12 +1,10 @@
 {
-  "version": "V1.16.14",
-  "sourceCommit": "db334d798a584939c2a872f01e225b59edca17ec",
-  "record": "docs/road-to-v2/releases/v1.16.14.md",
+  "version": "V1.16.15",
+  "sourceCommit": "8f9b67b6b6e6646d9b9372df2262362f692dbca3",
+  "record": "docs/road-to-v2/releases/v1.16.15.md",
   "changes": [
-    "Status labels are tinted pills with an icon and words. Buttons are flat: solid maroon for the main action, outlined maroon for the rest.",
-    "One family of corners (8, 12 and 16 px). Buttons, the hero, panels and skeletons are flat, with no gradients, glows or bevels, and skeletons no longer shimmer.",
-    "A button shows a spinner while it saves, and messages arrive with a short motion.",
-    "The staff app and its lists share one 760 px phone breakpoint, with 48 px phone fields and 44 px touch targets.",
-    "The public home page has slow moving water behind its heading, a fine grain and the campus photograph; it holds still on reduced motion or Data Saver."
+    "The public home page's \"How borrowing works\" is a left-aligned numbered list beside its title, so the centred heading is the only centred block.",
+    "On a 320 px phone the home page's two links stay on one line and the search hint shows whole.",
+    "The Lending Hub lists its categories by name, with Others last."
   ]
 }

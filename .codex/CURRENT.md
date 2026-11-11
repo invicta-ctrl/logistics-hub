@@ -6,6 +6,8 @@ Rewritten 2026-11-05 by the integration steward: first in PR #89, then after tha
 
 **Amended 2026-11-06 in PR #91:** Earl answered "This session = steward for PR #91 only" and, separately, "apply the landing page now, I authorize it to be in this slice not on its own slice". This amendment records both, for PR #91 only. It is still not a roster entry.
 
+**Amended 2026-11-11 with V1.16.15** by the LH-UI-88 S4 writer, on Earl's chat instructions "start S4 and fix the critical and major findings" and "push to main directly". Only the slot A row and the LH-UI-88 row changed; the steward role stays vacant and the roster file was not edited. A steward reconciles the rest (the V1.16.14 rows below still read as before the merge).
+
 ## Read first
 
 `AGENTS.md` (rules, writers, repository self-sufficiency, security review) → this file → [SESSION_HANDOFF.md](SESSION_HANDOFF.md) → [docs/SHARED_AGENT_WORKFLOW.md](../docs/SHARED_AGENT_WORKFLOW.md). The writer rules are [HAU-AGENT-LANES-003](../docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md). Authority: Earl's current instruction → accepted specification → verified repository state → Context Vault. This file is not evidence that a check passed: each row says where its fact was observed.
@@ -18,7 +20,7 @@ Rewritten 2026-11-05 by the integration steward: first in PR #89, then after tha
 
 | Slot | Holder | Task | Repository / branch / worktree | State |
 |---|---|---|---|---|
-| A | Claude (LH-UI-88 S1 writer) | **LH-UI-88 S1 Foundations**, candidate V1.16.14, PR #91 | `invicta-ctrl/logistics-hub`, `slice/lh-ui-88-s1-foundations`, worktree `D:\Documents\Projects\Logistics Hub\.claude\worktrees\lh-ui-88-redesign-c15339` | active, QUALIFICATION_PENDING |
+| A | Claude (LH-UI-88 S4 writer, this session; admitted by Earl in chat 2026-11-11: "start S4 and fix the critical and major findings") | **LH-UI-88 S4 part 1**, V1.16.15, pushed straight to `main` (Earl: "push to main directly"); no PR | `invicta-ctrl/logistics-hub`, `slice/lh-ui-88-s4-public`, worktree `D:\Documents\Projects\Logistics Hub\.claude\worktrees\lh-ui-88-s4` | MERGED_DEPLOYMENT_UNVERIFIED; releases the slot once the deploy state is recorded |
 | B | none | — | — | free |
 
 Released: **LH-RECORDS-01** (the steward's slot A) merged 2026-11-05 09:18 UTC as `main` `35f230f` (PR #90).
@@ -32,7 +34,7 @@ Other Logistics checkouts exist and are **not** writable by a new writer: the sh
 | ID | Task | Spec | Base → branch | Slot | State | Next |
 |---|---|---|---|---|---|---|
 | LH-RECORDS-01 | Apply the 003 roster amendment; reconcile `CURRENT.md`, the handoff, `CHANGELOG.md`, the V1.16.12 record and the stale passages; a clearer deploy-gate message for a merge-button commit (with a test); retire Console option 13 | 003 (amended); Earl, 2026-11-05: "i approve all … documents reconciled" | `main` `9a0cdfe` → `slice/records-roster-reconcile` | — | **merged** (PR #90, `main` `35f230f`, 2026-11-05 09:18 UTC) | none |
-| LH-UI-88 | Issue #88 visual refresh, slices S1–S5 | [accepted spec](../docs/specs/accepted/2026-11-05-lh-ui-88-visual-refresh.md) with its boards (recorded by LH-RECORDS-01) | `main` → one `slice/*` per slice | A (S1) | **S1 in review**: PR #91, `slice/lh-ui-88-s1-foundations`, candidate V1.16.14, QUALIFICATION_PENDING. **S2–S5 not started** | Earl's merge go-ahead for PR #91 and his visual check; then S2 Inventory with its own admission, branch and PR. Slices run one at a time because all share `src/styles.css` |
+| LH-UI-88 | Issue #88 visual refresh, slices S1–S5 | [accepted spec](../docs/specs/accepted/2026-11-05-lh-ui-88-visual-refresh.md) with its boards | `main` → one `slice/*` per slice | A (S4) | **S1 merged** (PR #91, `main` `b3a36f3`; its automatic Deploy stopped at the CodeQL gate). **S4 part 1 on `main`** (V1.16.15, record [v1.16.15](../docs/road-to-v2/releases/v1.16.15.md)), started before S2 and S3 on Earl's word. **S2, S3, S5 and the rest of S4 not started** | Earl's `DEPLOY <sha>` dispatch for production and his visual check; his decision on the landing water; then the next slice with its own admission |
 
 Issue #88 (<https://github.com/invicta-ctrl/logistics-hub/issues/88>) states, kept separate: design reference linked — **yes**; UI spec proposed — yes; UI spec accepted — **yes** (`docs/specs/accepted/2026-11-05-lh-ui-88-visual-refresh.md`); mobile and desktop UI implemented — no; owner visually accepted — no. The current Home · Find · More navigation stays; the boards' Home · Items · Activity · More bar is out of scope until a separate navigation amendment is accepted.
 
@@ -74,7 +76,8 @@ Issue #88 (<https://github.com/invicta-ctrl/logistics-hub/issues/88>) states, ke
 
 ## Next exact action
 
-1. Earl: look at the S1 preview (`http://127.0.0.1:8791`; restart it with `dataprivatepreviewestart-preview.cmd` in the S1 worktree) and decide whether the 200% text failures are accepted exceptions or block the merge, then give the merge go-ahead for PR #91, or feedback. Merge only with his explicit word, only after an independent review of the exact head and green CI, CodeQL and Worker E2E on that head. Merge method is his call: a merge-button commit makes the `Deploy` run fail its CodeQL gate by design (above), a fast-forward keeps the tested SHA; do not choose it for him. `--match-head-commit <sha>` pins the head.
+1. Earl: look at the S1 preview (`http://127.0.0.1:8791`; restart it with `dataprivatepreview
+estart-preview.cmd` in the S1 worktree) and decide whether the 200% text failures are accepted exceptions or block the merge, then give the merge go-ahead for PR #91, or feedback. Merge only with his explicit word, only after an independent review of the exact head and green CI, CodeQL and Worker E2E on that head. Merge method is his call: a merge-button commit makes the `Deploy` run fail its CodeQL gate by design (above), a fast-forward keeps the tested SHA; do not choose it for him. `--match-head-commit <sha>` pins the head.
 2. Earl: relay the staged roster rows for S1 into the live roster, and name an integration steward for everything after PR #91 (the S1 session is steward for PR #91 only). That steward moves the V1.16.14 `CHANGELOG.md` entry under released versions when it is verified, and reconciles this snapshot. Also decide the order against branch `handoff/steward-2026-11-05` (`c2b1151`, no PR), which rewrites these same two pointers and says S1 is unstarted; it predates the S1 pointers and must be reconciled before it merges.
 3. After Earl's feedback, a fresh admission for S2 Inventory, then S3 → S5, one at a time, each with its own branch, PR, gates, review and merge.
 4. Earl: check Administration > System > This version (V1.16.12, V1.16.13) and pages on a long list; then visually accept each LH-UI-88 slice. Issue #88 closes only after that.
