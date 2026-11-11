@@ -8,6 +8,8 @@ Rewritten 2026-11-05 by the integration steward: first in PR #89, then after tha
 
 **Amended 2026-11-11 with V1.16.15** by the LH-UI-88 S4 writer, on Earl's chat instructions "start S4 and fix the critical and major findings" and "push to main directly" (refused by branch protection; the slice is a PR). Only the slot A row and the LH-UI-88 row changed; the steward role stays vacant and the roster file was not edited. A steward reconciles the rest (the V1.16.14 rows below still read as before the merge).
 
+**Amended 2026-11-12 in PR #93** by the steward Earl appointed ("fix it, be the steward. merge when green"): the Steward line under "Writer slots". The CI change it made is in [the V1.16.15 record](../docs/road-to-v2/releases/v1.16.15.md).
+
 ## Read first
 
 `AGENTS.md` (rules, writers, repository self-sufficiency, security review) → this file → [SESSION_HANDOFF.md](SESSION_HANDOFF.md) → [docs/SHARED_AGENT_WORKFLOW.md](../docs/SHARED_AGENT_WORKFLOW.md). The writer rules are [HAU-AGENT-LANES-003](../docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md). Authority: Earl's current instruction → accepted specification → verified repository state → Context Vault. This file is not evidence that a check passed: each row says where its fact was observed.
@@ -15,7 +17,7 @@ Rewritten 2026-11-05 by the integration steward: first in PR #89, then after tha
 ## Writer slots (dated snapshot of the steward's live roster, observed 2026-11-05; re-check, do not assume)
 
 - **Live roster:** `D:\Documents\HAU-USC Logistics Hub\handoffs\WRITER_ROSTER.md` on Earl's PC, kept by the integration steward. It covers every repository, because the cap of two Claude writers is account-wide. This table is a copy; if they disagree, no new writer is admitted until the steward reconciles them.
-- **Steward:** for PR #91 only, the S1 writer's session (Earl, 2026-11-06: "This session = steward for PR #91 only"); it may edit these two pointers and the V1.16.14 `CHANGELOG.md` entry for that PR and nothing else, and it did not write the roster file. For every other PR, branch and repository the role is vacant. It was vacant as of 2026-11-05 (observed in the S1 session: the roster file could not be edited from it). The coordinator session that held the role, `local_c6813149-65ea-41fc-ac29-130177305dde`, authored LH-RECORDS-01 (PR #90) and is not the S1 writer. A session that cannot read the roster file asks Earl to relay its admission request. The S1 admission below is Earl's chat instruction (ratified 2026-11-06 by the answer above), not a roster entry; the roster rows are staged in the S1 session's git-ignored `data/private/review-packets/roster-rows.txt` for Earl to relay. The roster was not edited from this session.
+- **Steward:** the LH-UI-88 S4 session (this writer), appointed by Earl on 2026-11-12 in chat: "fix it, be the steward. merge when green". It reconciles PR #93 and the CI fix it needed. Before that the role was vacant except for PR #91 (Earl, 2026-11-06: "This session = steward for PR #91 only"). The live roster file is updated by this steward.
 - **Two-lane state:** HAU-AGENT-LANES-003 is merged (PR #89, `9a0cdfe`). A second lane still needs two accepted, disjoint task manifests.
 
 | Slot | Holder | Task | Repository / branch / worktree | State |

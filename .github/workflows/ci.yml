@@ -46,7 +46,17 @@ jobs:
       - run: ACTIVITY_PERF=1 ACTIVITY_PERF_TIERS=1000 npx vitest run tests/activity-perf.test.ts
       - run: STOCK_ACTIVITY_PERF=1 STOCK_ACTIVITY_PERF_TIERS=1000 npx vitest run tests/stock-activity-perf.test.ts
       - run: npm run verify:privacy
-      - run: npx playwright install --with-deps chromium
+      # The runner's Ubuntu mirrors sometimes cannot be reached (PR #93, 2026-11-11), which used to end the job before any test
+      # ran. Retry the system packages, then install the browser alone: the runner image already carries Chrome's libraries, and
+      # if one is truly missing the browser tests fail, so this can never turn a broken runner into a pass.
+      - name: Install Chromium for the browser tests
+        run: |
+          for attempt in 1 2; do
+            timeout 300 npx playwright install --with-deps chromium && exit 0
+            echo "::warning::Playwright system packages failed (attempt $attempt)"; sleep 30
+          done
+          echo "::warning::Installing Chromium without system packages"
+          npx playwright install chromium
       - run: npm run test:browser -- --reporter=line,github
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -67,7 +77,17 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # The runner's Ubuntu mirrors sometimes cannot be reached (PR #93, 2026-11-11), which used to end the job before any test
+      # ran. Retry the system packages, then install the browser alone: the runner image already carries Chrome's libraries, and
+      # if one is truly missing the browser tests fail, so this can never turn a broken runner into a pass.
+      - name: Install Chromium for the browser tests
+        run: |
+          for attempt in 1 2; do
+            timeout 300 npx playwright install --with-deps chromium && exit 0
+            echo "::warning::Playwright system packages failed (attempt $attempt)"; sleep 30
+          done
+          echo "::warning::Installing Chromium without system packages"
+          npx playwright install chromium
       - run: npm run test:browser:worker -- --reporter=line,github
       - uses: actions/upload-artifact@v4
         if: failure()
