@@ -173,7 +173,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
-          previous=$(npx wrangler deployments status --json 2>/dev/null | jq -r '[.versions[] | select(.percentage == 100) | .version_id][0] // ""') || previous=""
+          previous=$(npx wrangler deployments status --json 2>/dev/null | jq -r '[.versions[] | select(.percentage == 100) | .version_id][0] // ""' 2>/dev/null) || previous=""
           [[ "$previous" =~ ^[0-9a-f-]{36}$ ]] || { echo "::error::Could not read the live Worker version, so there is no safe rollback target. Nothing deployed."; exit 1; }
           echo "::add-mask::$previous"
           printf '%s' "$previous" > "$RUNNER_TEMP/previous-version"
