@@ -352,6 +352,34 @@ process.stdout.write(${JSON.stringify(wrangler.stdout)}); process.stderr.write($
     expect(injected.log).toMatch(/^Rolled back to the requested Worker version at \S+\. Reason: regressed ::warning::injected\n$/);
   });
 
+  it("LH-CD-01: keeps the captured rollback target off the log, refuses to deploy without one, and rolls back on a failed smoke check", () => {
+    const runnerTemp = fs.mkdtempSync(path.join(os.tmpdir(), "lh-runner-temp-"));
+    dirs.push(runnerTemp);
+    const status = JSON.stringify({ id: "d", versions: [{ version_id: version, percentage: 90 }, { version_id: current, percentage: 100 }] });
+    const captured = step("Capture the live version to roll back to", { RUNNER_TEMP: runnerTemp }, { stdout: status, stderr: "", status: 0 });
+    expect(captured.status, captured.log).toBe(0);
+    expect(captured.args).toEqual([["wrangler", "deployments", "status", "--json"]]);
+    expect(captured.log).toBe(`::add-mask::${current}\nCaptured the live version for an automatic rollback.\n`);
+    expect(fs.readFileSync(path.join(runnerTemp, "previous-version"), "utf8")).toBe(current);
+    for (const answer of [{ stdout: "not json", status: 0 }, { stdout: "", status: 1 }, { stdout: JSON.stringify({ versions: [] }), status: 0 }]) {
+      const refused = step("Capture the live version to roll back to", { RUNNER_TEMP: runnerTemp }, { ...answer, stderr: "" });
+      expect(refused.status).not.toBe(0);
+      expect(refused.log).toBe("::error::Could not read the live Worker version, so there is no safe rollback target. Nothing deployed.\n");
+    }
+    const rolled = step("Roll back when the smoke check fails", { RUNNER_TEMP: runnerTemp, SHA: sha }, { stdout: wranglerSays, stderr: "", status: 0 });
+    expect(rolled.status).toBe(1);
+    expect(rolled.args).toEqual([["wrangler", "rollback", current, "--message", `auto: smoke check failed on ${sha.slice(0, 12)}`, "--yes"]]);
+    expect(rolled.summary).toMatch(new RegExp(`^Smoke check failed on ${sha}, so the previous version is live again at \\S+\\.\\n$`));
+    for (const leak of leaks) expect(rolled.summary).not.toContain(leak);
+    expect(rolled.log.replace(`::add-mask::${current}\n`, "")).toBe(rolled.summary);
+    const broken = step("Roll back when the smoke check fails", { RUNNER_TEMP: runnerTemp, SHA: sha }, { stdout: wranglerSays, stderr: "Authentication error [code: 10000]", status: 4 });
+    expect(broken.status).toBe(4);
+    expect(broken.log.replace(`::add-mask::${current}\n`, "")).toBe("::error::Automatic rollback failed with exit 4 and Cloudflare [code: 10000]. Roll back by hand (docs/DEPLOYMENT.md, Rollback).\n");
+    const text = workflow();
+    expect(text.indexOf("      - name: Capture the live version to roll back to")).toBeLessThan(text.indexOf("      - name: Deploy\n"));
+    expect(text.indexOf("      - name: Smoke check the live site")).toBeGreaterThan(text.indexOf("      - name: Deploy\n"));
+  });
+
   it("refuses a deploy target that is not a commit before the step that would show it", () => {
     const steps = stepsOf("deploy");
     expect(steps[0]).toMatch(/^name: Refuse a target that is not a commit before any step shows it\n/);

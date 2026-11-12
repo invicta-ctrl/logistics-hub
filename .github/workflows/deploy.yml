@@ -163,6 +163,21 @@ jobs:
         env:
           RELEASE_SHA: ${{ steps.pick.outputs.sha }}
         run: GITHUB_SHA="$RELEASE_SHA" npm run build
+      # LH-CD-01: the version live now is the automatic rollback target. It is private, so it is masked and kept in a runner
+      # file (GitHub drops a step output that holds a masked value). Unreadable means no safe rollback, so nothing deploys.
+      - name: Capture the live version to roll back to
+        if: steps.order.outputs.skip != 'true' && !(github.event_name == 'workflow_run' && vars.DEPLOY_FROM_CI == 'dry-run')
+        working-directory: release
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          previous=$(npx wrangler deployments status --json 2>/dev/null | jq -r '[.versions[] | select(.percentage == 100) | .version_id][0] // ""' 2>/dev/null) || previous=""
+          [[ "$previous" =~ ^[0-9a-f-]{36}$ ]] || { echo "::error::Could not read the live Worker version, so there is no safe rollback target. Nothing deployed."; exit 1; }
+          echo "::add-mask::$previous"
+          printf '%s' "$previous" > "$RUNNER_TEMP/previous-version"
+          echo "Captured the live version for an automatic rollback."
       - name: Deploy
         if: steps.order.outputs.skip != 'true'
         working-directory: release
@@ -195,6 +210,32 @@ jobs:
             reason=${REASON//[$'\r\n']/ }
             echo "Deployed $SHA ($HOW) at $(date -u +%FT%TZ). ${reason:+Reason: $reason}" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
+      # LH-CD-01: the live site must serve this build's entry bundle and answer the public catalog, or the previous version
+      # comes back. Public GETs only; the rollback keeps Wrangler's output off this public log like every other step.
+      - name: Smoke check the live site
+        id: smoke
+        if: steps.order.outputs.skip != 'true' && !(github.event_name == 'workflow_run' && vars.DEPLOY_FROM_CI == 'dry-run')
+        run: node ops/scripts/ops/smoke.mjs --url https://logistics.hausc.org --dist release/dist
+      - name: Roll back when the smoke check fails
+        if: failure() && steps.smoke.outcome == 'failure'
+        working-directory: release
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SHA: ${{ steps.pick.outputs.sha }}
+        run: |
+          set -euo pipefail
+          previous=$(cat "$RUNNER_TEMP/previous-version")
+          echo "::add-mask::$previous"
+          status=0
+          output=$(npx wrangler rollback "$previous" --message "auto: smoke check failed on ${SHA:0:12}" --yes 2>&1) || status=$?
+          if [ "$status" -ne 0 ]; then
+            codes=$(grep -oE '\[code: [0-9]+\]' <<< "$output" | sort -u | paste -sd ' ' -) || true
+            echo "::error::Automatic rollback failed with exit $status${codes:+ and Cloudflare $codes}. Roll back by hand (docs/DEPLOYMENT.md, Rollback)."
+            exit "$status"
+          fi
+          echo "Smoke check failed on $SHA, so the previous version is live again at $(date -u +%FT%TZ)." | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 1
 
   rollback:
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'rollback'
