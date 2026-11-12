@@ -618,7 +618,7 @@ describe("the manifest and the workflow", () => {
         // LH-CD-01 adds the read of the live version (its JSON goes straight to jq) and the automatic rollback after a failed
         // smoke check.
         expect(text.match(/npx wrangler .*$/gm)?.map((line) => line.trim())).toEqual([
-          "npx wrangler deployments status --json 2>/dev/null | jq -r '[.versions[] | select(.percentage == 100) | .version_id][0] // \"\"') || previous=\"\"",
+          "npx wrangler deployments status --json 2>/dev/null | jq -r '[.versions[] | select(.percentage == 100) | .version_id][0] // \"\"' 2>/dev/null) || previous=\"\"",
           "npx wrangler \"${args[@]}\" 2>&1) || status=$?",
           "npx wrangler rollback \"$previous\" --message \"auto: smoke check failed on ${SHA:0:12}\" --yes 2>&1) || status=$?",
           "npx wrangler rollback \"$TARGET\" --message \"${REASON:0:100}\" --yes 2>&1) || status=$?"]);
