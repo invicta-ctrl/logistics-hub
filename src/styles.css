@@ -1447,13 +1447,14 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   .data-table-wrap--responsive .data-table--items tbody tr { content-visibility: auto; contain-intrinsic-size: auto 5.5rem; }
   .data-table-wrap--responsive .data-table--items td.col-item { grid-row: 1 / span 2; }
   .data-table-wrap--responsive .data-table--items .col-qty .cell-sub { display: none; }
-  .data-table-wrap--responsive .data-table.data-table--items td.col-status { grid-row: 2; grid-column: 2; justify-self: end; max-width: 8.5rem; text-align: right; }
+  .data-table-wrap--responsive .data-table.data-table--items td.col-status { grid-row: 2; grid-column: 2; justify-self: end; max-width: min(9rem, 40cqi); text-align: right; }
   /* LH-UI-88 S2 · One status per phone row, the most urgent, with "+N" for the rest; the others stay readable to screen readers. */
   .data-table-wrap--responsive .data-table--items .col-status .tags { justify-content: flex-end; align-items: baseline; gap: var(--space-1) var(--space-2); }
   .data-table-wrap--responsive .data-table--items .col-status .tag:not(.is-primary) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .data-table-wrap--responsive .data-table--items .col-status .tag { white-space: normal; text-align: left; }
   .data-table-wrap--responsive .data-table--items .tags__more { display: inline; color: var(--text-3); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
-  .data-table-wrap--responsive .data-table--items .cell-id { white-space: nowrap; }
+  /* The reference never splits at its hyphen, and the line may still break after it. */
+  .data-table-wrap--responsive .data-table--items .cell-id { display: inline-block; white-space: nowrap; }
   .data-table-wrap--responsive .data-table:not(.data-table--static) tbody td:last-child { padding-right: 0; }
   .data-table-wrap--responsive .data-table:not(.data-table--static) tbody td:last-child::after { display: none; }
   /* Select mode: the checkbox takes its own column beside the picture, so a row keeps its two lines. */
@@ -1476,6 +1477,12 @@ dialog.sheet:focus-visible { outline: 2px solid var(--brand); outline-offset: -2
   .data-table-wrap--responsive .data-table .col-level { width: auto; color: var(--text-2); font-size: var(--text-sm); }
   .data-table-wrap--responsive .data-table .cell-label { display: inline; }
   .data-table-wrap--responsive .data-table .col-desired { width: auto; }
+}
+/* LH-UI-88 S2 · On phones (a list under 26rem) the status takes its own line under the name, so neither squeezes the other. */
+@container (max-width: 26rem) {
+  .data-table-wrap--responsive .data-table.data-table--items td.col-status { grid-row: 3; grid-column: 1 / -1; justify-self: start; max-width: none; padding-left: 3.25rem; text-align: left; }
+  .data-table-wrap--responsive .data-table.data-table--items tr:has(> td.col-select) > td.col-status { grid-column: 2 / -1; padding-left: 3.25rem; }
+  .data-table-wrap--responsive .data-table--items .col-status .tags { justify-content: flex-start; }
 }
 @media (max-width: 760px) {
   .site-header__inner { min-height: 4rem; }

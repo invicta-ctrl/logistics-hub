@@ -118,8 +118,9 @@ function tags(item: Item): Html {
   if (state !== "OK") list.push([STOCK_TAG_TONES[state], STOCK_STATE_LABELS[state]]);
   if (item.reorderStatus) list.push(["tag--gold", RESTOCK_LABELS[item.reorderStatus] ?? label(item.reorderStatus)]);
   // A phone row shows one status, the most urgent (LH-UI-88 §3), and "+N" for the rest; screen readers and the sheet keep them all.
-  const urgency = (tone: string) => TAG_URGENCY.indexOf(tone);
-  const primary = list.reduce((best, [tone], index) => urgency(tone) < urgency(list[best][0]) ? index : best, 0);
+  // "Unclassified" yields a tie: the row's sub-line already names the type.
+  const urgency = ([tone, text]: [string, string]) => TAG_URGENCY.indexOf(tone) + (text === "Unclassified" ? 0.5 : 0);
+  const primary = list.reduce((best, entry, index) => urgency(entry) < urgency(list[best]) ? index : best, 0);
   return html`<span class="tags">${list.map(([tone, text], index) => html`<span class="${["tag", tone, index === primary ? "is-primary" : ""].join(" ").trim()}">${text}</span>`)}${list.length > 1 ? html`<span class="tags__more" aria-hidden="true">+${list.length - 1}</span>` : ""}</span>`;
 }
 /** Status tones from most to least urgent; "" is the plain Inactive tag. */
