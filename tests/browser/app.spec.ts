@@ -812,12 +812,15 @@ test("phones: Items rows keep picture, name, quantity and status; an item sheet 
   await expect(page.locator("tr[data-key=ITM-0473]")).toBeVisible();
   await page.waitForTimeout(400);
   await page.screenshot({ path: "test-results/browser/phone-items.png" });
-  // A row is picture, name with its reference, and quantity over status: one compact block, the status beside the name, not under it.
+  // A row is picture, name with its reference and quantity, then one status on its own line under the name (LH-UI-88 S2,
+  // replacing LH-IP02-S04's status beside the name, which squeezed the name on phones): still one compact block.
   for (const key of ["ITM-0463", "ITM-0473"]) {
     const row = page.locator(`tr[data-key=${key}]`);
-    expect((await row.boundingBox())!.height).toBeLessThan(110);
+    expect((await row.boundingBox())!.height).toBeLessThan(120);
+    const name = (await row.locator(".row-link").boundingBox())!;
     const status = (await row.locator(".col-status").boundingBox())!;
-    expect(status.x).toBeGreaterThan(195);
+    expect(status.y).toBeGreaterThan(name.y + name.height);
+    expect(Math.abs(status.x - (await row.locator("td.col-item").boundingBox())!.x)).toBeLessThan(2);
   }
   await expect(page.locator("tr[data-key=ITM-0473] .cell-place")).toBeHidden();
   // Select mode keeps each row's two lines: the checkbox sits beside the name, not under it.

@@ -106,19 +106,25 @@ const STATUS_CHOICES: Record<string, string> = { ACTIVE: "Active", VERIFY: "Acti
  * (Unclassified), details check (Needs details check), quantity confidence (Needs count), availability (computed) and restock.
  */
 function tags(item: Item): Html {
-  const list: Html[] = [];
-  if (item.listed) list.push(html`<span class="tag tag--ok">On Lending Hub</span>`);
-  if (item.status === "INACTIVE") list.push(html`<span class="tag">Inactive</span>`);
-  if (item.itemType === "NEEDS_REVIEW") list.push(html`<span class="tag tag--pending">Unclassified</span>`);
-  if (item.needsReview) list.push(html`<span class="tag tag--pending">Needs details check</span>`);
-  if (item.countNeeded) list.push(html`<span class="tag tag--warn">Needs count</span>`);
-  if (item.openUnits > item.onHand) list.push(html`<span class="tag tag--warn">Open units need review</span>`);
-  if (item.openReports) list.push(html`<span class="tag tag--warn">Location reported</span>`);
+  const list: [tone: string, text: string][] = [];
+  if (item.listed) list.push(["tag--ok", "On Lending Hub"]);
+  if (item.status === "INACTIVE") list.push(["", "Inactive"]);
+  if (item.itemType === "NEEDS_REVIEW") list.push(["tag--pending", "Unclassified"]);
+  if (item.needsReview) list.push(["tag--pending", "Needs details check"]);
+  if (item.countNeeded) list.push(["tag--warn", "Needs count"]);
+  if (item.openUnits > item.onHand) list.push(["tag--warn", "Open units need review"]);
+  if (item.openReports) list.push(["tag--warn", "Location reported"]);
   const state = stockState(item);
-  if (state !== "OK") list.push(html`<span class="tag ${STOCK_TAG_TONES[state]}">${STOCK_STATE_LABELS[state]}</span>`);
-  if (item.reorderStatus) list.push(html`<span class="tag tag--gold">${RESTOCK_LABELS[item.reorderStatus] ?? label(item.reorderStatus)}</span>`);
-  return html`<span class="tags">${list}</span>`;
+  if (state !== "OK") list.push([STOCK_TAG_TONES[state], STOCK_STATE_LABELS[state]]);
+  if (item.reorderStatus) list.push(["tag--gold", RESTOCK_LABELS[item.reorderStatus] ?? label(item.reorderStatus)]);
+  // A phone row shows one status, the most urgent (LH-UI-88 §3), and "+N" for the rest; screen readers and the sheet keep them all.
+  // "Unclassified" yields a tie: the row's sub-line already names the type.
+  const urgency = ([tone, text]: [string, string]) => TAG_URGENCY.indexOf(tone) + (text === "Unclassified" ? 0.5 : 0);
+  const primary = list.reduce((best, entry, index) => urgency(entry) < urgency(list[best]) ? index : best, 0);
+  return html`<span class="tags">${list.map(([tone, text], index) => html`<span class="${["tag", tone, index === primary ? "is-primary" : ""].join(" ").trim()}">${text}</span>`)}${list.length > 1 ? html`<span class="tags__more" aria-hidden="true">+${list.length - 1}</span>` : ""}</span>`;
 }
+/** Status tones from most to least urgent; "" is the plain Inactive tag. */
+const TAG_URGENCY = ["tag--bad", "tag--warn", "", "tag--pending", "tag--gold", "tag--ok"];
 
 /** One history entry in two answers: by id, or, from a Worker before V1.16.4, by its time and action. */
 const sameEvent = (a: CatalogEvent, b: CatalogEvent) => a.id ? a.id === b.id : a.at === b.at && a.action === b.action;
@@ -806,7 +812,7 @@ export async function workspace(): Promise<void> {
           <p class="card__text">This record came from the legacy system. Confirm its details, then mark it reviewed.</p>
           ${checklist(reviewChecklist(item))}
         </section>` : ""}
-      <dl class="facts">
+      <dl class="facts facts--rows">
         <div><dt>Status</dt><dd>${item.status === "INACTIVE" ? "Inactive" : "Active"}${item.itemType === "NEEDS_REVIEW" ? " · unclassified" : ""} · ${item.needsReview ? "needs a details check" : "details checked"}</dd></div>
         <div><dt>Lending Hub</dt><dd>${gaps.length ? "Not listed" : label(item.lendingAudience)}</dd></div>
         <div><dt>Unit</dt><dd>${item.unit}</dd></div>
