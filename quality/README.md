@@ -20,3 +20,6 @@ Existing real commands: typecheck, test, build, test:browser, test:browser:worke
 
 ### Remediation status
 Isolated Node 22.23.4 is now available; see CURRENT for executable path and verification. Lint preserves unused-variable errors except explicitly intentional discard conventions. `licenses/assets.json` records all public files with SHA-256, provenance, and status; approved records require matching content hash and nonempty license/evidence. Unresolved assets/dependencies fail the gate; no presumed institutional rights. Full readiness remains blocked on measured legacy test lint, full suites, reviewed snapshots, actual Desktop skills/model and release safeguards.
+
+### Exact development-tool license review
+Four reviewed packages (axe-core, @axe-core/playwright, minimatch and @isaacs/nonrecursive-glob-match) are permitted for development/CI tooling only with exact pinned version, license, dev-only lock flag and installed license notice. This does not authorize redistribution or runtime bundling; any scope/version change requires re-review. Remaining Sharp/libvips LGPL/composite license entries and institutional asset rights fail closed. Existing landing snapshots are unapproved review candidates in ignored quality/runs; no Windows-to-Linux baseline substitution.

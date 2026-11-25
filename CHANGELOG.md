@@ -4,6 +4,8 @@ A concise index of what changed in each product version/revision and accepted sp
 
 ## Unreleased — documentation and governance
 
+- **2026-11-25 · LH-GOV-001 further qualification:** exact-version development-only license reviews for four testing/lint packages; captured existing responsive landing review evidence; identified actual automatic Workers Builds trigger and deployed main build. Remaining license, fixture lint, accessibility, visual and release safeguards fail closed. No product increment or deployment.
+
 - **2026-11-25 · LH-GOV-001 readiness remediation:** provisioned isolated pinned Node, removed unused code and clarified intentional discarded fields, typed existing browser fixtures, populated public asset provenance and enforced exact asset hashes. Build/typecheck, foundations, focused regressions and inventory E2E pass; remaining test lint, full-suite qualification, license rights and deployment controls block release. No product version increment.
 
 - **2026-11-25 · Reconciliation:** PR #96 merged into remote main `70bfc7d`; incorporated the inventory UI changes into the local governance candidate. V1.16.16 release record remains deployment-unverified; no new product version or production push from this adoption. Direct-main integration authorized by owner but mandatory readiness checks still block.
