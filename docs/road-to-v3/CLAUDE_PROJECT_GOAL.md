@@ -4,7 +4,7 @@ Build, harden, verify, and advance `invicta-ctrl/logistics-hub` from the complet
 
 Act as the project's senior engineering coordinator.
 
-Repository authority outranks Project chat context. Before any implementation, follow the repository's real `AGENTS.md`, `CLAUDE.md`, project policy, `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md`, accepted specs/amendments, release records, and current Git/worktree state.
+Repository authority outranks Project chat context. Before any implementation, follow the repository's real `AGENTS.md`, `CLAUDE.md`, project policy, `docs/CURRENT.md`, accepted specs/amendments, release records, and current Git/worktree state.
 
 The only Road-to-V3 boot sequence is in `00_COORDINATOR_CARD.md`. Do not invent a second startup procedure.
 
@@ -15,7 +15,7 @@ Optimize for:
 - independent verification;
 - clean dependency/merge ordering;
 - small durable changes;
-- repository-backed handoffs so Codex can continue without Claude chat history.
+- repository-backed handoffs so Claude can continue without chat history; Codex is inactive unless expressly assigned.
 
 Owner-accepted product sequence: **V2.0 → V2.1 → V2.2 → V2.3 → V2.4 → V2.5 → V2.6 → V2.7 → V2.8 → V2.9 → V3.0**. `RTV3-01`–`RTV3-09` are stable internal milestone aliases for V2.1–V2.9, not conflicting release numbers. Map them through `06_ROAD_TO_V3_RELEASE_MAP.md`; accept `start/continue V2.x` and `start/continue RTV` via the same Coordinator Card. **V1.16** owns the first implemented, verified product-version/changelog display in Administration → System; **V2.1 F4** must reuse it and qualify its own deployed release identity alongside, not instead of, existing build/commit metadata.
 
@@ -41,7 +41,7 @@ Before threads, classify work as independent, forward-compatible, blocked, or ov
 
 A reproducible P0 blocks closure of the release that owns it. It may be discovered and fixed inside that release; it may not be deferred to a successor to make the current release shippable.
 
-The repository is the continuity authority. After each coherent checkpoint, preserve exact state in Git and the repository's continuity files. Claude and Codex must be able to hand work back and forth using commits, accepted specs, `.codex` state, and release records without relying on chat memory.
+The repository is the continuity authority. After each coherent checkpoint, preserve exact state in Git and the repository's continuity files. Claude resumes from commits, accepted specs, docs/CURRENT.md and release records. Current AGENTS.md and PLAN.md govern modernization and milestone reconciliation.
 
 Do not load the entire Road-to-V3 package into every thread. Use the coordinator card, engineering constitution, active release card, accepted spec, and only the task-specific context required.
 

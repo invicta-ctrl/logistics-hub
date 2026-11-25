@@ -1,0 +1,17 @@
+# Owner account invicta-ctrl admin access verified 2026-11-25; separate independent reviewer and ruleset qualification still required.
+/AGENTS.md @invicta-ctrl
+/DESIGN.md @invicta-ctrl
+/TECHNICAL-OVERVIEW.md @invicta-ctrl
+/ARCHITECTURE.md @invicta-ctrl
+/ENGINEERING-BASELINE.md @invicta-ctrl
+/QUALITY.md @invicta-ctrl
+/SKILLS.md @invicta-ctrl
+/governance.json @invicta-ctrl
+/docs/CURRENT.md @invicta-ctrl
+/docs/specs/ @invicta-ctrl
+/docs/references/ @invicta-ctrl
+/.github/ @invicta-ctrl
+/scripts/ @invicta-ctrl
+/.githooks/ @invicta-ctrl
+/CLAUDE.md @invicta-ctrl
+/.claude/ @invicta-ctrl

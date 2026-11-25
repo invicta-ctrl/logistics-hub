@@ -13,3 +13,7 @@ Rules for this folder (also in `AGENTS.md`, "Repository self-sufficiency"):
 1. Archive by copying the exact prior content, then shorten the live file. Never delete evidence to make the live file tidy.
 2. Add a row above with the date, the PR and what replaced it. Do not archive a file twice under the same name; use a new date.
 3. Accepted specifications stay in `docs/specs/accepted/` and are marked superseded in place (HAU-AGENT-LANES-002 is the example). Release records and evidence stay where they are.
+
+## 2026-11-25 — LH-GOV-001
+
+Exact retired checkpoint and Part briefs: `continuity/pre-v1.1.1-codex/`. Retired project policy: `agent-workflows/pre-v1.1.1-agents/`. Previous root policies and shared workflow remain in Git at `30d4464f4b34fdc5591f6012c2840ce58ba620a9`. Current authority: `AGENTS.md`, `docs/CURRENT.md`.

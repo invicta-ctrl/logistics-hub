@@ -1,0 +1,62 @@
+name: Kawing quality
+on:
+  pull_request:
+  push:
+    branches: ['**']
+  merge_group:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  readiness:
+    name: Kawing release readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify governance and resolve approved app root
+        id: governance
+        run: node scripts/check-governance.mjs
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ${{ steps.governance.outputs.app_dir }}/.node-version
+      - name: Verify change-linked documentation
+        run: node scripts/check-docs.mjs --ci
+      - name: Test foundation gate behavior
+        run: node --test scripts/foundations.test.mjs
+      - name: Install locked dependencies and Chromium
+        working-directory: ${{ steps.governance.outputs.app_dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f pnpm-lock.yaml && ! -f package-lock.json ]]; then
+            node -e 'if(!/^pnpm@\d+\.\d+\.\d+/.test(require("./package.json").packageManager||""))process.exit(1)'
+            version=$(node -p 'require("./package.json").packageManager.match(/^pnpm@(\d+\.\d+\.\d+)(?:\+sha512\.[a-f0-9]+)?$/i)?.[1] || ""')
+            [[ -n "$version" ]] || exit 1
+            npm install --global "pnpm@$version"
+            pnpm install --frozen-lockfile
+            pnpm exec playwright install --with-deps chromium
+          elif [[ -f package-lock.json && ! -f pnpm-lock.yaml ]]; then
+            npm ci
+            npm exec --no -- playwright install --with-deps chromium
+          else
+            echo "Exactly one supported lockfile required" >&2; exit 1
+          fi
+      - name: Run required checks
+        run: node scripts/release-readiness.mjs
+      - name: Upload readiness and available test evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: readiness-${{ github.sha }}
+          path: |
+            quality/release-report.json
+            quality/runs/
+          if-no-files-found: warn
+          retention-days: 14

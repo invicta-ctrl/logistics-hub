@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "project": "HAU-USC Logistics Hub",
+  "repository": "invicta-ctrl/logistics-hub",
+  "owner": "Earl (project owner); Department of Logistics (operating owner)",
+  "approval": "LH-GOV-001 owner-authorized 2026-11-25; docs/specs/LH-GOV-001.md",
+  "profile": "web",
+  "appRoot": ".",
+  "layout": {
+    "routes": "src",
+    "components": "src",
+    "features": "src",
+    "styles": "src",
+    "server": "src",
+    "lib": "src",
+    "contracts": "src",
+    "assets": "public",
+    "tests": "tests",
+    "migrations": "migrations",
+    "stories": {
+      "notApplicable": true,
+      "reason": "Existing application has no qualified shared component catalog; Storybook required when adopting shared components.",
+      "approval": "LH-GOV-001: existing non-React application has no shared library; mandatory for new shared components"
+    }
+  },
+  "release": {
+    "trigger": "workers-builds",
+    "target": "Cloudflare Worker logistics-hub; existing isolated production environment at logistics.hausc.org",
+    "approval": "Existing documented production policy (docs/DEPLOYMENT.md; LH-CD-01); actual trigger not requalified, no deployment authorized. CURRENT blocks release until single-trigger evidence and approved cutover."
+  },
+  "layoutShared": {
+    "src": {
+      "reason": "Existing flat TypeScript application; mapping is transitional until accepted feature-slice migration establishes new paths.",
+      "approval": "LH-GOV-001: approved transitional mapping during governance reconciliation; physical app layout is part of separately scoped modernization"
+    }
+  }
+}

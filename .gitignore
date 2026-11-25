@@ -12,3 +12,6 @@ worker-configuration.d.ts
 data/private/*
 !data/private/README.md
 .impeccable/
+
+# Local Astral Bridge recovery receipts; never commit runtime state.
+.astral-bridge/resilience/
