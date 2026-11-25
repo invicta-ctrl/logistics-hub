@@ -12,7 +12,7 @@ import { Folds, ListPager, foldMarkup, landOn, landOnFold, onLayoutChange, onPho
 import { bindStudentId, studentIdProblem } from "./student-id-field";
 import { formEdits } from "./unsaved";
 import { type Step, openWhereIsIt } from "./where-is-it";
-import { ApiError, CREST, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, keepFailure, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, itemVisual, itemThumbnailUrl, units } from "./ui";
+import { ApiError, type Html, MARK, app, categoryName, dataUrl, formatTime, html, icon, keepFailure, mount, navigate, onLeave, ownQuery, reducedMotion, setMessage, sheet, shrinkPhoto, itemVisual, itemThumbnailUrl, units } from "./ui";
 
 /*
  * Self-Service (/self-service): what a student or staff member sees after scanning the QR code
@@ -1030,7 +1030,7 @@ function bindForm(form: HTMLFormElement, item: CatalogItem | undefined, loan: Lo
 
   /** The first problem, with the field to fix it in, or null when the form is ready to check. */
   const validate = (values: ReturnType<typeof read>): [string, string] | null => {
-    const { name, studentId, purpose, reason, outcome, note, quantity: typed } = values;
+    const { name, studentId, reason, outcome, note, quantity: typed } = values;
     const needsIdentity = !loan || !loanKnown(loan) || !form.querySelector<HTMLElement>("[data-identity-fields]")?.hidden;
     // The Student ID and quantity in the desk's words; the name and reason prompts stay the phone's own, spoken to the borrower.
     const idProblem = needsIdentity ? studentIdProblem(studentId) : null;

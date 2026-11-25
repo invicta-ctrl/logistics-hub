@@ -1,0 +1,128 @@
+{
+  "public/brand/dol-mark.png": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "a9534f12af2ca60382549a52dd6c42bf859c7367309f58186a3655c5fba0b8b0",
+    "evidence": "docs/PRODUCT_REFERENCE.md § canonical brand files",
+    "reason": "Institutional imagery provenance documented; copyright/trademark usage authority and applicable terms not independently verified."
+  },
+  "public/brand/hau-campus-dusk.webp": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "d092519d8e05a720d8cf305d9a71e48178fe5cc4511c33e94340dc4e68cc3b5f",
+    "evidence": "docs/PRODUCT_REFERENCE.md § canonical brand files",
+    "reason": "Institutional imagery provenance documented; copyright/trademark usage authority and applicable terms not independently verified."
+  },
+  "public/brand/hau-usc-crest.webp": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "9fb56552ab99e4b374bd2bb3fc3de553f209b44b95f9b09ff203356694bbda7a",
+    "evidence": "docs/PRODUCT_REFERENCE.md § canonical brand files",
+    "reason": "Institutional imagery provenance documented; copyright/trademark usage authority and applicable terms not independently verified."
+  },
+  "public/brand/water-still.webp": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "0ceae3b4f66fd9f8e5dfa35793b5c773c0f29f4ddf099777c00def5335e356c9",
+    "evidence": "docs/road-to-v2/releases/v1.16.14.md — owner-supplied hau-logistics-landing.zip, authorized integration 2026-11-06.",
+    "reason": "Source and owner use directive documented; upstream redistribution terms not verified."
+  },
+  "public/brand/ydd-2026-banner.jpg": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "6ec7c5a75f1a360e68064d4887d237c64e12359969730fefbfdd9c95ea60d747",
+    "evidence": "docs/PRODUCT_REFERENCE.md § canonical brand files",
+    "reason": "Owner-supplied YDD 2026 banner and documented use directive; underlying image rights not verified."
+  },
+  "public/catalogue.webmanifest": {
+    "status": "approved",
+    "license": "MIT",
+    "sha256": "a544b92bfd323ad338ada4032be300a3ed831f5172eef2d3e633f95d2fd9bdc8",
+    "evidence": "Repository-authored application configuration/code; root LICENSE (MIT); inspected exact current file.",
+    "reason": "First-party application software."
+  },
+  "public/icons/catalog-192.png": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "831d33d50195b60ba60d61ea8ff732b113471b6a740eb7154c3ec207a7ed3d59",
+    "evidence": "public/catalogue.webmanifest; repository-tracked catalog PWA icon; exact image source/license not established.",
+    "reason": "Confirm derivation and rights for catalogue icon."
+  },
+  "public/icons/catalog-512.png": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "2974b03c816440302264aa1117b123505a18d281bf6d265dd05c598216da0648",
+    "evidence": "public/catalogue.webmanifest; repository-tracked catalog PWA icon; exact image source/license not established.",
+    "reason": "Confirm derivation and rights for catalogue icon."
+  },
+  "public/icons/catalog-maskable-512.png": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "665f71a2e95cc6112bac614f6f7a1098e96ec777f12a207c909cffe73c4af4b3",
+    "evidence": "public/catalogue.webmanifest; repository-tracked catalog PWA icon; exact image source/license not established.",
+    "reason": "Confirm derivation and rights for catalogue icon."
+  },
+  "public/icons/catalog-touch-icon.png": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "63d85e144ddb3a07d3ad5598eeed9596beb541c998145fce22d52197077102fe",
+    "evidence": "public/catalogue.webmanifest; repository-tracked catalog PWA icon; exact image source/license not established.",
+    "reason": "Confirm derivation and rights for catalogue icon."
+  },
+  "public/icons/icon-192.png": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "e3c46a72001d577c9e84e3d353a6d121ee6fa73a4cd9415dfea25f22908a9903",
+    "evidence": "docs/PRODUCT_REFERENCE.md § canonical brand files",
+    "reason": "Institutional imagery provenance documented; copyright/trademark usage authority and applicable terms not independently verified."
+  },
+  "public/icons/icon-512.png": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "e6ed88a8d15deb9af7794063dacda8580c448638c793a41ed3e73aeae853e6c7",
+    "evidence": "docs/PRODUCT_REFERENCE.md § canonical brand files",
+    "reason": "Institutional imagery provenance documented; copyright/trademark usage authority and applicable terms not independently verified."
+  },
+  "public/icons/maskable-512.png": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "32da2d89821cb3bd526c259652d9a4811c72f5316c6aae0a86b4197c35f86a19",
+    "evidence": "docs/PRODUCT_REFERENCE.md § canonical brand files",
+    "reason": "Institutional imagery provenance documented; copyright/trademark usage authority and applicable terms not independently verified."
+  },
+  "public/manifest.webmanifest": {
+    "status": "approved",
+    "license": "MIT",
+    "sha256": "5a8751806b9ffbe1bc19f5fc58944d26ca61ceb8617d56aeee1323696d4b950f",
+    "evidence": "Repository-authored application configuration/code; root LICENSE (MIT); inspected exact current file.",
+    "reason": "First-party application software."
+  },
+  "public/qr/logistics-self-service.png": {
+    "status": "approved",
+    "license": "MIT (project-generated output)",
+    "sha256": "d4e1f46e1b071f0bc4821919db4bb76d1fb5b8f9f96303f02997830a985887e0",
+    "evidence": "scripts/generate-self-service-qr.py: deterministic QR for the public route; docs/PRODUCT_REFERENCE.md; root LICENSE.",
+    "reason": "Generated code image; no external graphic."
+  },
+  "public/qr/logistics-self-service.svg": {
+    "status": "approved",
+    "license": "MIT (project-generated output)",
+    "sha256": "98ba6bfaef0815a1ba5bb4baf570b64bfe217964ea59523668875ea3f2ae70fd",
+    "evidence": "scripts/generate-self-service-qr.py: deterministic QR for the public route; docs/PRODUCT_REFERENCE.md; root LICENSE.",
+    "reason": "Generated code image; no external graphic."
+  },
+  "public/theme-boot.js": {
+    "status": "approved",
+    "license": "MIT",
+    "sha256": "4058f0b1f5b699ee1c3313f0618e0c357a730db6eaeea54fe1dc0691e9b86d13",
+    "evidence": "Repository-authored application configuration/code; root LICENSE (MIT); inspected exact current file.",
+    "reason": "First-party application software."
+  },
+  "public/touch-icon.png": {
+    "status": "unverified",
+    "license": null,
+    "sha256": "daecef7a3177a836aaadd2ac784277796814d2893e390a46d0550e80de091761",
+    "evidence": "docs/PRODUCT_REFERENCE.md § canonical brand files",
+    "reason": "Institutional imagery provenance documented; copyright/trademark usage authority and applicable terms not independently verified."
+  }
+}

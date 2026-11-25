@@ -10,7 +10,7 @@
 
 - Base SHA: 
 - Final head SHA (update after every substantive push): 
-- Writer slot / session / worktree / lock (`.codex/CURRENT.md`, "Writer slots"): 
+- Writer / session / canonical worktree / lock (`docs/CURRENT.md`):
 - Files outside the task's owned paths touched: none / list and the steward's transfer
 
 ## Risk and security receipt
@@ -41,7 +41,7 @@ Mark each **PASS**, **FAIL**, **N/A** or **NOT RUN**, with a reason and a link o
 
 ## Release and documentation
 
-- [ ] `.codex/CURRENT.md` / `.codex/SESSION_HANDOFF.md` reconciled (steward) and stale records archived to `docs/archive/`, not deleted
+- [ ] `docs/CURRENT.md` / `docs/CURRENT.md` reconciled (steward) and stale records archived to `docs/archive/`, not deleted
 - [ ] `CHANGELOG.md` entry (product: under the verified version; spec change: dated, no version)
 - [ ] Release state stated truthfully: `QUALIFICATION_PENDING` / `MERGED_DEPLOYMENT_UNVERIFIED` / `DEPLOYED_OWNER_CHECK_PENDING` / `RELEASED_VERIFIED`
 - Deployment, migration and rollback evidence, if any:
@@ -49,3 +49,5 @@ Mark each **PASS**, **FAIL**, **N/A** or **NOT RUN**, with a reason and a link o
 ## Merge
 
 Merging needs Earl's explicit go-ahead for this PR. Preparing or updating it is not that go-ahead.
+
+- [ ] Governance, docs checks, readiness evidence, and explicit release authorization reviewed.

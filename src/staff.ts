@@ -13,7 +13,7 @@ import { bulkBar } from "./bulk-select";
 import { placeList } from "./catalogue-places";
 import { ageOf, loadSession, shell } from "./staff-shell";
 import { ListPager, landOn, onLayoutChange } from "./pager";
-import { ApiError, type Html, animateNumber, api, categoryName, emptyState, expired, failure, formatDateTime, formatQuantity, html, icon, label, live, mount, onLeave, plural, preservingFocus, raw, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
+import { ApiError, type Html, animateNumber, api, categoryName, emptyState, expired, failure, formatDateTime, formatQuantity, html, icon, label, live, mount, onLeave, plural, preservingFocus, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
 import { formEdits } from "./unsaved";
 
 type Item = {
@@ -1270,7 +1270,7 @@ export async function workspace(): Promise<void> {
 
   /** The places a new place may go inside: active ones with room beneath them, and the top level. */
   function parentOptions(selected: string | null): Html {
-    return html`<option value="">Top level</option>${inOrder(places).filter(({ place, depth }) => place.active && depth < MAX_DEPTH).map(({ place, depth }) =>
+    return html`<option value="">Top level</option>${inOrder(places).filter(({ place, depth }) => place.active && depth < MAX_DEPTH).map(({ place }) =>
       html`<option value="${place.id}" ${place.id === selected ? html`selected` : ""}>${paths.get(place.id)}</option>`)}`;
   }
 

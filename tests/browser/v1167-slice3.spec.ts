@@ -36,7 +36,7 @@ async function admin(page: Page, options: { closed?: boolean } = {}) {
 
 test("every section opens with its verdict in words, and what waits for a decision has its own button", async ({ page }) => {
   await admin(page);
-  let assistOn = true;
+  const assistOn = true;
   await page.route("**/api/staff/admin/system", (route) => route.fulfill(reply(status(assistOn))));
   await page.goto("/staff/admin");
   await expect(page.locator(".verdict--ok")).toContainText("Everything checked is working.");

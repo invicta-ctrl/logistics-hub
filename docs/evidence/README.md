@@ -1,0 +1,2 @@
+# Verification evidence
+Record exact commit, accepted specification, commands and pass/fail/unrun outcomes; link sanitized CI reports, approved visual baselines and runtime evidence. Never commit secrets, customer data, private screenshots or generated report dumps. Record exceptions with owner approval, justification, scope and expiry or review condition. Keep current handoff in docs/CURRENT.md; no duplicate agent-specific checkpoints.

@@ -5,9 +5,9 @@ Operations system for the HAU-USC Department of Logistics.
 - **Public:** a landing page, a live **Lending Hub** that lists only staff-reviewed Loanable items with current availability, and Staff login. Logistics Request is shown as not yet available.
 - **Self-Service (`/self-service`):** one permanent QR code opens an installable app on people's own phones to Take, Borrow and Return self-service items and see My activity, and it keeps working offline (records sync later and reconcile across phones). Engineering: `docs/OFFLINE_SELF_SERVICE.md`; install guide for students and staff: `docs/PWA_INSTALL_GUIDE.md`.
 - **Staff:** an Inventory + Catalog workspace with a live table, views (Needs review, Ready to list, Low stock, Inactive…), search across names, other names, IDs, categories and locations, and an item sheet for stock movements, catalog and lending settings, migrated-record review, and a readable change history.
-- **Stack:** semantic HTML, CSS, TypeScript modules, Vite, one Cloudflare Worker, and D1. No SPA framework.
+- **Stack:** semantic HTML, CSS, TypeScript modules, Vite, one Cloudflare Worker, D1 and R2. Existing implementation is pre-modernization; target React/React Router/Tailwind direction is in ENGINEERING-BASELINE.md and PLAN.md.
 
-Read `AGENTS.md` and its required policy/handoff chain before changing anything. The [documentation authority map](docs/DOCUMENTATION_STATUS.md) distinguishes current instructions from historical evidence. `docs/PRODUCT_REFERENCE.md` describes the product.
+Read `AGENTS.md`, `governance.json`, `docs/CURRENT.md`, and `SKILLS.md` before changing anything. See TECHNICAL-OVERVIEW.md, DESIGN.md, ARCHITECTURE.md and QUALITY.md. The [documentation authority map](docs/DOCUMENTATION_STATUS.md) distinguishes current instructions from historical evidence. `docs/PRODUCT_REFERENCE.md` describes the product.
 
 ## How it works
 
@@ -44,7 +44,7 @@ If Playwright's bundled browser is missing, set `PLAYWRIGHT_CHROMIUM_PATH` to a 
 
 ## Deploying
 
-Merging is not deploying. A merge to `main` is `MERGED_DEPLOYMENT_UNVERIFIED` until the live artifact is checked against a build of that commit (then `DEPLOYED_OWNER_CHECK_PENDING`, and `RELEASED_VERIFIED` once Earl has checked it). The current truth for each release is in `.codex/CURRENT.md` and its record under `docs/road-to-v2/releases/`.
+Merging is not deploying. A merge to `main` is `MERGED_DEPLOYMENT_UNVERIFIED` until the live artifact is checked against a build of that commit (then `DEPLOYED_OWNER_CHECK_PENDING`, and `RELEASED_VERIFIED` once Earl has checked it). The current truth for each release is in `docs/CURRENT.md` and its record under `docs/road-to-v2/releases/`.
 
 - **How production is deployed today.** Cloudflare Workers Builds deploys each push to `main` by itself. The GitHub `Deploy` workflow runs after a green CI as a dry run (`DEPLOY_FROM_CI=dry-run`) and uploads nothing. A merge-button commit has no combined CodeQL check, so the gate refuses it by design: a red `Deploy` run on such a commit is expected, not a production failure. `docs/DEPLOYMENT.md` and `docs/road-to-v2/v1.17-ci-only-deploy-task.md` explain the gate and the switch to CI-only deploys (Earl's decision, not started).
 - **Migrations and release-scoped production preparation** go only through the Cloud Operations lane (`.github/workflows/production-ops.yml`, `ops/releases/<release>.json`), never from a PC.
@@ -52,6 +52,6 @@ Merging is not deploying. A merge to `main` is `MERGED_DEPLOYMENT_UNVERIFIED` un
 
 ## Agents and development workflow
 
-Claude writes the code: one writer by default, and up to two on separate accepted disjoint tasks in their own worktrees, with one serial integration steward (`docs/specs/accepted/2026-11-05-claude-parallel-writer-lanes.md`, HAU-AGENT-LANES-003). ChatGPT audits and reviews; Codex and Forge are read-only. Each writer has a worktree, a `slice/*` branch and a writer lock (`npm run agent:status|claim|yield -- claude`). See `docs/SHARED_AGENT_WORKFLOW.md`.
+One canonical development checkout by default. Claude Code Desktop orchestrator delegates to the pinned Sonnet implementation writer and Haiku read-only auditor. ChatGPT manages/audits; Codex is inactive unless explicitly assigned. See [AGENTS.md](AGENTS.md), [CURRENT](docs/CURRENT.md), [modernization plan](PLAN.md), [quality](QUALITY.md), [skills](SKILLS.md), [architecture](ARCHITECTURE.md), [design](DESIGN.md), [technical overview](TECHNICAL-OVERVIEW.md) and [changelog](CHANGELOG.md). Superseded policies and checkpoint records are preserved under docs/archive/.
 
-**Start here:** `AGENTS.md` (rules and reading order), then `.codex/CURRENT.md` (the live task board and writer slots) and `.codex/SESSION_HANDOFF.md` (last and next step). Superseded working documents are kept in `docs/archive/`. Every PR uses `.github/pull_request_template.md`.
+Canonical local Claude development folder: `D:\Documents\Projects\Logistics Hub`. Prior nested worktrees are retained in the separate historical archive; do not use them for current development. See `docs/CURRENT.md` for precise readiness state.

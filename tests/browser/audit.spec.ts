@@ -103,7 +103,7 @@ test("an old refresh cannot erase a pause after the server acknowledged it", asy
   await page.evaluate(async ({ id, owner }) => {
     const syncPath = "/src/catalogue-sync.ts";
     const { refreshCheck } = await import(syncPath) as typeof import("../../src/catalogue-sync");
-    (window as any).auditRead = refreshCheck(id, owner);
+    (window as Window & { auditRead?: Promise<unknown> }).auditRead = refreshCheck(id, owner);
   }, { id: AUDIT, owner: session.id });
   await asking;
   await page.evaluate(async (owner) => {
@@ -122,7 +122,7 @@ test("an old refresh cannot erase a pause after the server acknowledged it", asy
   }, session.id);
   release();
   const saved = await page.evaluate(async () => {
-    await (window as any).auditRead;
+    await (window as Window & { auditRead?: Promise<unknown> }).auditRead;
     const storePath = "/src/catalogue-store.ts";
     const store = await import(storePath) as typeof import("../../src/catalogue-store");
     return (await store.audits())[0];
@@ -154,7 +154,7 @@ test("an old pause acknowledgement keeps a newer resume, note and finish", async
   await page.evaluate(async (owner) => {
     const syncPath = "/src/catalogue-sync.ts";
     const sync = await import(syncPath) as typeof import("../../src/catalogue-sync");
-    (window as any).auditSent = new Promise<void>((resolve) => {
+    (window as Window & { auditSent?: Promise<void> }).auditSent = new Promise<void>((resolve) => {
       const off = sync.onSyncChange(() => { off(); resolve(); });
     });
     sync.startSending({ owner, legacy: false });
@@ -172,7 +172,7 @@ test("an old pause acknowledgement keeps a newer resume, note and finish", async
   });
   release();
   const saved = await page.evaluate(async () => {
-    await (window as any).auditSent;
+    await (window as Window & { auditSent?: Promise<void> }).auditSent;
     const storePath = "/src/catalogue-store.ts";
     const store = await import(storePath) as typeof import("../../src/catalogue-store");
     return (await store.audits())[0];

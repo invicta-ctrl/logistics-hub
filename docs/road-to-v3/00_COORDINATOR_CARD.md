@@ -1,6 +1,6 @@
 # Coordinator Card — Road to V3
 
-This file contains the **only normative boot sequence** for Road-to-V3 work.
+This file contains the milestone-dispatch procedure subordinate to AGENTS.md and LH-GOV-001. Reconcile the existing release map and owner-provided post-V2 roadmap before implementation.
 Other files may reference it, but must not define another startup procedure.
 
 ## 1. Boot sequence
@@ -12,8 +12,8 @@ Before creating a thread or editing code:
 3. Read `AGENTS.md`.
 4. Read `CLAUDE.md`.
 5. Read repository project-policy/agent-governance files.
-6. Read `.codex/CURRENT.md`.
-7. Read `.codex/SESSION_HANDOFF.md`.
+6. Read `docs/CURRENT.md`.
+7. Read `SKILLS.md` and applicable governance.
 8. Consult `docs/DOCUMENTATION_STATUS.md` if a legacy pointer or draft appears to conflict with current records.
 9. Read the accepted specification/amendment for the active release.
 10. Read the active release record and relevant migrations.
@@ -29,7 +29,7 @@ If repository state cannot be determined, stop. Unknown repository state is not 
 
 ## Owner command entry point — `start RTV` / `continue RTV`
 
-This is the **only command-dispatch procedure** for Codex, Claude, Forge, and independent cloud sessions. These instructions extend the boot sequence above; they do not replace it or override higher repository authority. The agent's own conversation history, cached plan, or working directory is not release authority.
+This is the **only command-dispatch procedure** for Claude Desktop; other agents require explicit owner task assignment. These instructions extend the boot sequence above; they do not replace it or override higher repository authority. The agent's own conversation history, cached plan, or working directory is not release authority.
 
 ### Recognized commands
 
@@ -48,7 +48,7 @@ Product version resolution: `V2.1`–`V2.9` map to existing internal milestones 
 
 1. Execute the boot sequence in §1. Confirm exact repository, `origin/main` HEAD, current branch/worktree and dirty files, remote slice branches, current writer lock, accepted specs, active task, release evidence, and historical versus current handoff. The latest verified Git state outranks stale narrative headings. An inaccessible lock/status is UNKNOWN, not free.
 2. If a non-RTV slice is already active or a different agent holds the writer lock, **do not interfere**: no second writable branch or main edit, no branch deletion, no takeover. Report the owner and safe next step; bounded read-only RTV preparation is permitted.
-3. Identify the active RTV task, if any, from `.codex/CURRENT.md`, `.codex/SESSION_HANDOFF.md`, the accepted spec and release record, verified against Git branches/commits. Do not restart a merged slice or assume a release is complete based on a stale pointer.
+3. Identify the active RTV task, if any, from `docs/CURRENT.md`, the accepted spec and release record, verified against Git branches/commits. Do not restart a merged slice or assume a release is complete based on a stale pointer.
 4. If no active RTV task, select the earliest eligible milestone in `06_ROAD_TO_V3_RELEASE_MAP.md`. RTV3-01 requires the truthful V2 handoff and its own owner-accepted milestone specification. RTV3-02 and subsequent domain milestones additionally require the accepted Product Direction Amendment; successor prerequisites and P0 gates still apply. A roadmap card or draft is **not** an accepted implementation spec.
 5. If the selected spec/amendment is missing, draft the smallest owner-reviewable specification using `templates/ACCEPTED_SPEC_TEMPLATE.md`, identify required decisions, and **stop before modifying implementation**. A shorthand command does not sign a spec, grant a production approval, or silently broaden scope.
 6. Once authorized, use the **single** `slice/<part>-<scope>` branch based on current verified `main` and claim the writer lock using repository workflow. Do not create simultaneous V3 version branches or writable subagent worktrees unless a later accepted governance amendment explicitly permits them. Parallel reviewers/researchers may remain read-only.

@@ -11,7 +11,7 @@ const catalog = {
   }))
 };
 
-test.beforeEach(async ({ page }, testInfo) => {
+test.beforeEach(async ({ page }) => {
   await page.route("**/api/public/catalog", (route) => route.fulfill({ contentType: "application/json", headers: { etag: '"r1"' }, body: JSON.stringify(catalog) }));
 });
 
@@ -71,7 +71,7 @@ test("Lending Hub on a phone: each category folds under a sticky title, opens on
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
 });
 
-test("no list's pager or fold scrolls sideways at 320 px", async ({ page }, testInfo) => {
+test("no list's pager or fold scrolls sideways at 320 px", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await page.goto("/lending");
   await expect(page.locator("[data-fold-group]").first()).toBeVisible();

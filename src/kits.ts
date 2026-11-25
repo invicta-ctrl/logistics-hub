@@ -1,5 +1,5 @@
 import { type Actor, BUMP_REVISION, InputError, audit, onHandOf, pathsOf, text, usablePlace, currentItemSQL } from "./inventory";
-import { CHECK_OUTCOMES, COMPONENT_STATE_LABELS, type CheckOutcome, type ComponentState, readComponent, readKit } from "./kit-policy";
+import { CHECK_OUTCOMES, COMPONENT_STATE_LABELS, type CheckOutcome, readComponent, readKit } from "./kit-policy";
 import { LOCATION_ID } from "./location-tree";
 import { officeDay } from "./loans";
 
