@@ -10,3 +10,6 @@
 - Full readiness runner fails closed at exact Node version: local 26.3.0, pinned 22.23.4 (verified from GitHub CI job 131078297553). Full browser/axe/visual/perf/unit suites not run. Actual Desktop model/skills smoke test and independent exact-diff/cold-start audit not established.
 - GitHub owner admin permission verified; separate reviewer/ruleset readback and actual Cloudflare single trigger not established (trigger lookup returned empty). No production changes, merge, push or deployment.
 - Product architecture remains legacy; proposed feature layout in PLAN.md is an accepted direction, not an implemented rewrite. Claude handles only next accepted development cycle, with mandatory readiness gates still in force.
+
+## Updated remote reconciliation — 2026-11-25
+Owner renewed adoption completion and direct-main authorization. Remote main now `70bfc7d459aa746e4191fb80fee2acaf0a5a66db`, merge of PR #96. Local merge-tree and merge succeeded without conflicts; changes confined to inventory UI, browser tests and its release record, retained intact. Build rerun timed out at 60 seconds during typecheck; lint still 58 errors. Existing readiness blockers remain; no production push performed.

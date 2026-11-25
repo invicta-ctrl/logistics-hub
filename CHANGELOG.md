@@ -4,6 +4,8 @@ A concise index of what changed in each product version/revision and accepted sp
 
 ## Unreleased — documentation and governance
 
+- **2026-11-25 · Reconciliation:** PR #96 merged into remote main `70bfc7d`; incorporated the inventory UI changes into the local governance candidate. V1.16.16 release record remains deployment-unverified; no new product version or production push from this adoption. Direct-main integration authorized by owner but mandatory readiness checks still block.
+
 - **2026-11-25 · LH-GOV-001 · Governance:** owner-authorized template v1.1.1 adoption; Claude Desktop roles, sole checkpoint, archived legacy governance, modernization target and quality automation. No product version increment or runtime change. [Adoption scope](docs/specs/LH-GOV-001.md); [state](docs/CURRENT.md).
 
 Release states used below and in `.codex/CURRENT.md`: `QUALIFICATION_PENDING` (not merged, or merged without its gates), `MERGED_DEPLOYMENT_UNVERIFIED` (on `main`, production not checked), `DEPLOYED_OWNER_CHECK_PENDING` (verified live, Earl has not yet checked) and `RELEASED_VERIFIED`. A merge is not a deployment. Where an older entry below says "merged and deployed", read the record it links for what was verified.
