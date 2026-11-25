@@ -64,7 +64,6 @@ export async function kitsWorkspace(): Promise<void> {
   const params = new URLSearchParams(window.location.search);
   let data: Answer | null = null;
   let places = placesOf([]);
-  let placeRows: PlaceRow[] = [];
   let pickable: PickItem[] | null = null;
   let openId: string | null = null;
   let detail: Detail | null = null;
@@ -85,10 +84,8 @@ export async function kitsWorkspace(): Promise<void> {
   });
   onLeave(() => { edited = () => false; marks = new Map(); });
 
-  const pathText = (id: string | null) => id ? pathOf(places, id) ?? null : null;
   const loadPlaces = async () => {
     const { locations } = await readKept<{ locations: PlaceRow[] }>("/api/staff/locations");
-    placeRows = locations;
     places = placesOf(locations);
   };
   let recent: PickItem[] | null = null;

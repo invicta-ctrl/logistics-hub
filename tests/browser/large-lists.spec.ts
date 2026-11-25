@@ -54,7 +54,7 @@ async function captureLayout(page: Page, testInfo: TestInfo, name: string, viewp
   if (table === "items") await dataTable.locator("tbody tr").nth(10).scrollIntoViewIfNeeded();
   // Where the table already starts on screen (the side rail leaves more room above it), scroll past its top so the header has to hold.
   if (table === "items") await dataTable.evaluate((element) => { const top = element.getBoundingClientRect().top; if (top > 0) window.scrollBy(0, top + 200); });
-  return dataTable.evaluate((element, { name, viewport, containerWidth }) => {
+  return dataTable.evaluate((element, { name, viewport }) => {
     const wrap = element.closest<HTMLElement>(".data-table-wrap")!;
     const wrapRect = wrap.getBoundingClientRect();
     const actionButtons = [...element.querySelectorAll<HTMLElement>(".col-actions > .row-actions > .button")];

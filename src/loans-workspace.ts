@@ -2,7 +2,7 @@ import { PUBLIC_LENDING_ITEM_TYPE } from "./catalog-policy";
 import { type Borrower, type Loan, bindLoanForm, isOverdue, loanFields, loanRow, openLoan, openReturn } from "./loan-form";
 import { ListPager, landOn, onLayoutChange } from "./pager";
 import { loadSession, shell } from "./staff-shell";
-import { api, emptyState, expired, type Html, html, icon, label, live, mount, onLeave, plural, preservingFocus, readKept, reducedMotion, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
+import { emptyState, expired, type Html, html, icon, label, live, mount, onLeave, plural, preservingFocus, readKept, reducedMotion, sheet as createSheet, sheetContent, toast, units, writeParams } from "./ui";
 
 type Period = "30d" | "12m" | "all";
 type Purpose = "INDIVIDUAL" | "USC";

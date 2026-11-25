@@ -7,7 +7,7 @@ import { type Card, type View, cardForm, cardSource, fillTiles, forgetScans, imp
 import { bindStudentId, studentIdProblem } from "./student-id-field";
 import { formEdits } from "./unsaved";
 import { Folds, ListPager, foldMarkup, landOn, landOnFold, onLayoutChange, onPhone } from "./pager";
-import { type Access, type Role, type Session, accessLabel, initials, loadSession, shell } from "./staff-shell";
+import { type Access, type Role, accessLabel, initials, loadSession, shell } from "./staff-shell";
 import { adminTabs, placeMarker } from "./admin-frame";
 import { type Html, api, categoryName, emptyState, failure, formatDate, formatDateTime, formatQuantity, formatTime, html, icon, label, mount, navigate, officeDay, onLeave, ownQuery, plural, setMessage, sheet as createSheet, sheetContent, toast, units, working, writeParams } from "./ui";
 

@@ -1,7 +1,7 @@
 // Data retention (Part 6.4). Who a long-settled loan or phone record was (name, student ID, photo) is
 // erased on the Owner's request; the record itself (item, quantity, times, decision, stock) stays.
 // Free text people typed (reasons, notes) is kept. Nothing runs by itself.
-import { BUMP_REVISION, audit } from "./inventory";
+import { BUMP_REVISION } from "./inventory";
 import type { Account } from "./accounts";
 
 export const ERASED = "[removed]";
@@ -19,9 +19,6 @@ const DAY_MS = 24 * 60 * 60_000;
 const loansDue = (cut: string) => `status <> 'OUT' AND closed_at < ${cut} AND (borrower_name <> '${ERASED}' OR COALESCE(student_id, '${ERASED}') <> '${ERASED}' OR photo_key <> '')`;
 const phoneDue = (cut: string) => `received_at < ${cut} AND (review IS NULL OR resolved_at IS NOT NULL) AND (person_name <> '${ERASED}' OR student_id IS NOT NULL OR photo_key IS NOT NULL)
   AND (loan_id IS NULL OR NOT EXISTS (SELECT 1 FROM loans l WHERE l.id = self_service_events.loan_id AND l.status = 'OUT'))`;
-// Every key a record still points at. A phone borrow and the loan it made share one photo, so an object belongs to every
-// record that references it and goes only when none of them keeps it any more.
-const REFERENCES = "SELECT photo_key AS k FROM loans WHERE photo_key <> '' UNION SELECT photo_key FROM self_service_events WHERE photo_key IS NOT NULL";
 const inList = (parameter: string) => `(SELECT value FROM json_each(${parameter}))`;
 
 const cutoff = (days: number) => new Date(Date.now() - days * DAY_MS).toISOString();

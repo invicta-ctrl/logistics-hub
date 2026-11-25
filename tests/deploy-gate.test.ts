@@ -1,4 +1,3 @@
-// @ts-nocheck: exercises a plain .mjs tool against a fake wrangler.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
